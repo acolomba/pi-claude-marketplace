@@ -423,3 +423,29 @@ entries into it. Severity and status follow the root file's rules.
      without containment (all kinds, names only). Parent line candidate.
   5. The orchestrator skipped the workflow's own preliminary classification
      and sent the whole register to the auditor.
+
+### P3-DC-22: Code review and fix choices
+
+- **Phase / source:** Phase 3 code reviewer (two iterations), code fixer
+  (`03-REVIEW.md`, `03-REVIEW-FIX.md`).
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. WR-01 fix: a failed ledger write now removes the renamed command files
+     (direct `unlink`, not the removal port) and rethrows. Old command files
+     unlinked before the renames are not restored, so a failed update can
+     leave old names recorded with no files (pre-existing for rename
+     failures; a retry recovers). The new scenario pins "no commands listed"
+     after a failed update.
+  2. WR-02 fix: a file claims its path only when its command is admitted; a
+     file reached through overlapping commands paths whose first-depth name
+     lost now loads under its second-depth name (not probed upstream).
+  3. Info items left open: IN-01 (`argument-hint: [x]` parses as a YAML list
+     and is dropped silently, upstream not probed), IN-02 (reinstall hint
+     names come from the project's `state.json`, as skills do), IN-03
+     (map-directory duplicate warnings name the plugin root), IN-04 (menu
+     step slices fixed 120-column rows), IN-05 (staged-path match is byte
+     exact; a mismatch falls back to Pi's own expansion, no `!` runs), IN-06
+     (one unit case asserts the Linux `EISDIR` text; macOS would say EPERM).
+  4. The fixer's two commits carry its harness's `Claude-Session` trailer
+     (`session_01EDUMG8nFuockQFTkJixpie`) rather than the parent's.
+  5. The `--auto` re-review was limited to the two files the fixes touched.

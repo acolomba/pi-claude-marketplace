@@ -1,193 +1,82 @@
 ---
 phase: 03-slash-commands
-reviewed: 2026-11-01T21:54:07Z
+reviewed: 2026-11-01T22:09:43Z
 depth: standard
-files_reviewed: 20
+iteration: 2
+files_reviewed: 2
 files_reviewed_list:
-  - extensions/pi-claude-marketplace/bridges/commands/command-record.ts
-  - extensions/pi-claude-marketplace/bridges/commands/discover.ts
-  - extensions/pi-claude-marketplace/bridges/commands/project-ledger.ts
   - extensions/pi-claude-marketplace/bridges/commands/stage.ts
-  - extensions/pi-claude-marketplace/bridges/commands/staged-command.ts
-  - extensions/pi-claude-marketplace/bridges/commands/types.ts
-  - extensions/pi-claude-marketplace/bridges/commands/unstage.ts
-  - extensions/pi-claude-marketplace/domain/component-paths.ts
-  - extensions/pi-claude-marketplace/domain/resolver-types.ts
-  - extensions/pi-claude-marketplace/edge/command-invocation.ts
-  - extensions/pi-claude-marketplace/orchestrators/command-invocation.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
-  - features/lib/slash-command-files.ts
-  - features/step_definitions/slash-command/frontmatter.steps.ts
-  - features/step_definitions/slash-command/invocation.steps.ts
-  - features/step_definitions/slash-command/listing.steps.ts
-  - features/step_definitions/slash-command/project-provenance.steps.ts
+  - extensions/pi-claude-marketplace/bridges/commands/discover.ts
 findings:
   critical: 0
-  warning: 2
-  info: 5
-  total: 7
-status: issues_found
+  warning: 0
+  info: 6
+  total: 6
+status: clean
 ---
 
-# Phase 3: Code Review Report
+# Phase 3: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-11-01T21:54:07Z
+**Reviewed:** 2026-11-01T22:09:43Z
 **Depth:** standard
-**Files Reviewed:** 20
-**Status:** issues_found
+**Files Reviewed:** 2
+**Status:** clean
 
 ## Narrative Findings (AI reviewer)
 
 ## Summary
 
-I read the new commands-bridge modules in full (`command-record.ts`,
-`project-ledger.ts`, `staged-command.ts`, `discover.ts`, `stage.ts`,
-`unstage.ts`, `types.ts`) and both invocation modules. For the large shared
-files, I read the hunks in `git diff origin/claude/quirky-planck-hhm592 HEAD`
-and the functions they touch. I also traced the callers: Pi's
-`parseFrontmatter` and `loadTemplateFromFile` (installed 1.4.0), Phase 2's
-`project-installs.ts` ledger (forget, then remember, keyed by name), the
-update runner's `failedPhases` gating, and `cascadeUnstagePlugin`.
+This pass re-reviews the two files that the iteration-1 fixes changed,
+`git diff 28224a6 HEAD` (commits 00714ec and 0822dc3), and the functions
+those hunks touch: `recordCommittedCommands`, the new
+`removeUnrecordedCommands`, `commitPreparedCommands`, `repeatsLoadedFile`,
+`admitCommand`, and `discoverPluginCommands`. I also traced the two callers of
+`commitPreparedCommands` (`install-outcome.ts:1289` and its undo,
+`update-swap.ts:1244-1262`), the ledger's update contract
+(`project-ledger.ts:18-19`: a failed update leaves the ledger as it was), and
+`unstage.ts`'s ENOENT-tolerant `unlinkIfPresent`.
 
-The core paths hold up when traced:
+**WR-01 is resolved.** When `recordCommittedCommands` throws, the commit now
+unlinks every `_renamePairs[].to`. ENOENT counts as success, and any other
+error becomes a leak appended after the staging-cleanup leak. The error keeps
+its original identity when there is no leak (`appendLeaks` with only
+`undefined` entries). So a throw again means "no new command is on disk":
 
-- The JSON-line frontmatter rebuild reads back the same through Pi's parser,
-  including for sources with no fence, an empty fence, a source of only
-  `---`, CRLF, and a closing fence followed by text.
-- The provenance digest is taken over a single read of the file, so the
-  bytes that are hashed are the bytes that are filled in.
-- The record key cannot be planted, because the author's value is replaced.
-- The trust check runs before any read.
-- Every write and unstage call site passes the ledger.
+- Update runner: `failedPhases.has("commands")` keeps the old
+  `resources.prompts`. No new unrecorded file is left for Pi to list after
+  `/reload`.
+- Install ledger: the failing phase's undo runs `unstagePluginCommands` over
+  `stagedCommandNames`. Its unlinks are ENOENT-tolerant, so files that are
+  already gone do no harm, and its own ledger failure is downgraded to a
+  warning (WR-04).
+- User scope: `projectCommandChange` returns `undefined`, so the branch
+  never runs.
 
-I found two warnings. The first is a new failure mode in the update runner:
-when the commit has already landed and the ledger write then fails, the
-state record no longer matches the files on disk. The second is a
-first-wins bookkeeping bug: discovery drops a map-declared command and then
-gives a false reason for dropping it. Choices that DUBIOUS-CHOICES records
-(P3-DC-09..19) are not reported here as defects. That includes the E8
-re-expansion, the "skill ledger" wording, `allowedTools` accepting a
-string, and `info` not listing map entries.
+What remains is not new. The previous-name files were unlinked before the
+renames, so after a failed update `state.json` (and the unchanged ledger)
+still list old names with no files behind them. A rename failure in this
+same function has always left that state. Every later path reads it
+ENOENT-tolerantly (re-stage unlink, uninstall, unstage), so a retry
+converges (NFR-3).
 
-## Warnings
+**WR-02 is resolved.** `repeatsLoadedFile` no longer writes. `admitCommand`
+records `byFile` only after the command wins `byGenerated`, and only for
+`kind: "file"`. Each source file can still be admitted at most once: an
+admitted file is in `byFile`, so every later visit returns early. The
+`discovered` output therefore still has unique `commandFile` values. The
+false "already loaded as command source" warning can no longer name a
+command that never loaded. Map entries that name a file declared directly
+(D-CF3-05), or a file a folder walk admitted, still get the D-CF3-03
+warning.
 
-### WR-01: A ledger write that fails after the commit has landed leaves an update's record out of step with the files on disk
-
-**File:** `extensions/pi-claude-marketplace/bridges/commands/stage.ts:344-347`, consumed at `extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:1244-1262` and `:825-827`
-
-**Issue:** `commitPreparedCommands` now does three things in order:
-
-1. It unlinks the previous target files (`:291-308`).
-2. It renames every new file into `resources/prompts/` (`:320-324`).
-3. It calls `recordCommittedCommands`, and that call can throw (`:345`).
-
-Step 3 throws whenever the project ledger write fails. One cause is
-`ProjectSkillLedgerError` "unknown-content" (WR-02). That happens when the
-ledger was written by another version, or when the file is corrupt, or
-when `<agentDir>` cannot be written. The comment says "the caller's undo
-removes commands that could never run". That holds for the install ledger,
-because `install-outcome.ts:1280` sets `c.stagedCommandNames` before the
-commit and the failing phase's undo unstages the files.
-
-The update runner has no undo. `commitUpdatePhase3a` catches the throw and
-pushes a `commands` failure. Then `applyPerBridgeResources` skips
-`sRecord.resources.prompts = ...` because `failedPhases.has("commands")`.
-After that:
-
-- `state.json` still lists the old command names, but those files are
-  already unlinked.
-- The new files exist, but no record lists them.
-- Pi lists the new files after `/reload`.
-- `uninstall` and `disable` unlink only the recorded old names, so
-  every new name that the old version did not have stays on disk with no
-  record.
-
-Before this phase, a commands commit that threw had rolled its renames
-back, so "commit threw" meant "nothing new committed". The ledger write
-breaks that contract for project scope.
-
-**Fix:** Keep the contract "throws means the renames are rolled back". The
-simplest way is to undo the renames inside `commitPreparedCommands` when the
-ledger write fails:
-
-```ts
-const leak = await cleanupStaging(ops, prepared.stagingRoot, "commands staging directory");
-try {
-  await recordCommittedCommands(ledger, prepared);
-} catch (err) {
-  // The renamed files cannot be proven; remove them so a caller without an
-  // undo (the update runner) never keeps unrecorded prompts.
-  const removalLeaks = await Promise.all(
-    prepared._renamePairs.map(async ({ to }) =>
-      unlink(to).then(
-        () => undefined,
-        (e: unknown) => `failed to remove ${to}: ${errorMessage(e)}`,
-      ),
-    ),
-  );
-  throw appendLeaks(err, [...removalLeaks.filter((l) => l !== undefined), leak]);
-}
-return leak;
-```
-
-Another option is to keep the throw and have `update-swap.ts` treat a
-ledger failure as a committed phase that carries a warning: write
-`resources.prompts` and surface the ledger message. The project commands
-then refuse at invocation until the user reinstalls.
-
-### WR-02: A file that loses a name collision still claims its path, so a later map key that names it is dropped with a false reason
-
-**File:** `extensions/pi-claude-marketplace/bridges/commands/discover.ts:649-708`
-
-**Issue:** `admitCommand` calls `repeatsLoadedFile` first. That call writes
-`state.byFile.set(command.commandFile, command)` (`:661`) before the
-generated-name check at `:695-708`. A file that then loses the D-07
-first-wins name check is never admitted, but it stays in `byFile` as if it
-had loaded.
-
-Here is a case that installs today. The plugin `demo` has no `plugin.json`
-`commands`, so `commands/` is read. That folder holds `demo-lint.md`, which
-CM-2 elides to `demo:lint`, and `lint.md`, which also becomes `demo:lint`
-and loses. The marketplace entry declares
-`"commands": {"check": {"source": "commands/lint.md"}}`, which adds to the
-folder under D-CF3-04. The map entry `check` then hits `byFile` and is
-dropped with the warning
-`command map entry "check" names "commands/lint.md", already loaded as command source "lint"`.
-No command `lint` was loaded, and `demo:check` never exists. The user
-loses a command and gets a misleading reason.
-
-The same early registration also drops, silently, an overlapping-directory
-copy of a file that lost its name at its first depth. The old code had that
-behavior too, but the new map warning turns it into a false statement.
-
-**Fix:** Record the file only when the command is admitted:
-
-```ts
-function admitCommand(state, command, where, mapKey): void {
-  if (repeatsLoadedFile(state, command, where, mapKey)) {   // read-only check
-    return;
-  }
-  const winner = state.byGenerated.get(command.generatedName);
-  if (winner === undefined) {
-    state.byGenerated.set(command.generatedName, command);
-    if (command.kind === "file") {
-      state.byFile.set(command.commandFile, command);        // moved here
-    }
-    return;
-  }
-  state.warnings.push(/* ...unchanged... */);
-}
-```
-
-Then remove the `state.byFile.set` call from `repeatsLoadedFile`. Add a unit
-case for the elided-collision plus entry-map shape.
+The fixes add no new Critical or Warning finding. One new Info item (IN-06)
+concerns a new unit test that only works on Linux. IN-01..IN-05 are carried
+forward unchanged from iteration 1. They were outside the fix scope and were
+not re-reviewed.
 
 ## Info
 
-### IN-01: A list-form `argument-hint` is dropped with no warning
+### IN-01: A list-form `argument-hint` is dropped with no warning (carried forward, out of scope)
 
 **File:** `extensions/pi-claude-marketplace/bridges/commands/staged-command.ts:178-195`, `:217-225`
 
@@ -205,7 +94,7 @@ upstream shows the hint, write a list of strings back as its YAML flow text
 (`[message]`) in `stagedFrontmatter`. Otherwise, add it to the D-CF3-09
 dropped-fields line.
 
-### IN-02: The reinstall hint copies plugin and marketplace names from the project's `state.json` without escaping them
+### IN-02: The reinstall hint copies plugin and marketplace names from the project's `state.json` without escaping them (carried forward, out of scope)
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/command-invocation.ts:264-279`, `:303-306`
 
@@ -222,19 +111,20 @@ notification. Skills carry the same pattern (D-CF2-13,
 `assertSafeName`. Alternatively, run the message through the escaping that
 `showHiddenCharacters` in `discover.ts` already uses.
 
-### IN-03: A map entry's directory walk reports duplicates against the plugin root instead of the walked directory
+### IN-03: A map entry's directory walk reports duplicates against the plugin root instead of the walked directory (carried forward, out of scope)
 
-**File:** `extensions/pi-claude-marketplace/bridges/commands/discover.ts:750-752`, `:701-703`
+**File:** `extensions/pi-claude-marketplace/bridges/commands/discover.ts:568-571`, `:755-757`
 
 **Issue:** A directory `source` walks with `base = sourceFile`, but
 `admitCommand` receives `pluginRoot` as `where`. A duplicate inside that
 walk therefore reads `command source "x" in "<pluginRoot>"`, while `x` is
-relative to the walked directory.
+relative to the walked directory. (The line numbers have moved since
+iteration 1. The code is the same.)
 
 **Fix:** Have `discoverMapSource` return the walked directory and pass it
 as `where` for the walked commands.
 
-### IN-04: The terminal-menu parser assumes rows padded to a fixed width in a raw stream with the control codes removed
+### IN-04: The terminal-menu parser assumes rows padded to a fixed width in a raw stream with the control codes removed (carried forward, out of scope)
 
 **File:** `features/step_definitions/slash-command/frontmatter.steps.ts:45-62`
 
@@ -254,7 +144,7 @@ P3-DC-13.3 records the assumption, but the step has no guard for it.
 that is a multiple of 120, and that every row in it matches. Better, read
 the rows from a terminal emulator snapshot if `pi-tui.ts` gains one.
 
-### IN-05: A staged project command whose path does not compare equal falls back to Pi's own expansion and skips the provenance check
+### IN-05: A staged project command whose path does not compare equal falls back to Pi's own expansion and skips the provenance check (carried forward, out of scope)
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/command-invocation.ts:157-167`
 
@@ -271,8 +161,36 @@ match on the staged prompts directory with `path.relative`. Do not treat a
 file under a staged prompts directory that fails the comparison as
 `not-staged`.
 
+### IN-06: The new WR-01 "cannot remove" unit case pins a Linux-only errno message
+
+**File:** `test/bridges/commands/stage.test.ts:1291-1321` (added in 00714ec)
+
+**Issue:** The case puts a directory in a renamed target's place and
+asserts the exact leak text
+`EISDIR: illegal operation on a directory, unlink '<path>'`. `unlink(2)` on
+a directory returns EISDIR on Linux, but EPERM on macOS. On a macOS
+checkout the production code still does the right thing (the error is not
+ENOENT, so it becomes a leak), but this assertion fails. CI runs only on
+`ubuntu-latest`, so the gate stays green. Other tests in the repository
+already allow for this difference (`remove.test.ts:1342` matches
+`/EISDIR|directory/i`). This is Info because it affects only local runs
+on another OS. The file's `acme:greet.md` target names already rule out
+Windows.
+
+**Fix:** Assert the message prefix and the cause, and match the errno part
+loosely, for example:
+
+```ts
+assert.match(
+  error.message,
+  /^the project ledger cannot be written \(additionally: failed to remove unrecorded command .*acme:greet\.md: (EISDIR|EPERM)\b/,
+);
+assert.strictEqual(error.cause, ledgerError);
+```
+
 ---
 
-_Reviewed: 2026-11-01T21:54:07Z_
+_Reviewed: 2026-11-01T22:09:43Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Iteration: 2_
