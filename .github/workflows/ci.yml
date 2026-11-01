@@ -128,6 +128,8 @@ jobs:
   # lengthen the lifecycle run. fail-fast is off, so one shard's failure does
   # not hide the other's result. Each timeout is at least 1.5 times the
   # shard's measured run and never below 15 minutes.
+  # test/architecture/behavioral-shard-coverage.test.ts fails when a feature
+  # file is in no shard or in two, so a new directory cannot drop out of CI.
   #
   # Measured 2026-11-01, ESTIMATED: the branch was not on origin, so no CI run
   # was dispatched. Local runs on 4 cores with `--parallel 8`, twice each in

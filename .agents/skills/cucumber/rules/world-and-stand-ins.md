@@ -80,7 +80,7 @@ Part of the `cucumber` skill: `.agents/skills/cucumber/SKILL.md`.
 ### Reset and CI
 
 - The reset asserts a clean baseline. After the profile Pi stops, every pid that a stand-in recorded is dead, and the script has no unused step. The `Before()` of the next scenario empties the sandbox.
-- The behavioral CI job runs as a matrix of two path shards with `fail-fast: false` (D-CF1-16). The lifecycle shard runs `features/marketplace` and `features/plugin`, and the components shard runs the six function directories. Each shard passes its paths to `npm run test:cucumber`, which installs the companions first, through an `env:` variable. Each shard's timeout is at least 1.5 times its measured run and never below 15 minutes. `npm run check:features` dry-runs every scenario, so a shard hides no unused step. A new function directory joins the components shard's paths in `.github/workflows/ci.yml`.
+- The behavioral CI job runs as a matrix of two path shards with `fail-fast: false` (D-CF1-16). The lifecycle shard runs `features/marketplace` and `features/plugin`, and the components shard runs the six function directories. Each shard passes its paths to `npm run test:cucumber`, which installs the companions first, through an `env:` variable. Each shard's timeout is at least 1.5 times its measured run and never below 15 minutes. `npm run check:features` dry-runs every scenario, so a shard hides no unused step. A new function directory joins the components shard's paths in `.github/workflows/ci.yml`. `test/architecture/behavioral-shard-coverage.test.ts` fails when a feature file is in no shard or in two.
 
 ### Arguments that start with `!`
 
