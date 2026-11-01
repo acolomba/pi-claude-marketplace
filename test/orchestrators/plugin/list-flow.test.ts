@@ -3117,12 +3117,11 @@ test("an invalid config layer drops the <autoupdate> marker from an official mar
 // Uncovered-path gap tests
 // ──────────────────────────────────────────────────────────────────────────
 
-// HOOK-01: hooks are a supported component kind. A plugin declaring `hooks`
-// at entry level with NO hooks/hooks.json on disk is not rejected -- the
-// resolver owns convention-file discovery only; entry/manifest-level
-// hooks-field semantics are deferred to future dispatch work. The plugin
-// lands as `available` (not installed, no admission blocker).
-test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buckets as ○ (available)", async () => {
+// HOOK-01 / D-CF5-20: the convention file is the only source of command
+// hooks. Hooks that the entry declares are not loaded, so a plugin whose entry
+// declares a `hooks` field lists as partially available with
+// `{unsupported hooks}`.
+test("D-CF5-20: plugin declaring hooks field with no hooks/hooks.json on disk buckets as ⊖ (partially available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -3142,11 +3141,10 @@ test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buc
     // act
     await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
-    const out = notifications[0]!.message;
-    // Plugin admits cleanly (no hooks.json on disk -> no parse-fail flip).
-    assert.match(out, /○ hooks-plugin/);
-    assert.doesNotMatch(out, /\{hooks\}/);
-    assert.doesNotMatch(out, /contains hooks/);
+    assert.strictEqual(
+      notifications[0]!.message,
+      "● mp1 [user]\n  ⊖ hooks-plugin (partially-available) {unsupported hooks}",
+    );
 
     verify(ctx);
     verify(ui);

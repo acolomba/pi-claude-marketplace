@@ -125,6 +125,70 @@ async function referencedFilesDeclareModule(
   return false;
 }
 
+// A `hooks` value of `undefined`, `null`, or `""` declares nothing.
+function declaresHooksValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== "";
+}
+
+/**
+ * D-CF5-27: Claude Code skips a manifest `hooks` path that resolves to the
+ * convention file, because that file loads on its own. A path that
+ * `resolveContainedComponentPath` rejects names another file. The check only
+ * resolves the path and never reads it.
+ */
+async function namesConventionFile(
+  pluginRoot: string,
+  raw: string,
+  defaultPath: string,
+): Promise<boolean> {
+  const contained = await resolveContainedComponentPath(pluginRoot, raw, "hooks reference");
+  return contained.ok && contained.absolutePath === defaultPath;
+}
+
+// One string or array element of a manifest `hooks` field declares hooks that
+// the convention file does not supply: a path to another file, or an inline
+// hooks object.
+async function elementDeclaresOtherHooks(
+  pluginRoot: string,
+  element: unknown,
+  defaultPath: string,
+): Promise<boolean> {
+  if (typeof element === "string" && element !== "") {
+    return !(await namesConventionFile(pluginRoot, element, defaultPath));
+  }
+
+  return declaresHooksValue(element);
+}
+
+/**
+ * D-CF5-20: reports whether the marketplace entry or the manifest declares
+ * hooks that only the merge Claude Code makes would load. That merge is
+ * deferred, because it changes the install, enable, and cascade flows, which
+ * another parallel phase owns. So the plugin reads as partially available
+ * with `unsupported hooks` rather than drop those hooks silently. A
+ * marketplace entry `hooks` counts in any form. A manifest `hooks` counts
+ * unless every path it names is the convention file (D-CF5-27).
+ */
+async function declaresUnloadedHooks(
+  input: {
+    readonly pluginRoot: string;
+    readonly entry: { readonly hooks?: unknown };
+    readonly manifest: { readonly hooks?: unknown } | null;
+  },
+  defaultPath: string,
+): Promise<boolean> {
+  if (declaresHooksValue(input.entry.hooks)) {
+    return true;
+  }
+
+  const field = input.manifest?.hooks;
+  const elements: readonly unknown[] = Array.isArray(field) ? field : [field];
+  const verdicts = await Promise.all(
+    elements.map((element) => elementDeclaresOtherHooks(input.pluginRoot, element, defaultPath)),
+  );
+  return verdicts.includes(true);
+}
+
 function hasOrphanRewake(config: HooksConfig): boolean {
   for (const groups of Object.values(config)) {
     for (const group of groups) {
@@ -160,7 +224,9 @@ function recordHooksConfig(resolution: HooksResolution, hooks: ResolvedHooksConf
  * Resolves convention hooks, supportability drops, orphan rewake metadata, and
  * the hooks-module declaration. Only the convention file supplies
  * command hooks. Hooks files that the `hooks` field names are read only for a
- * hooks module, and only when the convention file declares none.
+ * hooks module, and only when the convention file declares none. Hooks that
+ * the entry or the manifest declares besides the convention file add `hooks`
+ * to the `unsupported` array once (D-CF5-20).
  */
 export async function resolveHooks(
   input: {
@@ -190,6 +256,13 @@ export async function resolveHooks(
 
   if (hooks.value !== undefined) {
     recordHooksConfig(input.resolution, hooks.value);
+  }
+
+  if (
+    !input.resolution.unsupported.includes("hooks") &&
+    (await declaresUnloadedHooks(input, defaultPath))
+  ) {
+    input.resolution.unsupported.push("hooks");
   }
 
   return false;
