@@ -447,7 +447,12 @@ function readCommandItem(cursor: Cursor, command: Command): void {
   }
 
   const word = readWord(cursor);
-  skipBareDollar(cursor, word);
+  // Before the command name, a `\$` after an assignment word stays a word:
+  // tree-sitter-bash reads it as the command name `$`.
+  if (command.named || !ASSIGNMENT.test(word.raw)) {
+    skipBareDollar(cursor, word);
+  }
+
   if (word.pieces.length > 0) {
     addWord(cursor, command, word);
   }

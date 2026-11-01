@@ -139,6 +139,10 @@ const UPSTREAM_ROWS: readonly TokenRow[] = [
   { text: 'x "s"\\\\$\\$ b', tokens: ["x", "s\\$", "$", "b"] },
   { text: 'x <<< "a"\\$ b', tokens: ["x", "b"] },
   { text: '> "a"\\$ b', tokens: ["$", "b"] },
+  { text: 'x="a"\\$ b c', tokens: ["$", "b", "c"] },
+  { text: "x='a'\\$ b", tokens: ["$", "b"] },
+  { text: "x=$X\\$ b", tokens: ["$", "b"] },
+  { text: 'x=b"a"\\$ b', tokens: ["$", "b"] },
 ];
 
 // D-CF1-01 licensed residual: tree-sitter-bash error recovery and expansion
