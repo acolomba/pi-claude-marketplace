@@ -386,3 +386,23 @@ entries into it. Severity and status follow the root file's rules.
      union).
   9. On Windows a key with an inner `:` yields a file name NTFS refuses
      (parent line); `info` still does not list map entries (parent line).
+
+### P3-DC-20: Milestone merged before the phase gate; a clone fixed on the commands side
+
+- **Phase / source:** Phase 3 orchestrator, before wave 5.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Before the phase gate, the milestone branch (Phases 4, 6, and 7
+  merged, Phase 2 review fixes) was merged into this branch (`bf0b58f`), so
+  the phase gate runs on the combined tree. Only `.planning/ROADMAP.md` and
+  `.planning/STATE.md` conflicted: the Progress table keeps Phase 3 at 8/9
+  and Phase 4 complete; STATE takes the milestone's text. The combined tree
+  showed one new clone group (`dup:5cc56bd6`, `bridges/commands/unstage.ts`
+  against Phase 2's `bridges/skills/unstage.ts`), born of the milestone's
+  marker cleanup and the newer skills return shape. The commands side was
+  restructured (`unlinkIfPresent` helper, `d164a80`) instead of adding a
+  marker. `npm run check` then passed on the combined tree (seed 412895, 1451
+  scenarios).
+- **Alternatives:** Leave the integration to the parent's merge; add a
+  reviewed `code-duplication` marker.
+- **Why dubious:** The parent planned to merge; doing it here front-loads
+  conflict resolution in tool-written files.
