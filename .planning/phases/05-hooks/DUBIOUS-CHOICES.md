@@ -199,3 +199,20 @@ session writes this file. Each subagent ends its report with a
   11. Unverified assumptions: how plain stdout is trimmed, and the
       `[command]` text in `onFailure` messages.
 - **Recorded in:** `05-0*-PLAN.md`, `05-PATTERNS.md`.
+
+### P5-DC-13: Plan-check revision: a 25-file plan accepted, five waves
+
+- **Phase / source:** plan checker iteration 1 and the planner's revision.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The old 05-07 was split: 05-07 keeps the `hook-notice` kind
+  with its first caller (25 files, justified in its "Scope note" because the
+  kind must land in one commit), the new 05-08 owns tool context and Stop, and
+  the gate plan became 05-09. Phase 5 now has 9 plans in 5 waves (supersedes
+  P5-DC-12's "8 plans, 4 waves"). 05-01, 05-02, 05-06 keep 15-18 files with a
+  scope note. The 05-06/05-07 ordering is `coupling_justified`, not a
+  dependency.
+- **Alternatives:** Spread the kind over two commits (red tree between them);
+  six waves with a dependency.
+- **Why dubious:** The per-plan budget is exceeded by design; the coupling
+  justification holds only if 05-07's tests never assert a context value.
+- **Recorded in:** `05-07-PLAN.md` "Scope note", `05-08-PLAN.md`, `05-09-PLAN.md`.
