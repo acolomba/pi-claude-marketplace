@@ -393,7 +393,7 @@ Plans:
 - Wave 3: decision IDs, the re-measured `docs/mcp-compatibility.md` rows (FG-30), SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/mcp-server/**`, `features/step_definitions/mcp-server/**`, `features/lib/mcp-server-files.ts`, `bridges/mcp/**` (including Phase 1's escape fix once merged), `platform/mcp-status.ts`, `domain/mcp-resolution.ts`, `domain/components/mcp.ts`, `docs/mcp-compatibility.md`, `test/bridges/mcp/**`, `test/integration/mcp-*`. MCP-07 uses Phase 1's agent fixture writer and stand-ins, never a Phase 4 file.
 
-**Plans:** 8/9 plans executed in 4 waves (the template's wave-2 "configuration variants and sources" plan splits into a configuration plan and a sources plan with disjoint files; FG-28's silent skip moves to wave 3 because it edits `domain/mcp-resolution.ts`, which the wave-2 sources plan owns, and it changes outcomes that non-owned tests pin; the docs re-measure runs in wave 3 beside it, so the decision records, the parent lines, and the phase gate are wave 4; wave 1 also moves the Phase 1 seed's steps out of `calls.steps.ts` and the allowed project-scope scenario into `project-scope.feature`)
+**Plans:** 9/9 plans executed in 4 waves (the template's wave-2 "configuration variants and sources" plan splits into a configuration plan and a sources plan with disjoint files; FG-28's silent skip moves to wave 3 because it edits `domain/mcp-resolution.ts`, which the wave-2 sources plan owns, and it changes outcomes that non-owned tests pin; the docs re-measure runs in wave 3 beside it, so the decision records, the parent lines, and the phase gate are wave 4; wave 1 also moves the Phase 1 seed's steps out of `calls.steps.ts` and the allowed project-scope scenario into `project-scope.feature`)
 
 Plans:
 **Wave 1**
@@ -411,7 +411,7 @@ Plans:
 - [x] 06-08-PLAN.md — Wave 3: re-measure and rewrite `docs/mcp-compatibility.md` on pi-mcp-adapter 7.0.0 (MCP-03, FG-30; D-CF6-04, D-CF6-01, D-CF6-02, D-CF6-03, D-CF6-10)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 06-09-PLAN.md — Wave 4: phase gate, the D-CF6 decision records, the drafted pi-subagents gap report, and the parent lines (MCP-01..MCP-08; D-CF6-01..D-CF6-11)
+- [x] 06-09-PLAN.md — Wave 4: phase gate, the D-CF6 decision records, the drafted pi-subagents gap report, and the parent lines (MCP-01..MCP-08; D-CF6-01..D-CF6-11)
 
 ### Phase 7: Workflows
 
@@ -446,7 +446,7 @@ Plans:
 | 3. Slash Commands | 0/TBD | Not started | - |
 | 4. Agents | 0/TBD | Not started | - |
 | 5. Hooks | 0/TBD | Not started | - |
-| 6. MCP Servers | 8/9 | In Progress | - |
+| 6. MCP Servers | 9/9 | In Progress | - |
 | 7. Workflows | 0/TBD | Not started | - |
 
 ## Carried Forward

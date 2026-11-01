@@ -248,3 +248,22 @@ tooling. Status stays `open` until the user reviews it.
   4. The Outline's surviving server is inline in every row, so ".mcp.json survives a bad reference" is pinned by unit tests only.
   5. The 7 named plugin-resolver tests keep their arrange and now expect installable with no servers, instead of gaining a second source.
 - **Recorded in:** `06-07-SUMMARY.md`.
+
+### P6-DC-19: Plan 06-09 executor choices (phase gate and records)
+
+- **Phase / source:** Phase 6 executor for `06-09-PLAN.md` (`06-09-SUMMARY.md`).
+- **Severity:** Medium (items 2, 9); the rest Low. **Status:** open.
+- **Items:**
+  1. The doc check edited `docs/mcp-compatibility.md`, outside the plan's `files_modified`, as Task 1's action directs.
+  2. The new doc sentence "a skipped server does not replace an earlier one" rests on code, unit tests, and the research's reading of upstream; no scenario or 2.1.316 probe checks it.
+  3. The Upgrading bullet still covers only a malformed server, not a whole skipped file (no test runs that case).
+  4. The canary parent line is "re-run live on 7.0.0" rather than "raise to 7.0.0", since Phase 1 already pinned `ADAPTER_VERSION = "7.0.0"`.
+  5. A first gate run was stopped after 2 minutes and restarted whole after a docs-only fix; none of its output is used.
+  6. The Outcome column of the drafted Key Decisions rows: "✓ Good" for ten, "⚠ Revisit (gap pinned; report not filed)" for D-CF6-10.
+  7. The pi-subagents gap report ranks its requests; its reproduction steps were not run outside the harness.
+  8. The CHANGELOG draft has five sub-bullets and omits the re-measured doc and the agent gap.
+  9. The drafted MCP-07 line is checked `[x]` with "gap-pinned (D-CF6-10)", which could be read as a working foreground call.
+  10. The four drafted BACKLOG IDs (MCPBG-01, MCPSUB-01, MCPB-01, MCPREF-01) were chosen by the executor.
+  11. The `@public` tag clean-up and the `collision-*.ts` comment fixes stay parent lines although Phase 6 owns those files.
+  12. The SUMMARY was committed in three commits (one per task).
+- **Recorded in:** `06-09-SUMMARY.md`.
