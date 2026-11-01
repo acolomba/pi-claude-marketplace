@@ -274,3 +274,36 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
   6. The CHANGELOG parent line is marked Internal (no product fix).
   7. The SUMMARY's commit count excludes its own final commit.
 - **Recorded in:** `07-06-SUMMARY.md`.
+
+### P7-DC-15: Code review and fix loop choices
+
+- **Phase / source:** Phase 7 code review (`07-REVIEW.md`, `07-REVIEW-FIX.md`), 3 iterations.
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. **WR-01 pinned in every run scenario:** each run scenario states the
+     engine's `info` start notice and its `warning` "delivery ... deferred:
+     ... has no thenable send function" (engine 3.15.0 over RPC never posts
+     the result back). If a later Pi or engine fixes delivery, six scenarios
+     change at once.
+  2. New local tokens `{run id}` and `{session id}` in the notices step (not
+     in the frozen `run-tokens.ts` or the cucumber skill's token list), and a
+     read-only RPC `get_state` inside a `Then` to read the session id (the
+     frozen world turn has no field for it). Parent line: list the tokens in
+     the skill and keep a turn's session id in the world (IN-06).
+  3. The engine-absent negative control checks every command source for a
+     name containing the workflow name; a future command containing "hello"
+     would need a new fixture name.
+  4. WR-03 was fixed by adding coverage (three refusal rows, two lifecycle
+     scenarios) rather than narrowing the doc's grades.
+  5. The joined diagnostic `lines` column stays next to the new per-line
+     table (the frozen results step appends any omitted column; IN-08 parent
+     line for `features/lib/field-rows.ts`).
+  6. IN-05: only the notices step marks a run turn compared. This follows
+     `steps.md` but contradicts the literal `world-and-stand-ins.md:66`
+     ("A `Then` that reads the turn marks it compared"); kept as Info IN-10
+     with a parent line to fix the skill text.
+  7. Fixers worked in the main checkout (no worktree) so the cucumber red
+     proofs could run; the review/fix reports were committed per iteration
+     (the stop hook requires a clean tree) instead of once at the end, and
+     the iteration backups were kept in the scratchpad.
+- **Recorded in:** `07-REVIEW.md`, `07-REVIEW-FIX.md`, `07-REVIEW-DISPOSITION.md`.
