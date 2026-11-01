@@ -11,10 +11,12 @@
  * that every process a pid file names is gone.
  */
 
+import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const LOG_SUFFIX = ".jsonl";
+const PID_SUFFIX = ".pid";
 
 /** Returns the harness directory of the sandbox home `home`: `<home>/harness`. */
 export function harnessDirectory(home: string): string {
@@ -56,4 +58,30 @@ export async function readLogLinesSince(
     }),
   );
   return new Map(gained.filter(([, lines]) => lines.length > 0));
+}
+
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: unknown) {
+    // EPERM means the process exists but belongs to another user.
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+/**
+ * Asserts that every process a `*.pid` file in `directory` names has exited,
+ * so a stand-in that outlived its profile Pi fails the scenario (HAR-05).
+ * Each file holds one pid.
+ */
+export async function assertStandInsStopped(directory: string): Promise<void> {
+  const names = (await readdir(directory)).filter((name) => name.endsWith(PID_SUFFIX)).sort();
+  const pids = await Promise.all(
+    names.map(async (name) => Number((await readFile(path.join(directory, name), "utf8")).trim())),
+  );
+  const running = names
+    .map((name, index) => ({ file: name, pid: pids[index] ?? Number.NaN }))
+    .filter(({ pid }) => !Number.isInteger(pid) || isRunning(pid));
+  assert.deepStrictEqual(running, [], "these stand-in processes outlived the profile Pi");
 }

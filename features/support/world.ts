@@ -38,7 +38,8 @@ import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
 import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
-import { harnessDirectory } from "../lib/turn-records.ts";
+import { readModelCalls, readModelScript } from "../lib/scripted-model/script.ts";
+import { assertStandInsStopped, harnessDirectory } from "../lib/turn-records.ts";
 
 import { currentRun } from "./pi-process.ts";
 
@@ -51,6 +52,7 @@ import type { RpcGitEnvironment, RpcRecord, RpcRequest } from "../lib/pi-process
 import type { PluginCompletion } from "../lib/plugin-completions.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
+import type { ScriptStep } from "../lib/scripted-model/script.ts";
 
 // Starting Pi takes most of a second and a command a tenth of that; the
 // margin covers a loaded CI runner.
@@ -550,7 +552,12 @@ export class ScenarioWorld extends World {
       ],
       environment: { TMPDIR: temporary },
     });
-    this.onRelease(() => pi.stop());
+    // HAR-05: the profile Pi stops first, so a stand-in that exits when its
+    // stdin closes has exited before its pid file is checked.
+    this.onRelease(async () => {
+      await pi.stop();
+      await assertStandInsStopped(harness);
+    });
     this.scenarioPi = pi;
     this.profileHarnessDirectory = harness;
     await this.expectSuccess({ type: "set_model", provider: "faux", modelId: "faux-1" });
@@ -592,6 +599,26 @@ export class ScenarioWorld extends World {
   /** Records that a step compared the last model turn. */
   markTurnCompared(): void {
     this.lastTurnCompared = true;
+  }
+
+  /** Whether a model turn ran that no step compared. */
+  get lastTurnUncompared(): boolean {
+    return !this.lastTurnCompared;
+  }
+
+  /**
+   * Returns the steps of the model script that no model call took, in script
+   * order, or none when no profile Pi started (D-CF1-17). A call past the
+   * script takes no step.
+   */
+  async unusedScriptSteps(): Promise<readonly ScriptStep[]> {
+    const harness = this.profileHarnessDirectory;
+    if (harness === undefined) {
+      return [];
+    }
+
+    const [script, calls] = await Promise.all([readModelScript(harness), readModelCalls(harness)]);
+    return script.slice(calls.filter((call) => !call.overflow).length);
   }
 
   /** Adds a variable to the environment of the TUI session this scenario starts. */
@@ -735,7 +762,16 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
   const uncomparedSessionResults = this.uncomparedSessionResults;
   const uncomparedTuiNotices = this.uncomparedTuiNotices;
   const uncomparedCompletionSets = this.completionSetsAwaitingComparison();
-  await this.release();
+  // Read before the releases stop the profile Pi; a scenario with no profile
+  // Pi has no script and no turn. The releases run even when the read fails.
+  const lastTurnUncompared = this.lastTurnUncompared;
+  let unusedScriptSteps: readonly ScriptStep[];
+  try {
+    unusedScriptSteps = await this.unusedScriptSteps();
+  } finally {
+    await this.release();
+  }
+
   if (result?.status === Status.PASSED) {
     assert.deepStrictEqual(uncompared, [], "no step compared these rows of the last results");
     assert.deepStrictEqual(
@@ -754,5 +790,11 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
       [],
       "no step compared these plugin completion sets",
     );
+    assert.deepStrictEqual(
+      unusedScriptSteps,
+      [],
+      "no model call used these steps of the model script",
+    );
+    assert.strictEqual(lastTurnUncompared, false, "no step compared the last model turn");
   }
 });
