@@ -259,6 +259,57 @@ const ROWS: readonly ExpansionRow[] = [
     },
   },
   {
+    title: "D-CF1-13: an unset variable whose default ends in {env:NAME becomes the default text",
+    raw: "${PI_CM_V:-{env:PI_CM_SECRET}",
+    fieldClass: "remote",
+    env: {},
+    builtins: PROJECT,
+    expanded: {
+      segments: [{ kind: "text", text: "{env:PI_CM_SECRET" }],
+      missing: [],
+      withheld: [],
+    },
+  },
+  {
+    title: "D-CF1-13: a remote unset base-URL name with a default becomes the default text",
+    raw: "${ANTHROPIC_BASE_URL:-https://default.example.test}",
+    fieldClass: "remote",
+    env: {},
+    builtins: PROJECT,
+    expanded: {
+      segments: [{ kind: "text", text: "https://default.example.test" }],
+      missing: [],
+      withheld: [],
+    },
+  },
+  {
+    title:
+      "D-CF1-13: a remote credential-free base-URL name with a default stays a plain reference",
+    raw: "${ANTHROPIC_BASE_URL:-https://default.example.test}",
+    fieldClass: "remote",
+    env: { ANTHROPIC_BASE_URL: "https://proxy.example.test" },
+    builtins: PROJECT,
+    expanded: {
+      segments: [{ kind: "ref", name: "ANTHROPIC_BASE_URL" }],
+      missing: [],
+      withheld: [],
+    },
+  },
+  {
+    title: "D-CF1-13: a plain base-URL name keeps its default for the adapter",
+    raw: "${ANTHROPIC_BASE_URL:-https://default.example.test}",
+    fieldClass: "plain",
+    env: {},
+    builtins: PROJECT,
+    expanded: {
+      segments: [
+        { kind: "ref", name: "ANTHROPIC_BASE_URL", fallback: "https://default.example.test" },
+      ],
+      missing: [],
+      withheld: [],
+    },
+  },
+  {
     title: "D-CF1-13: a set variable whose default holds $env: stays a plain reference",
     raw: "${PI_CM_V:-$env:HOME}",
     fieldClass: "plain",
@@ -488,6 +539,18 @@ const ROWS: readonly ExpansionRow[] = [
   {
     title: "AVAR-05: a plain set Claude credential is withheld as empty text",
     raw: "${CLAUDE_CODE_OAUTH_TOKEN}",
+    fieldClass: "plain",
+    env: { CLAUDE_CODE_OAUTH_TOKEN: "oauth-token-value" },
+    builtins: PROJECT,
+    expanded: {
+      segments: [{ kind: "text", text: "" }],
+      missing: [],
+      withheld: [{ name: "CLAUDE_CODE_OAUTH_TOKEN", set: true }],
+    },
+  },
+  {
+    title: "AVAR-05: a plain set Claude credential ignores its default and is withheld",
+    raw: "${CLAUDE_CODE_OAUTH_TOKEN:-d}",
     fieldClass: "plain",
     env: { CLAUDE_CODE_OAUTH_TOKEN: "oauth-token-value" },
     builtins: PROJECT,

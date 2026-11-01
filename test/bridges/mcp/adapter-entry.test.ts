@@ -181,6 +181,57 @@ const OAUTH_HEADER_ROWS: readonly OAuthHeaderRow[] = [
     },
   },
   {
+    title: "a reference with a default and its variable unset keeps auth",
+    headers: { "X-Team": "${PI_CM_TEAM:-acme}" },
+    env: {},
+    expectedEntry: {
+      url: "https://mcp.example.test",
+      headers: { "X-Team": "${PI_CM_TEAM:-acme}" },
+      auth: "oauth",
+    },
+  },
+  {
+    title: "a reference with a default and its variable set to empty drops auth",
+    headers: { "X-Team": "${PI_CM_TEAM:-acme}" },
+    env: { PI_CM_TEAM: "" },
+    expectedEntry: {
+      url: "https://mcp.example.test",
+      headers: { "X-Team": "${PI_CM_TEAM:-acme}" },
+    },
+  },
+  {
+    title: "a reference with a default and its variable set keeps auth",
+    headers: { "X-Team": "${PI_CM_TEAM:-acme}" },
+    env: { PI_CM_TEAM: "t" },
+    expectedEntry: {
+      url: "https://mcp.example.test",
+      headers: { "X-Team": "${PI_CM_TEAM:-acme}" },
+      auth: "oauth",
+    },
+  },
+  {
+    title: "a reference with an empty default and its variable unset drops auth",
+    headers: { "X-Team": "${PI_CM_TEAM:-}" },
+    env: {},
+    expectedEntry: { url: "https://mcp.example.test", headers: { "X-Team": "${PI_CM_TEAM:-}" } },
+  },
+  {
+    title: "a reference with a blank default and its variable unset drops auth",
+    headers: { "X-Team": "${PI_CM_TEAM:-  }" },
+    env: {},
+    expectedEntry: { url: "https://mcp.example.test", headers: { "X-Team": "${PI_CM_TEAM:-  }" } },
+  },
+  {
+    title: "text beside a reference with an empty default and its variable unset keeps auth",
+    headers: { "X-Team": "team ${PI_CM_TEAM:-}" },
+    env: {},
+    expectedEntry: {
+      url: "https://mcp.example.test",
+      headers: { "X-Team": "team ${PI_CM_TEAM:-}" },
+      auth: "oauth",
+    },
+  },
+  {
     title: "a blank literal header value drops auth",
     headers: { "X-Team": "  " },
     env: {},

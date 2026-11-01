@@ -13,10 +13,11 @@
 // D-CF1-13: pi-mcp-adapter 7.x expands `${NAME:-default}` as Claude does for
 // an unset, empty, or set variable, so a reference with a default stays a
 // reference with its default, and a variable set after install takes effect at
-// the next connect. Two cases keep the install-time decision. The adapter runs
-// its `$env:` and `{env:` passes over the default it inserted, which Claude
-// never does, so a default that holds `$env:` or `{env:` text is resolved here.
-// A deny-listed name is decided here too (AVAR-05).
+// the next connect. Three cases keep the install-time decision. The adapter
+// runs its `$env:` and `{env:` passes over the default it inserted, which
+// Claude never does, so a default that holds `$env:` or `{env:` text is
+// resolved here. A deny-listed name is decided here too (AVAR-05), and so is a
+// base-URL name in a remote field, whose deny decision reads its value.
 //
 // AVAR-05: Claude withholds deny-listed variables
 // (`domain/claude-credential-denylist.ts`). The decision is made here, at
@@ -156,6 +157,20 @@ function holdsAdapterMarker(defaultText: string): boolean {
   return defaultText.includes("$env:") || defaultText.includes("{env:");
 }
 
+// D-CF1-13, AVAR-05: a remote base-URL name is withheld only when its value
+// carries a credential, so the value it holds at connect time must not reach
+// the adapter unchecked. Its default keeps the install-time rule.
+function leavesDefaultToAdapter(
+  fieldClass: FieldClass,
+  upper: string,
+  defaultText: string,
+): boolean {
+  return (
+    !holdsAdapterMarker(defaultText) &&
+    !(fieldClass === "remote" && CREDENTIAL_BASE_URL_NAMES.has(upper))
+  );
+}
+
 function segmentFor(inner: string, state: ScanState): Segment {
   const separator = inner.indexOf(DEFAULT_SEPARATOR);
   const name = separator === -1 ? inner : inner.slice(0, separator);
@@ -171,11 +186,12 @@ function segmentFor(inner: string, state: ScanState): Segment {
   }
 
   const value = valueOf(state.env, name);
-  if (isDenied(state.fieldClass, name.toUpperCase(), value)) {
+  const upper = name.toUpperCase();
+  if (isDenied(state.fieldClass, upper, value)) {
     return deniedSegment(name, defaultText, value, state);
   }
 
-  if (defaultText !== undefined && !holdsAdapterMarker(defaultText)) {
+  if (defaultText !== undefined && leavesDefaultToAdapter(state.fieldClass, upper, defaultText)) {
     return { kind: "ref", name, fallback: defaultText };
   }
 
@@ -195,9 +211,9 @@ function segmentFor(inner: string, state: ScanState): Segment {
  * Expands one field value by Claude's rule. A set variable, the empty string
  * included, stays a reference. A `:-` default stays with its reference, set or
  * not, for the adapter to use when the variable is unset at connect time
- * (D-CF1-13). A default holding `$env:` or `{env:` text keeps the install-time
- * rule instead: an unset variable becomes the default text, which is never
- * scanned again. An unset variable with no default stays a reference and is
+ * (D-CF1-13). A default holding `$env:` or `{env:` text, and a base-URL name
+ * in a remote field, keep the install-time rule instead: an unset variable
+ * becomes the default text, which is never scanned again. An unset variable with no default stays a reference and is
  * reported missing. At user scope
  * `${CLAUDE_PROJECT_DIR}` stays a reference and is never reported missing. A
  * deny-listed reference follows Claude's deny arm for `fieldClass` (AVAR-05)

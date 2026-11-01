@@ -390,6 +390,38 @@ test("AVAR-03: pi-mcp-adapter outputs Claude's value for every short adversarial
   assert.deepStrictEqual(tally, { checked: EXPECTED_CHECKED_VALUES, mismatches: 0, first: [] });
 });
 
+// D-CF1-13: `${A:-` defaults that hold `$env:`, `{env`, `{env:` or a closed
+// `}`, next to literal text that could complete a marker. `A` is unset at
+// install, so a marker-free default reaches the adapter as `${A:-default}`
+// and any other default is resolved at install.
+const MARKER_DEFAULT_ALPHABET: AdversarialAlphabet = {
+  tokens: ["${A:-", "$env:", "{env", "{env:", "}", "K", ":", "$", "e", "v:", "${R}"],
+  maxLength: 5,
+};
+
+// (11 + 11^2 + ... + 11^5) values, three variants each, through both the
+// expanded and the literal path: 177,155 x 3 x 2.
+const EXPECTED_CHECKED_MARKER_DEFAULT_VALUES = 1_062_930;
+
+test("D-CF1-13: pi-mcp-adapter outputs Claude's value for every short marker-default value", async () => {
+  // arrange
+  const adapter = await loadAdapter();
+  const raws = sequencesOf(MARKER_DEFAULT_ALPHABET);
+  const tally: PropertyTally = { checked: 0, mismatches: 0, first: [] };
+
+  // act
+  for (const raw of raws) {
+    tallyValue(tally, adapter.utils, raw);
+  }
+
+  // assert
+  assert.deepStrictEqual(tally, {
+    checked: EXPECTED_CHECKED_MARKER_DEFAULT_VALUES,
+    mismatches: 0,
+    first: [],
+  });
+});
+
 // Runtime values of a kept reference that end in a partial marker or in a
 // marker that still lacks its name or its closing `}`.
 const REFERENCE_VALUE_TAILS = [
@@ -432,6 +464,62 @@ test("AVAR-05: plugin text after a reference cannot complete a marker that the r
   // assert
   assert.deepStrictEqual(tally, {
     checked: EXPECTED_CHECKED_TAIL_VALUES,
+    mismatches: 0,
+    first: [],
+  });
+});
+
+// The defaults beside `${R}` that could complete, or begin, a marker with
+// R's runtime value. A default holds no `}`.
+const DEFAULT_COMPLETION_ALPHABET: AdversarialAlphabet = {
+  tokens: ["env:", "nv:", "v:", ":", "K", "$", "{", "/"],
+  maxLength: 3,
+};
+
+// Runtime values of R that complete a marker begun by a default before it.
+const REFERENCE_VALUE_COMPLETIONS = ["env:K}", "nv:K}", "v:K}", ":K}", "K}", "}", "env:K", "v:K"];
+
+// 11 tails x (8 + 8^2 + 8^3) defaults after `${R}`, plus 8 completions x
+// (8 + 8^2 + 8^3) defaults before it.
+const EXPECTED_CHECKED_DEFAULT_VALUES = 11_096;
+
+// `A` stays unset when the adapter connects, so the adapter inserts its
+// default next to R's runtime value.
+function defaultMismatchFor(
+  utils: PiMcpAdapterUtils,
+  raw: string,
+  referenceValue: string,
+): Mismatch | undefined {
+  const { segments } = expandClaudeValue(raw, "plain", PROPERTY_INSTALL_ENV, PROPERTY_BUILTINS);
+  const written = serializeSegments(segments, false);
+  const runtime = { R: referenceValue, K: "S" };
+  const want = rendered(segments, runtime);
+  const got = utils.interpolateEnvVars(written, { [EMPTY_ENV_NAME]: "", ...runtime });
+  return got === want ? undefined : { raw, variant: referenceValue, written, got, want };
+}
+
+test("D-CF1-13: a default left to the adapter cannot form a marker with a reference's value", async () => {
+  // arrange
+  const adapter = await loadAdapter();
+  const defaults = sequencesOf(DEFAULT_COMPLETION_ALPHABET);
+  const runs = [
+    ...REFERENCE_VALUE_TAILS.flatMap((tail) =>
+      defaults.map((fallback) => ({ raw: `\${R}\${A:-${fallback}}`, referenceValue: tail })),
+    ),
+    ...REFERENCE_VALUE_COMPLETIONS.flatMap((completion) =>
+      defaults.map((fallback) => ({ raw: `\${A:-${fallback}}\${R}`, referenceValue: completion })),
+    ),
+  ];
+  const tally: PropertyTally = { checked: 0, mismatches: 0, first: [] };
+
+  // act
+  for (const { raw, referenceValue } of runs) {
+    tallyCheck(tally, defaultMismatchFor(adapter.utils, raw, referenceValue));
+  }
+
+  // assert
+  assert.deepStrictEqual(tally, {
+    checked: EXPECTED_CHECKED_DEFAULT_VALUES,
     mismatches: 0,
     first: [],
   });

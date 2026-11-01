@@ -84,28 +84,58 @@ export interface StampServersInput {
 // variable that must be set and non-empty.
 const ADAPTER_REFERENCE = /\$\{(\w+)\}|\$env:(\w+)|\{env:(\w+)\}/g;
 
+// A reference with a default, as pi-mcp-adapter's first pass reads it
+// (D-CF1-13). Its OAuth scan skips such a reference.
+const DEFAULTED_REFERENCE = /\$\{(\w+):-([^}]*)\}/g;
+
 // The split token names a variable Pi's process sets to the empty string.
 function isSetForAdapter(env: ClaudeEnv, name: string): boolean {
   const value = Object.hasOwn(env, name) ? env[name] : undefined;
   return name !== ADAPTER_EMPTY_ENV && (value ?? "") !== "";
 }
 
+function isSet(env: ClaudeEnv, name: string): boolean {
+  return (Object.hasOwn(env, name) ? env[name] : undefined) !== undefined;
+}
+
+// D-CF1-13: a reference with a default reads as the install-time rule
+// resolves it: `${NAME}` when its variable is set, and its default text when
+// it is unset. A set empty variable then drops `auth`, and so does an unset
+// one whose default leaves the value blank.
+function installTimeHeaderValue(value: string, env: ClaudeEnv): string {
+  return value.replace(DEFAULTED_REFERENCE, (_reference, name: string, fallback: string) =>
+    isSet(env, name) ? `\${${name}}` : fallback,
+  );
+}
+
 // Exactly one group matches, and `join` writes the others as "".
+function namesSetForAdapter(text: string, env: ClaudeEnv): boolean {
+  return [...text.matchAll(ADAPTER_REFERENCE)].every((match) =>
+    isSetForAdapter(env, match.slice(1).join("")),
+  );
+}
+
+// The written value is what the adapter scans; the install-time reading adds
+// each set variable that a reference with a default names.
 function isCleanHeaderValue(value: unknown, env: ClaudeEnv): boolean {
-  if (typeof value !== "string" || value.trim() === "") {
+  if (typeof value !== "string") {
     return false;
   }
 
-  return [...value.matchAll(ADAPTER_REFERENCE)].every((match) =>
-    isSetForAdapter(env, match.slice(1).join("")),
+  const installTime = installTimeHeaderValue(value, env);
+  return (
+    installTime.trim() !== "" &&
+    namesSetForAdapter(value, env) &&
+    namesSetForAdapter(installTime, env)
   );
 }
 
 /**
  * D-08-04: pi-mcp-adapter refuses to connect in OAuth mode when a header value
  * is empty after trimming or names an unset or empty variable. Such an entry
- * loses the table's `auth`, so it keeps connecting without OAuth. The decision
- * reads only whether each variable is set; no value is written.
+ * loses the table's `auth`, so it keeps connecting without OAuth. A reference
+ * with a default reads as the install-time rule resolves it (D-CF1-13). The
+ * decision reads only whether each variable is set; no value is written.
  */
 function withOAuthDecision(substituted: SubstitutedEntry, env: ClaudeEnv): SubstitutedEntry {
   const { auth, ...withoutAuth } = substituted.entry;
