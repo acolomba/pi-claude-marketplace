@@ -6,6 +6,8 @@
   - Plugin MCP servers now need pi-mcp-adapter 7.0.0 or a later 7.x release. Literal text in a plugin's MCP settings still reaches the server unchanged.
   - Plugin agents now need pi-subagents 0.84.0 or newer.
   - Plugin workflows now need `@quintinshaw/pi-dynamic-workflows` 3.15.0 or a later 3.x release, which the package now declares as an optional peer.
+  - A declared `commands`, `agents`, or `workflows` path now replaces the conventional folder, as in Claude Code, and install and update warn when that folder exists.
+  - A `${NAME:-default}` in a plugin's MCP settings now reads a variable set after install, as in Claude Code, without a reinstall.
 - A plugin's `SessionStart` hook now runs once when an RPC client starts, switches, forks, or clones a session, as in Claude Code. (#294)
 - Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)
 
