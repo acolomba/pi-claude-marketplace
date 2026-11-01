@@ -28,3 +28,62 @@ Feature: Skill frontmatter
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: A skill that sets every field pi cannot honor reports them in its frontmatter order
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "audit" with this skill file:
+      """
+      ---
+      name: audit
+      description: Audits a change.
+      paths: src/**
+      hooks: {}
+      background: true
+      context: fork
+      agent: reviewer
+      effort: high
+      model: opus
+      disallowed-tools: Bash
+      ---
+
+      Audit the change.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                                             |
+      | cascade    | info     | true         |                                                                     |                                                                                                   |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | [audit] dropped fields: paths, hooks, background, context, agent, effort, model, disallowed-tools |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: A skill that sets only fields pi honors or that have their own decision reports no dropped field
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "tidy" with this skill file:
+      """
+      ---
+      name: tidy
+      description: Tidies a change.
+      allowed-tools: Read
+      arguments: target
+      shell: bash
+      user-invocable: false
+      ---
+
+      Tidy the change.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |

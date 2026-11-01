@@ -1217,6 +1217,66 @@ describe("prepareStageSkills", () => {
     ]);
   });
 
+  test("D-CF2-08: reports no dropped fields for a skill whose frontmatter does not parse", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-degraded-dropped-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "broken");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: [unterminated\nmodel: opus\n---\n\nBody.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      knownWorkflowNames: [],
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["acme-broken"],
+      recorded: [
+        {
+          generatedName: "acme-broken",
+          sourcePath: skillDirectory,
+          targetPath: path.join(locations.skillsTargetDir, "acme-broken"),
+        },
+      ],
+      warnings: [],
+      degraded: [
+        {
+          generatedName: "acme-broken",
+          parseError:
+            "Flow sequence in block collection must be sufficiently indented and end with a ] at line 2, column 1:\n\n" +
+            "name: [unterminated\nmodel: opus\n^\n",
+        },
+      ],
+    });
+  });
+
   test("D-CF2-08: reports nothing for a skill that sets none of the dropped fields", async (t) => {
     // act
     const { warnings } = await stagedSkillWarnings(t, {
