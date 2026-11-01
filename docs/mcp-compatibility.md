@@ -237,7 +237,7 @@ So this extension installs such a server, and the server works, but the rules ar
 
 A server config that the schema of Claude Code rejects is malformed. Examples are an unknown `type`, a `url` with no `type`, a `timeout` that is not a positive integer, and a `callbackPort` outside 1 to 65535. What a malformed server does depends on where the plugin declares it. This extension follows Claude Code 2.1.316 (D-CF6-02):
 
-- A file source is `.mcp.json`, or a file that `mcpServers` names. A malformed server in a file source is skipped with no message. The other servers and the other components of the plugin install. A file source that is missing, does not parse, or cannot be read is skipped the same way, and the other sources still load. The loader of Claude Code also skips these with no message. Only `claude plugin validate` reports them.
+- A file source is `.mcp.json`, or a file that `mcpServers` names. A malformed server in a file source is skipped with no message. The other servers and the other components of the plugin install. A skipped server does not replace a server with the same name from an earlier source, so that earlier server stays. A file source that is missing, does not parse, cannot be read, or holds no server map is skipped the same way, and the other sources still load. The loader of Claude Code also skips these with no message. Only `claude plugin validate` reports them.
 - An inline source is a server map written in `plugin.json` or in the marketplace entry, also as an element of an array. A malformed server in an inline source makes the whole plugin `(unavailable)` with the reason `{malformed mcp}`, and no part of it installs. Claude Code refuses to install such a plugin, because its `plugin.json` or its marketplace entry is not valid.
 - An `mcpServers` path that is absolute or that leaves the plugin root also makes the whole plugin `(unavailable)` with `{malformed mcp}`. Claude Code refuses such a `plugin.json` too.
 
@@ -505,7 +505,7 @@ The behaviors below differ from Claude Code. Each item names its reason: a recor
 - [Claude Code MCP reference](https://code.claude.com/docs/en/mcp) -- the upstream reference for plugin MCP servers, tool names, timeouts, OAuth, and tool search.
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) -- the Pi package that runs the servers, with its own configuration reference.
 - [pi-mcp-adapter configuration](https://github.com/nicobailon/pi-mcp-adapter/blob/main/docs/configuration.md) -- the file layout, the order in which pi-mcp-adapter reads its files, and the trust rules for project servers.
-- [MCP adapter canary](../test/live-uat/README.md#mcp-adapter-canary----mcp-adapter-canarymjs) -- the live test that runs this extension with pi-mcp-adapter 5.2.0, and its recorded result.
+- [MCP adapter canary](../test/live-uat/README.md#mcp-adapter-canary----mcp-adapter-canarymjs) -- the live test that runs this extension with pi-mcp-adapter 7.0.0. Its recorded result is from a run on pi-mcp-adapter 5.2.0.
 - [Hook compatibility](hooks-compatibility.md) -- how plugin hooks match MCP tools.
 - [Environment variables](env-vars.md) -- the variables that this extension adds to the `env` of stdio servers.
 - [Output catalog](output-catalog.md) -- the exact text of the `{unsupported mcp}` and `{malformed mcp}` rows, the `info` output, and the override notice.
