@@ -17800,14 +17800,14 @@ test("WLIF-01: a statePhase failure takes the envelope and the staging tree back
   });
 });
 
-test("WLIF-01: an undo before the workflows phase ran removes nothing and does not throw", async () => {
+test("WLIF-01: a plugin refused for an inline malformed MCP server saves no workflow", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-undo-noop-"));
     try {
-      // arrange -- the mcp phase runs BEFORE the workflows phase, so a
-      // malformed server written inline in plugin.json (D-CF6-02) fails the
-      // install with `workflowsPrep` still undefined and the workflows undo
-      // reaching its early return.
+      // arrange -- a malformed server written inline in plugin.json makes the
+      // plugin unavailable (D-CF6-02), so the install fails before any ledger
+      // phase runs and the workflows phase never starts. The workflows undo's
+      // early return is reached by the workflows prepare failure case below.
       const locations = locationsFor("project", cwd);
       const { pluginRoot } = await seedPathMarketplaceWithPlugin({
         cwd,
