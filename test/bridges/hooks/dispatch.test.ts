@@ -23,6 +23,8 @@ import type {
   HookExecutor,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { ClaudeSessionEndEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts";
+import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
@@ -31,8 +33,6 @@ import type {
   InputEvent,
   SessionBeforeCompactEvent,
   SessionCompactEvent,
-  SessionShutdownEvent,
-  SessionStartEvent,
   ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -269,7 +269,7 @@ describe("compositeHandlerFor", () => {
     );
 
     // act
-    await handler({ type: "session_start", reason: "startup" }, context);
+    await handler({ source: "startup" }, context);
 
     // assert
     assert.deepStrictEqual(owningRuntime.pendingSessionStartContextEntries(), [
@@ -284,7 +284,7 @@ describe("compositeHandlerFor", () => {
     assert.deepStrictEqual(executorCalls, [
       {
         pluginId: "session-owner",
-        event: { type: "session_start", reason: "startup" },
+        event: { source: "startup" },
       },
     ]);
   });
@@ -1071,7 +1071,7 @@ describe("composite dispatch closure partitions", () => {
       undefined,
       executor,
     );
-    const pending = handler({ type: "session_start", reason: "startup" }, context);
+    const pending = handler({ source: "startup" }, context);
     runtime.advanceGeneration();
 
     // act
@@ -1350,7 +1350,7 @@ describe("composite dispatch closure partitions", () => {
         declarationIndex: 3,
       }),
     ];
-    const event = { type: "session_start", reason: "resume" } satisfies SessionStartEvent;
+    const event = { source: "resume" } satisfies ClaudeSessionStartEvent;
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       {
@@ -1369,9 +1369,9 @@ describe("composite dispatch closure partitions", () => {
       executor,
     );
     const expectedCalls: RecordedCall[] = [
-      { pluginId: "session-empty", event: { type: "session_start", reason: "resume" } },
-      { pluginId: "session-star", event: { type: "session_start", reason: "resume" } },
-      { pluginId: "session-exact", event: { type: "session_start", reason: "resume" } },
+      { pluginId: "session-empty", event: { source: "resume" } },
+      { pluginId: "session-star", event: { source: "resume" } },
+      { pluginId: "session-exact", event: { source: "resume" } },
     ];
     const expectedPendingContext: readonly [] = [];
 
@@ -1382,6 +1382,120 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), expectedPendingContext);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
+
+  for (const { source, expectedPluginIds } of [
+    { source: "clear", expectedPluginIds: ["session-any", "session-clear"] },
+    { source: "startup", expectedPluginIds: ["session-any", "session-startup"] },
+  ] as const) {
+    test(`filters SessionStart matchers on the Claude-side source ${source} (D-CF5-01)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const context = createExtensionContext("/workspace/dispatch-session-source");
+      runtime.setRoutingBucket("SessionStart", [
+        createRoutingEntry({
+          pluginId: "session-any",
+          claudeEvent: "SessionStart",
+          rawMatcher: "*",
+          declarationIndex: 0,
+        }),
+        createRoutingEntry({
+          pluginId: "session-clear",
+          claudeEvent: "SessionStart",
+          rawMatcher: "clear",
+          declarationIndex: 1,
+        }),
+        createRoutingEntry({
+          pluginId: "session-startup",
+          claudeEvent: "SessionStart",
+          rawMatcher: "startup",
+          declarationIndex: 2,
+        }),
+      ]);
+      const executorCalls: RecordedCall[] = [];
+      const executor = createRecordingExecutor(
+        {
+          "session-any": { kind: "noop" },
+          "session-clear": { kind: "noop" },
+          "session-startup": { kind: "noop" },
+        },
+        executorCalls,
+      );
+      const handler = compositeHandlerFor(
+        runtime,
+        "SessionStart",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+
+      // act
+      await handler({ source }, context);
+
+      // assert
+      assert.deepStrictEqual(
+        executorCalls,
+        expectedPluginIds.map((pluginId) => ({ pluginId, event: { source } })),
+      );
+    });
+  }
+
+  for (const { reason, expectedPluginIds } of [
+    { reason: "other", expectedPluginIds: ["session-end-empty", "session-end-other"] },
+    { reason: "clear", expectedPluginIds: ["session-end-empty", "session-end-clear"] },
+  ] as const) {
+    test(`filters SessionEnd matchers on the Claude-side reason ${reason} (D-CF5-02)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const context = createExtensionContext("/workspace/dispatch-session-reason");
+      runtime.setRoutingBucket("SessionEnd", [
+        createRoutingEntry({
+          pluginId: "session-end-empty",
+          claudeEvent: "SessionEnd",
+          rawMatcher: "",
+          declarationIndex: 0,
+        }),
+        createRoutingEntry({
+          pluginId: "session-end-other",
+          claudeEvent: "SessionEnd",
+          rawMatcher: "other",
+          declarationIndex: 1,
+        }),
+        createRoutingEntry({
+          pluginId: "session-end-clear",
+          claudeEvent: "SessionEnd",
+          rawMatcher: "clear",
+          declarationIndex: 2,
+        }),
+      ]);
+      const executorCalls: RecordedCall[] = [];
+      const executor = createRecordingExecutor(
+        {
+          "session-end-empty": { kind: "noop" },
+          "session-end-other": { kind: "noop" },
+          "session-end-clear": { kind: "noop" },
+        },
+        executorCalls,
+      );
+      const handler = compositeHandlerFor(
+        runtime,
+        "SessionEnd",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+
+      // act
+      await handler({ reason }, context);
+
+      // assert
+      assert.deepStrictEqual(
+        executorCalls,
+        expectedPluginIds.map((pluginId) => ({ pluginId, event: { reason } })),
+      );
+    });
+  }
 });
 
 describe("toolResultCompositeHandler", () => {
@@ -1998,7 +2112,7 @@ describe("composite per-event adapters", () => {
       scope: "project",
       marketplace: "project-hooks",
     });
-    const event = { type: "session_start", reason: "startup" } satisfies SessionStartEvent;
+    const event = { source: "startup" } satisfies ClaudeSessionStartEvent;
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       { "session-context": { kind: "mutate", additionalContext: "project guidance" } },
@@ -2023,7 +2137,7 @@ describe("composite per-event adapters", () => {
     const expectedCalls: RecordedCall[] = [
       {
         pluginId: "session-context",
-        event: { type: "session_start", reason: "startup" },
+        event: { source: "startup" },
       },
     ];
 
@@ -2046,7 +2160,7 @@ describe("composite per-event adapters", () => {
       rawMatcher: "",
       declarationIndex: 0,
     });
-    const event = { type: "session_shutdown", reason: "reload" } satisfies SessionShutdownEvent;
+    const event = { reason: "other" } satisfies ClaudeSessionEndEvent;
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       { "session-end-block": { kind: "block", reason: "ignored block" } },
@@ -2063,7 +2177,7 @@ describe("composite per-event adapters", () => {
     const expectedCalls: RecordedCall[] = [
       {
         pluginId: "session-end-block",
-        event: { type: "session_shutdown", reason: "reload" },
+        event: { reason: "other" },
       },
     ];
 

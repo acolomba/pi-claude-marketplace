@@ -60,6 +60,8 @@ import { SCOPES } from "../../shared/types.ts";
 import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
+import { claudeSessionEndReason } from "./payloads/session-end.ts";
+import { claudeSessionStartSource } from "./payloads/session-start.ts";
 import {
   createRoutingStateOperations,
   type CacheEntry,
@@ -74,12 +76,15 @@ import {
 } from "./settle.ts";
 
 import type { HookExecutor } from "./dispatch.ts";
+import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionAPI,
   ExtensionContext,
+  ExtensionMode,
+  SessionShutdownEvent,
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -777,6 +782,61 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
 }
 
 /**
+ * D-60-06: prepares the `_shared` data directory of every scope that has
+ * SessionStart entries before a SessionStart dispatch, so `CLAUDE_ENV_FILE`'s
+ * directory exists. Scopes are prepared one after the other and each failure
+ * stays independent. Returns `false` once the generation goes stale, so the
+ * caller dispatches nothing.
+ */
+async function prepareSessionStartDataDirs(
+  routingState: EventRouterRoutingState,
+  ctx: ExtensionContext,
+  generationIsCurrent: GenerationGuard,
+): Promise<boolean> {
+  const entries = routingState.getRoutingBucket("SessionStart");
+  for (const scope of SCOPES) {
+    if (entries.some((entry) => entry.scope === scope)) {
+      requireNotificationMode(ctx.mode);
+      // eslint-disable-next-line no-await-in-loop -- at most two independent scope directories
+      await ensureSharedDataDir(locationsFor(scope, ctx.cwd));
+      if (!generationIsCurrent()) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * The `session_shutdown` callback: it maps Pi's reason once, with the live
+ * session mode, and dispatches the Claude-side SessionEnd event (D-CF5-02).
+ * Pi `reload` keeps the session, so it runs no SessionEnd and a cleanup hook
+ * never tears down state of a session that continues (D-CF5-03). A context
+ * whose mode is not a notification mode is skipped with a debug line before
+ * the event is read.
+ */
+function sessionShutdownCallback(
+  sessionEndHandler: (event: ClaudeSessionEndEvent, ctx: ExtensionContext) => Promise<undefined>,
+): (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<undefined> | undefined {
+  return (event, ctx) => {
+    let mode: ExtensionMode;
+    try {
+      mode = requireNotificationMode(ctx.mode);
+    } catch (error: unknown) {
+      hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+      return undefined;
+    }
+
+    if (event.reason === "reload") {
+      return undefined;
+    }
+
+    return sessionEndHandler({ reason: claudeSessionEndReason(event.reason, mode) }, ctx);
+  };
+}
+
+/**
  * D-59-03 / DISP-01 / DISP-02 / DISP-03 hooks-bridge factory.
  *
  * Step order is load-bearing:
@@ -911,7 +971,9 @@ async function registerHooksBridgeWith(
       // clone) binds extensions twice, so this registration sees the same
       // session_start twice (earendil-works/pi#10470). Claude Code runs
       // SessionStart once per session, so a repeat of the last event for the
-      // same session id is dropped.
+      // same session id and Pi reason is dropped (SSDEDUP-01). The key keeps
+      // Pi's raw reason, and the compaction SessionStart never passes here
+      // (D-CF5-05).
       let lastSessionStart: string | undefined = undefined;
       return async (event, ctx) => {
         try {
@@ -933,20 +995,19 @@ async function registerHooksBridgeWith(
           }
 
           rebuildRoutingTablesWith(routingState);
-          const entries = routingState.getRoutingBucket("SessionStart");
-          for (const scope of SCOPES) {
-            if (entries.some((entry) => entry.scope === scope)) {
-              requireNotificationMode(ctx.mode);
-              // eslint-disable-next-line no-await-in-loop -- at most two independent scope directories
-              await ensureSharedDataDir(locationsFor(scope, ctx.cwd));
-              if (!generationIsCurrent()) {
-                return;
-              }
-            }
+          if (!(await prepareSessionStartDataDirs(routingState, ctx, generationIsCurrent))) {
+            return;
+          }
+
+          // D-CF5-03: Pi `/reload` keeps the session, as upstream
+          // `/reload-plugins`, so it runs no SessionStart; the hydrate, the
+          // rebuild, and the shared data directories above still run.
+          if (event.reason === "reload") {
+            return;
           }
 
           requireNotificationMode(ctx.mode);
-          await sessionStartHandler(event, ctx);
+          await sessionStartHandler({ source: claudeSessionStartSource(event.reason) }, ctx);
           if (!generationIsCurrent()) {
             return;
           }
@@ -958,8 +1019,10 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "session_shutdown",
-    bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
+    bind((generation) =>
+      sessionShutdownCallback(
+        compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
+      ),
     ),
   );
   pi.on(

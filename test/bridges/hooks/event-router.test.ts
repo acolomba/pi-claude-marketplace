@@ -2570,7 +2570,7 @@ test("SessionStart contains a dispatch failure after preparing both directories"
   assert.deepStrictEqual(messages, []);
 });
 
-test("SessionStart runs once when Pi repeats the same session start", async (t) => {
+test("SessionStart runs once when Pi repeats the same session start (SSDEDUP-01)", async (t) => {
   // arrange
   const { root, projectRoot } = await makeSessionStartFixture(t);
   const { pi, registrations } = makeRecordingPi();
@@ -2579,8 +2579,9 @@ test("SessionStart runs once when Pi repeats the same session start", async (t) 
   await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry, event, ctx) => {
-      const { reason } = event as { reason: string };
-      dispatched.push(`${ctx.sessionManager.getSessionId()} ${reason} ${entry.scope}`);
+      dispatched.push(
+        `${ctx.sessionManager.getSessionId()} ${JSON.stringify(event)} ${entry.scope}`,
+      );
       return Promise.resolve({ kind: "noop" });
     },
   });
@@ -2598,18 +2599,166 @@ test("SessionStart runs once when Pi repeats the same session start", async (t) 
   // act
   await sessionStart({ type: "session_start", reason: "new" }, context);
   await sessionStart({ type: "session_start", reason: "new" }, context);
-  await sessionStart({ type: "session_start", reason: "reload" }, context);
-  await sessionStart({ type: "session_start", reason: "reload" }, otherSession);
+  await sessionStart({ type: "session_start", reason: "fork" }, context);
+  await sessionStart({ type: "session_start", reason: "fork" }, otherSession);
 
   // assert
   assert.deepStrictEqual(dispatched, [
-    `${sessionId} new project`,
-    `${sessionId} new user`,
-    `${sessionId} reload project`,
-    `${sessionId} reload user`,
-    "router-other-session reload project",
-    "router-other-session reload user",
+    `${sessionId} {"source":"clear"} project`,
+    `${sessionId} {"source":"clear"} user`,
+    `${sessionId} {"source":"fork"} project`,
+    `${sessionId} {"source":"fork"} user`,
+    'router-other-session {"source":"fork"} project',
+    'router-other-session {"source":"fork"} user',
   ]);
+});
+
+for (const { reason, source } of [
+  { reason: "startup", source: "startup" },
+  { reason: "new", source: "clear" },
+  { reason: "resume", source: "resume" },
+  { reason: "fork", source: "fork" },
+] as const) {
+  test(`session_start dispatches SessionStart with source ${source} for Pi ${reason} (D-CF5-01)`, async (t) => {
+    // arrange
+    const { root, projectRoot } = await makeSessionStartFixture(t);
+    const { pi, registrations } = makeRecordingPi();
+    const runtime = createHooksRuntime();
+    const dispatched: unknown[] = [];
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+      cwd: projectRoot,
+      executor: (entry, event) => {
+        dispatched.push({ scope: entry.scope, event });
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+
+    // act
+    await registeredHandler(registrations, "session_start")(
+      { type: "session_start", reason },
+      makeContext(projectRoot, root),
+    );
+
+    // assert
+    assert.deepStrictEqual(dispatched, [
+      { scope: "project", event: { source } },
+      { scope: "user", event: { source } },
+    ]);
+  });
+}
+
+test("session_start on Pi reload prepares the shared directories and runs no SessionStart (D-CF5-03)", async (t) => {
+  // arrange
+  const { root, projectRoot, sharedPaths } = await makeSessionStartFixture(t);
+  const { pi, registrations, messages } = makeRecordingPi();
+  const runtime = createHooksRuntime();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    cwd: projectRoot,
+    executor: (entry) => {
+      dispatched.push(entry.scope);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+
+  // act
+  const update = await registeredHandler(registrations, "session_start")(
+    { type: "session_start", reason: "reload" },
+    makeContext(projectRoot, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(sharedPaths.map(fs.existsSync), [true, true]);
+  assert.deepStrictEqual(
+    runtime.getRoutingBucket("SessionStart").map((entry) => entry.scope),
+    ["project", "user"],
+  );
+  assert.deepStrictEqual(dispatched, []);
+  assert.deepStrictEqual(messages, []);
+});
+
+for (const { reason, mode, expectedReason } of [
+  { reason: "new", mode: "print", expectedReason: "clear" },
+  { reason: "resume", mode: "rpc", expectedReason: "resume" },
+  { reason: "fork", mode: "json", expectedReason: "resume" },
+  { reason: "quit", mode: "tui", expectedReason: "prompt_input_exit" },
+  { reason: "quit", mode: "rpc", expectedReason: "other" },
+] as const) {
+  test(`session_shutdown dispatches SessionEnd with reason ${expectedReason} for Pi ${reason} in ${mode} mode (D-CF5-02)`, async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-session-end-");
+    const runtime = createHooksRuntime();
+    const { pi, registrations, messages } = makeRecordingPi();
+    const dispatched: unknown[] = [];
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry, event) => {
+        dispatched.push({ pluginId: entry.pluginId, event });
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    runtime.setRoutingBucket("SessionEnd", [
+      {
+        ...preToolUseEntry("session-end-plugin", root),
+        claudeEvent: "SessionEnd",
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      },
+    ]);
+    const context = new Proxy(makeContext(root, root), {
+      get(target, property, receiver): unknown {
+        return property === "mode" ? mode : Reflect.get(target, property, receiver);
+      },
+    });
+
+    // act
+    const update = await registeredHandler(registrations, "session_shutdown")(
+      { type: "session_shutdown", reason },
+      context,
+    );
+
+    // assert
+    assert.strictEqual(update, undefined);
+    assert.deepStrictEqual(dispatched, [
+      { pluginId: "session-end-plugin", event: { reason: expectedReason } },
+    ]);
+    assert.deepStrictEqual(messages, []);
+  });
+}
+
+test("session_shutdown on Pi reload runs no SessionEnd (D-CF5-03)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-session-end-reload-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.pluginId);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  runtime.setRoutingBucket("SessionEnd", [
+    {
+      ...preToolUseEntry("session-end-plugin", root),
+      claudeEvent: "SessionEnd",
+      matcher: parseMatcher(""),
+      rawMatcher: "",
+    },
+  ]);
+
+  // act
+  const update = await registeredHandler(registrations, "session_shutdown")(
+    { type: "session_shutdown", reason: "reload" },
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(dispatched, []);
+  assert.deepStrictEqual(messages, []);
 });
 
 test("SessionStart runs a repeat whose first event was skipped for its mode", async (t) => {
@@ -2803,7 +2952,7 @@ function observeRouterDebug(t: TestContext): () => string[] {
 }
 
 for (const { claudeEvent, event } of [
-  { claudeEvent: "SessionEnd", event: { type: "session_shutdown" } },
+  { claudeEvent: "SessionEnd", event: { type: "session_shutdown", reason: "quit" } },
   { claudeEvent: "PreCompact", event: { type: "session_before_compact", trigger: "manual" } },
   { claudeEvent: "PostCompact", event: { type: "session_compact", trigger: "manual" } },
   {

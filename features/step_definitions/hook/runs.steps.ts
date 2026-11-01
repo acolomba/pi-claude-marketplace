@@ -4,9 +4,13 @@
  *
  * Every hook the steps declare runs the hook recorder, which appends one line
  * per hook process to the harness log `hook-runs.jsonl` (HAR-04). The runs
- * step states the runs of the last model turn whole, one row per run in the
- * order the processes appended them. A session id differs on every run, so a
- * cell that holds one names the session by the order it first appears in.
+ * step states the runs of the last turn whole, one row per run in the order
+ * the processes appended them. Runs of one event may append in any order, so
+ * the any-order step sorts the stated and the recorded rows on every column
+ * before it compares them whole; sorting drops no row (D-CF5-09). A session
+ * id differs on every run, so a cell that holds one names the session by the
+ * order it first appears in, and a session id inside a cell, such as the one
+ * `CLAUDE_ENV_FILE` names, reads as that ordinal too (D-CF5-26).
  */
 
 import assert from "node:assert/strict";
@@ -53,10 +57,21 @@ function sessionOrdinals(runs: readonly HookRun[]): Map<string, string> {
 }
 
 // A string is projected to the run tokens, and a cell that is a session id
-// becomes its ordinal. Any other value is its JSON text.
+// becomes its ordinal. A session id inside a string becomes its ordinal in
+// place. Any other value is its JSON text.
 function cell(value: unknown, tokens: RunTokens, ordinals: ReadonlyMap<string, string>): string {
   const text = typeof value === "string" ? value : JSON.stringify(value);
-  return ordinals.get(text) ?? projectTokens("text", text, tokens);
+  const whole = ordinals.get(text);
+  if (whole !== undefined) {
+    return whole;
+  }
+
+  let embedded = text;
+  for (const [session, ordinal] of ordinals) {
+    embedded = embedded.replaceAll(session, ordinal);
+  }
+
+  return projectTokens("text", embedded, tokens);
 }
 
 function runRecord(
@@ -86,11 +101,40 @@ Given(
   },
 );
 
-Then("the hooks record these runs:", function (this: ScenarioWorld, table: DataTable) {
-  const runs = (this.requireTurn().logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
+// The runs of the last turn as the table states them: its columns first, in
+// its order, then any column it leaves out.
+function runsTable(world: ScenarioWorld, table: DataTable): string[][] {
+  const runs = (world.requireTurn().logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
   const ordinals = sessionOrdinals(runs);
-  const records = runs.map((run) => runRecord(run, this.tokens, ordinals));
+  const records = runs.map((run) => runRecord(run, world.tokens, ordinals));
   const [stated = []] = table.raw();
-  assert.deepStrictEqual(recordTable(stated, records), table.raw());
+  return recordTable(stated, records);
+}
+
+// Compares two rows cell by cell, left to right, by UTF-16 code units.
+function compareRows(left: readonly string[], right: readonly string[]): number {
+  for (const [index, text] of left.entries()) {
+    const other = right[index] ?? "";
+    if (text !== other) {
+      return text < other ? -1 : 1;
+    }
+  }
+
+  return left.length - right.length;
+}
+
+// Orders the body rows on every column, keeping the header first.
+function sortedRows(rows: readonly (readonly string[])[]): (readonly string[])[] {
+  const [header = [], ...body] = rows;
+  return [header, ...[...body].sort(compareRows)];
+}
+
+Then("the hooks record these runs:", function (this: ScenarioWorld, table: DataTable) {
+  assert.deepStrictEqual(runsTable(this, table), table.raw());
+  this.markTurnCompared();
+});
+
+Then("the hooks record these runs in any order:", function (this: ScenarioWorld, table: DataTable) {
+  assert.deepStrictEqual(sortedRows(runsTable(this, table)), sortedRows(table.raw()));
   this.markTurnCompared();
 });
