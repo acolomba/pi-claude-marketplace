@@ -91,6 +91,24 @@ test("aggregateDiscoveredResources keeps scope order and sorts within each resou
   assert.equal(Object.isFrozen(result.promptPaths), true);
 });
 
+test("T-02-17: aggregateDiscoveredResources leaves out an untrusted project's skills and prompts", async (t) => {
+  // arrange
+  const { user, project } = await makeTestLocations(t, "resources-discover-untrusted-");
+  await stageSkill(user, "alpha");
+  await stageSkill(project, "aardvark");
+  await stagePrompt(user, "alpha");
+  await stagePrompt(project, "aardvark");
+
+  // act
+  const result = await aggregateDiscoveredResources(user, undefined);
+
+  // assert
+  assert.deepEqual(result, {
+    skillPaths: [path.join(user.skillsTargetDir, "alpha")],
+    promptPaths: [path.join(user.promptsTargetDir, "alpha.md")],
+  });
+});
+
 test("aggregateDiscoveredResources excludes hidden, nonmatching, nondirectory, and symlink entries", async (t) => {
   // arrange
   const { root, user, project } = await makeTestLocations(t, "resources-discover-filter-");

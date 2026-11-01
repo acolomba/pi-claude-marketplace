@@ -259,9 +259,9 @@ export async function invokeBridgedSkill(
   }
 
   // T-02-17: Claude Code loads no project-scope plugin before the workspace
-  // is trusted. A skill staged in an untrusted project may come from a cloned
-  // repository rather than from an install, so it runs nothing and nothing of
-  // it reaches the model.
+  // is trusted, and resource discovery leaves an untrusted project's skills
+  // out. A skill Pi still lists here was discovered while the project was
+  // trusted, so it aborts until the next `/reload` and runs nothing.
   if (skill.projectScope && !request.projectTrusted) {
     return { kind: "abort", message: untrustedProjectMessage(request) };
   }

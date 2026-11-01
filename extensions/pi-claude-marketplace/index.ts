@@ -189,9 +189,14 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       }
 
       try {
+        // T-02-17: Pi withholds an untrusted project's own `.pi/skills` and
+        // `.pi/prompts`, and Claude Code loads no project-scope plugin
+        // component before trust, so an untrusted project's staged skills and
+        // prompts are not discovered at all. Pi resolves trust before it
+        // emits this event.
         const discovered = await aggregateDiscoveredResources(
           locationsFor("user", homedir()),
-          locationsFor("project", event.cwd),
+          ctx.isProjectTrusted() ? locationsFor("project", event.cwd) : undefined,
         );
         return {
           skillPaths: [...discovered.skillPaths],

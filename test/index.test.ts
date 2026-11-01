@@ -320,6 +320,11 @@ async function loadExtension(
   },
 ): Promise<LoadedExtension> {
   const boundary = createNotificationBoundary(emissions, cwd, modeReads);
+  // T-02-17: every discover pass asks whether Pi trusts the project; the
+  // untrusted case states its own expectation.
+  when(() => boundary.ctx.isProjectTrusted())
+    .thenReturn(true)
+    .anyTimes();
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   if (output?.inventoryError === undefined) {
     expectSoftDepProbes(pi, probes);
@@ -1015,6 +1020,7 @@ test("unsupported loading preserves disk and environment while discovering exist
   const capture = createJsonCapture();
   const loaded = await loadExtension(0, 0);
   const ctx = {
+    isProjectTrusted: () => true,
     mode: "unknown",
     get ui() {
       return capture.ui;
@@ -1065,6 +1071,7 @@ for (const mode of ["json", "rpc"]) {
       });
       const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_RECONCILE);
       const ctx = {
+        isProjectTrusted: () => true,
         mode,
         get ui() {
           return capture.ui;
@@ -1147,6 +1154,7 @@ for (const failure of ["mode", "inventory"] as const) {
       },
     );
     const ctx = {
+      isProjectTrusted: () => true,
       get mode(): string {
         if (failure === "mode") {
           throw new Error("stale mode");
@@ -1186,6 +1194,7 @@ for (const unsupportedRead of [2, 3]) {
     const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0);
     let reads = 0;
     const ctx = {
+      isProjectTrusted: () => true,
       get mode(): string {
         reads += 1;
         return reads === unsupportedRead ? "unknown" : "json";
@@ -1233,6 +1242,7 @@ test("a refused load append leaves install state untouched and still runs the in
     },
   });
   const ctx = {
+    isProjectTrusted: () => true,
     mode: "json",
     get ui() {
       return capture.ui;
@@ -1267,6 +1277,7 @@ for (const failure of ["unknown-mode", "mode", "sessionManager"] as const) {
     const loaded = await loadExtension(0, 0);
     const reads: string[] = [];
     const ctx = {
+      isProjectTrusted: () => true,
       get mode(): string {
         if (failure === "mode") {
           throw new Error("stale mode");
@@ -1619,6 +1630,38 @@ test("discovers prompts under the working directory the event names, not the one
   // assert
   assert.deepStrictEqual(discovered, expectedDiscovery);
   verifyBoundary();
+});
+
+test("T-02-17: discovers the user scope's prompts and not the project's when Pi does not trust the project", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "untrusted-project");
+  await seedPrompt(scope.cwd, "project.md");
+  const userPromptsDir = path.join(scope.agentDir, "pi-claude-marketplace", "resources", "prompts");
+  await mkdir(userPromptsDir, { recursive: true });
+  const userPromptPath = path.join(userPromptsDir, "user.md");
+  await writeFile(userPromptPath, "# prompt\n", "utf8");
+  const loaded = await loadExtension(0, PROBES_PER_DISCOVER);
+  let trustReads = 0;
+  const untrusted = new Proxy(loaded.ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "isProjectTrusted") {
+        return () => {
+          trustReads += 1;
+          return false;
+        };
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  // act
+  const discovered = await loaded.discover(discoverEvent(scope.cwd), untrusted);
+
+  // assert
+  assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [userPromptPath] });
+  assert.strictEqual(trustReads, 1);
+  loaded.verifyBoundary();
 });
 
 test("leaves both scope roots untouched and emits nothing when a pristine workspace reconciles (WR-05)", async (t) => {
