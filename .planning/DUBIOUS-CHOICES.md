@@ -741,3 +741,17 @@ Indented `---` fence; record-key spellings; stale staged file falling through to
 6. README tables applied with the invented `name: baz` example from 02-07. No `docs/output-catalog.md` entry: the catalog lists no staging diagnostic headers.
 7. CONVENTIONS marker listing corrected for pre-existing markers too (42 total, 24 `code-duplication`).
 - Gate after these commits (7e5240e): `npm run check` exit 0, cucumber 1254/1254 (seed 311675).
+
+### DC-31: Phase 7 (Workflows), merged at a28489b
+
+Full entries: `.planning/phases/07-workflows/DUBIOUS-CHOICES.md`, P7-DC-01..17 (one High, eight Medium, eight Low). The child session ran discuss, plan, execute, three review rounds, and verification (passed 5/5) on `features/component-features-phase-7`. No production code changed.
+
+**For the user to review first:**
+1. **P7-DC-03 (High), D-CF7-01:** Pi runs a plugin workflow with no approval prompt. Claude Code asks first in manual mode. Neither the engine nor Pi gives the bridge a hook, so this is recorded as a Pi gap and the bridge adds nothing.
+2. **P7-DC-02, D-CF7-02:** the engine passes typed arguments as an object `{_, _raw, key=value}`; Claude Code passes one string. Pinned as is.
+3. **P7-DC-04, D-CF7-03 / D-CF7-04:** the bridge refuses nondeterministic or unparseable scripts at install (upstream registers them and fails at run), and installs a script with a bad `meta` with a warning (upstream skips it at load).
+4. **P7-DC-06/13/16, WFL-04:** "engine loaded later, then `/reload`" is proven by adding the engine to Pi's settings and starting a new session, because over RPC `/reload` goes to the model. The verifier accepted it.
+5. **P7-DC-15:** engine 3.15.0 never posts a run's result back over RPC and warns once per session; six run scenarios pin that warning.
+6. **P7-DC-05:** commit trailers name the child session's link, not the parent's.
+7. **P7-DC-17:** the child skipped the transition's PROJECT.md step; the parent adds D-CF7-01..04 and moves WFL-01..05 to Validated.
+- Merge: clean auto-merge; the parent restored STATE.md's position block, which the child's copy had overwritten.
