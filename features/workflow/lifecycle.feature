@@ -39,3 +39,27 @@ Feature: Workflow lifecycle
     Given the user has started a new pi session
     When the user lists the slash commands pi offers
     Then pi offers no workflow commands
+
+  Scenario: Disabling a plugin with a workflow reports that its command lingers until a new session
+    When the user runs "/claude:plugin disable demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                             |
+      | cascade | warning  | true         | A plugin operation needs attention. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status   | reasons                | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | disabled | stale workflow command | user  | 1.0.0   |
+
+  Scenario: Running a workflow command after its plugin is disabled shows the engine's notice, because pi keeps the command until a new session
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user", which warned
+    When the user runs the workflow command "/demo:hello", which starts no run
+    Then the workflow engine shows these notices:
+      | severity | message                                                                                       |
+      | warning  | /demo:hello is not available in this project -- reload the session to drop the stale command. |
+
+  Scenario: Enabling a disabled plugin runs its workflow again in a new session
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user", which warned
+    Given the user has started a new pi session
+    Given the user has run "/claude:plugin enable demo@fixtures --scope user"
+    Given the user has started a new pi session
+    When the user runs the workflow command "/demo:hello"
+    Then the workflow run ends with the status "completed" and the result "Hello from demo."
