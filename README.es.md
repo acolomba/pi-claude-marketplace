@@ -24,7 +24,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 
 - Comandos.
 - Habilidades.
-- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents).
+- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`. Los agentes se ejecutan en primer plano, salvo que indiquen `background: true`. Un agente recibe el contenido de las habilidades que precarga.
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
 - Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 - Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
@@ -137,7 +137,7 @@ También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y
 
 ### Complementos parcialmente disponibles
 
-Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema o un servidor MCP que usa una función que pi-mcp-adapter no puede ejecutar. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
+Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema, un servidor MCP que usa una función que pi-mcp-adapter no puede ejecutar o un paquete MCP. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
 
 Lista los complementos parcialmente disponibles.
 
@@ -363,7 +363,7 @@ Actualiza un complemento instalado, todos los complementos instalados de un merc
 ```
 
 > [!NOTE]
-> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`.
+> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`. Mapea `sonnet`, `opus`, `haiku`, `fable`, `best` y `opusplan`, con o sin `[1m]`, a los modelos actuales de Claude, por ejemplo `anthropic/claude-sonnet-5-5`. Conserva los ID de modelo completos que empiezan por `claude-`.
 
 Reinstala un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 

@@ -24,7 +24,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`. Agents run in the foreground unless they set `background: true`. An agent gets the content of the skills it preloads.
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
@@ -139,7 +139,7 @@ You can also install the same plugin in both the user and project scopes. Then t
 
 ### Partially available plugins
 
-Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, or an MCP server that uses a feature pi-mcp-adapter cannot run. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
+Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, an MCP server that uses a feature pi-mcp-adapter cannot run, or an MCP bundle. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
 
 List partially available plugins.
 
@@ -374,7 +374,7 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 ```
 
 > [!NOTE]
-> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`.
+> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`. It maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, for example `anthropic/claude-sonnet-5-5`. It keeps full `claude-` model IDs.
 
 Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 
