@@ -11,13 +11,14 @@
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
-import { publishStubServersFile } from "../../lib/mcp-server-files.ts";
+import { MCP_SERVER_ENVIRONMENT_PRELOAD } from "../../lib/mcp-server-environment.ts";
 import { McpHttpServer, readMcpHttpRequests } from "../../lib/mcp-server-http.ts";
+import { MCP_STUB_SERVER } from "../../lib/mcp-stub-server.ts";
+import { writePublishedPluginFile } from "../../lib/published-marketplace.ts";
 
 import type { McpHttpRequest } from "../../lib/mcp-server-http.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -28,18 +29,18 @@ import type { ScenarioWorld } from "../../support/world.ts";
 const HTTP_LISTING_TIMEOUT_MS = 15_000;
 const HTTP_LISTING_POLL_MS = 50;
 
-// Writes `document` as the plugin's `.mcp.json` and asserts it reads back.
+// Writes `servers` as the `mcpServers` of the plugin's `.mcp.json`, which
+// must not exist yet, and asserts it reads back.
 async function publishMcpFile(
   world: ScenarioWorld,
   plugin: string,
   name: string,
-  document: unknown,
+  servers: Readonly<Record<string, unknown>>,
 ): Promise<void> {
   const published = world.requirePublished(name);
-  const text = JSON.stringify(document);
-  const written = await publishStubServersFile(published, plugin, ".mcp.json", text);
-  const target = path.join(published.root, "plugins", plugin, ".mcp.json");
-  assert.strictEqual(await readFile(target, "utf8"), written);
+  const text = `${JSON.stringify({ mcpServers: servers }, null, 2)}\n`;
+  const file = await writePublishedPluginFile(published, plugin, ".mcp.json", text);
+  assert.strictEqual(await readFile(file, "utf8"), text);
 }
 
 // The requests the server `server` logged, after asserting that no other
@@ -95,8 +96,29 @@ Given(
     const http = await McpHttpServer.start(this.tokens.home, server);
     this.onRelease(() => http.close());
     await publishMcpFile(this, plugin, name, {
-      mcpServers: { [server]: { type: "http", url: http.url, headers } },
+      [server]: { type: "http", url: http.url, headers },
     });
+  },
+);
+
+// MENV-01/02: the stub runs with the environment preload, which prefixes its
+// echo with the values of the two variables, as its own process has them.
+Given(
+  "the published plugin {string} of the marketplace {string} has the stub mcp server {string} that echoes its {string} and {string} environment variables",
+  async function (
+    this: ScenarioWorld,
+    plugin: string,
+    name: string,
+    server: string,
+    first: string,
+    second: string,
+  ) {
+    const entry = {
+      command: process.execPath,
+      args: ["--import", MCP_SERVER_ENVIRONMENT_PRELOAD, MCP_STUB_SERVER, plugin, server],
+      env: { STUB_TAG_FROM: `${first},${second}` },
+    };
+    await publishMcpFile(this, plugin, name, { [server]: entry });
   },
 );
 
