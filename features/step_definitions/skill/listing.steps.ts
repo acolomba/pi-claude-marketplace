@@ -1,6 +1,6 @@
 /**
- * @fileoverview Steps about invoking the skills of a plugin: the skills a
- * published plugin holds.
+ * @fileoverview Steps every skill feature shares: the skills a published
+ * plugin holds.
  */
 
 import assert from "node:assert/strict";
