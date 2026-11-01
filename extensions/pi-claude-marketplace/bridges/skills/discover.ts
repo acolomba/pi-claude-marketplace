@@ -26,8 +26,8 @@
 //     user and the model; this bridge skips it with a warning, in the style of
 //     the D-07 duplicate warning, so the user learns it was dropped. The skip
 //     comes before the generated-name dedup, so a shadowed skill claims no
-//     generated name. The command names are read through `skill-names.ts`,
-//     never through the commands bridge (fallow boundary zones).
+//     generated name. The command names come from this bridge's own name
+//     helpers, never from the commands bridge (fallow boundary zones).
 //
 // SK-2 elision is delegated to `domain/name.ts::generatedSkillName`; this
 // module is purely the discovery/filter step.
@@ -117,8 +117,8 @@ function duplicateWarning(
  */
 function shadowedByCommandWarning(sourceName: string, identityName: string): string {
   return (
-    `skill source "${sourceName}" has the same name "${identityName}" as a command ` +
-    `of the plugin; ignoring the skill.`
+    `skill source "${sourceName}" has the same name "${identityName}"` +
+    ` as a command of the plugin; ignoring the skill.`
   );
 }
 
