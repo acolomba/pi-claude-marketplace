@@ -240,6 +240,40 @@ Key facts (upstream = U, pi-subagents = P):
   `/reload` is needed for the file, but a new session keeps the parent
   catalog of D-CF4-14 current).
 
+### Amendments after research (2026-11-01; settled autonomously)
+
+The researcher's open questions (`04-RESEARCH.md`), answered with the
+recommended or upstream option. Each amends the decision it names.
+
+- **D-CF4-07 amended:** frontmatter `opusplan` maps to
+  `anthropic/claude-sonnet-5-5`, as the upstream record says a frontmatter
+  `opusplan` runs on sonnet (it is opus only in plan mode, which agents lack).
+- **D-CF4-01 amended:** a declared folder path is walked with the same
+  recursive walker (residual against upstream, which refuses folders); a
+  declared file path, which installs nothing today (`readdir` ENOTDIR), gets a
+  file branch and keeps its bare name. A symlinked declared file is refused
+  (T-03-27), where upstream follows it (residual). The agents walk gets its own
+  predicate; `shared/fs-utils.ts` behavior for skills and commands is
+  unchanged. `orchestrators/plugin/info.ts` stays flat (residual, parent line).
+- **D-CF4-09 amended:** pin only the explicit `agentScope:"project"` pair (the
+  Phase 1 seed); the default-scope untrusted run, whose error text names
+  repository paths no frozen run token covers, is not pinned (recorded).
+- **D-CF4-05 amended:** the `async`-field exception also covers an agent with
+  no `tools` list in a plugin that ships MCP servers (a foreground child loads
+  no ambient pi-mcp-adapter tools), so those keep today's output too.
+- **D-CF4-08 amended:** a `Tool(spec)` entry such as `Bash(git log *)` maps
+  by its tool name (`Bash`), as upstream resolves it; the spec is dropped.
+- **D-CF4-06 amended:** `effort` is lowercased before matching, as upstream.
+- **D-CF4-04 implementation (accepted from research):** the two orchestrator
+  call sites (`install-outcome.ts`, `update-swap.ts`) pass the skills phase's
+  result rows to the agents stage, which reads each preloaded skill's source
+  `SKILL.md`, checks model-invocability, and applies the skills bridge's body
+  transforms (`rewriteMarkdownReferences`, then `substituteClaudeVars` with
+  `skillDir` at the staged target). Minimal edits inside their own functions.
+- **Waves:** four waves, not three (wave 1 tracer; wave 2 the `convert.ts`
+  owner plus the two no-product-change plans; wave 3 invocation and XK-01;
+  wave 4 decisions, docs, gate), because `convert.ts` carries five decisions.
+
 ### Claude's Discretion
 
 - The plan split, wave placement (the ROADMAP's three-wave template), step
