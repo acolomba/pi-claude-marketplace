@@ -710,9 +710,19 @@ test("rejects a string reference that crosses a symlink without reading it", asy
   );
 });
 
+// D-CF6-02: Claude Code's loader skips every failure of its file read, the
+// transient EMFILE and EIO included, and Node's refusal of a path.
 for (const { title, readFailure } of [
   { title: "an EACCES error", readFailure: Object.assign(new Error("denied"), { code: "EACCES" }) },
-  { title: "a non-Error value", readFailure: "read failure" },
+  {
+    title: "a transient EMFILE error",
+    readFailure: Object.assign(new Error("too many open files"), { code: "EMFILE" }),
+  },
+  { title: "a transient EIO error", readFailure: Object.assign(new Error("i/o"), { code: "EIO" }) },
+  {
+    title: "a Node path error",
+    readFailure: Object.assign(new TypeError("bad path"), { code: "ERR_INVALID_ARG_VALUE" }),
+  },
 ] as const) {
   test(`D-CF6-02: skips a string reference whose read rejects with ${title}`, async () => {
     // arrange
@@ -779,6 +789,77 @@ for (const { title, readFailure } of [
         resolution: { notes: [], unsupported: [], mcpServers: { local: { command: "node" } } },
       },
     );
+  });
+}
+
+// D-CF6-02: only a file-system failure skips a file source; a throw without a
+// Node error code is a defect and reaches the caller.
+for (const { title, failure } of [
+  { title: "a non-Error value", failure: "read failure" },
+  { title: "a TypeError without a code", failure: new TypeError("defect") },
+] as const) {
+  test(`D-CF6-02: rethrows ${title} from a string reference read`, async () => {
+    // arrange
+    const { resolveStrictMcp } =
+      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+
+    // act
+    const resolved = resolveStrictMcp(
+      {
+        entry: { mcpServers: ["servers.json", { local: { command: "node" } }] },
+        manifest: null,
+        pluginRoot: "/plugins/alpha",
+        resolution: emptyResolution(),
+      },
+      {
+        statKind: (candidate) =>
+          Promise.resolve(candidate === "/plugins/alpha/servers.json" ? "file" : null),
+        readFileText: () =>
+          new Promise<string>((_resolve, reject) => {
+            Reflect.apply(reject, undefined, [failure]);
+          }),
+      },
+    );
+
+    // assert
+    await assert.rejects(resolved, (error: unknown) => {
+      assert.strictEqual(error, failure);
+      return true;
+    });
+  });
+
+  test(`D-CF6-02: rethrows ${title} from the .mcp.json stat`, async () => {
+    // arrange
+    const { resolveStrictMcp } =
+      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+    const reads: string[] = [];
+
+    // act
+    const resolved = resolveStrictMcp(
+      {
+        entry: {},
+        manifest: { mcpServers: { local: { command: "node" } } },
+        pluginRoot: "/plugins/alpha",
+        resolution: emptyResolution(),
+      },
+      {
+        statKind: () =>
+          new Promise<"file">((_resolve, reject) => {
+            Reflect.apply(reject, undefined, [failure]);
+          }),
+        readFileText: (candidate) => {
+          reads.push(candidate);
+          return Promise.resolve("{}");
+        },
+      },
+    );
+
+    // assert
+    await assert.rejects(resolved, (error: unknown) => {
+      assert.strictEqual(error, failure);
+      return true;
+    });
+    assert.deepStrictEqual(reads, []);
   });
 }
 

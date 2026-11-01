@@ -4555,7 +4555,7 @@ test("resolveStrict unwraps a standalone mcpServers document", async () => {
   });
 });
 
-test("resolveStrict skips a standalone .mcp.json whose read rejects with a non-Error -> installable with no servers (D-CF6-02)", async () => {
+test("resolveStrict propagates a non-Error standalone mcp read rejection (not wrapped as malformed)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./mcp-read-rejection");
   const mcpPath = path.join(localRoot, ".mcp.json");
@@ -4582,25 +4582,11 @@ test("resolveStrict skips a standalone .mcp.json whose read rejects with a non-E
     },
   };
 
-  // act
-  const resolvedPlugin = await resolveStrict(
-    pluginEntry({ source: "./mcp-read-rejection" }),
-    context,
+  // act & assert
+  await assert.rejects(
+    () => resolveStrict(pluginEntry({ source: "./mcp-read-rejection" }), context),
+    (error: unknown) => error === mcpReadFailure,
   );
-
-  // assert
-  assert.deepStrictEqual(resolvedPlugin, {
-    state: "installable",
-    installable: true,
-    name: "p1",
-    pluginRoot: localRoot,
-    supported: [],
-    unsupported: [],
-    notes: [],
-    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
-    mcpServers: {},
-    defaultEnabled: true,
-  });
 });
 
 test("requireInstallable classifies an update of the partial true arm", async () => {

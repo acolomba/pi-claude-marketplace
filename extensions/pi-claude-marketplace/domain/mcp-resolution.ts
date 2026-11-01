@@ -16,7 +16,7 @@
 import path from "node:path";
 
 import { hookDebugLog } from "../shared/debug-log.ts";
-import { errorMessage } from "../shared/errors.ts";
+import { errorMessage, isErrnoException } from "../shared/errors.ts";
 
 import { resolveContainedComponentPath } from "./component-paths.ts";
 import { MCP_SERVER_MAP_VALIDATOR } from "./components/mcp.ts";
@@ -122,12 +122,51 @@ function mergeServerMap(merge: McpMerge, value: unknown): void {
   addDefect(merge, `malformed mcpServers: ${errorDetail}`);
 }
 
+/**
+ * Returns the message of a file-system failure, which makes a file source
+ * contribute nothing (D-CF6-02), and rethrows anything else. Claude Code
+ * 2.1.316's loader returns no servers for every failure of its file read,
+ * transient ones such as `EMFILE` and `EIO` included. Node gives each such
+ * failure a `code`, a POSIX name such as `ENOENT` or an `ERR_` name for a
+ * path it refuses. A throw without one, such as a `TypeError` from a defect
+ * here or a non-`Error` value, propagates.
+ */
+function fileSystemFailureDetail(error: unknown): string {
+  if (isErrnoException(error)) {
+    return error.message;
+  }
+
+  throw error;
+}
+
 // D-CF6-01: a file holds its server map under `mcpServers` or as the whole
 // document, for `.mcp.json` and a referenced file alike.
 function fileServerMap(document: unknown): unknown {
   return isPlainObject(document) && Object.hasOwn(document, "mcpServers")
     ? document.mcpServers
     : document;
+}
+
+/**
+ * Returns the text of one file source, or `undefined` when it is missing,
+ * is not a regular file, or fails to read with a file-system error
+ * (D-CF6-02).
+ */
+async function readServerFileText(
+  merge: McpMerge,
+  absolutePath: string,
+  file: string,
+): Promise<string | undefined> {
+  try {
+    if ((await merge.dependencies.statKind(absolutePath)) !== "file") {
+      return undefined;
+    }
+
+    return await merge.dependencies.readFileText(absolutePath);
+  } catch (error: unknown) {
+    logFileSkip(merge, file, `the file: ${fileSystemFailureDetail(error)}`);
+    return undefined;
+  }
 }
 
 /**
@@ -139,14 +178,16 @@ function fileServerMap(document: unknown): unknown {
  * adds a note.
  */
 async function mergeServerFile(merge: McpMerge, absolutePath: string, file: string): Promise<void> {
+  const text = await readServerFileText(merge, absolutePath, file);
+  if (text === undefined) {
+    return;
+  }
+
   let document: unknown;
   try {
-    if ((await merge.dependencies.statKind(absolutePath)) !== "file") {
-      return;
-    }
-
-    document = JSON.parse(await merge.dependencies.readFileText(absolutePath));
+    document = JSON.parse(text);
   } catch (error: unknown) {
+    // `JSON.parse` of a string throws only a `SyntaxError`.
     logFileSkip(merge, file, `the file: ${errorMessage(error)}`);
     return;
   }
@@ -164,8 +205,8 @@ async function mergeServerFile(merge: McpMerge, absolutePath: string, file: stri
 
 // Where a reference string points. Claude Code refuses a manifest whose
 // reference is absolute or leaves the plugin root (D-CF6-02). A reference
-// whose path cannot be walked, such as one through a regular file, names a
-// file the loader cannot read.
+// whose path walk fails with a file-system error, such as one through a
+// regular file, names a file the loader cannot read.
 type LocatedReference =
   | { readonly kind: "inside"; readonly absolutePath: string }
   | { readonly kind: "refused"; readonly note: string }
@@ -176,7 +217,7 @@ async function locateReference(raw: string, pluginRoot: string): Promise<Located
   try {
     contained = await resolveContainedComponentPath(pluginRoot, raw, "mcpServers reference");
   } catch (error: unknown) {
-    return { kind: "unreachable", detail: errorMessage(error) };
+    return { kind: "unreachable", detail: fileSystemFailureDetail(error) };
   }
 
   if (contained.ok) {
