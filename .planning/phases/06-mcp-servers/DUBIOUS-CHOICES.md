@@ -221,3 +221,30 @@ tooling. Status stays `open` until the user reviews it.
   8. `[1]` replaces `[]` in the two refused plugin-schema lists in `test/domain/components/plugin.test.ts`.
   9. The four Task 3 scenarios (entry, bundle, reference rules) have no measured red run; their red is argued from the old code.
 - **Recorded in:** `06-03-SUMMARY.md`.
+
+### P6-DC-17: Plan 06-08 executor choices (compatibility doc)
+
+- **Phase / source:** Phase 6 executor for `06-08-PLAN.md` (`06-08-SUMMARY.md`).
+- **Severity:** Medium (items 4, 5, 6); the rest Low. **Status:** open.
+- **Items:**
+  1. The `MCP_DIRECT_TOOLS` deferred-tool name (`mcp__plugin_demo_stub___echo`, three underscores) is recorded as its own Naming divergence although ADOC-01 covers adapter settings in general.
+  2. The hooks paragraph states only the adapter fact (a proxied call is also a nested call under the real name) and leaves whether plugin matchers fire to the Phase 5 reconcile (parent line).
+  3. The header names the canary run without its version and points to Further reading, pulling against the must-have to state the old basis.
+  4. The Upgrading bullet says a skipped file-source server counts as "no longer declared" for AMIG-01; inferred from `resolveStrict` reuse, not run.
+  5. The D-CF6-10 item says Claude Code runs a subagent with a plugin MCP tool in the foreground; follows MCP-07's wording, no 2.1.316 probe.
+  6. The Migration divergence item is kept, reworded, although upstream also refuses such a plugin.
+  7. Scenario file names are cited in the user-facing doc.
+  8. The `--mcp-config` sentence ("Pi still does not run its built-in MCP") rests on an adapter source comment, not a run.
+- **Recorded in:** `06-08-SUMMARY.md`.
+
+### P6-DC-18: Plan 06-07 executor choices (silent skip)
+
+- **Phase / source:** Phase 6 executor for `06-07-PLAN.md` (`06-07-SUMMARY.md`).
+- **Severity:** High (items 1, 2); the rest Low. **Status:** open.
+- **Items:**
+  1. A skipped MCP file source or malformed server gets no user message, only an env-gated `hookDebugLog(..., "mcp")` line; a user loses a bad server silently, as in Claude Code.
+  2. EACCES and containment-walk I/O errors (ENOTDIR) are skipped rather than reported as `{permission denied}`, following upstream's loader; a real permission problem now goes unreported.
+  3. One Outline state Given (`the mcp file ... is {string}`, states `missing`, `not valid JSON`, `readable by nobody`) replaces the plan's three Givens; the plan's `cannot be read by anyone` step text is not registered.
+  4. The Outline's surviving server is inline in every row, so ".mcp.json survives a bad reference" is pinned by unit tests only.
+  5. The 7 named plugin-resolver tests keep their arrange and now expect installable with no servers, instead of gaining a second source.
+- **Recorded in:** `06-07-SUMMARY.md`.
