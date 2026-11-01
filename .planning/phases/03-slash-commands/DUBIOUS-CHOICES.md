@@ -343,3 +343,46 @@ entries into it. Severity and status follow the root file's rules.
   6. Wave 3's post-merge gate reuses the executor's `npm run check` at
      `ce2330b` (seed 713944, 1299 scenarios); the merged tree adds only the
      SUMMARY.
+
+### P3-DC-18: Plan 03-07 executor choices (provenance check)
+
+- **Phase / source:** 03-07 executor (`03-07-SUMMARY.md`).
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. The digest covers only the staged command file; a plugin script a `!`
+     command runs is not covered (the skills digest covers the whole staged
+     directory). Accepted as T-03-23; parent gap line.
+  2. The refusal names `/claude:plugin reinstall <plugin>@<marketplace>
+     --scope project` from the project record that lists the command (state
+     read with `persistMigration: false`), or a generic reinstall line.
+  3. An unparseable staged file refuses with `Cannot read the command ...`
+     before the ledger is read.
+  4. The unit fake hard-codes Phase 2's ledger layout and key.
+  5. A negative edit counted calls on `globalThis` (temporary).
+
+### P3-DC-19: Plan 03-08 executor choices (object-map commands)
+
+- **Phase / source:** 03-08 executor (`03-08-SUMMARY.md`).
+- **Severity:** Medium (items 1-2); the rest Low. **Status:** open.
+- **Items:**
+  1. **`allowedTools` accepts a string** (the plan's wording); upstream's
+     schema accepts only an array of strings, so `"allowedTools": "Read"`
+     installs here and fails upstream.
+  2. **A missing map source is an install warning**; upstream shows "failed
+     to load" in `plugin list` and says nothing at install.
+  3. `\p{Cf}` (and `\p{Cc}`) keys are skipped; hidden characters print as
+     `\u{XXXX}` in map warnings only.
+  4. Map warnings drop the plugin root (path redaction cut them short); the
+     walk's own duplicate warning is still cut short (pre-existing; parent
+     line for `shared/redact-absolute-paths.ts`).
+  5. A map source inside `commands/` suppresses the shadow note (D-CF1-06's
+     reach rule extended; not probed).
+  6. A directory source under a bad key is still walked (upstream ignores the
+     key for a directory).
+  7. Malformed entries (both/neither, wrong types, absolute, escaping, linked
+     source) make the plugin unavailable with reason `unsupported source`.
+  8. Non-owned test edit: `test/architecture/declared-component-path-overlap.test.ts`
+     gains `kind: "file"` in an expected value (`DiscoveredCommand` is now a
+     union).
+  9. On Windows a key with an inner `:` yields a file name NTFS refuses
+     (parent line); `info` still does not list map entries (parent line).
