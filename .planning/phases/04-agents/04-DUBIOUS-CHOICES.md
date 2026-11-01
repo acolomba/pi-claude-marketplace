@@ -188,3 +188,40 @@ entries into the root file. Severity and status follow the root file's rules.
 - **Parent lines from 04-01:** a CHANGELOG bullet; `shared/fs-utils.ts`
   `isPlainMarkdownFile` doc comment still names the agents bridge;
   `docs/prd/pi-claude-marketplace-prd.md:471` still states the old fallback.
+
+### P4-DC-08: Wave 2 executor choices (04-02 conversion, 04-03 companion and trust, 04-04 lifecycle)
+
+- **Phase / source:** executors for 04-02, 04-03, 04-04 (their SUMMARYs).
+- **Severity:** Medium for 04-03 item 1 and 04-02 item 1; the rest Low.
+  **Status:** open.
+- **04-02 (frontmatter conversion):**
+  1. `background: 'true'` (single-quoted) counts as true, like `true` and
+     `"true"`; an agent that runs MCP tools gets no `async` line even with
+     `background: true` (pi-subagents' own default is background).
+  2. `originalModel` and the unknown-model warning keep the untrimmed source
+     value; the thinking-fallback warning quotes the raw effort value while
+     the emitted level is normalized.
+  3. A quoted tool item with a space splits inside the quotes
+     (`["Read Grep"]` gives `"Read` and `Grep"`); upstream would give two
+     tools. Scenario (G) writes `tools: *` unquoted.
+  4. `MODEL_MAP` became a `Map`; one skill-reference unit test now expects a
+     tab to split a reference (D-CF4-08); `stage.test.ts` model lines edited
+     in Task 2 although listed only in the plan's file list.
+  5. Found, not fixed by the executor: `TOOL_MAP` is a plain object, so
+     `tools: constructor` matches a built-in key (pre-existing bug).
+- **04-03 (companion missing, trust):**
+  1. An install without pi-subagents reports `warning` (SEV-01
+     `companionSeverity`), not the plan's `info`; pinned as today's behavior.
+     Reinstall reports `info` for the same missing companion (parent line).
+  2. `project-trust.feature`'s description grew to four lines; scenario D
+     reuses the seed's full call table; companion scenario C starts no new
+     session after the profile Pi starts.
+  3. The untrusted default-scope text and the trust-blind list were measured
+     and recorded in the SUMMARY, not pinned (D-CF4-09).
+- **04-04 (lifecycle):**
+  1. The profile Pi with pi-subagents and the hidden-builtins Given moved to
+     the top of the Background, before the install (the shared Pi has no
+     pi-subagents, so its install warns); every verb runs through that Pi.
+  2. The update scenario's new body is not observed; closing model replies
+     are free text past the compared calls; tables aligned by a scratch
+     script (no Gherkin formatter in the repo).
