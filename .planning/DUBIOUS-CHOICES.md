@@ -504,3 +504,21 @@ this project.
 7. The stub logs its plugin and server names from its arguments (unrequested).
 8. FG-29 not decided.
 - Measured: A7 yes (nested call emits its own tool_execution records, id = outer id + `/1`); A5 adapter 7.0.0 reads `getAgentPath("mcp-adapter.json")` under `PI_CODING_AGENT_DIR`.
+
+### DC-21: Phase 1 wave 4 executor choices
+
+- **Phase / source:** executor for plan 01-09 (CI shards, phase gate).
+- **Severity:** Low. **Status:** open.
+- **Phase gate (on 80f1764, root wrapper):** `npm run check` exit 0 (cucumber 1169/1169); `test:e2e` 33 tests, first run 1 flake (ADET-01), next two full runs pass; `test:cucumber` twice 1169/1169 (seeds 641302, 717293).
+
+#### 01-09 (CI shards, handed-over lines, phase gate)
+1. CI shard timeouts (15 min each, the floor) rest on local runs doubled, not a CI measurement (CI-01 flagged assumption); re-measure on the first CI run and after each component merge.
+2. The session `GH_TOKEN` is invalid, so zizmor's online audits could not run locally; commits ran zizmor offline (no findings). CI's Lint workflow runs the online audits.
+3. CONVENTIONS.md (fallow-ignore count: 41 stated, 48 counted under extensions/test/scripts plus 3 in features/) and STACK.md (CI paragraph lacks the `behavioral` job) not edited (outside file list).
+4. The D-CF1-06 CHANGELOG line drops the handed-over sentence about `skills` (one-sentence rule).
+5. `layout.md` frozen list: every `features/lib/` file except the six fixture writers.
+6. `staging-warnings.feature` named a lifecycle file.
+7. PROJECT.md rows use semicolons as separators, matching existing rows.
+8. e2e verdict counts the third full run; the first full run had one flake (`ADET-01` sentinel still alive after the 2 s wait, `test/e2e/adapter-detection-rpc.test.ts:452`), passing 3/3 alone and in the next two full runs.
+9. Existing `uses: $/.github/workflows/sonarcloud.yml` line in ci.yml left as on origin/main.
+- Parent follow-ups: phase-specific findings listed in 01-09-SUMMARY (Phase 4: `convert.ts` `THINKING_VALUES` lacks `max`; pi-subagents `list` ignores trust. Phase 5: three hook findings. Phase 6: FG-29, startup listing in the seed log. Phase 7: the run When fails on any model call).

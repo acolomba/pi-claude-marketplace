@@ -233,7 +233,7 @@ tests (`test/bridges/<kind>/**`) and integration tests
 
 01-01 finishes before 01-03: the faux import needs `pi-ai` in `package.json`, and the companion profile needs the engine in the peer cache. Wave 3 works only because wave 2 put every shared registration in place. If 01-01 grows because adapter 7.x needs larger `bridges/mcp` work, split it into a wave-1 raise plus file-disjoint per-companion fix plans. Once Phase 1 merges, each seed feature file belongs to its kind's phase.
 
-**Plans:** 14/15 plans executed in 4 waves (the nine above, split and extended at planning: 01-15 carries the file-disjoint half of the version raise, 01-10/12/13 build the invocation cores, 01-11 the component-directory rule in wave 2, 01-14 the `:-` delegation)
+**Plans:** 15/15 plans executed in 4 waves (the nine above, split and extended at planning: 01-15 carries the file-disjoint half of the version raise, 01-10/12/13 build the invocation cores, 01-11 the component-directory rule in wave 2, 01-14 the `:-` delegation)
 
 Plans:
 **Wave 1**
@@ -257,7 +257,7 @@ Plans:
 - [x] 01-08-PLAN.md — Wave 3: workflow seed (HAR-07)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 01-09-PLAN.md — Wave 4: CI shards with measured timeouts, handed-over records, phase gate (CI-01)
+- [x] 01-09-PLAN.md — Wave 4: CI shards with measured timeouts, handed-over records, phase gate (CI-01)
 
 ### Phase 2: Skills
 
@@ -407,7 +407,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Harness and Version Raise | 14/15 | In Progress | - |
+| 1. Harness and Version Raise | 15/15 | In Progress | - |
 | 2. Skills | 0/TBD | Not started | - |
 | 3. Slash Commands | 0/TBD | Not started | - |
 | 4. Agents | 0/TBD | Not started | - |
