@@ -1291,11 +1291,11 @@ Feature: Plugin install dependencies
       | generated name                   | target file                         |
       | pi-claude-marketplace-zzz-helper | pi-claude-marketplace-zzz-helper.md |
     Then the staged skills directory of the project scope holds these files:
-      | file               | text                                                                              |
-      | aaa-skill/         |                                                                                   |
-      | aaa-skill/SKILL.md | ---\nname: aaa-skill\ndescription: A skill of aaa 1.0.0.\n---\n\nVersion 1.0.0.\n |
-      | zzz-skill/         |                                                                                   |
-      | zzz-skill/SKILL.md | ---\nname: zzz-skill\ndescription: A skill of zzz 1.0.0.\n---\n\nVersion 1.0.0.\n |
+      | file               | text                                                                                                                                                                                                                                                                         |
+      | aaa-skill/         |                                                                                                                                                                                                                                                                              |
+      | aaa-skill/SKILL.md | ---\nname: aaa-skill\ndescription: A skill of aaa 1.0.0.\npi-claude-marketplace: {"names":["aaa:aaa-skill","aaa-skill"],"pluginRoot":"{home}/marketplaces/tools/plugins/aaa","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/tools/aaa"}\n---\n\nVersion 1.0.0.\n |
+      | zzz-skill/         |                                                                                                                                                                                                                                                                              |
+      | zzz-skill/SKILL.md | ---\nname: zzz-skill\ndescription: A skill of zzz 1.0.0.\npi-claude-marketplace: {"names":["zzz:zzz-skill","zzz-skill"],"pluginRoot":"{home}/marketplaces/tools/plugins/zzz","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/tools/zzz"}\n---\n\nVersion 1.0.0.\n |
 
   Scenario: Installing a plugin whose new dependency would overwrite a user's agent file fails before its installed dependency moves
     Given the marketplace "tools" is published as a dir source

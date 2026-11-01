@@ -1,11 +1,12 @@
 /**
  * @fileoverview Writes the skills of a published plugin: one `SKILL.md` per
- * skill, at `skills/<name>/SKILL.md` inside the plugin (HAR-07).
+ * skill, at `skills/<name>/SKILL.md` inside the plugin (HAR-07), either built
+ * from a name, a description, and a body, or written as a whole text.
  */
 
 import path from "node:path";
 
-import { writePublishedPluginFile } from "./published-marketplace.ts";
+import { writePublishedPluginFile, writePublishedPluginFiles } from "./published-marketplace.ts";
 
 import type { PublishedMarketplace } from "./published-marketplace.ts";
 
@@ -36,4 +37,20 @@ export async function publishSkill(
     path.join("skills", skill.name, "SKILL.md"),
     skillFileText(skill),
   );
+}
+
+/**
+ * Writes `text` as the whole `SKILL.md` of the skill directory `directory` in
+ * the published plugin `plugin`, replacing a file that exists, and returns
+ * the path of that `SKILL.md`.
+ */
+export async function publishSkillFile(
+  published: PublishedMarketplace,
+  plugin: string,
+  directory: string,
+  text: string,
+): Promise<string> {
+  const file = path.join("skills", directory, "SKILL.md");
+  await writePublishedPluginFiles(published, plugin, { [file]: text });
+  return path.join(published.root, "plugins", plugin, file);
 }

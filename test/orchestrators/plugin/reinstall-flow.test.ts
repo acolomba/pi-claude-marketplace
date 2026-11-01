@@ -9853,7 +9853,9 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
       });
       assert.strictEqual(
         await readFile(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"),
-        '---\nname: hello-tool\ndescription: "new skill"\n---\n\nnew skill\n',
+        '---\nname: hello-tool\ndescription: "new skill"\n' +
+          `pi-claude-marketplace: {"names":["hello:tool","tool"],"pluginRoot":"${seeded.pluginRoot}","pluginData":"${dataDir}"}\n` +
+          "---\n\nnew skill\n",
       );
       await assert.rejects(() => readFile(path.join(dataDir, "state.txt"), "utf8"), {
         code: "ENOENT",

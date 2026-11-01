@@ -55,6 +55,60 @@ async function allocateCasePaths(
   };
 }
 
+/**
+ * The D-CF2-02 record line a staged `SKILL.md` carries as its last
+ * frontmatter line, with its trailing newline.
+ */
+function recordLine(names: readonly string[], pluginRoot: string, pluginData: string): string {
+  return `pi-claude-marketplace: ${JSON.stringify({ names, pluginRoot, pluginData })}\n`;
+}
+
+/**
+ * Stages the one skill directory `directory` of the plugin `acme`, whose
+ * `SKILL.md` holds `source`, and returns the staged `SKILL.md` bytes with the
+ * plugin root and data directory the stage was given.
+ */
+async function stageSingleSkill(
+  t: TestContext,
+  directory: string,
+  source: string,
+): Promise<{ stagedBytes: string; pluginRoot: string; pluginDataDir: string }> {
+  const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+    t,
+    "skills-stage-single-",
+  );
+  const skillsDirectory = path.join(pluginRoot, "skills");
+  await mkdir(path.join(skillsDirectory, directory), { recursive: true });
+  await writeFile(path.join(skillsDirectory, directory, "SKILL.md"), source);
+  const resolved = {
+    installable: true,
+    state: "installable",
+    name: "acme",
+    pluginRoot,
+    supported: ["skills"],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  } satisfies ResolvedPluginInstallable;
+  const prepared = await prepareStageSkills(createRemovalOps(), {
+    locations,
+    cwd: scopeRoot,
+    knownWorkflowNames: [],
+    pluginName: "acme",
+    pluginRoot,
+    pluginDataDir,
+    resolved,
+  });
+  assert.strictEqual(prepared.kind, "staged");
+  const stagedBytes = await readFile(
+    path.join(prepared.stagingRoot, `acme-${directory}`, "SKILL.md"),
+    "utf8",
+  );
+  return { stagedBytes, pluginRoot, pluginDataDir };
+}
+
 describe("prepareStageSkills", () => {
   test("returns a complete no-op without materializing bridge directories", async (t) => {
     // arrange
@@ -135,7 +189,9 @@ describe("prepareStageSkills", () => {
     const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
     const betaTarget = path.join(locations.skillsTargetDir, "acme-beta");
     const expectedAlphaBytes =
-      "---\nname: acme-alpha\ndescription: Alpha skill\nlicense: MIT\n---\n\nRoot: " +
+      "---\nname: acme-alpha\ndescription: Alpha skill\nlicense: MIT\n" +
+      recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+      "---\n\nRoot: " +
       pluginRoot +
       "\nData: " +
       pluginDataDir +
@@ -178,7 +234,11 @@ describe("prepareStageSkills", () => {
     assert.deepStrictEqual(alphaBytes, Buffer.from(expectedAlphaBytes));
     assert.deepStrictEqual(
       betaBytes,
-      Buffer.from("---\nname: acme-beta\ndescription: Beta skill\n---\n\nUnchanged beta body.\n"),
+      Buffer.from(
+        "---\nname: acme-beta\ndescription: Beta skill\n" +
+          recordLine(["acme:beta", "beta"], pluginRoot, pluginDataDir) +
+          "---\n\nUnchanged beta body.\n",
+      ),
     );
     assert.deepStrictEqual(resourceBytes, Buffer.from('{"keys":["a","b"]}\n'));
   });
@@ -247,7 +307,9 @@ describe("prepareStageSkills", () => {
     });
     assert.strictEqual(
       await readFile(path.join(prepared.stagingRoot, "acme-tool", "SKILL.md"), "utf8"),
-      "---\nname: acme-tool\ndescription: Winning skill\n---\n",
+      "---\nname: acme-tool\ndescription: Winning skill\n" +
+        recordLine(["acme:acme-tool", "acme-tool"], pluginRoot, pluginDataDir) +
+        "---\n",
     );
   });
 
@@ -302,7 +364,9 @@ describe("prepareStageSkills", () => {
     assert.deepStrictEqual(
       alphaBytes,
       Buffer.from(
-        '---\nname: acme-alpha\ndescription: "Wraps /skill:acme-tool for cleanup"\n---\n\n' +
+        '---\nname: acme-alpha\ndescription: "Wraps /skill:acme-tool for cleanup"\n' +
+          recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+          "---\n\n" +
           "Run /skill:acme-tool before acme:ghost.\n\n```text\n/skill:acme-tool stays verbatim\n```\n",
       ),
     );
@@ -354,8 +418,9 @@ describe("prepareStageSkills", () => {
     assert.deepStrictEqual(
       alphaBytes,
       Buffer.from(
-        "---\nname: acme-alpha\ndescription: Runs the audit\n---\n\n" +
-          "Run /acme:audit, then /acme:acme-release.\n",
+        "---\nname: acme-alpha\ndescription: Runs the audit\n" +
+          recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+          "---\n\nRun /acme:audit, then /acme:acme-release.\n",
       ),
     );
   });
@@ -414,7 +479,9 @@ describe("prepareStageSkills", () => {
     // assert
     assert.strictEqual(
       skill,
-      "---\nname: acme-helper\ndescription: Helper\n---\nRun /acme:review.\n",
+      "---\nname: acme-helper\ndescription: Helper\n" +
+        recordLine(["acme:helper", "helper"], pluginRoot, pluginDataDir) +
+        "---\nRun /acme:review.\n",
     );
     assert.strictEqual(notes, "Then use /acme:review.\n");
     assert.strictEqual(await readFile(outsideFile, "utf8"), "Run acme:review.\n");
@@ -476,7 +543,9 @@ describe("prepareStageSkills", () => {
       Buffer.from(
         "---\nname: acme-broken\n" +
           "description: Source frontmatter could not be parsed.\n" +
-          "disable-model-invocation: true\n---\n\nRun /skill:acme-tool after the break.",
+          "disable-model-invocation: true\n" +
+          recordLine(["acme:broken"], pluginRoot, pluginDataDir) +
+          "---\n\nRun /skill:acme-tool after the break.",
       ),
     );
   });
@@ -510,7 +579,9 @@ describe("prepareStageSkills", () => {
     const expectedBytes =
       "---\nname: acme-broken\n" +
       "description: Source frontmatter could not be parsed.\n" +
-      "disable-model-invocation: true\n---\n\n# Broken\n\nBody bytes survive.";
+      "disable-model-invocation: true\n" +
+      recordLine(["acme:broken"], pluginRoot, pluginDataDir) +
+      "---\n\n# Broken\n\nBody bytes survive.";
     const expectedResult = {
       stagedNames: ["acme-broken"],
       recorded: [
@@ -580,6 +651,7 @@ describe("prepareStageSkills", () => {
     const expectedBytes =
       "---\nname: acme-helper\n" +
       'description: "Use this: when reviewing pull requests"\n' +
+      recordLine(["acme:helper", "helper"], pluginRoot, pluginDataDir) +
       "---\n\nBody prose.\n";
     const expectedResult = {
       stagedNames: ["acme-helper"],
@@ -644,7 +716,9 @@ describe("prepareStageSkills", () => {
     const expectedBytes =
       "---\nname: acme-broken\n" +
       "description: Source frontmatter could not be parsed.\n" +
-      "disable-model-invocation: true\n---\n\n# Broken\n\nBody bytes survive.";
+      "disable-model-invocation: true\n" +
+      recordLine(["acme:broken"], pluginRoot, pluginDataDir) +
+      "---\n\n# Broken\n\nBody bytes survive.";
     const expectedResult = {
       stagedNames: ["acme-broken"],
       recorded: [
@@ -715,7 +789,9 @@ describe("prepareStageSkills", () => {
     const expectedBytes =
       "---\nname: acme-helper\n" +
       'description: "Use this: when reviewing For pull requests"\n' +
-      "when_to_use: For pull requests\n---\n\nBody.\n";
+      "when_to_use: For pull requests\n" +
+      recordLine(["acme:helper", "helper"], pluginRoot, pluginDataDir) +
+      "---\n\nBody.\n";
 
     // act
     const prepared = await prepareStageSkills(createRemovalOps(), {
@@ -780,9 +856,12 @@ describe("prepareStageSkills", () => {
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const expectedEmpty =
-      '---\nname: acme-empty\nversion: 1\ndescription: "No description provided."\n---\n';
+      '---\nname: acme-empty\nversion: 1\ndescription: "Plugin skill"\n' +
+      recordLine(["acme:empty", "empty"], pluginRoot, pluginDataDir) +
+      "---\n";
     const expectedProse =
-      '---\nname: acme-prose\nversion: 2\ndescription: "First prose line. Second prose line."\n' +
+      '---\nname: acme-prose\nversion: 2\ndescription: "Heading"\n' +
+      recordLine(["acme:prose", "prose"], pluginRoot, pluginDataDir) +
       "---\n\n# Heading\n\nFirst prose line.\nSecond prose line.\n\nLater.\n";
     const expectedFoldedDescription = description + " " + "b".repeat(535);
     const expectedFolded =
@@ -791,7 +870,9 @@ describe("prepareStageSkills", () => {
       expectedFoldedDescription +
       '"\nversion: 3\nwhen_to_use: ' +
       whenToUse +
-      "\n---\n\nBody.\n";
+      "\n" +
+      recordLine(["acme:folded", "folded"], pluginRoot, pluginDataDir) +
+      "---\n\nBody.\n";
 
     // act
     const prepared = await prepareStageSkills(createRemovalOps(), {
@@ -824,6 +905,252 @@ describe("prepareStageSkills", () => {
     assert.deepStrictEqual(prepared.result.degraded, []);
   });
 
+  for (const { behavior, source, expectedFrontmatter, expectedBody } of [
+    {
+      behavior: "the first line of the body, without the rest of its paragraph",
+      source:
+        "---\nname: brief\n---\n\nFirst line of the brief.\nSecond line of the same paragraph.\n",
+      expectedFrontmatter: '---\nname: acme-brief\ndescription: "First line of the brief."\n',
+      expectedBody: "\nFirst line of the brief.\nSecond line of the same paragraph.\n",
+    },
+    {
+      behavior: "the text of a leading heading without its marks",
+      source: "---\nname: brief\n---\n\n# Review a change\n\nRead the diff.\n",
+      expectedFrontmatter: '---\nname: acme-brief\ndescription: "Review a change"\n',
+      expectedBody: "\n# Review a change\n\nRead the diff.\n",
+    },
+    {
+      behavior: "Plugin skill for an empty body",
+      source: "---\nname: brief\n---\n",
+      expectedFrontmatter: '---\nname: acme-brief\ndescription: "Plugin skill"\n',
+      expectedBody: "",
+    },
+  ]) {
+    test(`D-CF2-07: fills a missing description with ${behavior}`, async (t) => {
+      // act
+      const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(t, "brief", source);
+
+      // assert
+      assert.strictEqual(
+        stagedBytes,
+        expectedFrontmatter +
+          recordLine(["acme:brief", "brief"], pluginRoot, pluginDataDir) +
+          "---\n" +
+          expectedBody,
+      );
+    });
+  }
+
+  test("NREG-01: keeps a present description byte for byte", async (t) => {
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "brief",
+      "---\nname: brief\ndescription:   Kept as written  \n---\n\nFirst line.\n",
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-brief\ndescription:   Kept as written  \n" +
+        recordLine(["acme:brief", "brief"], pluginRoot, pluginDataDir) +
+        "---\n\nFirst line.\n",
+    );
+  });
+
+  test("WTU-01: stages when_to_use after the fallback as one double-quoted scalar", async (t) => {
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "greet",
+      "---\nname: greet\nwhen_to_use: Use it when greeting.\n---\n\nGreets.\n",
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-greet\nwhen_to_use: Use it when greeting.\n" +
+        'description: "Greets. Use it when greeting."\n' +
+        recordLine(["acme:greet", "greet"], pluginRoot, pluginDataDir) +
+        "---\n\nGreets.\n",
+    );
+  });
+
+  test("WTU-01: folds when_to_use onto the fallback and cuts the result at 1,536", async (t) => {
+    // arrange
+    const whenToUse = "w".repeat(1600);
+    const expectedDescription = "First line. " + "w".repeat(1536 - "First line.\n".length);
+
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "brief",
+      "---\nname: brief\nwhen_to_use: " + whenToUse + "\n---\n\nFirst line.\n",
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-brief\nwhen_to_use: " +
+        whenToUse +
+        '\ndescription: "' +
+        expectedDescription +
+        '"\n' +
+        recordLine(["acme:brief", "brief"], pluginRoot, pluginDataDir) +
+        "---\n\nFirst line.\n",
+    );
+  });
+
+  test("D-CF2-02: stores each skill's names, a shared alias going to the first claimant", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-names-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const sources = {
+      "dupe-a": "---\nname: same\ndescription: First\n---\n",
+      "dupe-b": "---\nname: same\ndescription: Second\n---\n",
+      helper: "---\nname: acme:dupe-b\ndescription: Helper\n---\n\nRun acme:review first.\n",
+      review: "---\nname: fancy\ndescription: Review\n---\n",
+    };
+    for (const [directory, source] of Object.entries(sources)) {
+      await mkdir(path.join(skillsDirectory, directory), { recursive: true });
+      await writeFile(path.join(skillsDirectory, directory, "SKILL.md"), source);
+    }
+
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const expectedFiles = {
+      "acme-dupe-a":
+        "---\nname: acme-dupe-a\ndescription: First\n" +
+        recordLine(["acme:dupe-a", "acme:same", "same"], pluginRoot, pluginDataDir) +
+        "---\n",
+      "acme-dupe-b":
+        "---\nname: acme-dupe-b\ndescription: Second\n" +
+        recordLine(["acme:dupe-b"], pluginRoot, pluginDataDir) +
+        "---\n",
+      "acme-helper":
+        "---\nname: acme-helper\ndescription: Helper\n" +
+        recordLine(["acme:helper"], pluginRoot, pluginDataDir) +
+        "---\n\nRun /skill:acme-review first.\n",
+      "acme-review":
+        "---\nname: acme-review\ndescription: Review\n" +
+        recordLine(["acme:review", "acme:fancy", "fancy"], pluginRoot, pluginDataDir) +
+        "---\n",
+    };
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      knownWorkflowNames: [],
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const stagedFiles = Object.fromEntries(
+      await Promise.all(
+        prepared.result.stagedNames.map(
+          async (name) =>
+            [
+              name,
+              await readFile(path.join(prepared.stagingRoot, name, "SKILL.md"), "utf8"),
+            ] as const,
+        ),
+      ),
+    );
+
+    // assert
+    assert.deepStrictEqual(stagedFiles, expectedFiles);
+  });
+
+  test("D-CF2-03: stores no qualified alias that a command of the plugin is named", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-command-names-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    await mkdir(path.join(skillsDirectory, "review"), { recursive: true });
+    await writeFile(
+      path.join(skillsDirectory, "review", "SKILL.md"),
+      "---\nname: clash\ndescription: Review\n---\n",
+    );
+    await mkdir(path.join(pluginRoot, "commands"), { recursive: true });
+    await writeFile(path.join(pluginRoot, "commands", "clash.md"), "Clash command.\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills", "commands"],
+      unsupported: [],
+      notes: [],
+      componentPaths: {
+        skills: [skillsDirectory],
+        commands: ["commands"],
+        agents: [],
+        workflows: [],
+      },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      knownWorkflowNames: [],
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const stagedBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-review", "SKILL.md"),
+      "utf8",
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-review\ndescription: Review\n" +
+        recordLine(["acme:review", "clash"], pluginRoot, pluginDataDir) +
+        "---\n",
+    );
+  });
+
+  test("D-CF2-02: replaces an author's own record key with the stored record", async (t) => {
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "brief",
+      "---\nname: brief\npi-claude-marketplace:\n  names: [forged]\ndescription: Brief\n---\n",
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-brief\ndescription: Brief\n" +
+        recordLine(["acme:brief", "brief"], pluginRoot, pluginDataDir) +
+        "---\n",
+    );
+  });
+
   test("escapes substituted backslashes in an authored description", async (t) => {
     // arrange
     const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
@@ -852,6 +1179,7 @@ describe("prepareStageSkills", () => {
     const windowsRoot = "C:\\Users\\case\\plugin";
     const expectedBytes =
       '---\nname: acme-windows\ndescription: "Uses C:\\\\Users\\\\case\\\\plugin."\n' +
+      recordLine(["acme:windows", "windows"], windowsRoot, pluginDataDir) +
       "---\nUses C:\\Users\\case\\plugin.\n";
 
     // act
@@ -904,7 +1232,9 @@ describe("prepareStageSkills", () => {
     } satisfies ResolvedPluginInstallable;
     const targetDirectory = path.join(locations.skillsTargetDir, "acme-vars");
     const expectedBytes =
-      "---\nname: acme-vars\ndescription: Variables\n---\nRoot: " +
+      "---\nname: acme-vars\ndescription: Variables\n" +
+      recordLine(["acme:vars", "vars"], pluginRoot, pluginDataDir) +
+      "---\nRoot: " +
       pluginRoot +
       "\nData: " +
       pluginDataDir +
@@ -960,8 +1290,9 @@ describe("prepareStageSkills", () => {
     const expectedPrepareError = {
       name: "YAMLParseError",
       message:
-        "Flow sequence in block collection must be sufficiently indented and end with a ] at line 3, column 23:\n\n" +
-        "license: [unterminated\n                      ^\n",
+        "Flow sequence in block collection must be sufficiently indented and end with a ] at line 4, column 1:\n\n" +
+        "license: [unterminated\n" +
+        'pi-claude-marketplace: {"names":["acme:invalid","invalid"],"pluginRoot":"/plugi…\n^\n',
       cause: undefined,
     };
 
@@ -973,7 +1304,7 @@ describe("prepareStageSkills", () => {
         cwd: scopeRoot,
         knownWorkflowNames: [],
         pluginName: "acme",
-        pluginRoot,
+        pluginRoot: "/plugin",
         pluginDataDir: "[unterminated",
         resolved,
       });
@@ -1181,7 +1512,13 @@ describe("commitPreparedSkills", () => {
     } satisfies ResolvedPluginInstallable;
     const targetFile = path.join(locations.skillsTargetDir, "acme-reviewer", "SKILL.md");
     const expectedBytes = Buffer.from(
-      "---\nname: acme-reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n",
+      "---\nname: acme-reviewer\ndescription: Reviews changes\n" +
+        recordLine(
+          ["acme:reviewer", "acme:source-reviewer", "source-reviewer"],
+          pluginRoot,
+          pluginDataDir,
+        ) +
+        "---\n\nReview carefully.\n",
     );
 
     // act
@@ -1264,7 +1601,12 @@ describe("commitPreparedSkills", () => {
 
     // assert
     assert.strictEqual(leak, undefined);
-    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: Alpha\n---\nBody.\n");
+    assert.strictEqual(
+      targetBytes,
+      "---\nname: acme-alpha\ndescription: Alpha\n" +
+        recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+        "---\nBody.\n",
+    );
     assert.strictEqual(resourceBytes, "new resource\n");
     assert.strictEqual(previousState, undefined);
     assert.strictEqual(staleState, undefined);
@@ -1480,7 +1822,9 @@ describe("commitPreparedSkills", () => {
     assert.strictEqual(commitError, renameError);
     assert.strictEqual(
       await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"), "utf8"),
-      "---\nname: acme-alpha\ndescription: Alpha\n---\n",
+      "---\nname: acme-alpha\ndescription: Alpha\n" +
+        recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+        "---\n",
     );
   });
 
@@ -1541,7 +1885,12 @@ describe("commitPreparedSkills", () => {
 
     // assert
     assert.strictEqual(leak, expectedLeak);
-    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: Alpha\n---\n");
+    assert.strictEqual(
+      targetBytes,
+      "---\nname: acme-alpha\ndescription: Alpha\n" +
+        recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+        "---\n",
+    );
     assert.strictEqual((await stat(prepared.stagingRoot)).isDirectory(), true);
   });
 });

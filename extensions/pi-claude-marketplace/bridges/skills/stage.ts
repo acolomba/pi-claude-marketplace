@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import { cp, lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { descriptionFallback } from "../../domain/description-fallback.ts";
 import { assertSafeName } from "../../domain/name.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
@@ -31,7 +32,6 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { discoverPluginSkills } from "./discover.ts";
 import {
-  firstBodyParagraph,
   foldWhenToUse,
   repairSingleLineScalars,
   setDescriptionScalar,
@@ -39,8 +39,17 @@ import {
   truncate1536,
 } from "./frontmatter-degrade.ts";
 import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
+import {
+  commandUpstreamNames,
+  createSkillNameClaims,
+  frontmatterNameAliases,
+  skillIdentityName,
+  writeSkillRecord,
+} from "./skill-names.ts";
 
+import type { SkillNameClaims } from "./skill-names.ts";
 import type {
+  DiscoveredSkill,
   PreparedSkillsStaging,
   SkillDegradeRecord,
   StagedSkillRecord,
@@ -96,22 +105,13 @@ function repairUnparseableFrontmatter(
 }
 
 /**
- * SKILL-02 empty probe: a well-formed skill with neither a `description` nor any
- * prose body yields an empty first-paragraph candidate, and Pi drops a skill
- * whose `description` is empty (`skill: null`). Emit a short fixed non-empty
- * scalar so the skill still loads. Distinct from the unparseable-source
- * placeholder (D-86-02): the frontmatter parsed cleanly here; only the
- * description is absent.
- */
-const MISSING_DESCRIPTION_PLACEHOLDER = "No description provided.";
-
-/**
  * SKILL-02 / WTU-01 / WTU-02: augment the `description` on the well-formed
  * (gate-1 RETURN) arm. Reads the PARSED `description` / `when_to_use` values and
  * the parsed `body`:
- *   - SKILL-02 / D-86-06: an absent or empty `description` is filled from the
- *     first body paragraph (`firstBodyParagraph`); an empty candidate falls back
- *     to a fixed non-empty placeholder so Pi still loads the skill.
+ *   - D-CF2-07 / D-CF1-04: an absent or empty `description` is filled with
+ *     Claude Code's fallback for the body, labelled `Plugin skill`. The
+ *     fallback is never empty, so Pi, which drops a skill whose `description`
+ *     is empty, still loads the skill.
  *   - WTU-01 / A1: a non-empty `when_to_use` is folded in after a single `\n`.
  *   - WTU-02 / D-86-05 / A2: the combined text is hard-cut at 1,536 code units
  *     (never Pi's 1,024 warning threshold).
@@ -132,7 +132,8 @@ function augmentSkillDescription(
   const rawWhenToUse = frontmatter.when_to_use;
   const whenToUse = typeof rawWhenToUse === "string" ? rawWhenToUse : "";
 
-  const base = sourceDescription === "" ? firstBodyParagraph(body) : sourceDescription;
+  const base =
+    sourceDescription === "" ? descriptionFallback(body, "Plugin skill") : sourceDescription;
   const folded = foldWhenToUse(base, whenToUse === "" ? undefined : whenToUse);
   // SK-4 / AG-8: substitute the Claude path vars BEFORE the value is escaped into
   // the double-quoted scalar. The later whole-file `substituteClaudeVars` (below)
@@ -141,10 +142,7 @@ function augmentSkillDescription(
   // backstop; substituting first lets `emitSafeDoubleQuotedScalar` escape those
   // backslashes. The cap is applied pre-substitution (the WTU-02 listing budget
   // measures the authored text), matching the prior whole-file ordering.
-  const effective = substituteClaudeVars(
-    truncate1536(folded === "" ? MISSING_DESCRIPTION_PLACEHOLDER : folded),
-    vars,
-  );
+  const effective = substituteClaudeVars(truncate1536(folded), vars);
 
   // NREG-01: a present, in-cap `description` with no `when_to_use` and no path
   // var to expand is unchanged -- do NOT re-emit it as a double-quoted scalar
@@ -156,14 +154,24 @@ function augmentSkillDescription(
   return setDescriptionScalar(content, effective);
 }
 
-/** Rewrites copied supporting Markdown without following plugin symlinks. */
+/**
+ * Rewrites copied supporting Markdown without following plugin symlinks.
+ * D-CF2-02: it leaves the skill's own `SKILL.md`, `skillFile`, alone. The
+ * stage loop has already rewritten that file, and a second pass would read
+ * the stored names in its record as skill references (T-02-02).
+ */
 async function rewriteSupportingMarkdown(
   directory: string,
   pluginName: string,
   names: InstalledReferenceNames,
+  skillFile: string,
 ): Promise<void> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name);
+    if (file === skillFile) {
+      continue;
+    }
+
     // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
     const fileStat = await lstat(file);
     if (fileStat.isSymbolicLink()) {
@@ -172,7 +180,7 @@ async function rewriteSupportingMarkdown(
 
     if (fileStat.isDirectory()) {
       // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
-      await rewriteSupportingMarkdown(file, pluginName, names);
+      await rewriteSupportingMarkdown(file, pluginName, names, skillFile);
     } else if (fileStat.isFile() && entry.name.endsWith(".md")) {
       // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
       const content = await readFile(file, "utf8");
@@ -200,6 +208,167 @@ function skillReferenceNames(
     commands: supplied?.commands ?? [],
     workflows,
   };
+}
+
+/** A skill source after the PARSE-01 gate: the bytes to stage and what they parsed to. */
+interface ParsedSkillSource {
+  readonly content: string;
+  /** `undefined` on the SKILL-01 degraded arm. */
+  readonly parsed: ParsedSkillFrontmatter | undefined;
+  readonly degraded: SkillDegradeRecord | undefined;
+}
+
+/**
+ * PARSE-01: parse the SOURCE frontmatter BEFORE any rewrite/substitution to
+ * establish attribution ground truth and the degrade trigger. A THROW means a
+ * closed `---` block whose inner YAML is malformed (an author defect); a
+ * RETURN (including absent/empty frontmatter) is the happy arm. The parse is
+ * READ-ONLY -- validate, never eval (preserves T-03-17).
+ */
+function parseSkillSource(content: string, generatedName: string): ParsedSkillSource {
+  try {
+    return { content, parsed: parseFrontmatter(content), degraded: undefined };
+  } catch (parseErr) {
+    // SKFM-01: an unquoted colon in a single-line scalar is the one defect
+    // class safe to rewrite. A successful repair leaves `parsed` DEFINED, so
+    // the happy arm runs and nothing is degraded.
+    const repair = repairUnparseableFrontmatter(content);
+    if (repair !== undefined) {
+      return { content: repair.repaired, parsed: repair.parsed, degraded: undefined };
+    }
+
+    // SKILL-01 / D-86-02: unparseable source -> synthesize a known-good
+    // `disable-model-invocation` block (body preserved verbatim) so the skill
+    // still installs (no hard-fail), stays invocable by `/name`, and is never
+    // auto-invoked. The actionable detail (plugin, component, parse error)
+    // rides the install-time warning channel instead.
+    return {
+      content: synthesizeUnparseableSkill(extractBodyAfterFrontmatter(content), generatedName),
+      parsed: undefined,
+      degraded: { generatedName, parseError: errorMessage(parseErr) },
+    };
+  }
+}
+
+/** What every skill of one `prepareStageSkills` call is staged with. */
+interface SkillStagingContext {
+  readonly pluginName: string;
+  readonly pluginRoot: string;
+  readonly pluginDataDir: string;
+  /** SUB-02: the install cwd at project scope, `undefined` at user scope. */
+  readonly projectDir: string | undefined;
+  readonly locations: StageSkillsInput["locations"];
+  readonly stagingRoot: string;
+  readonly referenceNames: InstalledReferenceNames;
+  readonly claims: SkillNameClaims;
+}
+
+/** One skill staged by `stageSkill`. */
+interface StagedSkill {
+  readonly stagedDir: string;
+  readonly targetDir: string;
+  readonly degraded: SkillDegradeRecord | undefined;
+}
+
+/**
+ * Copies one discovered skill into the staging root and writes its staged
+ * `SKILL.md`: SK-3 name, description augment, SKTK-01 references, SK-4
+ * variables, and last the D-CF2-02 / D-CF2-06 record of its names and
+ * install-time values.
+ */
+async function stageSkill(
+  context: SkillStagingContext,
+  skill: DiscoveredSkill,
+): Promise<StagedSkill> {
+  const { locations, pluginName, stagingRoot } = context;
+  assertSafeName(skill.generatedName, "generated skill name");
+
+  const stagedDir = path.join(stagingRoot, skill.generatedName);
+  await assertPathInside(stagingRoot, stagedDir, "staged skill destination");
+
+  const targetDir = path.join(locations.skillsTargetDir, skill.generatedName);
+  await assertPathInside(locations.skillsTargetDir, targetDir, "skill target destination");
+
+  // SUB-01: ${CLAUDE_SKILL_DIR} resolves to the skill's installed dir --
+  // the same assertPathInside-guarded `targetDir` computed above.
+  // SUB-02: ${CLAUDE_PROJECT_DIR} resolves to the install cwd only for
+  // project scope; user scope leaves the token literal (undefined -> pass-through).
+  const skillVars: ClaudePluginVars = {
+    pluginRoot: context.pluginRoot,
+    pluginData: context.pluginDataDir,
+    skillDir: targetDir,
+    projectDir: context.projectDir,
+  };
+
+  // T-03-15: copy with `verbatimSymlinks: true, dereference: false` so a
+  // symlink inside the source tree is preserved as a symlink rather than
+  // resolved (which could escape the source tree). errorOnExist=true is a
+  // belt-and-braces guard; randomUUID ensures the staging dir is fresh.
+  await cp(skill.skillDir, stagedDir, {
+    recursive: true,
+    dereference: false,
+    verbatimSymlinks: true,
+    errorOnExist: true,
+    force: false,
+  });
+
+  const skillMdPath = path.join(stagedDir, "SKILL.md");
+  // FMBOM-01: strip a leading U+FEFF before anything reads these bytes. It
+  // has to precede the PARSE-01 gate-1 parse AND the SK-3 name rewrite,
+  // because `rewriteFrontmatterName` anchors on `startsWith("---")` and a
+  // marker sends it down the freshBlock path, which buries the source
+  // block in the body and drops its `description`. This same `content` is
+  // what `writeFile` emits below, so one strip keeps the parse, the
+  // rewrite, the augment and the staged bytes in agreement.
+  const source = parseSkillSource(
+    stripBom(await readFile(skillMdPath, "utf8")),
+    skill.generatedName,
+  );
+  let content = source.content;
+  const { parsed } = source;
+
+  // The parseable (gate-1 RETURN) arm keeps today's SK-3 name rewrite, then
+  // layers the SKILL-02 / WTU-01 / WTU-02 augment arm on the parsed values;
+  // the synthesized arm already emits the generated `name` + a placeholder
+  // `description`, so it skips both. SK-4 substitution runs on both arms.
+  // D-CF2-02: the synthesized arm keeps no frontmatter `name`, so it claims
+  // its identity alone.
+  let frontmatterAliases: readonly string[] = [];
+  if (parsed !== undefined) {
+    content = rewriteFrontmatterName(content, skill.generatedName);
+    content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, skillVars);
+    frontmatterAliases = frontmatterNameAliases(pluginName, parsed.frontmatter.name);
+  }
+
+  const names = context.claims.claim(
+    skillIdentityName(pluginName, skill.sourceName),
+    frontmatterAliases,
+  );
+
+  // SKTK-01: retarget same-plugin `<plugin>:<skill>`, `<plugin>:<command>`
+  // and `<plugin>:<workflow>` references (both arms -- a degraded skill's
+  // body is prose too). Runs before SK-4 substitution so the PARSE-02
+  // backstop validates the final bytes.
+  content = rewriteMarkdownReferences(content, pluginName, context.referenceNames);
+  content = substituteClaudeVars(content, skillVars);
+  // D-CF2-02 / D-CF2-06 / T-02-02: the record goes in last, after every
+  // rewrite, so no reference rewrite reads its names. Its `pluginRoot` and
+  // `pluginData` are the values the SK-4 substitution used.
+  content = writeSkillRecord(content, {
+    names,
+    pluginRoot: context.pluginRoot,
+    pluginData: context.pluginDataDir,
+  });
+  await writeFile(skillMdPath, content, "utf8");
+  await rewriteSupportingMarkdown(stagedDir, pluginName, context.referenceNames, skillMdPath);
+
+  // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
+  // backstop. A THROW here means our OWN rewrite/substitution produced
+  // bytes Pi would reject -- our defect, not the author's. Throw loudly so
+  // it rides the caller's cleanup catch; never mask it as author degradation.
+  parseFrontmatter(content);
+
+  return { stagedDir, targetDir, degraded: source.degraded };
 }
 
 /**
@@ -252,6 +421,13 @@ export async function prepareStageSkills(
     };
   }
 
+  // D-CF2-03: the command names a skill alias must not take, read before the
+  // staging root exists so a failed read leaves nothing to clean up.
+  const commandNames = await commandUpstreamNames(
+    pluginName,
+    resolved.pluginRoot,
+    resolved.componentPaths.commands,
+  );
   const stagingRoot = path.join(locations.skillsStagingDir, randomUUID());
   await mkdir(stagingRoot, { recursive: true });
   await assertPathInside(locations.skillsStagingDir, stagingRoot, "skills staging root");
@@ -260,125 +436,41 @@ export async function prepareStageSkills(
   const stagedNames: string[] = [];
   const recorded: StagedSkillRecord[] = [];
   const degraded: SkillDegradeRecord[] = [];
-  // SKTK-01: the same-plugin reference targets this install materializes.
-  const referenceNames = skillReferenceNames(
-    input.referenceNames,
-    discovered.map((skill) => skill.generatedName),
-    input.knownWorkflowNames,
-  );
+  const context: SkillStagingContext = {
+    pluginName,
+    pluginRoot,
+    pluginDataDir,
+    projectDir: locations.scope === "project" ? cwd : undefined,
+    locations,
+    stagingRoot,
+    // SKTK-01: the same-plugin reference targets this install materializes.
+    referenceNames: skillReferenceNames(
+      input.referenceNames,
+      discovered.map((skill) => skill.generatedName),
+      input.knownWorkflowNames,
+    ),
+    // D-CF2-02 / DC-25 item 2: every skill's identity is claimed before any
+    // frontmatter alias, and the loop below claims aliases in discovery order.
+    claims: createSkillNameClaims(
+      discovered.map((skill) => skillIdentityName(pluginName, skill.sourceName)),
+      commandNames,
+    ),
+  };
 
   try {
     for (const skill of discovered) {
-      assertSafeName(skill.generatedName, "generated skill name");
-
-      const stagedDir = path.join(stagingRoot, skill.generatedName);
       // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
-      await assertPathInside(stagingRoot, stagedDir, "staged skill destination");
-
-      const targetDir = path.join(locations.skillsTargetDir, skill.generatedName);
-      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
-      await assertPathInside(locations.skillsTargetDir, targetDir, "skill target destination");
-
-      // SUB-01: ${CLAUDE_SKILL_DIR} resolves to the skill's installed dir --
-      // the same assertPathInside-guarded `targetDir` computed above.
-      // SUB-02: ${CLAUDE_PROJECT_DIR} resolves to the install cwd only for
-      // project scope; user scope leaves the token literal (undefined -> pass-through).
-      const skillVars: ClaudePluginVars = {
-        pluginRoot,
-        pluginData: pluginDataDir,
-        skillDir: targetDir,
-        projectDir: locations.scope === "project" ? cwd : undefined,
-      };
-
-      // T-03-15: copy with `verbatimSymlinks: true, dereference: false` so a
-      // symlink inside the source tree is preserved as a symlink rather than
-      // resolved (which could escape the source tree). errorOnExist=true is a
-      // belt-and-braces guard; randomUUID ensures the staging dir is fresh.
-      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
-      await cp(skill.skillDir, stagedDir, {
-        recursive: true,
-        dereference: false,
-        verbatimSymlinks: true,
-        errorOnExist: true,
-        force: false,
-      });
-
-      const skillMdPath = path.join(stagedDir, "SKILL.md");
-      // FMBOM-01: strip a leading U+FEFF before anything reads these bytes. It
-      // has to precede the PARSE-01 gate-1 parse AND the SK-3 name rewrite,
-      // because `rewriteFrontmatterName` anchors on `startsWith("---")` and a
-      // marker sends it down the freshBlock path, which buries the source
-      // block in the body and drops its `description`. This same `content` is
-      // what `writeFile` emits below, so one strip keeps the parse, the
-      // rewrite, the augment and the staged bytes in agreement.
-      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
-      let content = stripBom(await readFile(skillMdPath, "utf8"));
-
-      // PARSE-01: parse the SOURCE frontmatter BEFORE any rewrite/substitution
-      // to establish attribution ground truth and the degrade trigger. A THROW
-      // means a closed `---` block whose inner YAML is malformed (an author
-      // defect); a RETURN (including absent/empty frontmatter) is the happy
-      // arm. The parse is READ-ONLY -- validate, never eval (preserves T-03-17).
-      let parsed: { frontmatter: Record<string, unknown>; body: string } | undefined;
-      try {
-        parsed = parseFrontmatter(content);
-      } catch (parseErr) {
-        // SKFM-01: an unquoted colon in a single-line scalar is the one defect
-        // class safe to rewrite. A successful repair leaves `parsed` DEFINED, so
-        // the happy arm below runs and nothing is degraded.
-        const repair = repairUnparseableFrontmatter(content);
-        if (repair === undefined) {
-          // SKILL-01 / D-86-02: unparseable source -> synthesize a known-good
-          // `disable-model-invocation` block (body preserved verbatim) so the
-          // skill still installs (no hard-fail), stays invocable by `/name`, and
-          // is never auto-invoked. The actionable detail (plugin, component,
-          // parse error) rides the install-time warning channel instead.
-          content = synthesizeUnparseableSkill(
-            extractBodyAfterFrontmatter(content),
-            skill.generatedName,
-          );
-          degraded.push({
-            generatedName: skill.generatedName,
-            parseError: errorMessage(parseErr),
-          });
-        } else {
-          content = repair.repaired;
-          parsed = repair.parsed;
-        }
+      const staged = await stageSkill(context, skill);
+      if (staged.degraded !== undefined) {
+        degraded.push(staged.degraded);
       }
 
-      // The parseable (gate-1 RETURN) arm keeps today's SK-3 name rewrite, then
-      // layers the SKILL-02 / WTU-01 / WTU-02 augment arm on the parsed values;
-      // the synthesized arm already emits the generated `name` + a placeholder
-      // `description`, so it skips both. SK-4 substitution runs on both arms.
-      if (parsed !== undefined) {
-        content = rewriteFrontmatterName(content, skill.generatedName);
-        content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, skillVars);
-      }
-
-      // SKTK-01: retarget same-plugin `<plugin>:<skill>`, `<plugin>:<command>`
-      // and `<plugin>:<workflow>` references (both arms -- a degraded skill's
-      // body is prose too). Runs before SK-4 substitution so the PARSE-02
-      // backstop validates the final bytes.
-      content = rewriteMarkdownReferences(content, pluginName, referenceNames);
-      content = substituteClaudeVars(content, skillVars);
-      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
-      await writeFile(skillMdPath, content, "utf8");
-      // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
-      await rewriteSupportingMarkdown(stagedDir, pluginName, referenceNames);
-
-      // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
-      // backstop. A THROW here means our OWN rewrite/substitution produced
-      // bytes Pi would reject -- our defect, not the author's. Throw loudly so
-      // it rides the cleanup catch below; never mask it as author degradation.
-      parseFrontmatter(content);
-
-      renamePairs.push({ from: stagedDir, to: targetDir });
+      renamePairs.push({ from: staged.stagedDir, to: staged.targetDir });
       stagedNames.push(skill.generatedName);
       recorded.push({
         generatedName: skill.generatedName,
         sourcePath: skill.skillDir,
-        targetPath: targetDir,
+        targetPath: staged.targetDir,
       });
     }
   } catch (err) {

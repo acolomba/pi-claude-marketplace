@@ -56,65 +56,6 @@ export function synthesizeUnparseableSkill(body: string, generatedName: string):
   );
 }
 
-/** A fenced-code-block delimiter line (```` ``` ```` or `~~~`), leading-trimmed. */
-const FENCE = /^(```|~~~)/;
-
-/**
- * Advance past a fenced code block whose opener is at `start`, returning the
- * index just after the closing fence (or the end of input if unterminated).
- */
-function skipFencedBlock(lines: readonly string[], start: number): number {
-  let i = start + 1;
-  while (i < lines.length && !FENCE.test((lines[i] ?? "").trim())) {
-    i++;
-  }
-
-  return i < lines.length ? i + 1 : i;
-}
-
-/** Collect the contiguous non-blank paragraph starting at `start` (joined by `\n`). */
-function collectParagraph(lines: readonly string[], start: number): string {
-  const paragraph: string[] = [];
-  for (let i = start; i < lines.length && (lines[i] ?? "").trim() !== ""; i++) {
-    paragraph.push(lines[i] ?? "");
-  }
-
-  return paragraph.join("\n");
-}
-
-/**
- * SKILL-02 / D-86-06: derive a `description` from the first GENUINE body line.
- * Skips blank lines, ATX `#` heading lines, and fenced code blocks (```` ``` ````
- * / `~~~` and their contents), lands on the first plain body line, and returns
- * the contiguous paragraph up to the next blank line (verbatim, joined by
- * `\n`). Returns `""` when the body has no prose (all blank / heading / fence).
- * Mirrors Claude Code's "first paragraph of markdown content" fallback.
- */
-export function firstBodyParagraph(body: string): string {
-  const lines = body.split("\n");
-  let i = 0;
-  while (i < lines.length) {
-    const trimmed = (lines[i] ?? "").trim();
-
-    // Blank line or ATX heading (`#` .. `######`, optionally bare): skip.
-    if (trimmed === "" || /^#{1,6}(\s|$)/.test(trimmed)) {
-      i++;
-      continue;
-    }
-
-    // Fenced code block: skip the opener, its contents, and the closing fence.
-    if (FENCE.test(trimmed)) {
-      i = skipFencedBlock(lines, i);
-      continue;
-    }
-
-    // First prose line: return the contiguous paragraph to the next blank line.
-    return collectParagraph(lines, i);
-  }
-
-  return "";
-}
-
 /**
  * WTU-01 / A1: fold `when_to_use` into the Pi `description`. An empty or absent
  * `whenToUse` returns `description` unchanged (no trailing separator); a
