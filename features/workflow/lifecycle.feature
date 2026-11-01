@@ -56,6 +56,12 @@ Feature: Workflow lifecycle
       | severity | message                                                                                       |
       | warning  | /demo:hello is not available in this project -- reload the session to drop the stale command. |
 
+  Scenario: A new session after the disable offers no workflow command
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user", which warned
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers no workflow commands
+
   Scenario: Enabling a disabled plugin runs its workflow again in a new session
     Given the user has run "/claude:plugin disable demo@fixtures --scope user", which warned
     Given the user has started a new pi session
@@ -136,6 +142,22 @@ Feature: Workflow lifecycle
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status  | reasons                | scope | from  | to    |
       | fixtures         | user              | demo@fixtures | demo | updated | stale workflow command | user  | 1.0.0 | 1.1.0 |
+
+  Scenario: Running the old workflow command after a renaming update shows the engine's notice, because pi keeps the command until a new session
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/hello.js" with this text:
+      """
+      export const meta = {name:"greet",description:"Greets."};
+
+      return "Hi.";
+      """
+    Given the user has run "/claude:plugin update demo@fixtures --scope user", which warned
+    When the user runs the workflow command "/demo:hello", which starts no run
+    Then the workflow engine shows these notices:
+      | severity | message                                                                                       |
+      | warning  | /demo:hello is not available in this project -- reload the session to drop the stale command. |
 
   Scenario: A new session after a renaming update offers only the new workflow command
     Given the marketplace "fixtures" offers these plugins:

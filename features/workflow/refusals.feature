@@ -28,10 +28,13 @@ Feature: Workflow refusals
       | error    | <message> |
 
     Examples:
-      | file        | script                                                                                                             | command        | message                                                                                                          |
-      | late.js     | const greeting = "late"; export const meta = {name:"late",description:"Declares its meta late."}; return greeting; | /demo:late     | /demo:late failed: `export const meta = { name, description, phases }` must be the first statement in the script |
-      | reserved.js | export const meta = {name:"reserved",description:"Uses a reserved key.",constructor:"x"}; return "reserved";       | /demo:reserved | /demo:reserved failed: reserved key name not allowed in meta: constructor                                        |
-      | nodesc.js   | export const meta = {name:"nodesc"}; return "nodesc";                                                              | /demo:nodesc   | /demo:nodesc failed: meta.description must be a non-empty string                                                 |
+      | file        | script                                                                                                             | command        | message                                                                                                            |
+      | late.js     | const greeting = "late"; export const meta = {name:"late",description:"Declares its meta late."}; return greeting; | /demo:late     | /demo:late failed: `export const meta = { name, description, phases }` must be the first statement in the script   |
+      | reserved.js | export const meta = {name:"reserved",description:"Uses a reserved key.",constructor:"x"}; return "reserved";       | /demo:reserved | /demo:reserved failed: reserved key name not allowed in meta: constructor                                          |
+      | nodesc.js   | export const meta = {name:"nodesc"}; return "nodesc";                                                              | /demo:nodesc   | /demo:nodesc failed: meta.description must be a non-empty string                                                   |
+      | mutable.js  | export let meta = {name:"mutable",description:"Declares its meta with let."}; return "mutable";                    | /demo:mutable  | /demo:mutable failed: meta export must be `export const meta = ...`                                                |
+      | hidden.js   | const meta = {name:"hidden",description:"Does not export its meta."}; return "hidden";                             | /demo:hidden   | /demo:hidden failed: `export const meta = { name, description, phases }` must be the first statement in the script |
+      | pair.js     | export const meta = {name:"pair",description:"Declares two bindings."}, other = 1; return "pair";                  | /demo:pair     | /demo:pair failed: meta export must declare only `meta`                                                            |
 
   Scenario: Installing a plugin refuses a nondeterministic script and one that does not parse, which Claude Code refuses only when they run
     Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/clock.js" with this text:
