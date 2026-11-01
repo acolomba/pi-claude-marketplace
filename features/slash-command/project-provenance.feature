@@ -31,6 +31,27 @@ Feature: Slash command project provenance
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install solo@fixtures --scope project"
 
+  Scenario: A project command whose install the user's pi directory does not record runs no context command
+    Given the user's pi directory records no plugin install for the project
+    Given the user has started a new pi session
+    When the user runs "/solo:status"
+    Then the result has these fields:
+      | kind         | usage-error                                                                                                                                                                                                                                                             |
+      | severity     | error                                                                                                                                                                                                                                                                   |
+      | needs reload | false                                                                                                                                                                                                                                                                   |
+      | message      | The command /solo:status was not installed into the project {project dir} on this machine, or its file changed after the install. Reinstall its plugin into this project with /claude:plugin reinstall solo@fixtures --scope project, then run /reload to use it. |
+      | usage        |                                                                                                                                                                                                                                                                         |
+
+  Scenario: A project command the user installed into the project runs its context command
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/solo:status"
+    Then the model receives these calls:
+      | call | role | text        |
+      | 1    | user | Status: ran |
+
   Scenario: Installing a project command's plugin while the user's record of project installs holds content pi cannot update fails and keeps the record
     Given the user has run "/claude:plugin uninstall solo@fixtures --scope project"
     Given the user's record of project skill installs was replaced with this text:

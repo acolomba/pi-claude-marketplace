@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
+import { commandFileDigest } from "../../extensions/pi-claude-marketplace/bridges/commands/project-ledger.ts";
 import { invokeStagedCommand } from "../../extensions/pi-claude-marketplace/orchestrators/command-invocation.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
   CommandInvocationDependencies,
   CommandInvocationRequest,
+  CommandOwnerState,
 } from "../../extensions/pi-claude-marketplace/orchestrators/command-invocation.ts";
 import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
@@ -45,19 +48,59 @@ const host = {
   },
 } satisfies PromptShellHost;
 
-/** Reads only the named files, and runs no shell; any other read or a shell run fails the case. */
-function dependencies(files: Readonly<Record<string, string>>): CommandInvocationDependencies {
+/** IN-06: the user's ledger of the project `/work`, named by the SHA-256 of its path. */
+const WORK_LEDGER = path.join(
+  AGENT_DIR,
+  "pi-claude-marketplace",
+  "project-installs",
+  createHash("sha256").update(CWD).digest("hex"),
+  "skills.json",
+);
+
+/** D-CF3-07: ledger text that lists each generated name of `digests` for the project `project`. */
+function projectLedger(digests: Readonly<Record<string, string>>, project = CWD): string {
+  const listed: Record<string, { plugin: string; sha256: string }> = {};
+  for (const [name, sha256] of Object.entries(digests)) {
+    listed[name] = { plugin: "demo", sha256 };
+  }
+
+  return JSON.stringify({ version: 1, project, skills: listed });
+}
+
+/** The ledger a project install of `/demo:greet` wrote: it lists the staged file as `files` hold it. */
+function installedLedger(files: Readonly<Record<string, string>>): string | null {
+  const staged = files[PROJECT_COMMAND];
+  return staged === undefined ? null : projectLedger({ "demo:greet": commandFileDigest(staged) });
+}
+
+/**
+ * Reads only the named files and the user's ledger of `/work` (by default the
+ * one the install of `files` wrote; `null` for none), and runs no shell; any
+ * other read fails, and a shell run or a state read fails the case.
+ */
+function dependencies(
+  files: Readonly<Record<string, string>>,
+  ledger: string | null = installedLedger(files),
+): CommandInvocationDependencies {
+  const readable: Readonly<Record<string, string>> =
+    ledger === null ? files : { ...files, [WORK_LEDGER]: ledger };
   return {
     getAgentDir: () => AGENT_DIR,
     readFile: (file) => {
-      const content = files[file];
+      const content = readable[file];
       return content === undefined
         ? Promise.reject(new Error(`unexpected read of ${file}`))
         : Promise.resolve(content);
     },
+    loadState: () => Promise.reject(new Error("a command that runs must not read the state")),
     host,
     runShell: () => Promise.reject(new Error("a body without a ! command must not run a shell")),
   };
+}
+
+/** A project `state.json` whose plugin `demo` of the marketplace `fixtures` lists `prompts`. */
+function ownerState(prompts: readonly string[]): CommandOwnerState {
+  return { marketplaces: { fixtures: { plugins: { demo: { resources: { prompts } } } } } };
 }
 
 /** A shell runner that records its requests and answers each with `result`. */
@@ -465,4 +508,170 @@ test("lets a failure other than the cores' own propagate", async () => {
       return true;
     },
   );
+});
+
+const NOT_RECORDED =
+  "The command /demo:greet was not installed into the project /work on this machine, or its " +
+  "file changed after the install. Reinstall its plugin into this project with ";
+
+const STATUS_COMMAND = commandFile("Status: !`printf ran`");
+
+for (const { title, ledger } of [
+  { title: "the user's ledger of the project is missing", ledger: null },
+  {
+    title: "the ledger names another project",
+    ledger: projectLedger({ "demo:greet": commandFileDigest(STATUS_COMMAND) }, "/elsewhere"),
+  },
+  {
+    title: "the ledger does not list the command",
+    ledger: projectLedger({ "demo:other": commandFileDigest(STATUS_COMMAND) }),
+  },
+  {
+    title: "the ledger lists the command with the digest of another file",
+    ledger: projectLedger({ "demo:greet": commandFileDigest(commandFile("Greet.")) }),
+  },
+  { title: "the ledger is not JSON", ledger: "{" },
+]) {
+  test(`D-CF3-07: refuses a project command without running its context command when ${title}`, async () => {
+    // arrange
+    const files = { [PROJECT_COMMAND]: STATUS_COMMAND };
+    const loaded: string[] = [];
+
+    // act
+    const outcome = await invokeStagedCommand(request({ args: "" }), {
+      ...dependencies(files, ledger),
+      loadState: (extensionRoot) => {
+        loaded.push(extensionRoot);
+        return Promise.resolve(ownerState(["demo:greet"]));
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "refuse",
+      message: `${NOT_RECORDED}/claude:plugin reinstall demo@fixtures --scope project, then run /reload to use it.`,
+    });
+    assert.deepStrictEqual(loaded, ["/work/.pi/pi-claude-marketplace"]);
+  });
+}
+
+for (const { title, loadState } of [
+  {
+    title: "no record of the project state lists the command",
+    loadState: () => Promise.resolve(ownerState(["demo:other"])),
+  },
+  {
+    title: "the project state cannot be read",
+    loadState: () => Promise.reject(new Error("state.json is not JSON")),
+  },
+]) {
+  test(`D-CF3-07: names every project plugin in the reinstall when ${title}`, async () => {
+    // arrange
+    const files = { [PROJECT_COMMAND]: STATUS_COMMAND };
+
+    // act
+    const outcome = await invokeStagedCommand(request({ args: "" }), {
+      ...dependencies(files, null),
+      loadState,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "refuse",
+      message: `${NOT_RECORDED}/claude:plugin reinstall --scope project, then run /reload to use it.`,
+    });
+  });
+}
+
+/** `base` with each file it is asked to read recorded in `reads`. */
+function recordingReads(
+  base: CommandInvocationDependencies,
+  reads: string[],
+): CommandInvocationDependencies {
+  return {
+    ...base,
+    readFile: (file) => {
+      reads.push(file);
+      return base.readFile(file);
+    },
+  };
+}
+
+test("D-CF3-07: refuses a project command pi does not trust before reading the user's ledger", async () => {
+  // arrange
+  const reads: string[] = [];
+  const files = { [PROJECT_COMMAND]: STATUS_COMMAND };
+
+  // act
+  const outcome = await invokeStagedCommand(
+    request({ projectTrusted: false }),
+    recordingReads(dependencies(files), reads),
+  );
+
+  // assert
+  assert.strictEqual(outcome.kind, "refuse");
+  assert.deepStrictEqual(reads, []);
+});
+
+test("D-CF3-07: runs a user command without reading the user's ledger or the state", async () => {
+  // arrange
+  const files = { [USER_COMMAND]: commandFile("Greet $0.") };
+  const reads: string[] = [];
+
+  // act
+  const outcome = await invokeStagedCommand(
+    request({ commands: [piCommand("demo:greet", "prompt", USER_COMMAND)] }),
+    recordingReads(dependencies(files, null), reads),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, { kind: "send", text: "Greet Ada." });
+  assert.deepStrictEqual(reads, [USER_COMMAND]);
+});
+
+test("T-03-22: fills the very text whose digest the ledger lists, read once", async () => {
+  // arrange
+  const base = dependencies({ [PROJECT_COMMAND]: commandFile("Greet $0.") });
+  const reads: string[] = [];
+  let commandReads = 0;
+  const changing: CommandInvocationDependencies = {
+    ...base,
+    // A second read of the command would see a file a pull changed after the check.
+    readFile: (file) => {
+      commandReads += file === PROJECT_COMMAND ? 1 : 0;
+      return commandReads > 1
+        ? Promise.resolve(commandFile("Run !`printf pwned`."))
+        : base.readFile(file);
+    },
+  };
+
+  // act
+  const outcome = await invokeStagedCommand(request(), recordingReads(changing, reads));
+
+  // assert
+  assert.deepStrictEqual(outcome, { kind: "send", text: "Greet Ada." });
+  assert.deepStrictEqual(reads, [PROJECT_COMMAND, WORK_LEDGER]);
+});
+
+test("D-CF3-07: refuses by default a project command the running pi's user did not install", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "command-invocation-");
+  const prompts = path.join(cwd, ".pi", "pi-claude-marketplace", "resources", "prompts");
+  const file = path.join(prompts, "demo:greet.md");
+  await mkdir(prompts, { recursive: true });
+  await writeFile(file, commandFile("Greet $0."), "utf8");
+
+  // act
+  const outcome = await invokeStagedCommand(
+    request({ commands: [piCommand("demo:greet", "prompt", file)], cwd }),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "refuse",
+    message:
+      `The command /demo:greet was not installed into the project ${cwd} on this machine, or ` +
+      "its file changed after the install. Reinstall its plugin into this project with " +
+      "/claude:plugin reinstall --scope project, then run /reload to use it.",
+  });
 });

@@ -16,11 +16,18 @@
 // D-CF1-03: only a command the user types reaches this module. A prompt
 // template outside this extension's two staged prompts directories, such as
 // the user's own, is `not-staged` and keeps Pi's expansion.
+//
+// D-CF3-07: a project's `.pi/pi-claude-marketplace/` tree can come from the
+// repository, so a project command runs only when the user's own ledger of
+// project installs, under the user scope, lists it with the SHA-256 of the
+// text read here. That one read feeds both the digest and the fill (T-03-22).
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { readCommandRecord } from "../bridges/commands/command-record.ts";
+import { commandFileDigest } from "../bridges/commands/project-ledger.ts";
+import { provenProjectSkills } from "../bridges/skills/project-installs.ts";
 import {
   claudeEffort,
   InvocationTooLargeError,
@@ -28,6 +35,7 @@ import {
   substituteArguments,
 } from "../domain/argument-substitution.ts";
 import { ContextInjectionError, expandContextInjections } from "../domain/context-injection.ts";
+import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 import {
   bashMissingMessage,
@@ -66,10 +74,26 @@ export type CommandInvocationOutcome =
   | { readonly kind: "send"; readonly text: string }
   | { readonly kind: "refuse"; readonly message: string };
 
+/** The part of a scope's `state.json` that names the plugin owning a staged command. */
+export interface CommandOwnerState {
+  readonly marketplaces: Readonly<
+    Record<
+      string,
+      {
+        readonly plugins: Readonly<
+          Record<string, { readonly resources: { readonly prompts: readonly string[] } }>
+        >;
+      }
+    >
+  >;
+}
+
 /** The side effects of an invocation. */
 export interface CommandInvocationDependencies {
   readonly getAgentDir: () => string;
   readonly readFile: (file: string) => Promise<string>;
+  /** Reads, without persisting a migration, the `state.json` under the given extension root. */
+  readonly loadState: (extensionRoot: string) => Promise<CommandOwnerState>;
   /** The machine facts that choose a shell and give the commands their environment. */
   readonly host: PromptShellHost;
   readonly runShell: PromptShellRunner;
@@ -82,6 +106,7 @@ function nodeDependencies(): CommandInvocationDependencies {
     host,
     runShell: createPromptShellRunner({ host, spawn: NODE_PROMPT_SHELL_SPAWN }),
     readFile: async (file) => readFile(file, "utf8"),
+    loadState: async (extensionRoot) => loadState(extensionRoot, { persistMigration: false }),
     getAgentDir,
   };
 }
@@ -101,6 +126,12 @@ interface StagedCommand {
 interface CommandFile {
   readonly frontmatter: Readonly<Record<string, unknown>>;
   readonly body: string;
+}
+
+/** The one read of a staged command file: its text and that text split. */
+interface ReadCommand {
+  readonly text: string;
+  readonly file: CommandFile;
 }
 
 function refusal(message: string): CommandInvocationOutcome {
@@ -221,18 +252,74 @@ function refusalFor(error: unknown): CommandInvocationOutcome {
   throw error;
 }
 
+const ANY_PROJECT_REINSTALL = "/claude:plugin reinstall --scope project";
+
+/**
+ * D-CF3-07: the command that stages the project command again and records it
+ * as this user's install. The project's `state.json` already records the
+ * plugin, so `install` would refuse it; `reinstall` names the plugin whose
+ * record lists the command among its prompts, or every project plugin when
+ * no record does or the state cannot be read.
+ */
+async function projectReinstallCommand(
+  request: CommandInvocationRequest,
+  dependencies: CommandInvocationDependencies,
+): Promise<string> {
+  const extensionRoot = path.join(request.cwd, ".pi", "pi-claude-marketplace");
+  const state = await dependencies.loadState(extensionRoot).catch(() => undefined);
+  for (const [marketplace, { plugins }] of Object.entries(state?.marketplaces ?? {})) {
+    for (const [plugin, record] of Object.entries(plugins)) {
+      if (record.resources.prompts.includes(request.name)) {
+        return `/claude:plugin reinstall ${plugin}@${marketplace} --scope project`;
+      }
+    }
+  }
+
+  return ANY_PROJECT_REINSTALL;
+}
+
+/**
+ * D-CF3-07 (follows D-CF2-13): refuses a project command unless the user's
+ * ledger of the project lists it with the digest of `text`, the file as read
+ * for this invocation. A user command needs no record: no repository can
+ * write the user scope. Returns `undefined` when the command may run.
+ */
+async function unprovenRefusal(
+  request: CommandInvocationRequest,
+  command: StagedCommand,
+  text: string,
+  agentDir: string,
+  dependencies: CommandInvocationDependencies,
+): Promise<CommandInvocationOutcome | undefined> {
+  if (command.scope === "user") {
+    return undefined;
+  }
+
+  const recorded = await provenProjectSkills(agentDir, request.cwd, dependencies.readFile);
+  if (recorded.get(request.name) === commandFileDigest(text)) {
+    return undefined;
+  }
+
+  const reinstall = await projectReinstallCommand(request, dependencies);
+  return refusal(
+    `The command ${request.typed} was not installed into the project ${request.cwd} on this machine, or its file changed after the install. Reinstall its plugin into this project with ${reinstall}, then run /reload to use it.`,
+  );
+}
+
 /**
  * D-CF3-06: builds what the model receives for a typed staged command,
  * reports that the command is not one this extension staged, or refuses it
  * with Claude Code's message (T-01-24). A project command in a project Pi
- * does not trust, and a staged file that cannot be read or parsed, refuse
- * too. A failure other than these propagates.
+ * does not trust, a project command this user's ledger does not list with
+ * the digest of its file (D-CF3-07), and a staged file that cannot be read
+ * or parsed, refuse too. A failure other than these propagates.
  */
 export async function invokeStagedCommand(
   request: CommandInvocationRequest,
   dependencies: CommandInvocationDependencies = NODE_DEPENDENCIES,
 ): Promise<CommandInvocationOutcome> {
-  const command = locateStagedCommand(request, dependencies.getAgentDir());
+  const agentDir = dependencies.getAgentDir();
+  const command = locateStagedCommand(request, agentDir);
   if (command === undefined) {
     return { kind: "not-staged" };
   }
@@ -251,7 +338,7 @@ export async function invokeStagedCommand(
   // the body it cached, with its `!` commands not run.
   const loaded = await dependencies
     .readFile(command.file)
-    .then((content): CommandFile => parseFrontmatter(content))
+    .then((text): ReadCommand => ({ text, file: parseFrontmatter(text) }))
     .catch((error: unknown) =>
       refusal(
         `Cannot read the command ${request.typed}: ${errorMessage(error)}. Run /reload to load the installed commands again.`,
@@ -261,5 +348,10 @@ export async function invokeStagedCommand(
     return loaded;
   }
 
-  return renderCommand(request, command, loaded, dependencies).catch(refusalFor);
+  const unproven = await unprovenRefusal(request, command, loaded.text, agentDir, dependencies);
+  if (unproven !== undefined) {
+    return unproven;
+  }
+
+  return renderCommand(request, command, loaded.file, dependencies).catch(refusalFor);
 }
