@@ -6,11 +6,11 @@ import { test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
+import { loadQualifiedSkillAliases } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import {
   NODE_PROJECT_SKILL_LEDGER,
   skillTreeDigest,
-} from "../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
-import { loadQualifiedSkillAliases } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
+} from "../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {

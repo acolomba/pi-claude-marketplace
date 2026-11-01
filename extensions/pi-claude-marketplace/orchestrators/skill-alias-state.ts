@@ -13,17 +13,17 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { readSkillRecord } from "../bridges/skills/skill-names.ts";
+import { generatedSkillName } from "../domain/name.ts";
 import {
   NODE_SKILL_TREE_LISTER,
   provenProjectSkills,
   skillTreeDigest,
-} from "../bridges/skills/project-installs.ts";
-import { readSkillRecord } from "../bridges/skills/skill-names.ts";
-import { generatedSkillName } from "../domain/name.ts";
+} from "../persistence/project-installs.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 
-import type { SkillTreeLister } from "../bridges/skills/project-installs.ts";
+import type { SkillTreeLister } from "../persistence/project-installs.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 
 export interface SkillAliasState {

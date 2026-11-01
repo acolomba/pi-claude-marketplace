@@ -6,13 +6,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
-import { skillTreeDigest } from "../../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
 import {
   abortPreparedSkills,
   commitPreparedSkills,
   prepareStageSkills,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { skillTreeDigest } from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import { SkillFrontmatterNodeError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { CleanupLeakError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -20,12 +20,12 @@ import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/s
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 
+import type { StageSkillsCommitResult } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type {
   ProjectSkillLedger,
   ProjectSkillLedgerChange,
-} from "../../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
-import type { StageSkillsCommitResult } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
+} from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 
 // Builtin-module patching that remains in this file, and why. The removal port
 // carries cleanupStaging's removals only. Every fault that reaches that helper

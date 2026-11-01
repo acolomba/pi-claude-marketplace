@@ -27,7 +27,6 @@ import path from "node:path";
 
 import { readCommandRecord } from "../bridges/commands/command-record.ts";
 import { commandFileDigest } from "../bridges/commands/project-ledger.ts";
-import { provenProjectSkills } from "../bridges/skills/project-installs.ts";
 import {
   claudeEffort,
   InvocationTooLargeError,
@@ -35,6 +34,7 @@ import {
   substituteArguments,
 } from "../domain/argument-substitution.ts";
 import { ContextInjectionError, expandContextInjections } from "../domain/context-injection.ts";
+import { provenProjectSkills } from "../persistence/project-installs.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 import {

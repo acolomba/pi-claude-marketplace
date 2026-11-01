@@ -97,7 +97,6 @@ import {
   prepareStageSkills,
   unstagePluginSkills,
 } from "../../bridges/skills/index.ts";
-import { NODE_PROJECT_SKILL_LEDGER } from "../../bridges/skills/project-installs.ts";
 import {
   commitPreparedWorkflows,
   prepareStageWorkflows,
@@ -119,6 +118,7 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
+import { NODE_PROJECT_SKILL_LEDGER } from "../../persistence/project-installs.ts";
 import {
   ConcurrentInstallError,
   DirectoryPinUnsatisfiedError,

@@ -21,11 +21,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  NODE_SKILL_TREE_LISTER,
-  provenProjectSkills,
-  skillTreeDigest,
-} from "../bridges/skills/project-installs.ts";
 import { readSkillRecord } from "../bridges/skills/skill-names.ts";
 import {
   claudeEffort,
@@ -34,6 +29,11 @@ import {
   substituteArguments,
 } from "../domain/argument-substitution.ts";
 import { ContextInjectionError, expandContextInjections } from "../domain/context-injection.ts";
+import {
+  NODE_SKILL_TREE_LISTER,
+  provenProjectSkills,
+  skillTreeDigest,
+} from "../persistence/project-installs.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 import {
@@ -46,7 +46,7 @@ import {
 import { errorMessage } from "../shared/errors.ts";
 
 import type { SkillAliasState } from "./skill-alias-state.ts";
-import type { SkillTreeLister } from "../bridges/skills/project-installs.ts";
+import type { SkillTreeLister } from "../persistence/project-installs.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
 

@@ -18,12 +18,12 @@ import { createUnstagePluginSkills } from "../../../extensions/pi-claude-marketp
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
+import type { SkillsUnstageRemover } from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type {
   ProjectSkillLedger,
   ProjectSkillLedgerChange,
-} from "../../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
-import type { SkillsUnstageRemover } from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
-import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+} from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 
 const NO_LEDGER: ProjectSkillLedger = { update: () => Promise.resolve() };
 

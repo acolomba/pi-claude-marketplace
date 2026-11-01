@@ -1,4 +1,4 @@
-// bridges/skills/project-installs.ts
+// persistence/project-installs.ts
 //
 // D-CF2-13: the project-scope skills this user installed, kept outside the
 // project. A project's `.pi/pi-claude-marketplace/` tree lives in the
@@ -31,10 +31,10 @@ import path from "node:path";
 import Type from "typebox";
 import { Compile } from "typebox/compile";
 
-import { getAgentDir } from "../../platform/pi-api.ts";
-import { atomicWriteJson } from "../../shared/atomic-json.ts";
-import { ProjectSkillLedgerError } from "../../shared/errors-bridges.ts";
-import { assertPathInside } from "../../shared/path-safety.ts";
+import { getAgentDir } from "../platform/pi-api.ts";
+import { atomicWriteJson } from "../shared/atomic-json.ts";
+import { ProjectSkillLedgerError } from "../shared/errors-bridges.ts";
+import { assertPathInside } from "../shared/path-safety.ts";
 
 import type { Dirent } from "node:fs";
 

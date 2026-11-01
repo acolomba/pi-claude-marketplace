@@ -23,6 +23,11 @@ import { descriptionFallback } from "../../domain/description-fallback.ts";
 import { droppedInvocationFieldsWarning } from "../../domain/invocation-frontmatter.ts";
 import { assertSafeName } from "../../domain/name.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
+import {
+  NODE_PROJECT_SKILL_LEDGER,
+  NODE_SKILL_TREE_LISTER,
+  skillTreeDigest,
+} from "../../persistence/project-installs.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
 import { SkillFrontmatterNodeError } from "../../shared/errors-bridges.ts";
@@ -40,11 +45,6 @@ import {
   synthesizeUnparseableSkill,
   truncate1536,
 } from "./frontmatter-degrade.ts";
-import {
-  NODE_PROJECT_SKILL_LEDGER,
-  NODE_SKILL_TREE_LISTER,
-  skillTreeDigest,
-} from "./project-installs.ts";
 import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 import {
   commandUpstreamNames,
@@ -54,7 +54,6 @@ import {
   writeSkillRecord,
 } from "./skill-names.ts";
 
-import type { ProjectSkillLedger } from "./project-installs.ts";
 import type { SkillNameClaims } from "./skill-names.ts";
 import type {
   DiscoveredSkill,
@@ -65,6 +64,7 @@ import type {
   StageSkillsInput,
 } from "./types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
+import type { ProjectSkillLedger } from "../../persistence/project-installs.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { ClaudePluginVars } from "../../shared/vars.ts";
 

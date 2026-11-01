@@ -10,7 +10,8 @@
 
 import { rm } from "node:fs/promises";
 
-import { NODE_PROJECT_SKILL_LEDGER } from "./project-installs.ts";
+import { NODE_PROJECT_SKILL_LEDGER } from "../../persistence/project-installs.ts";
+
 import { createUnstagePluginSkills } from "./unstage.ts";
 
 import type { SkillsUnstageRemover } from "./unstage.ts";

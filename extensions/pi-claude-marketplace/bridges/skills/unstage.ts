@@ -11,8 +11,8 @@ import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
-import type { ProjectSkillLedger } from "./project-installs.ts";
 import type { UnstageSkillsInput, UnstageSkillsResult } from "./types.ts";
+import type { ProjectSkillLedger } from "../../persistence/project-installs.ts";
 
 /** Removes one validated, contained skill tree. */
 export interface SkillsUnstageRemover {

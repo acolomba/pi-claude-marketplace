@@ -7,13 +7,12 @@
 // Only a record under the user scope root, which no repository can write,
 // tells this user's install apart from such a clone.
 //
-// The record is the D-CF2-13 project ledger that the skills bridge owns: one
-// file per project (IN-06), named by the SHA-256 of the project's real path,
-// whose `skills` map now also lists commands. A command's generated name holds
-// the namespace separator and never equals a skill name, so the two kinds
-// share the map. The fallow boundary zones keep this bridge from importing the
-// skills bridge, so this module declares the ledger it needs as a structural
-// type, and the orchestrators pass in the user's ledger.
+// The record is the D-CF2-13 project ledger in `persistence/project-installs.ts`:
+// one file per project (IN-06), named by the SHA-256 of the project's real
+// path, whose `skills` map also lists commands. A command's generated name
+// holds the namespace separator and never equals a skill name, so the two
+// kinds share the map. This module declares the ledger it needs as a
+// structural type, and the orchestrators pass in the user's ledger.
 //
 // The ledger itself enforces WR-02: content this version cannot update makes
 // the update throw and stays as it was. The commit writes after its staging

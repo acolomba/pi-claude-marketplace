@@ -87,7 +87,6 @@ import {
   commitPreparedSkills,
   prepareStageSkills,
 } from "../../bridges/skills/index.ts";
-import { NODE_PROJECT_SKILL_LEDGER } from "../../bridges/skills/project-installs.ts";
 import {
   abortPreparedWorkflows,
   commitPreparedWorkflows,
@@ -96,6 +95,7 @@ import {
 import { shadowedFolderWarning } from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { NODE_PROJECT_SKILL_LEDGER } from "../../persistence/project-installs.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CleanupContextError,

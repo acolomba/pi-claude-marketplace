@@ -4,20 +4,20 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
+import { invokeBridgedSkill } from "../../extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts";
 import {
   NODE_PROJECT_SKILL_LEDGER,
   skillTreeDigest,
-} from "../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
-import { invokeBridgedSkill } from "../../extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts";
+} from "../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import { parseFrontmatter } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
-import type { SkillTreeEntry } from "../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
 import type { SkillAliasState } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import type {
   SkillInvocationDependencies,
   SkillInvocationRequest,
 } from "../../extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts";
+import type { SkillTreeEntry } from "../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   PromptShellHost,

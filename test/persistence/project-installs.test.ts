@@ -10,9 +10,9 @@ import {
   NODE_SKILL_TREE_LISTER,
   provenProjectSkills,
   skillTreeDigest,
-} from "../../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
-import { ProjectSkillLedgerError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
-import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+} from "../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
+import { ProjectSkillLedgerError } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 /** The ledger file of the project at the canonical path `project` under the agent directory `agentDir`. */
 function projectLedgerFile(agentDir: string, project: string): string {
