@@ -400,3 +400,25 @@ Feature: Hook tool use
       | 2    | assistant   | tool call bash {"command":"echo from-model"}            |
       | 2    | tool result | bash failed: PreToolUse:Bash hook error: no echo        |
       | 2    | user        | PreToolUse:Bash hook additional context: denied by hook |
+
+  Scenario: A failed tool call runs PostToolUseFailure and not PostToolUse
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event              | matcher |
+      | after   | PostToolUse        | Bash    |
+      | failure | PostToolUseFailure | Bash    |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments             |
+      |       | bash | {"command": "exit 3"} |
+      | Done. |      |                       |
+    When the user prompts "run the failing command"
+    Then the hooks record these runs:
+      | event              | session | tool name | tool input           | tool response                                                          | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUseFailure | first   | Bash      | {"command":"exit 3"} | [{"type":"text","text":"(no output)\\n\\nCommand exited with code 3"}] | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
