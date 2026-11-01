@@ -109,6 +109,36 @@ export function surfaceDiscoveryWarnings(
   notifyStagingHalves(ctx, run, args, { discovery: args.warnings, hygiene: [] });
 }
 
+/**
+ * WR-04: shows the warnings an unstage returned after the verb's own rows,
+ * such as a project skill ledger the skills slot could not update (D-CF2-13).
+ * The removal itself happened, so the header names the verb that made it.
+ * Every line is redacted (NFR-9). No warning shows nothing.
+ */
+export function surfaceUnstageWarnings(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  subject: {
+    readonly plugin: string;
+    readonly scope: Scope;
+    readonly verb: "uninstalled" | "disabled";
+  },
+  warnings: readonly string[],
+): void {
+  if (warnings.length === 0) {
+    return;
+  }
+
+  const count =
+    warnings.length === 1 ? "1 cleanup warning" : `${warnings.length.toString()} cleanup warnings`;
+  notifyDiagnostic(
+    ctx,
+    run,
+    `Plugin "${subject.plugin}" [${subject.scope}] ${subject.verb}; ${count}.`,
+    warnings.map((warning) => redactAbsolutePaths(warning)),
+  );
+}
+
 function notifyStagingHalves(
   ctx: NotificationContext,
   run: NotificationRun,

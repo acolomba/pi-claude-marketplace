@@ -6,6 +6,7 @@ import {
   keyValueEnd,
   topLevelNodeIndex,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts";
+import { SkillFrontmatterNodeError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
 describe("frontmatterBlockEnd", () => {
   for (const { description, lines, expectedBlockEnd } of [
@@ -144,6 +145,34 @@ describe("keyValueEnd", () => {
       expectedKeyValueEnd: 4,
     },
     {
+      description: "IN-01: includes the value line of an explicit key and its continuation",
+      lines: ["---", "? name", "  # key comment", ": >", "  long", "description: d", "---"],
+      keyIndex: 1,
+      blockEnd: 6,
+      expectedKeyValueEnd: 4,
+    },
+    {
+      description: "IN-01: includes only the first value line of an explicit key",
+      lines: ["---", "? name", ": review", ": other", "---"],
+      keyIndex: 1,
+      blockEnd: 4,
+      expectedKeyValueEnd: 2,
+    },
+    {
+      description: "IN-01: stops at a value line after a key that is not explicit",
+      lines: ["---", "name: review", ": other", "---"],
+      keyIndex: 1,
+      blockEnd: 3,
+      expectedKeyValueEnd: 1,
+    },
+    {
+      description: "IN-01: stops at the next key after an explicit key with no value line",
+      lines: ["---", "? name", "description: d", "---"],
+      keyIndex: 1,
+      blockEnd: 3,
+      expectedKeyValueEnd: 1,
+    },
+    {
       description: "reports the last occupied line of a complete multiline span",
       lines: [
         "---",
@@ -233,6 +262,21 @@ describe("topLevelNodeIndex", () => {
       lines: ["---", "description: d", "---", "name: body"],
       expectedIndex: -1,
     },
+    {
+      description: "IN-01: finds an explicit key with its value line",
+      lines: ["---", "description: d", "? name", ": review", "---"],
+      expectedIndex: 2,
+    },
+    {
+      description: "WR-05: finds a flow mapping that holds the key alone",
+      lines: ["---", "{name: review}", "description: d", "---"],
+      expectedIndex: 1,
+    },
+    {
+      description: "WR-05: skips a flow mapping that holds only other keys",
+      lines: ["---", "{description: d, when_to_use: w}", "---"],
+      expectedIndex: -1,
+    },
   ]) {
     test(description, () => {
       // arrange
@@ -243,6 +287,40 @@ describe("topLevelNodeIndex", () => {
 
       // assert
       assert.strictEqual(index, expectedIndex);
+    });
+  }
+
+  for (const { description, lines, line, keys } of [
+    {
+      description: "a flow mapping",
+      lines: [
+        "---",
+        "{name: review, description: Reviews., disable-model-invocation: true}",
+        "---",
+      ],
+      line: 2,
+      keys: ["name", "description", "disable-model-invocation"],
+    },
+    {
+      description: "a multi-line flow mapping after another key",
+      lines: ["---", "when_to_use: w", "{description: d,", "  name: review}", "---"],
+      line: 3,
+      keys: ["description", "name"],
+    },
+  ]) {
+    test(`WR-05: throws for the key held in ${description} beside other keys`, () => {
+      // arrange
+      const blockEnd = frontmatterBlockEnd(lines);
+
+      // act & assert
+      assert.throws(
+        () => topLevelNodeIndex(lines, blockEnd, "name"),
+        (error: unknown) => {
+          assert.ok(error instanceof SkillFrontmatterNodeError);
+          assert.deepStrictEqual([error.key, error.line, error.keys], ["name", line, keys]);
+          return true;
+        },
+      );
     });
   }
 

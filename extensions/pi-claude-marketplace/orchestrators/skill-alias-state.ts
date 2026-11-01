@@ -13,12 +13,17 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { provenProjectSkills, skillFileDigest } from "../bridges/skills/project-installs.ts";
+import {
+  NODE_SKILL_TREE_LISTER,
+  provenProjectSkills,
+  skillTreeDigest,
+} from "../bridges/skills/project-installs.ts";
 import { readSkillRecord } from "../bridges/skills/skill-names.ts";
 import { generatedSkillName } from "../domain/name.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 
+import type { SkillTreeLister } from "../bridges/skills/project-installs.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 
 export interface SkillAliasState {
@@ -38,12 +43,15 @@ export interface SkillAliasDependencies {
   readonly loadState: (extensionRoot: string) => Promise<SkillAliasState>;
   readonly getAgentDir: () => string;
   readonly readFile: (file: string) => Promise<string>;
+  /** Lists the files and symbolic links of a staged skill directory (WR-03). */
+  readonly listSkillTree: SkillTreeLister;
 }
 
 const DEFAULT_DEPENDENCIES: SkillAliasDependencies = {
   loadState,
   getAgentDir,
   readFile: (file) => readFile(file, "utf8"),
+  listSkillTree: NODE_SKILL_TREE_LISTER,
 };
 
 /** A skill of the state whose staged `SKILL.md` Pi has loaded. */
@@ -99,27 +107,49 @@ function installedForms(pluginName: string, names: readonly string[]): readonly 
 }
 
 /**
+ * D-CF2-13 / WR-03: whether a project skill's staged directory, `content`
+ * standing for its `SKILL.md`, has the digest the user's project ledger
+ * lists. A user skill (`proven` undefined) passes; a directory that cannot be
+ * listed fails.
+ */
+async function matchesLedger(
+  skill: LoadedSkill,
+  content: string,
+  listSkillTree: SkillTreeLister,
+): Promise<boolean> {
+  if (skill.proven === undefined) {
+    return true;
+  }
+
+  const recorded = skill.proven.get(skill.generatedName);
+  try {
+    return (
+      recorded === skillTreeDigest(await listSkillTree(path.dirname(skill.skillPath)), content)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The names stored in the staged `SKILL.md` of `skill`; none when it cannot
  * be read, and none for a project skill that the user's project ledger does
- * not list with the digest of the file as it is now (D-CF2-13).
+ * not list with the digest of its directory as it is now (D-CF2-13, WR-03).
  */
 async function skillNames(
   skill: LoadedSkill,
-  read: SkillAliasDependencies["readFile"],
+  dependencies: Pick<SkillAliasDependencies, "readFile" | "listSkillTree">,
 ): Promise<readonly string[]> {
   let content: string;
   let frontmatter: Record<string, unknown>;
   try {
-    content = await read(skill.skillPath);
+    content = await dependencies.readFile(skill.skillPath);
     frontmatter = parseFrontmatter(content).frontmatter;
   } catch {
     return [];
   }
 
-  if (
-    skill.proven !== undefined &&
-    skill.proven.get(skill.generatedName) !== skillFileDigest(content)
-  ) {
+  if (!(await matchesLedger(skill, content, dependencies.listSkillTree))) {
     return [];
   }
 
@@ -200,7 +230,7 @@ export async function loadQualifiedSkillAliases(
   const claims = await Promise.all(
     skills.map(async (skill) => ({
       generatedName: skill.generatedName,
-      names: await skillNames(skill, resolved.readFile),
+      names: await skillNames(skill, resolved),
     })),
   );
   const aliases = new Map<string, string>();

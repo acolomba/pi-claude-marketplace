@@ -6,12 +6,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
+import { skillTreeDigest } from "../../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
 import {
   abortPreparedSkills,
   commitPreparedSkills,
   prepareStageSkills,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { SkillFrontmatterNodeError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import { CleanupLeakError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -1789,7 +1792,16 @@ describe("commitPreparedSkills", () => {
             "acme-alpha",
             {
               plugin: "acme",
-              sha256: createHash("sha256").update(targetBytes, "utf8").digest("hex"),
+              sha256: skillTreeDigest(
+                [
+                  {
+                    path: "resources/a.txt",
+                    kind: "file",
+                    sha256: createHash("sha256").update(resourceBytes, "utf8").digest("hex"),
+                  },
+                ],
+                targetBytes,
+              ),
             },
           ],
         ]),
@@ -1846,8 +1858,65 @@ describe("commitPreparedSkills", () => {
         scope === "project" ? { error: ledgerError } : { leak: undefined },
       );
       assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["acme-alpha"]);
+      assert.deepStrictEqual(await readdir(locations.skillsStagingDir), []);
     });
   }
+
+  test("IN-02: appends a staging cleanup leak to a project ledger failure", async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "skills-commit-ledger-leak-");
+    const locations = locationsFor("project", environment.cwd);
+    const pluginRoot = path.join(environment.root, "plugin");
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    await mkdir(path.join(skillsDirectory, "alpha"), { recursive: true });
+    await writeFile(
+      path.join(skillsDirectory, "alpha", "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\nBody.\n",
+    );
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: environment.cwd,
+      knownWorkflowNames: [],
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(environment.root, "plugin-data"),
+      resolved: {
+        installable: true,
+        state: "installable",
+        name: "acme",
+        pluginRoot,
+        supported: ["skills"],
+        unsupported: [],
+        notes: [],
+        componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
+        mcpServers: {},
+        defaultEnabled: true,
+      },
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const ledgerError = new Error("ledger is read-only");
+    const removal = createRemovalOpsFake({
+      boundary: "memory",
+      rmErrors: [[prepared.stagingRoot, new Error("staging cleanup denied")]],
+    });
+
+    // act & assert
+    await assert.rejects(
+      commitPreparedSkills(removal.removalOps, prepared, {
+        update: () => Promise.reject(ledgerError),
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof CleanupLeakError);
+        assert.strictEqual(error.cause, ledgerError);
+        assert.strictEqual(
+          error.message,
+          "ledger is read-only (additionally: failed to clean up skills staging directory at " +
+            `${prepared.stagingRoot}: staging cleanup denied)`,
+        );
+        return true;
+      },
+    );
+  });
 
   test("propagates a previous-directory removal error without renaming staged bytes", async (t) => {
     // arrange
@@ -2216,5 +2285,21 @@ describe("abortPreparedSkills", () => {
     assert.strictEqual(secondLeak, undefined);
     assert.strictEqual(stagingState, undefined);
     assert.strictEqual(targetState, undefined);
+  });
+});
+
+test("WR-05: refuses a skill whose frontmatter holds its name in a flow mapping with other keys, and names the skill", async (t) => {
+  // arrange
+  const source =
+    "---\n{name: review, description: Reviews a change., disable-model-invocation: true}\n---\n\nReview.\n";
+
+  // act & assert
+  await assert.rejects(stageSingleSkill(t, "review", source), (error: unknown) => {
+    assert.ok(error instanceof SkillFrontmatterNodeError);
+    assert.deepStrictEqual(
+      [error.skill, error.key, error.line, error.keys],
+      ["review", "name", 2, ["name", "description", "disable-model-invocation"]],
+    );
+    return true;
   });
 });

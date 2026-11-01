@@ -20,21 +20,6 @@ export interface SkillsUnstageRemover {
 }
 
 /**
- * Per-name `rm({recursive:true})` loop. Names are validated with
- * `assertSafeName` (defense-in-depth -- callers should already have
- * validated, but state.json corruption could surface bad names) and routed
- * through `assertPathInside` to refuse traversal escapes.
- *
- * `removedNames` lists names whose target dir existed pre-call (via the
- * `pathExists` lstat-based, non-symlink-following check BEFORE rm) AND whose
- * `remover.removeTree` call resolved without throwing. A post-call ENOENT
- * (TOCTOU race) is treated the same as a pre-call miss and excluded from
- * `removedNames` -- even if `removeTree` performed the removal itself before
- * reporting ENOENT. `removedNames` therefore reflects `removeTree`'s own
- * success signal, not a guaranteed record of every directory actually
- * removed.
- */
-/**
  * D-CF2-13: drops the unstaged names of a project-scope unstage from the
  * user's project ledger. A stale entry only names a file this user once
  * installed, so a ledger that cannot be written becomes a warning and never
@@ -60,6 +45,23 @@ async function forgetProjectSkills(
   }
 }
 
+/**
+ * Per-name `rm({recursive:true})` loop. Names are validated with
+ * `assertSafeName` (defense-in-depth -- callers should already have
+ * validated, but state.json corruption could surface bad names) and routed
+ * through `assertPathInside` to refuse traversal escapes.
+ *
+ * `removedNames` lists names whose target dir existed pre-call (via the
+ * `pathExists` lstat-based, non-symlink-following check BEFORE rm) AND whose
+ * `remover.removeTree` call resolved without throwing. A post-call ENOENT
+ * (TOCTOU race) is treated the same as a pre-call miss and excluded from
+ * `removedNames` -- even if `removeTree` performed the removal itself before
+ * reporting ENOENT. `removedNames` therefore reflects `removeTree`'s own
+ * success signal, not a guaranteed record of every directory actually
+ * removed. At project scope the loop then drops the names from the user's
+ * project ledger (`forgetProjectSkills`), and `warnings` reports a ledger it
+ * could not update.
+ */
 export function createUnstagePluginSkills(
   remover: SkillsUnstageRemover,
   ledger: ProjectSkillLedger,

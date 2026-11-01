@@ -1,9 +1,10 @@
 Feature: Plugin autoapply
 
-  When autoapply is on, a new session applies its configs and marketplaces.
+  When autoapply is on, a new session applies the user's configs and marketplaces. It leaves the
+  project's configs pending for /claude:plugin apply, because they come with the repository.
   /claude:plugin autoapply shows or changes that setting.
 
-  Scenario: A new session installs the plugins a project config declares when the config turns autoapply on
+  Scenario: A new session installs the plugins a user config declares when the project config turns autoapply on
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -12,8 +13,8 @@ Feature: Plugin autoapply
       """
       { "autoapply": true }
       """
-    Given the marketplace "fixtures" is added to the project scope
-    Given a config in scope project and layer base, with these plugins:
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     When the user starts a new pi session
@@ -21,16 +22,16 @@ Feature: Plugin autoapply
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
-      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
-    Then the installation record of the project scope holds these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: A new session clones and installs a git-source plugin that a project config declares when autoapply is on
+  Scenario: A new session clones and installs a git-source plugin that a user config declares when autoapply is on
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
@@ -38,12 +39,12 @@ Feature: Plugin autoapply
     Given the marketplace "gits" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | ghp  | github      | ghp        | false  |
-    Given a config in scope project and layer base, with this text:
+    Given a config in scope user and layer base, with this text:
       """
       { "autoapply": true }
       """
-    Given the marketplace "gits" is added to the project scope
-    Given a config in scope project and layer base, with these plugins:
+    Given the marketplace "gits" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | gits        | ghp    |         |
     When the user starts a new pi session
@@ -51,8 +52,8 @@ Feature: Plugin autoapply
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope | version |
+      | gits             | user              | ghp@gits | ghp  | installed |         | user  | 1.0.0   |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -61,12 +62,12 @@ Feature: Plugin autoapply
       | command          | description           |
       | /skill:ghp-skill | A skill of ghp 1.0.0. |
 
-  Scenario: Autoapply in the user config applies the plugins a project config declares
+  Scenario Outline: A new session leaves the plugins a project config declares pending when a config turns autoapply on
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
-    Given a config in scope user and layer base, with this text:
+    Given a config in scope <config scope> and layer <config layer>, with this text:
       """
       { "autoapply": true }
       """
@@ -76,14 +77,21 @@ Feature: Plugin autoapply
       | fixtures    | demo   |         |
     When the user starts a new pi session
     Then the session reports these results:
-      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
-      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
-      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
-    Then the session offers these skills:
-      | command           | description            |
-      | /skill:demo-skill | A skill of demo 1.0.0. |
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
+      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
+      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
+    Then the project scope has no installed plugins
+    Then the session offers no skills
+
+    Examples:
+      | config scope | config layer |
+      | user         | base         |
+      | project      | base         |
+      | project      | local        |
 
   Scenario: A project local config that turns autoapply off overrides a base config that turns it on
     Given the marketplace "fixtures" is published as a dir source
@@ -94,8 +102,8 @@ Feature: Plugin autoapply
       """
       { "autoapply": true }
       """
-    Given the marketplace "fixtures" is added to the project scope
-    Given a config in scope project and layer base, with these plugins:
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     Given a config in scope project and layer local, with this text:
@@ -108,10 +116,10 @@ Feature: Plugin autoapply
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
-    Then the project scope has no installed plugins
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope |
+      | fixtures         | user              | demo@fixtures | demo | will install |         | user  |
+      | fixtures         | user              | demo@fixtures | demo | will install |         | user  |
+    Then the user scope has no installed plugins
     Then the session offers no skills
 
   Scenario: A project config that turns autoapply off overrides a user config that turns it on
@@ -127,8 +135,8 @@ Feature: Plugin autoapply
       """
       { "autoapply": false }
       """
-    Given the marketplace "fixtures" is added to the project scope
-    Given a config in scope project and layer base, with these plugins:
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     When the user starts a new pi session
@@ -137,10 +145,10 @@ Feature: Plugin autoapply
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
-    Then the project scope has no installed plugins
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope |
+      | fixtures         | user              | demo@fixtures | demo | will install |         | user  |
+      | fixtures         | user              | demo@fixtures | demo | will install |         | user  |
+    Then the user scope has no installed plugins
     Then the session offers no skills
 
   Scenario: A project local config that turns autoapply on overrides a user config that turns it off
@@ -152,8 +160,8 @@ Feature: Plugin autoapply
       """
       { "autoapply": false }
       """
-    Given the marketplace "fixtures" is added to the project scope
-    Given a config in scope project and layer base, with these plugins:
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     Given a config in scope project and layer local, with this text:
@@ -165,8 +173,8 @@ Feature: Plugin autoapply
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
-      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -225,6 +233,7 @@ Feature: Plugin autoapply
     Then the project scope has no installed plugins
     Then the session offers no skills
 
+
   Scenario: A failed install during an autoapply session is reported and stays pending
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
@@ -233,12 +242,12 @@ Feature: Plugin autoapply
     Given the marketplace "gits" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | ghp  | github      | ghp        | false  |
-    Given a config in scope project and layer base, with this text:
+    Given a config in scope user and layer base, with this text:
       """
       { "autoapply": true }
       """
-    Given the marketplace "gits" is added to the project scope
-    Given a config in scope project and layer base, with these plugins:
+    Given the marketplace "gits" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | gits        | ghp    |         |
     Given the git host answers 404 for the plugin "ghp"
@@ -248,11 +257,11 @@ Feature: Plugin autoapply
       | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
       | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial |
-      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  |
-      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  |
-    Then the project scope has no installed plugins
-    When the user runs "/claude:plugin pending --scope project"
+      | marketplace name | marketplace scope | id       | name | status | reasons        | scope | leaks | rollback partial |
+      | gits             | user              | ghp@gits | ghp  | failed | source missing | user  |       |                  |
+      | gits             | user              | ghp@gits | ghp  | failed | source missing | user  |       |                  |
+    Then the user scope has no installed plugins
+    When the user runs "/claude:plugin pending --scope user"
     Then the result has these fields:
       | kind                | cascade           |
       | severity            | info              |
@@ -263,8 +272,8 @@ Feature: Plugin autoapply
       | tally warnings      | 0                 |
       | tally success count | 1                 |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status       | reasons | scope   |
-      | gits             | project           | ghp@gits | ghp  | will install |         | project |
+      | marketplace name | marketplace scope | id       | name | status       | reasons | scope |
+      | gits             | user              | ghp@gits | ghp  | will install |         | user  |
 
   Scenario: An autoapply session that an invalid GitHub base address stops reports the install it made before stopping
     Given pi runs with the github base address "http://example.invalid"
@@ -278,12 +287,12 @@ Feature: Plugin autoapply
     Given the marketplace "fixtures" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | ghp  | github      | ghp        | false  |
-    Given a config in scope project and layer base, with this text:
+    Given a config in scope user and layer base, with this text:
       """
       { "autoapply": true }
       """
-    Given the marketplace "fixtures" is added to the project scope
-    Given a config in scope project and layer base, with these plugins:
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
       | fixtures    | ghp    |         |
@@ -296,15 +305,44 @@ Feature: Plugin autoapply
       | reconcile-aborted         | error    | false        |             | PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme. |                   |                |                |                     |
       | cascade                   | info     | false        | true        |                                                                   | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   | version |
-      | fixtures         | project           | demo@fixtures | demo | installed    |         | project | 1.0.0   |
-      | fixtures         | project           | ghp@fixtures  | ghp  | will install |         | project |         |
-      | fixtures         | project           | ghp@fixtures  | ghp  | will install |         | project |         |
-    Then the installation record of the project scope holds these plugins:
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed    |         | user  | 1.0.0   |
+      | fixtures         | user              | ghp@fixtures  | ghp  | will install |         | user  |         |
+      | fixtures         | user              | ghp@fixtures  | ghp  | will install |         | user  |         |
+    Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
 
   Scenario: An autoapply session moves an installed plugin to the version a marketplace update brought
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the user has run "/claude:plugin marketplace update fixtures --scope user"
+    Given a config in scope user and layer local, with this text:
+      """
+      { "autoapply": true }
+      """
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope | from  | to    |
+      | fixtures         | user              | demo@fixtures | demo | updated |         | user  | 1.0.0 | 1.1.0 |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.1.0   | true    |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.1.0. |
+
+  Scenario: An autoapply session leaves the move of a project plugin pending
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -321,17 +359,19 @@ Feature: Plugin autoapply
       """
     When the user starts a new pi session
     Then the session reports these results:
-      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
-      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
-      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
-      | demo@fixtures | 1.1.0   | true    |
+      | demo@fixtures | 1.0.0   | true    |
     Then the session offers these skills:
       | command           | description            |
-      | /skill:demo-skill | A skill of demo 1.1.0. |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
 
   Scenario: Autoapply with no config that sets it shows the default and every config file
     When the user runs "/claude:plugin autoapply"
@@ -571,27 +611,27 @@ Feature: Plugin autoapply
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
-    Given the marketplace "fixtures" is added to the project scope
-    Given a config in scope project and layer base, with these plugins:
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
-    When the user runs "/claude:plugin autoapply on --scope project"
+    When the user runs "/claude:plugin autoapply on"
     Then the result has these fields:
-      | kind         | autoapply-status                                                |
-      | severity     | info                                                            |
-      | needs reload | false                                                           |
-      | enabled      | true                                                            |
-      | source scope | project                                                         |
-      | source file  | claude-plugins.json                                             |
-      | files        | [{"scope":"project","file":"claude-plugins.json","value":true}] |
-      | set scope    | project                                                         |
-      | set file     | claude-plugins.json                                             |
-      | set value    | true                                                            |
-    Then the project scope has no installed plugins
+      | kind         | autoapply-status                                             |
+      | severity     | info                                                         |
+      | needs reload | false                                                        |
+      | enabled      | true                                                         |
+      | source scope | user                                                         |
+      | source file  | claude-plugins.json                                          |
+      | files        | [{"scope":"user","file":"claude-plugins.json","value":true}] |
+      | set scope    | user                                                         |
+      | set file     | claude-plugins.json                                          |
+      | set value    | true                                                         |
+    Then the user scope has no installed plugins
     When the user starts a new pi session
     Then the session reports these results:
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
-      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |

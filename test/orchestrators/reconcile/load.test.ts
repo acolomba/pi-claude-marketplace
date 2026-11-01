@@ -592,7 +592,7 @@ function declaringAutoapply(
   return JSON.stringify({ schemaVersion: 1, marketplaces: { mp: { source } }, plugins, autoapply });
 }
 
-test("AAP-02 / D-05: a project config that turns autoapply on hands the load to the apply step and prints nothing itself", async (t) => {
+test("D-CF2-14: a project config that turns autoapply on hands the apply step the user scope only and prints the project's pending block", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "autoapply-on");
   await seedInstalled(scope, scope.project, {}, ["hello"]);
@@ -605,7 +605,7 @@ test("AAP-02 / D-05: a project config that turns autoapply on hands the load to 
   const run = runWithNothingLoaded();
   const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const completionCache = createCompletionCache();
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
   await autoLoad({ ctx, run, cwd: scope.cwd, hooksRouting, completionCache });
@@ -619,14 +619,46 @@ test("AAP-02 / D-05: a project config that turns autoapply on hands the load to 
     "cwd",
     "hooksRouting",
     "run",
+    "scope",
   ]);
   assert.equal(handed?.ctx, ctx);
   assert.equal(handed?.run, run);
   assert.equal(handed?.cwd, scope.cwd);
   assert.equal(handed?.hooksRouting, hooksRouting);
   assert.equal(handed?.completionCache, completionCache);
-  assert.deepStrictEqual(notifications, []);
+  assert.equal(handed?.scope, "user");
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project]\n  ● hello (will install)\n\nReconcile pending: 1 success" + APPLY_TRAILER,
+    },
+  ]);
   assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  verifyBoundary();
+});
+
+test("AAP-02 / D-05: an autoapply load whose project scope matches its config prints nothing itself", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "autoapply-silent");
+  await writeUnder(scope.user.baseConfigJsonPath, JSON.stringify({ autoapply: true }));
+  const { loadReconcile: autoLoad, applied } = recordingLoad();
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+
+  // act
+  await autoLoad({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: scope.cwd,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    applied.map((handed) => handed.scope),
+    ["user"],
+  );
+  assert.deepStrictEqual(notifications, []);
   verifyBoundary();
 });
 

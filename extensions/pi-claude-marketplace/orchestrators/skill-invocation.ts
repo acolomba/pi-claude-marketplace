@@ -21,7 +21,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { provenProjectSkills, skillFileDigest } from "../bridges/skills/project-installs.ts";
+import {
+  NODE_SKILL_TREE_LISTER,
+  provenProjectSkills,
+  skillTreeDigest,
+} from "../bridges/skills/project-installs.ts";
 import { readSkillRecord } from "../bridges/skills/skill-names.ts";
 import {
   claudeEffort,
@@ -30,6 +34,7 @@ import {
   substituteArguments,
 } from "../domain/argument-substitution.ts";
 import { ContextInjectionError, expandContextInjections } from "../domain/context-injection.ts";
+import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 import {
   bashMissingMessage,
@@ -40,6 +45,8 @@ import {
 } from "../platform/prompt-shell.ts";
 import { errorMessage } from "../shared/errors.ts";
 
+import type { SkillAliasState } from "./skill-alias-state.ts";
+import type { SkillTreeLister } from "../bridges/skills/project-installs.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
 
@@ -70,6 +77,10 @@ export type SkillInvocationOutcome =
 export interface SkillInvocationDependencies {
   readonly getAgentDir: () => string;
   readonly readFile: (file: string) => Promise<string>;
+  /** Reads the `state.json` of the scope whose extension root is given. */
+  readonly loadState: (extensionRoot: string) => Promise<SkillAliasState>;
+  /** Lists the files and symbolic links of a staged skill directory (WR-03). */
+  readonly listSkillTree: SkillTreeLister;
   /** The machine facts that choose a shell and give the commands their environment. */
   readonly host: PromptShellHost;
   readonly runShell: PromptShellRunner;
@@ -78,6 +89,8 @@ export interface SkillInvocationDependencies {
 const DEFAULT_DEPENDENCIES: SkillInvocationDependencies = {
   getAgentDir,
   readFile: (file) => readFile(file, "utf8"),
+  loadState,
+  listSkillTree: NODE_SKILL_TREE_LISTER,
   host: NODE_PROMPT_SHELL_HOST,
   runShell: createPromptShellRunner({
     spawn: NODE_PROMPT_SHELL_SPAWN,
@@ -208,17 +221,52 @@ function untrustedProjectMessage(request: SkillInvocationRequest): string {
 }
 
 /**
- * The abort message for a project skill that this user did not install into
- * the project, or whose file changed after the install (D-CF2-13).
+ * The command that stages the project skill again and records it as this
+ * user's install. The project's `state.json` already records the plugin, so
+ * `install` would refuse it as installed; `reinstall` names the plugin that
+ * the record lists the skill under, or every project plugin when no record
+ * lists it.
  */
-function notInstalledHereMessage(request: SkillInvocationRequest): string {
-  return `The skill ${request.typed} was not installed into the project ${request.cwd} on this machine, or its file changed after the install. Install its plugin into this project with --scope project, then run /reload to use it.`;
+async function reinstallCommand(
+  request: SkillInvocationRequest,
+  skill: BridgedSkill,
+  dependencies: SkillInvocationDependencies,
+): Promise<string> {
+  let state: SkillAliasState;
+  try {
+    state = await dependencies.loadState(path.join(request.cwd, ".pi", "pi-claude-marketplace"));
+  } catch {
+    return "/claude:plugin reinstall --scope project";
+  }
+
+  const owner = Object.entries(state.marketplaces)
+    .flatMap(([marketplace, entry]) =>
+      Object.entries(entry.plugins).map(([plugin, record]) => ({ marketplace, plugin, record })),
+    )
+    .find(({ record }) => record.resources.skills.includes(skill.name));
+  return owner === undefined
+    ? "/claude:plugin reinstall --scope project"
+    : `/claude:plugin reinstall ${owner.plugin}@${owner.marketplace} --scope project`;
 }
 
 /**
- * D-CF2-13: whether the user's project ledger lists the project skill with
- * the digest of `content`, the file as it is now. A user skill needs no
- * ledger: no repository can write the user scope.
+ * The abort message for a project skill that this user did not install into
+ * the project, or whose file changed after the install (D-CF2-13).
+ */
+async function notInstalledHereMessage(
+  request: SkillInvocationRequest,
+  skill: BridgedSkill,
+  dependencies: SkillInvocationDependencies,
+): Promise<string> {
+  const command = await reinstallCommand(request, skill, dependencies);
+  return `The skill ${request.typed} was not installed into the project ${request.cwd} on this machine, or its file changed after the install. Reinstall its plugin into this project with ${command}, then run /reload to use it.`;
+}
+
+/**
+ * D-CF2-13 / WR-03: whether the user's project ledger lists the project skill
+ * with the digest of its staged directory as it is now, `content` standing
+ * for its `SKILL.md`. A directory that cannot be listed fails the check. A
+ * user skill needs no ledger: no repository can write the user scope.
  */
 async function isInstalledHere(
   request: SkillInvocationRequest,
@@ -232,7 +280,16 @@ async function isInstalledHere(
   }
 
   const proven = await provenProjectSkills(agentDir, request.cwd, dependencies.readFile);
-  return proven.get(skill.name) === skillFileDigest(content);
+  const recorded = proven.get(skill.name);
+  if (recorded === undefined) {
+    return false;
+  }
+
+  try {
+    return recorded === skillTreeDigest(await dependencies.listSkillTree(skill.baseDir), content);
+  } catch {
+    return false;
+  }
 }
 
 /** The abort message for a staged skill file that cannot be read or parsed. */
@@ -280,10 +337,11 @@ export async function invokeBridgedSkill(
 
   // D-CF2-13: Pi trusts a project that holds only this extension's tree, so
   // trust alone cannot tell a cloned repository's staged skill from one this
-  // user installed. The ledger in the user scope can, and the digest is of
-  // the very bytes that run below.
+  // user installed. The ledger in the user scope can. The digest covers the
+  // very `SKILL.md` bytes that run below and every other file of the staged
+  // skill directory, such as a script a `!` command runs (WR-03).
   if (!(await isInstalledHere(request, skill, content, agentDir, dependencies))) {
-    return { kind: "abort", message: notInstalledHereMessage(request) };
+    return { kind: "abort", message: await notInstalledHereMessage(request, skill, dependencies) };
   }
 
   try {

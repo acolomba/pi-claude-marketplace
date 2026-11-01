@@ -1421,6 +1421,64 @@ test("PU-8 (b): V2 per-variant reload-hint -- emitted on uninstalled even with z
   });
 });
 
+test("WR-04: an uninstall shows the cascade's skill warnings after its row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-skill-warnings-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { warned: makePluginRecord() },
+          },
+        },
+      });
+      const stubCascade: typeof cascadeUnstagePlugin = () =>
+        Promise.resolve({
+          ok: true,
+          dropped: {
+            skills: [],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            workflows: [],
+          },
+          skillWarnings: ["could not update the project skill ledger: refused"],
+        });
+
+      const { ctx, run, notifications } = makeCtx();
+      await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "warned",
+        cascade: stubCascade,
+      });
+
+      assert.deepStrictEqual(
+        notifications.map(({ message }) => message),
+        [
+          "● mp [project]\n  ○ warned v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+          'Plugin "warned" [project] uninstalled; 1 cleanup warning.\n\n' +
+            "could not update the project skill ledger: refused",
+        ],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // MSG-SD-3 -- soft-dep markers structurally absent from (uninstalled) rows
 
 test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via V2 PluginUninstalledMessage)", async () => {

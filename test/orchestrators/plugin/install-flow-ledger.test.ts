@@ -7,6 +7,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  realpath,
   rm,
   stat,
   symlink,
@@ -5256,11 +5257,20 @@ for (const allowed of [false, true]) {
         }
 
         assert.equal(await readFile(user.stateJsonPath, "utf8"), userStateBefore);
-        // D-CF2-13: a project install lists its skills in the user's project ledger.
+        // D-CF2-13 / IN-06: a project install lists its skills in the user's
+        // ledger of that project, named by the SHA-256 of the project's real path.
+        const ledgerKey = createHash("sha256")
+          .update(await realpath(cwd))
+          .digest("hex");
         assert.deepEqual(
           await retryTree(user.scopeRoot),
           allowed
-            ? [...userTreeBefore, "pi-claude-marketplace/project-installs.json"].sort()
+            ? [
+                ...userTreeBefore,
+                "pi-claude-marketplace/project-installs/",
+                `pi-claude-marketplace/project-installs/${ledgerKey}/`,
+                `pi-claude-marketplace/project-installs/${ledgerKey}/skills.json`,
+              ].sort()
             : userTreeBefore,
         );
         assert.equal(notifications.length, 1);

@@ -133,6 +133,12 @@ acknowledged, 17 carried forward, and the phase-25 table conversion.
 injected collaborator honoring a prose-only contract that nothing type-enforces.**
 `IN-01` and `IN-04` are also open by choice but carry no comparable risk.
 
+## Deferred Verification
+
+| Phase | State | Resume |
+|-------|-------|--------|
+| 02 | verification_deferred_human -- code verified 4/5; criterion 5 needs the user to file the drafted Pi gap report (02-07-SUMMARY.md) or decide not to (D-CF2-10) | /gsd-verify-work 02 |
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first.

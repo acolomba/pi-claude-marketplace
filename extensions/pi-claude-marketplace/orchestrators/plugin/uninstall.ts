@@ -115,6 +115,7 @@ import {
   resolveCrossScopePluginTarget,
   sweepWorkflowsStaging,
 } from "./shared.ts";
+import { surfaceUnstageWarnings } from "./staging-diagnostics.ts";
 import {
   composeDependencyRefusalCause,
   composeKeptInstalledRow,
@@ -1443,6 +1444,9 @@ async function runUninstallOutcome(
   // primary's first and then each pruned member's, hoisted so the failure
   // arms and the success emission can all report them.
   const mcpConfigNotices: McpConfigNotice[] = [];
+  // WR-04: the primary cascade's skill warnings, such as a project skill
+  // ledger it could not update, shown after the success rows.
+  let skillWarnings: readonly string[] = [];
   const keepData = opts.keepData ?? false;
 
   try {
@@ -1514,6 +1518,7 @@ async function runUninstallOutcome(
       const localOutcome = await cascade(plugin, marketplace, locations, installed);
       retiredWorkflowCommand = localOutcome.dropped.workflows.length > 0;
       mcpConfigNotices.push(...(localOutcome.mcpConfigNotices ?? []));
+      skillWarnings = localOutcome.skillWarnings ?? [];
 
       // TR-03: split the failure handling by cause type.
       //   - AG-5 (AgentsUnstageFailureError): foreign content owned by
@@ -1721,6 +1726,7 @@ async function runUninstallOutcome(
     "single",
   );
   notifyMcpConfigNotices(ctx, run, mcpConfigNotices);
+  surfaceUnstageWarnings(ctx, run, { plugin, scope, verb: "uninstalled" }, skillWarnings);
   return outcome;
 }
 

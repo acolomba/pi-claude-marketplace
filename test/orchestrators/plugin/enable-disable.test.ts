@@ -674,6 +674,49 @@ test("ENBL-01: disable writes enabled:false to claude-plugins.json (base)", asyn
   });
 });
 
+test("WR-04: disable shows the cascade's skill warnings after its row", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false,
+    });
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin) {
+        const outcome = await cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin);
+        return { ...outcome, skillWarnings: ["ledger refused"] };
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ◍ foo v1.2.3 (disabled)\n\n/reload to pick up changes" },
+      {
+        message: 'Plugin "foo" [user] disabled; 1 cleanup warning.\n\nledger refused',
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
 test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (base unchanged)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // Reset state to populated (so disable is a fresh transition).

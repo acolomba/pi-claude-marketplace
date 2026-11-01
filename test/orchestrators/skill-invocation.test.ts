@@ -4,11 +4,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
-import { NODE_PROJECT_SKILL_LEDGER } from "../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
+import {
+  NODE_PROJECT_SKILL_LEDGER,
+  skillTreeDigest,
+} from "../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
 import { invokeBridgedSkill } from "../../extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts";
 import { parseFrontmatter } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
+import type { SkillTreeEntry } from "../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
+import type { SkillAliasState } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import type {
   SkillInvocationDependencies,
   SkillInvocationRequest,
@@ -70,39 +75,70 @@ function skillFile(body: string, frontmatter: readonly string[] = []): string {
   );
 }
 
-const LEDGER = "/agent/pi-claude-marketplace/project-installs.json";
-
 function sha256(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex");
 }
 
-/** D-CF2-13: a user ledger that lists `skills` (name to staged bytes) for the project `project`. */
-function ledgerText(project: string, skills: Readonly<Record<string, string>>): string {
-  const listed = Object.entries(skills).map(
-    ([name, content]) => [name, { plugin: "demo", sha256: sha256(content) }] as const,
-  );
-  return JSON.stringify({ version: 1, projects: { [project]: Object.fromEntries(listed) } });
+/** IN-06: the ledger file of the project `/work` under the agent directory `/agent`. */
+const LEDGER = `/agent/pi-claude-marketplace/project-installs/${sha256("/work")}/skills.json`;
+
+/** WR-03: the in-memory files under the skill directory `dir`, as the lister reports them. */
+function skillTree(files: Readonly<Record<string, string>>, dir: string): SkillTreeEntry[] {
+  const prefix = `${dir}/`;
+  return Object.keys(files)
+    .filter((file) => file.startsWith(prefix))
+    .map((file) => ({
+      path: file.slice(prefix.length),
+      kind: "file",
+      sha256: sha256(files[file] ?? ""),
+    }));
 }
 
-/** A ledger that lists every project skill among `files` with the digest of its bytes. */
+/** D-CF2-13: a user ledger that lists `digests` (name to directory digest) for the project `project`. */
+function ledgerText(project: string, digests: Readonly<Record<string, string>>): string {
+  const listed = Object.entries(digests).map(
+    ([name, digest]) => [name, { plugin: "demo", sha256: digest }] as const,
+  );
+  return JSON.stringify({ version: 1, project, skills: Object.fromEntries(listed) });
+}
+
+/** A ledger that lists every project skill among `files` with the digest of its directory. */
 function provingLedger(files: Readonly<Record<string, string>>): string {
   const projectSkills = Object.entries(files)
-    .filter(([file]) => file.startsWith(`${CWD}/.pi/`))
-    .map(([file, content]) => [path.basename(path.dirname(file)), content] as const);
+    .filter(([file]) => file.startsWith(`${CWD}/.pi/`) && path.basename(file) === "SKILL.md")
+    .map(([file, content]) => {
+      const dir = path.dirname(file);
+      return [path.basename(dir), skillTreeDigest(skillTree(files, dir), content)] as const;
+    });
   return ledgerText(CWD, Object.fromEntries(projectSkills));
 }
+
+/** The project's `state.json`: plugin `demo` of marketplace `fixtures` staged `demo-greet`. */
+const OWNER_STATE: SkillAliasState = {
+  marketplaces: {
+    fixtures: {
+      plugins: {
+        other: { resources: { skills: ["other-skill"] } },
+        demo: { resources: { skills: ["demo-greet"] } },
+      },
+    },
+  },
+};
 
 /**
  * Reads only the named files and the user ledger, `ledger` (by default one
  * that lists each project skill among `files`, and none for `null`); any
- * other read fails the case.
+ * other read fails the case. The project's `state.json` is `state`, and
+ * `null` makes it unreadable.
  */
 function dependencies(
   files: Readonly<Record<string, string>>,
   ledger: string | null = provingLedger(files),
+  state: SkillAliasState | null = OWNER_STATE,
 ): SkillInvocationDependencies {
   const readable = ledger === null ? files : { ...files, [LEDGER]: ledger };
   return {
+    listSkillTree: (dir) => Promise.resolve(skillTree(files, dir)),
     getAgentDir: () => AGENT_DIR,
     readFile: (file) => {
       const content = readable[file];
@@ -110,6 +146,10 @@ function dependencies(
         ? Promise.reject(new Error(`unexpected read of ${file}`))
         : Promise.resolve(content);
     },
+    loadState: (extensionRoot) =>
+      extensionRoot !== `${CWD}/.pi/pi-claude-marketplace` || state === null
+        ? Promise.reject(new Error(`unexpected state read of ${extensionRoot}`))
+        : Promise.resolve(state),
     host,
     runShell: () => Promise.reject(new Error("a body without a ! command must not run a shell")),
   };
@@ -428,7 +468,9 @@ test("D-CF2-06: reads the staged skill file from disk with the production depend
   await NODE_PROJECT_SKILL_LEDGER.update({
     projectPath: cwd,
     forget: [],
-    remember: new Map([["demo-greet", { plugin: "demo", sha256: sha256(skillFile("Greet $0.")) }]]),
+    remember: new Map([
+      ["demo-greet", { plugin: "demo", sha256: skillTreeDigest([], skillFile("Greet $0.")) }],
+    ]),
   });
 
   // act
@@ -586,15 +628,15 @@ for (const { title, ledger } of [
   { title: "lists no project", ledger: () => null },
   {
     title: "lists the skill for another project",
-    ledger: () => ledgerText("/elsewhere", { "demo-greet": STATUS_SKILL }),
+    ledger: () => ledgerText("/elsewhere", { "demo-greet": skillTreeDigest([], STATUS_SKILL) }),
   },
   {
     title: "lists another digest for the skill",
-    ledger: () => ledgerText(CWD, { "demo-greet": skillFile("Greet.") }),
+    ledger: () => ledgerText(CWD, { "demo-greet": skillTreeDigest([], skillFile("Greet.")) }),
   },
   {
     title: "lists only another skill of the project",
-    ledger: () => ledgerText(CWD, { "demo-other": STATUS_SKILL }),
+    ledger: () => ledgerText(CWD, { "demo-other": skillTreeDigest([], STATUS_SKILL) }),
   },
 ]) {
   test(`D-CF2-13: aborts a project skill without running a command when the user ledger ${title}`, async () => {
@@ -609,11 +651,126 @@ for (const { title, ledger } of [
       kind: "abort",
       message:
         "The skill /skill:demo-greet was not installed into the project /work on this machine, " +
-        "or its file changed after the install. Install its plugin into this project with " +
-        "--scope project, then run /reload to use it.",
+        "or its file changed after the install. Reinstall its plugin into this project with " +
+        "/claude:plugin reinstall demo@fixtures --scope project, then run /reload to use it.",
     });
   });
 }
+
+for (const { title, state } of [
+  { title: "cannot be read", state: null },
+  {
+    title: "lists the skill under no plugin",
+    state: { marketplaces: { fixtures: { plugins: {} } } },
+  },
+]) {
+  test(`D-CF2-13: the abort names a reinstall of every project plugin when the project state ${title}`, async () => {
+    // arrange
+    const files = { [PROJECT_SKILL]: STATUS_SKILL };
+
+    // act
+    const outcome = await invokeBridgedSkill(
+      request({ args: "" }),
+      dependencies(files, null, state),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "abort",
+      message:
+        "The skill /skill:demo-greet was not installed into the project /work on this machine, " +
+        "or its file changed after the install. Reinstall its plugin into this project with " +
+        "/claude:plugin reinstall --scope project, then run /reload to use it.",
+    });
+  });
+}
+
+const STATUS_SCRIPT = `${PROJECT_SKILL_DIR}/status.sh`;
+
+for (const { title, change } of [
+  {
+    title: "a script in its directory changed",
+    change: (files: Record<string, string>) => {
+      files[STATUS_SCRIPT] = "printf changed";
+    },
+  },
+  {
+    title: "a file was added to its directory",
+    change: (files: Record<string, string>) => {
+      files[`${PROJECT_SKILL_DIR}/notes/extra.txt`] = "added";
+    },
+  },
+  {
+    title: "a file was removed from its directory",
+    change: (files: Record<string, string>) => {
+      Reflect.deleteProperty(files, STATUS_SCRIPT);
+    },
+  },
+]) {
+  test(`WR-03: aborts a project skill without running a command when ${title} after the install`, async () => {
+    // arrange
+    const installed = { [PROJECT_SKILL]: STATUS_SKILL, [STATUS_SCRIPT]: "printf ran" };
+    const ledger = provingLedger(installed);
+    const files: Record<string, string> = { ...installed };
+    change(files);
+
+    // act
+    const outcome = await invokeBridgedSkill(request({ args: "" }), dependencies(files, ledger));
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "abort",
+      message:
+        "The skill /skill:demo-greet was not installed into the project /work on this machine, " +
+        "or its file changed after the install. Reinstall its plugin into this project with " +
+        "/claude:plugin reinstall demo@fixtures --scope project, then run /reload to use it.",
+    });
+  });
+}
+
+test("WR-03: runs a project skill whose whole directory matches the ledger", async () => {
+  // arrange
+  const files = { [PROJECT_SKILL]: STATUS_SKILL, [STATUS_SCRIPT]: "printf ran" };
+  const shell = recordingShell({
+    kind: "exited",
+    code: 0,
+    stdout: "ran",
+    stderr: "",
+    shell: "bash",
+  });
+
+  // act
+  const outcome = await invokeBridgedSkill(request({ args: "" }), {
+    ...dependencies(files),
+    runShell: shell.runShell,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "ok",
+    text: block(PROJECT_SKILL, PROJECT_SKILL_DIR, "Status: ran"),
+  });
+});
+
+test("WR-03: aborts a project skill whose directory cannot be listed", async () => {
+  // arrange
+  const files = { [PROJECT_SKILL]: STATUS_SKILL };
+
+  // act
+  const outcome = await invokeBridgedSkill(request({ args: "" }), {
+    ...dependencies(files),
+    listSkillTree: () => Promise.reject(new Error("EACCES")),
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "abort",
+    message:
+      "The skill /skill:demo-greet was not installed into the project /work on this machine, " +
+      "or its file changed after the install. Reinstall its plugin into this project with " +
+      "/claude:plugin reinstall demo@fixtures --scope project, then run /reload to use it.",
+  });
+});
 
 test("D-CF2-13: frames a user skill without reading the user ledger", async () => {
   // arrange

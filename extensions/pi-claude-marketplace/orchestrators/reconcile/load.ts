@@ -7,15 +7,26 @@
 //
 // AAP-02 / AAP-D1: the one exception is the `autoapply` setting. When the
 // effective value (`config-merge.ts::effectiveAutoapply`, the most specific config
-// file that sets it) is true, the load runs the injected apply step for both
-// scopes instead of the read-only pass below, and returns. The apply step runs
-// the same read pass, MCP move, warnings and routing rebuild, and its report
-// replaces the pending block.
+// file that sets it) is true, the load runs the injected apply step for the
+// user scope instead of the read-only pass below. The apply step runs the same
+// read pass, MCP move, warnings and routing rebuild for that scope, and its
+// report replaces the user scope's part of the pending block.
+//
+// D-CF2-14: a load never applies the project scope, whichever config file
+// turned autoapply on. The project's configs sit in the repository, and Pi
+// trusts a project that holds no trust-requiring file without asking, so a
+// cloned repository could otherwise have its own plugins installed, and their
+// skills recorded as this user's installs (D-CF2-13), with no step by the
+// user. Claude Code asks before it installs a plugin that repository settings
+// name. Pi's extension API reports only whether the project is trusted, not
+// whether the user decided it, so the load cannot tell a trusted project from
+// an auto-trusted one. The project scope gets the read-only pass and its
+// pending block, and `/claude:plugin apply`, which the user types, applies it.
 //
 // AAP-03 / NFR-2: an apply step that throws (GHB-03 ends its pass) is reported
-// as `reconcile-aborted`, and the read-only pass below then runs, so the
-// routing table and the warnings are rebuilt and the pending block lists what
-// the apply step did not make.
+// as `reconcile-aborted`, and the read-only pass below then runs for both
+// scopes, so the routing table and the warnings are rebuilt and the pending
+// block lists what the apply step did not make.
 //
 // What still runs, per scope, project first (MSG-GR-3):
 //   - the shared locked read pass (`read-pass.ts`): the MIG-01 first-run
@@ -82,42 +93,67 @@ export interface LoadReconcileOptions {
 
 const SCOPES: readonly Scope[] = ["project", "user"];
 
+/**
+ * AAP-02 / D-CF2-14: runs the apply step for the user scope when the configs
+ * turn autoapply on, and returns the scopes the read-only pass still covers:
+ * the project scope after an apply step that finished, and both scopes when
+ * autoapply is off or the apply step threw (AAP-03).
+ */
+async function autoapplyUserScope(
+  applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
+  opts: LoadReconcileOptions,
+): Promise<readonly Scope[]> {
+  const autoapply = effectiveAutoapply(
+    await loadAutoapplyFiles(locationsFor("project", opts.cwd), locationsFor("user", opts.cwd)),
+  );
+  if (autoapply.status === "valid" && autoapply.enabled) {
+    return applyUserScope(applyReconcile, opts);
+  }
+
+  return SCOPES;
+}
+
+/** D-CF2-14: the apply step of an autoapply load, given the user scope alone (AAP-02, AAP-03). */
+async function applyUserScope(
+  applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
+  opts: LoadReconcileOptions,
+): Promise<readonly Scope[]> {
+  try {
+    await applyReconcile({
+      ctx: opts.ctx,
+      run: opts.run,
+      cwd: opts.cwd,
+      hooksRouting: opts.hooksRouting,
+      completionCache: opts.completionCache,
+      scope: "user",
+      ...(opts.migrateMcpEntries !== undefined && { migrateMcpEntries: opts.migrateMcpEntries }),
+    });
+    return ["project"];
+  } catch (err) {
+    // A failed notify must not skip the read-only pass and its routing rebuild.
+    try {
+      notifyReconcileAborted(opts.ctx, opts.run, err);
+    } catch (notifyErr) {
+      hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
+    }
+
+    return SCOPES;
+  }
+}
+
 async function loadReconcileWithReader(
   reader: ReconcileStateReader,
   applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
   opts: LoadReconcileOptions,
 ): Promise<void> {
-  const autoapply = effectiveAutoapply(
-    await loadAutoapplyFiles(locationsFor("project", opts.cwd), locationsFor("user", opts.cwd)),
-  );
-  if (autoapply.status === "valid" && autoapply.enabled) {
-    try {
-      await applyReconcile({
-        ctx: opts.ctx,
-        run: opts.run,
-        cwd: opts.cwd,
-        hooksRouting: opts.hooksRouting,
-        completionCache: opts.completionCache,
-        ...(opts.migrateMcpEntries !== undefined && { migrateMcpEntries: opts.migrateMcpEntries }),
-      });
-      return;
-    } catch (err) {
-      // A failed notify must not skip the read-only pass and its routing rebuild.
-      try {
-        notifyReconcileAborted(opts.ctx, opts.run, err);
-      } catch (notifyErr) {
-        hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
-      }
-    }
-  }
-
+  const scopes = await autoapplyUserScope(applyReconcile, opts);
   const accumulators: ScopePassAccumulators = {
     outcomes: [],
     migration: { rows: [], notices: [] },
   };
   const readableScopes: Scope[] = [];
 
-  for (const scope of SCOPES) {
+  for (const scope of scopes) {
     // D-06: pending's block reports these rows, so the load drops them.
     const configOutcomes: PerEntryOutcome[] = [];
     // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing

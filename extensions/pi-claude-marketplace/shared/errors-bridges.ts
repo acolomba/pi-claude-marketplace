@@ -244,3 +244,60 @@ export class WorkflowTargetOccupiedError extends Error {
     this.targetPath = targetPath;
   }
 }
+
+/**
+ * D-CF2-13: the user's record of project skill installs could not be read,
+ * or holds content this version does not write. The writer leaves the file
+ * unchanged, so a transient read error or a newer layout never drops the
+ * entries of other projects, and the install that needed the write undoes
+ * its skills.
+ */
+export class ProjectSkillLedgerError extends Error {
+  readonly ledgerPath: string;
+  readonly defect: "unreadable" | "unknown-content";
+
+  constructor(
+    ledgerPath: string,
+    defect: ProjectSkillLedgerError["defect"],
+    opts?: { readonly cause?: unknown },
+  ) {
+    super(
+      defect === "unreadable"
+        ? `The project skill ledger ${ledgerPath} cannot be read; it was left unchanged.`
+        : `The project skill ledger ${ledgerPath} holds content this version cannot update; it was left unchanged.`,
+      opts,
+    );
+    this.name = "ProjectSkillLedgerError";
+    this.ledgerPath = ledgerPath;
+    this.defect = defect;
+  }
+}
+
+/**
+ * WR-05: a skill's frontmatter holds the key a staging writer rewrites in one
+ * top-level node beside other keys, such as the flow mapping
+ * `{name: x, description: y}`. The writer cannot replace that key without
+ * dropping the others, so the install stops and names the skill and the line.
+ */
+export class SkillFrontmatterNodeError extends Error {
+  readonly key: string;
+  /** The 1-based line of the node, counting the opening `---` as line 1. */
+  readonly line: number;
+  readonly keys: readonly string[];
+  /** The source name of the skill, once the staging loop knows it. */
+  readonly skill: string | undefined;
+
+  constructor(key: string, line: number, keys: readonly string[], skill?: string) {
+    const subject =
+      skill === undefined ? "The skill frontmatter" : `The frontmatter of the skill "${skill}"`;
+    super(
+      `${subject} holds "${key}" on line ${line.toString()} in one node with other keys ` +
+        `(${keys.join(", ")}); write each key on its own line.`,
+    );
+    this.name = "SkillFrontmatterNodeError";
+    this.key = key;
+    this.line = line;
+    this.keys = Object.freeze([...keys]);
+    this.skill = skill;
+  }
+}

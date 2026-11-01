@@ -6,12 +6,30 @@
  */
 
 import assert from "node:assert/strict";
-import { access, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { access, appendFile, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Given } from "@cucumber/cucumber";
+import { Given, Then } from "@cucumber/cucumber";
 
 import type { ScenarioWorld } from "../../support/world.ts";
+
+/**
+ * The user's record of the skills installed into the scenario's project, under
+ * the agent directory and named by the SHA-256 of the project's real path
+ * (IN-06).
+ */
+async function projectInstallsRecord(world: ScenarioWorld): Promise<string> {
+  const project = await realpath(world.tokens.projectDir);
+  const key = createHash("sha256").update(project).digest("hex");
+  return path.join(
+    world.tokens.agentDir,
+    "pi-claude-marketplace",
+    "project-installs",
+    key,
+    "skills.json",
+  );
+}
 
 // D-CF2-13: the project keeps its `.pi/pi-claude-marketplace/` tree and the
 // `state.json` that names the skill, as a clone of a repository that commits
@@ -19,13 +37,49 @@ import type { ScenarioWorld } from "../../support/world.ts";
 Given(
   "the user's pi directory records no plugin install for the project",
   async function (this: ScenarioWorld) {
-    const ledger = path.join(
-      this.tokens.agentDir,
-      "pi-claude-marketplace",
-      "project-installs.json",
-    );
-    await rm(ledger, { force: true });
+    const ledger = path.dirname(await projectInstallsRecord(this));
+    await rm(ledger, { recursive: true, force: true });
     await assert.rejects(access(ledger), { code: "ENOENT" });
     await access(path.join(this.tokens.projectDir, ".pi", "pi-claude-marketplace", "state.json"));
+  },
+);
+
+// WR-03: a change to the staged skill directory after the install, such as
+// one a pull of a repository that commits it brings: an edited `SKILL.md`, an
+// edited script that a context command runs, or an added file.
+Given(
+  "the line {string} was appended to the file {string} of the staged project skill {string}",
+  async function (this: ScenarioWorld, line: string, file: string, skill: string) {
+    const target = path.join(
+      this.tokens.projectDir,
+      ".pi",
+      "pi-claude-marketplace",
+      "resources",
+      "skills",
+      skill,
+      file,
+    );
+    await mkdir(path.dirname(target), { recursive: true });
+    await appendFile(target, `\n${line}\n`, "utf8");
+    const appended = `\n${line}\n`;
+    assert.strictEqual((await readFile(target, "utf8")).slice(-appended.length), appended);
+  },
+);
+
+// WR-02: content this version did not write, such as a later layout.
+Given(
+  "the user's record of project skill installs was replaced with this text:",
+  async function (this: ScenarioWorld, text: string) {
+    const record = await projectInstallsRecord(this);
+    await mkdir(path.dirname(record), { recursive: true });
+    await writeFile(record, text, "utf8");
+    assert.strictEqual(await readFile(record, "utf8"), text);
+  },
+);
+
+Then(
+  "the user's record of project skill installs holds this text:",
+  async function (this: ScenarioWorld, text: string) {
+    assert.strictEqual(await readFile(await projectInstallsRecord(this), "utf8"), text);
   },
 );

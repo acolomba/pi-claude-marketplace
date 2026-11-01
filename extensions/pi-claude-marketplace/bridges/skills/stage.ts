@@ -25,6 +25,7 @@ import { assertSafeName } from "../../domain/name.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
+import { SkillFrontmatterNodeError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
@@ -39,7 +40,11 @@ import {
   synthesizeUnparseableSkill,
   truncate1536,
 } from "./frontmatter-degrade.ts";
-import { NODE_PROJECT_SKILL_LEDGER, skillFileDigest } from "./project-installs.ts";
+import {
+  NODE_PROJECT_SKILL_LEDGER,
+  NODE_SKILL_TREE_LISTER,
+  skillTreeDigest,
+} from "./project-installs.ts";
 import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 import {
   commandUpstreamNames,
@@ -383,6 +388,25 @@ async function stageSkill(
 }
 
 /**
+ * WR-05: stages one skill, naming it in a frontmatter node error, which the
+ * shared scanner raises without knowing which skill it reads.
+ */
+async function stageNamedSkill(
+  context: SkillStagingContext,
+  skill: DiscoveredSkill,
+): Promise<StagedSkill> {
+  try {
+    return await stageSkill(context, skill);
+  } catch (err) {
+    if (err instanceof SkillFrontmatterNodeError) {
+      throw new SkillFrontmatterNodeError(err.key, err.line, err.keys, skill.sourceName);
+    }
+
+    throw err;
+  }
+}
+
+/**
  * Phase-1 of the skills bridge two-phase commit:
  *   1. Discover skills in the source plugin (SK-5). RN-6 / D-141-04:
  *      discovery already resolved any generated-name collision by first-wins
@@ -472,7 +496,7 @@ export async function prepareStageSkills(
   try {
     for (const skill of discovered) {
       // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
-      const staged = await stageSkill(context, skill);
+      const staged = await stageNamedSkill(context, skill);
       if (staged.degraded !== undefined) {
         degraded.push(staged.degraded);
       }
@@ -516,9 +540,9 @@ export async function prepareStageSkills(
 
 /**
  * D-CF2-13: lists the committed skills of a project-scope stage in the user's
- * project ledger, with the digest of each `SKILL.md` as it now sits at its
- * target, and drops the previous names this stage replaced. A user-scope
- * stage needs no ledger: no repository can write the user scope.
+ * project ledger, with the digest of each skill directory as it now sits at
+ * its target (WR-03), and drops the previous names this stage replaced. A
+ * user-scope stage needs no ledger: no repository can write the user scope.
  */
 async function recordProjectSkills(
   ledger: ProjectSkillLedger,
@@ -531,7 +555,8 @@ async function recordProjectSkills(
   const digests = await Promise.all(
     prepared.result.recorded.map(async (skill) => {
       const content = await readFile(path.join(skill.targetPath, "SKILL.md"), "utf8");
-      const entry = { plugin: prepared._pluginName, sha256: skillFileDigest(content) };
+      const entries = await NODE_SKILL_TREE_LISTER(skill.targetPath);
+      const entry = { plugin: prepared._pluginName, sha256: skillTreeDigest(entries, content) };
       return [skill.generatedName, entry] as const;
     }),
   );
@@ -547,12 +572,12 @@ async function recordProjectSkills(
  *   1. Remove every previous-named target dir (re-stage path; ENOENT-tolerant).
  *   2. mkdir target root recursively.
  *   3. Per-skill `rename(from, to)` -- atomic on same FS (D-04).
- *   4. D-CF2-13: at project scope, list the committed skills in the user's
- *      project ledger. A failed ledger write throws, so the caller's undo
- *      removes skills that could never run.
- *   5. Best-effort cleanup of the now-empty staging UUID dir; any leak
+ *   4. Best-effort cleanup of the now-empty staging UUID dir; any leak
  *      message is RETURNED (not thrown) so the caller can fold it into a
  *      higher-level rollback marker without breaking the success path.
+ *   5. D-CF2-13: at project scope, list the committed skills in the user's
+ *      project ledger. A failed ledger write throws, with any cleanup leak
+ *      appended, so the caller's undo removes skills that could never run.
  *
  * For the noop variant: no-op; returns undefined.
  */
@@ -613,10 +638,27 @@ export async function commitPreparedSkills(
     await rename(pair.from, pair.to);
   }
 
-  await recordProjectSkills(ledger, prepared);
+  return cleanUpAndRecord(ops, ledger, prepared);
+}
 
-  // Step 5: best-effort cleanup of the staging UUID dir.
-  return cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
+/**
+ * Steps 4 and 5 of the commit. IN-02: the staging cleanup runs before the
+ * ledger write, so a failed write leaves no staging dir behind, and a cleanup
+ * leak rides the write's error.
+ */
+async function cleanUpAndRecord(
+  ops: RemovalOps,
+  ledger: ProjectSkillLedger,
+  prepared: PreparedSkillsStaged,
+): Promise<string | undefined> {
+  const leak = await cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
+  try {
+    await recordProjectSkills(ledger, prepared);
+  } catch (err) {
+    throw appendLeakToError(err, leak);
+  }
+
+  return leak;
 }
 
 /**
