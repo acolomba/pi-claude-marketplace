@@ -248,7 +248,7 @@ test("stages a source led by a byte-order mark without the marker or a duplicate
         targetPath: path.join(locations.promptsTargetDir, "acme:deploy.md"),
       },
     ],
-    warnings: [],
+    warnings: [{ kind: "discovery", message: "[deploy] dropped fields: model" }],
     degraded: [],
   });
   assert.strictEqual(deployBytes, expectedDeploy);
@@ -673,6 +673,51 @@ test("preserves first-wins discovery warnings on a staged result", async (t) => 
       message: `command source "tools/lint" in "${commandsRoot}" elides to generated name "acme:tools:lint", already produced by command source "acme-tools/lint"; ignoring duplicate.`,
     },
   ]);
+  assert.strictEqual(abortLeak, undefined);
+});
+
+test("D-CF3-09 returns the discover warnings, then each dropped-fields line in command order", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-dropped-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-dropped-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  await mkdir(path.join(commandsRoot, "acme-tools"), { recursive: true });
+  await mkdir(path.join(commandsRoot, "tools"), { recursive: true });
+  await writeFile(
+    path.join(commandsRoot, "acme-tools", "lint.md"),
+    "---\ndescription: Lints.\nmodel: opus\neffort: high\n---\nLint.\n",
+  );
+  await writeFile(path.join(commandsRoot, "tools", "lint.md"), "second prompt\n");
+  await writeFile(
+    path.join(commandsRoot, "deploy.md"),
+    "---\ndescription: Deploys.\nargument-hint: <env>\n---\nDeploy.\n",
+  );
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+  });
+  const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
+
+  // assert
+  assert.deepStrictEqual(
+    { stagedNames: prepared.result.stagedNames, warnings: prepared.result.warnings },
+    {
+      stagedNames: ["acme:tools:lint", "acme:deploy"],
+      warnings: [
+        {
+          kind: "discovery",
+          message: `command source "tools/lint" in "${commandsRoot}" elides to generated name "acme:tools:lint", already produced by command source "acme-tools/lint"; ignoring duplicate.`,
+        },
+        { kind: "discovery", message: "[acme-tools/lint] dropped fields: model, effort" },
+      ],
+    },
+  );
   assert.strictEqual(abortLeak, undefined);
 });
 

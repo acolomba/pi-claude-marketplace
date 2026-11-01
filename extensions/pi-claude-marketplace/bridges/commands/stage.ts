@@ -86,6 +86,11 @@ function contextualStagingError(pluginName: string, generatedName: string, err: 
  * description) and writes it to a staging file. Per-file rename to the target dir is deferred to
  * `commitPreparedCommands`.
  *
+ * The result's warnings are the discover warnings, then one discovery warning
+ * per command whose source frontmatter sets fields Pi cannot honor, in
+ * command order (D-CF3-09); the install renders each as a declared-component
+ * note.
+ *
  * Returns a `kind: "noop"` short-circuit when `discovered.length === 0 &&
  * previousCommandNames.length === 0`: nothing to stage AND nothing to
  * remove, so creating the staging dir would be wasteful.
@@ -146,6 +151,7 @@ export async function prepareStageCommands(
   const renamePairs: { from: string; to: string }[] = [];
   const stagedNames: string[] = [];
   const degraded: CommandDegradeRecord[] = [];
+  const droppedFields: string[] = [];
 
   try {
     for (const command of discovered) {
@@ -166,6 +172,10 @@ export async function prepareStageCommands(
           // CMD-01 / D-86-07: the source frontmatter did not parse and was
           // neutralized; the install maps this to `{malformed command}`.
           degraded.push({ generatedName: command.generatedName, parseError: staged.parseError });
+        }
+
+        if (staged.droppedFields !== undefined) {
+          droppedFields.push(staged.droppedFields);
         }
 
         // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
@@ -197,7 +207,7 @@ export async function prepareStageCommands(
     result: {
       stagedNames: Object.freeze(stagedNames),
       recorded: Object.freeze(recorded),
-      warnings: Object.freeze(discoverWarnings.map(discoveryWarning)),
+      warnings: Object.freeze([...discoverWarnings, ...droppedFields].map(discoveryWarning)),
       // CMD-01: one record per command whose SOURCE frontmatter was unparseable
       // and neutralized (D-86-07). The install orchestrator maps these to the
       // `{malformed command}` reason token + per-component detail.
