@@ -479,3 +479,23 @@ session writes this file. Each subagent ends its report with a
      because the frozen `platform/pi-api.ts` does not re-export it (parent
      line: re-export it).
 - **Recorded in:** `05-REVIEW-FIX.md`.
+
+### P5-DC-24: Code review stopped at the iteration cap with two open warnings
+
+- **Phase / source:** `/gsd-code-review 5 --fix --auto`, iteration 3 (cap 3).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** The iteration-3 review left 0 critical and 2 warnings, both edge
+  cases of the follow-up prompt-context carrier (`a17639b`): (WR-01) a
+  follow-up whose UserPromptSubmit hook is still running when the run ends
+  loses its context (Pi rechecks `isStreaming` after the input handlers); a
+  follow-up queued after the last `turn_end` is read with no `turn_end` before
+  it; (WR-02) a terminating tool batch (a PreToolUse `continue:false`) and
+  `followUpMode: "all"` read follow-ups the bridge does not send context for.
+  They are not fixed in this phase; both go to BACKLOG parent lines with the
+  reviewer's suggested fix (check `ctx.isIdle()` in `queuePromptContext`,
+  match `event.prompt` in `before_agent_start`, send all matching queued
+  follow-ups). The 12 info findings stay open in `05-REVIEW.md`.
+- **Alternatives:** A fourth fix pass beyond the workflow's cap.
+- **Why dubious:** The main follow-up path is right; the edge cases lose hook
+  context silently (debug line only), which D-CF5-13's intent forbids.
+- **Recorded in:** `05-REVIEW.md` (iteration 3), this entry.
