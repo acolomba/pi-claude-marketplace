@@ -1,5 +1,9 @@
+import { randomUUID } from "node:crypto";
+
 import { loadQualifiedSkillAliases } from "../orchestrators/skill-alias-state.ts";
 import { invokeBridgedSkill } from "../orchestrators/skill-invocation.ts";
+import { notifyUsageError } from "../shared/notification-dispatch.ts";
+import { openNotificationRun } from "../shared/notification-run.ts";
 
 import type {
   SkillInvocationOutcome,
@@ -65,15 +69,29 @@ function aliasProvider(
   };
 }
 
-/** D-CF2-06: maps an invocation outcome onto Pi's input result. */
-function inputResult(outcome: SkillInvocationOutcome, event: InputEvent): InputEventResult {
-  return outcome.kind === "ok"
-    ? {
+/**
+ * D-CF2-06: maps an invocation outcome onto Pi's input result. T-01-24: an
+ * aborted invocation is reported to the user and handled, so nothing of it
+ * reaches the model.
+ */
+function inputResult(
+  outcome: SkillInvocationOutcome,
+  event: InputEvent,
+  reportAbort: (message: string) => void,
+): InputEventResult {
+  switch (outcome.kind) {
+    case "ok":
+      return {
         action: "transform",
         text: outcome.text,
         ...(event.images !== undefined && { images: event.images }),
-      }
-    : { action: "continue" };
+      };
+    case "abort":
+      reportAbort(outcome.message);
+      return { action: "handled" };
+    case "not-bridged":
+      return { action: "continue" };
+  }
 }
 
 /**
@@ -90,7 +108,19 @@ export function registerSkillAliases(
   invokeSkill: (
     request: SkillInvocationRequest,
   ) => Promise<SkillInvocationOutcome> = invokeBridgedSkill,
+  createInvocationId: () => string = randomUUID,
 ): void {
+  // A skill abort is a `usage-error` of the command `skill`, so RPC and JSON
+  // clients receive it as a `claude-plugin` entry with that origin.
+  const reportAbort = (ctx: ExtensionContext, message: string): void => {
+    const run = openNotificationRun(pi, {
+      kind: "command",
+      commandId: "skill",
+      invocationId: createInvocationId(),
+    });
+    notifyUsageError(ctx, run, { message, usage: "" });
+  };
+
   const cache = new Map<string, Promise<ReadonlyMap<string, string>>>();
   const getQualifiedAliases = (cwd: string): Promise<ReadonlyMap<string, string>> => {
     let aliases = cache.get(cwd);
@@ -132,7 +162,11 @@ export function registerSkillAliases(
         cwd: ctx.cwd,
         sessionId: ctx.sessionManager.getSessionId(),
         thinkingLevel: pi.getThinkingLevel(),
-      }).then((outcome) => inputResult(outcome, event));
+      }).then((outcome) =>
+        inputResult(outcome, event, (message) => {
+          reportAbort(ctx, message);
+        }),
+      );
     }
 
     return getQualifiedAliases(ctx.cwd).then((aliases) => {

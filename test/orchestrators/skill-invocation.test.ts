@@ -11,7 +11,11 @@ import type {
   SkillInvocationRequest,
 } from "../../extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts";
 import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { PromptShellHost } from "../../extensions/pi-claude-marketplace/platform/prompt-shell.ts";
+import type {
+  PromptShellHost,
+  PromptShellRequest,
+  PromptShellResult,
+} from "../../extensions/pi-claude-marketplace/platform/prompt-shell.ts";
 
 type PiCommand = ReturnType<ExtensionAPI["getCommands"]>[number];
 
@@ -326,4 +330,146 @@ test("D-CF2-06: reads the staged skill file from disk with the production depend
 
   // assert
   assert.deepStrictEqual(outcome, { kind: "ok", text: block(file, skillDir, "Greet Ada.") });
+});
+
+/** A shell that records each request and answers with `result`. */
+function recordingShell(result: PromptShellResult): {
+  readonly requests: PromptShellRequest[];
+  readonly runShell: SkillInvocationDependencies["runShell"];
+} {
+  const requests: PromptShellRequest[] = [];
+  return {
+    requests,
+    runShell: (shellRequest) => {
+      requests.push(shellRequest);
+      return Promise.resolve(result);
+    },
+  };
+}
+
+test("D-CF1-02: replaces a context command with its output, run by the chosen shell in the session directory", async () => {
+  // arrange
+  const files = { [PROJECT_SKILL]: skillFile("Status: !`printf ok`", ["shell: bash"]) };
+  const shell = recordingShell({
+    kind: "exited",
+    code: 0,
+    stdout: "ok",
+    stderr: "",
+    shell: "bash",
+  });
+
+  // act
+  const outcome = await invokeBridgedSkill(request({ args: "" }), {
+    ...dependencies(files),
+    runShell: shell.runShell,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "ok",
+    text: block(PROJECT_SKILL, PROJECT_SKILL_DIR, "Status: ok"),
+  });
+  assert.deepStrictEqual(shell.requests, [
+    { command: "printf ok", shell: "bash", cwd: CWD, env: { PATH: "/usr/bin" } },
+  ]);
+});
+
+test("T-01-22: substitutes before injection, so an argument that starts with ! runs nothing", async () => {
+  // arrange
+  const files = { [PROJECT_SKILL]: skillFile("Echo: $ARGUMENTS") };
+
+  // act
+  const outcome = await invokeBridgedSkill(
+    request({ args: "!`printf pwned`" }),
+    dependencies(files),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "ok",
+    text: block(PROJECT_SKILL, PROJECT_SKILL_DIR, "Echo: \\! `printf pwned`"),
+  });
+});
+
+test("T-01-24: aborts with Claude Code's message when a context command fails", async () => {
+  // arrange
+  const files = { [PROJECT_SKILL]: skillFile("Check: !`exit 3`") };
+  const shell = recordingShell({
+    kind: "exited",
+    code: 3,
+    stdout: "partial",
+    stderr: "",
+    shell: "bash",
+  });
+
+  // act
+  const outcome = await invokeBridgedSkill(request({ args: "" }), {
+    ...dependencies(files),
+    runShell: shell.runShell,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "abort",
+    message: 'Shell command failed for pattern "!`exit 3`": partial',
+  });
+});
+
+test("T-01-24: aborts without running a command when the frontmatter asks for a missing Bash", async () => {
+  // arrange
+  const files = { [PROJECT_SKILL]: skillFile("Check: !`exit 3`", ["shell: bash"]) };
+  const windows = { ...host, platform: "win32", env: {} } satisfies PromptShellHost;
+
+  // act
+  const outcome = await invokeBridgedSkill(request({ typed: "/demo:greet", args: "" }), {
+    ...dependencies(files),
+    host: windows,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "abort",
+    message:
+      "Skill /demo:greet requires bash (`shell: bash` in frontmatter) but Git Bash was not " +
+      "found. Install Git for Windows (https://git-scm.com/downloads/win), or change the " +
+      "skill's frontmatter to `shell: powershell`.",
+  });
+});
+
+test("T-01-24: aborts with Claude Code's message when the arguments pass the size limit", async () => {
+  // arrange
+  const files = { [PROJECT_SKILL]: skillFile("Echo: $ARGUMENTS") };
+
+  // act
+  const outcome = await invokeBridgedSkill(
+    request({ args: "a".repeat(4_000_001) }),
+    dependencies(files),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "abort",
+    message:
+      "This skill, command or hook and the arguments filled into it add up to more than " +
+      "4,000,000 characters. Use shorter arguments or fewer placeholders such as $ARGUMENTS.",
+  });
+});
+
+test("lets a failure other than the cores' own propagate", async () => {
+  // arrange
+  const files = { [PROJECT_SKILL]: skillFile("Status: !`printf ok`") };
+  const failure = new Error("spawn failed");
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      invokeBridgedSkill(request({ args: "" }), {
+        ...dependencies(files),
+        runShell: () => Promise.reject(failure),
+      }),
+    (error: unknown) => {
+      assert.strictEqual(error, failure);
+      return true;
+    },
+  );
 });

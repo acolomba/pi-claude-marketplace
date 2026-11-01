@@ -42,10 +42,12 @@ const GREET_SKILL: PiCommand = {
 const GREET_BLOCK = '<skill name="demo-greet">\nGreet Ada.\n</skill>';
 
 /** Registers the handlers on strict mocks and captures the input listener. */
-function registerWithInvoker(invokeSkill: SkillInvoker): {
-  pi: ExtensionAPI;
-  input: ReturnType<typeof It.willCapture<InputListener>>;
-} {
+function registerWithInvoker(
+  invokeSkill: SkillInvoker,
+  createInvocationId: () => string = () => {
+    throw new Error("an invocation that does not abort must not open a notification run");
+  },
+): { pi: ExtensionAPI; input: ReturnType<typeof It.willCapture<InputListener>> } {
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const session = It.willCapture<SessionListener>("session");
   const input = It.willCapture<InputListener>("input");
@@ -65,6 +67,7 @@ function registerWithInvoker(invokeSkill: SkillInvoker): {
       throw new Error("a /skill: token must not load skill aliases");
     },
     invokeSkill,
+    createInvocationId,
   );
   return { pi, input };
 }
@@ -362,6 +365,102 @@ test("leaves a command collision unchanged", () => {
   assert.deepStrictEqual(qualifiedCollision, { action: "continue" });
   verify(pi);
   verify(ctx);
+});
+
+/** Arranges the inventory reads that opening a notification run makes. */
+function expectNotificationRun(pi: ExtensionAPI): void {
+  when(() => pi.getAllTools())
+    .thenReturn([])
+    .times(3);
+}
+
+test("T-01-24: reports an aborted skill as a usage error entry over RPC and handles the prompt", async () => {
+  // arrange
+  const message = 'Shell command failed for pattern "!`exit 3`": partial';
+  const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
+  when(() => invokeSkill(greetRequest("Ada")))
+    .thenResolve({ kind: "abort", message })
+    .times(1);
+  const ctx = invocationContext();
+  when(() => ctx.mode)
+    .thenReturn("rpc")
+    .times(1);
+  const { pi, input } = registerWithInvoker(invokeSkill, () => "invocation-1");
+  when(() => pi.getCommands())
+    .thenReturn([GREET_SKILL])
+    .times(2);
+  when(() => pi.getThinkingLevel())
+    .thenReturn("low")
+    .times(1);
+  expectNotificationRun(pi);
+  when(() => {
+    pi.appendEntry("claude-plugin", {
+      schemaVersion: 1,
+      kind: "usage-error",
+      origin: { kind: "command", commandId: "skill", invocationId: "invocation-1" },
+      severity: "error",
+      needsReload: false,
+      message,
+      usage: "",
+    });
+  })
+    .thenReturn()
+    .times(1);
+
+  // act
+  const sent = await input.value?.(
+    { type: "input", text: "/skill:demo-greet Ada", source: "rpc" },
+    ctx,
+  );
+
+  // assert
+  assert.deepStrictEqual(sent, { action: "handled" });
+  verify(pi);
+  verify(ctx);
+  verify(invokeSkill);
+});
+
+test("T-01-24: shows an aborted skill's message alone in the terminal UI and handles the prompt", async () => {
+  // arrange
+  const message = 'Shell command failed for pattern "!`exit 3`": partial';
+  const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
+  when(() => invokeSkill(greetRequest("Ada")))
+    .thenResolve({ kind: "abort", message })
+    .times(1);
+  const ctx = invocationContext();
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "UI" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => {
+    ui.notify(message, "error");
+  })
+    .thenReturn()
+    .times(1);
+  const { pi, input } = registerWithInvoker(invokeSkill, () => "invocation-1");
+  when(() => pi.getCommands())
+    .thenReturn([GREET_SKILL])
+    .times(2);
+  when(() => pi.getThinkingLevel())
+    .thenReturn("low")
+    .times(1);
+  expectNotificationRun(pi);
+
+  // act
+  const sent = await input.value?.(
+    { type: "input", text: "/skill:demo-greet Ada", source: "interactive" },
+    ctx,
+  );
+
+  // assert
+  assert.deepStrictEqual(sent, { action: "handled" });
+  verify(pi);
+  verify(ctx);
+  verify(ui);
+  verify(invokeSkill);
 });
 
 test("keeps Pi's native suggestions for a bare skill name", async () => {

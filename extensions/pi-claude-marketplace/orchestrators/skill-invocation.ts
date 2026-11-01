@@ -6,6 +6,13 @@
 // (D-CF1-01) and framed in Pi's own `<skill>` block, so Pi's native
 // expansion, which appends the raw arguments after the block, never runs.
 //
+// D-CF1-02 / T-01-22: the `!` commands run after the substitution, once, in
+// the session's working directory, so a typed argument cannot form a command
+// (the argument core escapes a word-initial `!`) and command output is never
+// scanned again. T-01-24: a failed command, an oversized invocation, or a
+// missing Bash aborts the invocation with Claude Code's message, and nothing
+// reaches the model.
+//
 // D-CF1-03: only a skill the user types reaches this module. The model's own
 // skill reads have no extension hook, so they get neither arguments nor
 // injection. A skill outside this extension's two staged skills directories,
@@ -17,14 +24,18 @@ import path from "node:path";
 import { readSkillRecord } from "../bridges/skills/skill-names.ts";
 import {
   claudeEffort,
+  InvocationTooLargeError,
   parseArgumentNames,
   substituteArguments,
 } from "../domain/argument-substitution.ts";
+import { ContextInjectionError, expandContextInjections } from "../domain/context-injection.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 import {
+  bashMissingMessage,
   createPromptShellRunner,
   NODE_PROMPT_SHELL_HOST,
   NODE_PROMPT_SHELL_SPAWN,
+  selectPromptShell,
 } from "../platform/prompt-shell.ts";
 
 import type { ExtensionAPI } from "../platform/pi-api.ts";
@@ -145,9 +156,52 @@ function skillBlock(skill: BridgedSkill, body: string): string {
   );
 }
 
+/** The staged file of a skill, split as Pi's loader splits it. */
+interface ParsedSkill {
+  readonly frontmatter: Readonly<Record<string, unknown>>;
+  readonly body: string;
+}
+
 /**
- * D-CF2-06: builds what the model receives for a typed bridged skill, or
- * reports that the skill is not one this extension staged.
+ * D-CF2-06: substitutes, then runs the `!` commands with the shell the
+ * frontmatter `shell` chooses (D-CF1-01, D-CF1-02). Throws the cores' errors.
+ */
+async function fillSkill(
+  request: SkillInvocationRequest,
+  skill: BridgedSkill,
+  parsed: ParsedSkill,
+  dependencies: SkillInvocationDependencies,
+): Promise<SkillInvocationOutcome> {
+  const substituted = substituteArguments({
+    body: parsed.body.trim(),
+    args: request.args,
+    argumentNames: parseArgumentNames(parsed.frontmatter.arguments),
+    variables: invocationVariables(request, skill, parsed.frontmatter),
+  });
+  const requested = parsed.frontmatter.shell;
+  const choice = selectPromptShell(
+    typeof requested === "string" ? requested : undefined,
+    dependencies.host,
+  );
+  if (choice.kind === "bash-missing") {
+    return { kind: "abort", message: bashMissingMessage(request.typed) };
+  }
+
+  const expanded = await expandContextInjections(substituted, (command) =>
+    dependencies.runShell({
+      command,
+      shell: choice.shell,
+      cwd: request.cwd,
+      env: dependencies.host.env,
+    }),
+  );
+  return { kind: "ok", text: skillBlock(skill, expanded) };
+}
+
+/**
+ * D-CF2-06: builds what the model receives for a typed bridged skill, reports
+ * that the skill is not one this extension staged, or aborts with Claude
+ * Code's message (T-01-24). A failure other than the cores' own propagates.
  */
 export async function invokeBridgedSkill(
   request: SkillInvocationRequest,
@@ -159,11 +213,13 @@ export async function invokeBridgedSkill(
   }
 
   const parsed = parseFrontmatter(await dependencies.readFile(skill.location));
-  const substituted = substituteArguments({
-    body: parsed.body.trim(),
-    args: request.args,
-    argumentNames: parseArgumentNames(parsed.frontmatter.arguments),
-    variables: invocationVariables(request, skill, parsed.frontmatter),
-  });
-  return { kind: "ok", text: skillBlock(skill, substituted) };
+  try {
+    return await fillSkill(request, skill, parsed, dependencies);
+  } catch (error) {
+    if (error instanceof ContextInjectionError || error instanceof InvocationTooLargeError) {
+      return { kind: "abort", message: error.message };
+    }
+
+    throw error;
+  }
 }

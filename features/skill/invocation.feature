@@ -91,6 +91,7 @@ Feature: Skill invocation
       | severity     | error                                                                 |
       | needs reload | false                                                                 |
       | message      | Shell command failed for pattern "!`printf partial; exit 3`": partial |
+      | usage        |                                                                       |
 
   Scenario: An argument that starts with an exclamation mark reaches the model escaped and runs nothing
     Given pi runs with the scripted model
