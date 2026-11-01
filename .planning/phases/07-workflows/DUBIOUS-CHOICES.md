@@ -254,3 +254,23 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
   3. The marker scenarios run on the shared Pi and rely on every settings edit
      being restored at release.
 - **Recorded in:** `07-04-SUMMARY.md`.
+
+### P7-DC-14: Wave 3 executor choices (docs and gate)
+
+- **Phase / source:** Phase 7 wave 3 executor (`07-06-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. A new evidence grade, `scenario-measured at 3.15.0`, in
+     `docs/workflows-compatibility.md` for claims a `features/workflow/`
+     scenario measures.
+  2. The `export let/var` and second-declarator rows were read from the
+     2.1.316 binary offline (skipped at load upstream) rather than marked
+     `not read`.
+  3. The `args` row's Pi cell changed from `--` to `⚠`, and the old advice to
+     call structured scripts through the engine's tool was removed (its
+     premise was wrong).
+  4. A reserved-key row was added to the admit-versus-run table.
+  5. Quotes of engine and Claude Code text use `--` for U+2014 (commit hook).
+  6. The CHANGELOG parent line is marked Internal (no product fix).
+  7. The SUMMARY's commit count excludes its own final commit.
+- **Recorded in:** `07-06-SUMMARY.md`.
