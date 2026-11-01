@@ -9,7 +9,10 @@ import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/plat
 import { BridgeStagingError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
 import type { StagedCommandContext } from "../../../extensions/pi-claude-marketplace/bridges/commands/staged-command.ts";
-import type { DiscoveredCommand } from "../../../extensions/pi-claude-marketplace/bridges/commands/types.ts";
+import type {
+  CommandOverrides,
+  DiscoveredCommand,
+} from "../../../extensions/pi-claude-marketplace/bridges/commands/types.ts";
 
 const context = {
   pluginName: "acme",
@@ -19,16 +22,28 @@ const context = {
   referenceNames: { skills: [], commands: [], workflows: [] },
 } satisfies StagedCommandContext;
 
+type FileCommand = Extract<DiscoveredCommand, { kind: "file" }>;
+
+function inlineCommand(content: string, overrides?: CommandOverrides): DiscoveredCommand {
+  return {
+    kind: "inline",
+    sourceName: "beta",
+    generatedName: "acme:beta",
+    content,
+    ...(overrides !== undefined && { overrides }),
+  };
+}
+
 /** The record line the writer ends every staged frontmatter with, for `context`. */
 const RECORD_LINE =
   '"pi-claude-marketplace": {"pluginRoot":"/plugins/acme","pluginData":"/data/acme"}\n';
 
-async function commandWithSource(t: TestContext, source: string): Promise<DiscoveredCommand> {
+async function commandWithSource(t: TestContext, source: string): Promise<FileCommand> {
   const root = await mkdtemp(path.join(tmpdir(), "staged-command-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const commandFile = path.join(root, "deploy.md");
   await writeFile(commandFile, source);
-  return { sourceName: "deploy", generatedName: "acme:deploy", commandFile };
+  return { kind: "file", sourceName: "deploy", generatedName: "acme:deploy", commandFile };
 }
 
 test("D-CF3-08 describes a command with no frontmatter by its first body line", async (t) => {
@@ -512,6 +527,146 @@ test("propagates Pi's parse error when a repeated malformed block passes the clo
       return true;
     },
   );
+});
+
+test("D-CF3-03 stages an inline command's content as the same text as a file holding it", async (t) => {
+  // arrange
+  const content = "---\ndescription: FM in content\nargument-hint: <c>\n---\nFM body $ARGUMENTS";
+  const fileCommand = await commandWithSource(t, content);
+
+  // act
+  const stagedFile = await buildStagedCommand(fileCommand, context);
+  const stagedInline = await buildStagedCommand(inlineCommand(content), context);
+
+  // assert
+  assert.deepStrictEqual(
+    { stagedFile, stagedInline },
+    {
+      stagedFile: {
+        text:
+          '---\n"description": "FM in content"\n"argument-hint": "<c>"\n' +
+          RECORD_LINE +
+          "---\nFM body $ARGUMENTS",
+      },
+      stagedInline: {
+        text:
+          '---\n"description": "FM in content"\n"argument-hint": "<c>"\n' +
+          RECORD_LINE +
+          "---\nFM body $ARGUMENTS",
+      },
+    },
+  );
+});
+
+test("D-CF3-03 describes inline content without frontmatter by the manifest description", async () => {
+  // arrange
+  const command = inlineCommand("Beta inline body $ARGUMENTS", {
+    description: "Beta from the manifest.",
+  });
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"description": "Beta from the manifest."\n' +
+      RECORD_LINE +
+      "---\nBeta inline body $ARGUMENTS",
+  });
+});
+
+test("D-CF3-03 writes the manifest description and argument hint over the command's own, in place", async (t) => {
+  // arrange
+  const command: DiscoveredCommand = {
+    ...(await commandWithSource(
+      t,
+      "---\nargument-hint: <file hint>\ndescription: From the file.\nshell: bash\n---\nBody.\n",
+    )),
+    overrides: { description: "From the manifest.", argumentHint: "<target>" },
+  };
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"argument-hint": "<target>"\n"description": "From the manifest."\n"shell": "bash"\n' +
+      RECORD_LINE +
+      "---\nBody.\n",
+  });
+});
+
+test("D-CF3-10 adds a manifest argument hint the command does not set after its description", async (t) => {
+  // arrange
+  const command: DiscoveredCommand = {
+    ...(await commandWithSource(t, "---\ndescription: From the file.\n---\nBody.\n")),
+    overrides: { argumentHint: "<target>" },
+  };
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"description": "From the file."\n"argument-hint": "<target>"\n' +
+      RECORD_LINE +
+      "---\nBody.\n",
+  });
+});
+
+test("D-CF3-09 counts a manifest model as a set model field without staging it", async (t) => {
+  // arrange
+  const command: DiscoveredCommand = {
+    ...(await commandWithSource(t, "---\ndescription: From the file.\neffort: high\n---\nBody.\n")),
+    overrides: { model: "opus" },
+  };
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text: '---\n"description": "From the file."\n"effort": "high"\n' + RECORD_LINE + "---\nBody.\n",
+    droppedFields: "[deploy] dropped fields: effort, model",
+  });
+});
+
+test("D-CF3-09 names a model the command and the manifest both set once, in its place", async (t) => {
+  // arrange
+  const command: DiscoveredCommand = {
+    ...(await commandWithSource(t, "---\nmodel: sonnet\neffort: high\n---\nBody.\n")),
+    overrides: { model: "opus" },
+  };
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"model": "sonnet"\n"effort": "high"\n"description": "Body."\n' +
+      RECORD_LINE +
+      "---\nBody.\n",
+    droppedFields: "[deploy] dropped fields: model, effort",
+  });
+});
+
+test("D-CF3-09 reports no dropped field for malformed inline content with a manifest model", async () => {
+  // arrange
+  const command = inlineCommand("---\nkey: [unclosed\n---\nBody.", { model: "opus" });
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text: '---\n"description": "Body."\n' + RECORD_LINE + "---\nBody.",
+    parseError:
+      "Flow sequence in block collection must be sufficiently indented and end with a ] at line 1, column 15:\n\nkey: [unclosed\n              ^\n",
+  });
 });
 
 test("T-03-01 refuses a rebuilt frontmatter that Pi cannot read back", async (t) => {

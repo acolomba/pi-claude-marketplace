@@ -46,7 +46,7 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 import { withCommandRecord } from "./command-record.ts";
 
 import type { CommandRecord } from "./command-record.ts";
-import type { DiscoveredCommand } from "./types.ts";
+import type { CommandOverrides, DiscoveredCommand } from "./types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 
 /** What the writer needs besides the command: the install-time values. */
@@ -149,9 +149,14 @@ function neutralizeCommandFrontmatter(content: string): string {
  * install reports `{malformed command}`. A parse that returns keeps the source
  * frontmatter, which D-CF3-09 reads. The parse only validates; nothing in the
  * source is evaluated (T-03-17).
+ *
+ * D-CF3-03: an inline command's source is its map entry's `content`, read as
+ * a file's text would be. This is the one place the two kinds differ.
  */
-async function readCommandSource(commandFile: string): Promise<CommandSource> {
-  const content = stripBom(await readFile(commandFile, "utf8"));
+async function readCommandSource(command: DiscoveredCommand): Promise<CommandSource> {
+  const text =
+    command.kind === "file" ? await readFile(command.commandFile, "utf8") : command.content;
+  const content = stripBom(text);
   try {
     return { content, frontmatter: frontmatterKeys(parseFrontmatter(content).frontmatter) };
   } catch (parseErr) {
@@ -165,15 +170,41 @@ async function readCommandSource(commandFile: string): Promise<CommandSource> {
  * `description` that is not a non-empty string takes Claude Code's fallback
  * for the body Pi loads; a present key keeps its place, an absent one goes
  * last.
+ *
+ * D-CF3-03 and D-CF3-10: a map entry's `description` and `argumentHint` are
+ * written over the frontmatter's `description` and `argument-hint`, in the
+ * same places, as Claude Code 2.1.316 merges them.
  */
-function stagedFrontmatter(parsed: unknown, body: string): Frontmatter {
+function stagedFrontmatter(
+  parsed: unknown,
+  body: string,
+  overrides: CommandOverrides | undefined,
+): Frontmatter {
   const source = frontmatterKeys(parsed);
-  const declared = source.description;
+  const declared = overrides?.description ?? source.description;
   const description =
     typeof declared === "string" && declared !== ""
       ? declared
       : descriptionFallback(body, "Plugin command");
-  return { ...source, description };
+  const argumentHint = overrides?.argumentHint;
+  return {
+    ...source,
+    description,
+    ...(argumentHint !== undefined && { "argument-hint": argumentHint }),
+  };
+}
+
+/**
+ * D-CF3-09: the frontmatter the dropped-fields line reads. A map entry's
+ * `model` counts as a set `model` field, as Claude Code 2.1.316 merges it
+ * into the command's frontmatter.
+ */
+function frontmatterWithManifestModel(
+  frontmatter: Frontmatter,
+  overrides: CommandOverrides | undefined,
+): Frontmatter {
+  const model = overrides?.model;
+  return model === undefined ? frontmatter : { ...frontmatter, model };
 }
 
 /**
@@ -234,7 +265,7 @@ export async function buildStagedCommand(
   command: DiscoveredCommand,
   context: StagedCommandContext,
 ): Promise<StagedCommandText> {
-  const source = await readCommandSource(command.commandFile);
+  const source = await readCommandSource(command);
   const substituted = rewriteMarkdownReferences(
     substituteClaudeVars(source.content, {
       pluginRoot: context.pluginRoot,
@@ -250,13 +281,19 @@ export async function buildStagedCommand(
     pluginRoot: context.pluginRoot,
     pluginData: context.pluginDataDir,
   };
-  const frontmatter = withCommandRecord(stagedFrontmatter(parsed.frontmatter, body), record);
+  const frontmatter = withCommandRecord(
+    stagedFrontmatter(parsed.frontmatter, body, command.overrides),
+    record,
+  );
   const text = rebuildCommandText(substituted, frontmatter);
   assertReadsBack(command.generatedName, text, frontmatter, body);
   if ("parseError" in source) {
     return { text, parseError: source.parseError };
   }
 
-  const droppedFields = droppedInvocationFieldsWarning(command.sourceName, source.frontmatter);
+  const droppedFields = droppedInvocationFieldsWarning(
+    command.sourceName,
+    frontmatterWithManifestModel(source.frontmatter, command.overrides),
+  );
   return droppedFields === undefined ? { text } : { text, droppedFields };
 }

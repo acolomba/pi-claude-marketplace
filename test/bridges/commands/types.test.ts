@@ -1,5 +1,6 @@
 import type {
   CommandDegradeRecord,
+  CommandOverrides,
   DiscoveredCommand,
   PreparedCommandsNoop,
   PreparedCommandsStaged,
@@ -12,11 +13,40 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/bridges/commands/types.ts";
 
 const discoveredCommand: DiscoveredCommand = {
+  kind: "file",
   sourceName: "build/deploy",
   generatedName: "acme:build:deploy",
   commandFile: "/plugin/commands/build/deploy.md",
 } satisfies DiscoveredCommand;
 void discoveredCommand;
+
+// D-CF3-03: a command map entry gives an inline command with its overrides.
+const inlineCommand: DiscoveredCommand = {
+  kind: "inline",
+  sourceName: "beta",
+  generatedName: "acme:beta",
+  content: "Beta body $ARGUMENTS",
+  overrides: { description: "Beta.", argumentHint: "<target>", model: "opus" },
+} satisfies DiscoveredCommand;
+void inlineCommand;
+
+const commandOverrides: CommandOverrides = { argumentHint: "<target>" } satisfies CommandOverrides;
+void commandOverrides;
+
+const inlineCommandWithFile: DiscoveredCommand = {
+  kind: "inline",
+  sourceName: "beta",
+  generatedName: "acme:beta",
+  // @ts-expect-error an inline command carries its content, not a command file
+  commandFile: "/plugin/cmds/beta.md",
+};
+void inlineCommandWithFile;
+
+// @ts-expect-error a discovered command is a file or an inline command
+void ({ kind: "map", sourceName: "a", generatedName: "acme:a" } satisfies DiscoveredCommand);
+
+// @ts-expect-error an override is a string
+void ({ model: 1 } satisfies CommandOverrides);
 
 const stageCommandsInput: StageCommandsInput = {
   locations: undefined!,
@@ -82,8 +112,9 @@ void (preparedCommandsStaged satisfies PreparedCommandsStaging);
 void (preparedCommandsNoop.kind satisfies "noop");
 void (preparedCommandsStaged.kind satisfies "staged");
 
-// @ts-expect-error a discovered command always records its command file
+// @ts-expect-error a discovered file command always records its command file
 const discoveredCommandWithoutFile: DiscoveredCommand = {
+  kind: "file",
   sourceName: "build/deploy",
   generatedName: "acme:build:deploy",
 };
