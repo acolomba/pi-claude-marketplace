@@ -117,15 +117,38 @@ jobs:
         run: npm ci --ignore-scripts
 
       # npm run test:integration first runs scripts/install-test-peers.mjs,
-      # which installs pi-mcp-adapter and pi-subagents at the floors that
-      # package.json declares. PIFL-03 keeps both out of the lockfile.
+      # which installs pi-mcp-adapter, pi-subagents, and pi-dynamic-workflows at
+      # the floors that package.json declares. PIFL-03 keeps them out of the
+      # lockfile.
       - name: Run the integration tests
         run: npm run test:integration
 
+  # D-CF1-16: the behavioral tests run as two path shards, lifecycle and
+  # components, so the component scenarios that start a profile Pi do not
+  # lengthen the lifecycle run. fail-fast is off, so one shard's failure does
+  # not hide the other's result. Each timeout is at least 1.5 times the
+  # shard's measured run and never below 15 minutes.
+  #
+  # Measured 2026-11-01, ESTIMATED: the branch was not on origin, so no CI run
+  # was dispatched. Local runs on 4 cores with `--parallel 8`, twice each in
+  # random order: lifecycle 94 s and 102 s (1158 scenarios), components 35 s
+  # and 35 s (11 scenarios). Doubled for a 4-vCPU hosted runner, that is
+  # about 3.4 and 1.2 minutes, so both shards take the 15-minute floor.
+  # Re-measure after each component merge, and raise a timeout that no
+  # longer holds 1.5 times its shard's run.
   behavioral:
-    name: behavioral tests (Node 24)
+    name: behavioral tests, ${{ matrix.shard }} (Node 24)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: lifecycle
+            paths: features/marketplace features/plugin
+          - shard: components
+            paths: >-
+              features/skill features/slash-command features/agent features/hook features/mcp-server features/workflow
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -141,8 +164,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      # npm run test:cucumber first runs scripts/install-test-peers.mjs, which
+      # installs the three companions at their declared floors. The shard's
+      # paths reach the shell only through the environment (zizmor template
+      # injection), and the unquoted expansion splits them into arguments.
       - name: Run the behavioral tests
-        run: npm run test:cucumber
+        env:
+          SHARD_PATHS: ${{ matrix.paths }}
+        run: npm run test:cucumber -- $SHARD_PATHS
 
   sonarcloud:
     needs: [direct-coverage]
