@@ -755,3 +755,11 @@ Full entries: `.planning/phases/07-workflows/DUBIOUS-CHOICES.md`, P7-DC-01..17 (
 6. **P7-DC-05:** commit trailers name the child session's link, not the parent's.
 7. **P7-DC-17:** the child skipped the transition's PROJECT.md step; the parent adds D-CF7-01..04 and moves WFL-01..05 to Validated.
 - Merge: clean auto-merge; the parent restored STATE.md's position block, which the child's copy had overwritten.
+
+#### Phase 7 parent lines (applied by the parent at 12227bb..0b23370; `npm run check` exit 0, 1290/1290, seed 632189)
+1. D-CF7-01..04 rows shortened like the D-CF2 rows, outcome kept `-- Locked`; WFL-01..05 moved to Validated.
+2. The wrong install note ("the engine will refuse to load it", `bridges/workflows/discover.ts`) is user-visible but recorded as WFLNOTE-01, not fixed, because rewording it touches tests, the output catalog, and `refusals.feature`.
+3. IN-08 (`field-rows.ts` join, 44 uses) and the world-side half of IN-06 went to BACKLOG (WFLHARNESS-01). IN-02 was applied: `DIALOG_METHODS` exported once from `features/lib/pi-process.ts`, which touches files frozen during the component phases; later sibling merges may conflict there.
+4. IN-10 wording: "a `Then` that compares the whole of what a turn reports marks it compared"; the notices step still marks a run turn compared, which is arguable.
+5. `layout.md` now lags ROADMAP's ownership paragraph by the extra Phase 7 test files.
+6. Advisory review items IN-01/03/04/07/09 are not in BACKLOG (no parent line).
