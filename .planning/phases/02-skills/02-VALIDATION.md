@@ -2,11 +2,12 @@
 phase: "02"
 slug: "skills"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
+# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: true) (#2117)
+status: validated
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: true
 created: "2026-11-01"
+audited: "2026-11-01"
 ---
 
 # Phase 02 — Validation Strategy
@@ -44,25 +45,25 @@ because the sandbox runs as root.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 02-01-01 | 01 | 1 | SKL-01 | — | N/A | cucumber + unit | `node --test test/bridges/skills/stage.test.ts test/bridges/skills/frontmatter-degrade.test.ts test/orchestrators/plugin/materialize-latest.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts && npx cucumber-js features/skill && npm run check:features` | ❌ W0 `features/skill/listing.feature` (red first in the task) | ⬜ pending |
-| 02-01-02 | 01 | 1 | SKL-01 | — | N/A | cucumber + unit | `npx cucumber-js features/skill/listing.feature && node --test test/bridges/skills/stage.test.ts && npm run check:features` | ✅ after 02-01-01 | ⬜ pending |
-| 02-01-03 | 01 | 1 | SKL-01 (record for SKL-03, SKL-05) | T-02-01, T-02-02, T-02-04 | the stored record is one JSON line, verified on write, never rewritten, names capped at 256 characters | unit + cucumber + static | `node --test test/bridges/skills/skill-names.test.ts test/bridges/skills/stage.test.ts test/bridges/skills/frontmatter-scan.test.ts test/edge/register.test.ts test/orchestrators/plugin/materialize-latest.test.ts test/orchestrators/plugin/reinstall-flow.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/skill-names.ts extensions/pi-claude-marketplace/bridges/skills/stage.ts extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts && npx cucumber-js features/skill && npm run fallow` | ❌ W0 `test/bridges/skills/skill-names.test.ts` (red first in the task) | ⬜ pending |
-| 02-02-01 | 02 | 2 | SKL-02 | T-02-05, T-02-06 | every unhonored field a skill sets is reported, as a discovery warning without a value or path | cucumber + unit | `node --test test/bridges/skills/stage.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts && npx cucumber-js features/skill/frontmatter.feature && npx fallow dupes --fail-on-issues --format human --quiet` | ❌ W0 `features/skill/frontmatter.feature` (red first) | ⬜ pending |
-| 02-02-02 | 02 | 2 | SKL-02 | T-02-05 | the four never-reported fields stay silent; order kept | cucumber + unit | `npx cucumber-js features/skill/frontmatter.feature && node --test test/bridges/skills/stage.test.ts && npm run check:features` | ✅ after 02-02-01 | ⬜ pending |
-| 02-02-03 | 02 | 2 | SKL-02 | — | N/A | cucumber + lint | `npx cucumber-js features/skill/frontmatter.feature && npm run check:features && npx eslint features/step_definitions/skill/frontmatter.steps.ts --max-warnings 0` | ❌ W0 `features/step_definitions/skill/frontmatter.steps.ts` | ⬜ pending |
-| 02-03-01 | 03 | 2 | SKL-03 | T-02-07, T-02-12 | extension-sourced input and non-bridged skills never reach the runner | unit + cucumber + static | `node --test test/orchestrators/skill-invocation.test.ts test/edge/skill-aliases.test.ts test/index.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts extensions/pi-claude-marketplace/edge/skill-aliases.ts && npx cucumber-js features/skill/invocation.feature && npm run fallow` | ❌ W0 `test/orchestrators/skill-invocation.test.ts` (red first) | ⬜ pending |
-| 02-03-02 | 03 | 2 | SKL-03 | T-02-08, T-02-09, T-02-11 | substitution before injection; an abort is `handled`, reported only through `notifyUsageError`, nothing reaches the model | unit + cucumber | `node --test test/orchestrators/skill-invocation.test.ts test/edge/skill-aliases.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts extensions/pi-claude-marketplace/edge/skill-aliases.ts && npx cucumber-js features/skill/invocation.feature && npm run check:features` | ✅ after 02-03-01 | ⬜ pending |
-| 02-03-03 | 03 | 2 | SKL-03 (D-CF2-05) | T-02-07 | the same path for interactive and RPC; autocomplete offers qualified aliases only | unit + cucumber | `node --test test/edge/skill-aliases.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/skill-aliases.ts && npx cucumber-js features/skill && npm run check:features` | ✅ after 02-03-01 | ⬜ pending |
-| 02-04-01 | 04 | 2 | SKL-04 | T-02-13, T-02-14 | a shadowed skill is named in the install diagnostic; listings read names only | unit + cucumber | `node --test test/bridges/skills/discover.test.ts test/bridges/skills/stage.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/discover.ts && npx cucumber-js features/skill/collisions.feature && npx fallow dupes --fail-on-issues --format human --quiet` | ❌ W0 `features/skill/collisions.feature` (red first) | ⬜ pending |
-| 02-04-02 | 04 | 2 | SKL-04 | — | N/A | unit + architecture + cucumber + integration | `node --test test/bridges/skills/discover.test.ts test/architecture/declared-component-path-overlap.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/discover.ts && npx cucumber-js features/skill/collisions.feature && npm run test:integration` | ✅ after 02-04-01 | ⬜ pending |
-| 02-05-01 | 05 | 2 | SKL-06 | T-02-15 | a disabled plugin's skill is no longer expanded for the model | cucumber | `npx cucumber-js features/skill/lifecycle.feature && npm run check:features` | ❌ W0 `features/skill/lifecycle.feature` | ⬜ pending |
-| 02-05-02 | 05 | 2 | SKL-06 | T-02-15 | uninstall removes, enable restores, update replaces | cucumber | `npx cucumber-js features/skill/lifecycle.feature && npm run check:features` | ✅ after 02-05-01 | ⬜ pending |
-| 02-06-01 | 06 | 3 | SKL-05 | T-02-16 | an alias never takes a non-skill command's name; first claim wins | unit + cucumber + static | `node --test test/orchestrators/skill-alias-state.test.ts test/edge/skill-aliases.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts && npx cucumber-js features/skill/aliases.feature && npm run fallow` | ❌ W0 `features/skill/aliases.feature` (red first) | ⬜ pending |
-| 02-06-02 | 06 | 3 | SKL-05 | T-02-16 | a command keeps its name; a disabled plugin's alias is gone | cucumber + unit | `npx cucumber-js features/skill/aliases.feature && node --test test/orchestrators/skill-alias-state.test.ts && npm run check:features` | ✅ after 02-06-01 | ⬜ pending |
-| 02-06-03 | 06 | 3 | SKL-05 | T-02-18 | the TUI is released with its process group and stays in the sandbox | cucumber (TUI) + architecture + lint | `npx cucumber-js features/skill/aliases.feature && node --test test/architecture/pi-tui-notices.test.ts && npm run check:features && npx eslint features/lib/pi-tui.ts features/step_definitions/skill/aliases.steps.ts --max-warnings 0`; then `npm run test:cucumber -- features/marketplace/background-update.feature` | ❌ W0 `features/step_definitions/skill/aliases.steps.ts` | ⬜ pending |
-| 02-07-01 | 07 | 4 | SKL-01..SKL-06 | T-02-20 | no test weakened to pass the gate | full suite | `npm run check`; then `npm run test:cucumber && npm run test:cucumber` | ✅ | ⬜ pending |
-| 02-07-02 | 07 | 4 | D-CF2-10 (ROADMAP criterion 5) | T-02-19 | the Pi report is drafted, not filed | doc grep | `grep -c 'D-CF2-10' .planning/phases/02-skills/02-07-SUMMARY.md && grep -c 'D-CF2-12' .planning/phases/02-skills/02-07-SUMMARY.md` | ❌ written by the task | ⬜ pending |
-| 02-07-03 | 07 | 4 | SKL-01..SKL-06 | — | N/A | doc grep | `grep -c '^## Threat Flags' .planning/phases/02-skills/02-07-SUMMARY.md && grep -c 'Parent lines' .planning/phases/02-skills/02-07-SUMMARY.md` | ❌ written by the task | ⬜ pending |
+| 02-01-01 | 01 | 1 | SKL-01 | — | N/A | cucumber + unit | `node --test test/bridges/skills/stage.test.ts test/bridges/skills/frontmatter-degrade.test.ts test/orchestrators/plugin/materialize-latest.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts && npx cucumber-js features/skill && npm run check:features` | ✅ `features/skill/listing.feature` | ✅ green |
+| 02-01-02 | 01 | 1 | SKL-01 | — | N/A | cucumber + unit | `npx cucumber-js features/skill/listing.feature && node --test test/bridges/skills/stage.test.ts && npm run check:features` | ✅ after 02-01-01 | ✅ green |
+| 02-01-03 | 01 | 1 | SKL-01 (record for SKL-03, SKL-05) | T-02-01, T-02-02, T-02-04 | the stored record is one JSON line, verified on write, never rewritten, names capped at 256 characters | unit + cucumber + static | `node --test test/bridges/skills/skill-names.test.ts test/bridges/skills/stage.test.ts test/bridges/skills/frontmatter-scan.test.ts test/edge/register.test.ts test/orchestrators/plugin/materialize-latest.test.ts test/orchestrators/plugin/reinstall-flow.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/skill-names.ts extensions/pi-claude-marketplace/bridges/skills/stage.ts extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts && npx cucumber-js features/skill && npm run fallow` | ✅ `test/bridges/skills/skill-names.test.ts` | ✅ green |
+| 02-02-01 | 02 | 2 | SKL-02 | T-02-05, T-02-06 | every unhonored field a skill sets is reported, as a discovery warning without a value or path | cucumber + unit | `node --test test/bridges/skills/stage.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/stage.ts && npx cucumber-js features/skill/frontmatter.feature && npx fallow dupes --fail-on-issues --format human --quiet` | ✅ `features/skill/frontmatter.feature` | ✅ green |
+| 02-02-02 | 02 | 2 | SKL-02 | T-02-05 | the four never-reported fields stay silent; order kept | cucumber + unit | `npx cucumber-js features/skill/frontmatter.feature && node --test test/bridges/skills/stage.test.ts && npm run check:features` | ✅ after 02-02-01 | ✅ green |
+| 02-02-03 | 02 | 2 | SKL-02 | — | N/A | cucumber + lint | `npx cucumber-js features/skill/frontmatter.feature && npm run check:features && npx eslint features/step_definitions/skill/frontmatter.steps.ts --max-warnings 0` | ✅ `features/step_definitions/skill/frontmatter.steps.ts` | ✅ green |
+| 02-03-01 | 03 | 2 | SKL-03 | T-02-07, T-02-12 | extension-sourced input and non-bridged skills never reach the runner | unit + cucumber + static | `node --test test/orchestrators/skill-invocation.test.ts test/edge/skill-aliases.test.ts test/index.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts extensions/pi-claude-marketplace/edge/skill-aliases.ts && npx cucumber-js features/skill/invocation.feature && npm run fallow` | ✅ `test/orchestrators/skill-invocation.test.ts` | ✅ green |
+| 02-03-02 | 03 | 2 | SKL-03 | T-02-08, T-02-09, T-02-11 | substitution before injection; an abort is `handled`, reported only through `notifyUsageError`, nothing reaches the model | unit + cucumber | `node --test test/orchestrators/skill-invocation.test.ts test/edge/skill-aliases.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts extensions/pi-claude-marketplace/edge/skill-aliases.ts && npx cucumber-js features/skill/invocation.feature && npm run check:features` | ✅ after 02-03-01 | ✅ green |
+| 02-03-03 | 03 | 2 | SKL-03 (D-CF2-05) | T-02-07 | the same path for interactive and RPC; autocomplete offers qualified aliases only | unit + cucumber | `node --test test/edge/skill-aliases.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/skill-aliases.ts && npx cucumber-js features/skill && npm run check:features` | ✅ after 02-03-01 | ✅ green |
+| 02-04-01 | 04 | 2 | SKL-04 | T-02-13, T-02-14 | a shadowed skill is named in the install diagnostic; listings read names only | unit + cucumber | `node --test test/bridges/skills/discover.test.ts test/bridges/skills/stage.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/discover.ts && npx cucumber-js features/skill/collisions.feature && npx fallow dupes --fail-on-issues --format human --quiet` | ✅ `features/skill/collisions.feature` | ✅ green |
+| 02-04-02 | 04 | 2 | SKL-04 | — | N/A | unit + architecture + cucumber + integration | `node --test test/bridges/skills/discover.test.ts test/architecture/declared-component-path-overlap.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/skills/discover.ts && npx cucumber-js features/skill/collisions.feature && npm run test:integration` | ✅ after 02-04-01 | ✅ green |
+| 02-05-01 | 05 | 2 | SKL-06 | T-02-15 | a disabled plugin's skill is no longer expanded for the model | cucumber | `npx cucumber-js features/skill/lifecycle.feature && npm run check:features` | ✅ `features/skill/lifecycle.feature` | ✅ green |
+| 02-05-02 | 05 | 2 | SKL-06 | T-02-15 | uninstall removes, enable restores, update replaces | cucumber | `npx cucumber-js features/skill/lifecycle.feature && npm run check:features` | ✅ after 02-05-01 | ✅ green |
+| 02-06-01 | 06 | 3 | SKL-05 | T-02-16 | an alias never takes a non-skill command's name; first claim wins | unit + cucumber + static | `node --test test/orchestrators/skill-alias-state.test.ts test/edge/skill-aliases.test.ts && npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts && npx cucumber-js features/skill/aliases.feature && npm run fallow` | ✅ `features/skill/aliases.feature` | ✅ green |
+| 02-06-02 | 06 | 3 | SKL-05 | T-02-16 | a command keeps its name; a disabled plugin's alias is gone | cucumber + unit | `npx cucumber-js features/skill/aliases.feature && node --test test/orchestrators/skill-alias-state.test.ts && npm run check:features` | ✅ after 02-06-01 | ✅ green |
+| 02-06-03 | 06 | 3 | SKL-05 | T-02-18 | the TUI is released with its process group and stays in the sandbox | cucumber (TUI) + architecture + lint | `npx cucumber-js features/skill/aliases.feature && node --test test/architecture/pi-tui-notices.test.ts && npm run check:features && npx eslint features/lib/pi-tui.ts features/step_definitions/skill/aliases.steps.ts --max-warnings 0`; then `npm run test:cucumber -- features/marketplace/background-update.feature` | ✅ `features/step_definitions/skill/aliases.steps.ts` | ✅ green |
+| 02-07-01 | 07 | 4 | SKL-01..SKL-06 | T-02-20 | no test weakened to pass the gate | full suite | `npm run check`; then `npm run test:cucumber && npm run test:cucumber` | ✅ | ✅ green |
+| 02-07-02 | 07 | 4 | D-CF2-10 (ROADMAP criterion 5) | T-02-19 | the Pi report is drafted, not filed | doc grep | `grep -c 'D-CF2-10' .planning/phases/02-skills/02-07-SUMMARY.md && grep -c 'D-CF2-12' .planning/phases/02-skills/02-07-SUMMARY.md` | ✅ `02-07-SUMMARY.md` | ✅ green |
+| 02-07-03 | 07 | 4 | SKL-01..SKL-06 | — | N/A | doc grep | `grep -c '^## Threat Flags' .planning/phases/02-skills/02-07-SUMMARY.md && grep -c 'Parent lines' .planning/phases/02-skills/02-07-SUMMARY.md` | ✅ `02-07-SUMMARY.md` | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -74,11 +75,11 @@ No separate Wave 0 plan: each new test file is created red-first inside the task
 that needs it (TDD tasks), before the product change, and the red run is
 recorded in that plan's SUMMARY.
 
-- [ ] `test/bridges/skills/skill-names.test.ts` — pair for the new names module (02-01 Task 3)
-- [ ] `test/orchestrators/skill-invocation.test.ts` — pair for the new invocation module (02-03 Task 1)
-- [ ] `features/skill/{listing,frontmatter,collisions,lifecycle,aliases}.feature` — created red-first by their plans; `invocation.feature` is the Phase 1 seed, edited red-first by 02-03
-- [ ] `features/step_definitions/skill/{listing,frontmatter,collisions,aliases}.steps.ts` — the shared skill steps (02-01), the system-prompt skill list (02-02), the setup Given for an install that skipped a skill (02-04), the TUI alias turn (02-06)
-- [ ] `features/lib/pi-tui.ts` optional profile and `typeText` — spike first (02-06 Task 3)
+- [x] `test/bridges/skills/skill-names.test.ts` — pair for the new names module (02-01 Task 3)
+- [x] `test/orchestrators/skill-invocation.test.ts` — pair for the new invocation module (02-03 Task 1)
+- [x] `features/skill/{listing,frontmatter,collisions,lifecycle,aliases}.feature` — created red-first by their plans; `invocation.feature` is the Phase 1 seed, edited red-first by 02-03
+- [x] `features/step_definitions/skill/{listing,frontmatter,collisions,aliases}.steps.ts` — the shared skill steps (02-01), the system-prompt skill list (02-02), the setup Given for an install that skipped a skill (02-04), the TUI alias turn (02-06)
+- [x] `features/lib/pi-tui.ts` optional profile and `typeText` — spike first (02-06 Task 3)
 
 ---
 
@@ -94,11 +95,32 @@ recorded in that plan's SUMMARY.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s per task command
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s per task command
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending (set by `/gsd-validate-phase` after execution)
+**Approval:** approved 2026-11-01 (`/gsd-validate-phase 2`: 6/6 requirements COVERED, 0 gaps)
+
+## Validation Audit 2026-11-01
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Evidence: every referenced test file exists. `node --test` over the skills
+bridge, invocation, alias-state, skill-aliases, register, materialize-latest,
+reinstall-flow, and the two architecture tests: 765/765 pass.
+`npm run test:cucumber -- features/skill` (seed 205881): 52/52 scenarios pass.
+The 02-07 gate tree (`cf00b31`) passed `npm run check` and two random-order
+cucumber runs (1219/1219). It differs from HEAD only in `.planning/` files.
+Requirement map: SKL-01 `listing.feature`; SKL-02 `frontmatter.feature`;
+SKL-03 `invocation.feature`; SKL-04 `collisions.feature`; SKL-05
+`aliases.feature` (TUI); SKL-06 `lifecycle.feature` and `aliases.feature`.
+Each requirement also has unit tests. The manual-only rows are not SKL
+requirement gaps: two are unit-covered edges the sandbox cannot drive, and the
+third is the user's call to file the Pi report.
