@@ -55,14 +55,15 @@ async function requestsOf(world: ScenarioWorld, server: string): Promise<McpHttp
 }
 
 // One row per request, its request cell, then the whole value of each header
-// the table names, or an empty cell when the request carried none. The
-// request cell is the HTTP method, then the JSON-RPC method when there is one.
+// the table names, or `(none)` when the request carried no such header, so an
+// empty value and a missing header read differently. The request cell is the
+// HTTP method, then the JSON-RPC method when there is one.
 function requestRows(requests: readonly McpHttpRequest[], headers: readonly string[]): string[][] {
   return requests.map((request) => [
     request.rpcMethod === undefined
       ? request.httpMethod
       : `${request.httpMethod} ${request.rpcMethod}`,
-    ...headers.map((header) => request.headers[header] ?? ""),
+    ...headers.map((header) => request.headers[header] ?? "(none)"),
   ]);
 }
 

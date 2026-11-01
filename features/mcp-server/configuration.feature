@@ -31,10 +31,10 @@ Feature: MCP server configuration
       | 2    | tool result | mcp returned: echo:ping                                                    |
     Then the http mcp server "web" receives these json-rpc requests:
       | request                        | authorization | x-team | mcp-protocol-version |
-      | POST initialize                | Bearer t0k3n  | core   |                      |
+      | POST initialize                | Bearer t0k3n  | core   | (none)               |
       | POST notifications/initialized | Bearer t0k3n  | core   | 2025-11-25           |
       | POST tools/list                | Bearer t0k3n  | core   | 2025-11-25           |
-      | POST initialize                | Bearer t0k3n  | core   |                      |
+      | POST initialize                | Bearer t0k3n  | core   | (none)               |
       | POST notifications/initialized | Bearer t0k3n  | core   | 2025-11-25           |
       | POST tools/list                | Bearer t0k3n  | core   | 2025-11-25           |
       | POST tools/call                | Bearer t0k3n  | core   | 2025-11-25           |
@@ -42,6 +42,85 @@ Feature: MCP server configuration
       | request | authorization | x-team | mcp-protocol-version |
       | GET     | Bearer t0k3n  | core   | 2025-11-25           |
       | GET     | Bearer t0k3n  | core   | 2025-11-25           |
+
+  Scenario: Under the OAuth entry of D-08-04, a remote server whose headers hold no Authorization key connects with no sign-in
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the http mcp server "web" with these headers:
+      | header | value |
+      | X-Team | core  |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given pi runs with the scripted model and these companions:
+      | companion      |
+      | pi-mcp-adapter |
+    Given pi-mcp-adapter has listed the tools of the http mcp server "web"
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                        |
+      |       | mcp  | {"tool": "mcp__plugin_demo_web__echo", "args": {"text": "ping"}} |
+      | Done. |      |                                                                  |
+    When the user prompts "call the web server"
+    Then the model receives these calls:
+      | call | role        | text                                                                       |
+      | 1    | user        | call the web server                                                        |
+      | 2    | user        | call the web server                                                        |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_web__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: echo:ping                                                    |
+    Then the http mcp server "web" receives these json-rpc requests:
+      | request                        | authorization | x-team | mcp-protocol-version |
+      | POST initialize                | (none)        | core   | (none)               |
+      | POST notifications/initialized | (none)        | core   | 2025-11-25           |
+      | POST tools/list                | (none)        | core   | 2025-11-25           |
+      | POST initialize                | (none)        | core   | (none)               |
+      | POST notifications/initialized | (none)        | core   | 2025-11-25           |
+      | POST tools/list                | (none)        | core   | 2025-11-25           |
+      | POST tools/call                | (none)        | core   | 2025-11-25           |
+    Then the http mcp server "web" receives these other requests in any order:
+      | request | authorization | x-team | mcp-protocol-version |
+      | GET     | (none)        | core   | 2025-11-25           |
+      | GET     | (none)        | core   | 2025-11-25           |
+
+  Scenario: A header whose variable is unset when the server connects reaches it empty, a documented Pi gap where Claude Code keeps the literal
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the http mcp server "web" with these headers:
+      | header        | value               |
+      | Authorization | Bearer t0k3n        |
+      | X-Team        | ${PI_CM_UNSET_TEAM} |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given pi runs with the scripted model and these companions:
+      | companion      |
+      | pi-mcp-adapter |
+    Given pi-mcp-adapter has listed the tools of the http mcp server "web"
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                        |
+      |       | mcp  | {"tool": "mcp__plugin_demo_web__echo", "args": {"text": "ping"}} |
+      | Done. |      |                                                                  |
+    When the user prompts "call the web server"
+    Then the model receives these calls:
+      | call | role        | text                                                                       |
+      | 1    | user        | call the web server                                                        |
+      | 2    | user        | call the web server                                                        |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_web__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: echo:ping                                                    |
+    Then the http mcp server "web" receives these json-rpc requests:
+      | request                        | authorization | x-team | mcp-protocol-version |
+      | POST initialize                | Bearer t0k3n  |        | (none)               |
+      | POST notifications/initialized | Bearer t0k3n  |        | 2025-11-25           |
+      | POST tools/list                | Bearer t0k3n  |        | 2025-11-25           |
+      | POST initialize                | Bearer t0k3n  |        | (none)               |
+      | POST notifications/initialized | Bearer t0k3n  |        | 2025-11-25           |
+      | POST tools/list                | Bearer t0k3n  |        | 2025-11-25           |
+      | POST tools/call                | Bearer t0k3n  |        | 2025-11-25           |
+    Then the http mcp server "web" receives these other requests in any order:
+      | request | authorization | x-team | mcp-protocol-version |
+      | GET     | Bearer t0k3n  |        | 2025-11-25           |
+      | GET     | Bearer t0k3n  |        | 2025-11-25           |
 
   Scenario Outline: A server's env value reaches it as Claude Code expands it
     Given the marketplace "fixtures" is published as a dir source
