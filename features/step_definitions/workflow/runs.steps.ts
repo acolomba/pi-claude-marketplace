@@ -1,12 +1,13 @@
 /**
  * @fileoverview Steps about running the workflows of a plugin: the workflows
  * a published plugin holds, running one through its command, and the result
- * the run ends with (HAR-07).
+ * or error the run ends with (HAR-07).
  *
  * The workflow engine runs a workflow command in the background and does not
  * answer over RPC with the run's result. It does append progress entries to
  * Pi's session, and Pi prints each one, so the run `When` waits for the entry
- * that ends the run and the result `Then` reads the entries of the turn.
+ * that ends the run and the run-ending `Then` steps read the entries of the
+ * turn.
  */
 
 import assert from "node:assert/strict";
@@ -35,6 +36,19 @@ const WORKFLOW_RUN_TIMEOUT_MS = 20_000;
 function endsRun(record: RpcRecord): boolean {
   const status = progressOf(record)?.status;
   return typeof status === "string" && TERMINAL_STATUSES.has(status);
+}
+
+// The last progress entry of the turn's one run carries the run's final
+// status, the whole text of a text result, and the error a failed run threw.
+function runOutcome(world: ScenarioWorld): Readonly<Record<string, unknown>> {
+  const entries = world.requireTurn().records.flatMap((record) => {
+    const progress = progressOf(record);
+    return progress === undefined ? [] : [progress];
+  });
+  const runs = [...new Set(entries.map((entry) => entry.runId))];
+  assert.strictEqual(runs.length, 1, `the command started ${runs.length} runs`);
+  const last = entries.at(-1);
+  return { status: last?.status, result: last?.resultPreview, error: last?.error };
 }
 
 Given(
@@ -69,22 +83,19 @@ When(
   },
 );
 
-// The last progress entry of the run carries its final status and, for a
-// result that is text, the whole text.
 Then(
   "the workflow run ends with the status {string} and the result {string}",
   function (this: ScenarioWorld, status: string, result: string) {
-    const entries = this.requireTurn().records.flatMap((record) => {
-      const progress = progressOf(record);
-      return progress === undefined ? [] : [progress];
-    });
-    const runs = [...new Set(entries.map((entry) => entry.runId))];
-    assert.strictEqual(runs.length, 1, `the command started ${runs.length} runs`);
-    const last = entries.at(-1);
-    assert.deepStrictEqual(
-      { status: last?.status, result: last?.resultPreview, error: last?.error },
-      { status, result, error: undefined },
-    );
+    assert.deepStrictEqual(runOutcome(this), { status, result, error: undefined });
+    this.markTurnCompared();
+  },
+);
+
+// A run whose script throws ends with the thrown error and no result.
+Then(
+  "the workflow run ends with the status {string} and the error {string}",
+  function (this: ScenarioWorld, status: string, error: string) {
+    assert.deepStrictEqual(runOutcome(this), { status, result: undefined, error });
     this.markTurnCompared();
   },
 );
