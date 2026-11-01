@@ -680,3 +680,30 @@ this project.
 8. Pi gap report proposals are the agent's own; tracker URL from the SSDEDUP-01 backlog entry. Drafted, not filed.
 9. `${CLAUDE_EFFORT}` = `low` measured with the faux model only.
 - Gate (cf00b31, wrapper): `npm run check` exit 0 (cucumber seed 239193, 1219/1219); `test:cucumber` twice 1219/1219 (seeds 986925, 847603); `fallow dupes` exit 0.
+
+### DC-29: Phase 2 security, validation, and code review
+
+**Decision for the user to review: D-CF2-13, taken by the parent without asking.** Review round 2 found that a cloned repository can ship its own staged skills under `.pi/pi-claude-marketplace/` and get `!` commands run when the user types one of those skill names. Pi 1.4.0 trusts such a project on its own (no trust-requiring files), and `state.json` sits in the same repository-controlled folder. The parent ported Claude Code's model: a user-scope record of project installs (`<agentDir>/pi-claude-marketplace/project-installs.json`, keyed by the real project path, with the SHA-256 of each staged `SKILL.md`). A project-scope skill with no matching entry gets no alias and aborts before any `!` command runs. This mirrors upstream `installed_plugins.json` and its `not_installed_here` skip.
+
+#### secure-phase: 21 threats, 0 open (17 mitigated, 4 accepted AR-02-01..04)
+1. The runner had no Agent tool, so the auditor work ran inline (allowed at ASVS L1).
+2. Plain `git commit` instead of the GSD helper, whose `docs(phase-02)` title the commit rules forbid.
+- T-01-22/T-01-24 are closed for skills; commands stay open until the Commands phase wires `edge/command-invocation.ts`.
+
+#### validate-phase: compliant, 0 gaps
+1. Reused the 02-07 gate plus targeted reruns; no full re-run.
+- Manual-only: filing the Pi gap report (user); `shell: powershell` and the Windows "requires bash" path (unit-tested only); typed `${CLAUDE_PLUGIN_ROOT}` argument (unit-tested only).
+
+#### Code review round 1 (1 blocker, 3 warnings, all fixed with scenarios and red proofs)
+Indented `---` fence; record-key spellings; stale staged file falling through to Pi's expansion; untrusted project running `!`.
+
+#### Code review round 2 fixes (CR-01, WR-01..03)
+1. **The provenance ledger is written without a lock.** The skills bridge cannot import `transaction/`. Two concurrent project installs in different projects can lose one update; the failure is closed (that project's skills abort and ask for a reinstall).
+2. **Discovery still lists a project skill with no ledger entry** in a project Pi trusts, so the abort message can name it. The model can still read its description and body, which upstream `not_installed_here` would hide. Same prompt-injection exposure as `AGENTS.md`.
+3. **Existing project installs lose their skills until reinstalled.** A project-scope skill staged before this change has no ledger entry. Plain `apply` does not re-stage it. Needs a CHANGELOG line.
+4. The provenance scenario models a clone by deleting the user ledger rather than forging `state.json`.
+5. After WR-01 (discovery gated on `ctx.isProjectTrusted()`), the "Pi does not trust" abort is reachable only after a trust change within a session; unit tests cover it, no scenario. `features/skill/project-trust.feature` was rewritten because the behavior changed.
+6. `topLevelNodeIndex` falls back to the plain `<key>:` spelling for a node that does not parse alone; as a side effect a record key written as a YAML alias is now replaced instead of failing the install.
+7. `test/index.test.ts` answers `isProjectTrusted()` with `anyTimes()` in the shared helper.
+8. Files outside Phase 2 touched: `index.ts`, `orchestrators/discover.ts`, and their tests; `install-flow-ledger.test.ts`.
+- Parent line: the hooks bridge has the same pre-existing exposure; the Hooks phase should adopt the same provenance check.
