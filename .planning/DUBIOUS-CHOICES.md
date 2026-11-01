@@ -250,3 +250,16 @@ this project.
      The untrusted `Given` must also write a trust-requiring file such as
      `.pi/settings.json`, because Pi trusts a project without one.
 - **Recorded in:** `01-RESEARCH.md` (Q1-Q5, Pitfall A, Open Questions).
+
+### DC-14: Pattern-map open points left to the planner
+
+- **Phase / source:** Phase 1 pattern mapper (`01-PATTERNS.md`).
+- **Severity:** Low. **Status:** open.
+- **Items:** the spike 028 prototypes are named as "exact" analogs for the
+  scripted model, probe, and stub although they are prototypes; the hook
+  recorder and MCP stub are spawned by path and may need fallow handling
+  (unmeasured); the folder-shadowed warning (D-CF1-06) is suggested through
+  the resolver's `notes` without tracing whether that reaches the install
+  notification; an optional ESLint zone for `platform/prompt-shell.ts` that
+  CONTEXT does not ask for.
+- **Recorded in:** `01-PATTERNS.md`.
