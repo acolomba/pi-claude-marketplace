@@ -392,6 +392,7 @@ test("same-runtime reload makes every retained registration inert before argumen
     cache: Array.from(runtime.parsedConfigEntries()),
     routes: Array.from(runtime.routingTableEntries()),
     pending: runtime.pendingSessionStartContextEntries(),
+    promptPending: runtime.pendingPromptContextEntries(),
   });
   const readsBefore = [...readRoots];
   const forbiddenArgument = new Proxy(
@@ -419,6 +420,7 @@ test("same-runtime reload makes every retained registration inert before argumen
     cache: Array.from(runtime.parsedConfigEntries()),
     routes: Array.from(runtime.routingTableEntries()),
     pending: runtime.pendingSessionStartContextEntries(),
+    promptPending: runtime.pendingPromptContextEntries(),
   });
   const liveSessionStart = liveRegistrations[0]?.handler;
   assert.strictEqual(typeof liveSessionStart, "function");

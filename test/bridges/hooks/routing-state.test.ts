@@ -15,6 +15,7 @@ import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/
 
 import type {
   CacheEntry,
+  PendingPromptContext,
   PendingSessionStartContext,
   RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
@@ -67,6 +68,24 @@ test("reads an empty pending SessionStart context", (t) => {
 
   // assert
   assert.deepStrictEqual(entries, []);
+});
+
+test("the pending context clear also empties the runtime's prompt context (D-CF5-13)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const routingState = createRoutingStateOperations(runtime);
+  runtime.appendPendingPromptContext({
+    context: "stale prompt context",
+    pluginId: "stale-plugin",
+    marketplace: "catalog",
+    scope: "user",
+  } satisfies PendingPromptContext);
+
+  // act
+  routingState.clearPendingSessionStartContext();
+
+  // assert
+  assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
 });
 
 test("skips an empty pending SessionStart context", (t) => {

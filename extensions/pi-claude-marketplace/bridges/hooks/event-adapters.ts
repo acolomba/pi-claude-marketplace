@@ -18,9 +18,9 @@
 //     PostToolUseFailure). `block` keeps the tool's output and adds the
 //     hook's feedback, `<Event>:<Tool> hook blocking error from command:
 //     "<command>": <message>`, without marking the result an error;
-//     `mutate.updatedToolOutput` mutates the runtime-side surface
-//     (`event.content` and/or `event.isError`) in place + returns
-//     `undefined`; `stop` debug-logs + returns `undefined` (Pi's
+//     `mutate.updatedToolOutput` returns its `content` and/or `isError` as
+//     Pi's `tool_result` value, since Pi keeps only returned changes;
+//     `stop` debug-logs + returns `undefined` (Pi's
 //     `tool_result` cannot end the turn without aborting it); `noop` returns
 //     `undefined`. CR-01: the mutation surface is whitelisted to
 //     `{ content, isError }` -- a hook-supplied patch cannot rewrite
@@ -28,9 +28,10 @@
 //
 //   - adaptInputResult           -> Pi `input` (UserPromptSubmit).
 //     `block` -> `{ action: "handled" }`; `stop` -> `{ action: "handled" }`,
-//     so the prompt stops; `mutate.additionalContext` (when defined) ->
-//     `{ action: "transform", text }`; `mutate` without an
-//     `additionalContext` field -> `undefined`; `noop` returns `undefined`.
+//     so the prompt stops; `mutate.additionalContext` is buffered in the
+//     runtime's prompt-context buffer and the prompt continues unchanged
+//     (`undefined`); the `before_agent_start` handler sends the context as a
+//     message after the prompt (D-CF5-13); `noop` returns `undefined`.
 //
 //   - adaptObservationResultForEvent -> Pi `session_start` /
 //     `session_shutdown` / `session_before_compact` / `session_compact`
@@ -49,8 +50,8 @@
 // the `switch-exhaustiveness-check` lint rule at each switch.
 //
 // Mutation surface: tool_call replaces `event.input` (Record<string,
-// unknown>) key by key, tool_result mutates `event.content` (the Pi-side
-// (TextContent | ImageContent)[] array). The fold in `dispatch.ts` runs every
+// unknown>) key by key, tool_result returns the replacement `content` (the
+// Pi-side (TextContent | ImageContent)[] array) and `isError`. The fold in `dispatch.ts` runs every
 // hook on one snapshot, so a mutation applies once, after every hook ran.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -58,7 +59,7 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { hookBlockingErrorText, hookErrorText, hookEventLabel } from "./hook-labels.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
-import type { RoutingEntry } from "./routing-state.ts";
+import type { PendingPromptContext, RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
@@ -86,14 +87,26 @@ export interface HookAdapterContext {
   readonly attributedTo: RoutingEntry | undefined;
 }
 
-// The provenance a SessionStart context carries when the fold attributes it
-// to no entry. A fold of mutations always names one, so only a hand-built
+// The provenance a buffered context carries when the fold attributes it to
+// no entry. A fold of mutations always names one, so only a hand-built
 // result reaches it.
 const UNATTRIBUTED = { scope: "user", marketplace: "", pluginId: "" } as const satisfies {
   readonly scope: Scope;
   readonly marketplace: string;
   readonly pluginId: string;
 };
+
+// A context to buffer, with the provenance of the entry the fold attributes
+// it to. Both pending buffers take this shape.
+function bufferedContext(text: string, context: HookAdapterContext): PendingPromptContext {
+  const provenance = context.attributedTo ?? UNATTRIBUTED;
+  return {
+    context: text,
+    scope: provenance.scope,
+    marketplace: provenance.marketplace,
+    pluginId: provenance.pluginId,
+  };
+}
 
 // The declared command of the entry a folded result is attributed to.
 function attributedCommand(context: HookAdapterContext): string {
@@ -143,20 +156,29 @@ function replaceToolCallInput(event: ToolCallEvent, updatedInput: unknown): void
  * silently dropped, so a malicious or buggy hook cannot rewrite the event's
  * discriminator (`type`), its `toolName`, or any other routing-load-bearing
  * field. Non-object patches are rejected early.
+ *
+ * The patch is the handler's return value: Pi 1.4's `emitToolResult` keeps
+ * only the changes a handler returns, so a change made to the event in place
+ * would never reach the model. `undefined` when neither field is valid.
  */
-function applyToolResultPatch(event: ToolResultEvent, updatedToolOutput: unknown): void {
+function toolResultPatch(updatedToolOutput: unknown): ToolResultEventResult | undefined {
   if (updatedToolOutput === null || typeof updatedToolOutput !== "object") {
-    return;
+    return undefined;
   }
 
   const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;
+  const toolResult: ToolResultEventResult = {};
   if (Array.isArray(patch.content)) {
-    event.content = patch.content;
+    // Pi's `tool_result` slot takes image parts too; the frozen Pi boundary
+    // types it as text parts only, so the patch's parts are widened to it.
+    toolResult.content = patch.content as NonNullable<ToolResultEventResult["content"]>;
   }
 
   if (typeof patch.isError === "boolean") {
-    event.isError = patch.isError;
+    toolResult.isError = patch.isError;
   }
+
+  return Object.keys(toolResult).length === 0 ? undefined : toolResult;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -280,8 +302,8 @@ function withFeedback(
  * handler return shape (`ToolResultEventResult | undefined`).
  *
  * `tool_result` exposes a `content` / `details` / `isError` return shape;
- * the bridge's `mutate.updatedToolOutput` path mutates `event` in place,
- * then returns `undefined`. A `block` keeps the tool's output and returns it
+ * the bridge's `mutate.updatedToolOutput` path returns the whitelisted
+ * patch in that shape and leaves `event` alone. A `block` keeps the tool's output and returns it
  * with the hook's feedback after it, as Claude Code adds a PostToolUse
  * block's feedback after the tool result (D-CF5-11); the result is not
  * marked an error.
@@ -298,11 +320,7 @@ export function adaptToolResultResult(
       return { content: withFeedback(event, result, context) };
 
     case "mutate":
-      if (result.updatedToolOutput !== undefined) {
-        applyToolResultPatch(event, result.updatedToolOutput);
-      }
-
-      return undefined;
+      return toolResultPatch(result.updatedToolOutput);
 
     case "stop":
       hookDebugLog(
@@ -323,13 +341,18 @@ export function adaptToolResultResult(
  * D-60-03: convert a folded `HookExecResult` to the Pi `input` handler
  * return shape (`InputEventResult | undefined`).
  *
- * The `_event` and `_context` parameters keep the adapter signature uniform;
- * this adapter reads neither.
+ * D-CF5-13 / HOOK-05: a hook's `additionalContext` never replaces the
+ * prompt. The adapter buffers it with the provenance of the attributed entry
+ * and lets the prompt continue; the `before_agent_start` handler of the same
+ * turn sends it as a message after the prompt. A block or stop buffers
+ * nothing, so a stopped prompt sends no context to any turn. The `_event`
+ * parameter keeps the adapter signature uniform; this adapter does not read
+ * it.
  */
 export function adaptInputResult(
   result: HookExecResult,
   _event: InputEvent,
-  _context: HookAdapterContext,
+  context: HookAdapterContext,
 ): InputEventResult | undefined {
   switch (result.kind) {
     case "block":
@@ -337,7 +360,9 @@ export function adaptInputResult(
 
     case "mutate":
       if (result.additionalContext !== undefined) {
-        return { action: "transform", text: result.additionalContext };
+        context.runtime.appendPendingPromptContext(
+          bufferedContext(result.additionalContext, context),
+        );
       }
 
       return undefined;
@@ -362,12 +387,11 @@ export function adaptInputResult(
  *
  * Pi's lifecycle splits the upstream Claude Code SessionStart-hook contract
  * across two surfaces: `session_start` returns void, and
- * `before_agent_start` carries the `systemPrompt` chain Pi extensions use
- * to inject context into the next agent turn. The mutate-arm path here
- * captures `additionalContext` from a SessionStart event into the
- * `routing-state.ts` pending buffer; the `beforeAgentStartHandlerFor`
- * closure in `event-router.ts` drains the buffer on the next
- * `before_agent_start` event.
+ * `before_agent_start` can add a message to the next agent turn. The
+ * mutate-arm path here captures `additionalContext` from a SessionStart
+ * event into the runtime's pending buffer; the `before_agent_start` handler
+ * in `event-router.ts` drains the buffer on the next turn into a persisted
+ * message after the prompt (D-CF5-13).
  *
  * Per-event semantics:
  *
@@ -408,13 +432,9 @@ export function adaptObservationResultForEvent(
         // drained one-shot by beforeAgentStartHandlerFor and cleared on
         // registerHooksBridge entry (so /reload does not leak stale
         // context across sessions).
-        const provenance = context.attributedTo ?? UNATTRIBUTED;
-        context.runtime.appendPendingSessionStartContext({
-          context: result.additionalContext,
-          scope: provenance.scope,
-          marketplace: provenance.marketplace,
-          pluginId: provenance.pluginId,
-        });
+        context.runtime.appendPendingSessionStartContext(
+          bufferedContext(result.additionalContext, context),
+        );
       }
 
       // SessionEnd / PreCompact / PostCompact: no logical drain point for

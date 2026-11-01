@@ -34,7 +34,7 @@
 //      cannot escape as an unhandled exception.
 //   8. On `close`, route stderr through `hookDebugLog` (EXEC-03 sole sink;
 //      NO `ctx.ui.notify`) then return `parseHookStdout(code, stdout,
-//      stderr)`, unless the hook failed and sets `onFailure: "block"`
+//      stderr, entry.claudeEvent)`, unless the hook failed and sets `onFailure: "block"`
 //      (D-CF5-18, `./on-failure.ts`): then a start failure (`error`), an exit
 //      other than 0 and 2, a timeout, or broken JSON stdout is a block.
 //
@@ -424,7 +424,7 @@ async function spawnAndCollect(
         stderr,
       });
       // fallow-ignore-next-line code-duplication -- reviewed: the async-rewake and synchronous dispatch paths each own their child's stdin wiring; the shared part is a short EPIPE guard
-      settle(failure ?? parseHookStdout(code, stdout, stderr));
+      settle(failure ?? parseHookStdout(code, stdout, stderr, entry.claudeEvent));
     });
 
     // EPIPE defense: attach the error listener BEFORE write so a child

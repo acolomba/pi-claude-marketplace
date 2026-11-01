@@ -1377,19 +1377,18 @@ test("accepts string stream chunks and parses their complete result", async (t) 
   assert.deepStrictEqual(processChild.killSignals, []);
 });
 
-test("flushes an incomplete decoder tail before parsing", async (t) => {
+test("flushes an incomplete decoder tail before parsing the entry's plain stdout as context (D-CF5-13)", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-decoder-tail-");
-  const errorSpy = observeDebug(t);
   const processChild = makeInjectedChild(t);
   const processBoundary = observeSpawn(t, processChild);
-  const entry = makeEntry(caseRoot);
+  const entry = makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit" });
 
   // act
   const pendingOutcome = dispatchHookExec(
     entry,
-    { toolName: "bash", input: {} },
+    { type: "input", text: "decoder prompt", source: "interactive" } satisfies InputEvent,
     makeContext(caseRoot),
     undefined,
     runtime,
@@ -1399,19 +1398,9 @@ test("flushes an incomplete decoder tail before parsing", async (t) => {
   processChild.stdout?.write(Buffer.from([0xe2, 0x82]));
   await processChild.close(0);
   const hookOutcome = await pendingOutcome;
-  const lines = debugLines(errorSpy);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
-  assert.strictEqual(
-    lines.some(
-      (line) =>
-        line.includes("wire-protocol") &&
-        line.includes("JSON.parse failed") &&
-        line.includes("noop"),
-    ),
-    true,
-  );
+  assert.deepStrictEqual(hookOutcome, { kind: "mutate", additionalContext: "\uFFFD" });
   assert.deepStrictEqual(processChild.killSignals, []);
 });
 

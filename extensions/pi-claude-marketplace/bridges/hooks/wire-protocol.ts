@@ -18,8 +18,18 @@
 //                        stdout is one; else noop (debug-log)
 //   - signal-kill     -> noop (debug-log; `exitCode === null`)
 //   - exit 0 + empty  -> noop
-//   - exit 0 + non-JSON stdout -> noop (debug-log)
-//   - exit 0 + JSON  -> normalize per § 4 (block / mutate / stop / noop)
+//   - exit 0 + plain text -> on SessionStart and UserPromptSubmit, a mutate
+//                        whose `additionalContext` is the trimmed stdout, as
+//                        Claude Code adds plain stdout as context on those
+//                        events; on every other event noop (debug-log)
+//                        (D-CF5-13)
+//   - exit 0 + JSON  -> normalize per § 4 (block / mutate / stop / noop);
+//                        stdout that starts with `{` and ends with `}` but
+//                        does not parse is noop (debug-log)
+//
+// Claude Code reads stdout as JSON only when the trimmed text starts with
+// `{` and ends with `}`; anything else, a JSON array or string included, is
+// plain text.
 //
 // Whatever the decision, a JSON object's top-level `systemMessage` and its
 // `hookSpecificOutput.additionalContext` ride the arm it gives (D-CF5-13,
@@ -29,16 +39,25 @@
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
+import type { BucketAEvent } from "../../domain/components/hook-events.ts";
+
+// D-CF5-13: the events on which Claude Code adds plain stdout as context.
+const PLAIN_CONTEXT_EVENTS: ReadonlySet<BucketAEvent> = new Set([
+  "SessionStart",
+  "UserPromptSubmit",
+]);
 
 /**
- * D-60-01 wire-protocol parse. Maps child exit code + stdout + stderr to
- * a `HookExecResult`. Pure function -- no I/O, no side effects beyond
- * `hookDebugLog` on each diagnostic arm. Never throws.
+ * D-60-01 wire-protocol parse. Maps child exit code + stdout + stderr, and
+ * the Claude event the hook ran on, to a `HookExecResult`. Pure function --
+ * no I/O, no side effects beyond `hookDebugLog` on each diagnostic arm.
+ * Never throws.
  */
 export function parseHookStdout(
   exitCode: number | null,
   stdout: string,
   stderr: string,
+  claudeEvent: BucketAEvent,
 ): HookExecResult {
   if (exitCode === 2) {
     return exitTwoBlock(stdout, stderr);
@@ -53,6 +72,10 @@ export function parseHookStdout(
     return { kind: "noop" };
   }
 
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return plainStdoutResult(trimmed, claudeEvent);
+  }
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(trimmed);
@@ -63,7 +86,19 @@ export function parseHookStdout(
     return { kind: "noop" };
   }
 
-  return normalizeClaudeStdout(parsed);
+  // A text that starts with `{`, ends with `}`, and parses is a JSON object.
+  return normalizeClaudeStdout(parsed as object);
+}
+
+// D-CF5-13: plain stdout on exit 0 is context on SessionStart and
+// UserPromptSubmit, and is ignored on every other event.
+function plainStdoutResult(trimmed: string, claudeEvent: BucketAEvent): HookExecResult {
+  if (PLAIN_CONTEXT_EVENTS.has(claudeEvent)) {
+    return { kind: "mutate", additionalContext: trimmed };
+  }
+
+  hookDebugLog(`wire-protocol: plain stdout ignored on ${claudeEvent}; defaulting to noop`);
+  return { kind: "noop" };
 }
 
 // The stdout JSON object a hook printed, or `undefined` when stdout is empty,
@@ -120,7 +155,7 @@ function nonZeroExitResult(exitCode: number | null, stdout: string): HookExecRes
  * `docs/research/claude-hook-config-syntax.md § 4`: the decision, with the
  * hook's outputs on whichever arm the decision gives.
  */
-function normalizeClaudeStdout(parsed: unknown): HookExecResult {
+function normalizeClaudeStdout(parsed: object): HookExecResult {
   return { ...decideClaudeStdout(parsed), ...hookOutputs(parsed) };
 }
 
@@ -153,15 +188,11 @@ function hookOutputs(parsed: unknown): { additionalContext?: string; systemMessa
 }
 
 /**
- * The decision of a parsed Claude-shaped stdout object. Unknown root types,
- * unrecognized shapes, and missing fields all fall back to `noop` -- the
- * parser is permissive by design (D-60-01).
+ * The decision of a parsed Claude-shaped stdout object. Unrecognized shapes
+ * and missing fields fall back to `noop` -- the parser is permissive by
+ * design (D-60-01).
  */
-function decideClaudeStdout(parsed: unknown): HookExecResult {
-  if (parsed === null || typeof parsed !== "object") {
-    return { kind: "noop" };
-  }
-
+function decideClaudeStdout(parsed: object): HookExecResult {
   const obj = parsed as Record<string, unknown>;
 
   const topLevel = matchTopLevelStopOrBlock(obj);

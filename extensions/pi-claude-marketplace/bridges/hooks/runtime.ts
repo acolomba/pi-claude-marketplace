@@ -1,6 +1,11 @@
 import type { RingBuffer } from "./async-rewake/ring-buffer.ts";
 import type { ChildLike, TimerLadder } from "./exec-timer.ts";
-import type { CacheEntry, PendingSessionStartContext, RoutingEntry } from "./routing-state.ts";
+import type {
+  CacheEntry,
+  PendingPromptContext,
+  PendingSessionStartContext,
+  RoutingEntry,
+} from "./routing-state.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { AssistantMessage } from "../../platform/pi-api.ts";
@@ -65,6 +70,9 @@ export interface HooksRuntime {
   readonly appendPendingSessionStartContext: (entry: PendingSessionStartContext) => void;
   readonly pendingSessionStartContextEntries: () => readonly PendingSessionStartContext[];
   readonly drainPendingSessionStartContext: () => readonly PendingSessionStartContext[];
+  readonly appendPendingPromptContext: (entry: PendingPromptContext) => void;
+  readonly pendingPromptContextEntries: () => readonly PendingPromptContext[];
+  readonly drainPendingPromptContext: () => readonly PendingPromptContext[];
   readonly preparePendingContextForRegistration: () => void;
   readonly prepareSettleForRegistration: () => void;
   readonly recordLastAssistant: (message: AssistantMessage | undefined) => void;
@@ -80,6 +88,35 @@ export interface HooksRuntime {
   readonly runPidTableOperation: (key: string, operation: () => Promise<void>) => Promise<void>;
 }
 
+/** One pending context buffer: entries wait in arrival order until a drain. */
+interface ContextBuffer<T extends { readonly context: string }> {
+  readonly append: (entry: T) => void;
+  readonly entries: () => readonly T[];
+  readonly drain: () => readonly T[];
+}
+
+// An entry with an empty context adds nothing, so the buffer drops it.
+function createContextBuffer<T extends { readonly context: string }>(): ContextBuffer<T> {
+  let pending: T[] = [];
+  return {
+    append(entry: T): void {
+      if (entry.context.length > 0) {
+        pending.push(entry);
+      }
+    },
+
+    entries(): readonly T[] {
+      return [...pending];
+    },
+
+    drain(): readonly T[] {
+      const entries = pending;
+      pending = [];
+      return entries;
+    },
+  };
+}
+
 /** Creates one isolated owner for a hooks extension lifecycle. */
 export function createHooksRuntime(): HooksRuntime {
   const parsedConfigCache = new Map<string, CacheEntry>();
@@ -87,7 +124,10 @@ export function createHooksRuntime(): HooksRuntime {
   const children = new Map<string, HooksRuntimeChildEntry>();
   const pidTableOperations = new Map<string, Promise<void>>();
   let generation = 0;
-  let pendingSessionStartContext: PendingSessionStartContext[] = [];
+  // D-CF5-13: the SessionStart context waits for the next turn of the
+  // session; a prompt's context belongs to the turn of that prompt.
+  const pendingSessionStartContext = createContextBuffer<PendingSessionStartContext>();
+  const pendingPromptContext = createContextBuffer<PendingPromptContext>();
   let lastAssistant: AssistantMessage | undefined;
   let stopHookActive = false;
   let consecutiveBlockCount = 0;
@@ -138,24 +178,18 @@ export function createHooksRuntime(): HooksRuntime {
       return new Map(Array.from(routingTable, ([event, entries]) => [event, [...entries]]));
     },
 
-    appendPendingSessionStartContext(entry: PendingSessionStartContext): void {
-      if (entry.context.length > 0) {
-        pendingSessionStartContext.push(entry);
-      }
-    },
+    appendPendingSessionStartContext: pendingSessionStartContext.append,
+    pendingSessionStartContextEntries: pendingSessionStartContext.entries,
+    drainPendingSessionStartContext: pendingSessionStartContext.drain,
+    appendPendingPromptContext: pendingPromptContext.append,
+    pendingPromptContextEntries: pendingPromptContext.entries,
+    drainPendingPromptContext: pendingPromptContext.drain,
 
-    pendingSessionStartContextEntries(): readonly PendingSessionStartContext[] {
-      return [...pendingSessionStartContext];
-    },
-
-    drainPendingSessionStartContext(): readonly PendingSessionStartContext[] {
-      const entries = [...pendingSessionStartContext];
-      pendingSessionStartContext = [];
-      return entries;
-    },
-
+    // D-CF5-13: a bridge load empties both buffers, so no context reaches a
+    // later session.
     preparePendingContextForRegistration(): void {
-      pendingSessionStartContext = [];
+      pendingSessionStartContext.drain();
+      pendingPromptContext.drain();
     },
 
     prepareSettleForRegistration,
