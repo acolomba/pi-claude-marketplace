@@ -396,3 +396,59 @@ this project.
 7. `test/live-uat/mcp-adapter-canary.mjs` still pins pi-mcp-adapter 5.2.0 (outside the file list; no gate runs it).
 8. VER-01 "lockfile matches" read as: the lock root mirrors manifest peer ranges and dev dependencies, e2e fixture lock excluded (flagged for the verifier).
 9. GSD commit tool not used, so commit titles carry no plan IDs (project rule).
+
+### DC-19: Phase 1 wave 2 executor choices
+
+- **Phase / source:** executors for plans 01-03, 01-11, 01-12, 01-13, 01-14.
+- **Severity:** Medium for the upstream-over-plan deviations (01-11 item 1, 01-12 items 3-4, 01-13 item 1) and the Pi workaround (01-03 item 2); the rest Low. **Status:** open.
+- **Parent note:** executor prompts now point at a shared brief file (`executor-brief.md` in the session scratchpad) instead of repeating the common blocks, extending DC-17.
+
+#### 01-12 (argument substitution core)
+1. Parity oracle is tree-sitter-bash 0.25.1 via the research re-implementation; that Claude Code bundles an equivalent grammar is assumed, not verified. 9 known differences ($-lexing quirks, error recovery after unclosed quote/bracket) are kept in a residual table.
+2. Error-recovery heuristics inferred from harness probes, not grammar source (e.g. "doesn't" gives `doesn`, as upstream does).
+3. Deviation: `parseArgumentNames` keeps declared order; the cut to 64 and longest-first sort happen inside substitution with original indices, as in the binary. Phases 2 and 3 must pass its result to `substituteArguments` unchanged.
+4. Deviation: the size cap (4,000,000) applies only when a value is filled, as upstream; the plan's "oversized body with empty args throws" case was changed.
+5. Deviation: the nesting scan uses an explicit stack (recursion overflowed on `"$(` x3000, a DoS, T-01-20).
+6. `variables` typed `Readonly<Record<string,string>>`; unknown keys ignored.
+7. No separate RED commits (hook rejects them; tdd_mode false); RED counts in SUMMARY.
+8. With `args` undefined, variables are still filled (plan must-have and binary), contrary to CONTEXT E1's "returned unchanged".
+#### 01-13 (context injection core, prompt-shell spawn site)
+1. Spawn-failure text follows upstream `MRr` (bare `[Error]\n<msg>`), not the plan's `Shell command failed for pattern ...` form.
+2. Fenced ```! blocks found by an indexOf scan instead of upstream's regex (ESLint `sonarjs/super-linear-regex` rejects it); same output.
+3. Windows timeout kills only the shell process (`child.kill`), no `taskkill /T` tree kill.
+4. Windows Git Bash lookup scans absolute PATH entries for `git.exe` instead of `where.exe`; PowerShell executables (`powershell.exe` / `pwsh`) from the plan, unverified against upstream; PowerShell tool treated as off when the variable is unset (upstream reads a default-false flag).
+5. A stopped run always waits the full kill grace (2,000 ms default, own choice) before resolving `interrupted`.
+6. The runner request takes an already selected shell; the edge must call `selectPromptShell` itself.
+7. `timeoutMs` and `killGraceMs` optional with defaults (plan listed them as required).
+8. RED not committed separately (hook); evidence in `scratchpad/agent-01-13/red-task*.tap`.
+9. Gate fits: extra non-zero-exit case in the tracer for branch coverage; no-shell-out docstring no longer repeats "exactly five files".
+#### 01-14 (`:-` delegation to pi-mcp-adapter 7.x)
+1. Task boundaries moved: the marker check, shared-row updates, stage/integration assertion fixes, and all serializer guards landed in Task 1 (else Task 1 is red with 344 mismatches).
+2. Two unrequested serializer guards (a default that could complete a marker started by the preceding reference's value; a reference after a default ending in a partial trigger).
+3. Base-URL names (e.g. `ANTHROPIC_BASE_URL`) in `url`/`headers` stay install-time, reading "deny-listed" as covering the value-dependent deny list.
+4. OAuth clean rule keeps every old decision rather than the plan's literal per-reference wording (`team ${TEAM:-}` keeps `auth`).
+5. No separate RED commits.
+6. The unset-at-connect conformance variant also leaves plain references unset, modeled as `""` (existing residual).
+7. Retitled the shared row `${PI_CM_A:-{}env:PI_CM_SECRET}` to test the delegated form; a new `{env:`-default row keeps the merged-run case.
+8. `${CLAUDE_PROJECT_DIR:-x}` is now delegated; at user scope it reads Pi's exported `CLAUDE_PROJECT_DIR` at connect.
+9. One file outside files_modified changed: a one-line assertion in `test/bridges/mcp/stage.test.ts`.
+- Parent follow-up (01-09): CHANGELOG line "A plugin MCP setting `${NAME:-default}` now takes a variable you set after install, as in Claude Code, without a reinstall."
+#### 01-11 (declared component paths replace their folder, D-CF1-06)
+1. A declared `.` still triggers the shadowed-folder warning (upstream `lKn` checks `(S+sep).startsWith(folder+sep)`), against the plan's Task 2 behavior bullet. With `commands: "."` Pi's recursive commands walk still reads `commands/`, so the warning claims more than Pi does (matches what upstream prints).
+2. `""` now declares nothing (strict resolver and lenient map), following upstream's truthy check; before it resolved to the plugin root.
+3. The warning names the bare kind; upstream's `experimental.<kind>` variants and its "Remove ... from plugin.json" hint not ported.
+4. Update adds the warning only to its `updated` outcome; a failed update does not carry it.
+5. The second lenient seed in `info.ts` (warm tree of a non-path source, reads no declarations) left alone: it still lists every conventional folder of an unavailable non-path plugin.
+6. No separate red-only commits; red runs in SUMMARY.
+- Edited outside files_modified: four tests relying on the old union (`install-flow-ledger`, `reinstall-flow`, `update-flow` PDEF-01 fixtures; `declared-component-path-overlap` architecture test).
+- Parent follow-up (01-09): CHANGELOG sub-bullet as given in 01-11 SUMMARY.
+#### 01-03 (harness tracer: profile Pi, scripted model, companions, skill seed)
+1. jiti cache link: `{home}/tmp/jiti` links to `<run root>/jiti-cache` (outside the sandbox home, inside the run's temp root; compiled sources only) to cut profile Pi start from 13-20 s to ~1.4 s. Threat Flag.
+2. Rule 1 fix: the scripted model registers via `pi.registerProvider("faux", { apiKey: "scripted-model", ... })` because Pi's `findInitialModel` keeps a saved model only for an already-configured provider (1-in-6 "No API key" flake after a new session). Works around Pi behavior; may need revisiting.
+3. `PiProcess` now cancels every dialog, including one outside a request (shared Pi changes slightly).
+4. `companions.ts` created in Task 1 (needed earlier); `model.steps.ts` edited in Task 2.
+5. Unused-step message wording: "no model call used these steps of the model script".
+6. Self-chosen formats: script table columns, call-row formats (`tool call <name> <json>`, `<tool> returned|failed: <text>`), derived `systemPrompt`.
+7. Proven only by design, no scenario: "no script armed", HAR-03 `handled` path, live-pid stand-in check, companion reordering.
+8. Companion load check uses commands, not tools (tools wait for the 01-04 registry probe).
+- Parent follow-up (01-09): the cucumber world rule should mention the jiti cache link and the literal-key registration.
