@@ -1,14 +1,15 @@
 /**
  * @fileoverview Steps about workflow scripts that the bridge or the workflow
- * engine refuses: the install that reports a note on each such script.
+ * engine refuses: the install that reports a note on each such script, and
+ * the lines of the diagnostic that holds the notes.
  */
 
 import assert from "node:assert/strict";
 
-import { type DataTable, Given } from "@cucumber/cucumber";
+import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { runCommandPayloads } from "../../lib/pi-commands.ts";
-import { expandTokens } from "../../lib/run-tokens.ts";
+import { expandTokens, projectTokens } from "../../lib/run-tokens.ts";
 
 import type { NotificationPayload } from "../../lib/pi-commands.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -59,3 +60,17 @@ Given(
     );
   },
 );
+
+// The results table joins a diagnostic's lines with commas, and a note holds
+// commas of its own, so it cannot tell where one note ends. This step states
+// one line per row, in the diagnostic's order.
+Then("the diagnostic reports these lines:", function (this: ScenarioWorld, table: DataTable) {
+  const [lines, ...others] = this.resultsOf("command").flatMap((payload) =>
+    payload.kind === "diagnostic" ? [payload.lines] : [],
+  );
+  assert.deepStrictEqual(others, [], "the command reported more than one diagnostic");
+  const rows = (lines ?? assert.fail("the command reported no diagnostic")).map((line) => [
+    projectTokens("lines", line, this.tokens),
+  ]);
+  assert.deepStrictEqual([["line"], ...rows], table.raw());
+});
