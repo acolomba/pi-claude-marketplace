@@ -350,11 +350,16 @@ Then(
   },
 );
 
+// A staged SKILL.md records the plugin's root and data directories (D-CF2-02,
+// D-CF2-06), so the text shows the sandbox directories as run tokens.
 Then(
   "the staged skills directory of the {word} scope holds these files:",
   async function (this: ScenarioWorld, scope: string, table: DataTable) {
     const directory = path.join(extensionRoot(this, scope), "resources", "skills");
-    assert.deepStrictEqual(await fileRows(directory), table.raw());
+    const rows = (await fileRows(directory)).map((row) =>
+      row.map((cell) => projectTokens("text", cell, this.tokens)),
+    );
+    assert.deepStrictEqual(rows, table.raw());
   },
 );
 
