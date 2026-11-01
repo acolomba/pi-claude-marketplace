@@ -163,3 +163,24 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
       `resolveCompanion(...).entry`, which assumes each worktree runs
       `node scripts/install-test-peers.mjs`.
 - **Recorded in:** `07-01..07-06-PLAN.md`.
+
+### P7-DC-09: Wave 1 executor choices (listing tracer)
+
+- **Phase / source:** Phase 7 wave 1 executor (`07-01-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. `requirements-completed` lists only WFL-01, not WFL-05: this plan
+     delivers only the WLIF-06 stale notice after uninstall, and 07-05
+     finishes WFL-05.
+  2. The listing filter keeps only commands whose name holds a colon
+     (research assumption A3). A future engine built-in with a colon, or a
+     bridged command that lost its `<plugin>:` prefix, would still fail the
+     whole-table comparison rather than pass silently.
+  3. The WNAM-06 (prefix elision) scenario title does not name the ID, because
+     the feature rules forbid ticket references in titles; the ID is in the
+     commit and the SUMMARY only.
+- **Process note:** the Write tool saved a raw U+2014 where the `—`
+  escape was meant, and the `fix-unicode-dashes` hook turned the constant
+  into `"--"`; the executor caught it and rewrote the escape byte-exactly.
+  Later executors are warned.
+- **Recorded in:** `07-01-SUMMARY.md`.
