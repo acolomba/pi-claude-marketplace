@@ -13,13 +13,16 @@
 
 import assert from "node:assert/strict";
 import { readFile, rm } from "node:fs/promises";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 
-import { type DataTable, Given, Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import {
   LATE_TAG_ENVIRONMENT,
   publishStubMcpServer,
+  publishStubServersFile,
   stubMcpFileText,
 } from "../../lib/mcp-server-files.ts";
 import { readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
@@ -28,17 +31,29 @@ import {
   readAppliedLaunchEnvironments,
   writeLaunchEnvironment,
 } from "../../lib/pi-launch-environment.ts";
+import {
+  readRegistrySnapshot,
+  REGISTRY_PROBE_COMMAND,
+} from "../../lib/pi-registry-probe/snapshot.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { StubRequest } from "../../lib/mcp-stub-server.ts";
+import type { RegistrySnapshot } from "../../lib/pi-registry-probe/snapshot.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
 // Starting Node on the stub and listing one tool takes well under a second;
 // the margin covers a loaded CI runner and stays below the step timeout.
 const TOOL_LISTING_TIMEOUT_MS = 15_000;
 const TOOL_LISTING_POLL_MS = 50;
+
+// pi-mcp-adapter closes its listing connection before it registers the
+// listed tools with Pi, and it reports nothing a step can wait on between the
+// two. So the probe reads the registry until two reports this far apart
+// agree, which outlasts that gap on a loaded runner, and fails at the
+// listing deadline.
+const REGISTRY_QUIET_MS = 250;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -74,6 +89,41 @@ function paramsText(world: ScenarioWorld, request: StubRequest, toolCallIds: str
   );
 }
 
+// D-CF6-05: one probe report of every tool Pi has. Pi runs the probe's
+// command to completion before it answers, with no dialog and no error.
+async function probedRegistry(world: ScenarioWorld): Promise<RegistrySnapshot> {
+  const message = `/${REGISTRY_PROBE_COMMAND}`;
+  const { response, entries, extensionErrors, dialogs } = await world.pi.request({
+    type: "prompt",
+    message,
+  });
+  assert.deepStrictEqual(
+    [response.data, extensionErrors, dialogs],
+    [{ disposition: "handled" }, [], []],
+  );
+  return readRegistrySnapshot(entries);
+}
+
+// The probe report once two reports `REGISTRY_QUIET_MS` apart agree.
+async function settledRegistry(world: ScenarioWorld): Promise<RegistrySnapshot> {
+  world.profileHarness();
+  const deadline = Date.now() + TOOL_LISTING_TIMEOUT_MS;
+  let previous = await probedRegistry(world);
+  for (;;) {
+    await delay(REGISTRY_QUIET_MS);
+    const current = await probedRegistry(world);
+    if (isDeepStrictEqual(current, previous)) {
+      return current;
+    }
+
+    if (Date.now() > deadline) {
+      assert.fail(`pi's tool registry did not settle: ${JSON.stringify([previous, current])}`);
+    }
+
+    previous = current;
+  }
+}
+
 function listedTools(requests: readonly StubRequest[], plugin: string, server: string): boolean {
   return requests.some(
     (request) =>
@@ -98,6 +148,19 @@ Given(
     const stub = { plugin, server, env: LATE_TAG_ENVIRONMENT };
     const file = await publishStubMcpServer(this.requirePublished(name), stub);
     assert.strictEqual(await readFile(file, "utf8"), stubMcpFileText(stub));
+  },
+);
+
+// D-CF6-06: every member of the doc string whose value is `{"stub": {...}}`
+// becomes a stub server named after the member; every other value is
+// written as it is, so a scenario can also write a malformed server.
+Given(
+  "the published plugin {string} of the marketplace {string} has the file {string} with these stub mcp servers:",
+  async function (this: ScenarioWorld, plugin: string, name: string, file: string, text: string) {
+    const published = this.requirePublished(name);
+    const written = await publishStubServersFile(published, plugin, file, text);
+    const target = path.join(published.root, "plugins", plugin, file);
+    assert.strictEqual(await readFile(target, "utf8"), written);
   },
 );
 
@@ -147,6 +210,10 @@ Given(
   },
 );
 
+When("the user lists the mcp tools pi offers", async function (this: ScenarioWorld) {
+  this.registrySnapshot = await settledRegistry(this);
+});
+
 // One row per message the stub received, in arrival order: whether it was a
 // request or a notification, its method, and its params as JSON. Every
 // message must come from the named server.
@@ -178,4 +245,24 @@ Then("the model calls are offered these tools:", function (this: ScenarioWorld, 
     call.tools.map((tool) => tool.name).join(", "),
   ]);
   assert.deepStrictEqual([["call", "tools"], ...rows], table.raw());
+});
+
+// D-CF6-05: one row per tool Pi has that pi-mcp-adapter registered, the
+// `mcp` proxy and each `mcp__` tool, in Pi's order, with whether it is active.
+Then("pi offers these mcp tools:", function (this: ScenarioWorld, table: DataTable) {
+  const snapshot = this.registrySnapshot;
+  if (snapshot === undefined) {
+    assert.fail("no step listed the mcp tools pi offers");
+  }
+
+  const active = new Set(snapshot.activeTools);
+  const rows = snapshot.allTools
+    .filter(({ name }) => name === "mcp" || name.startsWith("mcp__"))
+    .map(({ name }) => [name, active.has(name) ? "yes" : "no"]);
+  assert.deepStrictEqual([["tool", "active"], ...rows], table.raw());
+});
+
+// The stub's whole log for the scenario is empty: no server was started.
+Then("no stub mcp server receives a message", async function (this: ScenarioWorld) {
+  assert.deepStrictEqual(await readStubRequests(this.profileHarness()), []);
 });
