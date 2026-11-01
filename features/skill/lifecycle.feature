@@ -32,3 +32,61 @@ Feature: Skill lifecycle
     Then the model receives these calls:
       | call | role | text              |
       | 1    | user | /skill:demo-greet |
+
+  Scenario: Enabling a disabled plugin offers its skills again
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given the user has run "/claude:plugin enable demo@fixtures --scope project"
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description              |
+      | /skill:demo-greet | Greets a person by name. |
+      | /skill:demo-skill | A skill of demo 1.0.0.   |
+
+  Scenario: Uninstalling a plugin removes its skills from a new session
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
+    When the user starts a new pi session
+    Then the session offers no skills
+
+  Scenario: Updating a plugin lists the new description of its skill
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "greet" with this skill file:
+      """
+      ---
+      name: greet
+      description: Greets someone warmly.
+      ---
+
+      Greet the person warmly.
+      """
+    Given the user has run "/claude:plugin update demo@fixtures --scope project"
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-greet | Greets someone warmly. |
+      | /skill:demo-skill | A skill of demo 1.1.0. |
+
+  Scenario: Updating a plugin sends the model the new body of its skill
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "greet" with this skill file:
+      """
+      ---
+      name: greet
+      description: Greets someone warmly.
+      ---
+
+      Greet the person warmly.
+      """
+    Given the user has run "/claude:plugin update demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply          |
+      | Hello, warmly. |
+    When the user prompts "/skill:demo-greet"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                                     |
+      | 1    | user | <skill name="demo-greet" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet.\n\nGreet the person warmly.\n</skill> |
