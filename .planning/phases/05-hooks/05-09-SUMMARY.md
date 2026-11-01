@@ -308,3 +308,41 @@ Phase complete, ready for verification and the parent merge. The parent applies 
 ---
 *Phase: 05-hooks*
 *Completed: 2026-11-01*
+
+## Parent lines added after the gate (session addendum, 2026-11-01)
+
+These come from work after this plan ran: the Nyquist gap fill, the
+PostToolUseFailure fix (`5595399`), and the code review fix passes
+(`0d877aa`..`a17639b`, see `05-REVIEW-FIX.md`). The final product tree
+(`76bf7fa`) passed `npm run check` (seed 310627, 1292/1292 scenarios).
+
+- **CHANGELOG.md** (add to the hooks bullet):
+  - PostToolUseFailure hooks now receive the error as `error`, as in Claude
+    Code, instead of `tool_response`.
+  - A hook guard with `onFailure: "block"` or an exit-2 deny now blocks even
+    when the hook writes past its output limits; a PreCompact block now
+    cancels the compaction; hook notices drop terminal control characters and
+    are cut at 2,000 characters; SessionStart context survives another hook's
+    block; prompt context stays with its own prompt (steers and follow-ups
+    included).
+- **.planning/BACKLOG.md:**
+  - Follow-up prompt context edge cases (P5-DC-24): a follow-up whose
+    UserPromptSubmit hook is still running when the run ends, a follow-up
+    queued after the last `turn_end`, a terminating tool batch, and
+    `followUpMode: "all"` lose their hook context. Suggested fix: check
+    `ctx.isIdle()` in `queuePromptContext`, match `event.prompt` in
+    `before_agent_start`, send every matching queued follow-up.
+  - Hook JSON on stdout over the 1 MB EXEC-02 cap is ignored, so a JSON deny
+    that large on exit 0 fails open (upstream keeps all output).
+  - The 12 info findings left in `05-REVIEW.md` (iteration 3).
+  - PostToolUseFailure stdin extras `tool_use_id`, `is_interrupt`,
+    `duration_ms` (with D-CF5-28).
+- **.planning/codebase/CONVENTIONS.md:** the `fallow-ignore` marker count is
+  now 40, not 41 (one code-duplication marker removed in `8da30e5`).
+- **platform/pi-api.ts (frozen):** re-export `TurnEndEvent`;
+  `test/index.test.ts` imports it straight from the Pi peer until then.
+- **Security (with T-05-28):** re-run `/gsd-secure-phase` after the merge;
+  `05-SECURITY.md` was audited before the review fix commits (P5-DC-25).
+- **D-CF5-09 amended:** the input rewrite is the last one in routing order,
+  whatever that hook decided, as upstream (P5-DC-22); use this wording in the
+  PROJECT.md Key Decisions row.
