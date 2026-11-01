@@ -27,7 +27,8 @@ See: `.planning/PROJECT.md` (updated 2026-11-01 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 4 — Agents
+**Current focus:** Phase 4 — Agents complete on `features/component-features-phase-4`
+(child session); the parent merges it.
 
 ## Current Position
 
@@ -833,6 +834,11 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 - D-CF1-15..17: one profile Pi per scenario through a `Given`, two CI
   behavioral shards, `.ts` stand-ins under `features/lib/` and a file-backed
   model script.
+- D-CF4-01..14 (Phase 4, Agents; rows drafted in `04-06-SUMMARY.md` for the
+  parent): nested agent names, upstream description fallback, `advertise:
+  true`, `async: false` by default, 5.x `--map-model` table, preloaded skill
+  content inlined into the agent prompt, trust divergence licensed as a Pi
+  gap, AGT-04 closed on a recorded gap (D-CF4-10).
 
 ### Blockers/Concerns
 
@@ -842,9 +848,11 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
   entries for the six unwired invocation cores (argument substitution, shell
   words, context injection, description fallback, and the rest); remove them
   and rerun `npm run fallow` once Phases 2 and 3 import the cores.
-- [Phase 1] pi-subagents 0.84 lists project agents whatever the trust, so the
-  trust pair observes a project-scope run; the agents phase settles how that
-  compares with Claude Code's handling of agents in an untrusted project.
+- [Phase 4] Settled by D-CF4-09: Claude Code runs plugin agents in untrusted
+  folders; pi-subagents refuses project-scope runs, a Pi-gap divergence. The
+  trust-blind list is drafted as a pi-subagents defect report (not filed).
+- [Phase 4] `advertise: true` (D-CF4-14) changes every parent system prompt
+  with pi-subagents loaded; re-verify sibling whole-prompt comparisons at merge.
 - [Phase 1] The sandbox runs as root, which breaks the permission-injection
   tests; run npm scripts and hook-running commits through the non-DAC shell
   wrapper (`npm_config_script_shell`) with a 6 GB heap.
@@ -865,6 +873,6 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 
 ## Session Continuity
 
-Last session: 2026-11-01T07:48:00Z
-Stopped at: Phase 4 complete, ready to execute Phase 2
+Last session: 2026-11-01T18:50:00Z
+Stopped at: Phase 4 complete and verified on its child branch; parent merge pending
 Resume file: None

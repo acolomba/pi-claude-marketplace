@@ -305,3 +305,20 @@ entries into the root file. Severity and status follow the root file's rules.
   6. The regression gate reuses the post-review `npm run check` (exit 0,
      seed 17555, 1256/1256), which runs every prior phase's tests, instead of
      a separate run over Phase 1's listed test files.
+
+### P4-DC-12: Phase transition done without PROJECT.md edits
+
+- **Phase / source:** Phase 4 transition (post-completion mode).
+- **Severity:** Low. **Status:** open.
+- **Choice:** `phase.complete` advanced STATE.md to Phase 2 (the first
+  incomplete phase on this branch, which the parent is finishing). The
+  transition's `evolve_project` step was skipped: PROJECT.md Key Decisions and
+  requirement moves are parent lines (`04-06-SUMMARY.md`), per the child brief,
+  to avoid conflicts across five parallel branches. STATE.md got a minimal
+  update (focus, recent decisions, two concerns, session continuity).
+  graduation_scan is a no-op (`features.global_learnings` off).
+- **Verification:** `04-VERIFICATION.md` status `passed` (5/5 must-haves);
+  verifier choices: AGT-05 recovery is simulated by a new Pi with the
+  companion (Pi cannot add an extension to a running process), XK-01 counts
+  the system-prompt placement (D-CF4-04), `--map-model` parity is shown
+  through `get` output and the unknown-model error.
