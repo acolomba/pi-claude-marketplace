@@ -143,3 +143,121 @@ Feature: Slash command manifest forms
     Then pi offers these slash commands from prompt templates:
       | command     | description |
       | /demo:hello | Says hello. |
+
+  Scenario: The plugin info of an unavailable plugin lists the commands folder beside the commands path its entry declares
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [
+          {
+            "name": "demo",
+            "source": "./plugins/demo",
+            "version": "1.0.0",
+            "skills": 42,
+            "commands": "./more"
+          }
+        ]
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "a" with this command file:
+      """
+      Run a.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "more/b.md" with this text:
+      """
+      Run b.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info        |
+      | marketplace details autoupdate | false              |
+      | marketplace name               | fixtures           |
+      | marketplace scope              | project            |
+      | needs reload                   | false              |
+      | plugin components commands     | a, b               |
+      | plugin components resolved     | true               |
+      | plugin components skills       | demo-skill         |
+      | plugin id                      | demo@fixtures      |
+      | plugin name                    | demo               |
+      | plugin reasons                 | unsupported source |
+      | plugin status                  | unavailable        |
+      | plugin version                 | 1.0.0              |
+      | severity                       | info               |
+
+  Scenario: Command files and directories a manifest declares in one array are all listed
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "commands": ["./cmds/a.md", "./more"] }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/a.md" with this text:
+      """
+      ---
+      description: Runs a.
+      ---
+
+      Run a.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "more/b.md" with this text:
+      """
+      ---
+      description: Runs b.
+      ---
+
+      Run b.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "more/sub/x.md" with this text:
+      """
+      ---
+      description: Runs x.
+      ---
+
+      Run x.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these slash commands from prompt templates:
+      | command     | description |
+      | /demo:a     | Runs a.     |
+      | /demo:b     | Runs b.     |
+      | /demo:sub:x | Runs x.     |
+
+  Scenario: A declared commands path that names a file other than a markdown file is skipped with a warning
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "commands": ["./cmds/readme.txt", "./cmds/a.md"] }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/readme.txt" with this text:
+      """
+      Read me.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/a.md" with this text:
+      """
+      Run a.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                                    |
+      | cascade    | info     | true         |                                                                     |                                                                                          |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | declared command path "cmds/readme.txt" in "demo" is not a markdown file; skipping path. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
