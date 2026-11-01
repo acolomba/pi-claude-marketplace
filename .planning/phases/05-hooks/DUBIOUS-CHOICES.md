@@ -386,3 +386,26 @@ session writes this file. Each subagent ends its report with a
 - **Gate:** the merged tree's build inputs equal the gated commit `e3f0676`, so
   the session reused 05-09's phase-gate result instead of rerunning it.
 - **Recorded in:** `05-09-SUMMARY.md`.
+
+### P5-DC-20: Security audit closures that rest on judgment
+
+- **Phase / source:** `/gsd-secure-phase 5` (security auditor), 31/31 closed.
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. T-05-28 (project-scope hooks with no D-CF2-13 provenance check, high) is
+     CLOSED by documented transfer only; the exposure is live on this branch
+     until the parent applies the guard (P5-DC-11) and re-runs
+     `/gsd-secure-phase` after the merge.
+  2. T-05-23 (escape sequences in hook-notice text) is closed at L1; hook
+     notice text reaches `ctx.ui.notify` verbatim, with no control-character
+     filter (open at L2, low).
+  3. T-05-12 (outer `mcp` proxy runs no hook, D-CF5-12) is an accepted
+     medium policy-bypass risk for adapter paths without a nested Pi call.
+  4. The five accepted risks are persisted as AR-05-01..05 in `05-SECURITY.md`.
+  5. Unregistered flag: the routed `updatedToolOutput` fix (`6bbe6ba`) lets a
+     plugin hook replace the tool output the model reads (upstream parity;
+     content whitelist in place), with no threat ID.
+  6. Fail-open edges noticed, not registered: stdout/stderr overflow settles
+     `noop` before the `onFailure` check; a generation change mid-bucket drops
+     a computed deny. Handed to code review.
+- **Recorded in:** `05-SECURITY.md`.
