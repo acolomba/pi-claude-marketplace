@@ -116,3 +116,46 @@ entries into the root file. Severity and status follow the root file's rules.
      bytes, 4.x model IDs): `update-swap.test.ts`, `reinstall-flow.test.ts`,
      `install-flow-ledger.test.ts`, `edge/handlers/plugin/install.test.ts`,
      `update.test.ts`.
+
+### P4-DC-06: Phase 4 planning choices
+
+- **Phase / source:** Phase 4 planner (`04-01..06-PLAN.md`, `COVERAGE.md`).
+- **Severity:** Medium (items 1, 2, 5, 9); the rest Low. **Status:** open.
+- **Items:**
+  1. The D-CF4-04 skip warnings and the D-CF4-05 guided-field warnings go to
+     the existing hygiene channel, so a standalone install does not print them;
+     scenarios see them through an `apply` that moves the plugin. CONTEXT says
+     "install warning".
+  2. The builtins control hides only the builtin `researcher` (the em-dash
+     fixer rewrites its description), so it shows 12 of 13 builtins; new step
+     `pi-subagents hides the builtin agent {string}`.
+  3. Settings Givens merge into `{agent dir}/settings.json` after the profile
+     Pi starts; a release restores the previous bytes.
+  4. The `has these agents:` table reads any column other than `file` and
+     `body` as a frontmatter key (loosens the unknown-column rule).
+  5. One trailing `[1m]` is stripped from a model alias; the `claude-`
+     pass-through is case-sensitive and refuses `:` and whitespace (T-04-06,
+     beyond the decision text). `thinking` is matched exactly; only `effort`
+     is normalized.
+  6. A `Tool(spec)` in `disallowedTools` disallows the whole tool; a `*`
+     anywhere in `tools` takes the omitted-tools path.
+  7. Preloads are read lazily for named skills only; read errors propagate;
+     an unparseable skill is skipped; skipped skills are left out of
+     `skills:`; a known skill with no source row keeps its `skills:` entry.
+  8. The walk is depth first, so a nested agent wins over a flat file with
+     the same flattened name (upstream lists both); a folder at 32 segments
+     is skipped silently (upstream debug-logs).
+  9. AGT-04 closes on the recorded gap from the researcher's measured runs;
+     no new probe is planned.
+  10. `install-outcome.ts` gains a `stagedSkillRecords` context field (4 edits)
+      to keep 100% coverage; two `update-flow.test.ts` cases outside
+      ownership get new expectations and titles.
+  11. AGT-06 gains two pins: a trusted default-scope run and a user-scope
+      agent run in an untrusted project.
+  12. Three tasks exceed the five-file split rule (04-01: 17 files plus a
+      deletion; 04-02 Task 1: 9; 04-05 Task 1: 10), forced by the wave split.
+  13. Wave 1 deletes the seed `features/step_definitions/agent/runs.steps.ts`;
+      wave 3 creates a new one. Expected agent literals in tests change twice
+      (`advertise` in wave 1, `async` in wave 2).
+  14. The planner wrote `COVERAGE.md` and edited ROADMAP.md's Phase 4 plan
+      list unasked; estimates are its own (`confidence: low`).

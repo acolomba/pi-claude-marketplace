@@ -345,7 +345,22 @@ Plans:
 - Wave 3: decision IDs, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/agent/**`, `features/step_definitions/agent/**`, `features/lib/agent-files.ts`, `bridges/agents/**`, `persistence/agents-index-*`, `test/bridges/agents/**`, `test/integration/agents-*`. XK-01 uses Phase 1's skill fixture writer and stand-ins, never a Phase 2 file.
 
-**Plans:** TBD
+**Plans:** 6 plans in 4 waves (the template's wave 2 runs one `convert.ts` owner beside the two plans that change no product code, and invocation moves to wave 3 because it edits `convert.ts` after the frontmatter plan; the phase gate is wave 4)
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md — Wave 1 tracer: listing and naming, the shared agent steps, the description fallback, nested and declared agent files, and `advertise` (AGT-01; D-CF4-01, -02, -03, -13, -14)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-02-PLAN.md — Wave 2: frontmatter conversion, the foreground default, effort, the 5.x `--map-model` table, tool splitting, and guided fields (AGT-03, AGT-02 `--map-model`; D-CF4-05, -06, -07, -08)
+- [ ] 04-03-PLAN.md — Wave 2: companion missing and project trust (AGT-05, AGT-06; D-CF4-11, -09)
+- [ ] 04-04-PLAN.md — Wave 2: disable, enable, uninstall, and update in pi-subagents' list (AGT-07; D-CF4-12)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-05-PLAN.md — Wave 3: skill preload content, foreground run tools, the same-name run, and the AGT-04 recorded gap (XK-01, AGT-02, AGT-04; D-CF4-04, -02, -10)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 04-06-PLAN.md — Wave 4: phase gate, the drafted pi-subagents report, the decision records, and the parent lines (all; D-CF4-01..14 records)
 
 ### Phase 5: Hooks
 
