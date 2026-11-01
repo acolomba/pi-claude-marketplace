@@ -207,9 +207,9 @@ export function writeSkillRecord(content: string, record: StoredSkillRecord): st
 /**
  * Reads the stored record from a parsed frontmatter, or returns `undefined`
  * when the key is absent or its value does not have the record's shape. The
- * writer's read-back is its only caller until a session-time reader imports it.
+ * writer's read-back and the skill invocation (D-CF2-06) read it.
  */
-function readSkillRecord(
+export function readSkillRecord(
   frontmatter: Readonly<Record<string, unknown>>,
 ): StoredSkillRecord | undefined {
   const value = frontmatter[RECORD_KEY];
