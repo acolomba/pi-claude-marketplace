@@ -29,6 +29,8 @@ import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 const SUPPORTED_SOURCE_FIELDS = new Set([
   "name",
   "description",
+  "when_to_use",
+  "when-to-use",
   "model",
   "tools",
   "disallowedTools",
@@ -556,6 +558,34 @@ function mapSkills(
   return { emit: dedupePreservingOrder(emit), warnings };
 }
 
+// A frontmatter value trimmed, or undefined when it is not a string or is
+// blank, so a blank value counts as missing.
+function nonBlank(value: unknown): string | undefined {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed === "" ? undefined : trimmed;
+}
+
+/**
+ * D-CF4-03: the description Claude Code lists for a plugin agent, in the
+ * order of Claude Code's `zie` lookup: the first non-blank value of
+ * `description`, `when_to_use`, and `when-to-use`, trimmed, and otherwise
+ * `Agent from <plugin> plugin`.
+ * `sourceDescriptionMissing` is true when `description` itself is missing or
+ * blank.
+ */
+function agentDescription(
+  raw: RawAgentFrontmatter,
+  pluginName: string,
+): { description: string; sourceDescriptionMissing: boolean } {
+  const sourceDescription = nonBlank(raw.description);
+  const description =
+    sourceDescription ??
+    nonBlank(raw.when_to_use) ??
+    nonBlank(raw["when-to-use"]) ??
+    `Agent from ${pluginName} plugin`;
+  return { description, sourceDescriptionMissing: sourceDescription === undefined };
+}
+
 /** The arguments of `convertAgent`. */
 export interface ConvertAgentInput {
   pluginName: string;
@@ -621,14 +651,15 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
   // keeps matching; `declaredName` is what pi-subagents takes as the agent's
   // localName and what the host workflow engine keys its agentType registry
   // on, so a bridged workflow's agent({ agentType }) call resolves.
-  const declaredName = declaredAgentName(pluginName, sourceName);
+  // D-CF4-01: a nested file's folders name it as Claude Code does,
+  // `<plugin>:<folder>...:<name>`.
+  const declaredName = declaredAgentName(pluginName, sourceName, discovered.namespace);
 
   const warnings: string[] = [];
 
   // 1. Description (with fallback)
-  let description = raw.description ?? "";
-  if (description === "") {
-    description = `Imported Claude Code plugin agent ${sourceName} from plugin ${pluginName}.`;
+  const { description, sourceDescriptionMissing } = agentDescription(raw, pluginName);
+  if (sourceDescriptionMissing) {
     warnings.push("source description was missing or empty -- using fallback");
   }
 

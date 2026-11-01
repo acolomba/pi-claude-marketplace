@@ -479,11 +479,14 @@ export interface GeneratedProvenanceFields {
  * (only when tools is absent and disallowed names mapped, #179), thinking,
  * skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
- * then the `provenance` mapping (generatedBy, sourcePlugin, sourceAgent,
+ * advertise, then the `provenance` mapping (generatedBy, sourcePlugin, sourceAgent,
  * sourcePath, originalModel [only when defined], droppedFields,
  * droppedTools, warnings -- each list field inline `[]` when empty or a
  * `    - item` block when non-empty).
  *
+ * D-CF4-14: `advertise: true` is fixed, so every bridged agent enters
+ * pi-subagents' catalog in the parent model's system prompt, as Claude Code
+ * lists plugin agents to its model.
  */
 export function emitGeneratedAgentFile(input: {
   frontmatter: GeneratedFrontmatterFields;
@@ -538,10 +541,11 @@ export function emitGeneratedAgentFile(input: {
     "systemPromptMode: replace",
     "inheritProjectContext: true",
     `inheritSkills: ${frontmatter.inheritSkills ? "true" : "false"}`,
+    "advertise: true",
   );
 
   // T-d8i-01: provenance folded under a single `provenance` mapping,
-  // appended after inheritSkills, inside the frontmatter -- so pi-subagents'
+  // appended after advertise, inside the frontmatter -- so pi-subagents'
   // parser stores-and-ignores it and the child subagent's system prompt (the
   // body, verbatim) never sees it. The nested keys and list items carry
   // leading whitespace, so pi-subagents' `^([\w-]+):` key regex skips them

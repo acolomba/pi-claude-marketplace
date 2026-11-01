@@ -55,6 +55,7 @@ ${expected.toolsField}
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: ${expected.inheritSkills}
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -283,6 +284,7 @@ aliases: pi-claude-marketplace-acme-reviewer
 ${expectedMapping}systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -343,6 +345,7 @@ skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: spec-tree
@@ -425,6 +428,7 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -946,6 +950,7 @@ skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -997,6 +1002,7 @@ tools: read,bash
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1042,6 +1048,7 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1089,6 +1096,7 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1134,6 +1142,7 @@ excludeTools: edit
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1180,6 +1189,7 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1224,6 +1234,7 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1270,6 +1281,7 @@ excludeTools: edit,write
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1315,6 +1327,7 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1364,6 +1377,7 @@ tools: read,bash
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1403,12 +1417,13 @@ Body content.
     // arrange
     const expectedFileContent = `---
 name: acme:bot
-description: Imported Claude Code plugin agent bot from plugin acme.
+description: Agent from acme plugin
 aliases: pi-claude-marketplace-acme-bot
 tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1445,6 +1460,151 @@ Body content.
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
+  for (const { label, raw, description, warnings } of [
+    {
+      label: "takes when_to_use when the description is missing",
+      raw: { when_to_use: "Use it to review code." },
+      description: "Use it to review code.",
+      warnings: ["source description was missing or empty -- using fallback"],
+    },
+    {
+      label: "takes when-to-use when description and when_to_use are missing",
+      raw: { "when-to-use": "Use it for audits." },
+      description: "Use it for audits.",
+      warnings: ["source description was missing or empty -- using fallback"],
+    },
+    {
+      label: "prefers when_to_use over when-to-use",
+      raw: { when_to_use: "Use it first.", "when-to-use": "Use it second." },
+      description: "Use it first.",
+      warnings: ["source description was missing or empty -- using fallback"],
+    },
+    {
+      label: "prefers the description over when_to_use",
+      raw: { description: "Reviews code.", when_to_use: "Use it to review code." },
+      description: "Reviews code.",
+      warnings: [],
+    },
+    {
+      label: "treats a description of only spaces as missing",
+      raw: { description: "   " },
+      description: "Agent from acme plugin",
+      warnings: ["source description was missing or empty -- using fallback"],
+    },
+    {
+      label: "skips a blank when_to_use for when-to-use",
+      raw: { when_to_use: "  ", "when-to-use": "Use it for audits." },
+      description: "Use it for audits.",
+      warnings: ["source description was missing or empty -- using fallback"],
+    },
+    {
+      label: "trims a present description",
+      raw: { description: "  Reviews code.  " },
+      description: "Reviews code.",
+      warnings: [],
+    },
+  ] satisfies readonly {
+    label: string;
+    raw: RawAgentFrontmatter;
+    description: string;
+    warnings: readonly string[];
+  }[]) {
+    test(`D-CF4-03 ${label}`, () => {
+      // arrange
+      const expectedFileContent = `---
+name: acme:bot
+description: ${description}
+aliases: pi-claude-marketplace-acme-bot
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:${yamlList(warnings)}
+---
+
+Body content.
+`;
+
+      // act
+      const agent = convertAgent({
+        pluginName: "acme",
+        pluginRoot: "/root",
+        pluginDataDir: "/data",
+        knownSkills: [],
+        discovered: {
+          sourceName: "bot",
+          generatedName: "pi-claude-marketplace-acme-bot",
+          sourcePath: "/abs/path/source.md",
+          sourceHash: "abc123",
+          raw: { tools: "Read", ...raw },
+          body: "Body content.\n",
+        },
+        sourceHash: "abc",
+        mapModel: false,
+      });
+
+      // assert
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+      assert.deepStrictEqual(agent.warnings, warnings);
+      assert.deepStrictEqual(agent.droppedFields, []);
+    });
+  }
+
+  test("D-CF4-01 names a nested agent after its folders and keeps its generated alias", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:review:security
+description: Checks security.
+aliases: pi-claude-marketplace-acme-review-security
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: security
+  sourcePath: /plugins/acme/agents/review/security.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Check security.
+`;
+
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/plugins/acme",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "security",
+        generatedName: "pi-claude-marketplace-acme-review-security",
+        sourcePath: "/plugins/acme/agents/review/security.md",
+        namespace: ["review"],
+        sourceHash: "abc123",
+        raw: { description: "Checks security.", tools: "Read" },
+        body: "Check security.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
   test("preserves a token-free CRLF body's final carriage return", () => {
     // arrange
     const expectedFileContent = `---
@@ -1457,6 +1617,7 @@ skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme

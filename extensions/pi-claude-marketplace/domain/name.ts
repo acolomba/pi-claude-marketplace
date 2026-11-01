@@ -541,11 +541,25 @@ export function generatedCommandName(plugin: string, source: string): string {
  * Format: `pi-claude-marketplace-<plugin>-<agent>` (Pi-namespacing prefix
  * keeps cross-extension agents distinguishable). Appends the complete source
  * name so bot and acme-bot remain distinct within plugin acme.
+ *
+ * D-CF4-01: `namespace` holds the folder segments between the plugin's agents
+ * folder and the file, joined before the source name with `-`, so
+ * `agents/review/security.md` of plugin demo is
+ * `pi-claude-marketplace-demo-review-security`. Each segment must be a safe
+ * name on its own.
  */
-export function generatedAgentName(plugin: string, source: string): string {
+export function generatedAgentName(
+  plugin: string,
+  source: string,
+  namespace: readonly string[] = [],
+): string {
   assertSafeName(plugin);
   assertSafeName(source);
-  const generated = `pi-claude-marketplace-${plugin}-${source}`;
+  for (const segment of namespace) {
+    assertSafeName(segment, "agent namespace segment");
+  }
+
+  const generated = ["pi-claude-marketplace", plugin, ...namespace, source].join("-");
   assertSafeName(generated);
   return generated;
 }
@@ -571,11 +585,24 @@ export function generatedAgentName(plugin: string, source: string): string {
  * The complete source name is preserved without elision, exactly as
  * `generatedAgentName` preserves it, so bot and acme-bot stay distinct
  * within plugin acme.
+ *
+ * D-CF4-01: `namespace` holds the folder segments between the plugin's agents
+ * folder and the file, joined with `:` as Claude Code names a nested plugin
+ * agent, so `agents/review/security.md` of plugin demo is
+ * `demo:review:security`. Each segment must be a safe name on its own.
  */
-export function declaredAgentName(plugin: string, source: string): string {
+export function declaredAgentName(
+  plugin: string,
+  source: string,
+  namespace: readonly string[] = [],
+): string {
   assertSafeName(plugin);
   assertSafeName(source);
-  const declared = `${plugin}:${source}`;
+  for (const segment of namespace) {
+    assertSafeName(segment, "agent namespace segment");
+  }
+
+  const declared = [plugin, ...namespace, source].join(":");
   assertSafeName(declared);
   return declared;
 }
