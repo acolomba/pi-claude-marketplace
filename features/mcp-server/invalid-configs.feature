@@ -75,11 +75,17 @@ Feature: MCP server invalid configs
       | companion      |
       | pi-mcp-adapter |
     Given pi-mcp-adapter has listed the tools of the stub mcp server "good" of the plugin "demo"
-    When the user lists the mcp tools pi offers
-    Then pi offers these mcp tools:
-      | tool                        | active |
-      | mcp                         | yes    |
-      | mcp__plugin_demo_good__echo | no     |
+    Given the scripted model plays these steps:
+      | reply | tool | arguments |
+      |       | mcp  | {}        |
+      | Done. |      |           |
+    When the user prompts "list the plugin servers"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                       |
+      | 1    | user        | list the plugin servers                                                                                                                                                    |
+      | 2    | user        | list the plugin servers                                                                                                                                                    |
+      | 2    | assistant   | tool call mcp {}                                                                                                                                                           |
+      | 2    | tool result | mcp returned: MCP: 0/1 servers, 1 tools\n\n○ plugin_demo_good_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
 
     Examples:
       | declared servers                           | broken file  | file state         |
