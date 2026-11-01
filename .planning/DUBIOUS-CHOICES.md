@@ -329,3 +329,22 @@ this project.
      01-15 (18), 01-11 (16). Most files are source-test pairs and docs; each
      plan has 3 tasks; the planner already split once.
 - **Recorded in:** `01-06-PLAN.md`, `01-14-PLAN.md` objective.
+
+### DC-17: Executor prompts read the GSD execution files by path
+
+- **Phase / source:** parent, Phase 1 execution (`execute-phase.md` step 3).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. The workflow asks the orchestrator to paste `execute-plan.md`,
+     `templates/summary.md`, `references/checkpoints.md`, `references/tdd.md`
+     (TDD plans), `references/worktree-path-safety.md`, and
+     `references/executor-examples.md` verbatim into every executor prompt
+     (about 2,400 lines each, 15 executors). The parent instead tells each
+     executor to Read those files in full, by absolute path, before any work.
+     The executor sees the same text; the parent keeps its context budget.
+  2. Executor prompts add a `<project_rules>` block: commit titles carry no
+     milestone, phase, plan, wave, or task ID (AGENTS.md); the two attribution
+     trailers; never push; the `pre-commit run --files` step. The workflow
+     forbids extra gate-override text, and the block contains none.
+  3. The repo has no `CLAUDE.md`; prompts point executors at `AGENTS.md`.
+- **Recorded in:** this log only.
