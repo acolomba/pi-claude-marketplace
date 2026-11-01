@@ -572,12 +572,12 @@ async function recordProjectSkills(
  *   1. Remove every previous-named target dir (re-stage path; ENOENT-tolerant).
  *   2. mkdir target root recursively.
  *   3. Per-skill `rename(from, to)` -- atomic on same FS (D-04).
- *   4. D-CF2-13: at project scope, list the committed skills in the user's
- *      project ledger. A failed ledger write throws, so the caller's undo
- *      removes skills that could never run.
- *   5. Best-effort cleanup of the now-empty staging UUID dir; any leak
+ *   4. Best-effort cleanup of the now-empty staging UUID dir; any leak
  *      message is RETURNED (not thrown) so the caller can fold it into a
  *      higher-level rollback marker without breaking the success path.
+ *   5. D-CF2-13: at project scope, list the committed skills in the user's
+ *      project ledger. A failed ledger write throws, with any cleanup leak
+ *      appended, so the caller's undo removes skills that could never run.
  *
  * For the noop variant: no-op; returns undefined.
  */
@@ -638,10 +638,27 @@ export async function commitPreparedSkills(
     await rename(pair.from, pair.to);
   }
 
-  await recordProjectSkills(ledger, prepared);
+  return cleanUpAndRecord(ops, ledger, prepared);
+}
 
-  // Step 5: best-effort cleanup of the staging UUID dir.
-  return cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
+/**
+ * Steps 4 and 5 of the commit. IN-02: the staging cleanup runs before the
+ * ledger write, so a failed write leaves no staging dir behind, and a cleanup
+ * leak rides the write's error.
+ */
+async function cleanUpAndRecord(
+  ops: RemovalOps,
+  ledger: ProjectSkillLedger,
+  prepared: PreparedSkillsStaged,
+): Promise<string | undefined> {
+  const leak = await cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
+  try {
+    await recordProjectSkills(ledger, prepared);
+  } catch (err) {
+    throw appendLeakToError(err, leak);
+  }
+
+  return leak;
 }
 
 /**
