@@ -49,6 +49,54 @@ Feature: Plugin staging warnings
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
 
+  Scenario: Installing a plugin whose declared commands path leaves its commands folder unread reports the folder
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "commands": "./custom-commands" }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "custom-commands/hello.md" with this text:
+      """
+      Say hello.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "commands/old.md" with this text:
+      """
+      Do the old thing.
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                    |
+      | cascade    | info     | true         |                                                                     |                                                                          |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | Default commands/ folder is ignored because the manifest sets "commands" |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: Updating to a version that declares a commands path reports the folder it leaves unread
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "commands/old.md" with this text:
+      """
+      Do the old thing.
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.1.0", "commands": "./custom-commands" }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "custom-commands/hello.md" with this text:
+      """
+      Say hello.
+      """
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                            | lines                                                                    |
+      | cascade    | info     | true         |                                                                   |                                                                          |
+      | diagnostic | warning  | false        | Plugin "demo" [project] updated; 1 declared component has a note. | Default commands/ folder is ignored because the manifest sets "commands" |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+
   Scenario: Enabling a plugin whose skills collide reports the skip under a header that names the scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"

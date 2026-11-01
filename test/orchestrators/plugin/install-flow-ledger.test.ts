@@ -1307,7 +1307,7 @@ test("PDEF-01: install preview detects an agent conflict from a later resolved d
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        agentDirectories: ["declared-agents"],
+        agentDirectories: ["declared-agents", "agents"],
         agents: [
           { directory: "declared-agents", sourceName: "first", description: "First agent" },
           { sourceName: "later", description: "Later agent" },
@@ -1358,7 +1358,7 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        agentDirectories: ["declared-agents"],
+        agentDirectories: ["declared-agents", "agents"],
         agents: [
           {
             directory: "declared-agents",
@@ -1436,7 +1436,7 @@ test("PDEF-01 / D-PL1-02: a standalone install reports a later duplicate agent a
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        agentDirectories: ["declared-agents"],
+        agentDirectories: ["declared-agents", "agents"],
         agents: [
           {
             directory: "declared-agents",
@@ -1511,7 +1511,7 @@ async function seedCollidingAgentsBehindBlockedMcp(cwd: string): Promise<string>
     marketplaceRoot: path.join(cwd, "mp-src"),
     marketplaceName: "mp",
     pluginName: "hello",
-    agentDirectories: ["declared-agents"],
+    agentDirectories: ["declared-agents", "agents"],
     agents: [
       {
         directory: "declared-agents",

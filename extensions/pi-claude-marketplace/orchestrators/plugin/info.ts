@@ -1934,7 +1934,10 @@ async function buildNotInstallablePathRowFields(
  * arm, which (unlike `installable` / `partially-available`) does not carry
  * `componentPaths`. The info surface re-resolves independently from the
  * marketplace entry's declared component paths plus the conventional
- * `<pluginRoot>/{skills,commands,agents,workflows}` locations;
+ * `<pluginRoot>/<kind>` locations, under the strict resolver's D-CF1-06 rule:
+ * `skills` always starts from `skills/`, and `commands`, `agents`, and
+ * `workflows` start from their conventional folder only when the entry's
+ * declaration for that kind is falsy, so a declared path replaces the folder.
  * `composeResolvedComponents` tolerates missing directories (ENOENT -> empty),
  * so a declared-but-absent or convention-absent directory contributes nothing.
  * This keeps the `(unavailable)`/`(installed)` path-source rows enumerating
@@ -1947,13 +1950,18 @@ function deriveLenientComponentPaths(entry: MarketplaceManifest["plugins"][numbe
   workflows: string[];
 } {
   const out = {
-    skills: ["skills"],
-    commands: ["commands"],
-    agents: ["agents"],
-    workflows: ["workflows"],
+    skills: [] as string[],
+    commands: [] as string[],
+    agents: [] as string[],
+    workflows: [] as string[],
   };
   for (const kind of ["skills", "commands", "agents", "workflows"] as const) {
-    for (const d of asDeclaredList((entry as Record<string, unknown>)[kind])) {
+    const declared = (entry as Record<string, unknown>)[kind];
+    if (kind === "skills" || !declared) {
+      out[kind].push(kind);
+    }
+
+    for (const d of asDeclaredList(declared)) {
       if (typeof d === "string" && !out[kind].includes(d)) {
         out[kind].push(d);
       }
@@ -1963,13 +1971,16 @@ function deriveLenientComponentPaths(entry: MarketplaceManifest["plugins"][numbe
   return out;
 }
 
-/** Normalize a raw entry component field to a flat list (undefined/null -> []). */
+/**
+ * Normalize a raw entry component field to a flat list (undefined/null/"" ->
+ * []). An empty string declares nothing, as in the strict resolver (D-CF1-06).
+ */
 function asDeclaredList(raw: unknown): readonly unknown[] {
   if (Array.isArray(raw)) {
     return raw;
   }
 
-  if (raw === undefined || raw === null) {
+  if (raw === undefined || raw === null || raw === "") {
     return [];
   }
 

@@ -2180,9 +2180,11 @@ test("PR-3 multiple unsupported components both surface as notes", async () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// PR-4 [D-07/COMP-01]: implicit-by-convention SUPPLEMENTS declared paths.
-// The strict-resolver Step 7 computes the UNION of declared + implicit;
-// first-wins dedup preserves declared-first ordering.
+// PR-4 [D-07/COMP-01]: for `skills` only, implicit-by-convention SUPPLEMENTS
+// declared paths: the strict resolver computes the UNION of declared +
+// implicit, and first-wins dedup preserves declared-first ordering. A
+// declared `commands`, `agents`, or `workflows` path REPLACES its
+// conventional folder instead, as Claude Code 2.1.316 does (D-CF1-06).
 // ──────────────────────────────────────────────────────────────────────────
 
 test("PR-4 implicit-by-convention populates componentPaths.skills when neither entry nor manifest declares it", async () => {
@@ -2346,6 +2348,69 @@ test("D-07 entry-declared path UNIONs with implicit-by-convention (was: PR-4 sho
     // Declared first, implicit-by-convention appended after.
     assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["custom", "skills"]);
   }
+});
+
+// D-CF1-06: a manifest that declares a replace kind beside its existing
+// conventional folder resolves to the declared path alone.
+for (const kind of ["commands", "agents", "workflows"] as const) {
+  test(`D-CF1-06 a manifest-declared ${kind} path replaces the existing ${kind}/ folder`, async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const context = resolveContext(marketplaceRoot, {
+      [localRoot]: "dir",
+      [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+        contents: JSON.stringify({ name: "p1", [kind]: "./custom" }),
+      },
+      [path.join(localRoot, "custom")]: "dir",
+      [path.join(localRoot, kind)]: "dir",
+    });
+
+    // act
+    const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        state: resolvedPlugin.state,
+        componentPaths:
+          resolvedPlugin.state === "installable" ? resolvedPlugin.componentPaths : undefined,
+        shadowedFolders:
+          resolvedPlugin.state === "installable" ? resolvedPlugin.shadowedFolders : undefined,
+      },
+      {
+        state: "installable",
+        componentPaths: {
+          skills: [],
+          commands: [],
+          agents: [],
+          workflows: [],
+          [kind]: ["custom"],
+        },
+        shadowedFolders: [kind],
+      },
+    );
+  });
+}
+
+test("D-CF1-06 a plugin whose declarations leave no folder unread carries no shadowed folders", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "commands")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      state: resolvedPlugin.state,
+      hasShadowedFolders: "shadowedFolders" in resolvedPlugin,
+    },
+    { state: "installable", hasShadowedFolders: false },
+  );
 });
 
 // ──────────────────────────────────────────────────────────────────────────

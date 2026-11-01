@@ -2135,6 +2135,46 @@ test("D-PL1-03: an agents duplicate joins the discovery warnings and a conversio
   ]);
 });
 
+test("D-CF1-06: a commands folder the manifest's declared path leaves unread joins the discovery warnings", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-shadowed-folder-");
+  const seeded = await seedPlugin(environment.cwd, { pluginJson: { commands: "./custom" } });
+  await mkdir(path.join(seeded.pluginRoot, "custom"), { recursive: true });
+  await mkdir(path.join(seeded.pluginRoot, "commands"), { recursive: true });
+  await writeFile(path.join(seeded.pluginRoot, "commands", "old.md"), "Do the old thing.\n");
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(
+    {
+      discoveryWarnings: ledgerOutcome.summary.discoveryWarnings,
+      stagedCommandNames: ledgerOutcome.summary.stagedCommandNames,
+    },
+    {
+      discoveryWarnings: [
+        {
+          kind: "discovery",
+          message: 'Default commands/ folder is ignored because the manifest sets "commands"',
+        },
+      ],
+      stagedCommandNames: [],
+    },
+  );
+});
+
 test("D-PL1-13: an mcp phase failure captures the warnings the agents phase collected", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-failure-warnings-");

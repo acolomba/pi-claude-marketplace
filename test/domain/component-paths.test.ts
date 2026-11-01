@@ -311,3 +311,251 @@ test("treats absent and null strict declarations as empty", async () => {
     },
   );
 });
+
+type FolderRuleKind = "skills" | "commands" | "agents" | "workflows";
+
+interface FolderRuleCase {
+  readonly title: string;
+  readonly kind: FolderRuleKind;
+  readonly declaredIn: "entry" | "manifest" | "nowhere";
+  readonly value: unknown;
+  readonly expectedPaths: readonly string[];
+  readonly leavesFolderUnread?: true;
+}
+
+const REPLACE_KINDS = ["commands", "agents", "workflows"] as const;
+
+// D-CF1-06: Claude Code 2.1.316 reads the conventional commands, agents, and
+// workflows folders only when the kind's declaration is falsy, and always
+// reads `skills/`.
+const folderRuleCases: readonly FolderRuleCase[] = [
+  ...REPLACE_KINDS.flatMap((kind): FolderRuleCase[] => [
+    {
+      title: `D-CF1-06 an entry-declared ${kind} path replaces the existing ${kind}/ folder`,
+      kind,
+      declaredIn: "entry",
+      value: "custom",
+      expectedPaths: ["custom"],
+      leavesFolderUnread: true,
+    },
+    {
+      title: `D-CF1-06 a manifest-declared ${kind} path replaces the existing ${kind}/ folder`,
+      kind,
+      declaredIn: "manifest",
+      value: "custom",
+      expectedPaths: ["custom"],
+      leavesFolderUnread: true,
+    },
+    {
+      title: `D-CF1-06 a declared empty ${kind} list leaves the existing ${kind}/ folder unread`,
+      kind,
+      declaredIn: "manifest",
+      value: [],
+      expectedPaths: [],
+      leavesFolderUnread: true,
+    },
+    {
+      title: `D-CF1-06 an empty-string ${kind} declaration reads the ${kind}/ folder and nothing else`,
+      kind,
+      declaredIn: "entry",
+      value: "",
+      expectedPaths: [kind],
+    },
+    {
+      title: `D-CF1-06 a null ${kind} declaration reads the ${kind}/ folder`,
+      kind,
+      declaredIn: "manifest",
+      value: null,
+      expectedPaths: [kind],
+    },
+  ]),
+  {
+    title: "D-CF1-06 an entry-declared skills path adds to the existing skills/ folder",
+    kind: "skills",
+    declaredIn: "entry",
+    value: "custom",
+    expectedPaths: ["custom", "skills"],
+  },
+  {
+    title: "D-CF1-06 a manifest-declared skills path adds to the existing skills/ folder",
+    kind: "skills",
+    declaredIn: "manifest",
+    value: "custom",
+    expectedPaths: ["custom", "skills"],
+  },
+  {
+    title: "D-CF1-06 a declared empty skills list still reads the existing skills/ folder",
+    kind: "skills",
+    declaredIn: "manifest",
+    value: [],
+    expectedPaths: ["skills"],
+  },
+  ...(["skills", ...REPLACE_KINDS] as const).map((kind): FolderRuleCase => ({
+    title: `D-CF1-06 an undeclared ${kind} kind reads its existing ${kind}/ folder`,
+    kind,
+    declaredIn: "nowhere",
+    value: undefined,
+    expectedPaths: [kind],
+  })),
+];
+
+for (const {
+  title,
+  kind,
+  declaredIn,
+  value,
+  expectedPaths,
+  leavesFolderUnread,
+} of folderRuleCases) {
+  test(title, async () => {
+    // arrange
+    const { collectStrictComponentPaths } =
+      await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+    const pluginRoot = "/plugins/alpha";
+    const resolution = emptyResolution();
+    const expected = emptyResolution();
+    expected.componentPaths[kind].push(...expectedPaths);
+    if (expectedPaths.length > 0) {
+      expected.supported.push(kind);
+    }
+
+    // act
+    const dirty = await collectStrictComponentPaths(
+      {
+        entry: {
+          name: "alpha",
+          source: "./alpha",
+          ...(declaredIn === "entry" && { [kind]: value }),
+        },
+        manifest: declaredIn === "manifest" ? { [kind]: value } : null,
+        pluginRoot,
+        resolution,
+      },
+      (candidate) => Promise.resolve(candidate === path.join(pluginRoot, kind) ? "dir" : null),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { dirty, resolution },
+      {
+        dirty: false,
+        resolution: {
+          ...expected,
+          ...(leavesFolderUnread === true && { shadowedFolders: [kind] }),
+        },
+      },
+    );
+  });
+}
+
+interface ShadowedFolderCase {
+  readonly title: string;
+  readonly declared: Readonly<Record<string, unknown>>;
+  readonly existingFolders: readonly string[];
+  readonly componentPaths: Readonly<Record<string, readonly string[]>>;
+  readonly shadowedFolders: readonly string[] | undefined;
+}
+
+// D-CF1-06: Claude Code 2.1.316 names a conventional folder that a declaration
+// leaves unread, unless a declared path is that folder or lies inside it.
+const shadowedFolderCases: readonly ShadowedFolderCase[] = [
+  {
+    title: "D-CF1-06 a declared path inside the commands/ folder leaves no folder unread",
+    declared: { commands: "./commands/extra" },
+    existingFolders: ["commands"],
+    componentPaths: { commands: ["commands/extra"] },
+    shadowedFolders: undefined,
+  },
+  {
+    title: "D-CF1-06 a declared path equal to the commands/ folder leaves no folder unread",
+    declared: { commands: "./commands" },
+    existingFolders: ["commands"],
+    componentPaths: { commands: ["commands"] },
+    shadowedFolders: undefined,
+  },
+  {
+    title: "D-CF1-06 a declared plugin root does not read the agents/ folder below it",
+    declared: { agents: "." },
+    existingFolders: ["agents"],
+    componentPaths: { agents: ["."] },
+    shadowedFolders: ["agents"],
+  },
+  {
+    title: "D-CF1-06 a declared skills path never leaves the skills/ folder unread",
+    declared: { skills: "./custom" },
+    existingFolders: ["skills"],
+    componentPaths: { skills: ["custom", "skills"] },
+    shadowedFolders: undefined,
+  },
+  {
+    title: "D-CF1-06 a declared commands path leaves no folder unread when commands/ is absent",
+    declared: { commands: "./custom" },
+    existingFolders: [],
+    componentPaths: { commands: ["custom"] },
+    shadowedFolders: undefined,
+  },
+  {
+    title: "D-CF1-06 every folder a declaration leaves unread is named in kind order",
+    declared: { workflows: "./flows", commands: "./cmds" },
+    existingFolders: ["commands", "workflows"],
+    componentPaths: { commands: ["cmds"], workflows: ["flows"] },
+    shadowedFolders: ["commands", "workflows"],
+  },
+];
+
+for (const {
+  title,
+  declared,
+  existingFolders,
+  componentPaths,
+  shadowedFolders,
+} of shadowedFolderCases) {
+  test(title, async () => {
+    // arrange
+    const { collectStrictComponentPaths } =
+      await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+    const pluginRoot = "/plugins/alpha";
+    const resolution = emptyResolution();
+    const expected = emptyResolution();
+    Object.assign(expected.componentPaths, componentPaths);
+    expected.supported.push(
+      ...(["skills", "commands", "agents", "workflows"] as const).filter(
+        (kind) => componentPaths[kind] !== undefined,
+      ),
+    );
+    const directories = new Set(existingFolders.map((folder) => path.join(pluginRoot, folder)));
+
+    // act
+    const dirty = await collectStrictComponentPaths(
+      { entry: { name: "alpha", source: "./alpha" }, manifest: declared, pluginRoot, resolution },
+      (candidate) => Promise.resolve(directories.has(candidate) ? "dir" : null),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { dirty, resolution },
+      {
+        dirty: false,
+        resolution: {
+          ...expected,
+          ...(shadowedFolders !== undefined && { shadowedFolders }),
+        },
+      },
+    );
+  });
+}
+
+test("D-CF1-06 the shadowed-folder warning names the folder and the field that hides it", async () => {
+  // arrange
+  const { shadowedFolderWarning } =
+    await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+
+  // act
+  const warning = shadowedFolderWarning("commands");
+
+  // assert
+  assert.strictEqual(
+    warning,
+    'Default commands/ folder is ignored because the manifest sets "commands"',
+  );
+});

@@ -35,7 +35,10 @@ import {
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
-test("overlapping declared and conventional command roots install each source once", async (t) => {
+// D-CF1-06: a declared commands path replaces the conventional `commands/`
+// folder, even when it lies inside that folder, so only the declared root's
+// sources install, each once.
+test("a declared command root inside the conventional folder replaces it and installs each source once", async (t) => {
   // arrange
   const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "command-path-overlap-"));
   t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
@@ -60,11 +63,6 @@ test("overlapping declared and conventional command roots install each source on
         sourceName: "commit",
         generatedName: "acme:commit",
         commandFile: path.join(pluginRoot, "commands", "git", "commit.md"),
-      },
-      {
-        sourceName: "top",
-        generatedName: "acme:top",
-        commandFile: path.join(pluginRoot, "commands", "top.md"),
       },
     ],
     warnings: [],
