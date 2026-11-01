@@ -1114,7 +1114,7 @@ test("LIFE-05: global-bulk target renders `(skipped) {not in manifest}` and writ
   });
 });
 
-test("updatePlugins preserves a generated skill preload in the staged agent", async () => {
+test("updatePlugins reports the skipped skill preload of the staged agent", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-agent-skill-direct-");
     try {
@@ -1156,7 +1156,11 @@ test("updatePlugins preserves a generated skill preload in the staged agent", as
         path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
-      assert.match(agent, /^skills: hello-tool$/m);
+      assert.doesNotMatch(agent, /^skills:/m);
+      assert.match(
+        agent,
+        /^ {4}- skill reference "tool" names a skill with no description -- not preloaded \(Claude Code skips it too\)$/m,
+      );
       assert.match(agent, /^Use \/skill:hello-tool\.$/m);
       assert.deepEqual(notifications, [
         {
@@ -1178,7 +1182,7 @@ test("updatePlugins preserves a generated skill preload in the staged agent", as
   });
 });
 
-test("updateSinglePlugin preserves a generated skill preload from its path source", async (t) => {
+test("updateSinglePlugin reports the skipped skill preload from its path source", async (t) => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-agent-skill-cascade-");
@@ -1209,7 +1213,11 @@ test("updateSinglePlugin preserves a generated skill preload from its path sourc
       "utf8",
     );
     assert.equal(outcome.partition, "updated");
-    assert.match(agent, /^skills: hello-tool$/m);
+    assert.doesNotMatch(agent, /^skills:/m);
+    assert.match(
+      agent,
+      /^ {4}- skill reference "tool" names a skill with no description -- not preloaded \(Claude Code skips it too\)$/m,
+    );
     assert.match(agent, /^Use \/skill:hello-tool\.$/m);
   });
 });

@@ -1,32 +1,32 @@
 /**
- * @fileoverview Steps about running the agents of a plugin: the agents a
- * published plugin holds (HAR-07, D-CF1-08).
+ * @fileoverview Steps about running a bridged agent: the tools that
+ * pi-subagents offers the child the run starts (AGT-02).
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 
-import { Given } from "@cucumber/cucumber";
+import { type DataTable, Then } from "@cucumber/cucumber";
 
-import { agentFileText, publishAgentFile } from "../../lib/agent-files.ts";
+import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
-Given(
-  "the published plugin {string} of the marketplace {string} has the agent {string} described as {string} with this body:",
-  async function (
-    this: ScenarioWorld,
-    plugin: string,
-    name: string,
-    agent: string,
-    description: string,
-    body: string,
-  ) {
-    const published = this.requirePublished(name);
-    const file = await publishAgentFile(published, plugin, { name: agent, description, body });
-    assert.strictEqual(
-      await readFile(file, "utf8"),
-      agentFileText({ name: agent, description, body }),
-    );
+// The names of the tools of model call `number` of the last turn, numbered
+// from 1, in the order Pi offered them.
+function offeredToolNames(world: ScenarioWorld, number: number): string[] {
+  const calls = modelCallsOf(world.requireTurn().logs);
+  const tools = calls.find((call) => call.index === number - 1)?.tools;
+  assert.ok(tools !== undefined, `the last turn has no model call ${number}`);
+  return tools.map((tool) => tool.name);
+}
+
+// The whole tool list of one call. A child agent's call is one of the turn's
+// calls, so this states the tools the child ran with.
+Then(
+  "the agent's model call {int} offers these tools:",
+  function (this: ScenarioWorld, number: number, table: DataTable) {
+    const rows = offeredToolNames(this, number).map((name) => [name]);
+    assert.deepStrictEqual([["tool"], ...rows], table.raw());
+    this.markTurnCompared();
   },
 );

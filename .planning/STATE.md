@@ -5,17 +5,17 @@ milestone_name: Component Behavioral Tests
 current_phase: 02
 current_phase_name: Skills
 status: executing
-stopped_at: Phases 2 and 6 verified with human items deferred; Phases 6 and 7 merged
+stopped_at: Phases 4, 6 and 7 merged; Phases 2 and 6 await user verification items
 last_updated: "2026-11-01T16:22:57.289Z"
 last_activity: 2026-11-01
-last_activity_desc: Phase 6 (MCP Servers) merged into the milestone branch
+last_activity_desc: Phase 4 (Agents) merged into the milestone branch
 state_head: 2e31f73843f33e4937b5c5c81d13f1c9792c3d23
 progress:
   total_phases: 7
-  completed_phases: 2
-  total_plans: 37
-  completed_plans: 36
-  percent: 29
+  completed_phases: 3
+  total_plans: 43
+  completed_plans: 42
+  percent: 43
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-01 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Skills (verification deferred to the user); Phases 3-5 running in child sessions
+**Current focus:** Phase 02 — Skills (verification deferred to the user); Phases 3 and 5 running in child sessions
 
 ## Current Position
 
 Phase: 02 (Skills) — 7/7 plans done, verification_deferred_human (see Deferred Verification)
 Plan: 7 of 7
-Status: Phase 7 complete and merged; Phase 6 merged with verification deferred; Phases 3-5 executing in child sessions
-Last activity: 2026-11-01 — Phase 6 (MCP Servers) merged into the milestone branch
+Status: Phases 4 and 7 complete and merged; Phase 6 merged with verification deferred; Phases 3 and 5 executing in child sessions
+Last activity: 2026-11-01 — Phase 4 (Agents) merged into the milestone branch
 
-Progress: [███░░░░░░░] 29% (2/7 phases complete: 1 and 7; Phase 2 awaits the user's verification item)
+Progress: [████░░░░░░] 43% (3/7 phases complete: 1, 4 and 7; Phases 2 and 6 await the user's verification items)
 
 Phase 1 is the only prerequisite. After it merges to `claude/quirky-planck-hhm592`,
 Phases 2-7 (Skills, Slash Commands, Agents, Hooks, MCP Servers, Workflows) run
@@ -840,6 +840,11 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 - D-CF1-15..17: one profile Pi per scenario through a `Given`, two CI
   behavioral shards, `.ts` stand-ins under `features/lib/` and a file-backed
   model script.
+- D-CF4-01..14 (Phase 4, Agents; rows drafted in `04-06-SUMMARY.md` for the
+  parent): nested agent names, upstream description fallback, `advertise:
+  true`, `async: false` by default, 5.x `--map-model` table, preloaded skill
+  content inlined into the agent prompt, trust divergence licensed as a Pi
+  gap, AGT-04 closed on a recorded gap (D-CF4-10).
 
 ### Blockers/Concerns
 
@@ -849,9 +854,11 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
   entries for the six unwired invocation cores (argument substitution, shell
   words, context injection, description fallback, and the rest); remove them
   and rerun `npm run fallow` once Phases 2 and 3 import the cores.
-- [Phase 1] pi-subagents 0.84 lists project agents whatever the trust, so the
-  trust pair observes a project-scope run; the agents phase settles how that
-  compares with Claude Code's handling of agents in an untrusted project.
+- [Phase 4] Settled by D-CF4-09: Claude Code runs plugin agents in untrusted
+  folders; pi-subagents refuses project-scope runs, a Pi-gap divergence. The
+  trust-blind list is drafted as a pi-subagents defect report (not filed).
+- [Phase 4] `advertise: true` (D-CF4-14) changes every parent system prompt
+  with pi-subagents loaded; re-verify sibling whole-prompt comparisons at merge.
 - [Phase 1] The sandbox runs as root, which breaks the permission-injection
   tests; run npm scripts and hook-running commits through the non-DAC shell
   wrapper (`npm_config_script_shell`) with a 6 GB heap.
@@ -872,6 +879,6 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 
 ## Session Continuity
 
-Last session: 2026-11-01T07:48:00Z
-Stopped at: Phase 7 complete, ready to execute Phase 2
+Last session: 2026-11-01T20:10:00Z
+Stopped at: Phase 4 merged; Phases 3 and 5 running in child sessions
 Resume file: None

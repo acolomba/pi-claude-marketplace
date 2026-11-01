@@ -19,8 +19,16 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 import { emitGeneratedAgentFile } from "./frontmatter.ts";
 
 import type { GeneratedToolsFields } from "./frontmatter.ts";
-import type { ConvertedAgent, DiscoveredAgent, RawAgentFrontmatter } from "./types.ts";
-import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
+import type {
+  ConvertedAgent,
+  DiscoveredAgent,
+  RawAgentFrontmatter,
+  SkillPreload,
+} from "./types.ts";
+import type {
+  InstalledReferenceNames,
+  SkillReferenceResolution,
+} from "../../domain/skill-tokens.ts";
 
 /**
  * Source frontmatter fields the converter actively consumes. Anything else
@@ -29,37 +37,49 @@ import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 const SUPPORTED_SOURCE_FIELDS = new Set([
   "name",
   "description",
+  "when_to_use",
+  "when-to-use",
   "model",
   "tools",
   "disallowedTools",
   "thinking",
   "effort",
   "skills",
+  "background",
 ]);
 
 /**
- * AG-7 user contract: allowlisted Claude model strings. Anything else is
- * omitted from the generated frontmatter.
+ * AG-7 / D-CF4-07 as amended: Claude Code's model aliases, keyed lower-case,
+ * mapped to the first-party models of Claude Code's model catalog.
+ * `opusplan` runs a subagent on sonnet, because its plan-mode upgrade to opus
+ * applies only to a session that inherits it; `best` selects fable.
  */
-const MODEL_MAP: Readonly<Record<string, string>> = Object.freeze({
-  sonnet: "anthropic/claude-sonnet-4-6",
-  opus: "anthropic/claude-opus-4-7",
-  haiku: "anthropic/claude-haiku-4-5",
-});
+const MODEL_MAP: ReadonlyMap<string, string> = new Map([
+  ["sonnet", "anthropic/claude-sonnet-5-5"],
+  ["opusplan", "anthropic/claude-sonnet-5-5"],
+  ["opus", "anthropic/claude-opus-5-5"],
+  ["haiku", "anthropic/claude-haiku-5-5"],
+  ["fable", "anthropic/claude-fable-5-1"],
+  ["best", "anthropic/claude-fable-5-1"],
+]);
+
+/** The suffix of Claude Code's one-million-token context aliases. */
+const LONG_CONTEXT_SUFFIX = "[1m]";
 
 /**
  * AG-7 user contract: Claude tool name -> Pi tool name. Tokens not present
- * here are dropped.
+ * here are dropped. A `Map`, so a token such as `constructor` cannot find an
+ * `Object.prototype` member.
  */
-const TOOL_MAP: Readonly<Record<string, string>> = Object.freeze({
-  Read: "read",
-  Bash: "bash",
-  Edit: "edit",
-  Write: "write",
-  Grep: "grep",
-  Glob: "find",
-  LS: "ls",
-});
+const TOOL_MAP: ReadonlyMap<string, string> = new Map([
+  ["Read", "read"],
+  ["Bash", "bash"],
+  ["Edit", "edit"],
+  ["Write", "write"],
+  ["Grep", "grep"],
+  ["Glob", "find"],
+  ["LS", "ls"],
+]);
 
 /**
  * ANAME-02: one MCP server this install writes. `key` is the server's
@@ -98,7 +118,10 @@ const MCP_ASYNC_WARNING =
   "launch this agent with `async: true`; a foreground launch fails, and so does a launch " +
   "before pi-mcp-adapter has cached the server's tools";
 
-/** Allowlist for thinking/effort values. */
+/**
+ * Allowlist for thinking/effort values. D-CF4-06 as amended: `max` is one of
+ * Claude Code's effort levels (`low`, `medium`, `high`, `xhigh`, `max`).
+ */
 const THINKING_VALUES: ReadonlySet<string> = new Set([
   "off",
   "minimal",
@@ -106,6 +129,7 @@ const THINKING_VALUES: ReadonlySet<string> = new Set([
   "medium",
   "high",
   "xhigh",
+  "max",
 ]);
 
 interface ToolMappingBase {
@@ -150,7 +174,13 @@ type ToolMappingResult = ExplicitToolMapping | OmittedToolMapping;
 type ValidatedToolMapping =
   (ExplicitToolMapping & { readonly mapped: [string, ...string[]] }) | OmittedToolMapping;
 
-function splitCsv(value: string | undefined): string[] {
+/**
+ * D-CF4-08 as amended: splits a `tools`, `disallowedTools`, or `skills` value
+ * as Claude Code does, on commas and on whitespace outside parentheses, so
+ * `Read Grep` is two entries and `Bash(git log *)` stays one. Empty parts
+ * are dropped.
+ */
+function splitToolList(value: string | undefined): string[] {
   if (value === undefined) {
     return [];
   }
@@ -165,20 +195,64 @@ function splitCsv(value: string | undefined): string[] {
     raw = raw.slice(1, -1);
   }
 
-  return raw
-    .split(",")
-    .map((part) => {
-      const trimmed = part.trim();
-      if (
-        (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-        (trimmed.startsWith("'") && trimmed.endsWith("'"))
-      ) {
-        return trimmed.slice(1, -1);
-      }
-
-      return trimmed;
-    })
+  return topLevelParts(raw)
+    .map((part) => withoutMatchingQuotes(part.trim()))
     .filter((part) => part !== "");
+}
+
+/** The parts of `raw` between commas and whitespace outside parentheses. */
+function topLevelParts(raw: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const char of raw) {
+    if (depth === 0 && (char === "," || /\s/.test(char))) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+
+    if (char === "(") {
+      depth += 1;
+    } else if (char === ")" && depth > 0) {
+      depth -= 1;
+    }
+
+    current += char;
+  }
+
+  parts.push(current);
+  return parts;
+}
+
+/**
+ * D-CF4-08 as amended: Claude Code resolves a `Tool(spec)` entry to its
+ * tool, so the bridge maps it by the tool name and drops the spec. A grant
+ * becomes the whole tool and a disallow removes the whole tool.
+ */
+function toolNameOf(token: string): string {
+  const open = token.indexOf("(");
+  return open > 0 && token.endsWith(")") ? token.slice(0, open) : token;
+}
+
+/**
+ * AGSK-03 / D-CF4-08 as amended: whether `token` names the Skill tool,
+ * bare or as `Skill(spec)`. Exact match on the tool name, like TOOL_MAP.
+ */
+function isSkillToken(token: string): boolean {
+  return toolNameOf(token) === "Skill";
+}
+
+/** The value with one pair of matching surrounding quotes removed. */
+function withoutMatchingQuotes(value: string): string {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+
+  return value;
 }
 
 function dedupePreservingOrder(values: readonly string[]): string[] {
@@ -194,29 +268,58 @@ function dedupePreservingOrder(values: readonly string[]): string[] {
   return out;
 }
 
-function mapModel(raw: string | undefined): {
-  emit: string | undefined;
-  originalModel: string | undefined;
-  warning: string | undefined;
-} {
-  if (raw === undefined || raw === "") {
+interface ModelMapping {
+  readonly emit: string | undefined;
+  readonly originalModel: string | undefined;
+  readonly warning: string | undefined;
+}
+
+/**
+ * AG-7 / D-CF4-07 as amended: the model a source `model` selects, read as
+ * Claude Code reads it. The value is trimmed; `inherit`, in any case, leaves
+ * the session's model; an alias maps through MODEL_MAP; a full `claude-` ID
+ * passes through. `originalModel` keeps the source value.
+ */
+function mapModel(raw: string | undefined): ModelMapping {
+  const value = raw?.trim() ?? "";
+  if (raw === undefined || value === "") {
     return { emit: undefined, originalModel: undefined, warning: undefined };
   }
 
-  if (raw === "inherit") {
-    return { emit: undefined, originalModel: "inherit", warning: undefined };
+  if (value.toLowerCase() === "inherit") {
+    return { emit: undefined, originalModel: raw, warning: undefined };
   }
 
-  const mapped = MODEL_MAP[raw];
-  if (mapped !== undefined) {
-    return { emit: mapped, originalModel: raw, warning: undefined };
-  }
-
+  const emit = aliasModel(value) ?? fullModelId(value);
   return {
-    emit: undefined,
+    emit,
     originalModel: raw,
-    warning: `unknown model "${raw}" -- omitted from generated frontmatter`,
+    warning:
+      emit === undefined
+        ? `unknown model "${raw}" -- omitted from generated frontmatter`
+        : undefined,
   };
+}
+
+/**
+ * D-CF4-07 as amended: Claude Code matches its aliases case-insensitively,
+ * and one trailing `[1m]` selects the same model with a longer context.
+ */
+function aliasModel(value: string): string | undefined {
+  const lower = value.toLowerCase();
+  const alias = lower.endsWith(LONG_CONTEXT_SUFFIX)
+    ? lower.slice(0, -LONG_CONTEXT_SUFFIX.length)
+    : lower;
+  return MODEL_MAP.get(alias);
+}
+
+/**
+ * D-CF4-07 as amended: Claude Code sends any other value as a model ID. Only
+ * a `claude-` ID with no whitespace and no `:` passes through, because
+ * pi-subagents reads a `:` suffix as a thinking level (T-04-06).
+ */
+function fullModelId(value: string): string | undefined {
+  return value.startsWith("claude-") && !/[\s:]/.test(value) ? `anthropic/${value}` : undefined;
 }
 
 /**
@@ -269,7 +372,7 @@ function mcpEntry(match: McpGrantMatch): string {
 
 /** A TOOL_MAP name, or the `mcp:` entry of a written server's MCP name. */
 function mapToolName(token: string, grants: readonly McpGrant[]): string | undefined {
-  const piName = TOOL_MAP[token];
+  const piName = TOOL_MAP.get(toolNameOf(token));
   if (piName !== undefined) {
     return piName;
   }
@@ -299,7 +402,7 @@ function mapToolTokens(
     // AGSK-03 / D-83.1-02: Skill is translated to inheritSkills (computed
     // in mapTools from raw tokens), never dropped -- no droppedTools entry
     // and no warning in any branch. Exact match, like TOOL_MAP lookups.
-    if (token === "Skill") {
+    if (isSkillToken(token)) {
       continue;
     }
 
@@ -319,19 +422,21 @@ function mapTools(
   rawDisallowed: string | undefined,
   grants: readonly McpGrant[],
 ): ToolMappingResult {
-  const disallowedTokens = splitCsv(rawDisallowed);
-  if (rawTools === undefined) {
+  const disallowedTokens = splitToolList(rawDisallowed);
+  const tokens = splitToolList(rawTools);
+  // D-CF4-08 as amended: Claude Code reads a `*` entry as every tool, which
+  // is what an omitted list grants.
+  if (rawTools === undefined || tokens.includes("*")) {
     return omittedToolMapping(disallowedTokens, grants);
   }
 
-  const tokens = splitCsv(rawTools);
-
   // AGSK-05 / D-83-01: the inherit flag is computed ONCE from RAW
-  // Claude-side tokens -- exact match, case-sensitive "Skill", like
-  // TOOL_MAP lookups. The disallow check must read raw tokens because
+  // Claude-side tokens -- exact match, case-sensitive "Skill", bare or as
+  // `Skill(spec)` (D-CF4-08 as amended), like TOOL_MAP lookups. The
+  // disallow check must read raw tokens because
   // Skill has no TOOL_MAP entry, so the Pi-name filter below can never
   // see it.
-  const inheritSkills = tokens.includes("Skill") && !disallowedTokens.includes("Skill");
+  const inheritSkills = tokens.some(isSkillToken) && !disallowedTokens.some(isSkillToken);
 
   // Apply disallowedTools after mapping.
   const { mapped, dropped } = mapToolTokens(tokens, grants);
@@ -387,10 +492,12 @@ function isDisallowed(entry: string, disallow: ExplicitDisallow): boolean {
 }
 
 /**
- * ANAME-02: pi-subagents takes no `excludeTools` beside an explicit `tools:`
- * list, so a per-tool disallow cannot narrow a whole-server grant that
- * survives the filter, and it warns. Any `mcp:` entry in the final list
- * needs a background launch, which this extension states and never injects.
+ * ANAME-02: a per-tool disallow cannot narrow a whole-server grant that
+ * survives the filter, so it warns. pi-subagents 0.62 and later do apply
+ * `excludeTools` beside an explicit `tools:` list (D-CF4-08); the per-tool
+ * warning text still says otherwise and stays unchanged, because it belongs
+ * to the MCP-07 warning surface. Any `mcp:` entry in the final list needs a
+ * background launch, which this extension states and never injects.
  */
 function explicitMcpWarnings(kept: readonly string[], disallow: ExplicitDisallow): string[] {
   const keptSet = new Set(kept);
@@ -437,11 +544,11 @@ function omittedToolMapping(
   const unmapped: string[] = [];
   for (const token of disallowedTokens) {
     // Skill is excluded: it maps to inheritSkills below, not to a Pi tool.
-    if (token === "Skill") {
+    if (isSkillToken(token)) {
       continue;
     }
 
-    const name = TOOL_MAP[token] ?? perToolMcpName(token, grants);
+    const name = TOOL_MAP.get(toolNameOf(token)) ?? perToolMcpName(token, grants);
     if (name === undefined) {
       unmapped.push(token);
     } else {
@@ -469,7 +576,7 @@ function omittedToolMapping(
     excludeTools,
     dropped: [],
     warnings,
-    inheritSkills: !disallowedTokens.includes("Skill"),
+    inheritSkills: !disallowedTokens.some(isSkillToken),
   };
 }
 
@@ -483,77 +590,210 @@ function omittedToolMapping(
  * - thinking absent, effort set+valid -> emit effort
  * - thinking absent, effort set+invalid -> warn, omit
  * - both absent -> omit silently
+ *
+ * `thinking` matches exactly; `effort` is normalized first (D-CF4-06).
  */
 function mapThinking(
   rawThinking: string | undefined,
   rawEffort: string | undefined,
 ): { emit: string | undefined; warning: string | undefined } {
-  if (rawThinking !== undefined && rawThinking !== "") {
-    if (THINKING_VALUES.has(rawThinking)) {
-      return { emit: rawThinking, warning: undefined };
-    }
+  const effort = mapEffort(rawEffort);
+  if (rawThinking === undefined || rawThinking === "") {
+    return effort;
+  }
 
-    // thinking present but invalid -- try effort as documented fallback
-    if (rawEffort !== undefined && rawEffort !== "" && THINKING_VALUES.has(rawEffort)) {
-      return {
-        emit: rawEffort,
-        warning: `unknown thinking value "${rawThinking}" -- using effort "${rawEffort}" as fallback`,
-      };
-    }
+  if (THINKING_VALUES.has(rawThinking)) {
+    return { emit: rawThinking, warning: undefined };
+  }
 
+  // thinking present but invalid -- try effort as documented fallback
+  if (effort.emit !== undefined) {
     return {
-      emit: undefined,
-      warning: `unknown thinking value "${rawThinking}" -- omitted from generated frontmatter`,
+      emit: effort.emit,
+      warning: `unknown thinking value "${rawThinking}" -- using effort "${rawEffort}" as fallback`,
     };
   }
 
-  if (rawEffort !== undefined && rawEffort !== "") {
-    if (THINKING_VALUES.has(rawEffort)) {
-      return { emit: rawEffort, warning: undefined };
-    }
-
-    return {
-      emit: undefined,
-      warning: `unknown effort value "${rawEffort}" -- omitted from generated frontmatter`,
-    };
-  }
-
-  return { emit: undefined, warning: undefined };
+  return {
+    emit: undefined,
+    warning: `unknown thinking value "${rawThinking}" -- omitted from generated frontmatter`,
+  };
 }
 
+/**
+ * D-CF4-06 as amended: Claude Code trims and lower-cases `effort` and reads
+ * `med` as `medium`. Claude Code also takes an integer effort, which
+ * pi-subagents has no level for, so it is dropped with the unknown-effort
+ * warning.
+ */
+function mapEffort(rawEffort: string | undefined): {
+  emit: string | undefined;
+  warning: string | undefined;
+} {
+  if (rawEffort === undefined || rawEffort === "") {
+    return { emit: undefined, warning: undefined };
+  }
+
+  const lower = rawEffort.trim().toLowerCase();
+  const level = lower === "med" ? "medium" : lower;
+  if (THINKING_VALUES.has(level)) {
+    return { emit: level, warning: undefined };
+  }
+
+  return {
+    emit: undefined,
+    warning: `unknown effort value "${rawEffort}" -- omitted from generated frontmatter`,
+  };
+}
+
+/**
+ * D-CF4-04: the deduped generated names of the skills of this plugin that an
+ * agent's `skills:` value names, in `skills:` order. The stage reads the
+ * preloads of exactly these names.
+ */
+export function preloadedSkillNames(
+  rawSkills: string | undefined,
+  pluginName: string,
+  knownSkills: readonly string[],
+): readonly string[] {
+  const known = new Set(knownSkills);
+  const names = splitToolList(rawSkills).flatMap((token) => {
+    const resolution = resolveSkillReference(pluginName, token, known);
+    return resolution.kind === "known" ? [resolution.generatedName] : [];
+  });
+  return dedupePreservingOrder(names);
+}
+
+/** The converted `skills:` entries, the inlined skill texts, and the warnings. */
+interface SkillsMapping {
+  readonly emit: string[];
+  readonly inline: string[];
+  readonly warnings: string[];
+}
+
+/**
+ * Converts the agent's `skills:` value. A known reference with an inline
+ * preload is written after the body and left out of `skills:`, one with a
+ * skip preload is left out with a warning, and one with no preload stays a
+ * `skills:` entry (D-CF4-04). Each generated name counts once, as in
+ * mapTools, so a bare token and its same-plugin self-qualified form
+ * (AGSK-02) converge on one entry.
+ */
 function mapSkills(
   rawSkills: string | undefined,
   pluginName: string,
   knownSkills: readonly string[],
-): { emit: string[]; warnings: string[] } {
-  const tokens = splitCsv(rawSkills);
-  if (tokens.length === 0) {
-    return { emit: [], warnings: [] };
-  }
-
+  preloads: ReadonlyMap<string, SkillPreload>,
+): SkillsMapping {
   const known = new Set(knownSkills);
-  const emit: string[] = [];
-  const warnings: string[] = [];
-  for (const token of tokens) {
+  const seen = new Set<string>();
+  const mapping: SkillsMapping = { emit: [], inline: [], warnings: [] };
+  for (const token of splitToolList(rawSkills)) {
     const resolution = resolveSkillReference(pluginName, token, known);
-    if (resolution.kind === "known") {
-      emit.push(resolution.generatedName);
-    } else if (resolution.kind === "malformed") {
-      hookDebugLog(`generatedSkillName rejected skill token "${token}": ${resolution.reason}`);
-      warnings.push(`malformed skill reference "${token}" -- dropped`);
-    } else if (resolution.kind === "foreign") {
-      warnings.push(
-        `skill reference "${token}" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`,
+    if (resolution.kind !== "known") {
+      mapping.warnings.push(unresolvedSkillWarning(token, resolution));
+    } else if (!seen.has(resolution.generatedName)) {
+      seen.add(resolution.generatedName);
+      addKnownSkill(
+        mapping,
+        token,
+        resolution.generatedName,
+        preloads.get(resolution.generatedName),
       );
-    } else {
-      warnings.push(`unknown skill reference "${token}" -- dropped`);
     }
   }
 
-  // Mirror mapTools: collapse duplicate generated skill names so the emitter
-  // never renders a repeated `skills:` entry. A bare token and its same-plugin
-  // self-qualified form (AGSK-02) converge on one generated name.
-  return { emit: dedupePreservingOrder(emit), warnings };
+  return mapping;
+}
+
+function addKnownSkill(
+  mapping: SkillsMapping,
+  token: string,
+  generatedName: string,
+  preload: SkillPreload | undefined,
+): void {
+  if (preload === undefined) {
+    mapping.emit.push(generatedName);
+  } else if (preload.kind === "inline") {
+    mapping.inline.push(preload.text);
+  } else {
+    mapping.warnings.push(skippedPreloadWarning(token, preload.reason));
+  }
+}
+
+/**
+ * D-CF4-04: the warning of a preload that is skipped. Claude Code keeps a
+ * skill the model cannot invoke, or a plugin skill with no description, out
+ * of the pool it preloads from.
+ */
+function skippedPreloadWarning(
+  token: string,
+  reason: Extract<SkillPreload, { kind: "skip" }>["reason"],
+): string {
+  switch (reason) {
+    case "disable-model-invocation":
+      return `skill reference "${token}" names a skill with disable-model-invocation: true -- not preloaded (Claude Code skips it too)`;
+    case "no-description":
+      return `skill reference "${token}" names a skill with no description -- not preloaded (Claude Code skips it too)`;
+    case "unparseable":
+      return `skill reference "${token}" names a skill whose frontmatter does not parse -- not preloaded`;
+  }
+}
+
+function unresolvedSkillWarning(
+  token: string,
+  resolution: Exclude<SkillReferenceResolution, { kind: "known" }>,
+): string {
+  if (resolution.kind === "malformed") {
+    hookDebugLog(`generatedSkillName rejected skill token "${token}": ${resolution.reason}`);
+    return `malformed skill reference "${token}" -- dropped`;
+  }
+
+  if (resolution.kind === "foreign") {
+    return `skill reference "${token}" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`;
+  }
+
+  return `unknown skill reference "${token}" -- dropped`;
+}
+
+/**
+ * D-CF4-04: the converted body, then each inlined skill text after one blank
+ * line, in `skills:` order. Residuals: the texts sit in the system prompt,
+ * not in Claude Code's first user message, because pi-subagents has no hook
+ * on a child's first message; `$ARGUMENTS` and inline `!` commands stay
+ * literal; the cross-plugin fallback and the frontmatter-name alias lookup
+ * are not modeled.
+ */
+function bodyWithPreloads(body: string, inline: readonly string[]): string {
+  return inline.length === 0 ? body : [body.trimEnd(), ...inline].join("\n\n");
+}
+
+// A frontmatter value trimmed, or undefined when it is not a string or is
+// blank, so a blank value counts as missing.
+function nonBlank(value: unknown): string | undefined {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed === "" ? undefined : trimmed;
+}
+
+/**
+ * D-CF4-03: the description Claude Code lists for a plugin agent, in the
+ * order of Claude Code's `zie` lookup: the first non-blank value of
+ * `description`, `when_to_use`, and `when-to-use`, trimmed, and otherwise
+ * `Agent from <plugin> plugin`.
+ * `sourceDescriptionMissing` is true when `description` itself is missing or
+ * blank.
+ */
+function agentDescription(
+  raw: RawAgentFrontmatter,
+  pluginName: string,
+): { description: string; sourceDescriptionMissing: boolean } {
+  const sourceDescription = nonBlank(raw.description);
+  const description =
+    sourceDescription ??
+    nonBlank(raw.when_to_use) ??
+    nonBlank(raw["when-to-use"]) ??
+    `Agent from ${pluginName} plugin`;
+  return { description, sourceDescriptionMissing: sourceDescription === undefined };
 }
 
 /** The arguments of `convertAgent`. */
@@ -586,6 +826,11 @@ export interface ConvertAgentInput {
    * entries; every other `mcp__` name is dropped.
    */
   mcpServerNames?: readonly string[] | undefined;
+  /**
+   * D-CF4-04: the preloads the stage read, keyed by generated skill name. A
+   * known `skills:` reference with no entry stays a `skills:` entry.
+   */
+  skillPreloads?: ReadonlyMap<string, SkillPreload> | undefined;
 }
 
 /**
@@ -621,14 +866,15 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
   // keeps matching; `declaredName` is what pi-subagents takes as the agent's
   // localName and what the host workflow engine keys its agentType registry
   // on, so a bridged workflow's agent({ agentType }) call resolves.
-  const declaredName = declaredAgentName(pluginName, sourceName);
+  // D-CF4-01: a nested file's folders name it as Claude Code does,
+  // `<plugin>:<folder>...:<name>`.
+  const declaredName = declaredAgentName(pluginName, sourceName, discovered.namespace);
 
   const warnings: string[] = [];
 
   // 1. Description (with fallback)
-  let description = raw.description ?? "";
-  if (description === "") {
-    description = `Imported Claude Code plugin agent ${sourceName} from plugin ${pluginName}.`;
+  const { description, sourceDescriptionMissing } = agentDescription(raw, pluginName);
+  if (sourceDescriptionMissing) {
     warnings.push("source description was missing or empty -- using fallback");
   }
 
@@ -658,8 +904,13 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
     warnings.push(thinkingResult.warning);
   }
 
-  // 5. Skills mapping
-  const skillsResult = mapSkills(raw.skills, pluginName, knownSkills);
+  // 5. Skills mapping (D-CF4-04: preloaded skills are inlined or skipped)
+  const skillsResult = mapSkills(
+    raw.skills,
+    pluginName,
+    knownSkills,
+    input.skillPreloads ?? new Map(),
+  );
   warnings.push(...skillsResult.warnings);
 
   // 6. Dropped fields (anything in source frontmatter that isn't supported).
@@ -704,6 +955,7 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
       ...optionalThinking(thinkingResult.emit),
       skills: skillsResult.emit,
       inheritSkills: toolsResult.inheritSkills,
+      ...optionalAsync(asyncSetting(raw.background, toolsResult, mcpServerNames)),
     },
     provenance: {
       pluginName,
@@ -714,7 +966,7 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
       droppedTools: toolsResult.dropped,
       warnings,
     },
-    body: convertedBody,
+    body: bodyWithPreloads(convertedBody, skillsResult.inline),
   });
 
   const result: ConvertedAgent = {
@@ -730,6 +982,48 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
   };
 
   return result;
+}
+
+/**
+ * D-CF4-05: the `async` launch default of a bridged agent. Claude Code runs a
+ * plugin agent in the foreground unless its source sets `background` to
+ * `true` or `"true"`, so the agent gets `async: true` for that value and
+ * `async: false` otherwise, which replaces pi-subagents' background default.
+ * Residual: a pi-subagents call can still ask for either launch mode, where
+ * Claude Code forces the background for `background: true`.
+ * An agent that runs MCP tools gets no line at all (D-CF4-05 as amended):
+ * pi-subagents serves MCP tools only in background launches, and its
+ * MCP async warning stays the guidance there.
+ */
+function asyncSetting(
+  rawBackground: unknown,
+  toolsResult: ToolMappingResult,
+  mcpServerNames: readonly string[] | undefined,
+): boolean | undefined {
+  if (runsMcpTools(toolsResult, mcpServerNames)) {
+    return undefined;
+  }
+
+  return typeof rawBackground === "string" && withoutMatchingQuotes(rawBackground) === "true";
+}
+
+/**
+ * An explicit list that maps an `mcp:` entry, or an omitted list, which
+ * grants the ambient tools, in a plugin that writes MCP servers.
+ */
+function runsMcpTools(
+  toolsResult: ToolMappingResult,
+  mcpServerNames: readonly string[] | undefined,
+): boolean {
+  if (toolsResult.omitted) {
+    return (mcpServerNames ?? []).length > 0;
+  }
+
+  return toolsResult.mapped.some((name) => name.startsWith("mcp:"));
+}
+
+function optionalAsync(launchAsync: boolean | undefined): { async?: boolean } {
+  return launchAsync === undefined ? {} : { async: launchAsync };
 }
 
 function optionalModel(model: string | undefined): { model?: string } {
@@ -758,7 +1052,7 @@ function assertMappedToolsNonEmpty(
     return;
   }
 
-  const skillNote = splitCsv(raw.tools).includes("Skill")
+  const skillNote = splitToolList(raw.tools).some(isSkillToken)
     ? " Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list."
     : "";
   throw new Error(
@@ -797,7 +1091,17 @@ function toolsFields(result: ValidatedToolMapping): GeneratedToolsFields {
  * points at the mechanism that does work instead. GUIDED_DROPPED_FIELDS is
  * derived from this table, which keeps the stage layer's generic
  * `dropped fields:` summary and these warnings in lockstep.
+ *
+ * D-CF4-05: Claude Code 2.1.316 also ignores `initialPrompt`, `observer`,
+ * `observerMessage`, and `observeSubagents` for plugin agents, with a
+ * warning of its own, so each gets the same guided warning. `memory`,
+ * `maxTurns`, `isolation`, `color`, `omitClaudeMd`, `autoCompactWindow`, and
+ * `experimental`, which Claude Code applies, stay in the generic line.
  */
+function pluginIgnoredFieldWarning(field: string): string {
+  return `agent-level \`${field}\` is not converted -- dropped (Claude Code ignores it for plugin agents too).`;
+}
+
 const GUIDED_DROPPED_FIELD_WARNINGS: Readonly<Record<string, (declaredName: string) => string>> =
   Object.freeze({
     "allowed-tools": (): string =>
@@ -810,6 +1114,10 @@ const GUIDED_DROPPED_FIELD_WARNINGS: Readonly<Record<string, (declaredName: stri
       "agent-level `permissionMode` is not converted -- dropped (Claude Code ignores it for plugin agents too).",
     hooks: (): string =>
       "agent-level `hooks` is not converted -- dropped (Claude Code ignores it for plugin agents too; plugin-level hooks/hooks.json still installs).",
+    initialPrompt: (): string => pluginIgnoredFieldWarning("initialPrompt"),
+    observer: (): string => pluginIgnoredFieldWarning("observer"),
+    observerMessage: (): string => pluginIgnoredFieldWarning("observerMessage"),
+    observeSubagents: (): string => pluginIgnoredFieldWarning("observeSubagents"),
   });
 
 /**

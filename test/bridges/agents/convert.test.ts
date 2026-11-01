@@ -4,11 +4,14 @@ import { describe, test } from "node:test";
 import {
   convertAgent,
   GUIDED_DROPPED_FIELDS,
+  preloadedSkillNames,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
+import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 
 import type {
   ConvertedAgent,
   RawAgentFrontmatter,
+  SkillPreload,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 const MCP_ASYNC_WARNING =
@@ -41,9 +44,14 @@ function yamlList(items: readonly string[]): string {
   return items.length === 0 ? " []" : items.map((item) => `\n    - ${item}`).join("");
 }
 
+function asyncLine(launchAsync: boolean | undefined): string {
+  return launchAsync === undefined ? "" : "async: " + String(launchAsync) + "\n";
+}
+
 function expectedMcpAgentFile(expected: {
   readonly toolsField: string;
   readonly inheritSkills: boolean;
+  readonly async?: boolean;
   readonly droppedTools: readonly string[];
   readonly warnings: readonly string[];
 }): string {
@@ -55,7 +63,8 @@ ${expected.toolsField}
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: ${expected.inheritSkills}
-provenance:
+advertise: true
+${asyncLine(expected.async)}provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
   sourceAgent: bot
@@ -70,7 +79,16 @@ Body content.
 }
 
 describe("GUIDED_DROPPED_FIELDS", () => {
-  const expectedGuidedFields = ["allowed-tools", "mcpServers", "permissionMode", "hooks"];
+  const expectedGuidedFields = [
+    "allowed-tools",
+    "mcpServers",
+    "permissionMode",
+    "hooks",
+    "initialPrompt",
+    "observer",
+    "observerMessage",
+    "observeSubagents",
+  ];
 
   test("exposes the complete guided set", () => {
     // act
@@ -124,7 +142,7 @@ describe("convertAgent", () => {
       sourceFields: {
         model: "sonnet",
       },
-      expectedMapping: "model: anthropic/claude-sonnet-4-6\ntools: read\n",
+      expectedMapping: "model: anthropic/claude-sonnet-5-5\ntools: read\n",
       expectedModelProvenance: "  originalModel: sonnet\n",
       expectedOriginalModel: {
         originalModel: "sonnet",
@@ -135,7 +153,7 @@ describe("convertAgent", () => {
       sourceFields: {
         model: "opus",
       },
-      expectedMapping: "model: anthropic/claude-opus-4-7\ntools: read\n",
+      expectedMapping: "model: anthropic/claude-opus-5-5\ntools: read\n",
       expectedModelProvenance: "  originalModel: opus\n",
       expectedOriginalModel: {
         originalModel: "opus",
@@ -146,7 +164,7 @@ describe("convertAgent", () => {
       sourceFields: {
         model: "haiku",
       },
-      expectedMapping: "model: anthropic/claude-haiku-4-5\ntools: read\n",
+      expectedMapping: "model: anthropic/claude-haiku-5-5\ntools: read\n",
       expectedModelProvenance: "  originalModel: haiku\n",
       expectedOriginalModel: {
         originalModel: "haiku",
@@ -283,6 +301,8 @@ aliases: pi-claude-marketplace-acme-reviewer
 ${expectedMapping}systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -335,7 +355,7 @@ Review files.
 name: spec-tree:changes-reviewer
 description: Reviews changes
 aliases: pi-claude-marketplace-spec-tree-changes-reviewer
-model: anthropic/claude-sonnet-4-6
+model: anthropic/claude-sonnet-5-5
 tools: bash,read
 thinking: high
 skills: spec-tree-review-changes
@@ -343,6 +363,8 @@ skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: spec-tree
@@ -425,6 +447,8 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -485,16 +509,112 @@ Review files.
       expectedWarnings: [],
     },
     {
+      sourceModel: "INHERIT",
+      expectedModelLine: undefined,
+      expectedOriginalModel: "INHERIT",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "sonnet",
+      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedOriginalModel: "sonnet",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "SONNET",
+      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedOriginalModel: "SONNET",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "opusplan",
+      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedOriginalModel: "opusplan",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "sonnet[1m]",
+      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedOriginalModel: "sonnet[1m]",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "Sonnet[1M]",
+      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedOriginalModel: "Sonnet[1M]",
+      expectedWarnings: [],
+    },
+    {
       sourceModel: "opus",
-      expectedModelLine: "model: anthropic/claude-opus-4-7",
+      expectedModelLine: "model: anthropic/claude-opus-5-5",
       expectedOriginalModel: "opus",
       expectedWarnings: [],
     },
     {
+      sourceModel: "opus[1m]",
+      expectedModelLine: "model: anthropic/claude-opus-5-5",
+      expectedOriginalModel: "opus[1m]",
+      expectedWarnings: [],
+    },
+    {
       sourceModel: "haiku",
-      expectedModelLine: "model: anthropic/claude-haiku-4-5",
+      expectedModelLine: "model: anthropic/claude-haiku-5-5",
       expectedOriginalModel: "haiku",
       expectedWarnings: [],
+    },
+    {
+      sourceModel: "fable",
+      expectedModelLine: "model: anthropic/claude-fable-5-1",
+      expectedOriginalModel: "fable",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "fable[1m]",
+      expectedModelLine: "model: anthropic/claude-fable-5-1",
+      expectedOriginalModel: "fable[1m]",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "best",
+      expectedModelLine: "model: anthropic/claude-fable-5-1",
+      expectedOriginalModel: "best",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "claude-opus-4-7",
+      expectedModelLine: "model: anthropic/claude-opus-4-7",
+      expectedOriginalModel: "claude-opus-4-7",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: " claude-haiku-5-5 ",
+      expectedModelLine: "model: anthropic/claude-haiku-5-5",
+      expectedOriginalModel: " claude-haiku-5-5 ",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "gpt-5",
+      expectedModelLine: undefined,
+      expectedOriginalModel: "gpt-5",
+      expectedWarnings: ['unknown model "gpt-5" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceModel: "claude-x:high",
+      expectedModelLine: undefined,
+      expectedOriginalModel: "claude-x:high",
+      expectedWarnings: ['unknown model "claude-x:high" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceModel: "Claude-Opus-4-7",
+      expectedModelLine: undefined,
+      expectedOriginalModel: "Claude-Opus-4-7",
+      expectedWarnings: ['unknown model "Claude-Opus-4-7" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceModel: "claude opus",
+      expectedModelLine: undefined,
+      expectedOriginalModel: "claude opus",
+      expectedWarnings: ['unknown model "claude opus" -- omitted from generated frontmatter'],
     },
     {
       sourceModel: "future-model",
@@ -571,6 +691,60 @@ Review files.
       sourceEffort: "turbo",
       expectedThinkingLine: undefined,
       expectedWarnings: ['unknown effort value "turbo" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: "max",
+      expectedThinkingLine: "thinking: max",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: "med",
+      expectedThinkingLine: "thinking: medium",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: "MED",
+      expectedThinkingLine: "thinking: medium",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: "HIGH",
+      expectedThinkingLine: "thinking: high",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: " low ",
+      expectedThinkingLine: "thinking: low",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: "32000",
+      expectedThinkingLine: undefined,
+      expectedWarnings: ['unknown effort value "32000" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceThinking: "max",
+      sourceEffort: "",
+      expectedThinkingLine: "thinking: max",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: "HIGH",
+      sourceEffort: "",
+      expectedThinkingLine: undefined,
+      expectedWarnings: ['unknown thinking value "HIGH" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceThinking: "turbo",
+      sourceEffort: "MED",
+      expectedThinkingLine: "thinking: medium",
+      expectedWarnings: ['unknown thinking value "turbo" -- using effort "MED" as fallback'],
     },
   ]) {
     test(`maps thinking ${JSON.stringify(sourceThinking)} and effort ${JSON.stringify(sourceEffort)}`, () => {
@@ -814,6 +988,85 @@ Review files.
     );
   });
 
+  test("grants inheritSkills for a Skill entry with a pattern, as for a bare Skill", () => {
+    // arrange & act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/plugins/acme",
+      pluginDataDir: "/data/acme",
+      knownSkills: [],
+      discovered: {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: "/plugins/acme/agents/reviewer.md",
+        sourceHash: "discovery-hash",
+        raw: { description: "Reviews files", tools: "Read, Skill(helper)" },
+        body: "Review files.\n",
+      },
+      sourceHash: "converted-hash",
+      mapModel: false,
+    });
+
+    // assert
+    assert.match(agent.fileContent, /^tools: read$/m);
+    assert.match(agent.fileContent, /^inheritSkills: true$/m);
+    assert.match(agent.fileContent, /^ {2}droppedTools: \[\]$/m);
+    assert.deepStrictEqual(agent.warnings, []);
+  });
+
+  test("drops inheritSkills for a disallowed Skill entry with a pattern beside an omitted tools list", () => {
+    // arrange & act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/plugins/acme",
+      pluginDataDir: "/data/acme",
+      knownSkills: [],
+      discovered: {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: "/plugins/acme/agents/reviewer.md",
+        sourceHash: "discovery-hash",
+        raw: { description: "Reviews files", disallowedTools: "Skill(helper)" },
+        body: "Review files.\n",
+      },
+      sourceHash: "converted-hash",
+      mapModel: false,
+    });
+
+    // assert
+    assert.match(agent.fileContent, /^inheritSkills: false$/m);
+    assert.deepStrictEqual(agent.warnings, []);
+  });
+
+  test("rejects a source whose only tool is a Skill entry with a pattern with the inheritSkills explanation", () => {
+    // arrange
+    const convertSkillPatternOnlyAgent = () =>
+      convertAgent({
+        pluginName: "acme",
+        pluginRoot: "/plugins/acme",
+        pluginDataDir: "/data/acme",
+        knownSkills: [],
+        discovered: {
+          sourceName: "reviewer",
+          generatedName: "pi-claude-marketplace-acme-reviewer",
+          sourcePath: "/plugins/acme/agents/reviewer.md",
+          sourceHash: "discovery-hash",
+          raw: { description: "Reviews files", tools: "Skill(helper)" },
+          body: "Review files.\n",
+        },
+        sourceHash: "converted-hash",
+        mapModel: false,
+      });
+
+    // act & assert
+    assert.throws(
+      convertSkillPatternOnlyAgent,
+      new Error(
+        'Cannot convert agent "reviewer" in plugin "acme": the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). Source tools: Skill(helper); disallowedTools: (none). Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list.',
+      ),
+    );
+  });
+
   test("labels a malformed changing tools accessor as omitted when the value disappears", () => {
     // arrange
     let toolsReadCount = 0;
@@ -861,7 +1114,9 @@ Review files.
     const expectedWarnings = [
       'malformed skill reference "spec-tree:" -- dropped',
       'malformed skill reference "spec-tree:sub/skill" -- dropped',
-      'malformed skill reference "spec-tree:a\tb" -- dropped',
+      // D-CF4-08: whitespace separates two references, as in Claude Code.
+      'unknown skill reference "spec-tree:a" -- dropped',
+      'unknown skill reference "b" -- dropped',
     ];
 
     // act
@@ -946,6 +1201,8 @@ skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -997,6 +1254,8 @@ tools: read,bash
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1042,6 +1301,8 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1089,6 +1350,8 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1134,6 +1397,8 @@ excludeTools: edit
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1180,6 +1445,8 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1224,6 +1491,8 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1270,6 +1539,8 @@ excludeTools: edit,write
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1315,6 +1586,8 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1364,6 +1637,8 @@ tools: read,bash
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1403,12 +1678,14 @@ Body content.
     // arrange
     const expectedFileContent = `---
 name: acme:bot
-description: Imported Claude Code plugin agent bot from plugin acme.
+description: Agent from acme plugin
 aliases: pi-claude-marketplace-acme-bot
 tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1445,6 +1722,153 @@ Body content.
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
+  for (const { label, raw, description, warnings } of [
+    {
+      label: "takes when_to_use when the description is missing",
+      raw: { when_to_use: "Use it to review code." },
+      description: "Use it to review code.",
+      warnings: ["source description was missing or empty -- using fallback"],
+    },
+    {
+      label: "takes when-to-use when description and when_to_use are missing",
+      raw: { "when-to-use": "Use it for audits." },
+      description: "Use it for audits.",
+      warnings: ["source description was missing or empty -- using fallback"],
+    },
+    {
+      label: "prefers when_to_use over when-to-use",
+      raw: { when_to_use: "Use it first.", "when-to-use": "Use it second." },
+      description: "Use it first.",
+      warnings: ["source description was missing or empty -- using fallback"],
+    },
+    {
+      label: "prefers the description over when_to_use",
+      raw: { description: "Reviews code.", when_to_use: "Use it to review code." },
+      description: "Reviews code.",
+      warnings: [],
+    },
+    {
+      label: "treats a description of only spaces as missing",
+      raw: { description: "   " },
+      description: "Agent from acme plugin",
+      warnings: ["source description was missing or empty -- using fallback"],
+    },
+    {
+      label: "skips a blank when_to_use for when-to-use",
+      raw: { when_to_use: "  ", "when-to-use": "Use it for audits." },
+      description: "Use it for audits.",
+      warnings: ["source description was missing or empty -- using fallback"],
+    },
+    {
+      label: "trims a present description",
+      raw: { description: "  Reviews code.  " },
+      description: "Reviews code.",
+      warnings: [],
+    },
+  ] satisfies readonly {
+    label: string;
+    raw: RawAgentFrontmatter;
+    description: string;
+    warnings: readonly string[];
+  }[]) {
+    test(`D-CF4-03 ${label}`, () => {
+      // arrange
+      const expectedFileContent = `---
+name: acme:bot
+description: ${description}
+aliases: pi-claude-marketplace-acme-bot
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:${yamlList(warnings)}
+---
+
+Body content.
+`;
+
+      // act
+      const agent = convertAgent({
+        pluginName: "acme",
+        pluginRoot: "/root",
+        pluginDataDir: "/data",
+        knownSkills: [],
+        discovered: {
+          sourceName: "bot",
+          generatedName: "pi-claude-marketplace-acme-bot",
+          sourcePath: "/abs/path/source.md",
+          sourceHash: "abc123",
+          raw: { tools: "Read", ...raw },
+          body: "Body content.\n",
+        },
+        sourceHash: "abc",
+        mapModel: false,
+      });
+
+      // assert
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+      assert.deepStrictEqual(agent.warnings, warnings);
+      assert.deepStrictEqual(agent.droppedFields, []);
+    });
+  }
+
+  test("D-CF4-01 names a nested agent after its folders and keeps its generated alias", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:review:security
+description: Checks security.
+aliases: pi-claude-marketplace-acme-review-security
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: security
+  sourcePath: /plugins/acme/agents/review/security.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Check security.
+`;
+
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/plugins/acme",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "security",
+        generatedName: "pi-claude-marketplace-acme-review-security",
+        sourcePath: "/plugins/acme/agents/review/security.md",
+        namespace: ["review"],
+        sourceHash: "abc123",
+        raw: { description: "Checks security.", tools: "Read" },
+        body: "Check security.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
   test("preserves a token-free CRLF body's final carriage return", () => {
     // arrange
     const expectedFileContent = `---
@@ -1457,6 +1881,8 @@ skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1538,6 +1964,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
+      async: false,
       droppedTools: [
         "mcp__plugin_other_db__q",
         "mcp__github__search",
@@ -1566,6 +1993,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
+      async: false,
       droppedTools: ["mcp__plugin_acme_db__a/b"],
       warnings: [],
     });
@@ -1607,6 +2035,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
+      async: false,
       droppedTools: [],
       warnings: [],
     });
@@ -1691,25 +2120,498 @@ Body.\r
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
-  for (const { label, raw } of [
-    {
-      label: "an explicit tools: list",
-      raw: { description: "d", tools: "Read, WebFetch", disallowedTools: "Edit, Unknown" },
-    },
-    {
-      label: "an omitted tools: list",
-      raw: { description: "d", disallowedTools: "Edit, Unknown" },
-    },
+  test("ANAME-02: an agent with no mcp__ token and an explicit tools: list converts identically with and without written servers", () => {
+    // arrange
+    const raw = { description: "d", tools: "Read, WebFetch", disallowedTools: "Edit, Unknown" };
+    const expectedAgent = convertMcpAgent(raw, undefined);
+
+    // act
+    const agent = convertMcpAgent(raw, ["db"]);
+
+    // assert
+    assert.deepStrictEqual(agent, expectedAgent);
+  });
+
+  test("D-CF4-05: an agent with an omitted tools: list loses only its async line when the plugin writes MCP servers", () => {
+    // arrange
+    const raw = { description: "d", disallowedTools: "Edit, Unknown" };
+    const withoutServers = convertMcpAgent(raw, undefined);
+
+    // act
+    const agent = convertMcpAgent(raw, ["db"]);
+
+    // assert
+    assert.deepStrictEqual(agent, {
+      ...withoutServers,
+      fileContent: withoutServers.fileContent.replace(
+        "advertise: true\nasync: false\n",
+        "advertise: true\n",
+      ),
+    });
+    assert.notStrictEqual(agent.fileContent, withoutServers.fileContent);
+  });
+
+  for (const { label, background, expectedAsync } of [
+    { label: "true", background: "true", expectedAsync: true },
+    { label: "a double-quoted true", background: '"true"', expectedAsync: true },
+    { label: "a single-quoted true", background: "'true'", expectedAsync: true },
+    { label: "false", background: "false", expectedAsync: false },
+    { label: "yes", background: "yes", expectedAsync: false },
+    { label: "an empty value", background: "", expectedAsync: false },
+    { label: "an absent field", background: undefined, expectedAsync: false },
   ]) {
-    test(`ANAME-02: an agent with no mcp__ token and ${label} converts identically with and without written servers`, () => {
+    test(`D-CF4-05: a background of ${label} converts with async: ${expectedAsync} and no warning`, () => {
       // arrange
-      const expectedAgent = convertMcpAgent(raw, undefined);
+      const raw = {
+        description: "d",
+        tools: "Read",
+        ...(background === undefined ? {} : { background }),
+      };
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: "tools: read",
+        inheritSkills: false,
+        async: expectedAsync,
+        droppedTools: [],
+        warnings: [],
+      });
 
       // act
-      const agent = convertMcpAgent(raw, ["db"]);
+      const agent = convertMcpAgent(raw, undefined);
+
+      // assert
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+      assert.deepStrictEqual(agent.droppedFields, []);
+      assert.deepStrictEqual(agent.warnings, []);
+    });
+  }
+
+  test("D-CF4-05: an explicit list with an mcp: entry converts with no async line even for background: true", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read,mcp:plugin_acme_db_",
+      inheritSkills: false,
+      droppedTools: [],
+      warnings: [MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read, mcp__plugin_acme_db", background: "true" },
+      ["db"],
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("D-CF4-05: an omitted list in a plugin that writes MCP servers converts with no async line even for background: true", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertMcpAgent({ description: "d", background: "true" }, ["db"]);
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+});
+
+describe("D-CF4-08 tool lists", () => {
+  for (const { label, tools, expectedTools } of [
+    { label: "spaces", tools: "Read Grep", expectedTools: "read,grep" },
+    { label: "commas", tools: "Read, Grep", expectedTools: "read,grep" },
+    { label: "an inline array", tools: '["Read", "Bash"]', expectedTools: "read,bash" },
+    { label: "a patterned entry", tools: "Bash(git log *), Read", expectedTools: "bash,read" },
+    {
+      label: "a comma inside parentheses",
+      tools: "Bash(a, b) Read",
+      expectedTools: "bash,read",
+    },
+    { label: "empty parts", tools: "Read  ,  Grep", expectedTools: "read,grep" },
+  ]) {
+    test(`splits a tools list with ${label} into its entries`, () => {
+      // arrange
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: `tools: ${expectedTools}`,
+        inheritSkills: false,
+        async: false,
+        droppedTools: [],
+        warnings: [],
+      });
+
+      // act
+      const agent = convertMcpAgent({ description: "d", tools }, undefined);
+
+      // assert
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+    });
+  }
+
+  test("a patterned disallowedTools entry removes the whole tool", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read",
+      inheritSkills: false,
+      async: false,
+      droppedTools: [],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read, Bash", disallowedTools: "Bash(rm *)" },
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("drops a tool named after an inherited object key", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read",
+      inheritSkills: false,
+      async: false,
+      droppedTools: ["constructor", "toString", "hasOwnProperty"],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read constructor toString hasOwnProperty" },
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("does not exclude a disallowed tool named after an inherited object key", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - disallowedTools entries with no Pi tool mapping (constructor, toString) cannot narrow the default tool set -- ignored
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", disallowedTools: "constructor toString" },
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("a space-separated MCP name of a written server maps to its mcp: entry", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read,mcp:plugin_acme_db_",
+      inheritSkills: false,
+      droppedTools: [],
+      warnings: [MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent({ description: "d", tools: "Read mcp__plugin_acme_db" }, ["db"]);
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  for (const tools of ["*", "Read, *"]) {
+    test(`a tools list of ${JSON.stringify(tools)} converts as an omitted list`, () => {
+      // arrange
+      const expectedAgent = convertMcpAgent({ description: "d" }, undefined);
+
+      // act
+      const agent = convertMcpAgent({ description: "d", tools }, undefined);
 
       // assert
       assert.deepStrictEqual(agent, expectedAgent);
+      assert.doesNotMatch(agent.fileContent, /^tools:/m);
+      assert.match(agent.fileContent, /^inheritSkills: true$/m);
+    });
+  }
+
+  test("disallowedTools narrows a wildcard tools list through excludeTools", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+excludeTools: bash,edit
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - \`excludeTools\` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "*", disallowedTools: "Bash(rm *) Edit" },
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("an explicit space-separated list that maps to nothing still refuses the conversion", () => {
+    // act
+    const convert = (): ConvertedAgent =>
+      convertMcpAgent({ description: "d", tools: "WebFetch NotebookEdit" }, undefined);
+
+    // assert
+    assert.throws(convert, {
+      message:
+        'Cannot convert agent "bot" in plugin "acme": the mapped tool list is empty ' +
+        '(pi-subagents has no safe representation of "no tools"). ' +
+        "Source tools: WebFetch NotebookEdit; disallowedTools: (none).",
+    });
+  });
+
+  test("a skills list splits on spaces into its references", () => {
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: ["acme-one", "acme-two"],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw: { description: "d", tools: "Read", skills: "one two" },
+        body: "Body content.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.match(agent.fileContent, /^skills: acme-one,acme-two$/m);
+    assert.deepStrictEqual(agent.warnings, []);
+  });
+});
+
+describe("preloadedSkillNames", () => {
+  test("lists the known references of the plugin once each in skills order", () => {
+    // act
+    const names = preloadedSkillNames("two, acme:one two other:x bad:", "acme", [
+      "acme-one",
+      "acme-two",
+    ]);
+
+    // assert
+    assert.deepStrictEqual(names, ["acme-two", "acme-one"]);
+  });
+
+  test("lists nothing for an agent without skills", () => {
+    // act
+    const names = preloadedSkillNames(undefined, "acme", ["acme-one"]);
+
+    // assert
+    assert.deepStrictEqual(names, []);
+  });
+});
+
+describe("D-CF4-04 skill preloads", () => {
+  function convertPreloadingAgent(
+    skills: string,
+    skillPreloads: ReadonlyMap<string, SkillPreload> | undefined,
+  ): ConvertedAgent {
+    return convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: ["acme-one", "acme-two", "acme-three"],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw: { description: "d", tools: "Read", skills },
+        body: "Body content.\n\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+      skillPreloads,
+    });
+  }
+
+  test("appends each inlined skill after the body in skills order and keeps the others listed", () => {
+    // arrange
+    const preloads = new Map<string, SkillPreload>([
+      ["acme-one", { kind: "inline", text: "Base directory for this skill: /s/acme-one\n\nOne." }],
+      ["acme-two", { kind: "inline", text: "Base directory for this skill: /s/acme-two\n\nTwo." }],
+    ]);
+    const expectedFileContent = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+tools: read
+skills: acme-three
+skillPath: ../pi-claude-marketplace/resources/skills
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body content.
+
+Base directory for this skill: /s/acme-two
+
+Two.
+
+Base directory for this skill: /s/acme-one
+
+One.
+`;
+
+    // act
+    const agent = convertPreloadingAgent("two three one acme:two", preloads);
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+    assert.deepStrictEqual(agent.warnings, []);
+  });
+
+  for (const { reason, expectedWarning } of [
+    {
+      reason: "disable-model-invocation",
+      expectedWarning:
+        'skill reference "one" names a skill with disable-model-invocation: true -- not preloaded (Claude Code skips it too)',
+    },
+    {
+      reason: "no-description",
+      expectedWarning:
+        'skill reference "one" names a skill with no description -- not preloaded (Claude Code skips it too)',
+    },
+    {
+      reason: "unparseable",
+      expectedWarning:
+        'skill reference "one" names a skill whose frontmatter does not parse -- not preloaded',
+    },
+  ] as const) {
+    test(`leaves a ${reason} skip out of skills with its warning`, () => {
+      // arrange
+      const preloads = new Map<string, SkillPreload>([["acme-one", { kind: "skip", reason }]]);
+
+      // act
+      const agent = convertPreloadingAgent("one", preloads);
+
+      // assert
+      assert.doesNotMatch(agent.fileContent, /^skills:/m);
+      assert.match(agent.fileContent, /\n---\n\nBody content\.\n\n$/);
+      assert.deepStrictEqual(agent.warnings, [expectedWarning]);
+    });
+  }
+
+  test("keeps the skills line of every skill without a preload", () => {
+    // act
+    const agent = convertPreloadingAgent("one two", undefined);
+
+    // assert
+    assert.match(agent.fileContent, /^skills: acme-one,acme-two$/m);
+    assert.match(agent.fileContent, /\n---\n\nBody content\.\n\n$/);
+  });
+
+  test("an inlined text with frontmatter-looking lines leaves the generated frontmatter unchanged", () => {
+    // arrange
+    const plain = convertPreloadingAgent("two", undefined);
+    const preloads = new Map<string, SkillPreload>([
+      ["acme-one", { kind: "inline", text: "---\nname: evil\ntools: bash,edit\n---\nOne." }],
+    ]);
+
+    // act
+    const agent = convertPreloadingAgent("one two", preloads);
+
+    // assert
+    assert.deepStrictEqual(
+      parseFrontmatter(agent.fileContent).raw,
+      parseFrontmatter(plain.fileContent).raw,
+    );
+    assert.strictEqual(
+      parseFrontmatter(agent.fileContent).body,
+      "\nBody content.\n\n---\nname: evil\ntools: bash,edit\n---\nOne.\n",
+    );
+  });
+});
+
+describe("D-CF4-05 plugin-ignored fields", () => {
+  for (const field of ["initialPrompt", "observer", "observerMessage", "observeSubagents"]) {
+    test(`drops ${field} with the plugin-ignored warning`, () => {
+      // act
+      const agent = convertMcpAgent({ description: "d", tools: "Read", [field]: "x" }, undefined);
+
+      // assert
+      assert.deepStrictEqual(agent.droppedFields, [field]);
+      assert.deepStrictEqual(agent.warnings, [
+        `agent-level \`${field}\` is not converted -- dropped (Claude Code ignores it for plugin agents too).`,
+      ]);
     });
   }
 });

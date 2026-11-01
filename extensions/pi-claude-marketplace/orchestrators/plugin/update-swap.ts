@@ -404,6 +404,7 @@ async function prepareUpdateHandles(
       pluginDataDir,
       agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
+      skillSources: handles.skills.result.recorded,
       referenceNames,
       // AG-7 opt-in: forward the direct-path `--map-model` setting. The
       // cascade entrypoint never sets `args.mapModel`, so cascade re-
