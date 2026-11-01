@@ -63,10 +63,23 @@ export type {
 } from "@earendil-works/pi-coding-agent";
 export type { AutocompleteProvider } from "@earendil-works/pi-tui";
 
-import type { AgentEndEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  AgentEndEvent,
+  ExtensionAPI,
+  ExtensionContext,
+  InputEvent,
+} from "@earendil-works/pi-coding-agent";
 
 /** Pi's mode union, derived from its context because the root omits the alias. */
 export type ExtensionMode = ExtensionContext["mode"];
+
+/** Pi's thinking level, the value `${CLAUDE_EFFORT}` receives at invocation (D-CF1-01). */
+// fallow-ignore-next-line unused-type -- NFR-11: the Pi boundary exports every Pi type the D-CF1-01 invocation handlers read before those handlers exist; the handlers that wire them are its consumers.
+export type ThinkingLevel = ReturnType<ExtensionAPI["getThinkingLevel"]>;
+
+/** The origin of a Pi `input` event, which the invocation handlers filter on (D-CF1-01). */
+// fallow-ignore-next-line unused-type -- NFR-11: the Pi boundary exports every Pi type the D-CF1-01 invocation handlers read before those handlers exist; the handlers that wire them are its consumers.
+export type InputSource = InputEvent["source"];
 
 /**
  * Structural `text` content block -- mirrors `pi-ai`'s `TextContent`

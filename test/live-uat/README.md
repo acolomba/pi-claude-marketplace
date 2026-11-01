@@ -8,7 +8,7 @@ The harnesses in this directory verify runtime behavior that the offline suites 
 | `manifest-absence-canary.mjs`       | installed plugins survive their manifest entry disappearing; disabled partials read as disabled                                                                                  | only for the optional host smoke                             |
 | `workflow-agent-failure-canary.mjs` | the host engine's `agent()` failure observable -- a recoverable failure resolves to `null`, a non-recoverable one rejects (WEVID-01)                                             | no -- it drives the engine, not a Pi session                 |
 | `workflow-storage-canary.mjs`       | the envelopes the bridge writes are the envelopes the host engine lists, loads and parses, in both scopes (WSTOR-01)                                                             | no -- it drives the extension and the engine's storage layer |
-| `mcp-adapter-canary.mjs`            | pi-mcp-adapter 5.2.0 loads this extension's entries, a legacy entry migrates with the reloads counted, tool search finds the plugin tools, and info shows their status (ADOC-02) | yes, with the keyless stub, which the canary starts itself   |
+| `mcp-adapter-canary.mjs`            | pi-mcp-adapter 7.0.0 loads this extension's entries, a legacy entry migrates with the reloads counted, tool search finds the plugin tools, and info shows their status (ADOC-02) | yes, with the keyless stub, which the canary starts itself   |
 
 All five follow the same honesty contract: an unmet precondition or an unobserved assertion exits **non-zero** with a human-readable reason, so the verifier records `human_needed` rather than a silent pass.
 
@@ -168,7 +168,7 @@ Nothing is run: no subagent starts, so no provider credentials are needed in eit
 
 ```bash
 mkdir -p /var/tmp/wf-engine tmp/pi-uat/wf-store
-npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.14.0
+npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.15.0
 PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-store \
 PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
   node test/live-uat/workflow-storage-canary.mjs
@@ -484,14 +484,14 @@ echo >> /tmp/stop-uat/stdin.log
 
 ## MCP adapter canary -- `mcp-adapter-canary.mjs`
 
-Proves that a real pi-mcp-adapter loads the MCP server entries that this extension writes to `mcp-adapter.json` (ADOC-02). The offline suites check the entries that the extension writes. Only a live adapter can show that the adapter reads those entries, starts the servers, and gives their tools to the model. The canary drives a real Pi over its RPC mode (JSON commands on stdin, JSON events on stdout). Pi loads this extension, pi-mcp-adapter 5.2.0, and a small helper extension that the canary writes into its sandbox. The model is the keyless stub, which replays scripted tool calls.
+Proves that a real pi-mcp-adapter loads the MCP server entries that this extension writes to `mcp-adapter.json` (ADOC-02). The offline suites check the entries that the extension writes. Only a live adapter can show that the adapter reads those entries, starts the servers, and gives their tools to the model. The canary drives a real Pi over its RPC mode (JSON commands on stdin, JSON events on stdout). Pi loads this extension, pi-mcp-adapter 7.0.0, and a small helper extension that the canary writes into its sandbox. The model is the keyless stub, which replays scripted tool calls.
 
 ### Prerequisites
 
 | Requirement                               | Notes                                                                                                                                                                                                                                                                                                                                                               |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The repository's Pi, 1.0.0 or later       | `npm ci` installs it from the `@earendil-works/pi-coding-agent` devDependency. The canary finds it through `test/pi-runtime.ts`.                                                                                                                                                                                                                                    |
-| A scratch install of pi-mcp-adapter 5.2.0 | Run `npm install --prefix /var/tmp/mcp-adapter-520 pi-mcp-adapter@5.2.0 --ignore-scripts --omit=peer --no-audit --no-fund`, then set `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-520/node_modules/pi-mcp-adapter`. Keep the prefix outside this repository. The adapter must never enter `package.json` or `package-lock.json`. The canary refuses any other version. |
+| A scratch install of pi-mcp-adapter 7.0.0 | Run `npm install --prefix /var/tmp/mcp-adapter-700 pi-mcp-adapter@7.0.0 --ignore-scripts --omit=peer --no-audit --no-fund`, then set `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-700/node_modules/pi-mcp-adapter`. Keep the prefix outside this repository. The adapter must never enter `package.json` or `package-lock.json`. The canary refuses any other version. |
 | `TMPDIR` outside the repository           | Use a directory on a real filesystem, such as `/var/tmp/mcp-adapter-canary`. The canary makes its sandbox there and removes it on every exit, also after Ctrl-C or `SIGTERM`. It refuses a temp directory inside the repository, because Pi asks for project trust there.                                                                                           |
 | No provider key                           | The canary starts the stub on `127.0.0.1` itself. Each Pi child gets an environment that the canary builds from scratch, so no inherited variable reaches Pi.                                                                                                                                                                                                       |
 
@@ -499,9 +499,9 @@ Proves that a real pi-mcp-adapter loads the MCP server entries that this extensi
 
 ```bash
 mkdir -p /var/tmp/mcp-adapter-canary
-npm install --prefix /var/tmp/mcp-adapter-520 pi-mcp-adapter@5.2.0 \
+npm install --prefix /var/tmp/mcp-adapter-700 pi-mcp-adapter@7.0.0 \
   --ignore-scripts --omit=peer --no-audit --no-fund
-PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-520/node_modules/pi-mcp-adapter \
+PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-700/node_modules/pi-mcp-adapter \
 TMPDIR=/var/tmp/mcp-adapter-canary \
   node test/live-uat/mcp-adapter-canary.mjs
 echo "EXIT=$?"
@@ -516,7 +516,7 @@ The canary runs five Pi sessions in one sandbox:
 
 ### What it asserts (exit 0 conditions)
 
-- **M0** -- the preconditions: the repository's Pi is 1.0.0 or later, `PI_MCP_ADAPTER_ROOT` holds pi-mcp-adapter 5.2.0, and `TMPDIR` is outside the repository.
+- **M0** -- the preconditions: the repository's Pi is 1.0.0 or later, `PI_MCP_ADAPTER_ROOT` holds pi-mcp-adapter 7.0.0, and `TMPDIR` is outside the repository.
 - **M1** (AMIG-03) -- the migration notice lists `echo -> plugin_echo_echo_ (echo) [user]`.
 - **M2** (AMIG-03, ASTAT-02) -- before any reload, the adapter still lists the old name `echo`, and info shows `(not loaded)`.
 - **M3** (AMIG-01, ANAME-01, ANAME-04) -- `mcp.json` keeps no entry with this extension's marker, and `mcp-adapter.json` holds `plugin_echo_echo_` with `toolPrefix: "mcp"` and `directTools: "search"`.
@@ -554,7 +554,7 @@ Exit 130 or 143 means that `SIGINT` (Ctrl-C) or `SIGTERM` stopped the run, which
 `--invert` flips the expected route A result text and nothing else:
 
 ```bash
-PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-520/node_modules/pi-mcp-adapter \
+PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-700/node_modules/pi-mcp-adapter \
 TMPDIR=/var/tmp/mcp-adapter-canary \
   node test/live-uat/mcp-adapter-canary.mjs --invert
 echo "EXIT=$?"

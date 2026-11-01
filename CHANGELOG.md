@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- The extension now needs Pi 1.4.0 or newer, and each companion extension now needs its latest release.
+  - Plugin MCP servers now need pi-mcp-adapter 7.0.0 or a later 7.x release. Literal text in a plugin's MCP settings still reaches the server unchanged.
+  - Plugin agents now need pi-subagents 0.84.0 or newer.
+  - Plugin workflows now need `@quintinshaw/pi-dynamic-workflows` 3.15.0 or a later 3.x release, which the package now declares as an optional peer.
 - A plugin's `SessionStart` hook now runs once when an RPC client starts, switches, forks, or clones a session, as in Claude Code. (#294)
 - Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)
 

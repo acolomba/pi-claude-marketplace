@@ -12,7 +12,7 @@
 //
 // ADOC-02: the unit tests prove that this extension writes `mcp-adapter.json`.
 // Only a live pi-mcp-adapter proves that the adapter reads it. This canary
-// drives a real Pi over RPC with this extension, pi-mcp-adapter 5.2.0 and a
+// drives a real Pi over RPC with this extension, pi-mcp-adapter 7.0.0 and a
 // small helper extension the canary writes into its sandbox. It proves:
 //   - a legacy `mcp.json` entry written by the published 0.19.2 migrates to
 //     `mcp-adapter.json` with the notice row the user sees (AMIG-01, AMIG-03);
@@ -54,11 +54,11 @@
 // deterministic and offline. The fixture holds the files 0.19.2 wrote on the
 // repository's Pi, with the sandbox root replaced by `@@SANDBOX@@`.
 //
-// Run (pi-mcp-adapter 5.2.0 in a scratch prefix outside the checkout):
+// Run (pi-mcp-adapter 7.0.0 in a scratch prefix outside the checkout):
 //
-//   npm install --prefix /var/tmp/mcp-adapter-520 pi-mcp-adapter@5.2.0 \
+//   npm install --prefix /var/tmp/mcp-adapter-700 pi-mcp-adapter@7.0.0 \
 //     --ignore-scripts --omit=peer --no-audit --no-fund
-//   PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-520/node_modules/pi-mcp-adapter \
+//   PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-700/node_modules/pi-mcp-adapter \
 //   TMPDIR=/var/tmp/mcp-adapter-canary \
 //     node test/live-uat/mcp-adapter-canary.mjs [--invert]
 //
@@ -117,7 +117,7 @@ const FIXTURE_RELATIVE = "test/live-uat/fixtures/mcp-adapter-canary/legacy-v0.19
 const FIXTURE_PATH = path.join(REPO_ROOT, FIXTURE_RELATIVE);
 const PLACEHOLDER = "@@SANDBOX@@";
 const MARKETPLACE = "canary-mkt";
-const ADAPTER_VERSION = "5.2.0";
+const ADAPTER_VERSION = "7.0.0";
 const LEGACY_VERSION = "0.19.2";
 const EXIT_HUMAN_NEEDED = 1;
 const EXIT_REGRESSION = 2;
@@ -339,9 +339,9 @@ async function requirePackage(root, name, version, entry, hint) {
 async function adapterExtension() {
   const hint =
     "Install it outside the checkout and name it:\n" +
-    `  npm install --prefix /var/tmp/mcp-adapter-520 pi-mcp-adapter@${ADAPTER_VERSION} ` +
+    `  npm install --prefix /var/tmp/mcp-adapter-700 pi-mcp-adapter@${ADAPTER_VERSION} ` +
     "--ignore-scripts --omit=peer --no-audit --no-fund\n" +
-    "  PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-520/node_modules/pi-mcp-adapter";
+    "  PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-700/node_modules/pi-mcp-adapter";
   const root = process.env.PI_MCP_ADAPTER_ROOT;
   if (root === undefined || root.trim() === "") {
     humanNeeded("PI_MCP_ADAPTER_ROOT is unset.", hint);

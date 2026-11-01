@@ -188,16 +188,16 @@ Two further facts about the installed name. If a command of that name is already
 
 The marketplace and the workflow engine each declare a minimum Pi version.
 
-- `pi-claude-marketplace` peers on `@earendil-works/pi-coding-agent >=1.0.0`.
-- `@quintinshaw/pi-dynamic-workflows` 3.13.0, 3.13.1, and 3.14.0 peer on `@earendil-works/pi-coding-agent >=0.80.8` and `@earendil-works/pi-tui >=0.80.6`. The published package metadata of these releases states these minimum versions, and 3.10.1 declared the same ones.
+- `pi-claude-marketplace` peers on `@earendil-works/pi-coding-agent >=1.4.0`.
+- `@quintinshaw/pi-dynamic-workflows` 3.13.0, 3.13.1, 3.14.0, and 3.15.0 peer on `@earendil-works/pi-coding-agent >=0.80.8` and `@earendil-works/pi-tui >=0.80.6`. The published package metadata of these releases states these minimum versions, and 3.10.1 declared the same ones.
 
 The marketplace first raised its minimum Pi version to 0.86.1 because of a child-tool failure in engine 3.13.0. Each `agent()` call starts a child session. Engine 3.13.0 creates that session with its own Pi dependency, and the host Pi sends the session's requests to the model. In the tested pairing, Pi 0.85.1 hosted an engine with a Pi 0.87.0 dependency. These two Pi versions use different tool formats, so the child sessions received no tools. Pi 0.86.1 passed the same OpenAI tool test with the same engine.
 
-Engine 3.13.1 creates each child session through the host Pi instead (engine pull request [#233](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/233)). The session and its model requests then come from the same Pi, so their tool formats always match. The pull request states this, and no run recorded here drove a child tool call with engine 3.13.1. The marketplace now requires Pi 1.0.0 for its own Pi API, independent of the engine. Install Pi 1.0.0 or a newer version before you install this extension.
+Engine 3.13.1 creates each child session through the host Pi instead (engine pull request [#233](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/233)). The session and its model requests then come from the same Pi, so their tool formats always match. The pull request states this, and no run recorded here drove a child tool call with engine 3.13.1. The marketplace now requires Pi 1.4.0 for its own Pi API, independent of the engine. Install Pi 1.4.0 or a newer version before you install this extension.
 
 On 2026-09-23, a saved workflow installed through this bridge ran with Pi 0.86.1 and the published engine 3.13.0. Pi loaded both packages through normal extension discovery. The engine resolved its Pi dependency at 0.87.1. An OpenAI child called `read` and `structured_output`, returned the expected value, and posted it to the parent session. The run then cleared its pending-delivery marker.
 
-Use engine 3.14.0 or a newer release. With engine 3.13.0 or 3.13.1, result delivery can stay pending when you launch Pi with `--no-extensions -e` to load the engine. Engine 3.14.0 includes the fix, engine pull request [#232](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/232), and no run recorded here measured it. If you set `PI_CODING_AGENT_DIR`, use engine 3.14.0 or later, because earlier releases look for workflows in another directory. The section "Upstream stability" below explains the rule.
+Use engine 3.15.0 or a newer 3.x release. This extension declares 3.15.0 as its lowest supported engine version. With engine 3.13.0 or 3.13.1, result delivery can stay pending when you launch Pi with `--no-extensions -e` to load the engine. Engine 3.14.0 includes the fix, engine pull request [#232](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/232), and no run recorded here measured it. If you set `PI_CODING_AGENT_DIR`, use engine 3.14.0 or later, because earlier releases look for workflows in another directory. The section "Upstream stability" below explains the rule.
 
 Install the engine with:
 
