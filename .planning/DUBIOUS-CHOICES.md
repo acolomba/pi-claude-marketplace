@@ -763,3 +763,19 @@ Full entries: `.planning/phases/07-workflows/DUBIOUS-CHOICES.md`, P7-DC-01..17 (
 4. IN-10 wording: "a `Then` that compares the whole of what a turn reports marks it compared"; the notices step still marks a run turn compared, which is arguable.
 5. `layout.md` now lags ROADMAP's ownership paragraph by the extra Phase 7 test files.
 6. Advisory review items IN-01/03/04/07/09 are not in BACKLOG (no parent line).
+
+### DC-32: Phase 6 (MCP Servers), merged at e3a003d
+
+Full entries: `.planning/phases/06-mcp-servers/DUBIOUS-CHOICES.md`, P6-DC-01..22. The child session ran discuss, plan (9 plans, 4 waves), execute, security (22/22 closed), validation, one review round (8 warnings, 7 fixed) and verification: **human_needed, 4/5**. The parent merged it without closing the phase and recorded `verification_deferred_human` in STATE.md.
+
+**For the user to decide (blocks `/gsd-verify-work 06`):**
+1. **D-CF6-10, SC4 / MCP-07:** no scenario shows an agent calling a plugin's MCP tool. pi-subagents 0.84.0 refuses it in a foreground run (`Unresolved MCP direct-tool selectors: ...`), and background children in the harness load neither the companions nor the scripted model (BACKLOG MCPBG-01). The refusal is pinned as a recorded gap. Accept the pin (override with your name) or reject it (needs a pi-subagents change and harness work).
+2. **Symlinks in referenced MCP files (WR-01, WR-02):** a referenced `mcpServers` file refuses any symlink, even one inside the plugin root (MCPR-04, NFR-10). Claude Code follows it. The root `.mcp.json` follows symlinks anywhere, as upstream does. The refusal note says "escapes plugin root" for an in-root link, which is wrong either way.
+
+**Behavior changes made for upstream parity (review these too):**
+3. **P6-DC-01, D-CF6-01:** servers from `.mcp.json` and declared `mcpServers` now merge, later same-name wins. This replaces PRD MC-1 ("first match wins, no merge").
+4. **P6-DC-02/07/18, D-CF6-02:** a malformed server in a file, or a missing, unparseable, or unreadable file source, is now skipped silently (debug log only); the plugin installs with the rest. Inline malformed servers and escaping references stay fatal. A permission-denied file is skipped instead of reported `{permission denied}`, and a transient read error (EMFILE, EIO) skips servers that a later update, apply or reload then removes (WR-03).
+5. **P6-DC-03, D-CF6-03:** project-scope plugin servers keep pi-mcp-adapter's project approval; Claude Code never asks.
+6. **P6-DC-07 item 5:** a reference without `./` stays installable; upstream refuses the manifest.
+- Also unfiled: a drafted pi-subagents gap report (user's call). Parent lines pending: CHANGELOG, PRD MC-1..4, PROJECT D-CF6-01..11, four BACKLOG items, output-catalog and hooks-compatibility docs, the canary re-run on 7.0.0, cucumber skill notes, the migration message rewording.
+- Merge: ROADMAP and STATE conflicts in the tracking tables only; the parent kept the milestone view.
