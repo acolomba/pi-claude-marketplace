@@ -147,3 +147,15 @@ tooling. Status stays `open` until the user reviews it.
 - **Alternatives:** Inline the five files verbatim in every dispatch, as the workflow's build-time-embed note asks.
 - **Why dubious:** The workflow's note forbids leaving the content to the executor; the reason it gives (an `@path` line never expands) does not apply to an explicit Read instruction, but an executor that skips the Read would run without the procedure.
 - **Recorded in:** this file.
+
+### P6-DC-11: Plan 06-01 executor choices (listing tracer)
+
+- **Phase / source:** Phase 6 executor for `06-01-PLAN.md` (`06-01-SUMMARY.md`).
+- **Severity:** Medium (items 1, 2, 3); the rest Low. **Status:** open.
+- **Items:**
+  1. **Connect before listing:** the adapter's lazy `mcp({ server })` listing holds an em dash that the `fix-unicode-dashes` pre-commit hook rewrites in every committed feature file, so the scenario lists status, connects, then lists the server; the first listing a model sees is not compared whole. Any adapter message with an em dash has the same limit.
+  2. **250 ms quiet window for the registry probe:** the tool-listing When repeats the probe until two reports 250 ms apart agree (15 s deadline), after one flip under 8 workers; a heuristic, not a readiness signal.
+  3. **`/** @public */` on 8 fixture-writer exports** nothing imports until wave 2, to pass fallow dead-code without a marker that could go stale; the tags hide dead code until removed (parent line to remove them after wave 2).
+  4. Array elements of `mcpServers` are not expanded as stub markers (a server takes its name from a member key).
+  5. The MCP-07 agent fixture body text "Call the tools the task names." was chosen by the executor.
+- **Recorded in:** `06-01-SUMMARY.md`.
