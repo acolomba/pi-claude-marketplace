@@ -25,3 +25,44 @@ Feature: Hook lifecycle
       | Done. |      |                                |
     When the user prompts "run the echo"
     Then the hooks record no runs
+
+  Scenario: Enabling a disabled plugin runs its hooks again
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given the user has run "/claude:plugin enable demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+
+  Scenario: Uninstalling a plugin stops its hooks
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record no runs
+
+  Scenario: Updating a plugin replaces its hooks
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name        | event      | matcher |
+      | fresh-guard | PreToolUse | Bash    |
+    Given the user has run "/claude:plugin update demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments   | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | fresh-guard | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
