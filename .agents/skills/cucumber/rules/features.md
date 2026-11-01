@@ -115,6 +115,7 @@ A scenario cannot know where its sandbox lives or when it runs. It writes each r
 - `{uuid}` is any lowercase RFC 4122 UUID in the text of a model call, such as the mission id that pi-subagents ends a subagent result with. The model-call steps project it, and a command never expands it. It does not prove that two ids are the same.
 - `{tool call <n>}` is the id that Pi makes up for the n-th tool call of the last model turn, counted from 1 in call order. Only the stub MCP server's messages step projects it, where pi-mcp-adapter forwards the id in `_meta`.
 - In the hooks runs step, a cell whose whole value is a session id reads as the session's ordinal: `first`, `second`, `third`, or `fourth`, counted by the order in which each session first appears across the runs. A command never expands an ordinal.
+- In the workflow notices step, `{run id}` is the run that a workflow command started, as its progress entries name it, and `{session id}` is Pi's current session id. A command never expands either.
 - `{scenario time}` in a `last updated at` cell matches any exact ISO timestamp between the start of the scenario and the check. Any other value stays as written, so a stale, future, or malformed time fails (D-05).
 
 A token never uses `<...>`, because an Outline uses that form for its placeholders. A token never uses `~`, because the product prints `~` itself. An `Examples:` cell can hold a token: `| dir | {home}/marketplaces/tools |`. A stand-in whose address shows up in a command or a result gets its own token in the same way.

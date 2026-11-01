@@ -75,6 +75,8 @@ Phase 1 creates one function directory for each kind (D-CF1-08). Each starts wit
 | MCP servers    | `features/mcp-server/`    | `invocation.feature`                          | `features/lib/mcp-server-files.ts`    | `features/step_definitions/mcp-server/calls.steps.ts`      |
 | Workflows      | `features/workflow/`      | `run.feature`                                 | `features/lib/workflow-files.ts`      | `features/step_definitions/workflow/runs.steps.ts`         |
 
+For workflows, `runs.steps.ts` stays the seed module and `features/step_definitions/workflow/listing.steps.ts` is the shared topic module (the listing `Then` steps, the no-run `When`, and the notices `Then`). The shared record helpers `progressOf`, `WorkflowCommandTurn`, and `sendWorkflowCommand` live in `features/lib/workflow-files.ts` beside the fixture writer.
+
 ### Frozen after Phase 1
 
 No component phase edits these files:

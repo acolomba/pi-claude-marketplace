@@ -64,9 +64,9 @@ Part of the `cucumber` skill: `.agents/skills/cucumber/SKILL.md`.
 
 - The model-turn `When`, `the user prompts {string}`, sends the prompt. If Pi reports the `handled` disposition, no turn runs. Otherwise the step waits for `agent_settled` with `aborted: false` until a named deadline. It never sleeps for a fixed time.
 - The step keeps every record that the turn produced: RPC events, tool events, custom entries, notifies, and extension errors. It also keeps every line that the stand-ins logged during the turn. It fails on a dialog or an extension error in the turn. The Pi process cancels every dialog, also one that arrives outside a request, so Pi never waits on one.
-- A `Then` that reads the turn marks it compared through the world's `markTurnCompared()`. The world fails a scenario that otherwise passes when no step compared its last turn, and a second turn fails when the first one went uncompared.
+- A `Then` that compares the whole of what a turn reports marks it compared through the world's `markTurnCompared()`. The world fails a scenario that otherwise passes when no step compared its last turn, and a second turn fails when the first one went uncompared.
 - Pi queues a prompt sent during a turn as a follow-up. So a step never sends a second prompt before the first turn settles.
-- A workflow run does not use the model-turn `When`. `the user runs the workflow command {string}` waits for the terminal `pi-dynamic-workflows:progress` entry in Pi's session, because workflow results do not come back over RPC. It fails when the scripted model is called during the run.
+- A workflow run does not use the model-turn `When`. `the user runs the workflow command {string}` waits for the terminal `pi-dynamic-workflows:progress` entry in Pi's session, because workflow results do not come back over RPC. It fails when the scripted model is called during the run. A command the engine refuses before a run writes no progress entry: `the user runs the workflow command {string}, which starts no run` reads Pi's records up to its answer and fails on any progress entry, and `the workflow engine shows these notices:` compares the engine's notices, with U+2014 read as `--`.
 
 ### Stand-ins of the profile Pi
 
