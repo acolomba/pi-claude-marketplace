@@ -5,6 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { invokeBridgedSkill } from "../../extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts";
+import { parseFrontmatter } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 import type {
   SkillInvocationDependencies,
@@ -292,19 +293,42 @@ for (const { title, commands } of [
   });
 }
 
-test("lets a read failure of the staged skill file propagate", async () => {
+test("aborts with a /reload hint when the staged skill file cannot be read", async () => {
   // arrange
   const files = {};
 
-  // act & assert
-  await assert.rejects(
-    () => invokeBridgedSkill(request(), dependencies(files)),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.strictEqual(error.message, `unexpected read of ${PROJECT_SKILL}`);
-      return true;
-    },
-  );
+  // act
+  const outcome = await invokeBridgedSkill(request(), dependencies(files));
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "abort",
+    message:
+      `Cannot read the skill /skill:demo-greet: unexpected read of ${PROJECT_SKILL}. ` +
+      "Run /reload to load the installed skills again.",
+  });
+});
+
+test("aborts with a /reload hint when the staged skill frontmatter does not parse", async () => {
+  // arrange
+  const content = "---\nname: [demo\n---\n\nStatus: !`printf ok`\n";
+  const files = { [PROJECT_SKILL]: content };
+  let parseFailure = "";
+  try {
+    parseFrontmatter(content);
+  } catch (error) {
+    parseFailure = error instanceof Error ? error.message : String(error);
+  }
+
+  // act
+  const outcome = await invokeBridgedSkill(request({ typed: "/demo:greet" }), dependencies(files));
+
+  // assert
+  assert.notStrictEqual(parseFailure, "");
+  assert.deepStrictEqual(outcome, {
+    kind: "abort",
+    message: `Cannot read the skill /demo:greet: ${parseFailure}. Run /reload to load the installed skills again.`,
+  });
 });
 
 test("D-CF2-06: reads the staged skill file from disk with the production dependencies", async (t) => {

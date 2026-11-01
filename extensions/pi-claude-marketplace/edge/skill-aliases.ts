@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { loadQualifiedSkillAliases } from "../orchestrators/skill-alias-state.ts";
 import { invokeBridgedSkill } from "../orchestrators/skill-invocation.ts";
+import { errorMessage } from "../shared/errors.ts";
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
 import { openNotificationRun } from "../shared/notification-run.ts";
 
@@ -138,27 +139,36 @@ export function registerSkillAliases(
   });
 
   // D-CF2-05: one path for a `/skill:` token and for every alias the table
-  // resolves, qualified or bare, from interactive and RPC input alike.
-  const invoke = (
+  // resolves, qualified or bare, from interactive and RPC input alike. An
+  // unexpected failure is reported and the prompt handled: Pi would otherwise
+  // send its own expansion, with the `!` commands not run, or the literal
+  // alias text to the model.
+  const invoke = async (
     generatedName: string,
     token: string,
     commands: ReturnType<ExtensionAPI["getCommands"]>,
     event: InputEvent,
     ctx: ExtensionContext,
-  ): Promise<InputEventResult> =>
-    invokeSkill({
-      commands,
-      generatedName,
-      typed: `/${token}`,
-      args: event.text.slice(token.length + 1).trim(),
-      cwd: ctx.cwd,
-      sessionId: ctx.sessionManager.getSessionId(),
-      thinkingLevel: pi.getThinkingLevel(),
-    }).then((outcome) =>
-      inputResult(outcome, event, (message) => {
-        reportAbort(ctx, message);
-      }),
-    );
+  ): Promise<InputEventResult> => {
+    let outcome: SkillInvocationOutcome;
+    try {
+      outcome = await invokeSkill({
+        commands,
+        generatedName,
+        typed: `/${token}`,
+        args: event.text.slice(token.length + 1).trim(),
+        cwd: ctx.cwd,
+        sessionId: ctx.sessionManager.getSessionId(),
+        thinkingLevel: pi.getThinkingLevel(),
+      });
+    } catch (error) {
+      outcome = { kind: "abort", message: errorMessage(error) };
+    }
+
+    return inputResult(outcome, event, (message) => {
+      reportAbort(ctx, message);
+    });
+  };
 
   pi.on("input", (event, ctx) => {
     if (event.source === "extension") {
@@ -181,11 +191,15 @@ export function registerSkillAliases(
 
     // DC-25 item 3: a bare alias that equals a Pi built-in command name is
     // not reserved here, because Pi does not export its built-in list.
-    return getQualifiedAliases(ctx.cwd).then((aliases) => {
-      const generatedName = aliases.get(token);
-      return generatedName === undefined
-        ? { action: "continue" }
-        : invoke(generatedName, token, commands, event, ctx);
-    });
+    // A table that cannot be loaded holds no alias, so the token stays Pi's.
+    return getQualifiedAliases(ctx.cwd).then(
+      (aliases) => {
+        const generatedName = aliases.get(token);
+        return generatedName === undefined
+          ? { action: "continue" }
+          : invoke(generatedName, token, commands, event, ctx);
+      },
+      (): InputEventResult => ({ action: "continue" }),
+    );
   });
 }

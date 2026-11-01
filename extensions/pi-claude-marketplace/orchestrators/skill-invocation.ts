@@ -37,6 +37,7 @@ import {
   NODE_PROMPT_SHELL_SPAWN,
   selectPromptShell,
 } from "../platform/prompt-shell.ts";
+import { errorMessage } from "../shared/errors.ts";
 
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
@@ -198,10 +199,16 @@ async function fillSkill(
   return { kind: "ok", text: skillBlock(skill, expanded) };
 }
 
+/** The abort message for a staged skill file that cannot be read or parsed. */
+function unreadableSkillMessage(typed: string, error: unknown): string {
+  return `Cannot read the skill ${typed}: ${errorMessage(error)}. Run /reload to load the installed skills again.`;
+}
+
 /**
  * D-CF2-06: builds what the model receives for a typed bridged skill, reports
  * that the skill is not one this extension staged, or aborts with Claude
- * Code's message (T-01-24). A failure other than the cores' own propagates.
+ * Code's message (T-01-24). A staged file that cannot be read or parsed
+ * aborts too. A failure other than these propagates.
  */
 export async function invokeBridgedSkill(
   request: SkillInvocationRequest,
@@ -212,7 +219,16 @@ export async function invokeBridgedSkill(
     return { kind: "not-bridged" };
   }
 
-  const parsed = parseFrontmatter(await dependencies.readFile(skill.location));
+  // A file that changed after Pi loaded it, such as one an uninstall,
+  // disable, or update removed before `/reload`, aborts the invocation: Pi's
+  // own expansion would send the body with its `!` commands not run.
+  let parsed: ParsedSkill;
+  try {
+    parsed = parseFrontmatter(await dependencies.readFile(skill.location));
+  } catch (error) {
+    return { kind: "abort", message: unreadableSkillMessage(request.typed, error) };
+  }
+
   try {
     return await fillSkill(request, skill, parsed, dependencies);
   } catch (error) {

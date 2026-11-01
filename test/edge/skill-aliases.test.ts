@@ -476,6 +476,77 @@ test("T-01-24: shows an aborted skill's message alone in the terminal UI and han
   verify(invokeSkill);
 });
 
+test("reports an invocation that fails unexpectedly as a usage error and handles the prompt", async () => {
+  // arrange
+  const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
+  when(() => invokeSkill(greetRequest("Ada")))
+    .thenReject(new Error("spawn failed"))
+    .times(1);
+  const ctx = invocationContext();
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "UI" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => {
+    ui.notify("spawn failed", "error");
+  })
+    .thenReturn()
+    .times(1);
+  const { pi, input } = registerWithInvoker(invokeSkill, {
+    createInvocationId: () => "invocation-1",
+  });
+  when(() => pi.getCommands())
+    .thenReturn([GREET_SKILL])
+    .times(2);
+  when(() => pi.getThinkingLevel())
+    .thenReturn("low")
+    .times(1);
+  expectNotificationRun(pi);
+
+  // act
+  const sent = await input.value?.(
+    { type: "input", text: "/skill:demo-greet Ada", source: "interactive" },
+    ctx,
+  );
+
+  // assert
+  assert.deepStrictEqual(sent, { action: "handled" });
+  verify(pi);
+  verify(ctx);
+  verify(ui);
+  verify(invokeSkill);
+});
+
+test("leaves a token to Pi when the alias table cannot be loaded", async () => {
+  // arrange
+  const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
+  when(() => ctx.cwd)
+    .thenReturn("/workspace")
+    .times(1);
+  const { pi, input } = registerWithInvoker(invokeSkill, {
+    loadAliases: () => Promise.reject(new Error("commands unavailable")),
+  });
+  when(() => pi.getCommands())
+    .thenReturn([GREET_SKILL])
+    .times(1);
+
+  // act
+  const sent = await input.value?.(
+    { type: "input", text: "/demo:greet Ada", source: "interactive" },
+    ctx,
+  );
+
+  // assert
+  assert.deepStrictEqual(sent, { action: "continue" });
+  verify(pi);
+  verify(ctx);
+  verify(invokeSkill);
+});
+
 test("keeps Pi's native suggestions for a bare skill name", async () => {
   // arrange
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });

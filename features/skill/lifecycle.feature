@@ -47,6 +47,18 @@ Feature: Skill lifecycle
     When the user starts a new pi session
     Then the session offers no skills
 
+  Scenario: Invoking a skill that an uninstall removed before a reload reports the missing file
+    Given pi runs with the scripted model
+    Given the user has started a new pi session
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
+    When the user runs "/skill:demo-greet Ada"
+    Then the result has these fields:
+      | kind         | usage-error                                                                                                                                                                                                                        |
+      | severity     | error                                                                                                                                                                                                                              |
+      | needs reload | false                                                                                                                                                                                                                              |
+      | message      | Cannot read the skill /skill:demo-greet: ENOENT: no such file or directory, open '{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet/SKILL.md'. Run /reload to load the installed skills again. |
+      | usage        |                                                                                                                                                                                                                                    |
+
   Scenario: Updating a plugin lists the new description of its skill
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
