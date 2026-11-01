@@ -11,18 +11,42 @@
  * another project runs in a project directory of its own, so it shows what
  * the user scope alone offers. A plain message is sent in the current
  * session, and the results that follow it, such as a background update's
- * notice, become the last results the same way.
+ * notice, become the last results the same way. A prompt to a profile Pi
+ * runs a model turn, and every record and stand-in log line the turn
+ * produced becomes the last model turn (HAR-03).
  */
 
 import assert from "node:assert/strict";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
+import { promptDisposition } from "../../test/e2e/_rpc.ts";
 import { sendMessage, startSession } from "../lib/pi-commands.ts";
 import { resultsTable } from "../lib/result-rows.ts";
+import { expandTokens } from "../lib/run-tokens.ts";
+import { modelCallsOf } from "../lib/scripted-model/script.ts";
+import { readLogLengths, readLogLinesSince } from "../lib/turn-records.ts";
 
 import type { SessionReport } from "../lib/pi-commands.ts";
+import type { RpcRecord } from "../lib/pi-process.ts";
 import type { ScenarioWorld } from "../support/world.ts";
+
+// A scripted turn takes well under a second; the margin covers a loaded CI
+// runner and stays below the 30-second step timeout, so a turn that never
+// settles fails here with Pi's stderr.
+const MODEL_TURN_TIMEOUT_MS = 20_000;
+
+const DIALOG_METHODS: ReadonlySet<string> = new Set(["select", "confirm", "input", "editor"]);
+
+// An extension error or a dialog during a turn is never expected.
+function isTurnFault(record: RpcRecord): boolean {
+  return (
+    record.type === "extension_error" ||
+    (record.type === "extension_ui_request" &&
+      typeof record.method === "string" &&
+      DIALOG_METHODS.has(record.method))
+  );
+}
 
 // A session's payloads become the last results, as a command's do.
 function keepSession(world: ScenarioWorld, report: SessionReport): void {
@@ -52,6 +76,41 @@ When("the user starts a new pi session in another project", async function (this
 // results, so the world fails a scenario whose fields or rows go uncompared.
 When("the user sends the message {string}", async function (this: ScenarioWorld, message: string) {
   this.recordResults(await sendMessage(this.pi, message), "session");
+});
+
+// HAR-03: Pi answers the prompt with its disposition before the turn runs.
+// `handled` means no turn runs; otherwise the step waits for `agent_settled`,
+// never for a fixed time, and keeps every record from the prompt on.
+When("the user prompts {string}", async function (this: ScenarioWorld, text: string) {
+  const prompt = expandTokens(text, this.tokens);
+  const harness = this.profileHarness();
+  const lengths = await readLogLengths(harness);
+  const from = this.pi.recordCount();
+  const { response } = await this.pi.request({ type: "prompt", message: prompt });
+  const disposition = promptDisposition(response);
+  if (disposition === undefined) {
+    assert.fail(`Pi refused the prompt: ${JSON.stringify(response)}`);
+  }
+
+  if (disposition !== "handled") {
+    const settled = await this.pi.waitForRecord(
+      from,
+      (record) => record.type === "agent_settled",
+      MODEL_TURN_TIMEOUT_MS,
+    );
+    assert.strictEqual(settled.aborted, false, JSON.stringify(settled));
+  }
+
+  const records = this.pi.recordsSince(from);
+  assert.deepStrictEqual(records.filter(isTurnFault), []);
+  const logs = await readLogLinesSince(harness, lengths);
+  const overflow = modelCallsOf(logs).filter((call) => call.overflow);
+  assert.deepStrictEqual(
+    overflow.map((call) => `call ${call.index + 1}`),
+    [],
+    "the model was called past the end of its script",
+  );
+  this.recordTurn({ prompt, disposition, records, logs });
 });
 
 // D-PL8-02: an RPC session never arms the background update, so nothing

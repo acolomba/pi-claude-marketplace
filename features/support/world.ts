@@ -10,11 +10,18 @@
  * uncompared, or when a new session reported a result whose fields no step
  * stated. The last results are those of the last `When` step: a command or a
  * new session.
+ *
+ * A scenario that needs a model starts a profile Pi of its own (D-CF1-15):
+ * the real extension plus the scripted model, in the run's sandbox. It takes
+ * the place of the run's Pi until the scenario's release stops it, so the
+ * run's shared Pi never gets a model. The world keeps the last model turn,
+ * and a second turn fails when no step compared the first.
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   After,
@@ -30,6 +37,7 @@ import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
 import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
+import { harnessDirectory } from "../lib/turn-records.ts";
 
 import { currentRun } from "./pi-process.ts";
 
@@ -37,7 +45,7 @@ import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
-import type { RpcGitEnvironment } from "../lib/pi-process.ts";
+import type { RpcGitEnvironment, RpcRecord, RpcRequest } from "../lib/pi-process.ts";
 import type { PluginCompletion } from "../lib/plugin-completions.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
@@ -48,10 +56,38 @@ const STEP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(STEP_TIMEOUT_MS);
 
+// The scripted model, which every profile Pi loads right after the real extension.
+const SCRIPTED_MODEL_EXTENSION = fileURLToPath(
+  new URL("../lib/scripted-model/extension.ts", import.meta.url),
+);
+
 /** The bytes of a scope's base config and installation record. */
 export interface ScopeBytes {
   readonly config: Buffer;
   readonly state: Buffer;
+}
+
+/**
+ * What a scenario's profile Pi loads and trusts (D-CF1-15). It always loads
+ * the real extension and the scripted model, then `extraExtensions` in order.
+ * It trusts the sandbox project unless `trust` is `untrusted` (D-CF1-07).
+ */
+export interface PiProfile {
+  readonly extraExtensions?: readonly string[];
+  readonly trust?: "trusted" | "untrusted";
+}
+
+/**
+ * One model turn: the prompt as sent, the disposition Pi reported for it,
+ * every record Pi printed from the prompt to `agent_settled`, in Pi's order,
+ * and the lines each stand-in log in the harness directory gained during the
+ * turn, by file name (HAR-03).
+ */
+export interface ModelTurn {
+  readonly prompt: string;
+  readonly disposition: string;
+  readonly records: readonly RpcRecord[];
+  readonly logs: ReadonlyMap<string, readonly unknown[]>;
 }
 
 export class ScenarioWorld extends World {
@@ -98,14 +134,20 @@ export class ScenarioWorld extends World {
   // A Pi this scenario started with an environment of its own; while set it
   // takes the place of the run's Pi.
   private scenarioPi: PiProcess | undefined = undefined;
+  // The harness directory of this scenario's profile Pi, once one started.
+  private profileHarnessDirectory: string | undefined = undefined;
+  private lastTurn: ModelTurn | undefined = undefined;
+  // Whether a step has compared `lastTurn`; a scenario with no turn has nothing to compare.
+  private lastTurnCompared = true;
   private tuiSession: PiTuiSession | undefined = undefined;
   private tuiEnvironment: RpcGitEnvironment | undefined = undefined;
   private readonly tuiVariables: Record<string, string> = {};
 
   /**
    * The Pi the steps talk to: the one this scenario started with
-   * `usePiWithGitHubBaseUrl()` or `usePiWithBackgroundUpdateDelay()`, or else
-   * the run's Pi, which the `Before()` hook has reset for this scenario.
+   * `usePiWithGitHubBaseUrl()`, `usePiWithBackgroundUpdateDelay()`, or
+   * `usePiWithProfile()`, or else the run's Pi, which the `Before()` hook has
+   * reset for this scenario.
    */
   get pi(): PiProcess {
     return this.scenarioPi ?? currentRun().pi;
@@ -454,6 +496,90 @@ export class ScenarioWorld extends World {
     await this.usePiWith(environment);
   }
 
+  /**
+   * Starts this scenario's profile Pi (D-CF1-15) and makes it the Pi the
+   * steps talk to until the scenario's release stops it with its process
+   * group. A scenario that needs a model must not change the run's shared Pi,
+   * which every other scenario reuses, so it gets a Pi of its own in the
+   * run's sandbox, with the run's git environment. The profile Pi loads the
+   * real extension, the scripted model, and then `profile.extraExtensions`.
+   * Its `TMPDIR` and its harness directory lie inside the sandbox home, which
+   * the next scenario's `Before()` empties (HAR-05). It trusts the sandbox
+   * project through a `trust.json` entry, as Pi records a user's answer to
+   * its trust prompt, unless the profile is untrusted (D-CF1-07). It runs the
+   * scripted model, with auto retry off, so a call past the script fails at
+   * once. One scenario starts at most one profile Pi.
+   */
+  async usePiWithProfile(profile: PiProfile): Promise<void> {
+    if (this.profileHarnessDirectory !== undefined) {
+      throw new Error("a profile Pi already started in this scenario");
+    }
+
+    const { root, sandbox, piEnvironment } = currentRun();
+    const harness = harnessDirectory(sandbox.home);
+    const temporary = path.join(sandbox.home, "tmp");
+    await mkdir(harness);
+    await mkdir(temporary);
+    // Pi compiles each TypeScript extension through jiti, which caches the
+    // output under `$TMPDIR/jiti`. A cold cache costs ten seconds or more per
+    // start, and `Before()` empties the sandbox home, so the cache directory
+    // links to one under the run's root, which lasts the whole run. It holds
+    // compiled copies of repository and peer sources only.
+    const compileCache = path.join(root, "jiti-cache");
+    await mkdir(compileCache, { recursive: true });
+    await symlink(compileCache, path.join(temporary, "jiti"));
+    if (profile.trust !== "untrusted") {
+      await this.trustSandboxProject();
+    }
+
+    const pi = await PiProcess.start(sandbox, piEnvironment, {
+      extensions: [SCRIPTED_MODEL_EXTENSION, ...(profile.extraExtensions ?? [])],
+      environment: { TMPDIR: temporary },
+    });
+    this.onRelease(() => pi.stop());
+    this.scenarioPi = pi;
+    this.profileHarnessDirectory = harness;
+    await this.expectSuccess({ type: "set_model", provider: "faux", modelId: "faux-1" });
+    await this.expectSuccess({ type: "set_auto_retry", enabled: false });
+  }
+
+  /**
+   * Returns the harness directory of this scenario's profile Pi, where the
+   * scripted model reads its script and the stand-ins keep their logs.
+   * Fails when no profile Pi started.
+   */
+  profileHarness(): string {
+    if (this.profileHarnessDirectory === undefined) {
+      assert.fail("no step started a profile Pi in this scenario");
+    }
+
+    return this.profileHarnessDirectory;
+  }
+
+  /**
+   * Keeps `turn` as the last model turn, after asserting that a step compared
+   * the previous one, so no turn goes unchecked.
+   */
+  recordTurn(turn: ModelTurn): void {
+    assert.strictEqual(this.lastTurnCompared, true, "no step compared the previous model turn");
+    this.lastTurn = turn;
+    this.lastTurnCompared = false;
+  }
+
+  /** Returns the last model turn, failing when no step ran one. */
+  requireTurn(): ModelTurn {
+    if (this.lastTurn === undefined) {
+      assert.fail("no model turn has run in this scenario");
+    }
+
+    return this.lastTurn;
+  }
+
+  /** Records that a step compared the last model turn. */
+  markTurnCompared(): void {
+    this.lastTurnCompared = true;
+  }
+
   /** Adds a variable to the environment of the TUI session this scenario starts. */
   setTuiVariable(name: string, value: string): void {
     if (this.tuiSession !== undefined) {
@@ -555,6 +681,27 @@ export class ScenarioWorld extends World {
     if (errors.length > 0) {
       throw new AggregateError(errors, "scenario releases failed");
     }
+  }
+
+  // Asserts that `request` succeeded on the Pi the steps talk to.
+  private async expectSuccess(request: RpcRequest): Promise<void> {
+    const { response } = await this.pi.request(request);
+    assert.deepStrictEqual(
+      { command: response.command, success: response.success },
+      { command: request.type, success: true },
+      JSON.stringify(response),
+    );
+  }
+
+  // Writes the `trust.json` entry Pi saves when a user trusts the sandbox
+  // project, in Pi's format: sorted keys, two-space JSON, and a trailing
+  // newline. Pi keys the entry by the project's realpath (D-CF1-07).
+  private async trustSandboxProject(): Promise<void> {
+    const { sandbox } = currentRun();
+    const file = path.join(sandbox.agentDir, "trust.json");
+    const text = `${JSON.stringify({ [await realpath(sandbox.cwd)]: true }, null, 2)}\n`;
+    await writeFile(file, text, { flag: "wx" });
+    assert.strictEqual(await readFile(file, "utf8"), text);
   }
 
   // Starts a Pi in the run's sandbox with `environment`, stops it with the
