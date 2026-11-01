@@ -218,14 +218,17 @@ Feature: Hook session
       | name | version |
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
-      | name  | event        | matcher |
-      | end   | SessionEnd   | *       |
-      | start | SessionStart | *       |
+      | name   | event            | matcher | form   | exit code | stderr     |
+      | end    | SessionEnd       | *       |        |           |            |
+      | start  | SessionStart     | *       |        |           |            |
+      | marker | UserPromptSubmit |         | script | 2         | not needed |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user has started pi in the terminal with the hooks recording
-    When the user reloads pi in the terminal with the hooks recording
-    Then the hooks record no runs
+    When the user reloads pi in the terminal and then prompts "after the reload" with the hooks recording
+    Then the hooks record these runs:
+      | event            | session | prompt           | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                          | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | after the reload | {project dir} |                 | marker    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {agent dir}/pi-claude-marketplace/data/demo | first                  | first             | 1          |
 
   Scenario: Quitting pi in the terminal runs SessionEnd with reason prompt_input_exit
     Given pi runs with the scripted model

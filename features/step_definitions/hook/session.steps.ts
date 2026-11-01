@@ -67,10 +67,9 @@ const RELOADED_TEXT = "Reloaded keybindings";
 // A reload rebuilds the extension runtime in well under this.
 const TERMINAL_RELOAD_TIMEOUT_MS = 20_000;
 
-// After the reload status, the terminal must stay unchanged this long, so a
-// hook run that a late session event started has time to land in the log
-// before the step reads it.
-const TERMINAL_QUIET_MS = 1_000;
+// A prompt's UserPromptSubmit run lands within seconds of the prompt; the
+// margin covers a loaded CI runner and stays below the step timeout.
+const TERMINAL_PROMPT_RUN_TIMEOUT_MS = 20_000;
 
 // An extension error or a dialog during a session action is never expected.
 function faultsOf(records: readonly RpcRecord[]): readonly RpcRecord[] {
@@ -127,16 +126,30 @@ async function readHookRuns(harness: string): Promise<readonly HookRun[]> {
   return (lines.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
 }
 
-// Waits until the log holds a SessionStart run with the source `startup`, by
-// reading it again every `HOOK_LOG_POLL_MS`, never for a fixed time alone.
-async function waitForStartupRun(harness: string): Promise<void> {
-  const deadline = Date.now() + TERMINAL_STARTUP_RUN_TIMEOUT_MS;
-  const isStartup = (run: HookRun): boolean =>
-    run.event === "SessionStart" && run.stdin.source === "startup";
-  while (!(await readHookRuns(harness)).some(isStartup)) {
-    assert.ok(Date.now() < deadline, "the terminal pi ran no SessionStart startup hook");
+// Waits until the log holds a run that `isRun` accepts, by reading it again
+// every `HOOK_LOG_POLL_MS`, never for a fixed time alone, and fails with
+// `missing` after `timeoutMs`.
+async function waitForRun(
+  harness: string,
+  isRun: (run: HookRun) => boolean,
+  timeoutMs: number,
+  missing: string,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await readHookRuns(harness)).some(isRun)) {
+    assert.ok(Date.now() < deadline, missing);
     await new Promise((resolve) => setTimeout(resolve, HOOK_LOG_POLL_MS));
   }
+}
+
+// Waits until the log holds a SessionStart run with the source `startup`.
+async function waitForStartupRun(harness: string): Promise<void> {
+  await waitForRun(
+    harness,
+    (run) => run.event === "SessionStart" && run.stdin.source === "startup",
+    TERMINAL_STARTUP_RUN_TIMEOUT_MS,
+    "the terminal pi ran no SessionStart startup hook",
+  );
 }
 
 // RPC `compact` answers after Pi ran its `session_compact` handlers.
@@ -262,15 +275,28 @@ When("the user quits pi with the hooks recording", async function (this: Scenari
   await recordSessionAction(this, "quit", () => this.pi.stop());
 });
 
+// A hook run prints nothing to the terminal, so no quiet window shows that a
+// reload ran no session hook. The step types a prompt after the reload and
+// waits for its UserPromptSubmit run instead: the bridge dispatches that run
+// through the same hooks runtime after the reload, so the turn holds every
+// session hook run the reload caused before it.
 When(
-  "the user reloads pi in the terminal with the hooks recording",
-  async function (this: ScenarioWorld) {
+  "the user reloads pi in the terminal and then prompts {string} with the hooks recording",
+  async function (this: ScenarioWorld, text: string) {
     const tui = this.requireTuiSession();
+    const harness = this.profileHarness();
+    const prompt = expandTokens(text, this.tokens);
     await recordTerminalAction(this, "/reload", async () => {
       const mark = tui.markOutput();
       tui.sendLine("/reload");
       await tui.waitForTextAfter(RELOADED_TEXT, mark, TERMINAL_RELOAD_TIMEOUT_MS);
-      await tui.waitForQuiet(TERMINAL_QUIET_MS, TERMINAL_RELOAD_TIMEOUT_MS);
+      tui.sendLine(prompt);
+      await waitForRun(
+        harness,
+        (run) => run.event === "UserPromptSubmit" && run.stdin.prompt === prompt,
+        TERMINAL_PROMPT_RUN_TIMEOUT_MS,
+        "the terminal pi ran no UserPromptSubmit hook for the prompt after the reload",
+      );
     });
   },
 );
