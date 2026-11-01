@@ -277,6 +277,7 @@ for (const label of ["command-severity", "command-exit-status", "needs-reload"])
       "plugin-path-skipped",
       "async-rewake-summary",
       "stop-override-cap",
+      "hook-notice",
       "future-kind",
     ].map((kind) => ({ name: `${kind} only`, records: [commandEvent({ kind })] })),
   ]) {

@@ -5395,6 +5395,16 @@ Plugins updated: 3 plugins · Run /reload to apply
 
 Emitted once by `notifyBackgroundUpdate` after a background update that moved at least one plugin. A background update runs after the first message of a tui session, once for each extension runtime. The notice names plugins, without their marketplace. A plugin is named once even when it was updated in both scopes or from two marketplaces (D-PL8-21), and names keep the order of the update. Two names are joined with "and". Three or more names are counted instead. Severity: `info`. The notice always asks for `/reload`, because Claude Code reloads a plugin in the running session only for a plugin source kind this extension does not have (D-PL8-11). A background update that moved nothing, failed, or was skipped prints nothing, and its detail goes to the debug log (`PI_CLAUDE_MARKETPLACE_DEBUG=1`). A json or rpc session never runs the background update, so it never receives its `background-update` entry; the payload kind stays in the schema (D-PL8-20, see [`docs/json-output.md`](json-output.md)). The byte form is locked by `test/architecture/background-update-notice.test.ts`, not by the catalog-uat walk, whose parser skips this section.
 
+### Hook notice (HOOK-05 / D-CF5-14 / D-CF5-24)
+
+<!-- catalog-state: hook-notice -->
+
+```text
+UserPromptSubmit says: remember the tests
+```
+
+Emitted by `notifyHookNotice` from the hooks bridge (`extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts`), once per notice, in the routing order of the hooks. A hook's `systemMessage` reads `<Event>[:<Tool>] says: <text>`, as in Claude Code; a tool event names the Claude tool, such as `PreToolUse:Bash says: checked`. The bridge composes the text and the notice shows it verbatim. An empty `systemMessage` shows nothing. The text never reaches the model. Severity: `info`. The JSON strategy appends a `hook-notice` entry whose origin is `hook` (see [`docs/json-output.md`](json-output.md)). The byte form is locked by `test/architecture/hooks-notice-notify.test.ts`, not by the catalog-uat walk, whose parser skips this section.
+
 ______________________________________________________________________
 
 ## Cross-references

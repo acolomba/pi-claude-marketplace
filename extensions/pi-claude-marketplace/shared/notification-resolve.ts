@@ -633,6 +633,7 @@ export const RAW_SURFACE_SEVERITY = {
   "reconcile-aborted": "error",
   "plugin-path-skipped": "warning",
   "background-update": "info",
+  "hook-notice": "info",
 } as const satisfies Record<Exclude<RawSurface["kind"], "mcp-migration">, Severity>;
 
 /** D-13: a reconcile abort whose live cause has been serialized to text. */
@@ -715,6 +716,7 @@ export function resolveRawSurface(surface: RawSurface): ResolvedRawSurface {
     case "device-flow-prompt":
     case "async-rewake-summary":
     case "stop-override-cap":
+    case "hook-notice":
       return surface;
   }
 }

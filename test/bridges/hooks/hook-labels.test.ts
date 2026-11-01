@@ -5,6 +5,9 @@ import {
   hookBlockingErrorText,
   hookErrorText,
   hookEventLabel,
+  hookMatchLabel,
+  hookSaysText,
+  promptBlockedText,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts";
 
 const GUARD_COMMAND = "$" + "{CLAUDE_PLUGIN_ROOT}/hooks/guard.sh";
@@ -103,6 +106,78 @@ describe("hookBlockingErrorText", () => {
 
       // assert
       assert.strictEqual(feedback, text);
+    });
+  }
+});
+
+describe("hookSaysText", () => {
+  for (const { name, label, message, text } of [
+    {
+      name: "a prompt hook's system message after its event",
+      label: "UserPromptSubmit",
+      message: "hi",
+      text: "UserPromptSubmit says: hi",
+    },
+    {
+      name: "a tool hook's system message after its event and tool",
+      label: "PreToolUse:Bash",
+      message: "checked",
+      text: "PreToolUse:Bash says: checked",
+    },
+  ]) {
+    test(`writes ${name} (D-CF5-14)`, () => {
+      // act
+      const notice = hookSaysText(label, message);
+
+      // assert
+      assert.strictEqual(notice, text);
+    });
+  }
+});
+
+describe("hookMatchLabel", () => {
+  for (const { claudeEvent, matchValue, label } of [
+    { claudeEvent: "SessionStart", matchValue: "startup", label: "SessionStart:startup" },
+    { claudeEvent: "SessionEnd", matchValue: "clear", label: "SessionEnd:clear" },
+    { claudeEvent: "PostCompact", matchValue: "auto", label: "PostCompact:auto" },
+  ]) {
+    test(`labels ${claudeEvent} by the value ${matchValue} its matcher selects on (D-CF5-14)`, () => {
+      // act
+      const text = hookMatchLabel(claudeEvent, matchValue);
+
+      // assert
+      assert.strictEqual(text, label);
+    });
+  }
+});
+
+describe("promptBlockedText", () => {
+  for (const { name, reason, fromStderr, text } of [
+    {
+      name: "an exit-2 stderr reason after the bracketed command",
+      reason: "no prompts today",
+      fromStderr: true,
+      text: `UserPromptSubmit operation blocked by hook:\n[${GUARD_COMMAND}]: no prompts today`,
+    },
+    {
+      name: "a decision reason alone",
+      reason: "not now",
+      fromStderr: false,
+      text: "UserPromptSubmit operation blocked by hook:\nnot now",
+    },
+    {
+      name: "Claude Code's default for a decision without a reason",
+      reason: undefined,
+      fromStderr: false,
+      text: "UserPromptSubmit operation blocked by hook:\nBlocked by hook",
+    },
+  ]) {
+    test(`writes ${name} (D-CF5-24)`, () => {
+      // act
+      const notice = promptBlockedText(reason, GUARD_COMMAND, fromStderr);
+
+      // assert
+      assert.strictEqual(notice, text);
     });
   }
 });

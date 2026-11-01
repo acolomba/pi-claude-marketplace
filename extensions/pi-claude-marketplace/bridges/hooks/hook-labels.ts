@@ -6,6 +6,10 @@
 // `PreToolUse:Bash hook error: <reason>`; an exit-2 block as
 // `PreToolUse:Bash hook error: [<command>]: <stderr>`; a PostToolUse block as
 // `PostToolUse:Bash hook blocking error from command: "<command>": <reason>`.
+// A hook's `systemMessage` reaches the user as `<label> says: <text>`, a
+// blocked prompt as `UserPromptSubmit operation blocked by hook:\n<message>`.
+// A session or compaction hook is named by the value its matcher selects on:
+// `SessionStart:startup`.
 //
 // A leaf: no Pi and no runtime imports, so every adapter and every output
 // carrier can share one wording.
@@ -26,6 +30,17 @@ export function hookEventLabel(claudeEvent: string, piToolName?: string): string
   return piToolName === undefined
     ? claudeEvent
     : `${claudeEvent}:${mapPiToClaudeToolName(piToolName)}`;
+}
+
+/**
+ * D-CF5-14: the label Claude Code gives a hook of an event whose matcher
+ * selects on a closed set, `<Event>:<value>`, `matchValue` being the value the
+ * matcher compares: the SessionStart source, the SessionEnd reason, or the
+ * compaction trigger. Claude Code 2.1.316 names a startup hook
+ * `SessionStart:startup`.
+ */
+export function hookMatchLabel(claudeEvent: string, matchValue: string): string {
+  return `${claudeEvent}:${matchValue}`;
 }
 
 // The message of a block: an exit-2 stderr reason follows the bracketed
@@ -50,6 +65,28 @@ export function hookBlockingErrorText(
   fromStderr: boolean,
 ): string {
   return `${label} hook blocking error from command: "${command}": ${blockMessage(reason, command, fromStderr)}`;
+}
+
+/**
+ * D-CF5-14: the notice Claude Code shows the user for a hook's
+ * `systemMessage`, `<label> says: <text>`.
+ */
+export function hookSaysText(label: string, text: string): string {
+  return `${label} says: ${text}`;
+}
+
+/**
+ * D-CF5-11 / D-CF5-24: the notice a blocked prompt shows the user,
+ * `UserPromptSubmit operation blocked by hook:\n<message>`, the message as
+ * `hookErrorText` writes it. Claude Code adds a third line,
+ * `Original prompt: <prompt>`, which this notice leaves out (D-CF5-24).
+ */
+export function promptBlockedText(
+  reason: string | undefined,
+  command: string,
+  fromStderr: boolean,
+): string {
+  return `UserPromptSubmit operation blocked by hook:\n${blockMessage(reason, command, fromStderr)}`;
 }
 
 /**

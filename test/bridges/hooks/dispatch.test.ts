@@ -16,6 +16,7 @@ import {
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 
 import type {
   CompositeDispatchEvent,
@@ -3254,3 +3255,371 @@ describe("PreToolUse decisions (D-CF5-11)", () => {
     assert.deepStrictEqual(event, createToolCallEvent());
   });
 });
+
+/** A JSON-mode context and Pi API that capture the hook notices a dispatch appends. */
+function createNoticeHost(cwd: string): {
+  readonly context: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly capture: ReturnType<typeof createJsonCapture>;
+} {
+  const capture = createJsonCapture();
+  const context = Object.defineProperties(createExtensionContext(cwd), {
+    mode: { value: "json" },
+    ui: { get: () => capture.ui },
+  });
+  const pi = {
+    getAllTools: () => [],
+    appendEntry: capture.entrySink.appendEntry,
+  } as unknown as ExtensionAPI;
+  return { context, pi, capture };
+}
+
+/** The `claude-plugin` entry of one hook notice. */
+function hookNoticeEntry(text: string): {
+  readonly customType: string;
+  readonly payload: Record<string, unknown>;
+} {
+  return {
+    customType: "claude-plugin",
+    payload: {
+      schemaVersion: 1,
+      origin: { kind: "hook" },
+      kind: "hook-notice",
+      severity: "info",
+      needsReload: false,
+      text,
+    },
+  };
+}
+
+function promptEntries(pluginIds: readonly string[]): RoutingEntry[] {
+  return pluginIds.map((pluginId, declarationIndex) =>
+    createRoutingEntry({
+      pluginId,
+      claudeEvent: "UserPromptSubmit",
+      rawMatcher: "",
+      declarationIndex,
+    }),
+  );
+}
+
+const PROMPT_EVENT = { type: "input", text: "hello", source: "interactive" } as InputEvent;
+
+describe("hook notices (HOOK-05 / D-CF5-14)", () => {
+  test("shows each prompt hook's non-empty system message in routing order whatever order the hooks finish in", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["first", "quiet", "third"]));
+    const host = createNoticeHost("/workspace/notices");
+    const held = createHeldExecutor([]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      host.pi,
+      held.executor,
+    );
+
+    // act
+    const pending = handler(PROMPT_EVENT, host.context);
+    await settleStartedHooks();
+    held.finish("third", { kind: "noop", systemMessage: "three" });
+    held.finish("quiet", { kind: "noop", systemMessage: "" });
+    held.finish("first", { kind: "noop", systemMessage: "one" });
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("UserPromptSubmit says: one"),
+      hookNoticeEntry("UserPromptSubmit says: three"),
+    ]);
+    host.capture.assertValid();
+  });
+
+  test("drops a prompt hook's system message with a debug line when no Pi API is given", async (t) => {
+    // arrange
+    const debugLines = observeHookDebug(t);
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["speaker"]));
+    const executor = createRecordingExecutor(
+      { speaker: { kind: "noop", systemMessage: "hi" } },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    await handler(PROMPT_EVENT, createExtensionContext("/workspace/no-pi"));
+
+    // assert
+    assert.deepStrictEqual(debugLines(), ["[hooks] dispatch: no Pi API to show 1 hook notice(s)"]);
+  });
+
+  test("debug-logs a hook notice that fails to show and still stops a blocked prompt", async (t) => {
+    // arrange
+    const debugLines = observeHookDebug(t);
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["speaker"]));
+    const executor = createRecordingExecutor(
+      { speaker: { kind: "block", reason: "no", systemMessage: "hi" } },
+      [],
+    );
+    // The print-mode context's `ui` throws, so the notice cannot be shown.
+    const pi = { getAllTools: () => [] } as unknown as ExtensionAPI;
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      pi,
+      executor,
+    );
+
+    // act
+    const output = await handler(PROMPT_EVENT, createExtensionContext("/workspace/stale"));
+
+    // assert
+    assert.deepStrictEqual(output, { action: "handled" });
+    assert.deepStrictEqual(debugLines(), [
+      "[hooks] dispatch: hook notice failed: composite dispatch must not read ui",
+    ]);
+  });
+
+  const SESSION_START = { source: "startup" } satisfies ClaudeSessionStartEvent;
+  const SESSION_END = { reason: "clear" } satisfies ClaudeSessionEndEvent;
+  const PRE_COMPACT = { reason: "manual" } as SessionBeforeCompactEvent;
+  const POST_COMPACT = { reason: "threshold" } as SessionCompactEvent;
+
+  for (const { name, claudeEvent, event, results, notices } of [
+    {
+      name: "a PreToolUse system message after the event and Claude's tool name",
+      claudeEvent: "PreToolUse",
+      event: createToolCallEvent(),
+      results: { checker: { kind: "noop", systemMessage: "checked" } },
+      notices: ["PreToolUse:Bash says: checked"],
+    },
+    {
+      name: "no notice for a PreToolUse block, which goes to the model",
+      claudeEvent: "PreToolUse",
+      event: createToolCallEvent(),
+      results: { guard: { kind: "block", reason: "no" } },
+      notices: [],
+    },
+    {
+      name: "a SessionStart system message after the event and its source",
+      claudeEvent: "SessionStart",
+      event: SESSION_START,
+      results: { greeter: { kind: "mutate", additionalContext: "ctx", systemMessage: "hello" } },
+      notices: ["SessionStart:startup says: hello"],
+    },
+    {
+      name: "the system messages, then the first block of a blocked prompt in routing order",
+      claudeEvent: "UserPromptSubmit",
+      event: PROMPT_EVENT,
+      results: {
+        speaker: { kind: "noop", systemMessage: "said" },
+        first: { kind: "block", reason: "r1", fromStderr: true },
+        second: { kind: "block", reason: "r2" },
+      },
+      notices: [
+        "UserPromptSubmit says: said",
+        "UserPromptSubmit operation blocked by hook:\n[printf first]: r1",
+      ],
+    },
+    {
+      name: "no blocked-prompt notice for a prompt a hook stops",
+      claudeEvent: "UserPromptSubmit",
+      event: PROMPT_EVENT,
+      results: {
+        stopper: { kind: "stop", stopReason: "enough" },
+        guard: { kind: "block", reason: "no" },
+      },
+      notices: [],
+    },
+    {
+      name: "a hook error for each SessionStart block in routing order",
+      claudeEvent: "SessionStart",
+      event: SESSION_START,
+      results: {
+        check: { kind: "block", reason: "startup check failed", fromStderr: true },
+        quiet: { kind: "noop" },
+        strict: {
+          kind: "block",
+          reason: '[printf strict]: failed; blocking because onFailure is "block"\nboom',
+        },
+      },
+      notices: [
+        "SessionStart:startup hook error: [printf check]: startup check failed",
+        'SessionStart:startup hook error: [printf strict]: failed; blocking because onFailure is "block"\nboom',
+      ],
+    },
+    {
+      name: "a hook error for a SessionEnd block after the event and its reason",
+      claudeEvent: "SessionEnd",
+      event: SESSION_END,
+      results: { ender: { kind: "block", reason: "bye", fromStderr: true } },
+      notices: ["SessionEnd:clear hook error: [printf ender]: bye"],
+    },
+    {
+      name: "a hook error for a PostCompact block after the event and its trigger",
+      claudeEvent: "PostCompact",
+      event: POST_COMPACT,
+      results: { compactor: { kind: "block" } },
+      notices: ["PostCompact:auto hook error: Blocked by hook"],
+    },
+    {
+      name: "no notice for a PreCompact block",
+      claudeEvent: "PreCompact",
+      event: PRE_COMPACT,
+      results: { compactor: { kind: "block", reason: "not now" } },
+      notices: [],
+    },
+  ] satisfies ReadonlyArray<{
+    readonly name: string;
+    readonly claudeEvent: CompositeDispatchEvent;
+    readonly event: unknown;
+    readonly results: Readonly<Record<string, HookExecResult>>;
+    readonly notices: readonly string[];
+  }>) {
+    test(`shows ${name} (D-CF5-14 / D-CF5-24)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, Object.keys(results)));
+      const host = createNoticeHost("/workspace/event-notices");
+      const handler = compositeHandlerFor(
+        runtime,
+        claudeEvent,
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(results, []),
+      );
+
+      // act
+      await handler(event, host.context);
+
+      // assert
+      assert.deepStrictEqual(
+        host.capture.entries,
+        notices.map((text) => hookNoticeEntry(text)),
+      );
+      host.capture.assertValid();
+    });
+  }
+
+  for (const { claudeEvent, event } of [
+    { claudeEvent: "SessionEnd", event: SESSION_END },
+    { claudeEvent: "PreCompact", event: PRE_COMPACT },
+    { claudeEvent: "PostCompact", event: POST_COMPACT },
+  ] satisfies ReadonlyArray<{
+    readonly claudeEvent: CompositeDispatchEvent;
+    readonly event: unknown;
+  }>) {
+    test(`drops a ${claudeEvent} system message with a debug line (D-CF5-14)`, async (t) => {
+      // arrange
+      const debugLines = observeHookDebug(t);
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, ["first", "second"]));
+      const host = createNoticeHost("/workspace/dropped-notices");
+      const handler = compositeHandlerFor(
+        runtime,
+        claudeEvent,
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(
+          {
+            first: { kind: "noop", systemMessage: "one" },
+            second: { kind: "noop", systemMessage: "two" },
+          },
+          [],
+        ),
+      );
+
+      // act
+      await handler(event, host.context);
+
+      // assert
+      assert.deepStrictEqual(host.capture.entries, []);
+      assert.deepStrictEqual(debugLines(), [
+        `[hooks] dispatch: 2 systemMessage(s) dropped on ${claudeEvent}`,
+      ]);
+      host.capture.assertValid();
+    });
+  }
+
+  test("names an empty command in the hook error of a hook that declares none (D-CF5-18)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const [entry] = routedEntries("SessionStart", ["bare"]);
+    assert.ok(entry !== undefined);
+    runtime.setRoutingBucket("SessionStart", [
+      { ...entry, handlerDecl: { type: "command", timeout: 1 } },
+    ]);
+    const host = createNoticeHost("/workspace/bare-notice");
+    const handler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      runtime.currentGeneration(),
+      host.pi,
+      createRecordingExecutor({ bare: { kind: "block", reason: "boom", fromStderr: true } }, []),
+    );
+
+    // act
+    await handler(SESSION_START, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("SessionStart:startup hook error: []: boom"),
+    ]);
+    host.capture.assertValid();
+  });
+
+  for (const { isError, notice } of [
+    { isError: false, notice: "PostToolUse:Bash says: looked" },
+    { isError: true, notice: "PostToolUseFailure:Bash says: looked" },
+  ]) {
+    test(`shows ${notice} from the tool-result composite (D-CF5-14)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const claudeEvent = isError ? "PostToolUseFailure" : "PostToolUse";
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, ["looker", "guard"]));
+      const host = createNoticeHost("/workspace/tool-result-notices");
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(
+          {
+            looker: { kind: "noop", systemMessage: "looked" },
+            guard: { kind: "block", reason: "check the output" },
+          },
+          [],
+        ),
+      );
+
+      // act
+      await handler(createToolResultEvent(isError), host.context);
+
+      // assert
+      assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry(notice)]);
+      host.capture.assertValid();
+    });
+  }
+});
+
+// Entries of `claudeEvent` with a match-all matcher, in routing order.
+function routedEntries(claudeEvent: BucketAEvent, pluginIds: readonly string[]): RoutingEntry[] {
+  return pluginIds.map((pluginId, declarationIndex) =>
+    createRoutingEntry({ pluginId, claudeEvent, rawMatcher: "", declarationIndex }),
+  );
+}

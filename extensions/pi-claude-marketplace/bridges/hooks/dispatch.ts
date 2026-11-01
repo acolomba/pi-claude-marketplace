@@ -41,6 +41,9 @@
 // generation changed while its hooks ran folds to noop.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
+import { notifyHookNotice } from "../../shared/notification-dispatch.ts";
+import { openNotificationRun } from "../../shared/notification-run.ts";
 
 import { dispatchHookExec } from "./dispatch-exec.ts";
 import {
@@ -49,6 +52,13 @@ import {
   adaptToolCallResult,
   adaptToolResultResult,
 } from "./event-adapters.ts";
+import {
+  hookErrorText,
+  hookEventLabel,
+  hookMatchLabel,
+  hookSaysText,
+  promptBlockedText,
+} from "./hook-labels.ts";
 import { ifFires } from "./if-field/index.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
 
@@ -398,6 +408,142 @@ async function runAndFold(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Hook notices (HOOK-05 / D-CF5-14 / D-CF5-24)
+// ──────────────────────────────────────────────────────────────────────────
+
+/** The events whose hooks a composite handler runs and whose notices it shows. */
+type NoticeEvent = CompositeDispatchEvent | "PostToolUse" | "PostToolUseFailure";
+
+type BlockResult = Extract<HookExecResult, { kind: "block" }>;
+
+// D-CF5-14: every hook's non-empty `systemMessage`, in routing order.
+function systemMessages(outcomes: readonly BucketOutcome[]): string[] {
+  return outcomes.flatMap(({ result }) =>
+    result.systemMessage === undefined || result.systemMessage === "" ? [] : [result.systemMessage],
+  );
+}
+
+// D-CF5-14: Claude Code shows a hook's `systemMessage` on these events and
+// drops it on the others.
+function showsSystemMessages(claudeEvent: NoticeEvent): boolean {
+  switch (claudeEvent) {
+    case "PreToolUse":
+    case "PostToolUse":
+    case "PostToolUseFailure":
+    case "UserPromptSubmit":
+    case "SessionStart":
+      return true;
+    case "SessionEnd":
+    case "PreCompact":
+    case "PostCompact":
+      return false;
+  }
+}
+
+// D-CF5-14: the `<label> says: <text>` notices of the bucket's system
+// messages, or none, with a debug line, on an event that drops them.
+function systemMessageNotices(
+  claudeEvent: NoticeEvent,
+  label: string,
+  outcomes: readonly BucketOutcome[],
+): string[] {
+  const messages = systemMessages(outcomes);
+  if (showsSystemMessages(claudeEvent)) {
+    return messages.map((message) => hookSaysText(label, message));
+  }
+
+  if (messages.length > 0) {
+    hookDebugLog(`dispatch: ${messages.length} systemMessage(s) dropped on ${claudeEvent}`);
+  }
+
+  return [];
+}
+
+// The text `compose` writes for each blocking outcome, in routing order, with
+// the hook's declared command, empty when the hook declares none, as the
+// adapters name it.
+function blockTexts(
+  outcomes: readonly BucketOutcome[],
+  compose: (result: BlockResult, command: string) => string,
+): string[] {
+  return outcomes.flatMap(({ entry, result }) =>
+    result.kind === "block" ? [compose(result, entry.handlerDecl.command ?? "")] : [],
+  );
+}
+
+/**
+ * D-CF5-11 / D-CF5-18 / D-CF5-24: the notices a block shows the user. A
+ * blocked prompt shows why once, with the first block in routing order. A
+ * SessionStart, SessionEnd, or PostCompact block changes nothing, so each one
+ * shows as the event's hook error, as Claude Code shows exit-2 stderr there.
+ * A tool block goes to the model instead, and a PreCompact block stays a
+ * debug line.
+ */
+function blockNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
+  switch (claudeEvent) {
+    case "UserPromptSubmit":
+      return folded.result.kind === "block"
+        ? blockTexts(folded.outcomes, (result, command) =>
+            promptBlockedText(result.reason, command, result.fromStderr === true),
+          ).slice(0, 1)
+        : [];
+    case "SessionStart":
+    case "SessionEnd":
+    case "PostCompact":
+      return blockTexts(folded.outcomes, (result, command) =>
+        hookErrorText(label, result.reason, command, result.fromStderr === true),
+      );
+    case "PreToolUse":
+    case "PostToolUse":
+    case "PostToolUseFailure":
+    case "PreCompact":
+      return [];
+  }
+}
+
+/**
+ * HOOK-05: every notice a folded bucket shows the user, labeled `label`: the
+ * system messages in routing order (D-CF5-09), then the block notices.
+ */
+function hookNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
+  return [
+    ...systemMessageNotices(claudeEvent, label, folded.outcomes),
+    ...blockNotices(claudeEvent, label, folded),
+  ];
+}
+
+/**
+ * HOOK-05 / D-CF5-14: show the user each notice, in order, through one
+ * hook-origin notification run. A notice goes only to the notify chokepoint,
+ * never to the model. With no Pi API there is no run to open, so the notices
+ * are dropped with a debug line; a notice that fails to show is debug-logged
+ * and never fails the event.
+ */
+function showHookNotices(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI | undefined,
+  notices: readonly string[],
+): void {
+  if (notices.length === 0) {
+    return;
+  }
+
+  if (pi === undefined) {
+    hookDebugLog(`dispatch: no Pi API to show ${notices.length} hook notice(s)`);
+    return;
+  }
+
+  try {
+    const run = openNotificationRun(pi, { kind: "hook" });
+    for (const notice of notices) {
+      notifyHookNotice(ctx, run, notice);
+    }
+  } catch (error: unknown) {
+    hookDebugLog(`dispatch: hook notice failed: ${errorMessage(error)}`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // pi-mcp-adapter's proxy (D-CF5-12)
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -481,6 +627,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     const folded = await runAndFold(runtime, bucket, event, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, event),
     );
+    showHookNotices(ctx, pi, hookNotices(claudeEvent, noticeLabel(claudeEvent, event), folded));
 
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
     return (await adaptForEvent(
@@ -516,7 +663,7 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const claudeEvent: BucketAEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
+    const claudeEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
     const bucket = runtime.getRoutingBucket(claudeEvent);
     if (bucket.length === 0 || isMcpProxyCall(event)) {
       return undefined;
@@ -524,6 +671,11 @@ export function toolResultCompositeHandler(
 
     const folded = await runAndFold(runtime, bucket, event, ctx, pi, executor, (entry) =>
       matcherFiresOnToolEvent(entry.matcher, event.toolName),
+    );
+    showHookNotices(
+      ctx,
+      pi,
+      hookNotices(claudeEvent, hookEventLabel(claudeEvent, event.toolName), folded),
     );
 
     return adaptToolResultResult(folded.result, event, {
@@ -615,43 +767,61 @@ export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
     : undefined;
 
 /**
- * Per-event filter dispatch. Routes to the per-event matcher-fires
- * predicate: SessionStart compares the mapped `source`, SessionEnd the
- * mapped `reason` (D-CF5-01 / D-CF5-02), and PreCompact and PostCompact the
- * Claude `trigger` the translators also send (D-CF5-04). UserPromptSubmit
- * fires unconditionally because the parser rejects a non-empty matcher on
- * it.
+ * The value a matcher of `claudeEvent` selects on: the mapped SessionStart
+ * `source` and SessionEnd `reason` (D-CF5-01 / D-CF5-02), the PreToolUse Pi
+ * tool name, and the Claude compaction `trigger` the translators also send
+ * (D-CF5-04). UserPromptSubmit has none, because the parser rejects a
+ * non-empty matcher on it.
+ */
+function matchValue(claudeEvent: CompositeDispatchEvent, event: unknown): string | undefined {
+  switch (claudeEvent) {
+    case "SessionStart":
+      return (event as ClaudeSessionStartEvent).source;
+    case "SessionEnd":
+      return (event as ClaudeSessionEndEvent).reason;
+    case "PreToolUse":
+      return (event as ToolCallEvent).toolName;
+    case "PreCompact":
+      return compactTrigger((event as SessionBeforeCompactEvent).reason);
+    case "PostCompact":
+      return compactTrigger((event as SessionCompactEvent).reason);
+    case "UserPromptSubmit":
+      return undefined;
+  }
+}
+
+/**
+ * Per-event filter dispatch on the event's match value: a PreToolUse matcher
+ * compares the tool name, every other matcher the closed-set value.
+ * UserPromptSubmit fires unconditionally.
  */
 function entryFires(
   claudeEvent: CompositeDispatchEvent,
   entry: RoutingEntry,
   event: unknown,
 ): boolean {
-  switch (claudeEvent) {
-    case "SessionStart":
-      return matcherFiresOnClosedSetValue(entry, (event as ClaudeSessionStartEvent).source);
-
-    case "SessionEnd":
-      return matcherFiresOnClosedSetValue(entry, (event as ClaudeSessionEndEvent).reason);
-
-    case "PreToolUse": {
-      const toolName = (event as ToolCallEvent).toolName;
-      return matcherFiresOnToolEvent(entry.matcher, toolName);
-    }
-
-    case "PreCompact":
-      return matcherFiresOnClosedSetValue(
-        entry,
-        compactTrigger((event as SessionBeforeCompactEvent).reason),
-      );
-
-    case "PostCompact":
-      return matcherFiresOnClosedSetValue(
-        entry,
-        compactTrigger((event as SessionCompactEvent).reason),
-      );
-
-    case "UserPromptSubmit":
-      return true;
+  const value = matchValue(claudeEvent, event);
+  if (value === undefined) {
+    return true;
   }
+
+  return claudeEvent === "PreToolUse"
+    ? matcherFiresOnToolEvent(entry.matcher, value)
+    : matcherFiresOnClosedSetValue(entry, value);
+}
+
+/**
+ * D-CF5-14: the label of an event's notices, as Claude Code names its hooks:
+ * `PreToolUse:<Claude tool>`, `<Event>:<value>` for a closed-set matcher
+ * (`SessionStart:startup`), and `UserPromptSubmit` alone.
+ */
+function noticeLabel(claudeEvent: CompositeDispatchEvent, event: unknown): string {
+  const value = matchValue(claudeEvent, event);
+  if (value === undefined) {
+    return claudeEvent;
+  }
+
+  return claudeEvent === "PreToolUse"
+    ? hookEventLabel(claudeEvent, value)
+    : hookMatchLabel(claudeEvent, value);
 }

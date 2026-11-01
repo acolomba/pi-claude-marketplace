@@ -2778,6 +2778,17 @@ const RAW_CASES: {
       ],
     },
   },
+  "hook-notice": {
+    surface: { kind: "hook-notice", text: "PreToolUse:Bash says: checked" },
+    expected: {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "hook-notice",
+      severity: "info",
+      needsReload: false,
+      text: "PreToolUse:Bash says: checked",
+    },
+  },
 };
 
 for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
