@@ -133,8 +133,8 @@ for (const { importer, violations } of [
  *
  * The ALLOWED_CHILD_PROCESS_FILES whitelist below is the SOLE permitted use
  * of node:child_process in the extension tree. Adding a sixth file MUST
- * require an explicit edit here AND an update to the sibling
- * "exactly five files" assertion below, so silent widening is caught in CI.
+ * require an explicit edit here AND an update to the sibling whitelist
+ * assertion below, so silent widening is caught in CI.
  */
 
 const ALLOWED_CHILD_PROCESS_FILES: ReadonlySet<string> = new Set(SHELL_OUT_EXEMPT_TARGETS);
