@@ -74,6 +74,7 @@ import type {
   ExtensionCommandContext,
   ExtensionContext,
   InputEvent,
+  InputEventResult,
   ResourcesDiscoverEvent,
   ResourcesDiscoverResult,
   SessionBeforeCompactEvent,
@@ -117,6 +118,9 @@ type BackgroundInputListener = (
   ctx: Pick<ExtensionContext, "mode" | "cwd" | "ui">,
 ) => void;
 
+/** The bridged-command input listener, which answers with an input result. */
+type CommandInvocationListener = (event: InputEvent, ctx: ExtensionContext) => InputEventResult;
+
 /** The background update's shutdown listener, which may wait for a step in flight. */
 type BackgroundShutdownListener = (event: SessionShutdownEvent) => Promise<void>;
 
@@ -140,6 +144,7 @@ interface LoadedExtension {
   readonly backgroundShutdown: BackgroundShutdownListener;
   readonly toolCall: ToolCallListener;
   readonly command: CommandRegistration;
+  readonly commandInvocation: CommandInvocationListener;
   readonly tools: readonly (ToolRegistration | undefined)[];
   readonly ctx: ExtensionCommandContext;
   readonly notifications: readonly Notification[];
@@ -474,6 +479,14 @@ async function loadExtension(
   })
     .thenReturn()
     .times(1);
+  const commandInvocationListener = It.willCapture<CommandInvocationListener>(
+    "command invocation input",
+  );
+  when(() => {
+    pi.on("input", commandInvocationListener);
+  })
+    .thenReturn()
+    .times(1);
 
   await claudeMarketplaceExtension(pi);
 
@@ -484,6 +497,7 @@ async function loadExtension(
   const backgroundShutdown = backgroundShutdownListener.value;
   const toolCall = toolCallListener.value;
   const command = commandRegistration.value;
+  const commandInvocation = commandInvocationListener.value;
   const publishStatus = statusListener.value;
   if (
     publishStatus === undefined ||
@@ -493,7 +507,8 @@ async function loadExtension(
     backgroundInput === undefined ||
     backgroundShutdown === undefined ||
     toolCall === undefined ||
-    command === undefined
+    command === undefined ||
+    commandInvocation === undefined
   ) {
     throw new Error("the extension factory installed an incomplete callback surface");
   }
@@ -506,6 +521,7 @@ async function loadExtension(
     backgroundShutdown,
     toolCall,
     command,
+    commandInvocation,
     tools: [firstTool.value, secondTool.value],
     ctx: boundary.ctx,
     notifications: boundary.notifications,
@@ -2294,6 +2310,22 @@ function backgroundContext(
     },
   };
 }
+
+test("D-CF1-01: the command invocation handler registered after the skill aliases passes a bridged command through", async (t) => {
+  // arrange
+  await createHermeticScope(t, "command-invocation");
+  const { commandInvocation, ctx, verifyBoundary } = await loadExtension(0, 0);
+
+  // act
+  const outcome = commandInvocation(
+    { type: "input", text: "/demo:greet Ada", source: "interactive" },
+    ctx,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, { action: "continue" });
+  verifyBoundary();
+});
 
 test("AUP-01: the first plain message in a tui session arms one unref'd background update that quitting cancels", async (t) => {
   // arrange
