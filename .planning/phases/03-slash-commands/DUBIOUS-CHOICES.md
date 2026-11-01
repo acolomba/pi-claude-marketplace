@@ -323,3 +323,23 @@ entries into it. Severity and status follow the root file's rules.
   2. A negative edit keyed on `allowExistingRecord` (temporary).
   3. `Given pi runs with the scripted model` sits in the Background, because
      the listing step needs the profile Pi.
+
+### P3-DC-17: Plan 03-06 executor choices (project-command ledger writer)
+
+- **Phase / source:** 03-06 executor (`03-06-SUMMARY.md`); wave 3 gate reuse.
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. Commands share Phase 2's per-project `skills.json` ledger; on Windows a
+     command name uses `.` as the separator, which still never equals a skill
+     name (skill names are `a-z0-9-` only).
+  2. The digest is over the file's UTF-8 text (03-07 must read it the same
+     way).
+  3. When the install undo runs after a failed ledger write, the second
+     forget warning is dropped.
+  4. Command ledger warnings ride the `skillWarnings` member and read
+     `could not remove the commands from the project skill ledger: ...`; the
+     "skill" wording across the ledger is a rename parent line.
+  5. A `prune` rollback does not restore ledger entries (parent line).
+  6. Wave 3's post-merge gate reuses the executor's `npm run check` at
+     `ce2330b` (seed 713944, 1299 scenarios); the merged tree adds only the
+     SUMMARY.
