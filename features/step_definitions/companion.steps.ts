@@ -14,6 +14,7 @@ import { type DataTable, Given } from "@cucumber/cucumber";
 
 import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { parseCompanionName, resolveCompanion } from "../lib/companions.ts";
+import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
 
@@ -21,6 +22,7 @@ import type { ScenarioWorld } from "../support/world.ts";
 // names them in (HAR-01).
 Given(
   "pi runs with the scripted model and these companions:",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld, table: DataTable) {
     const [header, ...rows] = table.raw();
     assert.deepStrictEqual(header, ["companion"]);

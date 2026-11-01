@@ -63,6 +63,16 @@ const STEP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(STEP_TIMEOUT_MS);
 
+/**
+ * The timeout of a step that starts a profile Pi. Each worker compiles the
+ * real extension, the scripted model, the registry probe, and the companions
+ * through a cold jiti cache on its first profile Pi: 13 to 20 seconds on an
+ * idle machine, and 27 seconds or more when the parallel workers start their
+ * profile Pis at once on a loaded runner. A Pi that never answers still fails
+ * the step.
+ */
+export const PROFILE_PI_START_TIMEOUT_MS = 90_000;
+
 // The scripted model, which every profile Pi loads right after the real extension.
 const SCRIPTED_MODEL_EXTENSION = fileURLToPath(
   new URL("../lib/scripted-model/extension.ts", import.meta.url),

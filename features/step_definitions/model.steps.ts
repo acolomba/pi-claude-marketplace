@@ -20,21 +20,26 @@ import {
   readModelScript,
   writeModelScript,
 } from "../lib/scripted-model/script.ts";
+import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
 
 // HAR-01: a profile Pi started with no companion loads none, so no command
 // comes from the optional peer cache.
-Given("pi runs with the scripted model", async function (this: ScenarioWorld) {
-  await this.usePiWithProfile({ companions: [] });
-  const { response } = await this.pi.request({ type: "get_commands" });
-  const commands = listedCommands(response);
-  assert.notDeepStrictEqual(commands, [], JSON.stringify(response));
-  assert.deepStrictEqual(
-    commands.filter(({ sourcePath }) => sourcePath !== undefined && isInPeerCache(sourcePath)),
-    [],
-  );
-});
+Given(
+  "pi runs with the scripted model",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({ companions: [] });
+    const { response } = await this.pi.request({ type: "get_commands" });
+    const commands = listedCommands(response);
+    assert.notDeepStrictEqual(commands, [], JSON.stringify(response));
+    assert.deepStrictEqual(
+      commands.filter(({ sourcePath }) => sourcePath !== undefined && isInPeerCache(sourcePath)),
+      [],
+    );
+  },
+);
 
 Given(
   "the scripted model plays these steps:",
