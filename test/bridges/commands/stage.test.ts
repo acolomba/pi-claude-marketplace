@@ -68,6 +68,11 @@ function resolvedFor(
   };
 }
 
+/** The D-CF3-06 record line a staged command ends its frontmatter with. */
+function recordLine(pluginRoot: string, pluginData: string): string {
+  return `"pi-claude-marketplace": {"pluginRoot":"${pluginRoot}","pluginData":"${pluginData}"}\n`;
+}
+
 async function pathIsPresent(filePath: string): Promise<boolean> {
   return access(filePath).then(
     () => true,
@@ -88,10 +93,15 @@ test("stages recursive commands with exact names, records, substitutions, and pr
     "---\ndescription: Show status\n---\n" + "Read ${CLAUDE_PLUGIN_DATA}/status.json.\n";
   const nestedSource = "---\ndescription: Build the web app\n---\nBuild web.\n";
   const expectedDeploy =
-    '---\n"description": "Deploy the service"\n---\n' +
+    '---\n"description": "Deploy the service"\n' +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\n" +
     `Deploy from ${pluginRoot} in ${locations.scopeRoot}.\n`;
   const expectedStatus =
-    '---\n"description": "Show status"\n---\n' + `Read ${pluginDataDir}/status.json.\n`;
+    '---\n"description": "Show status"\n' +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\n" +
+    `Read ${pluginDataDir}/status.json.\n`;
   await mkdir(path.join(commandsRoot, "build"), { recursive: true });
   await writeFile(path.join(commandsRoot, "acme-deploy.md"), deploySource);
   await writeFile(path.join(commandsRoot, "status.md"), statusSource);
@@ -148,7 +158,12 @@ test("stages recursive commands with exact names, records, substitutions, and pr
   assert.strictEqual(commitLeak, undefined);
   assert.deepStrictEqual(promptNames, ["acme:build:web.md", "acme:deploy.md", "acme:status.md"]);
   assert.strictEqual(deployBytes, expectedDeploy);
-  assert.strictEqual(nestedBytes, '---\n"description": "Build the web app"\n---\nBuild web.\n');
+  assert.strictEqual(
+    nestedBytes,
+    '---\n"description": "Build the web app"\n' +
+      recordLine(pluginRoot, pluginDataDir) +
+      "---\nBuild web.\n",
+  );
   assert.strictEqual(statusBytes, expectedStatus);
 });
 
@@ -179,7 +194,9 @@ test("rewrites skill and command references in staged command Markdown", async (
   // assert
   assert.strictEqual(
     content,
-    '---\n"description": "Review"\n---\nUse /skill:acme-helper, then /acme:review.\n',
+    '---\n"description": "Review"\n' +
+      recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data")) +
+      "---\nUse /skill:acme-helper, then /acme:review.\n",
   );
 });
 
@@ -201,7 +218,9 @@ test("stages a source led by a byte-order mark without the marker or a duplicate
     "\uFEFF---\ndescription: Deploy the service\nmodel: sonnet\n---\nDeploy carefully.\n",
   );
   const expectedDeploy =
-    '---\n"description": "Deploy the service"\n"model": "sonnet"\n---\nDeploy carefully.\n';
+    '---\n"description": "Deploy the service"\n"model": "sonnet"\n' +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\nDeploy carefully.\n";
 
   // act
   const prepared = await prepareStageCommands(createRemovalOps(), {
@@ -421,7 +440,12 @@ test("aborts staged commands without creating target prompts", async (t) => {
   const targetExists = await pathIsPresent(path.join(locations.promptsTargetDir, "acme:abort.md"));
 
   // assert
-  assert.strictEqual(stagedBytes, '---\n"description": "Abort me"\n---\nDo not commit.\n');
+  assert.strictEqual(
+    stagedBytes,
+    '---\n"description": "Abort me"\n' +
+      recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME)) +
+      "---\nDo not commit.\n",
+  );
   assert.strictEqual(abortLeak, undefined);
   assert.strictEqual(stagingExists, false);
   assert.strictEqual(targetExists, false);
@@ -459,7 +483,12 @@ test("removes prior owned prompts and tolerates a missing prior prompt during co
   // assert
   assert.strictEqual(commitLeak, undefined);
   assert.strictEqual(priorExists, false);
-  assert.strictEqual(currentBytes, '---\n"description": "Current"\n---\nCurrent prompt.\n');
+  assert.strictEqual(
+    currentBytes,
+    '---\n"description": "Current"\n' +
+      recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME)) +
+      "---\nCurrent prompt.\n",
+  );
 });
 
 test("neutralizes malformed frontmatter and preserves exact substituted body bytes", async (t) => {
@@ -471,7 +500,9 @@ test("neutralizes malformed frontmatter and preserves exact substituted body byt
     "---\ntitle: Deploy: the whole thing\ndescription: never reached\n---\n\n" +
     "Run the deployment for ${CLAUDE_PLUGIN_ROOT}.\n";
   const expectedBytes =
-    `---\n"description": "Run the deployment for ${pluginRoot}."\n---\n` +
+    `---\n"description": "Run the deployment for ${pluginRoot}."\n` +
+    recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME)) +
+    "---\n" +
     `\nRun the deployment for ${pluginRoot}.\n`;
   const expectedParseError =
     "Nested mappings are not allowed in compact mappings at line 1, column 8:\n\n" +
@@ -515,7 +546,9 @@ test("substitutes project variables and retains command-inapplicable skill varia
     "Project: ${CLAUDE_PROJECT_DIR}\n" +
     "Skill: ${CLAUDE_SKILL_DIR}\n";
   const expectedBytes =
-    `---\n"description": "Root: ${pluginRoot}"\n---\n` +
+    `---\n"description": "Root: ${pluginRoot}"\n` +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\n" +
     `Root: ${pluginRoot}\n` +
     `Data: ${pluginDataDir}\n` +
     `Project: ${locations.scopeRoot}\n` +
@@ -551,7 +584,9 @@ test("retains the project variable for user scope and restores the user director
     "Data: ${CLAUDE_PLUGIN_DATA}\n" +
     "Project: ${CLAUDE_PROJECT_DIR}\n";
   const expectedBytes =
-    `---\n"description": "Root: ${pluginRoot}"\n---\n` +
+    `---\n"description": "Root: ${pluginRoot}"\n` +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\n" +
     `Root: ${pluginRoot}\n` +
     `Data: ${pluginDataDir}\n` +
     "Project: ${CLAUDE_PROJECT_DIR}\n";
@@ -572,6 +607,40 @@ test("retains the project variable for user scope and restores the user director
 
   // assert
   assert.strictEqual(stagedBytes, expectedBytes);
+});
+
+test("D-CF3-06 records the same plugin root and data at user and project scope", async (t) => {
+  // arrange
+  const { agentDir } = await createHermeticEnvironment(t, "commands-stage-record-user-");
+  const userLocations = locationsFor("user", agentDir);
+  const projectLocations = await createProjectLocations(t, "commands-stage-record-project-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-record-");
+  const pluginDataDir = path.join(pluginRoot, "data");
+  await mkdir(path.join(pluginRoot, "commands"), { recursive: true });
+  await writeFile(path.join(pluginRoot, "commands", "scoped.md"), "Scope check.\n");
+  const expectedBytes =
+    '---\n"description": "Scope check."\n' +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\nScope check.\n";
+
+  // act
+  const stagedBytes = await Promise.all(
+    [userLocations, projectLocations].map(async (locations) => {
+      const prepared = await prepareStageCommands(createRemovalOps(), {
+        locations,
+        cwd: locations.scopeRoot,
+        pluginName: PLUGIN_NAME,
+        pluginRoot,
+        pluginDataDir,
+        resolved: resolvedFor(pluginRoot),
+      });
+      await commitPreparedCommands(createRemovalOps(), prepared);
+      return readFile(path.join(locations.promptsTargetDir, "acme:scoped.md"), "utf8");
+    }),
+  );
+
+  // assert
+  assert.deepStrictEqual(stagedBytes, [expectedBytes, expectedBytes]);
 });
 
 test("preserves first-wins discovery warnings on a staged result", async (t) => {
@@ -863,9 +932,22 @@ test("normalizes lone-CR and repeated malformed blocks to exact body bytes", asy
     prepared.result.degraded.map(({ generatedName }) => generatedName),
     ["acme:frontmatter-only", "acme:lone-cr", "acme:repeated"],
   );
-  assert.strictEqual(loneCrBytes, '---\n"description": "Lone CR body."\n---\n\nLone CR body.\n');
-  assert.strictEqual(repeatedBytes, '---\n"description": "Repeated body."\n---\nRepeated body.\n');
-  assert.strictEqual(frontmatterOnlyBytes, '---\n"description": "Plugin command"\n---\n');
+  const expectedRecord = recordLine(
+    pluginRoot,
+    path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+  );
+  assert.strictEqual(
+    loneCrBytes,
+    '---\n"description": "Lone CR body."\n' + expectedRecord + "---\n\nLone CR body.\n",
+  );
+  assert.strictEqual(
+    repeatedBytes,
+    '---\n"description": "Repeated body."\n' + expectedRecord + "---\nRepeated body.\n",
+  );
+  assert.strictEqual(
+    frontmatterOnlyBytes,
+    '---\n"description": "Plugin command"\n' + expectedRecord + "---\n",
+  );
 });
 
 test("cleans staging when a repeated malformed block reaches the no-opening safeguard", async (t) => {

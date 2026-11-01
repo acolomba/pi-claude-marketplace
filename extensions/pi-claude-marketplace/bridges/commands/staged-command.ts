@@ -17,7 +17,11 @@
 // replaced `description` can never sit beside a second one (Pi's YAML parser
 // refuses a duplicate key). The text after the source's closing fence is kept
 // byte for byte. CM-3 substitution and the reference rewrite run on the source
-// text before the rebuild, as they always have.
+// text before the rebuild.
+//
+// The rebuilt frontmatter ends with the install-time record (D-CF3-06,
+// `command-record.ts`). It is added after the substitution and the reference
+// rewrite, so neither pass reads or changes it (T-03-02).
 //
 // The writer re-parses its own output with Pi's parser and throws when the
 // result is not the frontmatter it meant or the body Pi read from the source,
@@ -33,6 +37,9 @@ import { BridgeStagingError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
+import { withCommandRecord } from "./command-record.ts";
+
+import type { CommandRecord } from "./command-record.ts";
 import type { DiscoveredCommand } from "./types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 
@@ -198,7 +205,7 @@ function assertReadsBack(
 /**
  * Builds the staged text of `command`: the PARSE-01 gate, CM-3 substitution,
  * the reference rewrite, then the rebuilt frontmatter with the D-CF3-08
- * description, checked by a read-back. A parse failure of the substituted
+ * description and the D-CF3-06 record, checked by a read-back. A parse failure of the substituted
  * text propagates: substitution produced bytes Pi rejects, the writer's own
  * defect.
  */
@@ -218,7 +225,11 @@ export async function buildStagedCommand(
   );
   const parsed = parseFrontmatter(substituted);
   const body = parsed.body.trim();
-  const frontmatter = stagedFrontmatter(parsed.frontmatter, body);
+  const record: CommandRecord = {
+    pluginRoot: context.pluginRoot,
+    pluginData: context.pluginDataDir,
+  };
+  const frontmatter = withCommandRecord(stagedFrontmatter(parsed.frontmatter, body), record);
   const text = rebuildCommandText(substituted, frontmatter);
   assertReadsBack(command.generatedName, text, frontmatter, body);
   return source.parseError === undefined ? { text } : { text, parseError: source.parseError };

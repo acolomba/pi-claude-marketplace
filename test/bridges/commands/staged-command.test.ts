@@ -19,6 +19,10 @@ const context = {
   referenceNames: { skills: [], commands: [], workflows: [] },
 } satisfies StagedCommandContext;
 
+/** The record line the writer ends every staged frontmatter with, for `context`. */
+const RECORD_LINE =
+  '"pi-claude-marketplace": {"pluginRoot":"/plugins/acme","pluginData":"/data/acme"}\n';
+
 async function commandWithSource(t: TestContext, source: string): Promise<DiscoveredCommand> {
   const root = await mkdtemp(path.join(tmpdir(), "staged-command-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -40,7 +44,9 @@ test("D-CF3-08 describes a command with no frontmatter by its first body line", 
   // assert
   assert.deepStrictEqual(staged, {
     text:
-      '---\n"description": "Deploy the current branch to the staging environment and report the result."\n---\n' +
+      '---\n"description": "Deploy the current branch to the staging environment and report the result."\n' +
+      RECORD_LINE +
+      "---\n" +
       "Deploy the current branch to the staging environment and report the result.\n\nSecond paragraph.\n",
   });
 });
@@ -54,7 +60,10 @@ test("D-CF3-08 describes a command by the first non-blank line after leading bla
 
   // assert
   assert.deepStrictEqual(staged, {
-    text: '---\n"description": "Run after two blank lines."\n---\n\n\nRun after two blank lines.\n',
+    text:
+      '---\n"description": "Run after two blank lines."\n' +
+      RECORD_LINE +
+      "---\n\n\nRun after two blank lines.\n",
   });
 });
 
@@ -66,7 +75,9 @@ test("D-CF3-08 describes a command whose body has no non-blank line as Plugin co
   const staged = await buildStagedCommand(command, context);
 
   // assert
-  assert.deepStrictEqual(staged, { text: '---\n"description": "Plugin command"\n---\n\n  \n' });
+  assert.deepStrictEqual(staged, {
+    text: '---\n"description": "Plugin command"\n' + RECORD_LINE + "---\n\n  \n",
+  });
 });
 
 test("D-CF3-08 keeps a non-empty declared description", async (t) => {
@@ -77,29 +88,31 @@ test("D-CF3-08 keeps a non-empty declared description", async (t) => {
   const staged = await buildStagedCommand(command, context);
 
   // assert
-  assert.deepStrictEqual(staged, { text: '---\n"description": "Deploys."\n---\nShip it.\n' });
+  assert.deepStrictEqual(staged, {
+    text: '---\n"description": "Deploys."\n' + RECORD_LINE + "---\nShip it.\n",
+  });
 });
 
 for (const { declared, frontmatter, text } of [
   {
     declared: "an empty string",
     frontmatter: 'description: ""\nmodel: sonnet\n',
-    text: '---\n"description": "Ship it."\n"model": "sonnet"\n---\nShip it.\n',
+    text: '---\n"description": "Ship it."\n"model": "sonnet"\n' + RECORD_LINE + "---\nShip it.\n",
   },
   {
     declared: "null",
     frontmatter: "description: null\nmodel: sonnet\n",
-    text: '---\n"description": "Ship it."\n"model": "sonnet"\n---\nShip it.\n',
+    text: '---\n"description": "Ship it."\n"model": "sonnet"\n' + RECORD_LINE + "---\nShip it.\n",
   },
   {
     declared: "a number",
     frontmatter: "description: 42\nmodel: sonnet\n",
-    text: '---\n"description": "Ship it."\n"model": "sonnet"\n---\nShip it.\n',
+    text: '---\n"description": "Ship it."\n"model": "sonnet"\n' + RECORD_LINE + "---\nShip it.\n",
   },
   {
     declared: "no key",
     frontmatter: "model: sonnet\n",
-    text: '---\n"model": "sonnet"\n"description": "Ship it."\n---\nShip it.\n',
+    text: '---\n"model": "sonnet"\n"description": "Ship it."\n' + RECORD_LINE + "---\nShip it.\n",
   },
 ]) {
   test(`D-CF3-08 replaces a description of ${declared} with the one fallback key`, async (t) => {
@@ -132,6 +145,7 @@ test("rebuilds every value as one JSON line that Pi reads back unchanged, in sou
     nested: { list: [1, true, null], map: { k: "v" } },
     path: "C:\\x\\${y}",
     description: "Values.",
+    "pi-claude-marketplace": { pluginRoot: "/plugins/acme", pluginData: "/data/acme" },
   };
 
   // act
@@ -146,6 +160,7 @@ test("rebuilds every value as one JSON line that Pi reads back unchanged, in sou
       '"nested": {"list":[1,true,null],"map":{"k":"v"}}\n' +
       '"path": "C:\\\\x\\\\${y}"\n' +
       '"description": "Values."\n' +
+      RECORD_LINE +
       "---\nBody.\n",
   });
   assert.deepStrictEqual(parseFrontmatter(staged.text), {
@@ -158,12 +173,12 @@ for (const { shape, source, text } of [
   {
     shape: "a list",
     source: "---\n- a\n- b\n---\nList body.\n",
-    text: '---\n"description": "List body."\n---\nList body.\n',
+    text: '---\n"description": "List body."\n' + RECORD_LINE + "---\nList body.\n",
   },
   {
     shape: "a scalar",
     source: "---\nhello\n---\nScalar body.\n",
-    text: '---\n"description": "Scalar body."\n---\nScalar body.\n',
+    text: '---\n"description": "Scalar body."\n' + RECORD_LINE + "---\nScalar body.\n",
   },
 ]) {
   test(`rebuilds a frontmatter that parses to ${shape} from no keys`, async (t) => {
@@ -187,7 +202,7 @@ test("keeps the whole text as the body of a source whose opening fence never clo
 
   // assert
   assert.deepStrictEqual(staged, {
-    text: '---\n"description": "---"\n---\n---\nNo closing fence here.\n',
+    text: '---\n"description": "---"\n' + RECORD_LINE + "---\n---\nNo closing fence here.\n",
   });
 });
 
@@ -202,7 +217,9 @@ test("reads a source behind two byte-order marks the way Pi does", async (t) => 
   const staged = await buildStagedCommand(command, context);
 
   // assert
-  assert.deepStrictEqual(staged, { text: '---\n"description": "Twice marked."\n---\nBody.\n' });
+  assert.deepStrictEqual(staged, {
+    text: '---\n"description": "Twice marked."\n' + RECORD_LINE + "---\nBody.\n",
+  });
 });
 
 test("substitutes the plugin variables and rewrites references before the rebuild", async (t) => {
@@ -223,8 +240,50 @@ test("substitutes the plugin variables and rewrites references before the rebuil
   // assert
   assert.deepStrictEqual(staged, {
     text:
-      '---\n"description": "From /plugins/acme"\n---\n' +
+      '---\n"description": "From /plugins/acme"\n' +
+      RECORD_LINE +
+      "---\n" +
       "Use /skill:acme-helper with /data/acme in /work/project.\n",
+  });
+});
+
+test("T-03-02 adds the record after the substitution and the reference rewrite", async (t) => {
+  // arrange
+  const command = await commandWithSource(
+    t,
+    "---\ndescription: Chains.\n---\nRun acme:other from ${CLAUDE_PLUGIN_ROOT}.\n",
+  );
+
+  // act
+  const staged = await buildStagedCommand(command, {
+    ...context,
+    pluginRoot: "/plugins/${CLAUDE_PLUGIN_DATA}",
+    pluginDataDir: "/data/x acme:other",
+    referenceNames: { skills: [], commands: ["acme:other"], workflows: [] },
+  });
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"description": "Chains."\n' +
+      '"pi-claude-marketplace": {"pluginRoot":"/plugins/${CLAUDE_PLUGIN_DATA}","pluginData":"/data/x acme:other"}\n' +
+      "---\nRun /acme:other from /plugins/${CLAUDE_PLUGIN_DATA}.\n",
+  });
+});
+
+test("D-CF3-06 replaces an author's record key with the install-time record, last", async (t) => {
+  // arrange
+  const command = await commandWithSource(
+    t,
+    "---\npi-claude-marketplace: {pluginRoot: /author}\ndescription: Planted.\n---\nBody.\n",
+  );
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text: '---\n"description": "Planted."\n' + RECORD_LINE + "---\nBody.\n",
   });
 });
 
@@ -240,7 +299,8 @@ test("CMD-01 neutralizes a malformed frontmatter and describes the remaining bod
 
   // assert
   assert.deepStrictEqual(staged, {
-    text: '---\n"description": "Run the deployment."\n---\n\nRun the deployment.\n',
+    text:
+      '---\n"description": "Run the deployment."\n' + RECORD_LINE + "---\n\nRun the deployment.\n",
     parseError:
       "Nested mappings are not allowed in compact mappings at line 1, column 8:\n\n" +
       "title: Deploy: the whole thing\n       ^\n",
@@ -250,19 +310,19 @@ test("CMD-01 neutralizes a malformed frontmatter and describes the remaining bod
 for (const { source, text } of [
   {
     source: "---\ralpha: one: two\r---\r\rLone CR body.\r",
-    text: '---\n"description": "Lone CR body."\n---\n\nLone CR body.\n',
+    text: '---\n"description": "Lone CR body."\n' + RECORD_LINE + "---\n\nLone CR body.\n",
   },
   {
     source: "---\nalpha: one: two\n---\n---\nbeta: three: four\n---\nRepeated body.\n",
-    text: '---\n"description": "Repeated body."\n---\nRepeated body.\n',
+    text: '---\n"description": "Repeated body."\n' + RECORD_LINE + "---\nRepeated body.\n",
   },
   {
     source: "---\nalpha: one: two\n---\n---\ndescription: Kept.\n---\nKept body.\n",
-    text: '---\n"description": "Kept."\n---\nKept body.\n',
+    text: '---\n"description": "Kept."\n' + RECORD_LINE + "---\nKept body.\n",
   },
   {
     source: "---\nalpha: one: two\n---",
-    text: '---\n"description": "Plugin command"\n---\n',
+    text: '---\n"description": "Plugin command"\n' + RECORD_LINE + "---\n",
   },
 ]) {
   test(`CMD-01 neutralizes ${JSON.stringify(source)} to its readable remainder`, async (t) => {
