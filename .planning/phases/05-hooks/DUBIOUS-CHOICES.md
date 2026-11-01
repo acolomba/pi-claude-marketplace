@@ -409,3 +409,20 @@ session writes this file. Each subagent ends its report with a
      `noop` before the `onFailure` check; a generation change mid-bucket drops
      a computed deny. Handed to code review.
 - **Recorded in:** `05-SECURITY.md`.
+
+### P5-DC-21: Nyquist gap fill exposed a PostToolUseFailure stdin divergence
+
+- **Phase / source:** `/gsd-validate-phase 5` (Nyquist auditor) and the session.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** The auditor's only gap (HOOK-04 had no PostToolUseFailure
+  scenario) was filled with a scenario that showed the bridge sends
+  `tool_response`, while Claude Code 2.1.316's schema sends `error: string`
+  (binary grep). Under the bug policy the session dispatched a fix in the
+  same phase: `error` carries the joined text parts of Pi's content, and the
+  scenario pins upstream's shape. `tool_use_id`, `is_interrupt`, and
+  `duration_ms` stay deferred (D-CF5-28).
+- **Alternatives:** Pin today's `tool_response` shape and record a divergence.
+- **Why dubious:** Found after the plans ran, so the fix was not planned; a
+  plugin that read `tool_response` on PostToolUseFailure (non-upstream) would
+  break.
+- **Recorded in:** `05-VALIDATION.md`, the fix commit.
