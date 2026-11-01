@@ -13,7 +13,7 @@ import path from "node:path";
 import { errorMessage } from "../shared/errors.ts";
 
 import { resolveContainedComponentPath } from "./component-paths.ts";
-import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
+import { MCP_SERVER_MAP_VALIDATOR } from "./components/mcp.ts";
 import { classifyMcpServer } from "./mcp-server-features.ts";
 
 import type { DroppedMcpServer, McpUnsupportedFeature } from "./mcp-server-features.ts";
@@ -84,12 +84,12 @@ function mergeServers(merge: McpMerge, servers: Readonly<Record<string, unknown>
 }
 
 function mergeServerMap(merge: McpMerge, value: unknown): void {
-  if (MCP_SERVERS_VALIDATOR.Check(value)) {
+  if (MCP_SERVER_MAP_VALIDATOR.Check(value)) {
     mergeServers(merge, value);
     return;
   }
 
-  const errorDetail = MCP_SERVERS_VALIDATOR.Errors(value)
+  const errorDetail = MCP_SERVER_MAP_VALIDATOR.Errors(value)
     .slice(0, 1)
     .map((error) => error.message)
     .join("");
@@ -186,7 +186,7 @@ async function readReferencedMcp(merge: McpMerge, raw: string): Promise<void> {
 // a reference string nor a server map refuses the whole array with one note.
 async function readMcpArray(merge: McpMerge, sources: readonly unknown[]): Promise<void> {
   const invalid = sources.findIndex(
-    (source) => typeof source !== "string" && !MCP_SERVERS_VALIDATOR.Check(source),
+    (source) => typeof source !== "string" && !MCP_SERVER_MAP_VALIDATOR.Check(source),
   );
   if (invalid !== -1) {
     mergeServerMap(merge, sources[invalid]);
