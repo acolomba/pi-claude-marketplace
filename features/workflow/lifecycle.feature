@@ -1,9 +1,8 @@
 Feature: Workflow lifecycle
 
-  Each plugin verb removes or replaces the workflow commands the engine
-  offers. A removed workflow's command stays until a new session, because Pi
-  cannot drop a command it offers. A scripted model stands in for a real one,
-  and a local marketplace for a published one.
+  Each plugin verb removes or replaces the workflow commands the engine offers. A removed
+  workflow's command stays until a new session, because Pi cannot drop a command it offers.
+  A scripted model and a local marketplace stand in for real ones.
 
   Background:
     Given pi runs with the scripted model and these companions:

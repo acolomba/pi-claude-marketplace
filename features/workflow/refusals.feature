@@ -1,9 +1,8 @@
 Feature: Workflow refusals
 
-  An install reports each workflow script it cannot install as written, and
-  the workflow engine refuses at run a script installed with a note. A
-  scripted model stands in for a real one, and a local marketplace for a
-  published one.
+  An install reports each workflow script it cannot install as written, and the workflow
+  engine refuses at run a script installed with a note. A scripted model and a local
+  marketplace stand in for real ones.
 
   Background:
     Given pi runs with the scripted model and these companions:
