@@ -1,126 +1,88 @@
 ---
 phase: 05-hooks
-fixed_at: 2026-11-01T23:30:00Z
+fixed_at: 2026-11-01T23:59:00Z
 review_path: /home/user/pi-claude-marketplace/.planning/phases/05-hooks/05-REVIEW.md
-iteration: 1
-findings_in_scope: 7
-fixed: 6
-skipped: 1
-status: partial
+iteration: 2
+findings_in_scope: 3
+fixed: 3
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 5: Code Review Fix Report
 
-**Fixed at:** 2026-11-01T23:30:00Z
+**Fixed at:** 2026-11-01T23:59:00Z
 **Source review:** /home/user/pi-claude-marketplace/.planning/phases/05-hooks/05-REVIEW.md
-**Iteration:** 1
+**Iteration:** 2
 
 **Summary:**
-- Findings in scope: 7 (CR-01, CR-02, WR-01..WR-05; scope `critical_warning`)
-- Fixed: 6
-- Skipped: 1 (WR-01: the fix would diverge from upstream)
+
+- Findings in scope: 3 (CR-01, WR-01, WR-02; scope `critical_warning`)
+- Fixed: 3
+- Skipped: 0
 
 **Where verification ran:** in the main checkout `/home/user/pi-claude-marketplace`, on branch `features/component-features-phase-5`. No worktree was used, as the caller's binding run rules require. The numbers below come from that tree.
 
-Each fix followed the same steps: a red unit test in the paired `test/**` file, then the fix, then 100% direct coverage (`npm run test:coverage:direct -- <source>`). Each user-visible change also got a cucumber scenario. I recorded it failing with the source fix reverted and passing with the fix in place. Then I ran `npx cucumber-js features/hook` (all passed: 71 scenarios, 856 steps after the last fix) and `npm run check:static` (all passed). Each commit's hook ran `npm run check:commit` and passed. I also ran the hook integration suites (`node --test test/integration/hooks-*.test.ts`, 9 passed) and `features/plugin/session-start-hooks.feature` (2 passed). I did not run the full `npm run check`; the GSD gate still has to run it.
+Each fix followed the same steps. I wrote a red unit test in the paired `test/**` file, then the fix, then checked 100% direct coverage (`npm run test:coverage:direct -- <source>`). Each fix also got a cucumber scenario that I recorded failing with the source fix reverted. Then I ran `npx cucumber-js features/hook` (all passed) and `npm run check:static` (all passed). Each commit's hook ran `npm run check:commit` and passed. After the last fix I also ran the whole cucumber suite (`npx cucumber-js`: 1292 scenarios passed), the hook architecture and integration suites, and `test/index.test.ts` (78 passed). I did not run the full `npm run check`. The GSD gate still has to run it.
 
 ## Fixed Issues
 
-### CR-01: Output overflow makes an `onFailure: "block"` hook fail open
+### CR-01: An output overflow still turns an exit-2 deny into an allow
 
-**Status:** fixed: requires human verification (logic: an early return skipped the onFailure check)
-**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts`, `test/bridges/hooks/dispatch-exec.test.ts`, `features/lib/hook-files.ts`, `features/hook/tool-use.feature`
-**Commit:** 0d877aa
-**Applied fix:** The overflow branch of the `close` handler now runs `onFailureBlock` with the close code (null after the bridge's SIGTERM, so it counts as a failure under E6). It passes empty stdout, so the truncated output is not parsed. A child that exits 0 by itself after an overflow stays a noop, and a unit case pins that. The owned fixture helper `features/lib/hook-files.ts` gains an `output bytes` column, so a script hook can print past the 1 MB stdout limit.
-**Scenario:** `features/hook/tool-use.feature`, "A PreToolUse hook with onFailure block that overflows its output blocks the tool call". The scenario floods stdout, not stderr: stderr chunks arrive at nondeterministic boundaries, so the reason text would vary from run to run. Both streams take the same code path.
+**Status:** fixed: requires human verification (logic: the exit code now decides after an overflow)
+**Upstream evidence (Claude Code 2.1.316, `/opt/claude-code/bin/claude`):** The command-hook runner `MU` adds every stdout and stderr chunk with no limit (`zo+=Vs`, `Io+=Vs`). It never stops a hook for its output. It resolves with the exit status (`status:_i??1`), so an exit 2 blocks whatever the output size.
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts`, `test/bridges/hooks/dispatch-exec.test.ts`, `features/hook/tool-use.feature`, `docs/hooks-compatibility.md`
+**Commit:** 8da30e5
+**Applied fix:** The bridge keeps its EXEC-02 memory limits (1 MB stdout, 64 KB stderr) but no longer kills a hook that passes them. `accumulateStream` drops the chunk that crosses a limit and every later chunk. It keeps its `data` listener, so the pipe drains and the hook runs to its exit. The timeout ladder still stops a hook that never exits. It returns a `cut()` flag. On `close`, stdout that was cut is not read (a cut JSON answer cannot parse). The exit code goes through the normal `onFailureBlock`, then `parseHookStdout`, path. So an exit 2 blocks with the stderr the bridge kept, and an exit 0 stays a noop. When only stderr overflows, the full stdout JSON still applies (a `deny` on exit 0 blocks). The unit cases that pinned the overflow kill (the SIGTERM, the 0-second ladder, the `kill()`-returned-false log, the already-killed child) were replaced by cases for "exit 2 after a stderr overflow", "exit 2 after a stdout overflow", "stdout deny with only stderr overflowing", "both streams overflow", and "the hook runs on until its timeout". The `fallow-ignore-next-line code-duplication` marker above the `settle` call was removed: `npx fallow dupes` finds no clone without it.
+**Scenario:** `features/hook/tool-use.feature`, "A PreToolUse hook that exits 2 after overflowing its output blocks the tool call with its stderr". It has no `onFailure`. The iteration-1 scenario depended on the kill, so its hook now exits 1 ("A PreToolUse hook with onFailure block that fails after overflowing its output blocks the tool call"). The new row in `docs/hooks-compatibility.md` describes the limits.
 **Red (fix reverted):**
+
 ```
--     'bash failed: PreToolUse:Bash hook error: [${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block"'
 +     'bash returned: from-model\n'
-1 scenario (1 failed)
+-     'bash failed: PreToolUse:Bash hook error: [${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: blocked by policy'
+2 scenarios (1 passed, 1 failed)
 ```
 
-### CR-02: A blocking or stopping SessionStart hook drops every other hook's `additionalContext`
-
-**Status:** fixed: requires human verification (state handling)
-**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts`, `test/bridges/hooks/event-adapters.test.ts`, `features/hook/additional-context.feature`
-**Commit:** 0df61e7
-**Applied fix:** `adaptObservationResultForEvent` now buffers a SessionStart fold's non-empty `additionalContext` whatever the arm (block, stop, mutate, noop). Block and stop are still debug-logged. Unit cases cover all three non-mutate arms. A PostCompact case shows that the other events still drop context.
-**Scenario:** "A session start hook's additional context reaches the model when another session start hook exits 2".
-**Red (fix reverted):**
-```
--   [ '1', 'user', 'SessionStart hook additional context: ss-ctx' ]
-1 scenario (1 failed)
-```
-
-### WR-02: UserPromptSubmit context can attach to a later prompt's turn
-
-**Status:** fixed: requires human verification (state handling across Pi's input/run lifecycle)
-**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts`, `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts`, `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts`, `test/bridges/hooks/dispatch.test.ts`, `test/bridges/hooks/event-adapters.test.ts`, `features/step_definitions/hook/prompt-and-stop.steps.ts`, `features/hook/additional-context.feature`, `docs/hooks-compatibility.md`
-**Commit:** 8e35210
-**Applied fix:**
-1. The UserPromptSubmit composite now drains stale prompt context when it starts, before the bucket check, so it drains even when no hook is routed. This is the "at minimum" part. The drain cannot go in the second `input` subscription: Pi runs `input` handlers in registration order, so that handler would drain the context the current prompt just buffered.
-2. `adaptInputResult` delivers the context of a queued steer or follow-up (`event.streamingBehavior !== undefined`) at once, with `pi.sendMessage(..., { triggerTurn: false })`. It does not buffer it. The message uses the same `claude-hook-additional-context` custom type and text as the `before_agent_start` carrier. The constant moved to `event-adapters.ts`, and `event-router.ts` imports it. A blank context, no Pi API, or a send that throws (debug-logged) sends nothing.
-**Scenario:** "A prompt hook's additional context for a steer reaches the model on the turn that reads the steer". It uses a new step, `the user prompts {string} and steers with {string} while the tool runs`. The step sends an RPC `prompt` with `streamingBehavior: "steer"` while a `sleep 3` bash call runs, asserts the disposition is `queued`, and keeps the whole run as the turn.
-**Red (fix reverted):**
-```
-+    "UserPromptSubmit hook additional context: ctx-from-hook"   (missing before "also say hi" on call 2)
-1 scenario (1 failed)
-```
-**Note:** The context lands just before the queued prompt, not after it as upstream places it. Pi queues the steer text only after its `input` handlers return, and no Pi carrier can put a message after a queued prompt. This Pi gap is documented in `docs/hooks-compatibility.md`.
-
-### WR-03: Hook notices reach the user verbatim and unbounded
+### WR-01: A `continue:false` from one PreCompact hook cancels another hook's block
 
 **Status:** fixed
-**Files modified:** `extensions/pi-claude-marketplace/shared/notification-resolve.ts`, `extensions/pi-claude-marketplace/shared/notification-dispatch.ts`, `extensions/pi-claude-marketplace/shared/notification-grammar.ts` (comment only), `test/shared/notification-resolve.test.ts`, `test/shared/notification-dispatch.test.ts`, `features/hook/messages.feature`, `docs/hooks-compatibility.md`, `docs/json-output.md`, `docs/output-catalog.md`
-**Commit:** 40f3d52
-**Applied fix:** A new `terminalSafeHookNotice` in `notification-resolve.ts` (the resolve step already redacts raw surfaces) does three things. It applies `stripVTControlCharacters`, as `orchestrators/plugin/package-install.ts` does. It replaces every remaining `\p{Cc}` except `\n` and `\t` with a space. It cuts the text at 2,000 grapheme clusters, ending it with `… (+N chars)`. That marker matches the project's existing D-PL3-10 marker form. `notifyHookNotice` calls it once before it builds the surface, so the TUI and JSON strategies both get the cleaned text. A notice that holds nothing but escapes emits nothing. The sanitizer could not live in `notification-dispatch.ts`: the D-16 / SC-5 presentation-sink gate (`test/architecture/presentation-sink.test.ts`) forbids composing text there, and my first attempt failed that gate in the commit hook. The `hook-notice` catalog block is unchanged, so the byte lock (`test/architecture/hooks-notice-notify.test.ts`) still passes. The prose next to it, the `json-output.md` field row, and `hooks-compatibility.md` now describe the strip and the cap.
-**Scenario:** "A hook's system message is shown without its terminal escape sequences". It sends an OSC title, an SGR color, and a NUL through `systemMessage`.
+**Upstream evidence:** The PreCompact runner `q0e` builds `blockedBy` from `w.filter((Se)=>Se.blocked)`, that is, from every blocked hook, whatever the other hooks return.
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts`, `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts`, `test/bridges/hooks/dispatch.test.ts`, `test/bridges/hooks/event-adapters.test.ts`, `features/hook/session.feature`, `docs/hooks-compatibility.md`
+**Commit:** c1fe1e2
+**Applied fix:** `adaptPreCompactResult` now takes every hook's own result, not the folded one. Any `block` returns `{ cancel: true }`, and each `stop` is still debug-logged. `adaptForEvent` receives the whole `FoldedBucket` and passes the outcomes' results to the PreCompact adapter. `blockNotices` shows the compaction-blocked notice whenever `blocks(folded.outcomes)` is not empty. The dispatch case that pinned "no notice when one hook stops and another blocks" now expects the notice, and a new case keeps "no notice for a stop alone".
+**Scenario:** `features/hook/session.feature`, "A PreCompact hook that exits 2 blocks the compaction when another PreCompact hook stops".
 **Red (fix reverted):**
-```
-+     text: 'UserPromptSubmit says: \x1B]0;title\x07remember\x1B[31m the\x00 tests'
--     text: 'UserPromptSubmit says: remember the  tests'
-1 scenario (1 failed)
-```
 
-### WR-04: A PreCompact block does nothing and shows nothing, although Pi can cancel
-
-**Status:** fixed: requires human verification (new decision path)
-**Upstream evidence (Claude Code 2.1.316, `/opt/claude-code/bin/claude`):** The PreCompact runner `q0e` collects the blocked hooks: `Z = q.map(Se => "[" + Se.command + "]" + (out ? ": " + out : "")).join("\n")`, returned as `blockedBy`. Every compaction path then skips or throws: `Compaction blocked by PreCompact hook: ${blockedBy}` (manual, reactive, and precomputed). It also posts the notification `compaction blocked by PreCompact hook` with `color: "warning"`. So upstream does block the compaction.
-**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts`, `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts`, `extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts`, `test/bridges/hooks/event-adapters.test.ts`, `test/bridges/hooks/dispatch.test.ts`, `test/bridges/hooks/hook-labels.test.ts`, `features/step_definitions/hook/session.steps.ts`, `features/hook/session.feature`, `docs/hooks-compatibility.md`, `docs/json-output.md`
-**Commit:** c17046a
-**Applied fix:**
-- New `adaptPreCompactResult`: a folded block returns `{ cancel: true }`, Pi's `SessionBeforeCompactResult.cancel`, typed structurally as `CompactionCancel`, because the frozen `platform/pi-api.ts` does not re-export Pi's type. A stop is debug-logged; context is dropped.
-- `CompositeReturnFor<"PreCompact">` now includes the cancel. `adaptObservationResultForEvent` no longer takes PreCompact, and its PreCompact test rows moved to PostCompact.
-- `blockNotices` shows one notice for a folded PreCompact block: `Compaction blocked by PreCompact hook: <message>`, with one message per blocking hook in routing order, joined by `\n`, as upstream does. The new `compactionBlockedText` / `HookBlock` in `hook-labels.ts` builds it. The `blockTexts` helper was folded into a shared `blocks()`.
-- On Pi's side, a manual compaction then fails with `Compaction cancelled`. A new step, `the user compacts the session with the hooks recording, which fails with {string}`, states that error.
-**Scenario:** "A PreCompact hook that exits 2 blocks the compaction". It checks the PreCompact run only (no SessionStart compact, no PostCompact) and the notice.
-**Red (fix reverted):**
 ```
 +   error: 'Turn prefix summarization failed: scripted model: call 2 has no step; the script has 1',
 -   error: 'Compaction cancelled',
 1 scenario (1 failed)
 ```
-(Without the fix, Pi went on to summarize. A bigger script would have shown the compaction succeeding.)
 
-### WR-05: The reload scenario's "no runs" check depends on a one-second quiet window
+### WR-02: A follow-up prompt's context reaches the model on the running prompt's turn
 
-**Status:** fixed
-**Files modified:** `features/step_definitions/hook/session.steps.ts`, `features/hook/session.feature`
-**Commit:** 40367d9
-**Applied fix:** The step `the user reloads pi in the terminal with the hooks recording` and its `TERMINAL_QUIET_MS` window are replaced by `the user reloads pi in the terminal and then prompts {string} with the hooks recording`. After the reload status line, the step types a prompt and polls the hook log until that prompt's UserPromptSubmit run appears. Pi runs `input` handlers before any model check, and the marker hook exits 2, so the prompt never reaches the model. The scenario now states the whole turn: the marker's run, and no SessionStart or SessionEnd run. The startup-run wait and the new wait share one `waitForRun` helper.
-**Demonstration it can fail:** I removed the D-CF5-03 SessionStart reload filter in `event-router.ts`, temporarily and without committing it. The scenario failed with an extra `SessionStart ... start ... claude-env-first.env` row before the marker row. Then I restored the file (`git checkout`).
+**Status:** fixed: requires human verification (state handling across Pi's turn and queue lifecycle). The reviewer's suggested carrier was not used. See below.
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts`, `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts`, `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts`, `extensions/pi-claude-marketplace/bridges/hooks/runtime.ts`, `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts`, `test/bridges/hooks/event-adapters.test.ts`, `test/bridges/hooks/event-router.test.ts`, `test/bridges/hooks/dispatch.test.ts`, `test/bridges/hooks/runtime.test.ts`, `test/architecture/hooks-lifecycle.test.ts`, `test/index.test.ts`, `features/step_definitions/hook/prompt-and-stop.steps.ts`, `features/hook/additional-context.feature`, `docs/hooks-compatibility.md`
+**Commit:** a17639b
+**Why not `{ deliverAs: event.streamingBehavior }`:** In Pi 1.4, `sendCustomMessage` with `deliverAs` and no `triggerTurn: false` calls `agent.steer`/`agent.followUp` while streaming. That puts the context in the same queue as the prompt, as a separate item. But Pi's default `steeringMode` and `followUpMode` are both `"one-at-a-time"` (`settings-defaults.js`), and `PendingMessageQueue.drain()` hands out one item per delivery point. So the context gets a model call of its own before the prompt. I confirmed this in the harness with a temporary patch, not committed. The existing steer scenario and the new follow-up scenario both failed with "the model was called past its script" (`call 3` and `call 5`).
+**Applied fix:**
 
-## Skipped Issues
+- A steer's context still goes out at once with `triggerTurn: false`. Pi reads a steer on the next model call, so it is correct already.
+- A follow-up's context is queued in a new runtime buffer (`PendingFollowUpContext`, with the follow-up's text).
+- A new `turn_end` subscription calls `sendDueFollowUpContext`. When the turn ended with no tool call, error, or abort, Pi reads its next queued message. `context.pendingMessages[0]` is that message (Pi's `peekQueuedMessages` returns the steering head, else the follow-up head). When it is a user message whose text matches a queued follow-up context, the bridge sends that context with `triggerTurn: false`. Pi appends it at this turn end, just before it reads the follow-up. The match uses text, as Pi does for its own queues (`_followUpMessages.indexOf(messageText)`). Contexts queued before the matched one are dropped, because Pi reads follow-ups in order.
+- A prompt that Pi does not queue (`streamingBehavior` undefined) drops any follow-up context still waiting, with a debug line. A bridge load empties the buffer too.
+- The `turn_end` registration adds one entry to the registration lists in `event-router.test.ts`, `hooks-lifecycle.test.ts`, and the strict mock in `test/index.test.ts`. That file imports `TurnEndEvent` from the Pi peer, because the frozen `platform/pi-api.ts` does not re-export it.
+- `docs/hooks-compatibility.md` (the paragraph at former line 279) now says what is true: a steer's context goes out at once, a follow-up's waits for the turn before Pi reads it, and a follow-up whose text Pi expands (a skill command or prompt template) is not found, so its context is dropped at the next idle prompt.
 
-### WR-01: The input rewrite is the last one in routing order, not the rewrite of the winning decision
+**Scenario:** `features/hook/additional-context.feature`, "A prompt hook's additional context for a follow-up reaches the model on the turn that reads the follow-up". The new step `the user prompts {string} and follows up with {string} while the tool runs` shares a helper with the steer step. The script runs two tool calls and a reply before Pi reads the follow-up.
+**Red (fix reverted):** the follow-up's context appeared on calls 2 and 3, after the first tool result, and not before `also say hi` on call 4 (`2 scenarios (1 passed, 1 failed)`; the steer scenario passed).
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:315-323, 355-359`
-**Reason:** The suggested fix would diverge from upstream. In Claude Code 2.1.316, the PreToolUse permission fold `jFt` sets `if(Ae)h=Ae` for every hook result that carries `updatedInput`, whatever that hook's `permissionBehavior` is. It then returns `q.updatedInput=h` next to the winning deny, ask, or allow. So upstream applies the last rewrite in completion order, independent of the decision. That matches E11 ("with two input rewrites ... the last to finish won"), and the current code does the same with routing order standing in for completion order. D-CF5-09 does say "the input rewrite of the winning decision", but it cites E11 as its evidence, and the binary shows no decision filter. Under AGENTS.md "Upstream parity", the gap between the decision's wording and upstream goes to the user as a question. I did not change the code.
-**Original issue:** `foldMutations` takes `lastSet(mutations, "updatedInput")` over all mutations, so with A `ask`+X and B `allow`+Y, the fold asks (attributed to A) and then applies B's Y.
+## Iteration 1 (summary)
+
+Iteration 1 (commits `0d877aa..40367d9`) fixed 6 of 7 findings: CR-01 (an `onFailure: "block"` guard failed open on output overflow), CR-02 (a blocking SessionStart hook dropped the others' context), WR-02 (prompt context on the wrong turn, for a stale buffer and a steer), WR-03 (hook notices shown verbatim and unbounded), WR-04 (a PreCompact block did nothing), and WR-05 (the reload scenario depended on a quiet window). It skipped WR-01 (the input rewrite of the winning decision) because the fix would have diverged from upstream's `jFt` fold. D-CF5-09 was later amended to match upstream (P5-DC-22).
 
 ---
 
-_Fixed: 2026-11-01T23:30:00Z_
+_Fixed: 2026-11-01T23:59:00Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_

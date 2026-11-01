@@ -453,3 +453,29 @@ session writes this file. Each subagent ends its report with a
   7. IN-01 (generation-change discard) refuted as intended (DISP-03); the six
      info findings were left out of the fix scope.
 - **Recorded in:** `05-REVIEW.md`, `05-REVIEW-FIX.md`, `05-CONTEXT.md` D-CF5-09.
+
+### P5-DC-23: Code review iteration 2 fixes
+
+- **Phase / source:** `/gsd-code-review 5 --fix --auto`, iteration 2 fixer.
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. CR-01: an output overflow no longer kills the hook; the bridge drains past
+     its EXEC-02 caps (1 MB stdout, 64 KB stderr) and the exit code decides,
+     so an exit-2 deny is never lost. Upstream keeps all output; stdout cut at
+     the cap is not read as JSON, so a JSON answer over 1 MB is lost (no D-CF5
+     ID; EXEC-02 cited in the docs). A hook that writes forever now runs to
+     its timeout.
+  2. WR-01: every PreCompact block cancels the compaction and is named in the
+     notice, as upstream's `blockedBy`.
+  3. WR-02: a follow-up's prompt context waits in a runtime queue and is sent
+     at the `turn_end` whose next queued message has the follow-up's text
+     (Pi's `deliverAs` gives the context its own model call in Pi's default
+     one-at-a-time mode). Text matching misses expanded follow-ups (skill or
+     template), and identical texts could swap contexts; documented.
+  4. Removed one `fallow-ignore` code-duplication marker that is no longer
+     needed, so `.planning/codebase/CONVENTIONS.md`'s "exactly 41" marker
+     count is now 40 (parent line).
+  5. `test/index.test.ts` imports `TurnEndEvent` straight from the Pi peer
+     because the frozen `platform/pi-api.ts` does not re-export it (parent
+     line: re-export it).
+- **Recorded in:** `05-REVIEW-FIX.md`.
