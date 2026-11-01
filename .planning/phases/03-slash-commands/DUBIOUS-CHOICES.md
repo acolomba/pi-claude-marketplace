@@ -166,3 +166,54 @@ entries into it. Severity and status follow the root file's rules.
   order is item 7; the TUI source tag is spiked before the expected value is
   written.
 - **Recorded in:** `03-RESEARCH.md`, `03-VALIDATION.md`.
+
+### P3-DC-10: Phase 3 planning choices
+
+- **Phase / source:** Phase 3 planner (`03-01..09-PLAN.md`).
+- **Severity:** Medium (items 1-4); the rest Low. **Status:** open.
+- **Items:**
+  1. **Five waves, nine plans** (the ledger writer and the object map split
+     out): wave 1 tracer 03-01; wave 2 frontmatter 03-02, invocation 03-03,
+     declared paths and entry rule 03-04, lifecycle 03-05; wave 3 ledger writer
+     03-06; wave 4 ledger check 03-07 and object map 03-08; wave 5 gate 03-09.
+  2. **Project commands run without the ledger check between waves 2 and 4**;
+     only the phase gate covers the finished rule.
+  3. **D-CF3-07's abort text follows D-CF2-13's current wording** (it names
+     reinstall), not the CONTEXT literal.
+  4. **The "uninstall before `/reload`" abort scenario lives in invocation
+     (03-03)**, not lifecycle.
+  5. Command ledger warnings ride Phase 2's `skillWarnings` member (wording
+     names the commands; rename is a parent line).
+  6. Ledger scenarios use a commands-only plugin `solo`, because
+     `offers these plugins:` always adds a skill.
+  7. The description fallback reads the body after install-time substitution
+     and reference rewrite (differs from upstream only for a first line naming
+     `${CLAUDE_PLUGIN_ROOT}`).
+  8. The writer's read-back compares the JSON form of the frontmatter, so a
+     non-finite YAML number stages as `null`.
+  9. The reinstall-owner lookup reads `state.json` with
+     `persistMigration: false` (skills side saves one; Phase 2 parent line).
+  10. The argument-hint check uses `this.startTuiSession()` in the shared
+      sandbox after a spike; the source tag is unconfirmed.
+  11. Extra scenario: `info` of an unavailable plugin with entry-declared
+      `commands`.
+  12. Entry maps with both or neither of `source`/`content` make the plugin
+      unavailable (unprobed for entries).
+  13. `\p{Cf}` map keys are skipped (beyond D-CF3-03's list, per upstream).
+  14. A declared path or map `source` through a symlink makes the plugin
+      unavailable (today's containment rule).
+  15. The ledger digest covers only the staged command file, not plugin
+      scripts a `!` command runs (residual).
+  16. The "user's own template" Given writes `<agent dir>/prompts/<name>.md`.
+  17. `test/index.test.ts` gets more than an expected-value edit (`pi` exposed
+      on `LoadedExtension`; the listener type may return a Promise), limited
+      by a `git diff` criterion.
+  18. Inline map commands record a synthetic `sourcePath`
+      `<plugin root>#commands.<key>` (MCP bridge precedent).
+  19. An abort's `commandId` is the command name without its slash.
+  20. `/claude:plugin info` still does not list declared command files or map
+      entries (residual parent line).
+  21. 03-01 carries an extra `promote` assumption-delta block.
+  22. 03-01's degraded-command scenario assumes that install reports only
+      warnings (`, which warned`).
+- **Recorded in:** the plans.
