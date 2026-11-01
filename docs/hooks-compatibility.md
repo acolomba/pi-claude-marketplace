@@ -67,7 +67,7 @@ Each compaction runs three events in order, as upstream does (D-CF5-04, D-CF5-05
 
 Pi reports a compaction as `manual`, `threshold`, or `overflow`. The bridge sends `manual` as `manual`, and `threshold` and `overflow` as `auto`. A `PreCompact` or `PostCompact` matcher of `manual` or `auto` compares with that value. A second compaction in the same session runs the three events again.
 
-A `PreCompact` block cancels the compaction, as upstream does, so `SessionStart` and `PostCompact` do not run. A block is an exit 2, a `decision` of `block`, or a failure under `onFailure: "block"`. The bridge shows `Compaction blocked by PreCompact hook: <message>`, with one `[<command>]: <stderr>` message for each blocking hook, one per line. Upstream shows that notice as a warning. The bridge shows it at `info` severity, as every hook notice (D-CF5-18, D-CF5-24). Pi then answers the compaction with `Compaction cancelled`.
+A `PreCompact` block cancels the compaction, as upstream does, so `SessionStart` and `PostCompact` do not run. A block is an exit 2, a `decision` of `block`, or a failure under `onFailure: "block"`. A block from any `PreCompact` hook cancels the compaction, whatever the other hooks return: a `continue: false` from another hook does not hide it. The bridge shows `Compaction blocked by PreCompact hook: <message>`, with one `[<command>]: <stderr>` message for each blocking hook, one per line. Upstream shows that notice as a warning. The bridge shows it at `info` severity, as every hook notice (D-CF5-18, D-CF5-24). Pi then answers the compaction with `Compaction cancelled`.
 
 ### Turn-boundary timing shift
 

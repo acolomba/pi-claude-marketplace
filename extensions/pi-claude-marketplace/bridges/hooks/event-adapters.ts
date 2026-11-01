@@ -344,26 +344,26 @@ export interface CompactionCancel {
 }
 
 /**
- * D-CF5-18: convert a folded PreCompact result to the Pi
- * `session_before_compact` return. A block (exit 2, a `decision: "block"`, or
- * a failure under `onFailure: "block"`) cancels the compaction, as Claude
- * Code 2.1.316 skips a compaction a PreCompact hook blocks, so neither
+ * D-CF5-18: convert the PreCompact hooks' results to the Pi
+ * `session_before_compact` return. A block from any hook (exit 2, a
+ * `decision: "block"`, or a failure under `onFailure: "block"`) cancels the
+ * compaction, as Claude Code 2.1.316 skips a compaction when any PreCompact
+ * hook blocks, whatever the other hooks return. So neither
  * SessionStart(`compact`) nor PostCompact runs. Claude Code acts on no other
  * PreCompact outcome: a stop is debug-logged, and context is dropped (D-60-03).
+ * The results are every hook's own, not the fold, because a fold lets a stop
+ * hide a block.
  */
-export function adaptPreCompactResult(result: HookExecResult): CompactionCancel | undefined {
-  switch (result.kind) {
-    case "block":
-      return { cancel: true };
-
-    case "stop":
+export function adaptPreCompactResult(
+  results: readonly HookExecResult[],
+): CompactionCancel | undefined {
+  for (const result of results) {
+    if (result.kind === "stop") {
       hookDebugLog(`adaptPreCompact: stop ignored; reason=${result.stopReason ?? "<none>"}`);
-      return undefined;
-
-    case "mutate":
-    case "noop":
-      return undefined;
+    }
   }
+
+  return results.some((result) => result.kind === "block") ? { cancel: true } : undefined;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

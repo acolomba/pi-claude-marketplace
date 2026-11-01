@@ -2470,6 +2470,32 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(output, { cancel: true });
   });
 
+  test("cancels the compaction on a PreCompact block that follows another hook's stop", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreCompact", routedEntries("PreCompact", ["stopper", "keeper"]));
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreCompact",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor(
+        { stopper: { kind: "stop" }, keeper: { kind: "block", reason: "keep", fromStderr: true } },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(
+      { reason: "manual" } as SessionBeforeCompactEvent,
+      createExtensionContext("/workspace/pre-compact-stop-and-block"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { cancel: true });
+  });
+
   test("passes a PostCompact noop through after observing it", async () => {
     // arrange
     const runtime = createHooksRuntime();
@@ -3583,10 +3609,17 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       ],
     },
     {
-      name: "no notice for a PreCompact hook that stops",
+      name: "the compaction-blocked notice of a PreCompact block that another hook's stop does not hide",
       claudeEvent: "PreCompact",
       event: PRE_COMPACT,
       results: { stopper: { kind: "stop" }, keeper: { kind: "block", reason: "keep" } },
+      notices: ["Compaction blocked by PreCompact hook: keep"],
+    },
+    {
+      name: "no notice for a PreCompact hook that stops",
+      claudeEvent: "PreCompact",
+      event: PRE_COMPACT,
+      results: { stopper: { kind: "stop" }, quiet: { kind: "noop" } },
       notices: [],
     },
   ] satisfies ReadonlyArray<{

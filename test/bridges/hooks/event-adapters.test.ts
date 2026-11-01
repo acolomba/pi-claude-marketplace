@@ -1356,19 +1356,32 @@ describe("adaptObservationResultForEvent", () => {
 describe("adaptPreCompactResult", () => {
   test("cancels the compaction for a block, as Claude Code does", () => {
     // act
-    const adaptation = adaptPreCompactResult({ kind: "block", reason: "keep the history" });
+    const adaptation = adaptPreCompactResult([{ kind: "block", reason: "keep the history" }]);
 
     // assert
     assert.deepStrictEqual(adaptation, { cancel: true });
   });
 
-  for (const hookOutcome of [
-    { kind: "noop" },
-    { kind: "mutate", additionalContext: "dropped" },
-  ] satisfies HookExecResult[]) {
-    test(`lets the compaction run for a ${hookOutcome.kind}`, () => {
+  test("cancels the compaction for a block that another hook's stop precedes", () => {
+    // act
+    const adaptation = adaptPreCompactResult([
+      { kind: "stop", stopReason: "halt requested" },
+      { kind: "noop" },
+      { kind: "block", reason: "keep the history" },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(adaptation, { cancel: true });
+  });
+
+  for (const hookOutcomes of [
+    [],
+    [{ kind: "noop" }],
+    [{ kind: "noop" }, { kind: "mutate", additionalContext: "dropped" }],
+  ] satisfies HookExecResult[][]) {
+    test(`lets the compaction run for ${JSON.stringify(hookOutcomes.map(({ kind }) => kind))}`, () => {
       // act
-      const adaptation = adaptPreCompactResult(hookOutcome);
+      const adaptation = adaptPreCompactResult(hookOutcomes);
 
       // assert
       assert.strictEqual(adaptation, undefined);
@@ -1403,7 +1416,7 @@ describe("adaptPreCompactResult", () => {
       const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
 
       // act
-      const adaptation = adaptPreCompactResult(hookOutcome);
+      const adaptation = adaptPreCompactResult([{ kind: "noop" }, hookOutcome]);
 
       // assert
       assert.strictEqual(adaptation, undefined);

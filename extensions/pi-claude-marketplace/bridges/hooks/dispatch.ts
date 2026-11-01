@@ -488,8 +488,12 @@ function blockNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBuc
       return blocks(folded.outcomes).map(({ reason, command, fromStderr }) =>
         hookErrorText(label, reason, command, fromStderr),
       );
-    case "PreCompact":
-      return folded.result.kind === "block" ? [compactionBlockedText(blocks(folded.outcomes))] : [];
+    case "PreCompact": {
+      // Every block counts, as on upstream: a stop in the fold does not hide one.
+      const blocked = blocks(folded.outcomes);
+      return blocked.length > 0 ? [compactionBlockedText(blocked)] : [];
+    }
+
     case "PreToolUse":
     case "PostToolUse":
     case "PostToolUseFailure":
@@ -709,12 +713,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     }
 
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
-    return (await adaptForEvent(
-      claudeEvent,
-      folded.result,
-      event,
-      context,
-    )) as CompositeReturnFor<E>;
+    return (await adaptForEvent(claudeEvent, folded, event, context)) as CompositeReturnFor<E>;
   };
 }
 
@@ -770,16 +769,19 @@ export function toolResultCompositeHandler(
 
 /**
  * D-60-03: dispatch the folded HookExecResult to the matching per-Pi-event
- * adapter. Observation events have no Pi-side return slot -- their adapter
+ * adapter. The PreCompact adapter reads every hook's own result instead
+ * (D-CF5-18), because the fold lets a stop hide a block. Observation events
+ * have no Pi-side return slot -- their adapter
  * is invoked for the SessionStart context buffer and the block/stop
  * debug-log side effect and always returns undefined.
  */
 async function adaptForEvent(
   claudeEvent: CompositeDispatchEvent,
-  result: HookExecResult,
+  folded: FoldedBucket,
   event: unknown,
   context: HookAdapterContext,
 ): Promise<ToolCallEventResult | InputEventResult | CompactionCancel | undefined> {
+  const { result } = folded;
   switch (claudeEvent) {
     case "PreToolUse":
       // D-CF5-11: an ask may wait on the user's answer in the terminal.
@@ -787,7 +789,7 @@ async function adaptForEvent(
     case "UserPromptSubmit":
       return adaptInputResult(result, event as InputEvent, context);
     case "PreCompact":
-      return adaptPreCompactResult(result);
+      return adaptPreCompactResult(folded.outcomes.map((outcome) => outcome.result));
     case "SessionStart":
     case "SessionEnd":
     case "PostCompact":
