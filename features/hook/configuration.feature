@@ -185,3 +185,58 @@ Feature: Hook configuration
       | event      | session | tool name | tool input             | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PreToolUse | first   | Bash      | {"command":"echo one"} | {project dir} |                 | every     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
       | PreToolUse | first   | Bash      | {"command":"echo two"} | {project dir} |                 | every     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+
+  Scenario Outline: Info on a plugin with a hook on an event pi does not support names the event unsupported
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event        | matcher |
+      | guard  | PreToolUse   | Bash    |
+      | notice | <hook event> |         |
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info                                                                                           |
+      | marketplace details autoupdate | false                                                                                                 |
+      | marketplace name               | fixtures                                                                                              |
+      | marketplace scope              | project                                                                                               |
+      | needs reload                   | false                                                                                                 |
+      | plugin components hooks        | [{"event":"PreToolUse","matcher":"Bash"},{"kind":"lenient","event":"<hook event>","supported":false}] |
+      | plugin components resolved     | true                                                                                                  |
+      | plugin components skills       | demo-skill                                                                                            |
+      | plugin id                      | demo@fixtures                                                                                         |
+      | plugin name                    | demo                                                                                                  |
+      | plugin reasons                 | unsupported hooks                                                                                     |
+      | plugin status                  | partially-available                                                                                   |
+      | plugin version                 | 1.0.0                                                                                                 |
+      | severity                       | info                                                                                                  |
+
+    Examples:
+      | hook event     |
+      | Notification   |
+      | DirectoryAdded |
+      | PreModelSwitch |
+
+  Scenario: A plugin with an unsupported hook event still runs its supported hooks after a partial install
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event        | matcher |
+      | guard  | PreToolUse   | Bash    |
+      | notice | Notification |         |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --partial"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
