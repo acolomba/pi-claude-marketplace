@@ -707,7 +707,7 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
     eventFields: {
       tool_name: "Bash",
       tool_input: { command: "false" },
-      tool_response: [{ type: "text", text: "exit 1" }],
+      error: "exit 1",
     },
   },
   {

@@ -6,9 +6,12 @@
 // (the router's bucket-A split between PostToolUse and
 // PostToolUseFailure happens upstream of this translator). Pi's
 // lowercase `event.toolName` is capitalized via `mapPiToClaudeToolName`
-// (TOOL-01 reuse); `event.input` flows into `tool_input` and the
-// errored tool's `event.content` flows into Claude's `tool_response`
-// field carrying the error payload (claude-hook-config-syntax.md § 3).
+// (TOOL-01 reuse); `event.input` flows into `tool_input`. Claude Code
+// sends a failed tool's error as the string `error` and sends no
+// `tool_response`, so the text parts of the errored tool's
+// `event.content`, joined with newlines, become `error`; an image part
+// has no text and is left out. `tool_use_id`, `is_interrupt`, and
+// `duration_ms` are not sent (D-CF5-28).
 
 import { mapPiToClaudeToolName } from "../../../domain/components/hook-tool-names.ts";
 
@@ -22,7 +25,19 @@ export interface PostToolUseFailureStdin {
   readonly hook_event_name: "PostToolUseFailure";
   readonly tool_name: string;
   readonly tool_input: unknown;
-  readonly tool_response: unknown;
+  readonly error: string;
+}
+
+// The text parts of a failed tool's content, one per line.
+function errorText(content: ToolResultEvent["content"]): string {
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block.type === "text") {
+      parts.push(block.text);
+    }
+  }
+
+  return parts.join("\n");
 }
 
 export function translatePostToolUseFailure(
@@ -36,6 +51,6 @@ export function translatePostToolUseFailure(
     hook_event_name: "PostToolUseFailure",
     tool_name: mapPiToClaudeToolName(event.toolName),
     tool_input: event.input,
-    tool_response: event.content,
+    error: errorText(event.content),
   };
 }
