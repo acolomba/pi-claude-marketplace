@@ -322,3 +322,18 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
   3. The verifier re-ran only `features/workflow` and relied on the
      orchestrator's recorded full gate.
 - **Recorded in:** `07-VERIFICATION.md`.
+
+### P7-DC-17: Transition step skipped for PROJECT.md
+
+- **Phase / source:** Phase 7 transition (post-completion mode).
+- **Severity:** Low. **Status:** open.
+- **Choice:** The transition's `evolve_project` step (validated requirements,
+  Key Decisions rows, "Last updated" footer in `.planning/PROJECT.md`) was not
+  run in this child session. `CHILD-SESSION-BRIEF.md` forbids editing
+  PROJECT.md Key Decisions, and the other edits to that shared 2.6 MB file
+  would conflict with the sibling phases' merges. The parent applies the
+  D-CF7-01..04 Key Decisions rows from `07-06-SUMMARY.md` "Parent lines" and
+  moves WFL-01..05 to Validated at merge. `phase.complete` already updated
+  ROADMAP.md, STATE.md, and REQUIREMENTS.md (WFL-01..05 checked).
+- **Alternatives:** Edit PROJECT.md's requirement and footer sections here.
+- **Recorded in:** this file only.
