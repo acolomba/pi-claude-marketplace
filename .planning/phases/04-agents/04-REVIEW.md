@@ -1,8 +1,8 @@
 ---
 phase: 04-agents
-reviewed: 2026-11-01T18:26:50Z
+reviewed: 2026-11-01T18:32:57Z
 depth: standard
-iteration: 1
+iteration: 2
 files_reviewed: 13
 files_reviewed_list:
   - extensions/pi-claude-marketplace/bridges/agents/convert.ts
@@ -20,15 +20,15 @@ files_reviewed_list:
   - test/orchestrators/plugin/update-flow.test.ts
 findings:
   critical: 0
-  warning: 1
+  warning: 0
   info: 3
-  total: 4
+  total: 3
 status: issues_found
 ---
 
-# Phase 4: Code Review Report
+# Phase 4: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-11-01T18:26:50Z
+**Reviewed:** 2026-11-01T18:32:57Z
 **Depth:** standard
 **Files Reviewed:** 13
 **Status:** issues_found
@@ -73,38 +73,29 @@ What was checked and holds:
   column. `mergeUserSetting` restores the previous bytes, or removes a file it
   created, on release. `offeredToolNames` asserts the call exists.
 
-## Warnings
+## Iteration 2
 
-### WR-01: A `Skill(spec)` entry is not resolved to the Skill tool, so it neither grants nor disallows skill inheritance
+This pass re-reviews the fix commit `ee1b1da` (iteration 1's WR-01) and looks
+for regressions it introduced.
 
-**File:** `extensions/pi-claude-marketplace/bridges/agents/convert.ts:397` (`mapToolTokens`), `:430` (`mapTools`), `:538` and `:570` (`omittedToolMapping`)
+- **WR-01 (`Skill(spec)` entry): resolved.** `isSkillToken` compares
+  `toolNameOf(token)` with `"Skill"`. All five former raw comparisons use it:
+  the skip in `mapToolTokens`, both sides of the `inheritSkills` flag in
+  `mapTools`, the skip and the flag in `omittedToolMapping`, and the AG-11
+  note in `assertMappedToolsNonEmpty`. The probe now gives `tools: read`,
+  `inheritSkills: true`, no dropped tool for `tools: Read, Skill(helper)`, and
+  `inheritSkills: false` with no warning for `disallowedTools: Skill(helper)`.
+- **Regressions: none found.** A bare `Skill` takes the same path as before
+  (`toolNameOf("Skill")` is `"Skill"`). `tools: Skill(helper)` alone still
+  refuses the install (AG-11); it now carries the Skill note, as `tools: Skill`
+  does. `Skill(helper)` in an explicit list's `disallowedTools` still maps to
+  no Pi name, so the explicit-list filter is unchanged. The three new unit
+  cases and the new scenario `A Skill entry with a pattern grants or disallows
+  the skills as the Skill tool does` pass; `features/agent/` passes (40
+  scenarios). ESLint, `fallow health`, and `fallow dupes` are clean.
 
-**Issue:** D-CF4-08 as amended says a `Tool(spec)` entry maps by its tool name,
-as upstream resolves it (`04-UPSTREAM-AGENTS.md` line 367: "`Tool(spec)`
-resolves to the tool"). `toolNameOf` applies that rule to the TOOL_MAP lookups
-only. The four `Skill` checks still compare the raw token with `"Skill"`, so
-`Skill(helper)` takes the generic path:
-
-| source | HEAD output | expected under D-CF4-08 |
-|---|---|---|
-| `tools: Read, Skill(helper)` | `tools: read`, `inheritSkills: false`, `droppedTools: [Skill(helper)]` | `inheritSkills: true`, nothing dropped (as `tools: Read, Skill`) |
-| `disallowedTools: Skill(helper)` (no `tools`) | `inheritSkills: true`, warning "no Pi tool mapping (Skill(helper)) cannot narrow the default tool set" | `inheritSkills: false`, no warning (as `disallowedTools: Skill`) |
-
-The first row takes the skills away from a child whose source grants the Skill
-tool. The second keeps them for a child whose source disallows it, and the
-warning tells the user the restriction was ignored. `Bash(git log *)` in the
-same positions maps to `bash` (the `Tool lists split on commas and spaces`
-scenario), so the two tool kinds disagree. The user sees it through
-pi-subagents' `get` action (`Inherit skills: …`) and through the child's
-skill list.
-
-**Fix:** Compare the resolved tool name in all four places, for example a
-helper `isSkillToken(token) => toolNameOf(token) === "Skill"`, used in
-`mapToolTokens`, the `inheritSkills` computation of `mapTools` (both the grant
-and the disallow side), and `omittedToolMapping` (the skip and
-`inheritSkills`). The AG-11 note in `assertMappedToolsNonEmpty` reads
-`splitToolList(raw.tools).includes("Skill")`, and it should use the same
-helper so `tools: Skill(helper)` alone gets the Skill hint.
+The iteration-1 Info findings stand unchanged below. They are outside the fix
+scope (Critical and Warning only).
 
 ## Info
 
@@ -150,6 +141,6 @@ with a discovery warning instead of throwing.
 
 ---
 
-_Reviewed: 2026-11-01T18:26:50Z_
+_Reviewed: 2026-11-01T18:32:57Z_
 _Reviewer: Claude (gsd-code-reviewer role, run inline)_
 _Depth: standard_
