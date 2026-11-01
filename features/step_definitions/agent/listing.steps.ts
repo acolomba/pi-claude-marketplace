@@ -1,6 +1,6 @@
 /**
- * @fileoverview Steps about running the agents of a plugin: the agents a
- * published plugin holds (HAR-07, D-CF1-08).
+ * @fileoverview Steps that every agent feature shares: the agents a published
+ * plugin holds (HAR-07, AGT-01, D-08).
  */
 
 import assert from "node:assert/strict";
