@@ -28,11 +28,11 @@
 //     pluginId); within-plugin entries preserve declaration order via the
 //     monotonic `declarationIndex` carried on RoutingEntry (DISP-04).
 //
-//   - `pendingSessionStartContext`: the one-shot buffer holding each
-//     SessionStart handler's `additionalContext` until the
-//     `before_agent_start` closure drains it into the turn's system prompt.
+//   - the pending context buffers: each SessionStart and UserPromptSubmit
+//     hook's `additionalContext` waits there until the `before_agent_start`
+//     closure drains both into one message after the prompt (D-CF5-13).
 //     Cleared at every factory entry so a `/reload` cannot leak the prior
-//     session's primer.
+//     session's context.
 //
 // DISP-01 / DISP-02 / DISP-03 / DISP-04 / OBS-01 anchor the contracts this
 // module enforces; D-59-01 / D-59-02 / D-59-03 anchor the decisions.
@@ -204,16 +204,17 @@ function contextPart(
  * captured generation and live mode before invoking this closure. A stale
  * registration or rejected mode leaves the live context buffers intact.
  *
- * Drain semantics (each drain clears its buffer in the same call):
- *   - SessionStart buffer -> joins entries with `"\n\n"` and appends them to
- *     `event.systemPrompt`.
- *   - prompt buffer (D-CF5-13) -> one persisted custom message, which Pi
- *     places after the prompt and sends to the model as a user message; the
- *     prompt itself is not changed. `display: false` keeps it out of the
- *     transcript the user reads.
- *   - nothing buffered -> returns undefined. Pi's runner emits
- *     `before_agent_start` on every agent turn, so a noop return after the
- *     drain is the path for every later turn.
+ * D-CF5-13: the handler drains both context buffers into one custom message
+ * with a text part per event, `SessionStart hook additional context: <values>`
+ * first, then `UserPromptSubmit hook additional context: <values>`. Pi places the message after the prompt, persists
+ * it in the session, and sends it to the model as a user message, so the
+ * SessionStart context stays in the history of every later turn, as Claude
+ * Code's does. The prompt and the system prompt are not changed.
+ * `display: false` keeps the message out of the transcript the user reads.
+ *
+ * With nothing to send, the handler returns undefined. Pi's runner emits
+ * `before_agent_start` on every agent turn, so that is the path for every
+ * turn after the drain.
  */
 function createBeforeAgentStartHandler(
   runtime: HooksRuntime,
@@ -221,20 +222,18 @@ function createBeforeAgentStartHandler(
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
-  return (event) => {
-    const sessionStart = runtime.drainPendingSessionStartContext();
-    const prompt = contextPart("UserPromptSubmit", runtime.drainPendingPromptContext());
-    const update: BeforeAgentStartEventResult = {};
-    if (sessionStart.length > 0) {
-      const buffered = sessionStart.map((entry) => entry.context).join("\n\n");
-      update.systemPrompt = `${event.systemPrompt}\n\n${buffered}`;
+  return () => {
+    const content = [
+      contextPart("SessionStart", runtime.drainPendingSessionStartContext()),
+      contextPart("UserPromptSubmit", runtime.drainPendingPromptContext()),
+    ].filter((part) => part !== undefined);
+    if (content.length === 0) {
+      return Promise.resolve(undefined);
     }
 
-    if (prompt !== undefined) {
-      update.message = { customType: HOOK_CONTEXT_MESSAGE_TYPE, content: [prompt], display: false };
-    }
-
-    return Promise.resolve(Object.keys(update).length === 0 ? undefined : update);
+    return Promise.resolve({
+      message: { customType: HOOK_CONTEXT_MESSAGE_TYPE, content, display: false },
+    });
   };
 }
 
@@ -1008,11 +1007,11 @@ async function registerHooksBridgeWith(
     });
   }
 
-  // /reload re-enters this factory and must not leak a stale SessionStart
-  // additionalContext entry from the prior session into the new buffer.
+  // /reload re-enters this factory and must not leak a stale
+  // additionalContext entry from the prior session into the new buffers.
   // Clearing here makes the invariant explicit: each bridge load starts
-  // with an empty pending buffer, which only `adaptObservationResultForEvent`
-  // (via `appendPendingSessionStartContext`) can subsequently populate.
+  // with both pending buffers empty, which only the SessionStart and
+  // UserPromptSubmit adapters can subsequently populate (D-CF5-13).
   runtime.preparePendingContextForRegistration();
 
   // Same epoch hygiene for the settle dispatcher's cached last-assistant
@@ -1161,10 +1160,9 @@ async function registerHooksBridgeWith(
       toolResultCompositeHandler(runtime, generation, pi, opts.executor),
     ),
   );
-  // SessionStart additionalContext drain: every agent turn fires
-  // before_agent_start; the handler returns early when the pending
-  // buffer is empty so the no-context path is a single Map lookup per
-  // turn.
+  // Hook additionalContext drain (D-CF5-13): every agent turn fires
+  // before_agent_start; the handler returns early when both pending
+  // buffers are empty.
   pi.on(
     "before_agent_start",
     bindWithMode(() => createBeforeAgentStartHandler(runtime)),

@@ -382,12 +382,11 @@ export function adaptInputResult(
  *
  * Pi's lifecycle splits the upstream Claude Code SessionStart-hook contract
  * across two surfaces: `session_start` returns void, and
- * `before_agent_start` carries the `systemPrompt` chain Pi extensions use
- * to inject context into the next agent turn. The mutate-arm path here
- * captures `additionalContext` from a SessionStart event into the
- * `routing-state.ts` pending buffer; the `beforeAgentStartHandlerFor`
- * closure in `event-router.ts` drains the buffer on the next
- * `before_agent_start` event.
+ * `before_agent_start` can add a message to the next agent turn. The
+ * mutate-arm path here captures `additionalContext` from a SessionStart
+ * event into the runtime's pending buffer; the `before_agent_start` handler
+ * in `event-router.ts` drains the buffer on the next turn into a persisted
+ * message after the prompt (D-CF5-13).
  *
  * Per-event semantics:
  *
