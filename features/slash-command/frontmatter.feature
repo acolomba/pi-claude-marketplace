@@ -163,3 +163,34 @@ Feature: Slash command frontmatter
     Then the model call 1 lists these skills in its system prompt:
       | name       | description            | location                                                                     |
       | demo-skill | A skill of demo 1.0.0. | {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-skill/SKILL.md |
+
+  Scenario: A command's argument hint is shown in pi's terminal menu
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "deploy" with this command file:
+      """
+      ---
+      description: Deploys the branch.
+      argument-hint: <environment>
+      ---
+
+      Deploy the branch.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "destroy" with this command file:
+      """
+      ---
+      description: Destroys the branch.
+      ---
+
+      Destroy the branch.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    When the user types the slash command prefix "/demo:de" in pi's terminal
+    Then pi's terminal menu offers these slash commands:
+      | command         | text                                     |
+      | demo:deploy     | <environment> -- [t] Deploys the branch. |
+      | demo:destroy    | [t] Destroys the branch.                 |
+      | demo:demo-skill |                                          |
