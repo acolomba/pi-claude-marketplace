@@ -198,7 +198,7 @@ tests (`test/bridges/<kind>/**`) and integration tests
 - [ ] **Phase 4: Agents** - pi-subagents lists and runs bridged agents with converted fields, preloaded skills, and companion-missing recovery
 - [ ] **Phase 5: Hooks** - Hooks fire on Pi's session, tool, prompt, and stop events with Claude's stdin and environment, including the `clear`, `compact`, and `fork` parity fixes
 - [ ] **Phase 6: MCP Servers** - pi-mcp-adapter 7.x connects bridged servers under Claude's tool names, with configuration variants, project scope, and companion-missing recovery
-- [ ] **Phase 7: Workflows** - The workflow engine registers and runs bridged workflows, reports refused scripts, and recovers when the engine is loaded later
+- [x] **Phase 7: Workflows** - The workflow engine registers and runs bridged workflows, reports refused scripts, and recovers when the engine is loaded later (completed 2026-11-01)
 
 ## Phase Details
 
@@ -417,7 +417,20 @@ Plans:
 - Wave 3: decision IDs, `docs/workflows-compatibility.md`, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/workflow/**`, `features/step_definitions/workflow/**`, `features/lib/workflow-files.ts`, `bridges/workflows/**`, `platform/workflow-home.ts`, `domain/workflow-script.ts`, `docs/workflows-compatibility.md`, `test/bridges/workflows/**`, `test/integration/workflows-*`.
 
-**Plans:** TBD
+**Plans:** 6/6 plans complete in 3 waves (the wave-1 tracer also seeds `lifecycle.feature` with its stale-command scenario, because `check:features` fails on a shared step that no feature file uses yet)
+
+Plans:
+**Wave 1**
+- [x] 07-01-PLAN.md — Wave 1 tracer: listing and naming, the shared workflow steps and run helpers, and the stale-command notice (WFL-01, WFL-05; WNAM-06, WLIF-06)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 07-02-PLAN.md — Wave 2: refused, skipped, and noted scripts at install and at run (WFL-03; D-CF7-03, D-CF7-04)
+- [x] 07-03-PLAN.md — Wave 2: runs with the engine's argument object, and a failing run (WFL-02; D-CF7-01, D-CF7-02)
+- [x] 07-04-PLAN.md — Wave 2: the missing engine's marker, and the engine loaded later (WFL-04; WDEP-02)
+- [x] 07-05-PLAN.md — Wave 2: uninstall, disable, enable, and update (WFL-05; WLIF-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 07-06-PLAN.md — Wave 3: D-CF7-01..04 in the compatibility doc, the parent lines, and the phase gate (WFL-01..05)
 
 ## Progress
 
@@ -429,7 +442,7 @@ Plans:
 | 4. Agents | 0/TBD | Not started | - |
 | 5. Hooks | 0/TBD | Not started | - |
 | 6. MCP Servers | 0/TBD | Not started | - |
-| 7. Workflows | 0/TBD | Not started | - |
+| 7. Workflows | 6/6 | Complete    | 2026-11-01 |
 
 ## Carried Forward
 

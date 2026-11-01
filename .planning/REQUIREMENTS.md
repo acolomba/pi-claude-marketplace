@@ -114,11 +114,11 @@ the parent applies them at merge.
 
 ### Workflows
 
-- [ ] **WFL-01**: With the workflow engine loaded, each bridged workflow is the command `/<plugin>:<meta.name>` with its description
-- [ ] **WFL-02**: Running the command completes, and its run records the arguments in the engine's shape (FG-32) and the script's result
-- [ ] **WFL-03**: Scripts the engine refuses (meta shape, determinism, reserved names) are reported as upstream or a recorded divergence, and the missing run approval is recorded (FG-31)
-- [ ] **WFL-04**: Without the engine, the install shows `{requires pi-dynamic-workflows}` at the decided severity and loading the engine then reloading makes the workflows available with no reinstall
-- [ ] **WFL-05**: Disable, uninstall, and update remove or replace the workflow, including the lingering-command notice (WLIF-06)
+- [x] **WFL-01**: With the workflow engine loaded, each bridged workflow is the command `/<plugin>:<meta.name>` with its description
+- [x] **WFL-02**: Running the command completes, and its run records the arguments in the engine's shape (FG-32) and the script's result
+- [x] **WFL-03**: Scripts the engine refuses (meta shape, determinism, reserved names) are reported as upstream or a recorded divergence, and the missing run approval is recorded (FG-31)
+- [x] **WFL-04**: Without the engine, the install shows `{requires pi-dynamic-workflows}` at the decided severity and loading the engine then reloading makes the workflows available with no reinstall
+- [x] **WFL-05**: Disable, uninstall, and update remove or replace the workflow, including the lingering-command notice (WLIF-06)
 
 ### Cross-kind
 
@@ -200,11 +200,11 @@ Deferred to a milestone with a real model provider.
 | MCP-06 | Phase 6 | Pending |
 | MCP-07 | Phase 6 | Pending |
 | MCP-08 | Phase 6 | Pending |
-| WFL-01 | Phase 7 | Pending |
-| WFL-02 | Phase 7 | Pending |
-| WFL-03 | Phase 7 | Pending |
-| WFL-04 | Phase 7 | Pending |
-| WFL-05 | Phase 7 | Pending |
+| WFL-01 | Phase 7 | Complete |
+| WFL-02 | Phase 7 | Complete |
+| WFL-03 | Phase 7 | Complete |
+| WFL-04 | Phase 7 | Complete |
+| WFL-05 | Phase 7 | Complete |
 | XK-01 | Phase 4 | Pending |
 
 **Coverage:**
