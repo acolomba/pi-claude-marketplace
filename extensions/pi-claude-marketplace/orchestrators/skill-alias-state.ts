@@ -1,8 +1,22 @@
+// orchestrators/skill-alias-state.ts
+//
+// D-CF2-02: the slash names a user can type for a bridged skill besides
+// `/skill:<generated name>`. They are exactly Claude Code 2.1.316's names for
+// the skill, which install stored in the record line of each staged
+// `SKILL.md` (`readSkillRecord`); this module reads them back at session time
+// and never reads the plugin source.
+//
+// A name goes to the first skill that claims it, in loader order: the user
+// root before the project root, and state order within a root. SK-6: a name
+// that a Pi command of another source already has stays with that command.
+
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { readSkillRecord } from "../bridges/skills/skill-names.ts";
 import { generatedSkillName } from "../domain/name.ts";
 import { loadState } from "../persistence/state-io.ts";
-import { getAgentDir } from "../platform/pi-api.ts";
+import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 
@@ -22,9 +36,21 @@ export interface SkillAliasState {
 export interface SkillAliasDependencies {
   readonly loadState: (extensionRoot: string) => Promise<SkillAliasState>;
   readonly getAgentDir: () => string;
+  readonly readFile: (file: string) => Promise<string>;
 }
 
-const DEFAULT_DEPENDENCIES: SkillAliasDependencies = { loadState, getAgentDir };
+const DEFAULT_DEPENDENCIES: SkillAliasDependencies = {
+  loadState,
+  getAgentDir,
+  readFile: (file) => readFile(file, "utf8"),
+};
+
+/** A skill of the state whose staged `SKILL.md` Pi has loaded. */
+interface LoadedSkill {
+  readonly pluginName: string;
+  readonly generatedName: string;
+  readonly skillPath: string;
+}
 
 /** Removes the plugin prefix from a generated Pi skill name. */
 function skillSuffix(pluginName: string, generatedName: string): string | undefined {
@@ -44,42 +70,61 @@ function skillSuffix(pluginName: string, generatedName: string): string | undefi
     : undefined;
 }
 
-/** Adds only aliases whose recorded skill file Pi has loaded. */
-function addPluginAliases(
-  aliases: Map<string, string>,
-  pluginName: string,
-  generatedNames: readonly string[],
-  root: string,
-  loadedPaths: ReadonlySet<string>,
-  reserved: ReadonlySet<string>,
-): void {
-  for (const generatedName of generatedNames) {
-    const suffix = skillSuffix(pluginName, generatedName);
-    if (suffix === undefined) {
-      continue;
-    }
-
-    const alias = `${pluginName}:${suffix}`;
-    const skillPath = path.resolve(
-      root,
-      "pi-claude-marketplace",
-      "resources",
-      "skills",
-      generatedName,
-      "SKILL.md",
-    );
-    if (loadedPaths.has(skillPath) && !reserved.has(alias)) {
-      aliases.set(alias, generatedName);
-    }
-  }
+/**
+ * DC-25 item 1: the one alias of a skill staged before install stored its
+ * names, derived from its generated name with the plugin prefix cut off. Claude
+ * Code has no such name; the skill keeps it until its plugin is staged again.
+ */
+function legacyAliases(skill: LoadedSkill): readonly string[] {
+  const suffix = skillSuffix(skill.pluginName, skill.generatedName);
+  return suffix === undefined ? [] : [`${skill.pluginName}:${suffix}`];
 }
 
-/** Maps loaded plugin skills from state to their qualified slash names. */
+/** The names stored in the staged `SKILL.md` of `skill`; none when it cannot be read. */
+async function skillNames(
+  skill: LoadedSkill,
+  read: SkillAliasDependencies["readFile"],
+): Promise<readonly string[]> {
+  let frontmatter: Record<string, unknown>;
+  try {
+    frontmatter = parseFrontmatter(await read(skill.skillPath)).frontmatter;
+  } catch {
+    return [];
+  }
+
+  return readSkillRecord(frontmatter)?.names ?? legacyAliases(skill);
+}
+
+/** The skills of the state under `root` whose staged file Pi has loaded, in state order. */
+function loadedSkills(
+  state: SkillAliasState,
+  root: string,
+  loadedPaths: ReadonlySet<string>,
+): readonly LoadedSkill[] {
+  const skillsDir = path.resolve(root, "pi-claude-marketplace", "resources", "skills");
+  return Object.values(state.marketplaces)
+    .flatMap((marketplace) => Object.entries(marketplace.plugins))
+    .flatMap(([pluginName, plugin]) =>
+      plugin.resources.skills.map((generatedName) => ({
+        pluginName,
+        generatedName,
+        skillPath: path.join(skillsDir, generatedName, "SKILL.md"),
+      })),
+    )
+    .filter((skill) => loadedPaths.has(skill.skillPath));
+}
+
+/**
+ * D-CF2-02: maps each name that a loaded bridged skill stored to its
+ * generated name. The first claim wins, and a name that `reserved` holds is
+ * never mapped (SK-6).
+ */
 export async function loadQualifiedSkillAliases(
   pi: ExtensionAPI,
   cwd: string,
-  dependencies: SkillAliasDependencies = DEFAULT_DEPENDENCIES,
+  dependencies: Partial<SkillAliasDependencies> = {},
 ): Promise<ReadonlyMap<string, string>> {
+  const resolved = { ...DEFAULT_DEPENDENCIES, ...dependencies };
   const commands = pi.getCommands();
   const reserved = new Set(
     commands.filter((command) => command.source !== "skill").map((command) => command.name),
@@ -89,21 +134,30 @@ export async function loadQualifiedSkillAliases(
       .filter((command) => command.source === "skill")
       .map((command) => path.resolve(command.sourceInfo.path)),
   );
-  const roots = [dependencies.getAgentDir(), path.join(cwd, ".pi")];
-  const aliases = new Map<string, string>();
-
-  for (const root of roots) {
+  const skills: LoadedSkill[] = [];
+  for (const root of [resolved.getAgentDir(), path.join(cwd, ".pi")]) {
     let state: SkillAliasState;
     try {
       // eslint-disable-next-line no-await-in-loop -- two scope roots, one state read each
-      state = await dependencies.loadState(path.join(root, "pi-claude-marketplace"));
+      state = await resolved.loadState(path.join(root, "pi-claude-marketplace"));
     } catch {
       continue;
     }
 
-    for (const marketplace of Object.values(state.marketplaces)) {
-      for (const [pluginName, plugin] of Object.entries(marketplace.plugins)) {
-        addPluginAliases(aliases, pluginName, plugin.resources.skills, root, loadedPaths, reserved);
+    skills.push(...loadedSkills(state, root, loadedPaths));
+  }
+
+  const claims = await Promise.all(
+    skills.map(async (skill) => ({
+      generatedName: skill.generatedName,
+      names: await skillNames(skill, resolved.readFile),
+    })),
+  );
+  const aliases = new Map<string, string>();
+  for (const { generatedName, names } of claims) {
+    for (const name of names) {
+      if (!reserved.has(name) && !aliases.has(name)) {
+        aliases.set(name, generatedName);
       }
     }
   }
