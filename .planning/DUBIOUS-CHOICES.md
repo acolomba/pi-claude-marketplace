@@ -780,6 +780,16 @@ Full entries: `.planning/phases/06-mcp-servers/DUBIOUS-CHOICES.md`, P6-DC-01..22
 - Also unfiled: a drafted pi-subagents gap report (user's call). Parent lines pending: CHANGELOG, PRD MC-1..4, PROJECT D-CF6-01..11, four BACKLOG items, output-catalog and hooks-compatibility docs, the canary re-run on 7.0.0, cucumber skill notes, the migration message rewording.
 - Merge: ROADMAP and STATE conflicts in the tracking tables only; the parent kept the milestone view.
 
+#### Phase 6 parent lines (applied by the parent at 249c2ec..4b29a69; `npm run check` exit 0, 1376/1376, seed 278404)
+1. D-CF6-01..11 rows shortened like the D-CF2 rows. The drafted `✓ Good` outcomes are kept, except D-CF6-10, which is `-- Pending (user review)`. MCP-01..08 are not in Validated, as SKL-01..06 are not while Phase 2 waits. The drafted REQUIREMENTS line (MCP-07 `[x]`, gap-pinned) and the ROADMAP SC4 rewording are not applied, because they would settle D-CF6-10.
+2. CHANGELOG: the five sub-bullets are joined into one sentence each, and "A bad server written in `plugin.json` still blocks the install" is cut, because it is not a change. The `Internal:` behavioral-tests line still names workflows only.
+3. PRD MC-1..MC-4 applied as drafted. The new MCP flowchart is the parent's drawing of the drafted merge.
+4. `docs/hooks-compatibility.md` states the measured nested call and says that hooks for it are not measured yet (HOOKNEST-01), instead of waiting for a hooks measurement. Phase 5 is not merged and may conflict in that file.
+5. Not done: the live canary re-run on 7.0.0 (MCPCANARY-01), the AMIG-01 wording for a skipped server (MCPMIG-01, user-visible, needs a scenario), and the MCP file link rule (MCPLINK-01, waits for the user). No gap report was filed.
+6. `withStubServers`: the stub-marker limit is documented in the fixture writer, the step, and `layout.md`, not fixed by narrowing the marker match.
+7. `ci.yml`: the note records a local components-shard run on the combined tree (215 scenarios, 2 min 26 s, seed 520794). The hosted re-measure is still to do.
+8. The optional README "or an MCP bundle" was applied in both READMEs.
+
 ### DC-33: Phase 4 (Agents), merged at ef558e9
 
 Full entries: `.planning/phases/04-agents/04-DUBIOUS-CHOICES.md`, P4-DC-01..12. The child session ran discuss, plan (6 plans, 4 waves), execute, validation (compliant), security (19 threats, 0 open), one review round (one warning, fixed) and verification (passed 5/5). Phase transitioned on its branch.
@@ -797,3 +807,11 @@ Full entries: `.planning/phases/04-agents/04-DUBIOUS-CHOICES.md`, P4-DC-01..12. 
 8. The branch carries `72f9a02 docs(04): record code review disposition` with a phase number and no trailers (a GSD helper commit, already pushed); the final squash merge drops it.
 - Parent lines pending: CHANGELOG, READMEs, PROJECT D-CF4-01..14, BACKLOG, PRD and `docs/env-vars.md`, cucumber skill notes, the unfiled pi-subagents defect report and Pi gap notes, and Phase 6's stale "cannot narrow" MCP warning.
 - Merge: REQUIREMENTS and STATE conflicts in the tracking tables only.
+
+#### Phase 4 parent lines (applied by the parent at 249c2ec..4b29a69; `npm run check` exit 0, 1376/1376, seed 278404)
+1. D-CF4-01..14 rows shortened, outcome kept `-- Locked`. The `P4-DC-NN` references are kept, not renumbered, as the D-CF7 rows keep `P7-DC-NN`. AGT-01..07 and XK-01 moved to Validated.
+2. CHANGELOG: the two sub-bullets that broke the one-sentence rule were joined, and so was the skill preload one. "Run `/claude:plugin reinstall`" names `<plugin>@<marketplace>`, as the skills bullet does.
+3. `layout.md`: the Agents row's step module is now `listing.steps.ts`, but its seed features column keeps Phase 1's two seeds (as the other rows do). The six agent features are named in a note below the table instead.
+4. Not applied, recorded in BACKLOG: the stale ANAME-02 "cannot narrow" warning (AGTEXCL-01; user-visible, no drafted text, needs a scenario), the `info` agent listing (AGTINFO-01), the frozen-harness `{pi-subagents dir}` token and scripted-model import (AGTTOKEN-01, AGTASYNC-01), and the unfiled pi-subagents report (AGTSUB-01, an ID the parent added).
+5. `shared/fs-utils.ts`: the comment names the commands bridge and the skills bridge's command-name check, not the commands bridge only, because `bridges/skills/skill-names.ts` also calls `isPlainMarkdownFile`.
+6. The sibling re-verification that D-CF4-14 asks for (every whole parent-prompt comparison) rests on the full `npm run check` above.
