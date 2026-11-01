@@ -875,7 +875,7 @@ for (const { key, shownKey, reason } of [
     // assert
     assert.deepStrictEqual(discovery, {
       discovered: [],
-      warnings: [`command map entry "${shownKey}" in "${directory}" ${reason}; skipping entry.`],
+      warnings: [`command map entry "${shownKey}" ${reason}; skipping entry.`],
     });
   });
 }
@@ -909,11 +909,11 @@ test("D-CF3-03 skips each command map source that is not a command file with a w
   assert.deepStrictEqual(discovery, {
     discovered: [],
     warnings: [
-      `command map entry "missing" in "${directory}" names "cmds/missing.md", which does not exist; skipping entry.`,
-      `command map entry "text" in "${directory}" names "cmds/notes.txt", which is not a markdown file; skipping entry.`,
-      `command map entry "hidden" in "${directory}" names "cmds/.hidden.md", which is dotfile-prefixed; skipping entry.`,
-      `command map entry "linked" in "${directory}" names "cmds/linked.md", which is a symlink; skipping entry.`,
-      `command map entry "under-file" in "${directory}" names "real.md/child.md", which does not exist; skipping entry.`,
+      `command map entry "missing" names "cmds/missing.md", which does not exist; skipping entry.`,
+      `command map entry "text" names "cmds/notes.txt", which is not a markdown file; skipping entry.`,
+      `command map entry "hidden" names "cmds/.hidden.md", which is dotfile-prefixed; skipping entry.`,
+      `command map entry "linked" names "cmds/linked.md", which is a symlink; skipping entry.`,
+      `command map entry "under-file" names "real.md/child.md", which does not exist; skipping entry.`,
     ],
   });
 });
@@ -962,7 +962,7 @@ test("D-CF3-03 skips a second command map key on one file with a warning naming 
   assert.deepStrictEqual(discovery, {
     discovered: [{ sourceName: "one", generatedName: "acme:one", commandFile: commandPath }],
     warnings: [
-      `command map entry "two" in "${directory}" names "cmds/a.md", already loaded as command source "one"; skipping entry.`,
+      `command map entry "two" names "cmds/a.md", already loaded as command source "one"; skipping entry.`,
     ],
   });
 });
@@ -990,8 +990,8 @@ test("D-CF3-03 gives a declared path's command precedence over a command map key
   assert.deepStrictEqual(discovery, {
     discovered: [{ sourceName: "alpha", generatedName: "acme:alpha", commandFile: folderPath }],
     warnings: [
-      `command source "alpha" in "${directory}" elides to generated name "acme:alpha", already produced by command source "alpha"; ignoring duplicate.`,
-      `command map entry "again" in "${directory}" names "commands/alpha.md", already loaded as command source "alpha"; skipping entry.`,
+      `command map entry "alpha" elides to generated name "acme:alpha", already produced by command source "alpha"; skipping entry.`,
+      `command map entry "again" names "commands/alpha.md", already loaded as command source "alpha"; skipping entry.`,
     ],
   });
 });

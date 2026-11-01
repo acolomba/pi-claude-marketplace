@@ -745,7 +745,115 @@ test("D-CF3-03 refuses a command map source that escapes the plugin root with a 
   );
 });
 
-test("D-CF3-03 refuses a command map entry that is not an object with a note naming its key", async () => {
+// D-CF3-03: Claude Code 2.1.316 refuses the manifest for each of these
+// entries, so the plugin is unavailable. The valid `alpha` entry stays.
+for (const { title, beta, note } of [
+  {
+    title: "an entry that is not an object",
+    beta: 5,
+    note: 'command map entry "beta" is not an object (got number)',
+  },
+  {
+    title: "an entry that is null",
+    beta: null,
+    note: 'command map entry "beta" is not an object (got null)',
+  },
+  {
+    title: "an entry that is a list",
+    beta: ["./b.md"],
+    note: 'command map entry "beta" is not an object (got array)',
+  },
+  {
+    title: "an entry that sets both source and content",
+    beta: { source: "./b.md", content: "Beta body" },
+    note: 'command map entry "beta" sets both "source" and "content"; it must set exactly one',
+  },
+  {
+    title: "an entry that sets neither source nor content",
+    beta: { description: "Beta." },
+    note: 'command map entry "beta" sets neither "source" nor "content"; it must set exactly one',
+  },
+  {
+    title: "an entry whose source and content are empty",
+    beta: { source: "", content: "" },
+    note: 'command map entry "beta" sets neither "source" nor "content"; it must set exactly one',
+  },
+  {
+    title: "a source that is not a string",
+    beta: { source: 7 },
+    note: 'command map entry "beta" field "source" is not a string (got number)',
+  },
+  {
+    title: "content that is not a string",
+    beta: { content: { text: "Beta" } },
+    note: 'command map entry "beta" field "content" is not a string (got object)',
+  },
+  {
+    title: "a description that is not a string",
+    beta: { source: "./b.md", description: 5 },
+    note: 'command map entry "beta" field "description" is not a string (got number)',
+  },
+  {
+    title: "an argument hint that is not a string",
+    beta: { source: "./b.md", argumentHint: true },
+    note: 'command map entry "beta" field "argumentHint" is not a string (got boolean)',
+  },
+  {
+    title: "a model that is not a string",
+    beta: { source: "./b.md", model: null },
+    note: 'command map entry "beta" field "model" is not a string (got null)',
+  },
+  {
+    title: "allowed tools that are a number",
+    beta: { source: "./b.md", allowedTools: 3 },
+    note: 'command map entry "beta" field "allowedTools" is not a string or a list of strings',
+  },
+  {
+    title: "allowed tools that hold a number",
+    beta: { source: "./b.md", allowedTools: ["Read", 3] },
+    note: 'command map entry "beta" field "allowedTools" is not a string or a list of strings',
+  },
+  {
+    title: "an absolute source",
+    beta: { source: "/etc/b.md" },
+    note: 'source of command map entry "beta" must be relative (got absolute "/etc/b.md")',
+  },
+  {
+    title: "a source that escapes the plugin root",
+    beta: { source: "../b.md" },
+    note: 'source of command map entry "beta" escapes plugin root: "../b.md"',
+  },
+] as const) {
+  test(`D-CF3-03 refuses ${title} with a note naming its key`, async () => {
+    // arrange
+    const { collectStrictComponentPaths } =
+      await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+    const resolution = emptyResolution();
+
+    // act
+    const dirty = await collectStrictComponentPaths(
+      {
+        entry: { name: "alpha", source: "./alpha" },
+        manifest: { commands: { alpha: { source: "./a.md" }, beta } },
+        pluginRoot: "/plugins/alpha",
+        resolution,
+      },
+      () => Promise.resolve(null),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { dirty, notes: resolution.notes, commandMap: resolution.componentPaths.commandMap },
+      {
+        dirty: true,
+        notes: [note],
+        commandMap: [{ key: "alpha", source: "a.md", origin: "manifest" }],
+      },
+    );
+  });
+}
+
+test("D-CF3-03 accepts allowed tools given as a string or a list of strings and keeps none", async () => {
   // arrange
   const { collectStrictComponentPaths } =
     await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
@@ -755,7 +863,12 @@ test("D-CF3-03 refuses a command map entry that is not an object with a note nam
   const dirty = await collectStrictComponentPaths(
     {
       entry: { name: "alpha", source: "./alpha" },
-      manifest: { commands: { alpha: { source: "./a.md" }, beta: 5 } },
+      manifest: {
+        commands: {
+          alpha: { source: "./a.md", allowedTools: "Read" },
+          beta: { content: "Beta body", allowedTools: ["Read", "Bash"] },
+        },
+      },
       pluginRoot: "/plugins/alpha",
       resolution,
     },
@@ -764,13 +877,195 @@ test("D-CF3-03 refuses a command map entry that is not an object with a note nam
 
   // assert
   assert.deepStrictEqual(
-    { dirty, notes: resolution.notes },
+    { dirty, notes: resolution.notes, commandMap: resolution.componentPaths.commandMap },
     {
-      dirty: true,
-      notes: ['source of command map entry "beta" is not a string (got undefined)'],
+      dirty: false,
+      notes: [],
+      commandMap: [
+        { key: "alpha", source: "a.md", origin: "manifest" },
+        { key: "beta", content: "Beta body", origin: "manifest" },
+      ],
     },
   );
 });
+
+test("D-CF3-03 refuses a command map source that passes through a symbolic link", async (testContext) => {
+  // arrange
+  const { collectStrictComponentPaths } =
+    await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "component-paths-map-symlink-"));
+  const pluginRoot = path.join(temporaryRoot, "plugin");
+  const outsideRoot = path.join(temporaryRoot, "outside");
+  await mkdir(pluginRoot);
+  await mkdir(outsideRoot);
+  await symlink(outsideRoot, path.join(pluginRoot, "linked"));
+  testContext.after(() => rm(temporaryRoot, { recursive: true, force: true }));
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await collectStrictComponentPaths(
+    {
+      entry: { name: "alpha", source: "./alpha" },
+      manifest: { commands: { beta: { source: "./linked/b.md" } } },
+      pluginRoot,
+      resolution,
+    },
+    () => Promise.resolve(null),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, notes: resolution.notes, commandMap: resolution.componentPaths.commandMap },
+    {
+      dirty: true,
+      notes: ['source of command map entry "beta" escapes plugin root: "./linked/b.md"'],
+      commandMap: [],
+    },
+  );
+});
+
+interface CommandMapDeclarationCase {
+  readonly title: string;
+  readonly entryCommands?: unknown;
+  readonly manifestCommands?: unknown;
+  readonly existingFolder: boolean;
+  readonly expected: ComponentPathsOwner.ComponentPathResolution;
+}
+
+// D-CF3-03 and D-CF3-04: a `plugin.json` map replaces `commands/` and names
+// it when it leaves it unread; an entry map adds to it and names nothing.
+const commandMapDeclarationCases: readonly CommandMapDeclarationCase[] = [
+  {
+    title: "D-CF3-03 a plugin manifest's command map leaves the existing commands/ folder unread",
+    manifestCommands: { alpha: { source: "./cmds/alpha.md" }, beta: { content: "Beta body" } },
+    existingFolder: true,
+    expected: {
+      supported: ["commands"],
+      notes: [],
+      componentPaths: {
+        ...emptyResolution().componentPaths,
+        commandMap: [
+          { key: "alpha", source: "cmds/alpha.md", origin: "manifest" },
+          { key: "beta", content: "Beta body", origin: "manifest" },
+        ],
+      },
+      shadowedFolders: ["commands"],
+    },
+  },
+  {
+    title: "D-CF3-03 a plugin manifest's command map source inside commands/ reaches the folder",
+    manifestCommands: { alpha: { source: "./commands/alpha.md" } },
+    existingFolder: true,
+    expected: {
+      supported: ["commands"],
+      notes: [],
+      componentPaths: {
+        ...emptyResolution().componentPaths,
+        commandMap: [{ key: "alpha", source: "commands/alpha.md", origin: "manifest" }],
+      },
+    },
+  },
+  {
+    title: "D-CF3-04 a marketplace entry's command map adds to the existing commands/ folder",
+    entryCommands: {
+      gamma: { source: "./extra/gamma.md" },
+      delta: { content: "Delta body", description: "Delta." },
+    },
+    existingFolder: true,
+    expected: {
+      supported: ["commands"],
+      notes: [],
+      componentPaths: {
+        ...emptyResolution().componentPaths,
+        commands: ["commands"],
+        commandMap: [
+          { key: "gamma", source: "extra/gamma.md", origin: "entry" },
+          { key: "delta", content: "Delta body", origin: "entry", description: "Delta." },
+        ],
+      },
+    },
+  },
+  {
+    title:
+      "D-CF3-03 a plugin manifest's command map keeps the paths the marketplace entry declares",
+    entryCommands: "./more",
+    manifestCommands: { alpha: { source: "./cmds/alpha.md" } },
+    existingFolder: false,
+    expected: {
+      supported: ["commands"],
+      notes: [],
+      componentPaths: {
+        ...emptyResolution().componentPaths,
+        commands: ["more"],
+        commandMap: [{ key: "alpha", source: "cmds/alpha.md", origin: "manifest" }],
+      },
+    },
+  },
+  {
+    title: "D-CF3-03 the plugin manifest's command map comes before the marketplace entry's",
+    entryCommands: { gamma: { source: "./g.md" } },
+    manifestCommands: { alpha: { source: "./a.md" } },
+    existingFolder: false,
+    expected: {
+      supported: ["commands"],
+      notes: [],
+      componentPaths: {
+        ...emptyResolution().componentPaths,
+        commandMap: [
+          { key: "alpha", source: "a.md", origin: "manifest" },
+          { key: "gamma", source: "g.md", origin: "entry" },
+        ],
+      },
+    },
+  },
+  {
+    title: "D-CF3-03 a commands list that holds an object keeps the not-a-string refusal",
+    manifestCommands: ["./cmds", { alpha: { source: "./a.md" } }],
+    existingFolder: false,
+    expected: {
+      supported: ["commands"],
+      notes: ['component path for "commands" is not a string (got object)'],
+      componentPaths: { ...emptyResolution().componentPaths, commands: ["cmds"] },
+    },
+  },
+];
+
+for (const {
+  title,
+  entryCommands,
+  manifestCommands,
+  existingFolder,
+  expected,
+} of commandMapDeclarationCases) {
+  test(title, async () => {
+    // arrange
+    const { collectStrictComponentPaths } =
+      await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+    const pluginRoot = "/plugins/alpha";
+    const resolution = emptyResolution();
+
+    // act
+    await collectStrictComponentPaths(
+      {
+        entry: {
+          name: "alpha",
+          source: "./alpha",
+          ...(entryCommands !== undefined && { commands: entryCommands }),
+        },
+        manifest: manifestCommands === undefined ? null : { commands: manifestCommands },
+        pluginRoot,
+        resolution,
+      },
+      (candidate) =>
+        Promise.resolve(
+          existingFolder && candidate === path.join(pluginRoot, "commands") ? "dir" : null,
+        ),
+    );
+
+    // assert
+    assert.deepStrictEqual(resolution, expected);
+  });
+}
 
 test("D-CF1-06 the shadowed-folder warning names the folder and the field that hides it", async () => {
   // arrange

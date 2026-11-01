@@ -174,10 +174,15 @@ async function addValidatedComponentPaths(
 
 /**
  * D-CF1-06: records the existing conventional folder of `kind` as unread,
- * unless a collected declared path reaches it.
+ * unless a collected declared path reaches it. `declared` defaults to the
+ * kind's collected paths; commands add their map sources (D-CF3-03).
  */
-function recordShadowedFolder(resolution: ComponentPathResolution, kind: ComponentPathKind): void {
-  if (!declaredPathReachesFolder(resolution.componentPaths[kind], kind)) {
+function recordShadowedFolder(
+  resolution: ComponentPathResolution,
+  kind: ComponentPathKind,
+  declared: readonly string[] = resolution.componentPaths[kind],
+): void {
+  if (!declaredPathReachesFolder(declared, kind)) {
     resolution.shadowedFolders = [...(resolution.shadowedFolders ?? []), kind];
   }
 }
@@ -244,10 +249,73 @@ function commandMapOverrides(
   };
 }
 
+/** The JSON type name of a value, for a refusal note. */
+function jsonTypeOf(value: unknown): string {
+  if (value === null) {
+    return "null";
+  }
+
+  return Array.isArray(value) ? "array" : typeof value;
+}
+
+const COMMAND_MAP_STRING_FIELDS = [
+  "source",
+  "content",
+  "description",
+  "argumentHint",
+  "model",
+] as const;
+
+function isToolList(value: unknown): boolean {
+  return (
+    typeof value === "string" ||
+    (Array.isArray(value) && value.every((tool) => typeof tool === "string"))
+  );
+}
+
+/**
+ * D-CF3-03: why an entry's fields do not have Claude Code 2.1.316's types,
+ * or `undefined` when they do. `allowedTools` is checked and then ignored.
+ */
+function commandMapFieldRefusal(value: Readonly<Record<string, unknown>>): string | undefined {
+  const field = COMMAND_MAP_STRING_FIELDS.find(
+    (name) => value[name] !== undefined && typeof value[name] !== "string",
+  );
+  if (field !== undefined) {
+    return `field "${field}" is not a string (got ${jsonTypeOf(value[field])})`;
+  }
+
+  if (value.allowedTools !== undefined && !isToolList(value.allowedTools)) {
+    return 'field "allowedTools" is not a string or a list of strings';
+  }
+
+  return undefined;
+}
+
+/**
+ * D-CF3-03: an entry sets exactly one of `source` and `content`, as Claude
+ * Code 2.1.316's refine requires; an empty string sets nothing.
+ */
+function commandMapBodyRefusal(value: Readonly<Record<string, unknown>>): string | undefined {
+  const setsSource = nonEmptyString(value.source);
+  const setsContent = nonEmptyString(value.content);
+  if (setsSource && setsContent) {
+    return 'sets both "source" and "content"; it must set exactly one';
+  }
+
+  if (!setsSource && !setsContent) {
+    return 'sets neither "source" nor "content"; it must set exactly one';
+  }
+
+  return undefined;
+}
+
 /**
  * D-CF3-03: one map entry as the commands bridge reads it, or the note that
- * refuses it. A `source` passes the same containment check as a declared
- * path; its key names it in the note.
+ * refuses it. Claude Code 2.1.316 refuses the whole manifest for a malformed
+ * entry, so every refusal makes the plugin unavailable. A `source` passes the
+ * same containment check as a declared path, so an absolute path, an escape,
+ * and a link are refused; its key names it in the note.
  */
 async function validateCommandMapEntry(
   key: string,
@@ -255,17 +323,26 @@ async function validateCommandMapEntry(
   origin: CommandMapEntry["origin"],
   pluginRoot: string,
 ): Promise<{ ok: true; entry: CommandMapEntry } | { ok: false; reason: string }> {
-  const value = isPlainObject(raw) ? raw : {};
-  const overrides = commandMapOverrides(value);
-  if (typeof value.content === "string") {
-    return { ok: true, entry: { key, content: value.content, origin, ...overrides } };
+  const subject = `command map entry "${key}"`;
+  if (!isPlainObject(raw)) {
+    return { ok: false, reason: `${subject} is not an object (got ${jsonTypeOf(raw)})` };
+  }
+
+  const refusal = commandMapFieldRefusal(raw) ?? commandMapBodyRefusal(raw);
+  if (refusal !== undefined) {
+    return { ok: false, reason: `${subject} ${refusal}` };
+  }
+
+  const overrides = commandMapOverrides(raw);
+  if (nonEmptyString(raw.content)) {
+    return { ok: true, entry: { key, content: raw.content, origin, ...overrides } };
   }
 
   const validated = await validateComponentPath(
     "commands",
-    value.source,
+    raw.source,
     pluginRoot,
-    `source of command map entry "${key}"`,
+    `source of ${subject}`,
   );
   if (!validated.ok) {
     return validated;
@@ -306,6 +383,11 @@ async function collectCommandMap(
   return dirty;
 }
 
+/** D-CF3-03: the `source` paths of the collected map entries, in order. */
+function commandMapSources(commandMap: readonly CommandMapEntry[] | undefined): string[] {
+  return (commandMap ?? []).flatMap((mapEntry) => ("source" in mapEntry ? [mapEntry.source] : []));
+}
+
 /**
  * D-CF3-04 (E4): the commands kind's own collection. Claude Code 2.1.316
  * reads `commands/` unless `plugin.json` declares `commands` (a truthy
@@ -315,9 +397,11 @@ async function collectCommandMap(
  * when two name the same command. The folder is reported unread only when
  * `plugin.json` declares, the folder exists, and no collected path reaches it.
  *
- * D-CF3-03: a `plugin.json` object map is a declaration too. Its entries go
- * to `componentPaths.commandMap` rather than to the paths, and a plugin whose
- * only commands come from a map still supports `commands`.
+ * D-CF3-03: an object map is a declaration too, in either place. Its entries
+ * go to `componentPaths.commandMap` rather than to the paths, the
+ * `plugin.json` map's first, and a plugin whose only commands come from a
+ * map still supports `commands`. A map source inside `commands/` reaches the
+ * folder, as a declared path does.
  */
 async function collectStrictCommandPaths(
   entry: PluginEntry,
@@ -329,7 +413,8 @@ async function collectStrictCommandPaths(
   const seenPaths = new Set<string>();
   const manifestRaw = manifest?.commands;
   const manifestDeclares = Boolean(manifestRaw);
-  const declared = readCommandsDeclaration(manifestRaw);
+  const manifestDeclared = readCommandsDeclaration(manifestRaw);
+  const entryDeclared = readCommandsDeclaration(entry.commands);
   const folderExists = (await statKind(path.join(pluginRoot, "commands"))) === "dir";
   if (folderExists && !manifestDeclares) {
     addComponentPath(resolution, "commands", seenPaths, "commands");
@@ -339,13 +424,22 @@ async function collectStrictCommandPaths(
     resolution,
     "commands",
     seenPaths,
-    [...declared.paths, ...readPathOrArray(entry.commands)],
+    [...manifestDeclared.paths, ...entryDeclared.paths],
     pluginRoot,
   );
-  const mapDirty = await collectCommandMap(resolution, declared.map, "manifest", pluginRoot);
+  const manifestMapDirty = await collectCommandMap(
+    resolution,
+    manifestDeclared.map,
+    "manifest",
+    pluginRoot,
+  );
+  const entryMapDirty = await collectCommandMap(resolution, entryDeclared.map, "entry", pluginRoot);
 
   if (folderExists && manifestDeclares) {
-    recordShadowedFolder(resolution, "commands");
+    recordShadowedFolder(resolution, "commands", [
+      ...resolution.componentPaths.commands,
+      ...commandMapSources(resolution.componentPaths.commandMap),
+    ]);
   }
 
   if (resolution.componentPaths.commandMap !== undefined) {
@@ -354,7 +448,7 @@ async function collectStrictCommandPaths(
     markSupportedWhenCollected(resolution, "commands");
   }
 
-  return pathsDirty || mapDirty;
+  return pathsDirty || manifestMapDirty || entryMapDirty;
 }
 
 /**

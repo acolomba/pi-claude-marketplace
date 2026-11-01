@@ -469,13 +469,13 @@ function showHiddenCharacters(text: string): string {
 }
 
 /**
- * D-CF3-03: the warning for a command map entry the walk skips. It names the
- * key and the plugin root, in the walk's wording.
+ * D-CF3-03: the warning for a command map entry the walk skips, in the
+ * walk's wording. It names the key and no absolute path: the install row
+ * already names the plugin, and the paths it quotes are relative to the
+ * plugin root.
  */
-function mapEntryWarning(key: string, pluginRoot: string, reason: string): string {
-  return showHiddenCharacters(
-    `command map entry "${key}" in "${pluginRoot}" ${reason}; skipping entry.`,
-  );
+function mapEntryWarning(key: string, reason: string): string {
+  return showHiddenCharacters(`command map entry "${key}" ${reason}; skipping entry.`);
 }
 
 // D-CF3-03: Claude Code 2.1.316 refuses a command name that ends in `:` or
@@ -560,13 +560,13 @@ async function discoverMapEntry(
 
   const named = nameMapKey(pluginName, mapEntry.key);
   if (!named.ok) {
-    warnings.push(mapEntryWarning(mapEntry.key, pluginRoot, named.reason));
+    warnings.push(mapEntryWarning(mapEntry.key, named.reason));
     return { found: [] };
   }
 
   const refusal = mapSourceRefusal(relFrom(pluginRoot, sourceFile), stats);
   if (refusal !== undefined) {
-    warnings.push(mapEntryWarning(mapEntry.key, pluginRoot, refusal));
+    warnings.push(mapEntryWarning(mapEntry.key, refusal));
     return { found: [] };
   }
 
@@ -591,9 +591,11 @@ interface DiscoveryState {
 }
 
 /**
- * Folds one found command into the first-wins sets. A file found again is
- * dropped silently, except when a map key names it: D-CF3-03 warns that the
- * key loses to the command that loaded the file first.
+ * Folds one found command into the first-wins sets. `where` is the declared
+ * path the command came from, or the plugin root for a map entry. A file
+ * found again is dropped silently, except when a map key names it: D-CF3-03
+ * warns that the key loses to the command that loaded the file first. A
+ * generated name found again warns either way (D-07).
  */
 function admitCommand(
   state: DiscoveryState,
@@ -604,11 +606,11 @@ function admitCommand(
   const fileWinner = state.byFile.get(command.commandFile);
   if (fileWinner !== undefined) {
     if (mapKey !== undefined) {
+      const file = relFrom(where, command.commandFile);
       state.warnings.push(
         mapEntryWarning(
           mapKey,
-          where,
-          `names "${relFrom(where, command.commandFile)}", already loaded as command source "${fileWinner.sourceName}"`,
+          `names "${file}", already loaded as command source "${fileWinner.sourceName}"`,
         ),
       );
     }
@@ -620,14 +622,19 @@ function admitCommand(
 
   // D-07 first-wins dedup by generated command name.
   const winner = state.byGenerated.get(command.generatedName);
-  if (winner !== undefined) {
-    state.warnings.push(
-      duplicateWarning(command.sourceName, where, command.generatedName, winner.sourceName),
-    );
+  if (winner === undefined) {
+    state.byGenerated.set(command.generatedName, command);
     return;
   }
 
-  state.byGenerated.set(command.generatedName, command);
+  state.warnings.push(
+    mapKey === undefined
+      ? duplicateWarning(command.sourceName, where, command.generatedName, winner.sourceName)
+      : mapEntryWarning(
+          mapKey,
+          `elides to generated name "${command.generatedName}", already produced by command source "${winner.sourceName}"`,
+        ),
+  );
 }
 
 /**

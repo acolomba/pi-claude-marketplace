@@ -303,3 +303,267 @@ Feature: Slash command manifest forms
       | command     | description |
       | /demo:alpha | Runs alpha. |
       | /demo:beta  | Runs beta.  |
+
+  Scenario: Installing a plugin whose manifest declares its commands as an object map reports the commands folder it leaves unread
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "commands": {
+          "alpha": { "source": "./cmds/alpha.md" },
+          "beta": { "source": "./cmds/beta.md" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/alpha.md" with this text:
+      """
+      Run alpha.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/beta.md" with this text:
+      """
+      Run beta.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "old" with this command file:
+      """
+      Run old.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                    |
+      | cascade    | info     | true         |                                                                     |                                                                          |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | Default commands/ folder is ignored because the manifest sets "commands" |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: A marketplace entry's object map of commands adds to the commands folder
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [
+          {
+            "name": "demo",
+            "source": "./plugins/demo",
+            "version": "1.0.0",
+            "commands": { "gamma": { "source": "./extra/gamma.md" } }
+          }
+        ]
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "other" with this command file:
+      """
+      ---
+      description: Runs other.
+      ---
+
+      Run other.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "extra/gamma.md" with this text:
+      """
+      ---
+      description: Runs gamma.
+      ---
+
+      Run gamma.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these slash commands from prompt templates:
+      | command     | description |
+      | /demo:gamma | Runs gamma. |
+      | /demo:other | Runs other. |
+
+  Scenario Outline: A command map entry that names both or neither of source and content makes the plugin unavailable
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "commands": <commands> }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/alpha.md" with this text:
+      """
+      Run alpha.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons            |
+      | fixtures         | project           | demo@fixtures | demo | unavailable | unsupported source |
+    Then the project scope has no installed plugins
+
+    Examples:
+      | entry form                     | commands                                                                              |
+      | both source and content        | { "alpha": { "source": "./cmds/alpha.md", "content": "Run alpha." } }                 |
+      | neither source nor content     | { "alpha": { "source": "./cmds/alpha.md" }, "beta": { "description": "Runs beta." } } |
+      | a description that is a number | { "alpha": { "source": "./cmds/alpha.md", "description": 5 } }                        |
+
+  Scenario Outline: A command map key pi cannot name is skipped with a warning
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "commands": {
+          "alpha": { "source": "./cmds/alpha.md" },
+          "<key>": { "source": "./cmds/other.md" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/alpha.md" with this text:
+      """
+      Run alpha.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/other.md" with this text:
+      """
+      Run other.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                               |
+      | cascade    | info     | true         |                                                                     |                                                     |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | command map entry "<key>" <reason>; skipping entry. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+    Examples:
+      | key       | reason           |
+      | trail:    | ends with ":"    |
+      | has space | holds whitespace |
+      | <angle    | holds "<" or ">" |
+
+  Scenario Outline: A command map entry whose source pi cannot stage is skipped with a warning
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "commands": {
+          "alpha": { "source": "./cmds/alpha.md" },
+          "beta": { "source": "./<source>" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/alpha.md" with this text:
+      """
+      Run alpha.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/notes.txt" with this text:
+      """
+      Read the notes.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/.hidden.md" with this text:
+      """
+      Run hidden.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                      |
+      | cascade    | info     | true         |                                                                     |                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | command map entry "beta" names "<source>", which <reason>; skipping entry. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+    Examples:
+      | source form    | source          | reason                 |
+      | a missing file | cmds/missing.md | does not exist         |
+      | a text file    | cmds/notes.txt  | is not a markdown file |
+      | a dotfile      | cmds/.hidden.md | is dotfile-prefixed    |
+
+  Scenario: A command map entry whose source is a directory is read as a directory
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "commands": { "tools": { "source": "./more" } } }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "more/b.md" with this text:
+      """
+      ---
+      description: Runs b.
+      ---
+
+      Run b.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "more/sub/x.md" with this text:
+      """
+      ---
+      description: Runs x.
+      ---
+
+      Run x.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these slash commands from prompt templates:
+      | command     | description |
+      | /demo:b     | Runs b.     |
+      | /demo:sub:x | Runs x.     |
+
+  Scenario: Two command map keys that name one file keep the first
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "commands": {
+          "one": { "source": "./cmds/a.md" },
+          "two": { "source": "./cmds/a.md" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/a.md" with this text:
+      """
+      Run a.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                                              |
+      | cascade    | info     | true         |                                                                     |                                                                                                    |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | command map entry "two" names "cmds/a.md", already loaded as command source "one"; skipping entry. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
