@@ -35,7 +35,7 @@ test("maps a failed built-in tool to the complete PostToolUseFailure envelope", 
     hook_event_name: "PostToolUseFailure",
     tool_name: "Bash",
     tool_input: { command: "false" },
-    tool_response: [{ type: "text", text: "exit code 1: command failed" }],
+    error: "exit code 1: command failed",
   };
 
   // act
@@ -44,7 +44,6 @@ test("maps a failed built-in tool to the complete PostToolUseFailure envelope", 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
   assert.strictEqual(payload.tool_input, toolInput);
-  assert.strictEqual(payload.tool_response, toolResponse);
 });
 
 test("preserves a failed custom tool name and nested values without mutation", () => {
@@ -81,10 +80,7 @@ test("preserves a failed custom tool name and nested values without mutation", (
       query: { phrase: "hook contracts", languages: ["typescript"] },
       limit: 2,
     },
-    tool_response: [
-      { type: "text", text: "catalog lookup failed" },
-      { type: "text", text: "retryable: false" },
-    ],
+    error: "catalog lookup failed\nretryable: false",
   };
 
   // act
@@ -93,7 +89,6 @@ test("preserves a failed custom tool name and nested values without mutation", (
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
   assert.strictEqual(payload.tool_input, toolInput);
-  assert.strictEqual(payload.tool_response, toolResponse);
   assert.deepStrictEqual(toolInput, {
     query: { phrase: "hook contracts", languages: ["typescript"] },
     limit: 2,
@@ -107,4 +102,32 @@ test("preserves a failed custom tool name and nested values without mutation", (
     transcriptPath: "/sessions/session-custom.jsonl",
     cwd: "/workspace/custom",
   });
+});
+
+test("sends only the text parts of a failure that also carries an image", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "tool-call-image",
+    toolName: "read",
+    input: { path: "/workspace/broken.png" },
+    content: [
+      { type: "text", text: "image decode failed" },
+      { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+      { type: "text", text: "truncated at byte 8" },
+    ],
+    isError: true,
+    details: undefined,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "session-image",
+    transcriptPath: "/sessions/session-image.jsonl",
+    cwd: "/workspace/image",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUseFailure(event, context);
+
+  // assert
+  assert.strictEqual(payload.error, "image decode failed\ntruncated at byte 8");
 });
