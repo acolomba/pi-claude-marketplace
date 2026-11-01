@@ -234,3 +234,23 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
   3. `nope.js` keeps an unreachable `return "never";` after its `throw` so
      every fixture body ends in a `return`.
 - **Recorded in:** `07-03-SUMMARY.md`.
+
+### P7-DC-13: Wave 2 executor choices (engine missing)
+
+- **Phase / source:** Phase 7 wave 2, companion-missing executor (`07-04-SUMMARY.md`).
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. **Merge into Pi's user settings instead of a `wx` write.** Every profile
+     Pi already has `<agentDir>/settings.json` (`{"retry":{"enabled":false}}`,
+     saved when the frozen `usePiWithProfile` sends `set_auto_retry`), which
+     research's probe never sent. The step refuses a file that already has a
+     `packages` member, adds `packages: [<engine root>]` beside the other
+     members as `pi install` does, and restores the exact text it found (or
+     removes the file) at release. Alternative: project settings
+     (`<project>/.pi/settings.json`), unverified and entangled with project
+     trust (HAR-06). Threat T-07-09 now rests on merge-and-restore.
+  2. No `Background:` in `companion-missing.feature`: two scenarios start a
+     profile Pi first, and the wave-1 features repeat their setup per scenario.
+  3. The marker scenarios run on the shared Pi and rely on every settings edit
+     being restored at release.
+- **Recorded in:** `07-04-SUMMARY.md`.
