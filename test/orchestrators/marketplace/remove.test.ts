@@ -441,6 +441,48 @@ test("invalidates committed full removal after persistence and before data hygie
   notification.verifyInteractions();
 });
 
+test("WR-04: a clean removal shows each plugin's skill warnings after its rows", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await projectCase(testContext);
+  const marketplace = "warned-remove";
+  await seedMarketplace(locations, {
+    cwd,
+    name: marketplace,
+    source: pathSource("./warned-remove"),
+    plugins: { alpha: pluginRecord(), beta: pluginRecord() },
+  });
+  // The diagnostic after the row reads the context as an MCP notice does.
+  const notification = notificationBoundary(1, 1);
+  const cascade: typeof cascadeUnstagePlugin = (plugin) =>
+    Promise.resolve(
+      plugin === "beta"
+        ? { ok: true, dropped: emptyDropped(), skillWarnings: ["ledger refused"] }
+        : { ok: true, dropped: emptyDropped() },
+    );
+
+  // act
+  await removeMarketplace({
+    completionCache: recordingCompletionCache([]),
+    ctx: notification.ctx,
+    run: notification.run,
+    name: marketplace,
+    scope: "project",
+    cwd,
+    cascade,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    notification.calls.map(({ message }) => message),
+    [
+      "● warned-remove [project] (removed)\n  ○ alpha (uninstalled)\n  ○ beta (uninstalled)\n\n" +
+        "/reload to pick up changes",
+      'Plugin "beta" [project] uninstalled; 1 cleanup warning.\n\nledger refused',
+    ],
+  );
+  notification.verifyInteractions();
+});
+
 test("invalidates a partial removal while retaining failed plugin data", async (testContext) => {
   // arrange
   const { cwd, locations } = await projectCase(testContext);

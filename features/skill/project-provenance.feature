@@ -108,3 +108,23 @@ Feature: Skill project provenance
       { "version": 2, "projects": {} }
       """
     Then the project scope has no installed plugins
+
+  Scenario Outline: Removing a project skill while the user's record of project skill installs holds content pi cannot update removes it and warns
+    Given the user's record of project skill installs was replaced with this text:
+      """
+      { "version": 2 }
+      """
+    When the user runs "<command>"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                             | lines                                                                                                                                              |
+      | cascade    | info     | true         |                                                    |                                                                                                                                                    |
+      | diagnostic | warning  | false        | Plugin "demo" [project] <verb>; 1 cleanup warning. | could not update the project skill ledger: The project skill ledger skills.json holds content this version cannot update; it was left unchanged. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons | scope   | <extra field> |
+      | fixtures         | project           | demo@fixtures | demo | <verb> |         | project | <extra value> |
+
+    Examples:
+      | command                                                    | verb        | extra field        | extra value |
+      | /claude:plugin uninstall demo@fixtures --scope project     | uninstalled | version            | 1.0.0       |
+      | /claude:plugin disable demo@fixtures --scope project       | disabled    | version            | 1.0.0       |
+      | /claude:plugin marketplace remove fixtures --scope project | uninstalled | marketplace status | removed     |

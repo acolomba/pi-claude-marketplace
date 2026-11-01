@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  chmod,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -992,6 +1002,41 @@ test("cascadeUnstagePlugin returns every removed resource in six-kind order", as
   assert.equal(Object.isFrozen(outcome.dropped), true);
   assert.equal(Object.values(outcome.dropped).every(Object.isFrozen), true);
   await assert.rejects(() => stat(workflowPath), { code: "ENOENT" });
+});
+
+test("WR-04: cascadeUnstagePlugin carries the warning of a project skill ledger it could not update", async (t) => {
+  // arrange
+  const { cwd, locations } = await createProjectScope(t, "cascade-ledger-warning");
+  const { record } = await seedFullCascade(locations, "official", "sample");
+  const key = createHash("sha256")
+    .update(await realpath(cwd))
+    .digest("hex");
+  const ledgerFile = path.join(
+    locationsFor("user", cwd).scopeRoot,
+    "pi-claude-marketplace",
+    "project-installs",
+    key,
+    "skills.json",
+  );
+  await mkdir(path.dirname(ledgerFile), { recursive: true });
+  await writeFile(ledgerFile, '{ "version": 2 }');
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(
+    [outcome.ok, outcome.dropped.skills, outcome.skillWarnings],
+    [
+      true,
+      ["sample-skill"],
+      [
+        `could not update the project skill ledger: The project skill ledger ${ledgerFile} ` +
+          "holds content this version cannot update; it was left unchanged.",
+      ],
+    ],
+  );
+  assert.strictEqual(await readFile(ledgerFile, "utf8"), '{ "version": 2 }');
 });
 
 test("cascadeUnstagePlugin removes every recorded workflow envelope", async (t) => {

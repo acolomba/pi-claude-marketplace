@@ -7,6 +7,7 @@ import {
   surfaceCascadeStagingDiagnostics,
   surfaceDiscoveryWarnings,
   surfaceStagingDiagnostics,
+  surfaceUnstageWarnings,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/staging-diagnostics.ts";
 import {
   discoveryWarning,
@@ -478,5 +479,77 @@ describe("surfaceCascadeStagingDiagnostics", () => {
 
     // assert
     verify(ctx);
+  });
+});
+
+describe("surfaceUnstageWarnings", () => {
+  for (const { title, verb, warnings, header, lines } of [
+    {
+      title: "one warning under a singular count",
+      verb: "uninstalled" as const,
+      warnings: ["could not update the project skill ledger: /home/dev/.pi/agent/x/skills.json"],
+      header: 'Plugin "demo" [project] uninstalled; 1 cleanup warning.',
+      lines: ["could not update the project skill ledger: skills.json"],
+    },
+    {
+      title: "several warnings under a plural count, in order",
+      verb: "disabled" as const,
+      warnings: ["first", "second"],
+      header: 'Plugin "demo" [project] disabled; 2 cleanup warnings.',
+      lines: ["first", "second"],
+    },
+  ]) {
+    test(`WR-04: renders ${title} after the verb's rows, with every path redacted`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const ctx = {
+        mode: "json",
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+      // act
+      surfaceUnstageWarnings(ctx, run, { plugin: "demo", scope: "project", verb }, warnings);
+
+      // assert
+      assert.deepStrictEqual(
+        capture.entries.map((entry) => entry.payload),
+        [
+          {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "diagnostic",
+            severity: "warning",
+            needsReload: false,
+            header,
+            lines,
+          },
+        ],
+      );
+    });
+  }
+
+  test("WR-04: renders nothing for no warning", () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    surfaceUnstageWarnings(
+      ctx,
+      { ...runWithNothingLoaded(), entrySink: capture.entrySink },
+      { plugin: "demo", scope: "user", verb: "uninstalled" },
+      [],
+    );
+
+    // assert
+    assert.deepStrictEqual(capture.entries, []);
   });
 });

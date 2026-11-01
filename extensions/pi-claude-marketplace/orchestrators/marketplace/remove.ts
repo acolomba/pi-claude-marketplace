@@ -99,6 +99,7 @@ import {
 import { collectPluginClonesLocked } from "../plugin/clone-gc.ts";
 import { buildScopeDeclarationIndex, withoutDisabledHolders } from "../plugin/dependency-index.ts";
 import { applyPartialCascadeFold } from "../plugin/shared.ts";
+import { surfaceUnstageWarnings } from "../plugin/staging-diagnostics.ts";
 
 import { composeHeldRemovalCause, REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
@@ -423,12 +424,15 @@ async function cascadePluginsInPlace(args: {
   readonly successfullyUnstaged: string[];
   readonly failedPlugins: FailedPluginCascade[];
   readonly mcpConfigNotices: McpConfigNotice[];
+  /** WR-04: each removed plugin's skill warnings, shown after a clean removal's rows. */
+  readonly skillWarnings: { readonly plugin: string; readonly warnings: readonly string[] }[];
 }): Promise<void> {
   const { record, marketplace, locations, cascade, successfullyUnstaged, failedPlugins } = args;
   for (const [pluginName, plugin] of args.entries) {
     // eslint-disable-next-line no-await-in-loop -- each unstage rewrites the shared agents index and mcp.json
     const outcome = await cascade(pluginName, marketplace, locations, plugin);
     args.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
+    args.skillWarnings.push({ plugin: pluginName, warnings: outcome.skillWarnings ?? [] });
     if (outcome.ok) {
       successfullyUnstaged.push(pluginName);
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- record.plugins is a dynamic-key Record<string, ...>.
@@ -841,6 +845,7 @@ async function runRemoveLockBody(args: {
   readonly successfullyUnstaged: string[];
   readonly failedPlugins: FailedPluginCascade[];
   readonly mcpConfigNotices: McpConfigNotice[];
+  readonly skillWarnings: { readonly plugin: string; readonly warnings: readonly string[] }[];
   readonly cfgInvalidSentinel: Error;
 }): Promise<RemoveLockResult> {
   const {
@@ -853,6 +858,7 @@ async function runRemoveLockBody(args: {
     successfullyUnstaged,
     failedPlugins,
     mcpConfigNotices,
+    skillWarnings,
     cfgInvalidSentinel,
   } = args;
 
@@ -916,6 +922,7 @@ async function runRemoveLockBody(args: {
     successfullyUnstaged,
     failedPlugins,
     mcpConfigNotices,
+    skillWarnings,
   };
   await cascadePluginsInPlace({ ...removal, entries: plan.entries });
   if (indexResult !== undefined) {
@@ -1321,6 +1328,7 @@ async function runRemoveOutcome(
   const failedPlugins: FailedPluginCascade[] = [];
   const successfullyUnstaged: string[] = []; // plugins whose cascade returned ok:true
   const mcpConfigNotices: McpConfigNotice[] = [];
+  const skillWarnings: { readonly plugin: string; readonly warnings: readonly string[] }[] = [];
   let removal: RemoveLockResult = { sourceKind: undefined, recordDeleted: false };
 
   // CFG-03 sentinel: a synthetic throw signaling the lock body aborted on an
@@ -1343,6 +1351,7 @@ async function runRemoveOutcome(
           successfullyUnstaged,
           failedPlugins,
           mcpConfigNotices,
+          skillWarnings,
           cfgInvalidSentinel,
         });
       },
@@ -1395,6 +1404,14 @@ async function runRemoveOutcome(
   if (!orchestrated) {
     emitCleanRemoval(opts, resolved.scope, successfullyUnstaged);
     notifyMcpConfigNotices(opts.ctx, opts.run, mcpConfigNotices);
+    for (const { plugin, warnings } of skillWarnings) {
+      surfaceUnstageWarnings(
+        opts.ctx,
+        opts.run,
+        { plugin, scope: resolved.scope, verb: "uninstalled" },
+        warnings,
+      );
+    }
   }
 
   return {

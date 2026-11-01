@@ -462,6 +462,20 @@ export interface UnstageOutcome {
    * non-empty, on success and on failure, like `mcpConfigNotices`.
    */
   readonly writtenMcpFiles?: readonly McpWrittenFile[];
+  /**
+   * WR-04: the warnings of the skills slot, such as a project skill ledger it
+   * could not update (D-CF2-13). The removal still happened, so the caller
+   * shows them after its rows. Set only when non-empty, on success and on
+   * failure.
+   */
+  readonly skillWarnings?: readonly string[];
+}
+
+/** WR-04: spreads `skillWarnings` onto an outcome only when there is at least one. */
+function skillWarningsMember(warnings: readonly string[]): {
+  readonly skillWarnings?: readonly string[];
+} {
+  return warnings.length > 0 ? { skillWarnings: warnings } : {};
 }
 
 /**
@@ -566,6 +580,7 @@ export async function cascadeUnstagePlugin(
   };
   let mcpConfigNotices: readonly McpConfigNotice[] = [];
   let writtenMcpFiles: readonly McpWrittenFile[] = [];
+  let skillWarnings: readonly string[] = [];
 
   try {
     const skillsResult = await unstagePluginSkills({
@@ -573,6 +588,7 @@ export async function cascadeUnstagePlugin(
       previousSkillNames: installedPlugin.resources.skills,
     });
     dropped.skills = [...skillsResult.removedNames];
+    skillWarnings = skillsResult.warnings;
 
     const cmdResult = await unstagePluginCommands({
       locations,
@@ -651,6 +667,7 @@ export async function cascadeUnstagePlugin(
       dropped: freezeDropped(dropped),
       ...mcpConfigNoticesMember(mcpConfigNotices),
       ...writtenMcpFilesMember(writtenMcpFiles),
+      ...skillWarningsMember(skillWarnings),
     });
   } catch (err) {
     // AFILE-04: an MCP unstage that rewrote the adapter file before its legacy
@@ -675,6 +692,7 @@ export async function cascadeUnstagePlugin(
       cause: failure instanceof Error ? failure : new Error(String(failure)),
       ...mcpConfigNoticesMember(mcpConfigNotices),
       ...writtenMcpFilesMember(writtenMcpFiles),
+      ...skillWarningsMember(skillWarnings),
     });
   }
 }
