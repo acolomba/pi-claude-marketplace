@@ -6,6 +6,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "./bridges/hooks/index.ts";
+import { registerCommandInvocation } from "./edge/command-invocation.ts";
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { registerSkillAliases } from "./edge/skill-aliases.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
@@ -263,4 +264,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   );
   registerClaudeMarketplaceTools(pi);
   registerSkillAliases(pi);
+  // D-CF1-01 / D-CF1-02: Pi runs input handlers in registration order, so the
+  // command invocation handler sees the text after the skill-alias rewrite.
+  registerCommandInvocation(pi);
 }
