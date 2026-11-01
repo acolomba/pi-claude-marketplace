@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
@@ -8,6 +8,7 @@ import {
   provenProjectSkills,
   skillFileDigest,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
+import { ProjectSkillLedgerError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 /** The user ledger file under the agent directory `agentDir`. */
@@ -168,29 +169,60 @@ describe("NODE_PROJECT_SKILL_LEDGER", () => {
 
   for (const { label, text } of [
     { label: "not JSON", text: "{" },
-    { label: "of another shape", text: JSON.stringify({ version: 2, projects: {} }) },
+    { label: "of another version", text: JSON.stringify({ version: 2, projects: {} }) },
+    {
+      label: "missing a digest",
+      text: JSON.stringify({ version: 1, projects: { "/p": { s: { plugin: "demo" } } } }),
+    },
   ]) {
-    test(`D-CF2-13: replaces a ledger that is ${label}`, async (t) => {
+    test(`WR-02: refuses to update a ledger that is ${label} and leaves it unchanged`, async (t) => {
       // arrange
       const { project, file } = await allocateCase(t);
       await mkdir(path.dirname(file), { recursive: true });
       await writeFile(file, text);
       const ledger = NODE_PROJECT_SKILL_LEDGER;
 
-      // act
-      await ledger.update({
+      // act & assert
+      await assert.rejects(
+        ledger.update({
+          projectPath: project,
+          forget: [],
+          remember: new Map([["demo-greet", DEMO_GREET]]),
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof ProjectSkillLedgerError);
+          assert.deepStrictEqual([error.ledgerPath, error.defect], [file, "unknown-content"]);
+          return true;
+        },
+      );
+      assert.strictEqual(await readFile(file, "utf8"), text);
+    });
+  }
+
+  test("WR-02: refuses to update a ledger that cannot be read and leaves it in place", async (t) => {
+    // arrange
+    const { project, file } = await allocateCase(t);
+    await mkdir(file, { recursive: true });
+    const ledger = NODE_PROJECT_SKILL_LEDGER;
+
+    // act & assert
+    await assert.rejects(
+      ledger.update({
         projectPath: project,
         forget: [],
         remember: new Map([["demo-greet", DEMO_GREET]]),
-      });
-
-      // assert
-      assert.deepStrictEqual(await readLedger(file), {
-        version: 1,
-        projects: { [project]: { "demo-greet": DEMO_GREET } },
-      });
-    });
-  }
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof ProjectSkillLedgerError);
+        assert.deepStrictEqual(
+          [error.ledgerPath, error.defect, (error.cause as NodeJS.ErrnoException).code],
+          [file, "unreadable", "EISDIR"],
+        );
+        return true;
+      },
+    );
+    assert.ok((await stat(file)).isDirectory());
+  });
 });
 
 describe("provenProjectSkills", () => {

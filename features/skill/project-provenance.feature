@@ -66,3 +66,24 @@ Feature: Skill project provenance
     Then the model receives these calls:
       | call | role | text                                                                                                                                                                                                                                           |
       | 1    | user | <skill name="demo-status" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status.\n\nStatus: ran\n</skill> |
+
+  Scenario: Installing a project skill's plugin while the user's record of project skill installs holds content pi cannot update fails and keeps the record
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
+    Given the user's record of project skill installs was replaced with this text:
+      """
+      { "version": 2, "projects": {} }
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons | scope   | version | cause chain                                                                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed |         | project | 1.0.0   | The project skill ledger project-installs.json holds content this version cannot update; it was left unchanged. | false           |       |                  |
+    Then the user's record of project skill installs holds this text:
+      """
+      { "version": 2, "projects": {} }
+      """
+    Then the project scope has no installed plugins

@@ -25,6 +25,7 @@ import { Compile } from "typebox/compile";
 
 import { getAgentDir } from "../../platform/pi-api.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
+import { ProjectSkillLedgerError } from "../../shared/errors-bridges.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
 const LEDGER_SCHEMA = Type.Object({
@@ -156,6 +157,37 @@ function changedLedger(ledger: Ledger, key: string, change: ProjectSkillLedgerCh
 }
 
 /**
+ * The ledger the writer changes. A missing file lists nothing. Any other read
+ * failure, and content this version did not write, throws, so the write never
+ * drops entries it could not read (WR-02).
+ */
+async function ledgerToUpdate(file: string): Promise<Ledger> {
+  let text: string;
+  try {
+    text = await readFile(file, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return {};
+    }
+
+    throw new ProjectSkillLedgerError(file, "unreadable", { cause: err });
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch (err) {
+    throw new ProjectSkillLedgerError(file, "unknown-content", { cause: err });
+  }
+
+  if (!LEDGER_VALIDATOR.Check(value)) {
+    throw new ProjectSkillLedgerError(file, "unknown-content");
+  }
+
+  return value.projects;
+}
+
+/**
  * D-CF2-13: the ledger under the user scope root of `agentDir()`, written
  * atomically (NFR-1) and only when a change alters what it lists.
  */
@@ -165,8 +197,7 @@ function createProjectSkillLedger(agentDir: () => string): ProjectSkillLedger {
       const root = path.join(agentDir(), "pi-claude-marketplace");
       const file = projectInstallsFile(agentDir());
       await assertPathInside(root, file, "project skill ledger");
-      const text = await readLedgerText(file, (target) => readFile(target, "utf8"));
-      const ledger = parseLedger(text);
+      const ledger = await ledgerToUpdate(file);
       const projects = changedLedger(
         ledger,
         await canonicalProjectPath(change.projectPath),

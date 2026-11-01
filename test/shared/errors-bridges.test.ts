@@ -10,6 +10,7 @@ import {
   McpServerCollisionError,
   McpServerKeyCollisionError,
   McpUnstagePartialError,
+  ProjectSkillLedgerError,
   WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
@@ -733,4 +734,46 @@ describe("WorkflowTargetOccupiedError", () => {
     // assert
     assert.strictEqual(error.targetPath, targetPath);
   });
+});
+
+describe("ProjectSkillLedgerError", () => {
+  for (const { defect, cause, message } of [
+    {
+      defect: "unreadable" as const,
+      cause: new Error("EACCES"),
+      message:
+        "The project skill ledger /agent/pi-claude-marketplace/project-installs.json cannot be read; it was left unchanged.",
+    },
+    {
+      defect: "unknown-content" as const,
+      cause: undefined,
+      message:
+        "The project skill ledger /agent/pi-claude-marketplace/project-installs.json holds content this version cannot update; it was left unchanged.",
+    },
+  ]) {
+    test(`D-CF2-13: names the ledger file and the ${defect} defect, and keeps its cause`, () => {
+      // arrange
+      const ledgerPath = "/agent/pi-claude-marketplace/project-installs.json";
+
+      // act
+      const error = new ProjectSkillLedgerError(
+        ledgerPath,
+        defect,
+        cause === undefined ? undefined : { cause },
+      );
+
+      // assert
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          ledgerPath: error.ledgerPath,
+          defect: error.defect,
+          cause: error.cause,
+        },
+        { name: "ProjectSkillLedgerError", message, ledgerPath, defect, cause },
+      );
+    });
+  }
 });

@@ -6,12 +6,17 @@
  */
 
 import assert from "node:assert/strict";
-import { access, rm } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Given } from "@cucumber/cucumber";
+import { Given, Then } from "@cucumber/cucumber";
 
 import type { ScenarioWorld } from "../../support/world.ts";
+
+/** The user's record of the plugins installed into projects, under the agent directory. */
+function projectInstallsRecord(world: ScenarioWorld): string {
+  return path.join(world.tokens.agentDir, "pi-claude-marketplace", "project-installs.json");
+}
 
 // D-CF2-13: the project keeps its `.pi/pi-claude-marketplace/` tree and the
 // `state.json` that names the skill, as a clone of a repository that commits
@@ -19,13 +24,27 @@ import type { ScenarioWorld } from "../../support/world.ts";
 Given(
   "the user's pi directory records no plugin install for the project",
   async function (this: ScenarioWorld) {
-    const ledger = path.join(
-      this.tokens.agentDir,
-      "pi-claude-marketplace",
-      "project-installs.json",
-    );
+    const ledger = projectInstallsRecord(this);
     await rm(ledger, { force: true });
     await assert.rejects(access(ledger), { code: "ENOENT" });
     await access(path.join(this.tokens.projectDir, ".pi", "pi-claude-marketplace", "state.json"));
+  },
+);
+
+// WR-02: content this version did not write, such as a later layout.
+Given(
+  "the user's record of project skill installs was replaced with this text:",
+  async function (this: ScenarioWorld, text: string) {
+    const record = projectInstallsRecord(this);
+    await mkdir(path.dirname(record), { recursive: true });
+    await writeFile(record, text, "utf8");
+    assert.strictEqual(await readFile(record, "utf8"), text);
+  },
+);
+
+Then(
+  "the user's record of project skill installs holds this text:",
+  async function (this: ScenarioWorld, text: string) {
+    assert.strictEqual(await readFile(projectInstallsRecord(this), "utf8"), text);
   },
 );
