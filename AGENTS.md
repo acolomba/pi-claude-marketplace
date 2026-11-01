@@ -10,6 +10,7 @@ Before editing any file, read it first. Before modifying a function, trace its c
 
 - NEVER commit to the main branch.
 - Branch names: `main`, `features/*`, `releases/*`, and `agent-*` for temporary agent worktree branches. New feature branches use `features/<name>`.
+- In a Claude Code cloud session, you may push to origin a `features/<name>` branch other than the session's designated branch when concurrent cloud sessions work on it, so that each session can get the others' work. Push only the branches that this work needs, and never push `main`.
 - Commit as `.agents/skills/committing/SKILL.md` describes: its message format also applies to PR titles. NEVER use `--no-verify` to skip the hooks.
 - NEVER rebase, never rewrite history. Update branches by merging.
 - When writing PR descriptions, use the `simple-english` skill in Plain mode and the `humanizer` skill, if available.
