@@ -137,6 +137,7 @@ void ({ kind: "prepared", result: stageCommandsCommitResult } satisfies Prepared
 const unstageCommandsInput: UnstageCommandsInput = {
   locations: undefined!,
   previousCommandNames: ["acme:build:deploy"],
+  ledger: { update: () => Promise.resolve() },
 } satisfies UnstageCommandsInput;
 void unstageCommandsInput;
 

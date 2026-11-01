@@ -32,6 +32,7 @@ import { unstagePluginCommands } from "../../bridges/commands/index.ts";
 import { removeHookConfig } from "../../bridges/hooks/index.ts";
 import { unstageMcpServers } from "../../bridges/mcp/index.ts";
 import { unstagePluginSkills } from "../../bridges/skills/index.ts";
+import { NODE_PROJECT_SKILL_LEDGER } from "../../bridges/skills/project-installs.ts";
 import { unstagePluginWorkflows } from "../../bridges/workflows/index.ts";
 import { generatedMcpServerKey } from "../../domain/name.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -463,10 +464,10 @@ export interface UnstageOutcome {
    */
   readonly writtenMcpFiles?: readonly McpWrittenFile[];
   /**
-   * WR-04: the warnings of the skills slot, such as a project skill ledger it
-   * could not update (D-CF2-13). The removal still happened, so the caller
-   * shows them after its rows. Set only when non-empty, on success and on
-   * failure.
+   * WR-04: the warnings of the skills slot, then those of the commands slot,
+   * such as a project ledger either could not update (D-CF2-13, D-CF3-07).
+   * The removal still happened, so the caller shows them after its rows. Set
+   * only when non-empty, on success and on failure.
    */
   readonly skillWarnings?: readonly string[];
 }
@@ -593,8 +594,10 @@ export async function cascadeUnstagePlugin(
     const cmdResult = await unstagePluginCommands({
       locations,
       previousCommandNames: installedPlugin.resources.prompts,
+      ledger: NODE_PROJECT_SKILL_LEDGER,
     });
     dropped.commands = [...cmdResult.removedNames];
+    skillWarnings = [...skillWarnings, ...cmdResult.warnings];
 
     const agentsResult = await unstagePluginAgents({
       locations,

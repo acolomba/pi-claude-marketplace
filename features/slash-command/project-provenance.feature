@@ -51,3 +51,23 @@ Feature: Slash command project provenance
       { "version": 2, "projects": {} }
       """
     Then the project scope has no installed plugins
+
+  Scenario Outline: Removing a project command while the user's record of project installs holds content pi cannot update removes it and warns
+    Given the user's record of project skill installs was replaced with this text:
+      """
+      { "version": 2 }
+      """
+    When the user runs "<command>"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                             | lines                                                                                                                                                           |
+      | cascade    | info     | true         |                                                    |                                                                                                                                                                 |
+      | diagnostic | warning  | false        | Plugin "solo" [project] <verb>; 1 cleanup warning. | could not remove the commands from the project skill ledger: The project skill ledger skills.json holds content this version cannot update; it was left unchanged. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons | scope   | <extra field> |
+      | fixtures         | project           | solo@fixtures | solo | <verb> |         | project | <extra value> |
+
+    Examples:
+      | command                                                    | verb        | extra field        | extra value |
+      | /claude:plugin uninstall solo@fixtures --scope project     | uninstalled | version            | 1.0.0       |
+      | /claude:plugin disable solo@fixtures --scope project       | disabled    | version            | 1.0.0       |
+      | /claude:plugin marketplace remove fixtures --scope project | uninstalled | marketplace status | removed     |

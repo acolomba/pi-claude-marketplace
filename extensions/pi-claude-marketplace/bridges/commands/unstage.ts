@@ -5,13 +5,39 @@
 //
 // Commands have no on-disk index and need no marker check -- the
 // promptsTargetDir is owned end-to-end by name per D-06.
+//
+// D-CF3-07: at project scope the removed names then leave the user's project
+// ledger. A stale entry only names a file this user once installed, so a
+// ledger the removal cannot update becomes a warning (WR-04) and never blocks
+// the removal.
 
 import { unlink } from "node:fs/promises";
 import path from "node:path";
 
+import { errorMessage } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
+import { projectCommandChange } from "./project-ledger.ts";
+
 import type { UnstageCommandsInput, UnstageCommandsResult } from "./types.ts";
+
+/**
+ * WR-04: the warnings of dropping the unstaged names from the user's project
+ * ledger. A user-scope unstage and one with no names leave the ledger alone.
+ */
+async function forgetUnstagedCommands(input: UnstageCommandsInput): Promise<readonly string[]> {
+  const change = projectCommandChange(input.locations, input.previousCommandNames);
+  if (change === undefined || change.forget.length === 0) {
+    return [];
+  }
+
+  return input.ledger.update(change).then(
+    () => [],
+    (err: unknown) => [
+      `could not remove the commands from the project skill ledger: ${errorMessage(err)}`,
+    ],
+  );
+}
 
 export async function unstagePluginCommands(
   input: UnstageCommandsInput,
@@ -39,6 +65,6 @@ export async function unstagePluginCommands(
 
   return {
     removedNames: Object.freeze(removed),
-    warnings: Object.freeze<string[]>([]),
+    warnings: Object.freeze([...(await forgetUnstagedCommands(input))]),
   };
 }

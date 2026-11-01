@@ -18,6 +18,7 @@
 // orchestrators the per-command (sourcePath, targetPath) records needed to
 // populate `state.json` without re-discovering after commit.
 
+import type { ProjectCommandLedger } from "./project-ledger.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -122,6 +123,8 @@ export interface PreparedCommandsStaged {
 export interface UnstageCommandsInput {
   readonly locations: ScopedLocations;
   readonly previousCommandNames: readonly string[];
+  /** D-CF3-07: the user's project ledger, which forgets the names at project scope. */
+  readonly ledger: ProjectCommandLedger;
 }
 
 /** Result of `unstagePluginCommands`. */

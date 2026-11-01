@@ -1295,6 +1295,7 @@ async function runInstallLedgerBody(
       await unstagePluginCommands({
         locations: c.locations,
         previousCommandNames: c.stagedCommandNames,
+        ledger: NODE_PROJECT_SKILL_LEDGER,
       });
     },
   };
