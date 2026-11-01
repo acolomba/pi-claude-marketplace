@@ -1,8 +1,8 @@
 /**
- * @fileoverview Steps about calling the MCP servers of a plugin: the stub
- * servers a published plugin holds, a profile Pi started with a variable the
- * user set, pi-mcp-adapter's first listing of the servers' tools, and the
- * messages a stub receives (HAR-04, HAR-07).
+ * @fileoverview The steps every MCP server feature shares: the stub servers a
+ * published plugin holds, a profile Pi started with a variable the user set,
+ * pi-mcp-adapter's first listing of the servers' tools, and the messages a
+ * stub receives (HAR-04, HAR-07, D-CF6-05).
  *
  * When a session starts, pi-mcp-adapter connects to a server whose tools it
  * has not cached, lists them, and disconnects, in the background. A model
@@ -13,13 +13,16 @@
 
 import assert from "node:assert/strict";
 import { readFile, rm } from "node:fs/promises";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 
-import { type DataTable, Given, Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import {
   LATE_TAG_ENVIRONMENT,
   publishStubMcpServer,
+  publishStubServersFile,
   stubMcpFileText,
 } from "../../lib/mcp-server-files.ts";
 import { readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
@@ -28,17 +31,29 @@ import {
   readAppliedLaunchEnvironments,
   writeLaunchEnvironment,
 } from "../../lib/pi-launch-environment.ts";
-import { projectTokens } from "../../lib/run-tokens.ts";
+import {
+  readRegistrySnapshot,
+  REGISTRY_PROBE_COMMAND,
+} from "../../lib/pi-registry-probe/snapshot.ts";
+import { expandTokens, projectTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { StubRequest } from "../../lib/mcp-stub-server.ts";
+import type { RegistrySnapshot } from "../../lib/pi-registry-probe/snapshot.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
 // Starting Node on the stub and listing one tool takes well under a second;
 // the margin covers a loaded CI runner and stays below the step timeout.
 const TOOL_LISTING_TIMEOUT_MS = 15_000;
 const TOOL_LISTING_POLL_MS = 50;
+
+// pi-mcp-adapter closes its listing connection before it registers the
+// listed tools with Pi, and it reports nothing a step can wait on between the
+// two. So the probe reads the registry until two reports this far apart
+// agree, which outlasts that gap on a loaded runner, and fails at the
+// listing deadline.
+const REGISTRY_QUIET_MS = 250;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -74,6 +89,41 @@ function paramsText(world: ScenarioWorld, request: StubRequest, toolCallIds: str
   );
 }
 
+// D-CF6-05: one probe report of every tool Pi has. Pi runs the probe's
+// command to completion before it answers, with no dialog and no error.
+async function probedRegistry(world: ScenarioWorld): Promise<RegistrySnapshot> {
+  const message = `/${REGISTRY_PROBE_COMMAND}`;
+  const { response, entries, extensionErrors, dialogs } = await world.pi.request({
+    type: "prompt",
+    message,
+  });
+  assert.deepStrictEqual(
+    [response.data, extensionErrors, dialogs],
+    [{ disposition: "handled" }, [], []],
+  );
+  return readRegistrySnapshot(entries);
+}
+
+// The probe report once two reports `REGISTRY_QUIET_MS` apart agree.
+async function settledRegistry(world: ScenarioWorld): Promise<RegistrySnapshot> {
+  world.profileHarness();
+  const deadline = Date.now() + TOOL_LISTING_TIMEOUT_MS;
+  let previous = await probedRegistry(world);
+  for (;;) {
+    await delay(REGISTRY_QUIET_MS);
+    const current = await probedRegistry(world);
+    if (isDeepStrictEqual(current, previous)) {
+      return current;
+    }
+
+    if (Date.now() > deadline) {
+      assert.fail(`pi's tool registry did not settle: ${JSON.stringify([previous, current])}`);
+    }
+
+    previous = current;
+  }
+}
+
 function listedTools(requests: readonly StubRequest[], plugin: string, server: string): boolean {
   return requests.some(
     (request) =>
@@ -101,6 +151,19 @@ Given(
   },
 );
 
+// D-CF6-06: every member of the doc string whose value is `{"stub": {...}}`
+// becomes a stub server named after the member; every other value is
+// written as it is, so a scenario can also write a malformed server.
+Given(
+  "the published plugin {string} of the marketplace {string} has the file {string} with these stub mcp servers:",
+  async function (this: ScenarioWorld, plugin: string, name: string, file: string, text: string) {
+    const published = this.requirePublished(name);
+    const written = await publishStubServersFile(published, plugin, file, text);
+    const target = path.join(published.root, "plugins", plugin, file);
+    assert.strictEqual(await readFile(target, "utf8"), written);
+  },
+);
+
 // A profile Pi's environment is fixed when it starts, so a variable the user
 // sets after an install reaches only a Pi started after it. The variable is
 // never set in this worker's own environment.
@@ -121,10 +184,13 @@ Given(
 );
 
 // Done once the stub logged a tools/list and no stub is running, which means
-// the adapter closed the listing connection.
+// the adapter closed the listing connection. The plugin is the argument the
+// stub logs, with run tokens expanded, so a stub started with
+// `${CLAUDE_PLUGIN_ROOT}` is named by `{home}/marketplaces/<name>/plugins/<plugin>`.
 Given(
   "pi-mcp-adapter has listed the tools of the stub mcp server {string} of the plugin {string}",
-  async function (this: ScenarioWorld, server: string, plugin: string) {
+  async function (this: ScenarioWorld, server: string, pluginText: string) {
+    const plugin = expandTokens(pluginText, this.tokens);
     const harness = this.profileHarness();
     const deadline = Date.now() + TOOL_LISTING_TIMEOUT_MS;
     for (;;) {
@@ -147,12 +213,18 @@ Given(
   },
 );
 
+When("the user lists the mcp tools pi offers", async function (this: ScenarioWorld) {
+  this.registrySnapshot = await settledRegistry(this);
+});
+
 // One row per message the stub received, in arrival order: whether it was a
 // request or a notification, its method, and its params as JSON. Every
-// message must come from the named server.
+// message must come from the named server, whose plugin argument may hold
+// run tokens, as in the listing wait.
 Then(
   "the stub mcp server {string} of the plugin {string} receives these messages:",
-  async function (this: ScenarioWorld, server: string, plugin: string, table: DataTable) {
+  async function (this: ScenarioWorld, server: string, pluginText: string, table: DataTable) {
+    const plugin = expandTokens(pluginText, this.tokens);
     const requests = await readStubRequests(this.profileHarness());
     assert.deepStrictEqual(
       requests.filter((request) => request.plugin !== plugin || request.server !== server),
@@ -167,3 +239,35 @@ Then(
     assert.deepStrictEqual([["kind", "method", "params"], ...rows], table.raw());
   },
 );
+
+// D-CF6-05: one row per model call of the last turn, numbered from 1 as the
+// calls step numbers them, with the names of the tools Pi offered that call
+// in the order Pi sent them. A scenario that uses it also states the calls,
+// so this step leaves the turn for that step to mark compared.
+Then("the model calls are offered these tools:", function (this: ScenarioWorld, table: DataTable) {
+  const rows = modelCallsOf(this.requireTurn().logs).map((call) => [
+    String(call.index + 1),
+    call.tools.map((tool) => tool.name).join(", "),
+  ]);
+  assert.deepStrictEqual([["call", "tools"], ...rows], table.raw());
+});
+
+// D-CF6-05: one row per tool Pi has that pi-mcp-adapter registered, the
+// `mcp` proxy and each `mcp__` tool, in Pi's order, with whether it is active.
+Then("pi offers these mcp tools:", function (this: ScenarioWorld, table: DataTable) {
+  const snapshot = this.registrySnapshot;
+  if (snapshot === undefined) {
+    assert.fail("no step listed the mcp tools pi offers");
+  }
+
+  const active = new Set(snapshot.activeTools);
+  const rows = snapshot.allTools
+    .filter(({ name }) => name === "mcp" || name.startsWith("mcp__"))
+    .map(({ name }) => [name, active.has(name) ? "yes" : "no"]);
+  assert.deepStrictEqual([["tool", "active"], ...rows], table.raw());
+});
+
+// The stub's whole log for the scenario is empty: no server was started.
+Then("no stub mcp server receives a message", async function (this: ScenarioWorld) {
+  assert.deepStrictEqual(await readStubRequests(this.profileHarness()), []);
+});
