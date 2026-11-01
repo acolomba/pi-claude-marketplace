@@ -46,7 +46,7 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
 import { openNotificationRun, requireNotificationMode } from "../../../shared/notification-run.ts";
 import { installTimerLadder } from "../exec-timer.ts";
-import { prepareHookEnv } from "../hook-env.ts";
+import { hookPathVars, prepareHookEnv } from "../hook-env.ts";
 import { translatePostCompact } from "../payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "../payloads/post-tool-use.ts";
@@ -205,7 +205,7 @@ export async function spawnAndRegister(
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareAsyncEnv(entry, transCtx, loc, dispatchId);
-    const planValue = planSpawn(entry);
+    const planValue = planSpawn(entry, hookPathVars(entry, transCtx, loc));
     const timeoutSeconds = resolveTimeoutSeconds({
       raw: entry.handlerDecl.timeout,
       event: entry.claudeEvent,

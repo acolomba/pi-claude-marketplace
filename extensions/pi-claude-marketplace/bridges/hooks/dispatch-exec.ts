@@ -20,7 +20,8 @@
 //      !== undefined` -> `spawn(command, args, { ..., shell: false })`;
 //      otherwise -> `spawn(command, [], { ..., shell: entry.handlerDecl.shell
 //      ?? true })`. Note: `args: []` is exec-form -- the discriminator is
-//      "args defined" not "args non-empty".
+//      "args defined" not "args non-empty". The exec form gets the three
+//      path variables substituted into `command` and `args` (D-CF5-15).
 //   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02). `ladder.cancel()`
 //      runs from the shared `settle()` closure, which both `child.once(
 //      "close", ...)` and `child.once("error", ...)` call, to close the
@@ -58,7 +59,7 @@ import { errorMessage } from "../../shared/errors.ts";
 
 import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
-import { prepareHookEnv } from "./hook-env.ts";
+import { hookPathVars, prepareHookEnv } from "./hook-env.ts";
 import { translatePostCompact } from "./payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "./payloads/post-tool-use.ts";
@@ -80,6 +81,7 @@ import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ClaudePluginVars } from "../../shared/vars.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Constants
@@ -191,8 +193,10 @@ export async function dispatchHookExec(
     const transCtx = buildTranslationContext(ctx);
     const stdinPayload = buildPayload(entry.claudeEvent, event, transCtx);
     const stdinJson = serializeWithTruncation(stdinPayload);
-    const env = await prepareEnv(entry, transCtx);
-    return await spawnAndCollect(entry, env, stdinJson, spawnImpl);
+    const loc = locationsFor(entry.scope, transCtx.cwd);
+    const env = await prepareHookEnv(entry, transCtx, loc);
+    const vars = hookPathVars(entry, transCtx, loc);
+    return await spawnAndCollect(entry, vars, env, stdinJson, spawnImpl);
   } catch (err) {
     hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
     return { kind: "noop" };
@@ -265,27 +269,17 @@ function buildPayload(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// HOOK-05 env construction + D-60-06 _shared CLAUDE_ENV_FILE
-// ──────────────────────────────────────────────────────────────────────────
-
-async function prepareEnv(
-  entry: RoutingEntry,
-  transCtx: TranslationContext,
-): Promise<NodeJS.ProcessEnv> {
-  return prepareHookEnv(entry, transCtx, locationsFor(entry.scope, transCtx.cwd));
-}
-
-// ──────────────────────────────────────────────────────────────────────────
 // Spawn + stream-and-collect
 // ──────────────────────────────────────────────────────────────────────────
 
 async function spawnAndCollect(
   entry: RoutingEntry,
+  vars: ClaudePluginVars,
   env: NodeJS.ProcessEnv,
   stdinJson: string,
   spawnImpl: typeof spawn = spawn,
 ): Promise<HookExecResult> {
-  const plan = planSpawn(entry);
+  const plan = planSpawn(entry, vars);
   const timeoutSeconds = resolveTimeoutSeconds({
     raw: entry.handlerDecl.timeout,
     event: entry.claudeEvent,

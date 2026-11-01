@@ -1604,6 +1604,46 @@ test("uses shell form only when the declaration omits args", async (t) => {
   );
 });
 
+test("spawns an exec-form hook with Claude's path variables filled in", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-exec-substitution-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot, {
+    command: "${CLAUDE_PLUGIN_ROOT}/bin/hook",
+    args: ["--data=${CLAUDE_PLUGIN_DATA}", "${CLAUDE_PROJECT_DIR}", "${user_config.token}"],
+  });
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+  const call = await processBoundary.spawned;
+  await processChild.close(0);
+  const hookOutcome = await pendingOutcome;
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(
+    { command: call.command, args: call.args, shell: call.options.shell },
+    {
+      command: path.join(caseRoot, "plugin", "bin", "hook"),
+      args: [
+        `--data=${path.join(caseRoot, ".pi", "pi-claude-marketplace", "data", "dispatch-plugin")}`,
+        caseRoot,
+        "${user_config.token}",
+      ],
+      shell: false,
+    },
+  );
+});
+
 test("contains an EPIPE from stdin after registering its error listener", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
