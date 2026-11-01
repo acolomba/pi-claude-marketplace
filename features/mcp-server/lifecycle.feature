@@ -162,6 +162,10 @@ Feature: MCP server lifecycle
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"stub": {"stub": {"env": {"STUB_TAG": "v2"}}}}
+      """
     Given the user has run "/claude:plugin update demo@fixtures --scope user", which warned
     Given pi runs with the scripted model and these companions:
       | companion      |
