@@ -151,7 +151,7 @@ test("MANF-03 declared skill subdirs under a shipped skills parent warn not at a
 
   // assert
   assert.deepStrictEqual(discovery, {
-    generatedNames: ["ui-theme-designer-help", "ui-theme-designer-design-tokens"],
+    generatedNames: ["ui-theme-designer-design-tokens", "ui-theme-designer-help"],
     warnings: [],
   });
 });

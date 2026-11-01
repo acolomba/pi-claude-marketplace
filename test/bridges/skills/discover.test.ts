@@ -499,12 +499,79 @@ test("MANF-03 a trailing separator keys the same directory as one already seen",
 
   // assert
   assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "help", generatedName: "acme-help", skillDir: helpDirectory }],
+    warnings: [],
+  });
+});
+
+test("D-CF2-04: keeps the skills folder's copy over a declared path's copy", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-folder-first-");
+  const extraDirectory = path.join(pluginRoot, "extra");
+  const folderTwinDirectory = path.join(pluginRoot, "skills", "twin");
+  await writeSkill(path.join(extraDirectory, "twin"), "twin");
+  await writeSkill(folderTwinDirectory, "twin");
+  const resolved = resolvedPlugin(pluginRoot, ["extra", "skills"]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "twin", generatedName: "acme-twin", skillDir: folderTwinDirectory }],
+    warnings: [
+      `skill source "twin" in "${extraDirectory}" elides to generated name ` +
+        `"acme-twin", already produced by skill source "twin"; ignoring duplicate.`,
+    ],
+  });
+});
+
+test("D-CF2-04: declared skills inside the skills folder take the folder's order", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-folder-order-");
+  const alphaDirectory = path.join(pluginRoot, "skills", "alpha");
+  const bravoDirectory = path.join(pluginRoot, "skills", "bravo");
+  await writeSkill(alphaDirectory, "alpha");
+  await writeSkill(bravoDirectory, "bravo");
+  const resolved = resolvedPlugin(pluginRoot, [
+    path.join("skills", "bravo"),
+    path.join("skills", "alpha"),
+    "skills",
+  ]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
     discovered: [
-      {
-        sourceName: "help",
-        generatedName: "acme-help",
-        skillDir: helpDirectory + path.sep,
-      },
+      { sourceName: "alpha", generatedName: "acme-alpha", skillDir: alphaDirectory },
+      { sourceName: "bravo", generatedName: "acme-bravo", skillDir: bravoDirectory },
+    ],
+    warnings: [],
+  });
+});
+
+test("D-CF2-04: entries other than the skills folder keep their declared order", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-declared-order-");
+  const folderDirectory = path.join(pluginRoot, "skills", "folder");
+  const zuluDirectory = path.join(pluginRoot, "zulu", "zulu-skill");
+  const alphaDirectory = path.join(pluginRoot, "alpha", "alpha-skill");
+  await writeSkill(folderDirectory, "folder");
+  await writeSkill(zuluDirectory, "zulu-skill");
+  await writeSkill(alphaDirectory, "alpha-skill");
+  const resolved = resolvedPlugin(pluginRoot, ["zulu", "skills", "alpha"]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { sourceName: "folder", generatedName: "acme-folder", skillDir: folderDirectory },
+      { sourceName: "zulu-skill", generatedName: "acme-zulu-skill", skillDir: zuluDirectory },
+      { sourceName: "alpha-skill", generatedName: "acme-alpha-skill", skillDir: alphaDirectory },
     ],
     warnings: [],
   });

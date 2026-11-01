@@ -15,6 +15,10 @@
 //     skip as two dirs under separate entries. Nothing throws on a
 //     generated-name collision. `domain/name.ts::assertSafeName` still
 //     guards the source name itself.
+//   - D-CF2-04: the conventional `skills` entry is read before the declared
+//     entries, which keep their own order, so the `skills/` copy of a skill
+//     wins the first-wins dedup over a declared path's copy, as in Claude
+//     Code 2.1.316 (E3). The resolver's order is left as it is.
 //   - A declared `componentPaths.skills` element that is ITSELF a skill dir
 //     (contains `SKILL.md` directly, rather than being a parent of skill
 //     subdirs) is discovered as a single skill, threaded through the same
@@ -190,6 +194,19 @@ async function collectSkillSubdirs(discovery: SkillDiscovery, skillsDir: string)
 }
 
 /**
+ * D-CF2-04 / E3: the conventional `skills` entry first, then every other
+ * entry in its own order. The resolver appends the conventional folder after
+ * the declared paths, but Claude Code 2.1.316 keeps the `skills/` copy of a
+ * skill that a declared path repeats, so discovery reads that folder first.
+ */
+function skillsFolderFirst(skillsDirs: readonly string[]): readonly string[] {
+  return [
+    ...skillsDirs.filter((skillsRel) => skillsRel === "skills"),
+    ...skillsDirs.filter((skillsRel) => skillsRel !== "skills"),
+  ];
+}
+
+/**
  * Enumerate skill subdirs in `resolved.componentPaths.skills`. The array
  * may be empty (no skills declared and no implicit-by-convention) or
  * contain one or more relative-or-absolute paths.
@@ -233,7 +250,7 @@ export async function discoverPluginSkills(input: {
     warnings: [],
   };
 
-  for (const skillsRel of resolved.componentPaths.skills) {
+  for (const skillsRel of skillsFolderFirst(resolved.componentPaths.skills)) {
     const skillsDir = path.isAbsolute(skillsRel)
       ? skillsRel
       : path.join(resolved.pluginRoot, skillsRel);
