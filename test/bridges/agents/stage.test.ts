@@ -107,7 +107,7 @@ describe("prepareStagePluginAgents", () => {
     });
     assert.strictEqual(
       await readFile(targetPath, "utf8"),
-      `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${winnerPath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nFirst body.\n`,
+      `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${winnerPath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nFirst body.\n`,
     );
     assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
       schemaVersion: 1,
@@ -323,6 +323,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -345,6 +346,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -450,6 +452,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -958,7 +961,7 @@ describe("commitPreparedAgents", () => {
       });
       assert.strictEqual(
         await readFile(newTarget, "utf8"),
-        `---\nname: acme:acme-reviewer\ndescription: Prefixed reviewer\naliases: pi-claude-marketplace-acme-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
+        `---\nname: acme:acme-reviewer\ndescription: Prefixed reviewer\naliases: pi-claude-marketplace-acme-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
       );
       assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
         schemaVersion: 1,
@@ -967,7 +970,7 @@ describe("commitPreparedAgents", () => {
       if (coexist) {
         assert.strictEqual(
           await readFile(oldTarget, "utf8"),
-          `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${shortSource}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nShort body.\n`,
+          `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${shortSource}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nShort body.\n`,
         );
       } else {
         assert.strictEqual(await exists(oldTarget), false);
@@ -1126,6 +1129,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1148,6 +1152,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1661,7 +1666,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.strictEqual(await readFile(handNamedTarget, "utf8"), handNamedBytes);
     assert.strictEqual(
       await readFile(currentTarget, "utf8"),
-      `---\nname: acme:current\ndescription: Current agent\naliases: pi-claude-marketplace-acme-current\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: current\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nCurrent.\n`,
+      `---\nname: acme:current\ndescription: Current agent\naliases: pi-claude-marketplace-acme-current\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: current\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nCurrent.\n`,
     );
     assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
       schemaVersion: 1,

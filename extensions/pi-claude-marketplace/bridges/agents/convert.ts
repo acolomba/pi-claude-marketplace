@@ -37,6 +37,7 @@ const SUPPORTED_SOURCE_FIELDS = new Set([
   "thinking",
   "effort",
   "skills",
+  "background",
 ]);
 
 /**
@@ -169,18 +170,20 @@ function splitCsv(value: string | undefined): string[] {
 
   return raw
     .split(",")
-    .map((part) => {
-      const trimmed = part.trim();
-      if (
-        (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-        (trimmed.startsWith("'") && trimmed.endsWith("'"))
-      ) {
-        return trimmed.slice(1, -1);
-      }
-
-      return trimmed;
-    })
+    .map((part) => withoutMatchingQuotes(part.trim()))
     .filter((part) => part !== "");
+}
+
+/** The value with one pair of matching surrounding quotes removed. */
+function withoutMatchingQuotes(value: string): string {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+
+  return value;
 }
 
 function dedupePreservingOrder(values: readonly string[]): string[] {
@@ -735,6 +738,7 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
       ...optionalThinking(thinkingResult.emit),
       skills: skillsResult.emit,
       inheritSkills: toolsResult.inheritSkills,
+      ...optionalAsync(asyncSetting(raw.background, toolsResult, mcpServerNames)),
     },
     provenance: {
       pluginName,
@@ -761,6 +765,48 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
   };
 
   return result;
+}
+
+/**
+ * D-CF4-05: the `async` launch default of a bridged agent. Claude Code runs a
+ * plugin agent in the foreground unless its source sets `background` to
+ * `true` or `"true"`, so the agent gets `async: true` for that value and
+ * `async: false` otherwise, which replaces pi-subagents' background default.
+ * Residual: a pi-subagents call can still ask for either launch mode, where
+ * Claude Code forces the background for `background: true`.
+ * An agent that runs MCP tools gets no line at all (D-CF4-05 as amended):
+ * pi-subagents serves MCP tools only in background launches, and its
+ * MCP async warning stays the guidance there.
+ */
+function asyncSetting(
+  rawBackground: unknown,
+  toolsResult: ToolMappingResult,
+  mcpServerNames: readonly string[] | undefined,
+): boolean | undefined {
+  if (runsMcpTools(toolsResult, mcpServerNames)) {
+    return undefined;
+  }
+
+  return typeof rawBackground === "string" && withoutMatchingQuotes(rawBackground) === "true";
+}
+
+/**
+ * An explicit list that maps an `mcp:` entry, or an omitted list, which
+ * grants the ambient tools, in a plugin that writes MCP servers.
+ */
+function runsMcpTools(
+  toolsResult: ToolMappingResult,
+  mcpServerNames: readonly string[] | undefined,
+): boolean {
+  if (toolsResult.omitted) {
+    return (mcpServerNames ?? []).length > 0;
+  }
+
+  return toolsResult.mapped.some((name) => name.startsWith("mcp:"));
+}
+
+function optionalAsync(launchAsync: boolean | undefined): { async?: boolean } {
+  return launchAsync === undefined ? {} : { async: launchAsync };
 }
 
 function optionalModel(model: string | undefined): { model?: string } {

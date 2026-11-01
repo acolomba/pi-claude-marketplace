@@ -438,6 +438,11 @@ export type GeneratedFrontmatterFields = {
   readonly thinking?: string;
   readonly skills: readonly string[];
   readonly inheritSkills: boolean;
+  /**
+   * D-CF4-05: pi-subagents' launch default, `true` for a background run and
+   * `false` for a foreground one. Absent leaves pi-subagents' own default.
+   */
+  readonly async?: boolean;
 } & GeneratedToolsFields;
 
 /**
@@ -479,7 +484,7 @@ export interface GeneratedProvenanceFields {
  * (only when tools is absent and disallowed names mapped, #179), thinking,
  * skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
- * advertise, then the `provenance` mapping (generatedBy, sourcePlugin, sourceAgent,
+ * advertise, async (only when set, D-CF4-05), then the `provenance` mapping (generatedBy, sourcePlugin, sourceAgent,
  * sourcePath, originalModel [only when defined], droppedFields,
  * droppedTools, warnings -- each list field inline `[]` when empty or a
  * `    - item` block when non-empty).
@@ -543,9 +548,12 @@ export function emitGeneratedAgentFile(input: {
     `inheritSkills: ${frontmatter.inheritSkills ? "true" : "false"}`,
     "advertise: true",
   );
+  if (frontmatter.async !== undefined) {
+    lines.push(`async: ${frontmatter.async ? "true" : "false"}`);
+  }
 
   // T-d8i-01: provenance folded under a single `provenance` mapping,
-  // appended after advertise, inside the frontmatter -- so pi-subagents'
+  // appended after advertise and async, inside the frontmatter -- so pi-subagents'
   // parser stores-and-ignores it and the child subagent's system prompt (the
   // body, verbatim) never sees it. The nested keys and list items carry
   // leading whitespace, so pi-subagents' `^([\w-]+):` key regex skips them

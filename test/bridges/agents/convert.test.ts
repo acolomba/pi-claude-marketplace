@@ -41,9 +41,14 @@ function yamlList(items: readonly string[]): string {
   return items.length === 0 ? " []" : items.map((item) => `\n    - ${item}`).join("");
 }
 
+function asyncLine(launchAsync: boolean | undefined): string {
+  return launchAsync === undefined ? "" : "async: " + String(launchAsync) + "\n";
+}
+
 function expectedMcpAgentFile(expected: {
   readonly toolsField: string;
   readonly inheritSkills: boolean;
+  readonly async?: boolean;
   readonly droppedTools: readonly string[];
   readonly warnings: readonly string[];
 }): string {
@@ -56,7 +61,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: ${expected.inheritSkills}
 advertise: true
-provenance:
+${asyncLine(expected.async)}provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
   sourceAgent: bot
@@ -285,6 +290,7 @@ ${expectedMapping}systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -346,6 +352,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: spec-tree
@@ -429,6 +436,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -951,6 +959,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1003,6 +1012,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1049,6 +1059,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1097,6 +1108,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1143,6 +1155,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1190,6 +1203,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1235,6 +1249,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1282,6 +1297,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1328,6 +1344,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1378,6 +1395,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1424,6 +1442,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1520,6 +1539,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1569,6 +1589,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1618,6 +1639,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1699,6 +1721,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
+      async: false,
       droppedTools: [
         "mcp__plugin_other_db__q",
         "mcp__github__search",
@@ -1727,6 +1750,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
+      async: false,
       droppedTools: ["mcp__plugin_acme_db__a/b"],
       warnings: [],
     });
@@ -1768,6 +1792,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
+      async: false,
       droppedTools: [],
       warnings: [],
     });
@@ -1852,25 +1877,117 @@ Body.\r
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
-  for (const { label, raw } of [
-    {
-      label: "an explicit tools: list",
-      raw: { description: "d", tools: "Read, WebFetch", disallowedTools: "Edit, Unknown" },
-    },
-    {
-      label: "an omitted tools: list",
-      raw: { description: "d", disallowedTools: "Edit, Unknown" },
-    },
+  test("ANAME-02: an agent with no mcp__ token and an explicit tools: list converts identically with and without written servers", () => {
+    // arrange
+    const raw = { description: "d", tools: "Read, WebFetch", disallowedTools: "Edit, Unknown" };
+    const expectedAgent = convertMcpAgent(raw, undefined);
+
+    // act
+    const agent = convertMcpAgent(raw, ["db"]);
+
+    // assert
+    assert.deepStrictEqual(agent, expectedAgent);
+  });
+
+  test("D-CF4-05: an agent with an omitted tools: list loses only its async line when the plugin writes MCP servers", () => {
+    // arrange
+    const raw = { description: "d", disallowedTools: "Edit, Unknown" };
+    const withoutServers = convertMcpAgent(raw, undefined);
+
+    // act
+    const agent = convertMcpAgent(raw, ["db"]);
+
+    // assert
+    assert.deepStrictEqual(agent, {
+      ...withoutServers,
+      fileContent: withoutServers.fileContent.replace(
+        "advertise: true\nasync: false\n",
+        "advertise: true\n",
+      ),
+    });
+    assert.notStrictEqual(agent.fileContent, withoutServers.fileContent);
+  });
+
+  for (const { label, background, expectedAsync } of [
+    { label: "true", background: "true", expectedAsync: true },
+    { label: "a double-quoted true", background: '"true"', expectedAsync: true },
+    { label: "a single-quoted true", background: "'true'", expectedAsync: true },
+    { label: "false", background: "false", expectedAsync: false },
+    { label: "yes", background: "yes", expectedAsync: false },
+    { label: "an empty value", background: "", expectedAsync: false },
+    { label: "an absent field", background: undefined, expectedAsync: false },
   ]) {
-    test(`ANAME-02: an agent with no mcp__ token and ${label} converts identically with and without written servers`, () => {
+    test(`D-CF4-05: a background of ${label} converts with async: ${expectedAsync} and no warning`, () => {
       // arrange
-      const expectedAgent = convertMcpAgent(raw, undefined);
+      const raw = {
+        description: "d",
+        tools: "Read",
+        ...(background === undefined ? {} : { background }),
+      };
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: "tools: read",
+        inheritSkills: false,
+        async: expectedAsync,
+        droppedTools: [],
+        warnings: [],
+      });
 
       // act
-      const agent = convertMcpAgent(raw, ["db"]);
+      const agent = convertMcpAgent(raw, undefined);
 
       // assert
-      assert.deepStrictEqual(agent, expectedAgent);
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+      assert.deepStrictEqual(agent.droppedFields, []);
+      assert.deepStrictEqual(agent.warnings, []);
     });
   }
+
+  test("D-CF4-05: an explicit list with an mcp: entry converts with no async line even for background: true", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read,mcp:plugin_acme_db_",
+      inheritSkills: false,
+      droppedTools: [],
+      warnings: [MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read, mcp__plugin_acme_db", background: "true" },
+      ["db"],
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("D-CF4-05: an omitted list in a plugin that writes MCP servers converts with no async line even for background: true", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertMcpAgent({ description: "d", background: "true" }, ["db"]);
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
 });
