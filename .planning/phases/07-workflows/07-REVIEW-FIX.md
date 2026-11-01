@@ -1,114 +1,96 @@
 ---
 phase: 07-workflows
-fixed_at: 2026-11-01T16:30:00Z
+fixed_at: 2026-11-01T19:30:00Z
 review_path: .planning/phases/07-workflows/07-REVIEW.md
-iteration: 1
-findings_in_scope: 8
-fixed: 8
+iteration: 2
+findings_in_scope: 3
+fixed: 3
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 7: Code Review Fix Report
 
-**Fixed at:** 2026-11-01T16:30:00Z
+**Fixed at:** 2026-11-01T19:30:00Z
 **Source review:** .planning/phases/07-workflows/07-REVIEW.md
-**Iteration:** 1
+**Iteration:** 2
 
 **Summary:**
 
-- Findings in scope: 8 (CR-01, WR-01 to WR-07; fix scope `critical_warning`, so IN-01 to IN-04 were not attempted)
-- Fixed: 8
+- Findings in scope: 3. The fix scope is `critical_warning` (WR-01, WR-02), and the caller added IN-05 on the condition that every scenario keeps passing and the cucumber rules allow it. Both held. IN-01 to IN-04 and IN-06 to IN-08 were not attempted.
+- Fixed: 3
 - Skipped: 0
 
-**Where verification ran:** in the main checkout `/home/user/pi-claude-marketplace` on `features/component-features-phase-7`, not in a worktree. The caller told me to work there and not to switch branches. Every npm command ran with `npm_config_script_shell=<scratchpad>/nondac-sh NODE_OPTIONS=--max-old-space-size=6144`. Every commit ran the hook's `npm run check:commit`, and it passed each time.
+**Where verification ran:** in the main checkout `/home/user/pi-claude-marketplace` on `features/component-features-phase-7`, not in a worktree. The caller told me to work there and not to switch branches, although `workflow.use_worktrees` is `true`. Every npm command and every commit ran with `npm_config_script_shell=<scratchpad>/nondac-sh NODE_OPTIONS=--max-old-space-size=6144`. No staged file in these three commits is a build input, so the hook skipped `npm run check:commit` each time, and I ran the gates below by hand.
 
-**Final gates:**
+**Final gates (after the last commit, `baf0cbd`):**
 
-- `npx cucumber-js features/workflow`: 37 scenarios and 457 steps passed (seed 96241). A second run also passed 37 of 37 (seed 38175).
-- `npm run check:static`: passed. That covers typecheck, lint, lint:workflows, fallow (dupes included), format:check, test:corresponding, and check:features.
+- `npx cucumber-js features/workflow`: 37 scenarios and 457 steps passed (seed 61268).
+- `node scripts/check-features.mjs`: exit 0.
+- `npm run check:static` (after a lone `npm run lint` to warm ESLint): passed. That covers typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, and check:features.
 
-## Fixed Issues
+## Iteration 1 (summary)
 
-### CR-01: "Without the engine, a new session offers no workflow command" cannot fail
+The first pass fixed all 8 in-scope findings of the first review, with no skips:
 
-**Files modified:** `features/step_definitions/workflow/listing.steps.ts`, `features/workflow/companion-missing.feature`
-**Commit:** e4e0052
-**Applied fix:** I added the step `pi offers no slash command whose name contains {string}`. It reads every command of the registry probe's listing from any source (engine, prompt template, skill, other extension) and compares `[source, /name, path]` for each command whose name holds the text to `[]`. The companion-missing scenario now ends with `Then pi offers no slash command whose name contains "hello"`. The engine-path filter stays in `pi offers no workflow commands` and `pi offers these workflow commands:`, which `listing.feature` and `lifecycle.feature` use with the engine loaded.
-**Red proof:** I temporarily published `/demo:hello` as a prompt template in the plugin (the slash-command `Given`), which stands in for a bridge that falls back to a prompt template. I kept the old step and placed it before the new one. The old step `pi offers no workflow commands` passed, and the new step failed with `[['prompt', '/demo:hello', '<agentDir>/pi-claude-marketplace/resources/prompts/demo:hello.md']]` against `[]`. After the revert the scenario passed.
+- CR-01 (e4e0052): the companion-missing scenario reads every slash command from any source, not only engine commands.
+- WR-01 (3fc82fa): every run scenario states the engine's notices, with the run id and session id shown as `{run id}` and `{session id}`.
+- WR-02 (02c9447): the doc records that delivery stays pending over RPC with engine 3.15.0.
+- WR-03 (7af3d39): the refusal Outline gained three rows, and `lifecycle.feature` gained a rename scenario and a new-session-after-disable scenario.
+- WR-04 (1505f71): the doc note says the bridge warns on a missing description.
+- WR-05 (ab1a516): the refusal precondition compares the whole `script | disposition` set.
+- WR-06 (c8a9bfa): a per-line diagnostic step replaced the ambiguous comma join as the real check.
+- WR-07 (7e0f3c9): two feature descriptions fit in three lines.
 
-### WR-01: The run `Then` steps mark the turn compared but ignore every notice
+Each behavior fix had a red proof. The full record is in the git history of this file.
 
-**Files modified:** `features/step_definitions/workflow/listing.steps.ts`, `features/workflow/run.feature`, `features/workflow/companion-missing.feature`, `features/workflow/lifecycle.feature`
-**Commit:** 3fc82fa
-**Applied fix:** I first checked that the notices are deterministic. The command handler calls `startInBackground` and then posts the start notice, both synchronously, before Pi answers. The `complete`/`error` listener of `task-panel.ts` emits the delivery warning synchronously, while `workflow-progress.ts` publishes the terminal progress entry in a `queueMicrotask`. So the warning always precedes the entry that ends the run `When`. `warnDelivery` warns once per session endpoint, and every run scenario runs one command in a fresh session. The notices step now shows each run id named by the turn's progress entries as `{run id}`, and the session id from Pi's RPC `get_state` as `{session id}`. A notice that names another run or session therefore fails. All six run scenarios (three in `run.feature`, the Outline with three rows among them, the recovery scenario in `companion-missing.feature`, and two in `lifecycle.feature`) now state both notices: the `info` start notice and the `warning` `[workflow-delivery] delivery for {run id} deferred: endpoint for session {session id} has no thenable send function`.
-**Red proof:** In `run.feature`'s first scenario I changed `has no thenable send function` to `was delivered`. The scenario failed, and its diff showed the projected `{run id}` and `{session id}`. After the revert it passed. The run, companion-missing, and lifecycle files then passed three times on different seeds.
+## Fixed Issues (iteration 2)
 
-### WR-02: The doc says the delivery fix shipped in 3.14.0 and was never measured
+### WR-01: The doc says every run shows the delivery warning, but the engine warns once per session
 
 **Files modified:** `docs/workflows-compatibility.md`
-**Commit:** 02c9447
-**Applied fix:** The engine requirements paragraph now says that in Pi's RPC mode delivery stays pending with engine 3.15.0 too. It quotes the warning (scenario-measured at 3.15.0, Pi 1.4.0 over RPC, engine loaded with `--extension`, `features/workflow/run.feature`). It says that the run completes and its progress entry carries the result. It grades "the result is never posted" as source-read at 3.15.0 (`src/task-panel.ts`, the branch of `deliverAndAck` that warns and returns). It marks interactive mode as not measured.
+**Commit:** 6382ae4
+**Applied fix:** I first confirmed the engine behavior in the optional peer cache (engine 3.15.0, `src/task-panel.ts`). `warnDelivery` returns early when `endpoint.warned` is set and sets it the first time it warns. `bindSessionDelivery` builds a new endpoint, without the flag, only when the session binds again. The paragraph now says that the first run in a session shows the start notice and then the warning (scenario-measured, as before). It adds that the engine shows the warning only once per session, so a later run in the same session shows only the start notice and its result stays pending all the same. That part is graded source-read at 3.15.0 (`src/task-panel.ts`, `warnDelivery`). It also says that every scenario that pins the warning runs one command in a new session. This is a doc change, so it has no red proof.
 
-### WR-03: "Scenario-measured" claims cover more cases than the scenarios pin
+### WR-02: Two steps added by the fixes do not name their kind
 
-**Files modified:** `features/workflow/refusals.feature`, `features/workflow/lifecycle.feature`, `docs/workflows-compatibility.md`
-**Commit:** 7af3d39
-**Applied fix:** I took the "add coverage" option, not the "narrow the grade" one.
+**Files modified:** `features/step_definitions/workflow/refusals.steps.ts`, `features/step_definitions/workflow/listing.steps.ts`, `features/workflow/refusals.feature`, `features/workflow/companion-missing.feature`
+**Commit:** cd65b30
+**Applied fix:** I renamed both steps so that their text names the workflow kind:
 
-- The refusal Outline gained three rows:
-  - `mutable.js` (`export let meta`) gives `/demo:mutable failed: meta export must be \`export const meta = ...\``.
-  - `hidden.js` (unexported `const meta`) gives the check-3 first-statement message.
-  - `pair.js` (`export const meta = {...}, other = 1`) gives `/demo:pair failed: meta export must declare only \`meta\``.
-  So all six rows of the admit-versus-run table are now run.
-- `lifecycle.feature` gained two scenarios:
-  - "Running the old workflow command after a renaming update shows the engine's notice, ..."
-  - "A new session after the disable offers no workflow command".
-- The doc sentence at line 191 now says that the lingering-command behavior holds "after each of the three" verbs.
+- `the diagnostic reports these lines:` is now `the workflow install diagnostic reports these lines:`. The three uses in `refusals.feature` (lines 60, 88, 123) changed with it.
+- `pi offers no slash command whose name contains {string}` is now `pi offers no slash command for the workflow {string}`. Its parameter is now named `workflow`, and its comment says it matches commands whose name holds the workflow's name. The use in `companion-missing.feature:72` changed with it.
+
+The bodies are unchanged. Prettier rewrapped the refusals step because the longer text passes 100 columns.
 
 **Red proof:**
 
-- The three new Outline rows first ran with the placeholder message `x`, and all three failed with the engine's real message, which I then wrote in.
-- The rename scenario with `/demo:greet` in place of `/demo:hello` failed.
-- The disable scenario with its `Given the user has started a new pi session` removed failed: `pi offers no workflow commands` saw `[['/demo:hello', 'Says hello.']]`.
-- All passed after the revert.
+- In "Installing a plugin refuses a nondeterministic script and one that does not parse, ..." (`refusals.feature:40`), I changed the expected `clock.js` line from `was refused` to `was skipped`. The scenario failed in `Then the workflow install diagnostic reports these lines:` (`refusals.steps.ts:67`) with an `AssertionError`.
+- In "Without the engine, a new session offers no workflow command" (`companion-missing.feature:61`), I changed `"hello"` to `"claude"`. The scenario failed in `Then pi offers no slash command for the workflow "claude"` (`listing.steps.ts:114`): it found `['extension', '/claude:plugin', '<repo>/extensions/pi-claude-marketplace/index.ts']` where it expected `[]`.
+- After the revert, both feature files passed 15 of 15 scenarios (seed 997313), and `check:features` passed.
 
-### WR-04: The table note "the bridge never checks `description`" contradicts the pinned install note
+### IN-05: The run `Then` steps still mark the turn compared on their own
 
-**Files modified:** `docs/workflows-compatibility.md`
-**Commit:** 1505f71
-**Applied fix:** The Notes cell now reads "the bridge does not require `description` and warns under `meta-fields-invalid`; the engine refuses at check 9". mdformat realigned the table, which is why the commit touches 11 lines.
+**Files modified:** `features/step_definitions/workflow/runs.steps.ts`
+**Commit:** baf0cbd
+**Applied fix:** I removed `this.markTurnCompared()` from `the workflow run ends with the status {string} and the result {string}` and from `... and the error {string}`, and added a comment that says only `the workflow engine shows these notices:` marks a run turn compared. Both steps still read the world through `runOutcome(this)`, so they stay `function` expressions. The cucumber rules allow this: `steps.md` lists the side effects a `Then` may have, and the change removes one. Every run scenario (the three in `run.feature`, including the Outline, the recovery scenario in `companion-missing.feature`, and two in `lifecycle.feature`) already ends with the notices step, and every `which starts no run` scenario uses the notices step alone, so no scenario needed a change.
 
-### WR-05: The refusal precondition accepts the wrong disposition
+**Red proof:**
 
-**Files modified:** `features/step_definitions/workflow/refusals.steps.ts`, `features/workflow/refusals.feature`
-**Commit:** ab1a516
-**Applied fix:** The step `the user has run {string}, which reported notes on workflow scripts of the plugin` is now `the user has run {string}, which reported these notes on workflow scripts:` with a `| script | disposition |` table. The step parses each diagnostic line with `^workflow script "([^"]+)" in "workflows" (was refused|was not installed|was installed but the engine will refuse to load it): `. It compares the whole set of rows (file names, dispositions, and count) in the `Given`, with the info cascade and the warning diagnostic as before. A line that is no workflow note keeps its text in the script cell and fails. The Outline states `| <file> | was installed but the engine will refuse to load it |`. The listing scenario states all seven scripts.
-**Red proof:** In the listing scenario I changed `clock.js` to `was not installed`. The scenario failed in the `Given` (`'was refused'` against `'was not installed'`). After the revert it passed.
-
-### WR-06: The joined `lines` cell cannot tell where one note ends and the next begins
-
-**Files modified:** `features/step_definitions/workflow/refusals.steps.ts`, `features/workflow/refusals.feature`
-**Commit:** c8a9bfa
-**Applied fix:** I added `Then the diagnostic reports these lines:`. It requires exactly one diagnostic among the command's results and compares its lines, one row per line, to a `| line |` table. The three install scenarios now state it after the results table. The joined `lines` column of `the command reports these results:` stays, because that frozen step appends any column a table leaves out (`features/lib/field-rows.ts`), so the column cannot be dropped without editing a frozen file.
-**Red proof:** I merged the `broken.js` and `clock.js` rows into one row joined with `, `, which is what a bridge that merged two notes would print. The joined cell cannot see that merge, but the new step failed. After the revert it passed.
-
-### WR-07: Two feature descriptions break the two-to-three-line rule
-
-**Files modified:** `features/workflow/refusals.feature`, `features/workflow/lifecycle.feature`
-**Commit:** 7e0f3c9
-**Applied fix:** I reflowed both descriptions to three lines. Each names its stand-ins in one clause ("A scripted model and a local marketplace stand in for real ones."), as `run.feature` does. This change has no behavior and no red proof. `check:features` passes.
+- Before the change, I deleted the notices step and its table from the first scenario of `run.feature` (line 7). The scenario passed (11 of 11 steps). That shows the gap the finding describes.
+- After the change, the same edited scenario failed with `AssertionError: no step compared the last model turn`.
+- After I restored `run.feature`, the whole workflow suite passed: 37 scenarios and 457 steps (seed 61268).
 
 ## Parent lines
 
-None. No fix needed a frozen file. One note for the parent: a cleaner WR-06 fix would make the shared results projection (`features/lib/field-rows.ts`, frozen) render a diagnostic's `lines` without the ambiguous `, ` join. Then the per-line step could replace the joined column instead of sitting beside it.
+None. No fix needed a frozen file. The parent lines of the review (IN-02, IN-06, IN-08) are unchanged and remain open for the parent.
 
 ## Not in scope (Info, not attempted)
 
-IN-01 (release comment and order in `companion-missing.steps.ts`), IN-02 (`DIALOG_METHODS` defined three times; two of the copies live in frozen files), IN-03 (doc note that quoted engine messages show U+2014 as `--`), and IN-04 (`description ?? ""` projection).
+IN-01 (release comment and order in `companion-missing.steps.ts`), IN-02 (`DIALOG_METHODS` defined three times; parent line), IN-03 (doc note that quoted engine messages show U+2014 as `--`), IN-04 (`description ?? ""` projection), IN-06 (`{run id}` and `{session id}` tokens; parent line), IN-07 (the `export var` and empty-`description` variants are not driven), and IN-08 (the joined results column; parent line).
 
 ______________________________________________________________________
 
-_Fixed: 2026-11-01T16:30:00Z_
+_Fixed: 2026-11-01T19:30:00Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_
