@@ -281,17 +281,17 @@ Plans:
 - Wave 3: decision IDs, the Pi report, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/skill/**`, `features/step_definitions/skill/**`, `features/lib/skill-files.ts`, `bridges/skills/**`, `edge/skill-aliases.ts`, `test/bridges/skills/**`, `test/integration/skills-*`.
 
-**Plans:** 1/7 plans executed in 4 waves (the template's wave 1 also stores the upstream names the alias loader reads, so the staged bytes change once; the alias plan moves to wave 3 because it builds on the invocation plan's input handler; the phase gate is wave 4)
+**Plans:** 5/7 plans executed in 4 waves (the template's wave 1 also stores the upstream names the alias loader reads, so the staged bytes change once; the alias plan moves to wave 3 because it builds on the invocation plan's input handler; the phase gate is wave 4)
 
 Plans:
 **Wave 1**
 - [x] 02-01-PLAN.md — Wave 1 tracer: listing with Claude Code's description fallback, the shared skill steps, and the stored upstream names record (SKL-01; D-CF2-07, D-CF2-02 install half)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 02-02-PLAN.md — Wave 2: frontmatter fields, the dropped-fields warning and the pass-through pins (SKL-02; D-CF2-08, D-CF2-09, D-CF2-01)
-- [ ] 02-03-PLAN.md — Wave 2: skill invocation with argument substitution and context injection, interactive and RPC (SKL-03; D-CF2-06, D-CF2-05)
-- [ ] 02-04-PLAN.md — Wave 2: name clashes, a command shadows its plugin's skill and `skills/` wins (SKL-04; D-CF2-03, D-CF2-04)
-- [ ] 02-05-PLAN.md — Wave 2: disable, uninstall, update, and enable in a new session (SKL-06; D-CF2-11)
+- [x] 02-02-PLAN.md — Wave 2: frontmatter fields, the dropped-fields warning and the pass-through pins (SKL-02; D-CF2-08, D-CF2-09, D-CF2-01)
+- [x] 02-03-PLAN.md — Wave 2: skill invocation with argument substitution and context injection, interactive and RPC (SKL-03; D-CF2-06, D-CF2-05)
+- [x] 02-04-PLAN.md — Wave 2: name clashes, a command shadows its plugin's skill and `skills/` wins (SKL-04; D-CF2-03, D-CF2-04)
+- [x] 02-05-PLAN.md — Wave 2: disable, uninstall, update, and enable in a new session (SKL-06; D-CF2-11)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 02-06-PLAN.md — Wave 3: Claude Code's alias names over RPC and the TUI driver (SKL-05; D-CF2-02, D-CF2-05, D-CF2-12)
@@ -424,7 +424,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Harness and Version Raise | 15/15 | Complete    | 2026-11-01 |
-| 2. Skills | 1/7 | In Progress | - |
+| 2. Skills | 5/7 | In Progress | - |
 | 3. Slash Commands | 0/TBD | Not started | - |
 | 4. Agents | 0/TBD | Not started | - |
 | 5. Hooks | 0/TBD | Not started | - |
