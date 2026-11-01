@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
+import { NODE_PROJECT_SKILL_LEDGER } from "../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
 import { loadQualifiedSkillAliases } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
   SkillAliasDependencies,
@@ -80,11 +82,39 @@ function stateWith(plugins: Readonly<Record<string, readonly string[]>>): SkillA
   };
 }
 
-/** Dependencies over in-memory states per scope root and in-memory files. */
+const LEDGER = "/agent/pi-claude-marketplace/project-installs.json";
+
+function sha256(content: string): string {
+  return createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+/** D-CF2-13: a user ledger that lists `skills` (name to staged bytes) for the project `project`. */
+function ledgerText(project: string, skills: Readonly<Record<string, string>>): string {
+  const listed = Object.entries(skills).map(
+    ([name, content]) => [name, { plugin: "demo", sha256: sha256(content) }] as const,
+  );
+  return JSON.stringify({ version: 1, projects: { [project]: Object.fromEntries(listed) } });
+}
+
+/** A ledger that lists every project skill among `files` with the digest of its bytes. */
+function provingLedger(files: Readonly<Record<string, string>>): string {
+  const projectSkills = Object.entries(files)
+    .filter(([file]) => file.startsWith(`${PROJECT_ROOT}/`))
+    .map(([file, content]) => [path.basename(path.dirname(file)), content] as const);
+  return ledgerText(CWD, Object.fromEntries(projectSkills));
+}
+
+/**
+ * Dependencies over in-memory states per scope root, in-memory files, and the
+ * user ledger `ledger` (by default one that lists each project skill among
+ * `files`, and none for `null`).
+ */
 function dependencies(
   states: Readonly<Record<string, SkillAliasState>>,
-  files: Readonly<Record<string, string>>,
+  readable: Readonly<Record<string, string>>,
+  ledger: string | null = provingLedger(readable),
 ): SkillAliasDependencies {
+  const files = ledger === null ? readable : { ...readable, [LEDGER]: ledger };
   return {
     getAgentDir: () => AGENT_DIR,
     loadState: (extensionRoot) => {
@@ -489,17 +519,22 @@ for (const { claimants, reservedNames, expectedAliases } of [
 
 test("D-CF2-02: reads the staged skill file from disk with the production reader", async (t) => {
   // arrange
-  const cwd = await mkdtemp(path.join(tmpdir(), "skill-alias-state-"));
-  t.after(() => rm(cwd, { recursive: true, force: true, maxRetries: 3 }));
+  const { agentDir, cwd } = await createHermeticEnvironment(t, "skill-alias-state-");
   const projectRoot = path.join(cwd, ".pi");
   const file = stagedPath(projectRoot, "demo-review");
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, recordedSkill("demo-review", ["demo:review", "fancy"]), "utf8");
+  const content = recordedSkill("demo-review", ["demo:review", "fancy"]);
+  await writeFile(file, content, "utf8");
+  await NODE_PROJECT_SKILL_LEDGER.update({
+    projectPath: cwd,
+    forget: [],
+    remember: new Map([["demo-review", { plugin: "demo", sha256: sha256(content) }]]),
+  });
   const pi = piWith([skillCommand("demo-review", file)]);
 
   // act
   const aliases = await loadQualifiedSkillAliases(pi, cwd, true, {
-    getAgentDir: () => AGENT_DIR,
+    getAgentDir: () => agentDir,
     loadState: (extensionRoot) =>
       extensionRoot === path.join(projectRoot, "pi-claude-marketplace")
         ? Promise.resolve(stateWith({ demo: ["demo-review"] }))
@@ -516,3 +551,48 @@ test("D-CF2-02: reads the staged skill file from disk with the production reader
   );
   verify(pi);
 });
+
+for (const { title, ledger } of [
+  { title: "lists no project", ledger: () => null },
+  {
+    title: "lists another digest for the skill",
+    ledger: () => ledgerText(CWD, { "demo-review": recordedSkill("demo-review", ["demo:other"]) }),
+  },
+  {
+    title: "lists the skill for another project",
+    ledger: () =>
+      ledgerText("/elsewhere", { "demo-review": recordedSkill("demo-review", ["fancy"]) }),
+  },
+]) {
+  test(`D-CF2-13: a project skill claims no name when the user ledger ${title}, and a user skill still does`, async () => {
+    // arrange
+    const projectFile = stagedPath(PROJECT_ROOT, "demo-review");
+    const userFile = stagedPath(AGENT_DIR, "tools-lint");
+    const pi = piWith([
+      skillCommand("tools-lint", userFile),
+      skillCommand("demo-review", projectFile),
+    ]);
+
+    // act
+    const aliases = await loadQualifiedSkillAliases(
+      pi,
+      CWD,
+      true,
+      dependencies(
+        {
+          [AGENT_DIR]: stateWith({ tools: ["tools-lint"] }),
+          [PROJECT_ROOT]: stateWith({ demo: ["demo-review"] }),
+        },
+        {
+          [userFile]: recordedSkill("tools-lint", ["tools:lint"]),
+          [projectFile]: recordedSkill("demo-review", ["demo:review", "fancy"]),
+        },
+        ledger(),
+      ),
+    );
+
+    // assert
+    assert.deepStrictEqual([...aliases], [["tools:lint", "tools-lint"]]);
+    verify(pi);
+  });
+}

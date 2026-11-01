@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
+import { NODE_PROJECT_SKILL_LEDGER } from "../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
 import { invokeBridgedSkill } from "../../extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts";
 import { parseFrontmatter } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
   SkillInvocationDependencies,
@@ -28,6 +30,16 @@ const USER_SKILL_DIR = "/agent/pi-claude-marketplace/resources/skills/demo-greet
 const USER_SKILL = `${USER_SKILL_DIR}/SKILL.md`;
 const RECORD =
   'pi-claude-marketplace: {"names":["demo:greet"],"pluginRoot":"/plugins/demo","pluginData":"/data/demo"}';
+
+/** A staged skill whose body runs a command that a forged copy would run. */
+const STATUS_SKILL = [
+  "---",
+  "name: demo-greet",
+  "description: Greets.",
+  "---",
+  "",
+  "Status: !`printf ran`",
+].join("\n");
 
 const host = {
   platform: "linux",
@@ -58,12 +70,42 @@ function skillFile(body: string, frontmatter: readonly string[] = []): string {
   );
 }
 
-/** Reads only the named file; any other read fails the case. */
-function dependencies(files: Readonly<Record<string, string>>): SkillInvocationDependencies {
+const LEDGER = "/agent/pi-claude-marketplace/project-installs.json";
+
+function sha256(content: string): string {
+  return createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+/** D-CF2-13: a user ledger that lists `skills` (name to staged bytes) for the project `project`. */
+function ledgerText(project: string, skills: Readonly<Record<string, string>>): string {
+  const listed = Object.entries(skills).map(
+    ([name, content]) => [name, { plugin: "demo", sha256: sha256(content) }] as const,
+  );
+  return JSON.stringify({ version: 1, projects: { [project]: Object.fromEntries(listed) } });
+}
+
+/** A ledger that lists every project skill among `files` with the digest of its bytes. */
+function provingLedger(files: Readonly<Record<string, string>>): string {
+  const projectSkills = Object.entries(files)
+    .filter(([file]) => file.startsWith(`${CWD}/.pi/`))
+    .map(([file, content]) => [path.basename(path.dirname(file)), content] as const);
+  return ledgerText(CWD, Object.fromEntries(projectSkills));
+}
+
+/**
+ * Reads only the named files and the user ledger, `ledger` (by default one
+ * that lists each project skill among `files`, and none for `null`); any
+ * other read fails the case.
+ */
+function dependencies(
+  files: Readonly<Record<string, string>>,
+  ledger: string | null = provingLedger(files),
+): SkillInvocationDependencies {
+  const readable = ledger === null ? files : { ...files, [LEDGER]: ledger };
   return {
     getAgentDir: () => AGENT_DIR,
     readFile: (file) => {
-      const content = files[file];
+      const content = readable[file];
       return content === undefined
         ? Promise.reject(new Error(`unexpected read of ${file}`))
         : Promise.resolve(content);
@@ -371,8 +413,7 @@ test("aborts with a /reload hint when the staged skill frontmatter does not pars
 
 test("D-CF2-06: reads the staged skill file from disk with the production dependencies", async (t) => {
   // arrange
-  const cwd = await mkdtemp(path.join(tmpdir(), "skill-invocation-"));
-  t.after(() => rm(cwd, { recursive: true, force: true, maxRetries: 3 }));
+  const { cwd } = await createHermeticEnvironment(t, "skill-invocation-");
   const skillDir = path.join(
     cwd,
     ".pi",
@@ -384,6 +425,11 @@ test("D-CF2-06: reads the staged skill file from disk with the production depend
   const file = path.join(skillDir, "SKILL.md");
   await mkdir(skillDir, { recursive: true });
   await writeFile(file, skillFile("Greet $0."), "utf8");
+  await NODE_PROJECT_SKILL_LEDGER.update({
+    projectPath: cwd,
+    forget: [],
+    remember: new Map([["demo-greet", { plugin: "demo", sha256: sha256(skillFile("Greet $0.")) }]]),
+  });
 
   // act
   const outcome = await invokeBridgedSkill(
@@ -534,4 +580,52 @@ test("lets a failure other than the cores' own propagate", async () => {
       return true;
     },
   );
+});
+
+for (const { title, ledger } of [
+  { title: "lists no project", ledger: () => null },
+  {
+    title: "lists the skill for another project",
+    ledger: () => ledgerText("/elsewhere", { "demo-greet": STATUS_SKILL }),
+  },
+  {
+    title: "lists another digest for the skill",
+    ledger: () => ledgerText(CWD, { "demo-greet": skillFile("Greet.") }),
+  },
+  {
+    title: "lists only another skill of the project",
+    ledger: () => ledgerText(CWD, { "demo-other": STATUS_SKILL }),
+  },
+]) {
+  test(`D-CF2-13: aborts a project skill without running a command when the user ledger ${title}`, async () => {
+    // arrange
+    const files = { [PROJECT_SKILL]: STATUS_SKILL };
+
+    // act
+    const outcome = await invokeBridgedSkill(request({ args: "" }), dependencies(files, ledger()));
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "abort",
+      message:
+        "The skill /skill:demo-greet was not installed into the project /work on this machine, " +
+        "or its file changed after the install. Install its plugin into this project with " +
+        "--scope project, then run /reload to use it.",
+    });
+  });
+}
+
+test("D-CF2-13: frames a user skill without reading the user ledger", async () => {
+  // arrange
+  const files = { [USER_SKILL]: skillFile("Greet $ARGUMENTS.") };
+  const commands = [skillCommand("skill:demo-greet", USER_SKILL)];
+
+  // act
+  const outcome = await invokeBridgedSkill(request({ commands }), dependencies(files, null));
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "ok",
+    text: block(USER_SKILL, USER_SKILL_DIR, "Greet Ada."),
+  });
 });

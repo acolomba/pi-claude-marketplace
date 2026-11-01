@@ -21,6 +21,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { provenProjectSkills, skillFileDigest } from "../bridges/skills/project-installs.ts";
 import { readSkillRecord } from "../bridges/skills/skill-names.ts";
 import {
   claudeEffort,
@@ -206,6 +207,34 @@ function untrustedProjectMessage(request: SkillInvocationRequest): string {
   return `The skill ${request.typed} belongs to the project ${request.cwd}, which Pi does not trust. Trust the project folder, then run /reload to use it.`;
 }
 
+/**
+ * The abort message for a project skill that this user did not install into
+ * the project, or whose file changed after the install (D-CF2-13).
+ */
+function notInstalledHereMessage(request: SkillInvocationRequest): string {
+  return `The skill ${request.typed} was not installed into the project ${request.cwd} on this machine, or its file changed after the install. Install its plugin into this project with --scope project, then run /reload to use it.`;
+}
+
+/**
+ * D-CF2-13: whether the user's project ledger lists the project skill with
+ * the digest of `content`, the file as it is now. A user skill needs no
+ * ledger: no repository can write the user scope.
+ */
+async function isInstalledHere(
+  request: SkillInvocationRequest,
+  skill: BridgedSkill,
+  content: string,
+  agentDir: string,
+  dependencies: SkillInvocationDependencies,
+): Promise<boolean> {
+  if (!skill.projectScope) {
+    return true;
+  }
+
+  const proven = await provenProjectSkills(agentDir, request.cwd, dependencies.readFile);
+  return proven.get(skill.name) === skillFileDigest(content);
+}
+
 /** The abort message for a staged skill file that cannot be read or parsed. */
 function unreadableSkillMessage(typed: string, error: unknown): string {
   return `Cannot read the skill ${typed}: ${errorMessage(error)}. Run /reload to load the installed skills again.`;
@@ -215,14 +244,16 @@ function unreadableSkillMessage(typed: string, error: unknown): string {
  * D-CF2-06: builds what the model receives for a typed bridged skill, reports
  * that the skill is not one this extension staged, or aborts with Claude
  * Code's message (T-01-24). A project skill in a project Pi does not trust,
- * and a staged file that cannot be read or parsed, abort too. A failure other
+ * a project skill this user did not install into the project (D-CF2-13), and
+ * a staged file that cannot be read or parsed, abort too. A failure other
  * than these propagates.
  */
 export async function invokeBridgedSkill(
   request: SkillInvocationRequest,
   dependencies: SkillInvocationDependencies = DEFAULT_DEPENDENCIES,
 ): Promise<SkillInvocationOutcome> {
-  const skill = findBridgedSkill(request, dependencies.getAgentDir());
+  const agentDir = dependencies.getAgentDir();
+  const skill = findBridgedSkill(request, agentDir);
   if (skill === undefined) {
     return { kind: "not-bridged" };
   }
@@ -238,11 +269,21 @@ export async function invokeBridgedSkill(
   // A file that changed after Pi loaded it, such as one an uninstall,
   // disable, or update removed before `/reload`, aborts the invocation: Pi's
   // own expansion would send the body with its `!` commands not run.
+  let content: string;
   let parsed: ParsedSkill;
   try {
-    parsed = parseFrontmatter(await dependencies.readFile(skill.location));
+    content = await dependencies.readFile(skill.location);
+    parsed = parseFrontmatter(content);
   } catch (error) {
     return { kind: "abort", message: unreadableSkillMessage(request.typed, error) };
+  }
+
+  // D-CF2-13: Pi trusts a project that holds only this extension's tree, so
+  // trust alone cannot tell a cloned repository's staged skill from one this
+  // user installed. The ledger in the user scope can, and the digest is of
+  // the very bytes that run below.
+  if (!(await isInstalledHere(request, skill, content, agentDir, dependencies))) {
+    return { kind: "abort", message: notInstalledHereMessage(request) };
   }
 
   try {

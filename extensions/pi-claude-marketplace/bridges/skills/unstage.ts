@@ -7,9 +7,11 @@
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
+import type { ProjectSkillLedger } from "./project-installs.ts";
 import type { UnstageSkillsInput, UnstageSkillsResult } from "./types.ts";
 
 /** Removes one validated, contained skill tree. */
@@ -32,8 +34,35 @@ export interface SkillsUnstageRemover {
  * success signal, not a guaranteed record of every directory actually
  * removed.
  */
+/**
+ * D-CF2-13: drops the unstaged names of a project-scope unstage from the
+ * user's project ledger. A stale entry only names a file this user once
+ * installed, so a ledger that cannot be written becomes a warning and never
+ * blocks the removal.
+ */
+async function forgetProjectSkills(
+  ledger: ProjectSkillLedger,
+  input: UnstageSkillsInput,
+): Promise<readonly string[]> {
+  if (input.locations.scope !== "project" || input.previousSkillNames.length === 0) {
+    return [];
+  }
+
+  try {
+    await ledger.update({
+      projectPath: path.dirname(input.locations.scopeRoot),
+      forget: input.previousSkillNames,
+      remember: new Map(),
+    });
+    return [];
+  } catch (err) {
+    return [`could not update the project skill ledger: ${errorMessage(err)}`];
+  }
+}
+
 export function createUnstagePluginSkills(
   remover: SkillsUnstageRemover,
+  ledger: ProjectSkillLedger,
 ): (input: UnstageSkillsInput) => Promise<UnstageSkillsResult> {
   return async function unstagePluginSkills(
     input: UnstageSkillsInput,
@@ -69,7 +98,7 @@ export function createUnstagePluginSkills(
 
     return {
       removedNames: Object.freeze(removed),
-      warnings: Object.freeze([]),
+      warnings: Object.freeze([...(await forgetProjectSkills(ledger, input))]),
     };
   };
 }

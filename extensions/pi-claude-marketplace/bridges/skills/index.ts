@@ -10,6 +10,7 @@
 
 import { rm } from "node:fs/promises";
 
+import { NODE_PROJECT_SKILL_LEDGER } from "./project-installs.ts";
 import { createUnstagePluginSkills } from "./unstage.ts";
 
 import type { SkillsUnstageRemover } from "./unstage.ts";
@@ -26,4 +27,7 @@ const NODE_SKILLS_UNSTAGE_REMOVER: SkillsUnstageRemover = {
 };
 
 /** Removes recorded skill trees through the Node filesystem adapter. */
-export const unstagePluginSkills = createUnstagePluginSkills(NODE_SKILLS_UNSTAGE_REMOVER);
+export const unstagePluginSkills = createUnstagePluginSkills(
+  NODE_SKILLS_UNSTAGE_REMOVER,
+  NODE_PROJECT_SKILL_LEDGER,
+);

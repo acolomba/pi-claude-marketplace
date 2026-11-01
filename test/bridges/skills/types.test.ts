@@ -68,6 +68,7 @@ const preparedSkillsStaged: PreparedSkillsStaged = {
   stagingRoot: "/scope/pi-claude-marketplace/skills-staging/acme",
   result: stageSkillsCommitResult,
   _previousNames: ["acme-obsolete"],
+  _pluginName: "acme",
   _renamePairs: [
     {
       from: "/scope/pi-claude-marketplace/skills-staging/acme/acme-deploy",

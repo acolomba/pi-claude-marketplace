@@ -13,6 +13,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { provenProjectSkills, skillFileDigest } from "../bridges/skills/project-installs.ts";
 import { readSkillRecord } from "../bridges/skills/skill-names.ts";
 import { generatedSkillName } from "../domain/name.ts";
 import { loadState } from "../persistence/state-io.ts";
@@ -50,6 +51,11 @@ interface LoadedSkill {
   readonly pluginName: string;
   readonly generatedName: string;
   readonly skillPath: string;
+  /**
+   * D-CF2-13: for a project skill, the digests the user's project ledger
+   * lists for the project; `undefined` for a user skill.
+   */
+  readonly proven: ReadonlyMap<string, string> | undefined;
 }
 
 /** Removes the plugin prefix from a generated Pi skill name. */
@@ -92,15 +98,28 @@ function installedForms(pluginName: string, names: readonly string[]): readonly 
   return names.filter((name) => name.startsWith(prefix) || name === bare);
 }
 
-/** The names stored in the staged `SKILL.md` of `skill`; none when it cannot be read. */
+/**
+ * The names stored in the staged `SKILL.md` of `skill`; none when it cannot
+ * be read, and none for a project skill that the user's project ledger does
+ * not list with the digest of the file as it is now (D-CF2-13).
+ */
 async function skillNames(
   skill: LoadedSkill,
   read: SkillAliasDependencies["readFile"],
 ): Promise<readonly string[]> {
+  let content: string;
   let frontmatter: Record<string, unknown>;
   try {
-    frontmatter = parseFrontmatter(await read(skill.skillPath)).frontmatter;
+    content = await read(skill.skillPath);
+    frontmatter = parseFrontmatter(content).frontmatter;
   } catch {
+    return [];
+  }
+
+  if (
+    skill.proven !== undefined &&
+    skill.proven.get(skill.generatedName) !== skillFileDigest(content)
+  ) {
     return [];
   }
 
@@ -115,6 +134,7 @@ function loadedSkills(
   state: SkillAliasState,
   root: string,
   loadedPaths: ReadonlySet<string>,
+  proven: ReadonlyMap<string, string> | undefined,
 ): readonly LoadedSkill[] {
   const skillsDir = path.resolve(root, "pi-claude-marketplace", "resources", "skills");
   return Object.values(state.marketplaces)
@@ -124,6 +144,7 @@ function loadedSkills(
         pluginName,
         generatedName,
         skillPath: path.join(skillsDir, generatedName, "SKILL.md"),
+        proven,
       })),
     )
     .filter((skill) => loadedPaths.has(skill.skillPath));
@@ -134,7 +155,9 @@ function loadedSkills(
  * generated name. The first claim wins, and a name that `reserved` holds is
  * never mapped (SK-6). T-02-17: the project root is read only when Pi trusts
  * the project (`projectTrusted`), as Claude Code loads no project-scope
- * plugin before the workspace is trusted.
+ * plugin before the workspace is trusted. D-CF2-13: a project skill claims
+ * names only when the user's project ledger lists it, because the project's
+ * own `state.json` sits in the repository.
  */
 export async function loadQualifiedSkillAliases(
   pi: ExtensionAPI,
@@ -153,8 +176,12 @@ export async function loadQualifiedSkillAliases(
       .map((command) => path.resolve(command.sourceInfo.path)),
   );
   const skills: LoadedSkill[] = [];
-  const roots = [resolved.getAgentDir(), ...(projectTrusted ? [path.join(cwd, ".pi")] : [])];
-  for (const root of roots) {
+  const agentDir = resolved.getAgentDir();
+  const roots = [
+    { root: agentDir, project: false },
+    ...(projectTrusted ? [{ root: path.join(cwd, ".pi"), project: true }] : []),
+  ];
+  for (const { root, project } of roots) {
     let state: SkillAliasState;
     try {
       // eslint-disable-next-line no-await-in-loop -- two scope roots, one state read each
@@ -163,7 +190,11 @@ export async function loadQualifiedSkillAliases(
       continue;
     }
 
-    skills.push(...loadedSkills(state, root, loadedPaths));
+    const proven = project
+      ? // eslint-disable-next-line no-await-in-loop -- the project root alone reads the ledger
+        await provenProjectSkills(agentDir, cwd, resolved.readFile)
+      : undefined;
+    skills.push(...loadedSkills(state, root, loadedPaths, proven));
   }
 
   const claims = await Promise.all(

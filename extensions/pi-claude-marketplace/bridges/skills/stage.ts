@@ -39,6 +39,7 @@ import {
   synthesizeUnparseableSkill,
   truncate1536,
 } from "./frontmatter-degrade.ts";
+import { NODE_PROJECT_SKILL_LEDGER, skillFileDigest } from "./project-installs.ts";
 import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 import {
   commandUpstreamNames,
@@ -48,9 +49,11 @@ import {
   writeSkillRecord,
 } from "./skill-names.ts";
 
+import type { ProjectSkillLedger } from "./project-installs.ts";
 import type { SkillNameClaims } from "./skill-names.ts";
 import type {
   DiscoveredSkill,
+  PreparedSkillsStaged,
   PreparedSkillsStaging,
   SkillDegradeRecord,
   StagedSkillRecord,
@@ -506,8 +509,37 @@ export async function prepareStageSkills(
       degraded: Object.freeze(degraded),
     },
     _previousNames: Object.freeze(previousNames),
+    _pluginName: pluginName,
     _renamePairs: Object.freeze(renamePairs),
   };
+}
+
+/**
+ * D-CF2-13: lists the committed skills of a project-scope stage in the user's
+ * project ledger, with the digest of each `SKILL.md` as it now sits at its
+ * target, and drops the previous names this stage replaced. A user-scope
+ * stage needs no ledger: no repository can write the user scope.
+ */
+async function recordProjectSkills(
+  ledger: ProjectSkillLedger,
+  prepared: PreparedSkillsStaged,
+): Promise<void> {
+  if (prepared.locations.scope !== "project") {
+    return;
+  }
+
+  const digests = await Promise.all(
+    prepared.result.recorded.map(async (skill) => {
+      const content = await readFile(path.join(skill.targetPath, "SKILL.md"), "utf8");
+      const entry = { plugin: prepared._pluginName, sha256: skillFileDigest(content) };
+      return [skill.generatedName, entry] as const;
+    }),
+  );
+  await ledger.update({
+    projectPath: path.dirname(prepared.locations.scopeRoot),
+    forget: prepared._previousNames,
+    remember: new Map(digests),
+  });
 }
 
 /**
@@ -515,7 +547,10 @@ export async function prepareStageSkills(
  *   1. Remove every previous-named target dir (re-stage path; ENOENT-tolerant).
  *   2. mkdir target root recursively.
  *   3. Per-skill `rename(from, to)` -- atomic on same FS (D-04).
- *   4. Best-effort cleanup of the now-empty staging UUID dir; any leak
+ *   4. D-CF2-13: at project scope, list the committed skills in the user's
+ *      project ledger. A failed ledger write throws, so the caller's undo
+ *      removes skills that could never run.
+ *   5. Best-effort cleanup of the now-empty staging UUID dir; any leak
  *      message is RETURNED (not thrown) so the caller can fold it into a
  *      higher-level rollback marker without breaking the success path.
  *
@@ -524,6 +559,7 @@ export async function prepareStageSkills(
 export async function commitPreparedSkills(
   ops: RemovalOps,
   prepared: PreparedSkillsStaging,
+  ledger: ProjectSkillLedger = NODE_PROJECT_SKILL_LEDGER,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
     return undefined;
@@ -577,7 +613,9 @@ export async function commitPreparedSkills(
     await rename(pair.from, pair.to);
   }
 
-  // Step 4: best-effort cleanup of the staging UUID dir.
+  await recordProjectSkills(ledger, prepared);
+
+  // Step 5: best-effort cleanup of the staging UUID dir.
   return cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
 }
 

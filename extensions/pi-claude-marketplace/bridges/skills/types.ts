@@ -117,6 +117,8 @@ export interface PreparedSkillsStaged {
   readonly result: StageSkillsCommitResult;
   /** Internal -- orchestrators MUST NOT read these. */
   readonly _previousNames: readonly string[];
+  /** Internal -- the plugin the D-CF2-13 project ledger lists the skills under. */
+  readonly _pluginName: string;
   /** Internal -- per-skill staging-to-target rename pairs for commit. */
   readonly _renamePairs: readonly { from: string; to: string }[];
 }

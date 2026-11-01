@@ -5256,7 +5256,13 @@ for (const allowed of [false, true]) {
         }
 
         assert.equal(await readFile(user.stateJsonPath, "utf8"), userStateBefore);
-        assert.deepEqual(await retryTree(user.scopeRoot), userTreeBefore);
+        // D-CF2-13: a project install lists its skills in the user's project ledger.
+        assert.deepEqual(
+          await retryTree(user.scopeRoot),
+          allowed
+            ? [...userTreeBefore, "pi-claude-marketplace/project-installs.json"].sort()
+            : userTreeBefore,
+        );
         assert.equal(notifications.length, 1);
         assert.equal(notifications[0]?.severity, allowed ? undefined : "error");
         assert.equal(

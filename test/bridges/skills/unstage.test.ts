@@ -18,12 +18,36 @@ import { createUnstagePluginSkills } from "../../../extensions/pi-claude-marketp
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
+import type {
+  ProjectSkillLedger,
+  ProjectSkillLedgerChange,
+} from "../../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
 import type { SkillsUnstageRemover } from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-const unstagePluginSkills = createUnstagePluginSkills({
-  removeTree: (target: string) => rm(target, { recursive: true, force: true }),
-});
+const NO_LEDGER: ProjectSkillLedger = { update: () => Promise.resolve() };
+
+const unstagePluginSkills = createUnstagePluginSkills(
+  { removeTree: (target: string) => rm(target, { recursive: true, force: true }) },
+  NO_LEDGER,
+);
+
+/** A ledger that records each change it receives. */
+function recordingLedger(): {
+  readonly ledger: ProjectSkillLedger;
+  readonly changes: ProjectSkillLedgerChange[];
+} {
+  const changes: ProjectSkillLedgerChange[] = [];
+  return {
+    ledger: {
+      update: (change) => {
+        changes.push(change);
+        return Promise.resolve();
+      },
+    },
+    changes,
+  };
+}
 
 interface SkillScope {
   readonly directory: string;
@@ -220,7 +244,7 @@ test("continues after the required remover reports ENOENT after deletion", async
       }
     },
   };
-  const unstageSkills = createUnstagePluginSkills(remover);
+  const unstageSkills = createUnstagePluginSkills(remover, NO_LEDGER);
 
   // act
   const unstagedSkills = await unstageSkills({
@@ -261,7 +285,7 @@ test("propagates the required remover failure after earlier effects", async (t) 
       await rm(target, { recursive: true, force: true });
     },
   };
-  const unstageSkills = createUnstagePluginSkills(remover);
+  const unstageSkills = createUnstagePluginSkills(remover, NO_LEDGER);
 
   // act
   const unstageError = await unstageSkills({
@@ -276,4 +300,71 @@ test("propagates the required remover failure after earlier effects", async (t) 
   assert.strictEqual(unstageError, removalError);
   assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["acme-blocked", "acme-later"]);
   assert.deepStrictEqual(removalTargets, [removedSkillDirectory, blockedSkillDirectory]);
+});
+
+test("D-CF2-13: forgets every requested project skill in the user's project ledger", async (t) => {
+  // arrange
+  const { directory, locations } = await createSkillScope(t, "skills-unstage-ledger-");
+  await mkdir(path.join(locations.skillsTargetDir, "acme-first"));
+  const { ledger, changes } = recordingLedger();
+  const unstageSkills = createUnstagePluginSkills(
+    { removeTree: (target: string) => rm(target, { recursive: true, force: true }) },
+    ledger,
+  );
+
+  // act
+  const unstagedSkills = await unstageSkills({
+    locations,
+    previousSkillNames: ["acme-first", "acme-missing"],
+  });
+
+  // assert
+  assert.deepStrictEqual(unstagedSkills, { removedNames: ["acme-first"], warnings: [] });
+  assert.deepStrictEqual(changes, [
+    { projectPath: directory, forget: ["acme-first", "acme-missing"], remember: new Map() },
+  ]);
+});
+
+test("D-CF2-13: leaves the project ledger alone for a user-scope unstage", async () => {
+  // arrange
+  const { ledger, changes } = recordingLedger();
+  const unstageSkills = createUnstagePluginSkills(
+    {
+      removeTree: () => Promise.reject(new Error("no user skill directory exists to remove")),
+    },
+    ledger,
+  );
+
+  // act
+  const unstagedSkills = await unstageSkills({
+    locations: locationsFor("user", "/unused"),
+    previousSkillNames: ["acme-never-staged-here"],
+  });
+
+  // assert
+  assert.deepStrictEqual(unstagedSkills, { removedNames: [], warnings: [] });
+  assert.deepStrictEqual(changes, []);
+});
+
+test("D-CF2-13: reports a ledger that cannot be written as a warning after removing the skills", async (t) => {
+  // arrange
+  const { locations } = await createSkillScope(t, "skills-unstage-ledger-failure-");
+  await mkdir(path.join(locations.skillsTargetDir, "acme-first"));
+  const unstageSkills = createUnstagePluginSkills(
+    { removeTree: (target: string) => rm(target, { recursive: true, force: true }) },
+    { update: () => Promise.reject(new Error("ledger is read-only")) },
+  );
+
+  // act
+  const unstagedSkills = await unstageSkills({
+    locations,
+    previousSkillNames: ["acme-first"],
+  });
+
+  // assert
+  assert.deepStrictEqual(unstagedSkills, {
+    removedNames: ["acme-first"],
+    warnings: ["could not update the project skill ledger: ledger is read-only"],
+  });
+  assert.deepStrictEqual(await readdir(locations.skillsTargetDir), []);
 });
