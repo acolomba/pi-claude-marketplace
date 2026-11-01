@@ -851,7 +851,7 @@ describe("composite dispatch reduction", () => {
       undefined,
       executor,
     );
-    const expectedOutput = { block: true, reason: "first denial" };
+    const expectedOutput = { block: true, reason: "PreToolUse:Bash hook error: first denial" };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "leading-noop", event: createToolCallEvent() },
       { pluginId: "first-block", event: createToolCallEvent() },
@@ -1840,7 +1840,7 @@ describe("toolResultCompositeHandler", () => {
 });
 
 describe("composite per-event adapters", () => {
-  test("adapts a PreToolUse block without a reason", async () => {
+  test("adapts a PreToolUse block without a reason to Claude Code's default hook error", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -1864,7 +1864,7 @@ describe("composite per-event adapters", () => {
       undefined,
       executor,
     );
-    const expectedOutput = { block: true };
+    const expectedOutput = { block: true, reason: "PreToolUse:Bash hook error: Blocked by hook" };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "pre-tool-block-empty", event: createToolCallEvent() },
     ];
@@ -1875,6 +1875,52 @@ describe("composite per-event adapters", () => {
     // assert
     assert.deepStrictEqual(output, expectedOutput);
     assert.deepStrictEqual(executorCalls, expectedCalls);
+  });
+
+  test("names the blocking hook's command before an exit-2 stderr reason (D-CF5-11)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/pre-tool-block-stderr");
+    const entries = [
+      createRoutingEntry({
+        pluginId: "quiet-observer",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+      createRoutingEntry({
+        pluginId: "stderr-guard",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 1,
+      }),
+    ];
+    const executorCalls: RecordedCall[] = [];
+    const executor = createRecordingExecutor(
+      {
+        "quiet-observer": { kind: "noop" },
+        "stderr-guard": { kind: "block", reason: "blocked by policy", fromStderr: true },
+      },
+      executorCalls,
+    );
+    runtime.setRoutingBucket("PreToolUse", entries);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), context);
+
+    // assert
+    assert.deepStrictEqual(output, {
+      block: true,
+      reason: "PreToolUse:Bash hook error: [printf stderr-guard]: blocked by policy",
+    });
   });
 
   test("adapts a UserPromptSubmit block to handled", async () => {

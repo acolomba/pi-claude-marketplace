@@ -53,6 +53,7 @@ import {
 import { ifFires } from "./if-field/index.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
 
+import type { HookAdapterContext } from "./event-adapters.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
@@ -357,7 +358,8 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       entryFires(claudeEvent, entry, event),
     );
 
-    return adaptForEvent(runtime, claudeEvent, reduced, event) as CompositeReturnFor<E>;
+    const context = { runtime, ctx, pi, attributedTo: reduced.attributedTo };
+    return adaptForEvent(claudeEvent, reduced, event, context) as CompositeReturnFor<E>;
   };
 }
 
@@ -410,14 +412,15 @@ export function toolResultCompositeHandler(
  * and always returns undefined.
  */
 function adaptForEvent(
-  runtime: HooksRuntime,
   claudeEvent: CompositeDispatchEvent,
   reduced: ReducedBucket,
   event: unknown,
+  context: HookAdapterContext,
 ): ToolCallEventResult | InputEventResult | undefined {
+  const { runtime } = context;
   switch (claudeEvent) {
     case "PreToolUse":
-      return adaptToolCallResult(reduced.result, event as ToolCallEvent);
+      return adaptToolCallResult(reduced.result, event as ToolCallEvent, context);
     case "UserPromptSubmit":
       return adaptInputResult(reduced.result, event as InputEvent);
     case "SessionStart":

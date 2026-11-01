@@ -5,6 +5,7 @@ void ({ kind: "noop", suppressOutput: true } satisfies HookExecResult);
 
 void ({ kind: "block" } satisfies HookExecResult);
 void ({ kind: "block", reason: "operation refused" } satisfies HookExecResult);
+void ({ kind: "block", reason: "blocked by policy", fromStderr: true } satisfies HookExecResult);
 
 void ({
   kind: "mutate",
@@ -28,5 +29,7 @@ void ({ kind: "continue" } satisfies HookExecResult);
 void ({ updatedInput: { command: "check" } } satisfies HookExecResult);
 // @ts-expect-error block results cannot carry fields from the noop arm
 void ({ kind: "block", suppressOutput: true } satisfies HookExecResult);
+// @ts-expect-error the stderr marker is present only on a stderr reason
+void ({ kind: "block", reason: "no echo", fromStderr: false } satisfies HookExecResult);
 // @ts-expect-error permission decisions use the closed allow, deny, and ask vocabulary
 void ({ kind: "mutate", permissionDecision: "prompt" } satisfies HookExecResult);

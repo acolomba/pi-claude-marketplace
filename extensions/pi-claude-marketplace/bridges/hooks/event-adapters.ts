@@ -49,10 +49,15 @@
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
+import { hookErrorText, hookEventLabel } from "./hook-labels.ts";
+
 import type { HookExecResult } from "./exec-result.ts";
+import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
+  ExtensionAPI,
+  ExtensionContext,
   InputEvent,
   InputEventResult,
   ToolCallEvent,
@@ -61,6 +66,24 @@ import type {
   ToolResultEventResult,
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * What an adapter knows besides the folded result: the hooks runtime, the
+ * Pi context and API of the event, and the routing entry the folded result
+ * is attributed to (`undefined` for a fold of noops). The block texts name
+ * the attributed entry's command (D-CF5-11).
+ */
+export interface HookAdapterContext {
+  readonly runtime: HooksRuntime;
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI | undefined;
+  readonly attributedTo: RoutingEntry | undefined;
+}
+
+// The declared command of the entry a folded result is attributed to.
+function attributedCommand(context: HookAdapterContext): string {
+  return context.attributedTo?.handlerDecl.command ?? "";
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Mutation helper (D-60-02 / D-60-03)
@@ -154,20 +177,29 @@ function applyToolResultPatch(event: ToolResultEvent, updatedToolOutput: unknown
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * D-60-03: convert a reducer-folded `HookExecResult` to the Pi `tool_call`
- * handler return shape (`ToolCallEventResult | undefined`).
+ * D-60-03: convert a folded `HookExecResult` to the Pi `tool_call` handler
+ * return shape (`ToolCallEventResult | undefined`).
  *
- * Note: exactOptionalPropertyTypes is on, so an explicit
- * `reason: undefined` cannot be passed for an optional `reason?: string`
- * slot. The `reason` field is included only when defined.
+ * A block reaches the model as Claude Code sends it (D-CF5-11):
+ * `PreToolUse:<Tool> hook error: <reason>`, with an exit-2 stderr reason
+ * after the attributed hook's bracketed command.
  */
 export function adaptToolCallResult(
   result: HookExecResult,
   event: ToolCallEvent,
+  context: HookAdapterContext,
 ): ToolCallEventResult | undefined {
   switch (result.kind) {
     case "block":
-      return result.reason === undefined ? { block: true } : { block: true, reason: result.reason };
+      return {
+        block: true,
+        reason: hookErrorText(
+          hookEventLabel("PreToolUse", event.toolName),
+          result.reason,
+          attributedCommand(context),
+          result.fromStderr === true,
+        ),
+      };
 
     case "mutate":
       applyMutationInPlace(event, result);

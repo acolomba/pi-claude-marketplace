@@ -5,7 +5,7 @@ import { parseHookStdout } from "../../../extensions/pi-claude-marketplace/bridg
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 
-test("blocks exit 2 with its trimmed stderr reason before reading stdout", () => {
+test("blocks exit 2 with its trimmed stderr reason, marked, when stdout names no block reason", () => {
   // arrange
   const exitCode = 2;
   const stdout = '{"continue":false,"stopReason":"ignored stop"}';
@@ -15,21 +15,114 @@ test("blocks exit 2 with its trimmed stderr reason before reading stdout", () =>
   const hookOutcome = parseHookStdout(exitCode, stdout, stderr);
 
   // assert
-  assert.deepEqual(hookOutcome, { kind: "block", reason: "denied by hook" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: "denied by hook",
+    fromStderr: true,
+  });
 });
 
-test("blocks exit 2 without a reason when stderr is blank", () => {
+test("blocks exit 2 with a marked stderr block and no reason when stderr is blank", () => {
   // arrange
   const exitCode = 2;
-  const stdout = '{"decision":"block","reason":"ignored stdout reason"}';
+  const stdout = "plain text";
   const stderr = " \n ";
 
   // act
   const hookOutcome = parseHookStdout(exitCode, stdout, stderr);
 
   // assert
-  assert.deepEqual(hookOutcome, { kind: "block" });
+  assert.deepStrictEqual(hookOutcome, { kind: "block", fromStderr: true });
 });
+
+for (const { name, stdout, reason } of [
+  {
+    name: "a block decision",
+    stdout: '{"decision":"block","reason":"json block reason"}',
+    reason: "json block reason",
+  },
+  {
+    name: "a deny decision",
+    stdout:
+      '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"json deny reason"}}',
+    reason: "json deny reason",
+  },
+]) {
+  test(`blocks exit 2 with the reason of ${name} over stderr, unmarked (D-CF5-11)`, () => {
+    // act
+    const hookOutcome = parseHookStdout(2, stdout, "stderr reason\n");
+
+    // assert
+    assert.deepStrictEqual(hookOutcome, { kind: "block", reason });
+  });
+}
+
+test("blocks exit 2 with stderr when the stdout block decision has no reason", () => {
+  // act
+  const hookOutcome = parseHookStdout(2, '{"decision":"block"}', "stderr reason\n");
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: "stderr reason",
+    fromStderr: true,
+  });
+});
+
+for (const { name, stdout, hookOutcome } of [
+  {
+    name: "a deny decision",
+    stdout:
+      '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"no echo"}}',
+    hookOutcome: { kind: "block", reason: "no echo" },
+  },
+  {
+    name: "a block decision",
+    stdout: '{"decision":"block","reason":"r"}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+]) {
+  test(`applies ${name} that a hook prints before it exits 1 (D-CF5-11)`, (t) => {
+    // arrange
+    const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
+    const hadDebug = Object.hasOwn(process.env, debugKey);
+    const previousDebug = process.env[debugKey];
+    process.env[debugKey] = "1";
+    t.after(() => {
+      if (hadDebug) {
+        process.env[debugKey] = previousDebug;
+      } else {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      }
+    });
+    const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
+
+    // act
+    const parsed = parseHookStdout(1, stdout, "ignored stderr");
+
+    // assert
+    assert.deepStrictEqual(parsed, hookOutcome);
+    assert.deepStrictEqual(
+      consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
+      [["[hooks] wire-protocol: non-zero exit (1); applying its JSON output"]],
+    );
+  });
+}
+
+for (const { name, stdout } of [
+  { name: "plain", stdout: "denied, sort of" },
+  { name: "invalid JSON", stdout: '{"decision":"block"' },
+  { name: "a JSON array", stdout: '["deny"]' },
+  { name: "JSON null", stdout: "null" },
+]) {
+  test(`defaults exit 1 with ${name} stdout to noop`, () => {
+    // act
+    const hookOutcome = parseHookStdout(1, stdout, "ignored stderr");
+
+    // assert
+    assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  });
+}
 
 test("defaults another nonzero exit to noop and reports its semantic diagnostic", (t) => {
   // arrange
@@ -46,7 +139,7 @@ test("defaults another nonzero exit to noop and reports its semantic diagnostic"
   });
   const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
   const exitCode = 7;
-  const stdout = '{"decision":"block","reason":"ignored block"}';
+  const stdout = "ignored plain stdout";
   const stderr = "ignored stderr";
   let hookOutcome: HookExecResult | undefined;
   let thrown: unknown;

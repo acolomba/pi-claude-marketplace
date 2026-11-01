@@ -8,14 +8,49 @@ import {
   adaptToolResultResult,
   applyMutationInPlace,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
+import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
+import type { HookAdapterContext } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type {
+  ExtensionContext,
   InputEvent,
   ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+// The declared command of the hook every block below is attributed to.
+const GUARD_COMMAND = "$" + "{CLAUDE_PLUGIN_ROOT}/hooks/guard.sh";
+
+function guardEntry(): RoutingEntry {
+  return {
+    scope: "project",
+    marketplace: "fixtures",
+    pluginId: "demo",
+    resolvedSource: asAbsolutePluginRoot("/plugins/demo"),
+    claudeEvent: "PreToolUse",
+    matcher: parseMatcher("Bash"),
+    rawMatcher: "Bash",
+    handlerDecl: { type: "command", command: GUARD_COMMAND },
+    declarationIndex: 0,
+    ifPredicate: MATCH_ALL_IF,
+  };
+}
+
+// The adapters read only the context's `mode`, so a print-mode context with
+// no other field stands in for Pi's.
+function adapterContext(attributedTo: RoutingEntry | undefined): HookAdapterContext {
+  return {
+    runtime: createHooksRuntime(),
+    ctx: { mode: "print" } as ExtensionContext,
+    pi: undefined,
+    attributedTo,
+  };
+}
 
 describe("applyMutationInPlace", () => {
   for (const { name, event } of [
@@ -88,7 +123,7 @@ describe("adaptToolCallResult", () => {
     } satisfies ToolCallEvent;
 
     // act
-    const adaptation = adaptToolCallResult({ kind: "noop" }, event);
+    const adaptation = adaptToolCallResult({ kind: "noop" }, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -101,48 +136,79 @@ describe("adaptToolCallResult", () => {
     assert.strictEqual(event.input, input);
   });
 
-  test("blocks with the exact supplied reason", () => {
-    // arrange
-    const event = {
-      type: "tool_call",
-      toolCallId: "call-block-reason",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
-    } satisfies ToolCallEvent;
+  for (const { name, hookOutcome, reason } of [
+    {
+      name: "a JSON reason as the hook error",
+      hookOutcome: { kind: "block", reason: "no echo" } as const,
+      reason: "PreToolUse:Bash hook error: no echo",
+    },
+    {
+      name: "an exit-2 stderr reason after the hook's bracketed command",
+      hookOutcome: { kind: "block", reason: "blocked by policy", fromStderr: true } as const,
+      reason: `PreToolUse:Bash hook error: [${GUARD_COMMAND}]: blocked by policy`,
+    },
+    {
+      name: "an onFailure reason without bracketing its command again",
+      hookOutcome: {
+        kind: "block",
+        reason: `[${GUARD_COMMAND}]: failed; blocking because onFailure is "block"\nboom`,
+      } as const,
+      reason: `PreToolUse:Bash hook error: [${GUARD_COMMAND}]: failed; blocking because onFailure is "block"\nboom`,
+    },
+    {
+      name: "Claude Code's default for a decision without a reason",
+      hookOutcome: { kind: "block" } as const,
+      reason: "PreToolUse:Bash hook error: Blocked by hook",
+    },
+    {
+      name: "Claude Code's default for an exit 2 without stderr",
+      hookOutcome: { kind: "block", fromStderr: true } as const,
+      reason: `PreToolUse:Bash hook error: [${GUARD_COMMAND}]: No stderr output`,
+    },
+  ]) {
+    test(`blocks a bash call with ${name} (D-CF5-11)`, () => {
+      // arrange
+      const event = {
+        type: "tool_call",
+        toolCallId: "call-block",
+        toolName: "bash",
+        input: { command: "echo from-model" },
+      } satisfies ToolCallEvent;
 
-    // act
-    const adaptation = adaptToolCallResult({ kind: "block", reason: "policy denied" }, event);
+      // act
+      const adaptation = adaptToolCallResult(hookOutcome, event, adapterContext(guardEntry()));
 
-    // assert
-    assert.deepStrictEqual(adaptation, { block: true, reason: "policy denied" });
-    assert.deepStrictEqual(event, {
-      type: "tool_call",
-      toolCallId: "call-block-reason",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
+      // assert
+      assert.deepStrictEqual(adaptation, { block: true, reason });
+      assert.deepStrictEqual(event, {
+        type: "tool_call",
+        toolCallId: "call-block",
+        toolName: "bash",
+        input: { command: "echo from-model" },
+      });
     });
-  });
+  }
 
-  test("omits the optional reason key when a block has no reason", () => {
+  test("names an empty command for a block attributed to no hook", () => {
     // arrange
     const event = {
       type: "tool_call",
-      toolCallId: "call-block-absent",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
+      toolCallId: "call-block-unattributed",
+      toolName: "read",
+      input: { path: "notes.md" },
     } satisfies ToolCallEvent;
 
     // act
-    const adaptation = adaptToolCallResult({ kind: "block" }, event);
+    const adaptation = adaptToolCallResult(
+      { kind: "block", reason: "denied", fromStderr: true },
+      event,
+      adapterContext(undefined),
+    );
 
     // assert
-    assert.deepStrictEqual(adaptation, { block: true });
-    assert.strictEqual(Object.hasOwn(adaptation, "reason"), false);
-    assert.deepStrictEqual(event, {
-      type: "tool_call",
-      toolCallId: "call-block-absent",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
+    assert.deepStrictEqual(adaptation, {
+      block: true,
+      reason: "PreToolUse:Read hook error: []: denied",
     });
   });
 
@@ -160,7 +226,7 @@ describe("adaptToolCallResult", () => {
     const hookOutcome = { kind: "mutate", updatedInput } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptToolCallResult(hookOutcome, event);
+    const adaptation = adaptToolCallResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -194,7 +260,7 @@ describe("adaptToolCallResult", () => {
     const hookOutcome = { kind: "mutate", updatedInput } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptToolCallResult(hookOutcome, event);
+    const adaptation = adaptToolCallResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -221,7 +287,7 @@ describe("adaptToolCallResult", () => {
     } satisfies ToolCallEvent;
 
     // act
-    const adaptation = adaptToolCallResult({ kind: "mutate" }, event);
+    const adaptation = adaptToolCallResult({ kind: "mutate" }, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -251,7 +317,7 @@ describe("adaptToolCallResult", () => {
       const hookOutcome = { kind: "mutate", updatedInput } satisfies HookExecResult;
 
       // act
-      const adaptation = adaptToolCallResult(hookOutcome, event);
+      const adaptation = adaptToolCallResult(hookOutcome, event, adapterContext(guardEntry()));
 
       // assert
       assert.strictEqual(adaptation, undefined);
@@ -300,7 +366,7 @@ describe("adaptToolCallResult", () => {
       } satisfies ToolCallEvent;
 
       // act
-      const adaptation = adaptToolCallResult(stopOutcome, event);
+      const adaptation = adaptToolCallResult(stopOutcome, event, adapterContext(guardEntry()));
 
       // assert
       assert.strictEqual(adaptation, undefined);
