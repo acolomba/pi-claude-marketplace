@@ -192,6 +192,13 @@ describe("writeSkillRecord", () => {
         "---\nname: demo-review\npi-claude-marketplace:\n  names: [x]\n  y: z\nlicense: MIT\n---\n",
       expectedContent: `---\nname: demo-review\nlicense: MIT\n${recordText}\n---\n`,
     },
+    {
+      label: "keeps an indented --- inside a block scalar out of the fence search",
+      content: "---\nname: demo-review\ndescription: |\n  One.\n  ---\n  Two.\n---\n\nBody.\n",
+      expectedContent:
+        "---\nname: demo-review\ndescription: |\n  One.\n  ---\n  Two.\n" +
+        `${recordText}\n---\n\nBody.\n`,
+    },
   ]) {
     test(label, () => {
       // act
