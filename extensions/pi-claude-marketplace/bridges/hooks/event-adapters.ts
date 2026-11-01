@@ -43,9 +43,8 @@
 //
 // Mutation surface: tool_call mutates `event.input` (Record<string,
 // unknown>), tool_result mutates `event.content` (the Pi-side
-// (TextContent | ImageContent)[] array). The `applyMutationInPlace`
-// helper colocates the two mutation paths so dispatch.ts's reducer loop
-// has a single call site between iterations.
+// (TextContent | ImageContent)[] array). The fold in `dispatch.ts` runs every
+// hook on one snapshot, so a mutation applies once, after every hook ran.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
@@ -80,6 +79,15 @@ export interface HookAdapterContext {
   readonly attributedTo: RoutingEntry | undefined;
 }
 
+// The provenance a SessionStart context carries when the fold attributes it
+// to no entry. A fold of mutations always names one, so only a hand-built
+// result reaches it.
+const UNATTRIBUTED = { scope: "user", marketplace: "", pluginId: "" } as const satisfies {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly pluginId: string;
+};
+
 // The declared command of the entry a folded result is attributed to.
 function attributedCommand(context: HookAdapterContext): string {
   return context.attributedTo?.handlerDecl.command ?? "";
@@ -88,40 +96,6 @@ function attributedCommand(context: HookAdapterContext): string {
 // ──────────────────────────────────────────────────────────────────────────
 // Mutation helper (D-60-02 / D-60-03)
 // ──────────────────────────────────────────────────────────────────────────
-
-/**
- * D-60-02 / D-60-03: apply a `mutate` outcome to the Pi event in place so
- * the next reducer iteration's translator sees the post-mutation state.
- *
- * Discriminator is the runtime `event.type` field (Pi events carry a
- * literal `type` tag). Only tool_call and tool_result have a mutation
- * surface in v1.13; input's `additionalContext` flows through the
- * adapter's return value (not in-place mutation), and observation events
- * have no mutation surface at all.
- *
- * The mutate arm's optional fields are silently ignored when the matching
- * surface is not present (e.g., `updatedToolOutput` on a tool_call event)
- * -- mirrors Claude Code upstream's documented per-event field
- * applicability.
- */
-export function applyMutationInPlace(
-  event: unknown,
-  result: Extract<HookExecResult, { kind: "mutate" }>,
-): void {
-  if (event === null || typeof event !== "object") {
-    return;
-  }
-
-  const tagged = event as { type?: unknown };
-  if (tagged.type === "tool_call" && result.updatedInput !== undefined) {
-    applyToolCallInputPatch(event as ToolCallEvent, result.updatedInput);
-    return;
-  }
-
-  if (tagged.type === "tool_result" && result.updatedToolOutput !== undefined) {
-    applyToolResultPatch(event as ToolResultEvent, result.updatedToolOutput);
-  }
-}
 
 /**
  * CR-01: reject non-object patches (null, array, primitive) early so a hook
@@ -202,7 +176,10 @@ export function adaptToolCallResult(
       };
 
     case "mutate":
-      applyMutationInPlace(event, result);
+      if (result.updatedInput !== undefined) {
+        applyToolCallInputPatch(event, result.updatedInput);
+      }
+
       return undefined;
 
     case "stop":
@@ -236,13 +213,12 @@ export function adaptToolCallResult(
 export function adaptToolResultResult(
   result: HookExecResult,
   event: ToolResultEvent,
+  _context: HookAdapterContext,
 ): ToolResultEventResult | undefined {
   switch (result.kind) {
     case "block":
       // Pi `tool_result` has no `block` field; signal the block via
-      // `isError: true` + a synthetic text block carrying the reason. The
-      // reducer already short-circuited subsequent entries, so this is the
-      // terminal Pi-side return for the bucket.
+      // `isError: true` + a synthetic text block carrying the reason.
       return result.reason === undefined
         ? { isError: true }
         : {
@@ -251,7 +227,10 @@ export function adaptToolResultResult(
           };
 
     case "mutate":
-      applyMutationInPlace(event, result);
+      if (result.updatedToolOutput !== undefined) {
+        applyToolResultPatch(event, result.updatedToolOutput);
+      }
+
       return undefined;
 
     case "stop":
@@ -270,15 +249,16 @@ export function adaptToolResultResult(
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * D-60-03: convert a reducer-folded `HookExecResult` to the Pi `input`
- * handler return shape (`InputEventResult | undefined`).
+ * D-60-03: convert a folded `HookExecResult` to the Pi `input` handler
+ * return shape (`InputEventResult | undefined`).
  *
- * The `_event` parameter is reserved for forward-compat (future per-event
- * narrowing); the v1.13 adapter does not read from it.
+ * The `_event` and `_context` parameters keep the adapter signature uniform;
+ * this adapter reads neither.
  */
 export function adaptInputResult(
   result: HookExecResult,
   _event: InputEvent,
+  _context: HookAdapterContext,
 ): InputEventResult | undefined {
   switch (result.kind) {
     case "block":
@@ -335,14 +315,16 @@ export function adaptInputResult(
  *       prompt. Deferred per D-60-03. `block` / `stop` are still
  *       debug-logged for observability.
  *
+ * The buffered context carries the provenance of the entry the fold
+ * attributes it to (the last mutating hook).
+ *
  * The adapter NEVER notifies and NEVER throws. A new `HookExecResult` arm
  * is a compile-time failure at this switch (NFR-7).
  */
 export function adaptObservationResultForEvent(
-  runtime: HooksRuntime,
   result: HookExecResult,
   claudeEvent: Extract<BucketAEvent, "SessionStart" | "SessionEnd" | "PreCompact" | "PostCompact">,
-  provenance: { readonly scope: Scope; readonly marketplace: string; readonly pluginId: string },
+  context: HookAdapterContext,
 ): undefined {
   switch (result.kind) {
     case "block":
@@ -357,7 +339,8 @@ export function adaptObservationResultForEvent(
         // drained one-shot by beforeAgentStartHandlerFor and cleared on
         // registerHooksBridge entry (so /reload does not leak stale
         // context across sessions).
-        runtime.appendPendingSessionStartContext({
+        const provenance = context.attributedTo ?? UNATTRIBUTED;
+        context.runtime.appendPendingSessionStartContext({
           context: result.additionalContext,
           scope: provenance.scope,
           marketplace: provenance.marketplace,

@@ -404,18 +404,22 @@ test("gives top-level block precedence over nested decisions", () => {
   assert.deepEqual(hookOutcome, { kind: "block", reason: "top block" });
 });
 
-test("gives a nested deny precedence over every mutation field and output suppression", () => {
+test("gives a nested deny precedence over every mutation field and keeps its context", () => {
   // arrange
   const exitCode = 0;
   const stdout =
-    '{"hookSpecificOutput":{"permissionDecision":"deny","permissionDecisionReason":"nested deny","updatedInput":{"command":"ignored input"},"updatedToolOutput":{"content":"ignored output"},"additionalContext":"ignored context"},"suppressOutput":true}';
+    '{"hookSpecificOutput":{"permissionDecision":"deny","permissionDecisionReason":"nested deny","updatedInput":{"command":"ignored input"},"updatedToolOutput":{"content":"ignored output"},"additionalContext":"denied context"},"suppressOutput":true}';
   const stderr = "ignored stderr";
 
   // act
   const hookOutcome = parseHookStdout(exitCode, stdout, stderr);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "nested deny" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: "nested deny",
+    additionalContext: "denied context",
+  });
 });
 
 test("omits a wrong-type nested deny reason", () => {
@@ -640,4 +644,108 @@ test("returns the final noop outcome for an otherwise valid empty object", () =>
   assert.deepStrictEqual(hookOutcome, {
     kind: "noop",
   });
+});
+
+for (const { name, stdout, hookOutcome } of [
+  {
+    name: "a block",
+    stdout:
+      '{"decision":"block","reason":"r","systemMessage":"shown","hookSpecificOutput":{"additionalContext":"ctx"}}',
+    hookOutcome: { kind: "block", reason: "r", systemMessage: "shown", additionalContext: "ctx" },
+  },
+  {
+    name: "a stop",
+    stdout:
+      '{"continue":false,"stopReason":"halt","systemMessage":"shown","hookSpecificOutput":{"additionalContext":"ctx"}}',
+    hookOutcome: {
+      kind: "stop",
+      stopReason: "halt",
+      systemMessage: "shown",
+      additionalContext: "ctx",
+    },
+  },
+  {
+    name: "a mutation",
+    stdout:
+      '{"systemMessage":"shown","hookSpecificOutput":{"updatedInput":{"command":"x"},"additionalContext":"ctx"}}',
+    hookOutcome: {
+      kind: "mutate",
+      updatedInput: { command: "x" },
+      systemMessage: "shown",
+      additionalContext: "ctx",
+    },
+  },
+  {
+    name: "a noop",
+    stdout: '{"systemMessage":"shown","suppressOutput":true}',
+    hookOutcome: { kind: "noop", suppressOutput: true, systemMessage: "shown" },
+  },
+]) {
+  test(`keeps the system message and context on ${name} (D-CF5-13, D-CF5-14)`, () => {
+    // act
+    const parsed = parseHookStdout(0, stdout, "ignored stderr");
+
+    // assert
+    assert.deepStrictEqual(parsed, hookOutcome);
+  });
+}
+
+test("keeps the stdout outputs on an exit-2 stderr block", () => {
+  // act
+  const hookOutcome = parseHookStdout(
+    2,
+    '{"systemMessage":"shown","hookSpecificOutput":{"additionalContext":"ctx"}}',
+    "denied\n",
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: "denied",
+    fromStderr: true,
+    systemMessage: "shown",
+    additionalContext: "ctx",
+  });
+});
+
+test("ignores a non-string system message and context", () => {
+  // act
+  const hookOutcome = parseHookStdout(
+    0,
+    '{"systemMessage":7,"hookSpecificOutput":{"additionalContext":["ctx"]}}',
+    "ignored stderr",
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+});
+
+test("ignores a defer decision and reports it (D-CF5-11)", (t) => {
+  // arrange
+  const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
+  const hadDebug = Object.hasOwn(process.env, debugKey);
+  const previousDebug = process.env[debugKey];
+  process.env[debugKey] = "1";
+  t.after(() => {
+    if (hadDebug) {
+      process.env[debugKey] = previousDebug;
+    } else {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    }
+  });
+  const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
+
+  // act
+  const hookOutcome = parseHookStdout(
+    0,
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"defer","permissionDecisionReason":"later"}}',
+    "ignored stderr",
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(
+    consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
+    [["[hooks] wire-protocol: permissionDecision defer ignored (no deferred permission in Pi)"]],
+  );
 });

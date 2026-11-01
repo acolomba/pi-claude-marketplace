@@ -28,6 +28,13 @@
 //   - `stop`   -- entry signals end-of-chain via Claude's
 //                 `continue: false` body.
 //
+// Every arm may also carry the hook's outputs, whatever it decided: its
+// `additionalContext` (D-CF5-13) and its `systemMessage` (D-CF5-14). Claude
+// Code keeps both on a block too, so a denied tool call still sends its
+// context. The fold in `./dispatch.ts` joins every hook's context in routing
+// order and keeps each hook's outcome, with its `systemMessage`, for the
+// output carriers.
+//
 // The union is a pure leaf -- no imports, no module-level state. NFR-7
 // (discriminated unions + exhaustive `kind` switches with no default arm)
 // drives the shape: any future arm requires updating every `kind`-switch
@@ -39,8 +46,14 @@
  * `kind` discriminator drives per-event adapter dispatch downstream.
  */
 export type HookExecResult =
-  | { kind: "noop"; suppressOutput?: boolean }
-  | { kind: "block"; reason?: string; fromStderr?: true }
+  | { kind: "noop"; suppressOutput?: boolean; additionalContext?: string; systemMessage?: string }
+  | {
+      kind: "block";
+      reason?: string;
+      fromStderr?: true;
+      additionalContext?: string;
+      systemMessage?: string;
+    }
   | {
       kind: "mutate";
       updatedInput?: unknown;
@@ -48,5 +61,6 @@ export type HookExecResult =
       additionalContext?: string;
       permissionDecision?: "allow" | "deny" | "ask";
       permissionDecisionReason?: string;
+      systemMessage?: string;
     }
-  | { kind: "stop"; stopReason?: string };
+  | { kind: "stop"; stopReason?: string; additionalContext?: string; systemMessage?: string };

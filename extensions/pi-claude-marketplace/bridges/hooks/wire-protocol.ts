@@ -20,6 +20,11 @@
 //   - exit 0 + empty  -> noop
 //   - exit 0 + non-JSON stdout -> noop (debug-log)
 //   - exit 0 + JSON  -> normalize per § 4 (block / mutate / stop / noop)
+//
+// Whatever the decision, a JSON object's top-level `systemMessage` and its
+// `hookSpecificOutput.additionalContext` ride the arm it gives (D-CF5-13,
+// D-CF5-14), and `permissionDecision: "defer"` is ignored (Pi has no
+// deferred-permission flow; D-CF5-11).
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
@@ -81,15 +86,16 @@ function stdoutObject(stdout: string): object | undefined {
  */
 function exitTwoBlock(stdout: string, stderr: string): HookExecResult {
   const parsed = stdoutObject(stdout);
-  const decided = parsed === undefined ? undefined : normalizeClaudeStdout(parsed);
+  const outputs = hookOutputs(parsed);
+  const decided = parsed === undefined ? undefined : decideClaudeStdout(parsed);
   if (decided?.kind === "block" && decided.reason !== undefined) {
-    return { kind: "block", reason: decided.reason };
+    return { kind: "block", reason: decided.reason, ...outputs };
   }
 
   const reason = stderr.trim();
   return reason === ""
-    ? { kind: "block", fromStderr: true }
-    : { kind: "block", reason, fromStderr: true };
+    ? { kind: "block", fromStderr: true, ...outputs }
+    : { kind: "block", reason, fromStderr: true, ...outputs };
 }
 
 /**
@@ -111,11 +117,47 @@ function nonZeroExitResult(exitCode: number | null, stdout: string): HookExecRes
 
 /**
  * Map a parsed Claude-shaped stdout object to a `HookExecResult` per
- * `docs/research/claude-hook-config-syntax.md § 4`. Unknown root types,
- * unrecognized shapes, and missing fields all fall back to `noop` --
- * the parser is permissive by design (D-60-01 v1.13 stance).
+ * `docs/research/claude-hook-config-syntax.md § 4`: the decision, with the
+ * hook's outputs on whichever arm the decision gives.
  */
 function normalizeClaudeStdout(parsed: unknown): HookExecResult {
+  return { ...decideClaudeStdout(parsed), ...hookOutputs(parsed) };
+}
+
+/**
+ * D-CF5-13 / D-CF5-14: the outputs a hook prints whatever it decides, a
+ * top-level string `systemMessage` and a string
+ * `hookSpecificOutput.additionalContext`. None for stdout that is no object.
+ */
+function hookOutputs(parsed: unknown): { additionalContext?: string; systemMessage?: string } {
+  const outputs: { additionalContext?: string; systemMessage?: string } = {};
+  if (parsed === null || typeof parsed !== "object") {
+    return outputs;
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.systemMessage === "string") {
+    outputs.systemMessage = obj.systemMessage;
+  }
+
+  const hso = obj.hookSpecificOutput;
+  const context =
+    hso !== null && typeof hso === "object"
+      ? (hso as Record<string, unknown>).additionalContext
+      : undefined;
+  if (typeof context === "string") {
+    outputs.additionalContext = context;
+  }
+
+  return outputs;
+}
+
+/**
+ * The decision of a parsed Claude-shaped stdout object. Unknown root types,
+ * unrecognized shapes, and missing fields all fall back to `noop` -- the
+ * parser is permissive by design (D-60-01).
+ */
+function decideClaudeStdout(parsed: unknown): HookExecResult {
   if (parsed === null || typeof parsed !== "object") {
     return { kind: "noop" };
   }
@@ -168,6 +210,11 @@ function matchTopLevelStopOrBlock(obj: Record<string, unknown>): HookExecResult 
  * to the `suppressOutput` / default-noop arms.
  */
 function matchHookSpecificOutput(hso: Record<string, unknown>): HookExecResult | null {
+  if (hso.permissionDecision === "defer") {
+    // D-CF5-11: Pi has no deferred-permission flow, so the decision is ignored.
+    hookDebugLog("wire-protocol: permissionDecision defer ignored (no deferred permission in Pi)");
+  }
+
   if (hso.permissionDecision === "deny") {
     const reason =
       typeof hso.permissionDecisionReason === "string" ? hso.permissionDecisionReason : undefined;

@@ -20,7 +20,6 @@ import {
   shutdownInMemoryChildren,
   spawnAndRegister,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
-import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import {
   createHooksHydration,
   createHooksRouting,
@@ -1314,18 +1313,18 @@ test("registered before_agent_start drains ordered context once and leaves an em
   const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
   await hydration.registerHooksBridge(pi, { cwd: root });
   const handler = registeredHandler(registrations, "before_agent_start");
-  adaptObservationResultForEvent(
-    runtime,
-    { kind: "mutate", additionalContext: "alpha context" },
-    "SessionStart",
-    { scope: "project", marketplace: "catalog", pluginId: "alpha" },
-  );
-  adaptObservationResultForEvent(
-    runtime,
-    { kind: "mutate", additionalContext: "beta context" },
-    "SessionStart",
-    { scope: "user", marketplace: "catalog", pluginId: "beta" },
-  );
+  runtime.appendPendingSessionStartContext({
+    context: "alpha context",
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "alpha",
+  });
+  runtime.appendPendingSessionStartContext({
+    context: "beta context",
+    scope: "user",
+    marketplace: "catalog",
+    pluginId: "beta",
+  });
   const event = {
     type: "before_agent_start",
     prompt: "prompt",
@@ -1355,12 +1354,12 @@ test("registered before_agent_start rejects a stale epoch without draining live 
   await hydration.registerHooksBridge(pi, { cwd: root });
   const handler = registeredHandler(registrations, "before_agent_start");
   await hydration.registerHooksBridge(pi, { cwd: root });
-  adaptObservationResultForEvent(
-    runtime,
-    { kind: "mutate", additionalContext: "live context" },
-    "SessionStart",
-    { scope: "project", marketplace: "catalog", pluginId: "live" },
-  );
+  runtime.appendPendingSessionStartContext({
+    context: "live context",
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "live",
+  });
   const event = {
     type: "before_agent_start",
     prompt: "prompt",
@@ -2567,7 +2566,7 @@ test("SessionStart contains a dispatch failure after preparing both directories"
   // assert
   assert.strictEqual(update, undefined);
   assert.deepStrictEqual(sharedPaths.map(fs.existsSync), [true, true]);
-  assert.deepStrictEqual(dispatched, ["project"]);
+  assert.deepStrictEqual(dispatched, ["project", "user"]);
   assert.deepStrictEqual(messages, []);
 });
 
@@ -2878,7 +2877,7 @@ test(
       { pluginId: "beta", event: "SessionStart" },
     ]);
     assert.deepStrictEqual(firstTurn, {
-      systemPrompt: "base prompt\n\nbeta context",
+      systemPrompt: "base prompt\n\nalpha context\nbeta context",
     });
     assert.strictEqual(secondTurn, undefined);
     assert.deepStrictEqual(routes, [

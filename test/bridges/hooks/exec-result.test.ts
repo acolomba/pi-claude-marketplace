@@ -18,6 +18,16 @@ void ({
 void ({ kind: "mutate", permissionDecision: "deny" } satisfies HookExecResult);
 void ({ kind: "mutate", permissionDecision: "ask" } satisfies HookExecResult);
 
+void ({ kind: "noop", additionalContext: "kept", systemMessage: "shown" } satisfies HookExecResult);
+void ({
+  kind: "block",
+  reason: "denied",
+  additionalContext: "kept",
+  systemMessage: "shown",
+} satisfies HookExecResult);
+void ({ kind: "mutate", systemMessage: "shown" } satisfies HookExecResult);
+void ({ kind: "stop", additionalContext: "kept", systemMessage: "shown" } satisfies HookExecResult);
+
 void ({ kind: "stop" } satisfies HookExecResult);
 void ({ kind: "stop", stopReason: "hook requested stop" } satisfies HookExecResult);
 
@@ -31,5 +41,7 @@ void ({ updatedInput: { command: "check" } } satisfies HookExecResult);
 void ({ kind: "block", suppressOutput: true } satisfies HookExecResult);
 // @ts-expect-error the stderr marker is present only on a stderr reason
 void ({ kind: "block", reason: "no echo", fromStderr: false } satisfies HookExecResult);
+// @ts-expect-error a system message is text
+void ({ kind: "noop", systemMessage: 7 } satisfies HookExecResult);
 // @ts-expect-error permission decisions use the closed allow, deny, and ask vocabulary
 void ({ kind: "mutate", permissionDecision: "prompt" } satisfies HookExecResult);

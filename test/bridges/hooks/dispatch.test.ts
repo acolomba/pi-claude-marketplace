@@ -289,7 +289,7 @@ describe("compositeHandlerFor", () => {
     ]);
   });
 
-  test("requires matcher and if agreement before composing mutations in declaration order", async () => {
+  test("requires matcher and if agreement, then runs both mutations on one snapshot (D-CF5-09)", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -470,12 +470,7 @@ describe("compositeHandlerFor", () => {
           type: "tool_call",
           toolCallId: "dispatch-call",
           toolName: "bash",
-          input: {
-            command: "git status",
-            original: "kept",
-            firstMutation: "visible",
-            shared: "first",
-          },
+          input: { command: "git status", original: "kept" },
         },
         context,
         pi: undefined,
@@ -492,7 +487,6 @@ describe("compositeHandlerFor", () => {
       input: {
         command: "git status",
         original: "kept",
-        firstMutation: "visible",
         secondMutation: "composed",
         shared: "second",
       },
@@ -698,7 +692,7 @@ describe("collectBucketOutcomes", () => {
     assert.deepStrictEqual(outcomes, expectedOutcomes);
   });
 
-  test("stops the bucket before a later executor when the generation changes during await", async () => {
+  test("returns no outcome when the generation changes while its hooks run", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -711,7 +705,7 @@ describe("collectBucketOutcomes", () => {
         declarationIndex: 0,
       }),
       createRoutingEntry({
-        pluginId: "must-not-start",
+        pluginId: "parallel-peer",
         claudeEvent: "PreToolUse",
         rawMatcher: "Bash",
         declarationIndex: 1,
@@ -721,7 +715,7 @@ describe("collectBucketOutcomes", () => {
     let finishExecution: ((result: HookExecResult) => void) | undefined;
     const executor: HookExecutor = (entry) => {
       calls.push(entry.pluginId);
-      if (entry.pluginId === "must-not-start") {
+      if (entry.pluginId === "parallel-peer") {
         return Promise.resolve({ kind: "noop" });
       }
 
@@ -747,7 +741,7 @@ describe("collectBucketOutcomes", () => {
 
     // assert
     assert.deepStrictEqual(outcomes, []);
-    assert.deepStrictEqual(calls, ["awaited"]);
+    assert.deepStrictEqual(calls, ["awaited", "parallel-peer"]);
   });
 });
 
@@ -809,7 +803,7 @@ describe("composite dispatch reduction", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("returns the first block and skips every later entry", async () => {
+  test("blocks with the first block in routing order after running every hook", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -855,6 +849,7 @@ describe("composite dispatch reduction", () => {
     const expectedCalls: RecordedCall[] = [
       { pluginId: "leading-noop", event: createToolCallEvent() },
       { pluginId: "first-block", event: createToolCallEvent() },
+      { pluginId: "later-block", event: createToolCallEvent() },
     ];
 
     // act
@@ -865,7 +860,7 @@ describe("composite dispatch reduction", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("returns on the first stop and skips every later entry", async () => {
+  test("folds a stop over a later block after running every hook", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -878,7 +873,7 @@ describe("composite dispatch reduction", () => {
         declarationIndex: 0,
       }),
       createRoutingEntry({
-        pluginId: "later-noop",
+        pluginId: "later-block",
         claudeEvent: "PreToolUse",
         rawMatcher: "Bash",
         declarationIndex: 1,
@@ -888,7 +883,7 @@ describe("composite dispatch reduction", () => {
     const executor = createRecordingExecutor(
       {
         "first-stop": { kind: "stop", stopReason: "stop now" },
-        "later-noop": { kind: "noop" },
+        "later-block": { kind: "block", reason: "later denial" },
       },
       executorCalls,
     );
@@ -903,6 +898,7 @@ describe("composite dispatch reduction", () => {
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
     const expectedCalls: RecordedCall[] = [
       { pluginId: "first-stop", event: createToolCallEvent() },
+      { pluginId: "later-block", event: createToolCallEvent() },
     ];
 
     // act
@@ -913,7 +909,7 @@ describe("composite dispatch reduction", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("composes multiple mutations from left to right", async () => {
+  test("applies the last input rewrite in routing order to the snapshot both hooks read", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -952,7 +948,6 @@ describe("composite dispatch reduction", () => {
     const expectedEvent = createToolCallEvent("bash", {
       command: "git status",
       preserved: true,
-      first: 1,
       second: 2,
       shared: "second",
     });
@@ -964,12 +959,7 @@ describe("composite dispatch reduction", () => {
       },
       {
         pluginId: "mutation-b",
-        event: createToolCallEvent("bash", {
-          command: "git status",
-          preserved: true,
-          first: 1,
-          shared: "first",
-        }),
+        event: createToolCallEvent("bash", { command: "git status", preserved: true }),
       },
     ];
 
@@ -1698,7 +1688,7 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("adapts the first reasoned block and skips the later tool-result entry", async () => {
+  test("adapts the first reasoned block after running every tool-result entry", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -1736,6 +1726,7 @@ describe("toolResultCompositeHandler", () => {
     };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "block-first", event: createToolResultEvent(false) },
+      { pluginId: "block-later", event: createToolResultEvent(false) },
     ];
 
     // act
@@ -1957,51 +1948,6 @@ describe("composite per-event adapters", () => {
       {
         pluginId: "input-block",
         event: { type: "input", text: "review hooks", source: "interactive" },
-      },
-    ];
-
-    // act
-    const output = await handler(event, context);
-
-    // assert
-    assert.deepStrictEqual(output, expectedOutput);
-    assert.deepStrictEqual(executorCalls, expectedCalls);
-  });
-
-  test("adapts UserPromptSubmit additional context to transformed text", async () => {
-    // arrange
-    const runtime = createHooksRuntime();
-    runtime.advanceGeneration();
-    const context = createExtensionContext("/workspace/input-transform");
-    const entry = createRoutingEntry({
-      pluginId: "input-transform",
-      claudeEvent: "UserPromptSubmit",
-      rawMatcher: "",
-      declarationIndex: 0,
-    });
-    const event = {
-      type: "input",
-      text: "review hooks",
-      source: "rpc",
-    } satisfies InputEvent;
-    const executorCalls: RecordedCall[] = [];
-    const executor = createRecordingExecutor(
-      { "input-transform": { kind: "mutate", additionalContext: "dispatch context" } },
-      executorCalls,
-    );
-    runtime.setRoutingBucket("UserPromptSubmit", [entry]);
-    const handler = compositeHandlerFor(
-      runtime,
-      "UserPromptSubmit",
-      runtime.currentGeneration(),
-      undefined,
-      executor,
-    );
-    const expectedOutput = { action: "transform", text: "dispatch context" };
-    const expectedCalls: RecordedCall[] = [
-      {
-        pluginId: "input-transform",
-        event: { type: "input", text: "review hooks", source: "rpc" },
       },
     ];
 
@@ -2709,5 +2655,560 @@ describe("optional Pi inventory collaborator", () => {
     await assert.rejects(handler(createToolCallEvent(), context), {
       message: "injected executor refused",
     });
+  });
+});
+
+// Starts every hook and holds its result until the case finishes it, so a
+// case decides the order the hooks finish in.
+function createHeldExecutor(started: string[]): {
+  readonly executor: HookExecutor;
+  readonly finish: (pluginId: string, result: HookExecResult) => void;
+} {
+  const pending = new Map<string, (result: HookExecResult) => void>();
+  return {
+    executor: (entry) => {
+      started.push(entry.pluginId);
+      return new Promise((resolve) => {
+        pending.set(entry.pluginId, resolve);
+      });
+    },
+    finish: (pluginId, result) => {
+      finishDeferredExecution(pending.get(pluginId), result);
+    },
+  };
+}
+
+// Lets the started executors reach their held promises.
+async function settleStartedHooks(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
+function preToolUseEntries(pluginIds: readonly string[]): RoutingEntry[] {
+  return pluginIds.map((pluginId, declarationIndex) =>
+    createRoutingEntry({
+      pluginId,
+      claudeEvent: "PreToolUse",
+      rawMatcher: "Bash",
+      declarationIndex,
+    }),
+  );
+}
+
+describe("parallel run and routing-order fold", () => {
+  test(
+    "starts every matching hook before any finishes (D-CF5-09)",
+    { timeout: 5_000 },
+    async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["left", "right"]));
+      const gates = new Map<string, () => void>();
+      const met = (pluginId: string): Promise<void> =>
+        new Promise((resolve) => {
+          gates.set(pluginId, resolve);
+        });
+      const leftMet = met("left");
+      const rightMet = met("right");
+      const executor: HookExecutor = async (entry) => {
+        const [own, other] = entry.pluginId === "left" ? ["left", rightMet] : ["right", leftMet];
+        gates.get(own)?.();
+        await other;
+        return { kind: "noop" };
+      };
+
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+
+      // act
+      const output = await handler(
+        createToolCallEvent(),
+        createExtensionContext("/workspace/meet"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+    },
+  );
+
+  test("blocks with the first block in routing order whatever order the hooks finish in", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["quiet", "first", "second"]));
+    const started: string[] = [];
+    const held = createHeldExecutor(started);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      held.executor,
+    );
+
+    // act
+    const pending = handler(createToolCallEvent(), createExtensionContext("/workspace/reverse"));
+    await settleStartedHooks();
+    held.finish("second", { kind: "block", reason: "r2", fromStderr: true });
+    held.finish("first", { kind: "block", reason: "r1", fromStderr: true });
+    held.finish("quiet", { kind: "noop" });
+    const output = await pending;
+
+    // assert
+    assert.deepStrictEqual(started, ["quiet", "first", "second"]);
+    assert.deepStrictEqual(output, {
+      block: true,
+      reason: "PreToolUse:Bash hook error: [printf first]: r1",
+    });
+  });
+
+  test("lets a block win over an earlier ask (D-CF5-09)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["asker", "denier"]));
+    const executor = createRecordingExecutor(
+      {
+        asker: { kind: "mutate", permissionDecision: "ask", permissionDecisionReason: "sure?" },
+        denier: { kind: "block", reason: "no" },
+      },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), createExtensionContext("/workspace/ask"));
+
+    // assert
+    assert.deepStrictEqual(output, { block: true, reason: "PreToolUse:Bash hook error: no" });
+  });
+
+  test("lets a block win over a mutation that adds context", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const entries = ["context", "blocker"].map((pluginId, declarationIndex) =>
+      createRoutingEntry({
+        pluginId,
+        claudeEvent: "UserPromptSubmit",
+        rawMatcher: "",
+        declarationIndex,
+      }),
+    );
+    runtime.setRoutingBucket("UserPromptSubmit", entries);
+    const executor = createRecordingExecutor(
+      {
+        context: { kind: "mutate", additionalContext: "a" },
+        blocker: { kind: "block", reason: "no", additionalContext: "b" },
+      },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(
+      { type: "input", text: "hello", source: "interactive" },
+      createExtensionContext("/workspace/context-block"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { action: "handled" });
+  });
+
+  test("joins every hook's context in routing order whatever order they finish in", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const generation = runtime.advanceGeneration();
+    const entries = ["early", "silent", "late"].map((pluginId, declarationIndex) =>
+      createRoutingEntry({
+        pluginId,
+        claudeEvent: "SessionStart",
+        rawMatcher: "",
+        declarationIndex,
+        scope: "project",
+      }),
+    );
+    runtime.setRoutingBucket("SessionStart", entries);
+    const held = createHeldExecutor([]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      generation,
+      undefined,
+      held.executor,
+    );
+
+    // act
+    const pending = handler({ source: "startup" }, createExtensionContext("/workspace/contexts"));
+    await settleStartedHooks();
+    held.finish("late", { kind: "mutate", additionalContext: "b" });
+    held.finish("silent", { kind: "mutate", additionalContext: "" });
+    held.finish("early", { kind: "mutate", additionalContext: "a" });
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
+      { context: "a\nb", scope: "project", marketplace: "dispatch-catalog", pluginId: "late" },
+    ]);
+  });
+
+  test("keeps every outcome with its system message in routing order", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const entries = preToolUseEntries(["first", "second"]);
+    const held = createHeldExecutor([]);
+
+    // act
+    const pending = collectBucketOutcomes(
+      runtime,
+      entries,
+      createToolCallEvent(),
+      createExtensionContext("/workspace/outcomes"),
+      undefined,
+      () => true,
+      held.executor,
+    );
+    await settleStartedHooks();
+    held.finish("second", { kind: "noop", systemMessage: "two" });
+    held.finish("first", { kind: "block", reason: "r", systemMessage: "one" });
+    const outcomes = await pending;
+
+    // assert
+    assert.deepStrictEqual(
+      outcomes.map(({ entry, result }) => [entry.pluginId, result]),
+      [
+        ["first", { kind: "block", reason: "r", systemMessage: "one" }],
+        ["second", { kind: "noop", systemMessage: "two" }],
+      ],
+    );
+  });
+});
+
+describe("hook dedupe (D-CF5-10)", () => {
+  function hookEntry(input: {
+    readonly pluginId: string;
+    readonly rawMatcher: string;
+    readonly declarationIndex: number;
+    readonly timeout: number;
+  }): RoutingEntry {
+    return {
+      ...createRoutingEntry({ ...input, claudeEvent: "PreToolUse" }),
+      handlerDecl: { type: "command", command: "guard", timeout: input.timeout },
+    };
+  }
+
+  test("runs a hook one plugin declares twice once, at the first position with the last copy's fields", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", [
+      hookEntry({ pluginId: "demo", rawMatcher: "Bash", declarationIndex: 0, timeout: 5 }),
+      hookEntry({ pluginId: "other", rawMatcher: "Bash", declarationIndex: 1, timeout: 6 }),
+      hookEntry({ pluginId: "demo", rawMatcher: "*", declarationIndex: 2, timeout: 7 }),
+    ]);
+    const ran: Array<{ pluginId: string; rawMatcher: string; timeout: unknown }> = [];
+    const executor: HookExecutor = (entry) => {
+      ran.push({
+        pluginId: entry.pluginId,
+        rawMatcher: entry.rawMatcher,
+        timeout: entry.handlerDecl.timeout,
+      });
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    await handler(createToolCallEvent(), createExtensionContext("/workspace/dedupe"));
+
+    // assert
+    assert.deepStrictEqual(ran, [
+      { pluginId: "demo", rawMatcher: "Bash", timeout: 7 },
+      { pluginId: "other", rawMatcher: "Bash", timeout: 6 },
+    ]);
+  });
+
+  test("keeps hooks that differ in shell, arguments, or if as separate hooks", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const base = hookEntry({
+      pluginId: "demo",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
+      timeout: 1,
+    });
+    const bucket: RoutingEntry[] = [
+      base,
+      { ...base, handlerDecl: { ...base.handlerDecl, shell: "powershell" } },
+      { ...base, handlerDecl: { ...base.handlerDecl, args: ["x"] } },
+      { ...base, handlerDecl: { type: "command", command: "guard", if: "Bash(git *)" } },
+    ];
+    const ran: unknown[] = [];
+
+    // act
+    const outcomes = await collectBucketOutcomes(
+      runtime,
+      bucket,
+      createToolCallEvent(),
+      createExtensionContext("/workspace/distinct"),
+      undefined,
+      () => true,
+      (entry) => {
+        ran.push(entry.handlerDecl);
+        return Promise.resolve({ kind: "noop" });
+      },
+    );
+
+    // assert
+    assert.strictEqual(outcomes.length, 4);
+    assert.deepStrictEqual(
+      ran,
+      bucket.map((entry) => entry.handlerDecl),
+    );
+  });
+});
+
+describe("mcp proxy calls (D-CF5-12)", () => {
+  const PROXY_CASES = [
+    {
+      name: "a call through the mcp proxy",
+      toolName: "mcp",
+      input: { tool: "mcp__plugin_demo_stub__echo", args: { text: "ping" } },
+      runs: false,
+    },
+    {
+      name: "a call through a namespace proxy",
+      toolName: "mcp__stub",
+      input: { tool: "echo", args: { text: "ping" } },
+      runs: false,
+    },
+    { name: "an mcp proxy search", toolName: "mcp", input: { search: "x" }, runs: true },
+    {
+      name: "an mcp proxy describe action",
+      toolName: "mcp",
+      input: { tool: "mcp__plugin_demo_stub__echo", action: "describe" },
+      runs: true,
+    },
+    {
+      name: "a real mcp tool whose input names a tool",
+      toolName: "mcp__plugin_demo_stub__echo",
+      input: { tool: "echo" },
+      runs: true,
+    },
+  ] as const;
+
+  for (const { name, toolName, input, runs } of PROXY_CASES) {
+    test(`${runs ? "runs" : "runs no"} PreToolUse hook for ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PreToolUse", [
+        createRoutingEntry({
+          pluginId: "any",
+          claudeEvent: "PreToolUse",
+          rawMatcher: "*",
+          declarationIndex: 0,
+        }),
+      ]);
+      const calls: RecordedCall[] = [];
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor({ any: { kind: "noop" } }, calls),
+      );
+
+      // act
+      const output = await handler(
+        createToolCallEvent(toolName, { ...input }),
+        createExtensionContext("/workspace/proxy"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(
+        calls.map(({ pluginId }) => pluginId),
+        runs ? ["any"] : [],
+      );
+    });
+
+    test(`${runs ? "runs" : "runs no"} PostToolUse hook for ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PostToolUse", [
+        createRoutingEntry({
+          pluginId: "after",
+          claudeEvent: "PostToolUse",
+          rawMatcher: "*",
+          declarationIndex: 0,
+        }),
+      ]);
+      const calls: RecordedCall[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor({ after: { kind: "noop" } }, calls),
+      );
+
+      // act
+      const output = await handler(
+        { ...createToolResultEvent(false, toolName), input: { ...input } },
+        createExtensionContext("/workspace/proxy-result"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(
+        calls.map(({ pluginId }) => pluginId),
+        runs ? ["after"] : [],
+      );
+    });
+  }
+});
+
+describe("routing-order fold of mutations", () => {
+  test("allows with the last input rewrite in routing order", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["approver", "rewriter", "quiet"]));
+    const held = createHeldExecutor([]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      held.executor,
+    );
+    const event = createToolCallEvent("bash", { command: "echo from-model" });
+
+    // act
+    const pending = handler(event, createExtensionContext("/workspace/allow"));
+    await settleStartedHooks();
+    held.finish("quiet", { kind: "noop" });
+    held.finish("rewriter", { kind: "mutate", updatedInput: { command: "echo rewritten" } });
+    held.finish("approver", {
+      kind: "mutate",
+      permissionDecision: "allow",
+      updatedInput: { command: "echo approved" },
+    });
+    const output = await pending;
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event, createToolCallEvent("bash", { command: "echo rewritten" }));
+  });
+
+  for (const { name, ask } of [
+    {
+      name: "with its reason",
+      ask: { kind: "mutate", permissionDecision: "ask", permissionDecisionReason: "sure?" },
+    },
+    { name: "without a reason", ask: { kind: "mutate", permissionDecision: "ask" } },
+  ] as const) {
+    test(`attributes a fold to its first ask ${name}, not to the last mutation`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const generation = runtime.advanceGeneration();
+      const entries = ["asker", "second-asker", "later"].map((pluginId, declarationIndex) =>
+        createRoutingEntry({
+          pluginId,
+          claudeEvent: "SessionStart",
+          rawMatcher: "",
+          declarationIndex,
+          scope: "project",
+        }),
+      );
+      runtime.setRoutingBucket("SessionStart", entries);
+      const executor = createRecordingExecutor(
+        {
+          asker: { ...ask, additionalContext: "a" },
+          "second-asker": {
+            kind: "mutate",
+            permissionDecision: "ask",
+            permissionDecisionReason: "b?",
+          },
+          later: { kind: "mutate", additionalContext: "b" },
+        },
+        [],
+      );
+      const handler = compositeHandlerFor(runtime, "SessionStart", generation, undefined, executor);
+
+      // act
+      await handler({ source: "startup" }, createExtensionContext("/workspace/ask-attribution"));
+
+      // assert
+      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
+        { context: "a\nb", scope: "project", marketplace: "dispatch-catalog", pluginId: "asker" },
+      ]);
+    });
+  }
+
+  test("applies the last tool-output rewrite in routing order", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket(
+      "PostToolUse",
+      ["first", "second"].map((pluginId, declarationIndex) =>
+        createRoutingEntry({
+          pluginId,
+          claudeEvent: "PostToolUse",
+          rawMatcher: "Bash",
+          declarationIndex,
+        }),
+      ),
+    );
+    const executor = createRecordingExecutor(
+      {
+        first: { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "one" }] } },
+        second: { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "two" }] } },
+      },
+      [],
+    );
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const event = createToolResultEvent(false);
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/outputs"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event.content, [{ type: "text", text: "two" }]);
   });
 });

@@ -6,7 +6,6 @@ import {
   adaptObservationResultForEvent,
   adaptToolCallResult,
   adaptToolResultResult,
-  applyMutationInPlace,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
@@ -52,64 +51,13 @@ function adapterContext(attributedTo: RoutingEntry | undefined): HookAdapterCont
   };
 }
 
-describe("applyMutationInPlace", () => {
-  for (const { name, event } of [
-    { name: "null", event: null },
-    { name: "primitive", event: "tool_call" },
-  ] as const) {
-    test(`drops a ${name} event without changing the hook outcome`, () => {
-      // arrange
-      const hookOutcome = {
-        kind: "mutate",
-        updatedInput: { command: "replacement" },
-      } satisfies HookExecResult;
-      let thrown: unknown;
-
-      // act
-      try {
-        applyMutationInPlace(event, hookOutcome);
-      } catch (error) {
-        thrown = error;
-      }
-
-      // assert
-      assert.strictEqual(thrown, undefined);
-      assert.deepStrictEqual(hookOutcome, {
-        kind: "mutate",
-        updatedInput: { command: "replacement" },
-      });
-    });
-  }
-
-  test("leaves an event outside the mutable tool families unchanged", () => {
-    // arrange
-    const event = {
-      type: "input",
-      text: "original prompt",
-      source: "interactive",
-    } satisfies InputEvent;
-    const hookOutcome = {
-      kind: "mutate",
-      updatedInput: { text: "hostile prompt" },
-      updatedToolOutput: { isError: true },
-    } satisfies HookExecResult;
-
-    // act
-    applyMutationInPlace(event, hookOutcome);
-
-    // assert
-    assert.deepStrictEqual(event, {
-      type: "input",
-      text: "original prompt",
-      source: "interactive",
-    });
-    assert.deepStrictEqual(hookOutcome, {
-      kind: "mutate",
-      updatedInput: { text: "hostile prompt" },
-      updatedToolOutput: { isError: true },
-    });
-  });
-});
+// A context attributed to an entry of the given plugin, over `runtime`.
+function provenanceContext(
+  runtime: HookAdapterContext["runtime"],
+  provenance: Pick<RoutingEntry, "scope" | "marketplace" | "pluginId">,
+): HookAdapterContext {
+  return { ...adapterContext({ ...guardEntry(), ...provenance }), runtime };
+}
 
 describe("adaptToolCallResult", () => {
   test("returns undefined for noop without changing the complete event", () => {
@@ -401,7 +349,7 @@ describe("adaptToolResultResult", () => {
     } satisfies ToolResultEvent;
 
     // act
-    const adaptation = adaptToolResultResult({ kind: "noop" }, event);
+    const adaptation = adaptToolResultResult({ kind: "noop" }, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -432,7 +380,11 @@ describe("adaptToolResultResult", () => {
     } satisfies ToolResultEvent;
 
     // act
-    const adaptation = adaptToolResultResult({ kind: "block", reason: "policy denied" }, event);
+    const adaptation = adaptToolResultResult(
+      { kind: "block", reason: "policy denied" },
+      event,
+      adapterContext(guardEntry()),
+    );
 
     // assert
     assert.deepStrictEqual(adaptation, {
@@ -455,7 +407,11 @@ describe("adaptToolResultResult", () => {
     } satisfies ToolResultEvent;
 
     // act
-    const adaptation = adaptToolResultResult({ kind: "block" }, event);
+    const adaptation = adaptToolResultResult(
+      { kind: "block" },
+      event,
+      adapterContext(guardEntry()),
+    );
 
     // assert
     assert.deepStrictEqual(adaptation, { isError: true });
@@ -505,7 +461,7 @@ describe("adaptToolResultResult", () => {
     } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptToolResultResult(hookOutcome, event);
+    const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -562,7 +518,11 @@ describe("adaptToolResultResult", () => {
     } satisfies ToolResultEvent;
 
     // act
-    const adaptation = adaptToolResultResult({ kind: "mutate" }, event);
+    const adaptation = adaptToolResultResult(
+      { kind: "mutate" },
+      event,
+      adapterContext(guardEntry()),
+    );
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -598,7 +558,7 @@ describe("adaptToolResultResult", () => {
       const hookOutcome = { kind: "mutate", updatedToolOutput } satisfies HookExecResult;
 
       // act
-      const adaptation = adaptToolResultResult(hookOutcome, event);
+      const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
       // assert
       assert.strictEqual(adaptation, undefined);
@@ -635,7 +595,7 @@ describe("adaptToolResultResult", () => {
     } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptToolResultResult(hookOutcome, event);
+    const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -673,7 +633,7 @@ describe("adaptToolResultResult", () => {
     } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptToolResultResult(hookOutcome, event);
+    const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -706,6 +666,7 @@ describe("adaptToolResultResult", () => {
     const adaptation = adaptToolResultResult(
       { kind: "mutate", updatedToolOutput: { isError: true } },
       event,
+      adapterContext(guardEntry()),
     );
 
     // assert
@@ -760,7 +721,7 @@ describe("adaptToolResultResult", () => {
       } satisfies ToolResultEvent;
 
       // act
-      const adaptation = adaptToolResultResult(stopOutcome, event);
+      const adaptation = adaptToolResultResult(stopOutcome, event, adapterContext(guardEntry()));
 
       // assert
       assert.strictEqual(adaptation, undefined);
@@ -785,7 +746,7 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult({ kind: "noop" }, event);
+    const adaptation = adaptInputResult({ kind: "noop" }, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -808,7 +769,11 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult({ kind: "block", reason: "policy denied" }, event);
+    const adaptation = adaptInputResult(
+      { kind: "block", reason: "policy denied" },
+      event,
+      adapterContext(guardEntry()),
+    );
 
     // assert
     assert.deepStrictEqual(adaptation, { action: "handled" });
@@ -832,6 +797,7 @@ describe("adaptInputResult", () => {
     const adaptation = adaptInputResult(
       { kind: "mutate", additionalContext: "added context" },
       event,
+      adapterContext(guardEntry()),
     );
 
     // assert
@@ -852,7 +818,11 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult({ kind: "mutate", additionalContext: "" }, event);
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: "" },
+      event,
+      adapterContext(guardEntry()),
+    );
 
     // assert
     assert.deepStrictEqual(adaptation, { action: "transform", text: "" });
@@ -871,7 +841,7 @@ describe("adaptInputResult", () => {
     } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptInputResult(hookOutcome, event);
+    const adaptation = adaptInputResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -916,7 +886,7 @@ describe("adaptInputResult", () => {
       } satisfies InputEvent;
 
       // act
-      const adaptation = adaptInputResult(stopOutcome, event);
+      const adaptation = adaptInputResult(stopOutcome, event, adapterContext(guardEntry()));
 
       // assert
       assert.strictEqual(adaptation, undefined);
@@ -950,16 +920,14 @@ describe("adaptObservationResultForEvent", () => {
 
     // act
     adaptObservationResultForEvent(
-      runtime,
       { kind: "mutate", additionalContext: "first context" },
       "SessionStart",
-      firstProvenance,
+      provenanceContext(runtime, firstProvenance),
     );
     adaptObservationResultForEvent(
-      runtime,
       { kind: "mutate", additionalContext: "second context" },
       "SessionStart",
-      secondProvenance,
+      provenanceContext(runtime, secondProvenance),
     );
 
     // assert
@@ -993,7 +961,11 @@ describe("adaptObservationResultForEvent", () => {
     } satisfies HookExecResult;
 
     // act
-    adaptObservationResultForEvent(runtime, hookOutcome, "SessionStart", provenance);
+    adaptObservationResultForEvent(
+      hookOutcome,
+      "SessionStart",
+      provenanceContext(runtime, provenance),
+    );
 
     // assert
     assert.strictEqual(Object.hasOwn(hookOutcome, "additionalContext"), false);
@@ -1011,10 +983,9 @@ describe("adaptObservationResultForEvent", () => {
 
     // act
     adaptObservationResultForEvent(
-      runtime,
       { kind: "mutate", additionalContext: "" },
       "SessionStart",
-      provenance,
+      provenanceContext(runtime, provenance),
     );
 
     // assert
@@ -1037,16 +1008,32 @@ describe("adaptObservationResultForEvent", () => {
 
       // act
       adaptObservationResultForEvent(
-        runtime,
         { kind: "mutate", additionalContext: context },
         eventName,
-        provenance,
+        provenanceContext(runtime, provenance),
       );
 
       // assert
       assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
     });
   }
+
+  test("captures SessionStart context that no entry is attributed to under an empty provenance", () => {
+    // arrange
+    const runtime = createHooksRuntime();
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "orphan context" },
+      "SessionStart",
+      { ...adapterContext(undefined), runtime },
+    );
+
+    // assert
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
+      { context: "orphan context", scope: "user", marketplace: "", pluginId: "" },
+    ]);
+  });
 
   test("returns from noop without changing pending state", () => {
     // arrange
@@ -1058,7 +1045,11 @@ describe("adaptObservationResultForEvent", () => {
     } as const;
 
     // act
-    adaptObservationResultForEvent(runtime, { kind: "noop" }, "SessionStart", provenance);
+    adaptObservationResultForEvent(
+      { kind: "noop" },
+      "SessionStart",
+      provenanceContext(runtime, provenance),
+    );
 
     // assert
     assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
@@ -1116,7 +1107,11 @@ describe("adaptObservationResultForEvent", () => {
       } as const;
 
       // act
-      adaptObservationResultForEvent(runtime, hookOutcome, eventName, provenance);
+      adaptObservationResultForEvent(
+        hookOutcome,
+        eventName,
+        provenanceContext(runtime, provenance),
+      );
 
       // assert
       assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
