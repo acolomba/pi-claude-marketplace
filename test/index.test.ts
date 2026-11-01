@@ -119,7 +119,10 @@ type BackgroundInputListener = (
 ) => void;
 
 /** The bridged-command input listener, which answers with an input result. */
-type CommandInvocationListener = (event: InputEvent, ctx: ExtensionContext) => InputEventResult;
+type CommandInvocationListener = (
+  event: InputEvent,
+  ctx: ExtensionContext,
+) => InputEventResult | Promise<InputEventResult>;
 
 /** The background update's shutdown listener, which may wait for a step in flight. */
 type BackgroundShutdownListener = (event: SessionShutdownEvent) => Promise<void>;
@@ -137,6 +140,7 @@ interface HermeticScope {
 }
 
 interface LoadedExtension {
+  readonly pi: ExtensionAPI;
   readonly bridgeSessionStart: BridgeSessionStartListener;
   readonly discover: DiscoverListener;
   readonly sessionEnv: EventListener<SessionStartEvent>;
@@ -519,6 +523,7 @@ async function loadExtension(
   }
 
   return {
+    pi,
     bridgeSessionStart,
     discover,
     sessionEnv,
@@ -2361,7 +2366,10 @@ function backgroundContext(
 test("D-CF1-01: the command invocation handler registered after the skill aliases passes a bridged command through", async (t) => {
   // arrange
   await createHermeticScope(t, "command-invocation");
-  const { commandInvocation, ctx, verifyBoundary } = await loadExtension(0, 0);
+  const { pi, commandInvocation, ctx, verifyBoundary } = await loadExtension(0, 0);
+  when(() => pi.getCommands())
+    .thenReturn([])
+    .times(1);
 
   // act
   const outcome = commandInvocation(
