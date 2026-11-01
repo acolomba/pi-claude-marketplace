@@ -60,12 +60,16 @@ Pi's bash tool builds each child's env fresh, spreading the full live `process.e
 
 Skill content is the only surface that resolves the skill-scoped `${CLAUDE_SKILL_DIR}` token.
 
-| Variable                | Claude Code | Pi  | Notes                                                                                                                |
-| ----------------------- | ----------- | --- | -------------------------------------------------------------------------------------------------------------------- |
-| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into skill content at install time (SUB-01).                                                             |
-| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into skill content at install time.                                                                      |
-| `${CLAUDE_SKILL_DIR}`   | ✓           | ✓   | The skill's installed directory; skill-scoped, so only skill content resolves it (SUB-01).                           |
-| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "`CLAUDE_PROJECT_DIR` at user scope". |
+When the user invokes a skill, as `/skill:` or an alias, a typed argument that names `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_SKILL_DIR}`, or, at project scope, `${CLAUDE_PROJECT_DIR}` is filled in from the values that install recorded (D-CF2-06). A skill that the model loads on its own gets the file as staged (D-CF1-03).
+
+| Variable                | Claude Code | Pi  | Notes                                                                                                                                                                                                                                                   |
+| ----------------------- | ----------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into skill content at install time (SUB-01).                                                                                                                                                                                                |
+| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into skill content at install time.                                                                                                                                                                                                         |
+| `${CLAUDE_SKILL_DIR}`   | ✓           | ✓   | The skill's installed directory; skill-scoped, so only skill content resolves it (SUB-01).                                                                                                                                                              |
+| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "`CLAUDE_PROJECT_DIR` at user scope".                                                                                                                                    |
+| `${CLAUDE_SESSION_ID}`  | ✓           | ✓   | Replaced with the Pi session id when the user invokes the skill (D-CF1-01, D-CF2-06). A skill that the model loads on its own keeps it literal (D-CF1-03).                                                                                              |
+| `${CLAUDE_EFFORT}`      | ✓           | ✓   | Replaced at invocation with the thinking level of the Pi session: `low`, `medium`, `high`, `xhigh`, and `max` as themselves, `off` and `minimal` as `low`, and an unknown level as `high` (D-CF1-01). A model-loaded skill keeps it literal (D-CF1-03). |
 
 ### Commands content
 
@@ -153,7 +157,7 @@ Both hook lanes spread `...process.env` before adding the parity keys. When Pi i
 
 ### Pi-only `CLAUDE_SESSION_ID` alias
 
-`CLAUDE_SESSION_ID` is a pi-only alias of the session id, set alongside `CLAUDE_CODE_SESSION_ID` and `CLAUDECODE` from the single shared producer (`claudeSessionEnvFor`). It is present in bash children and on both hook lanes, and carries the same value as `CLAUDE_CODE_SESSION_ID` within one dispatch, so the three stay internally consistent (SENV-03, D-91-02). No upstream equivalent exists.
+`CLAUDE_SESSION_ID` is a pi-only alias of the session id, set alongside `CLAUDE_CODE_SESSION_ID` and `CLAUDECODE` from the single shared producer (`claudeSessionEnvFor`). It is present in bash children and on both hook lanes, and carries the same value as `CLAUDE_CODE_SESSION_ID` within one dispatch, so the three stay internally consistent (SENV-03, D-91-02). No upstream equivalent exists. The `${CLAUDE_SESSION_ID}` token in skill content is a different thing: Claude Code fills it in when the user invokes a skill, and so does this extension (see "Skills content").
 
 ### `CLAUDE_ENV_FILE` is exposed but not sourced
 

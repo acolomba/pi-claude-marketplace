@@ -207,7 +207,9 @@ The ten structured kinds through `prune-committed-warning` also permit this fiel
 
 Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
 
-A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. Such a load with nothing to change emits nothing. A background update reports the plugins it moved as one `background-update` whose `origin.kind` is `load`. Only a tui session runs the background update, so a json or rpc session never receives this entry; the kind stays in the schema (D-PL8-20).
+A bridged plugin skill that stops when you invoke it reports a `usage-error` whose `origin.commandId` is `skill`. This happens when a `` !`command` `` fails, the invocation is too large, Bash is missing, or the skill file cannot be read. A project skill also stops when Pi no longer trusts the project or when this machine has no record of its install. Nothing reaches the model (D-CF2-06).
+
+A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` for the user scope only and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. The project scope still gets the read-only pass, so its pending changes arrive as a `cascade` whose `origin.kind` is `load` (D-CF2-14). Such a load with nothing to change emits nothing. A background update reports the plugins it moved as one `background-update` whose `origin.kind` is `load`. Only a tui session runs the background update, so a json or rpc session never receives this entry; the kind stays in the schema (D-PL8-20).
 
 ### Command origin
 

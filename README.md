@@ -110,15 +110,16 @@ Commands use a colon (`:`) on POSIX and a dot (`.`) on Windows:
 | `foo`       | `foo-bar`    | `/foo:bar`      | `/foo.bar`        |
 | `foo`       | `foo`        | `/foo:foo`      | `/foo.foo`        |
 
-Skills use Pi's `/skill:` form and also have an alias in interactive sessions:
+Skills use Pi's `/skill:` form and also have aliases in interactive sessions and over RPC:
 
-| Plugin name | Skill name | Pi skill form    | Interactive alias |
-| ----------- | ---------- | ---------------- | ----------------- |
-| `foo`       | `bar`      | `/skill:foo-bar` | `/foo:bar`        |
-| `foo`       | `foo-bar`  | `/skill:foo-bar` | `/foo:bar`        |
-| `foo`       | `foo`      | `/skill:foo`     | `/foo:foo`        |
+| Plugin name | Skill name                          | Pi skill form    | Aliases                        |
+| ----------- | ----------------------------------- | ---------------- | ------------------------------ |
+| `foo`       | `bar`                               | `/skill:foo-bar` | `/foo:bar`                     |
+| `foo`       | `foo-bar`                           | `/skill:foo-bar` | `/foo:foo-bar`                 |
+| `foo`       | `foo`                               | `/skill:foo`     | `/foo:foo`                     |
+| `foo`       | `bar`, with frontmatter `name: baz` | `/skill:foo-bar` | `/foo:bar`, `/foo:baz`, `/baz` |
 
-Skill aliases use a colon on every platform. If an alias conflicts with a command, the command takes precedence. Use `/skill:foo-bar` to invoke the skill.
+The aliases are the names that Claude Code gives a skill. The skill name is the name of the skill's folder. If the skill's frontmatter sets `name`, the skill also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. If two skills of a plugin set the same `name`, the first skill gets the alias. Skill aliases use a colon on every platform. If an alias conflicts with a command, the command takes precedence. If a skill has the same name as a command of its plugin, install skips the skill and warns. Use `/skill:foo-bar` to invoke the skill.
 
 Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`.
 

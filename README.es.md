@@ -108,15 +108,16 @@ Los comandos usan dos puntos (`:`) en POSIX y un punto (`.`) en Windows:
 | `foo`                  | `foo-bar`          | `/foo:bar`           | `/foo.bar`             |
 | `foo`                  | `foo`              | `/foo:foo`           | `/foo.foo`             |
 
-Las habilidades usan la forma `/skill:` de Pi y también tienen un alias en las sesiones interactivas:
+Las habilidades usan la forma `/skill:` de Pi y también tienen alias en las sesiones interactivas y por RPC:
 
-| Nombre del complemento | Nombre de la habilidad | Forma de Pi      | Alias interactivo |
-| ---------------------- | ---------------------- | ---------------- | ----------------- |
-| `foo`                  | `bar`                  | `/skill:foo-bar` | `/foo:bar`        |
-| `foo`                  | `foo-bar`              | `/skill:foo-bar` | `/foo:bar`        |
-| `foo`                  | `foo`                  | `/skill:foo`     | `/foo:foo`        |
+| Nombre del complemento | Nombre de la habilidad                   | Forma de Pi      | Alias                          |
+| ---------------------- | ---------------------------------------- | ---------------- | ------------------------------ |
+| `foo`                  | `bar`                                    | `/skill:foo-bar` | `/foo:bar`                     |
+| `foo`                  | `foo-bar`                                | `/skill:foo-bar` | `/foo:foo-bar`                 |
+| `foo`                  | `foo`                                    | `/skill:foo`     | `/foo:foo`                     |
+| `foo`                  | `bar`, con `name: baz` en el frontmatter | `/skill:foo-bar` | `/foo:bar`, `/foo:baz`, `/baz` |
 
-Los alias de habilidades usan dos puntos en todas las plataformas. Si un alias entra en conflicto con un comando, el comando tiene prioridad. Usa `/skill:foo-bar` para ejecutar la habilidad.
+Los alias son los nombres que Claude Code da a una habilidad. El nombre de la habilidad es el nombre de su carpeta. Si el frontmatter de la habilidad define `name`, la habilidad también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos. Si dos habilidades de un complemento definen el mismo `name`, la primera recibe el alias. Los alias de habilidades usan dos puntos en todas las plataformas. Si un alias entra en conflicto con un comando, el comando tiene prioridad. Si una habilidad tiene el mismo nombre que un comando de su complemento, la instalación omite la habilidad y muestra un aviso. Usa `/skill:foo-bar` para ejecutar la habilidad.
 
 Los servidores MCP de los complementos reciben los nombres que les da Claude Code. El modelo ve cada herramienta como `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter guarda cada servidor bajo una clave que termina en `_`. `/claude:plugin info` muestra cada servidor como `plugin:<plugin>:<server>`.
 
