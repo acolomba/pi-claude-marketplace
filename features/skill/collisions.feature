@@ -108,3 +108,86 @@ Feature: Skill collisions
       | command           | description            |
       | /skill:demo-clash | Clash skill            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: The skills folder's copy wins over a declared path's copy of the same skill
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "skills": ["./extra"] }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "twin" described as "Twin in skills." with this body:
+      """
+      TWIN IN SKILLS
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "extra/twin/SKILL.md" with this text:
+      """
+      ---
+      name: twin
+      description: Twin in extra.
+      ---
+
+      TWIN IN EXTRA
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which skipped a skill of the plugin
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+      | /skill:demo-twin  | Twin in skills.        |
+
+  Scenario: Installing a plugin whose declared skills path repeats a skill reports the skipped copy
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "skills": ["./extra"] }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "twin" described as "Twin in skills." with this body:
+      """
+      TWIN IN SKILLS
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "extra/twin/SKILL.md" with this text:
+      """
+      ---
+      name: twin
+      description: Twin in extra.
+      ---
+
+      TWIN IN EXTRA
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                   |
+      | cascade    | info     | true         |                                                                     |                                         |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | skill source "twin" in "[redacted path] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: Two skill directories that elide to one pi name keep the first
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "demo-tool" described as "Tool in demo-tool." with this body:
+      """
+      TOOL IN DEMO-TOOL
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "tool" described as "Tool in tool." with this body:
+      """
+      TOOL IN TOOL
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which skipped a skill of the plugin
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+      | /skill:demo-tool  | Tool in demo-tool.     |
