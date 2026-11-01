@@ -131,6 +131,17 @@ void (true satisfies Same<
 void (true satisfies Same<PiBoundary.StopReason, PiBoundary.AssistantMessage["stopReason"]>);
 void (true satisfies PiBoundary.ExtensionAPI extends PiBoundary.PiInventory ? true : false);
 void (true satisfies Same<PiBoundary.ExtensionMode, "tui" | "rpc" | "json" | "print">);
+// D-CF1-01: `${CLAUDE_EFFORT}` reads the level the peer's getter returns.
+void (true satisfies Same<
+  PiBoundary.ThinkingLevel,
+  ReturnType<Peer.ExtensionAPI["getThinkingLevel"]>
+>);
+// @ts-expect-error a level the peer does not define is not a thinking level
+void ("turbo" satisfies PiBoundary.ThinkingLevel);
+// D-CF1-01: the invocation handlers filter on the peer's input source.
+void (true satisfies Same<PiBoundary.InputSource, Peer.InputEvent["source"]>);
+// @ts-expect-error a source the peer does not emit is not an input source
+void ("cli" satisfies PiBoundary.InputSource);
 // @ts-expect-error the consumer context requires an explicit mode
 void ({ ui: { notify: () => undefined } } satisfies PiBoundary.NotificationContext);
 void (true satisfies PiBoundary.ExtensionContext extends PiBoundary.NotificationContext
