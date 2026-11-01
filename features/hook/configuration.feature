@@ -31,9 +31,9 @@ Feature: Hook configuration
       | severity                       | info                |
 
     Examples:
-      | hooks field                                                                                    |
-      | "./extra/hooks.json"                                                                           |
-      | ["./extra/hooks.json"]                                                                         |
+      | hooks field                                                                                      |
+      | "./extra/hooks.json"                                                                             |
+      | ["./extra/hooks.json"]                                                                           |
       | { "PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "echo x" }] }] } |
 
   Scenario: Info on a plugin whose marketplace entry declares hooks names it partially available with unsupported hooks
