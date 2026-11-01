@@ -267,3 +267,16 @@ tooling. Status stays `open` until the user reviews it.
   11. The `@public` tag clean-up and the `collision-*.ts` comment fixes stay parent lines although Phase 6 owns those files.
   12. The SUMMARY was committed in three commits (one per task).
 - **Recorded in:** `06-09-SUMMARY.md`.
+
+### P6-DC-20: Verification-step choices (validation and security audit)
+
+- **Phase / source:** Phase 6 verify:post steps (`06-VALIDATION.md`, `06-SECURITY.md`), orchestrator and gsd-security-auditor.
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. The Nyquist audit found no gap and spawned no auditor: every MCP requirement maps to a committed feature file that passed in the phase gate's three cucumber runs; the user gate ("Fix all gaps" / "mark manual-only") was not shown because nothing was missing.
+  2. T-06-SC (named in all nine plans) is one register row.
+  3. The six `accept` threats were closed by writing their Accepted Risks Log rows (AR-06-01..06), with "plan threat model (Phase 6 planner)" as the accepter rather than the user.
+  4. The no-read proof for T-06-07/T-06-16 rests on the unit cases; the outside-reference scenario proves only the fatal refusal.
+  5. T-06-14 was checked at L1 depth (the three lifecycle scenarios); the D-08-02 field carry-over was not traced.
+  6. The root `.mcp.json` is read through symlink-following `stat`/`readFile` without containment (predates Phase 6); recorded as an observation, not a threat.
+- **Recorded in:** `06-VALIDATION.md`, `06-SECURITY.md`.
