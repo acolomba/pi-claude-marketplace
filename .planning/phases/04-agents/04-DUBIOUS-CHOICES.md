@@ -256,3 +256,21 @@ entries into the root file. Severity and status follow the root file's rules.
      model's faux import resolves under `compat.js`; the parent/child call race
      also remains. Fix routes (parent lines): change the frozen scripted
      model's import, or report the alias-prefix problem to pi-subagents.
+
+### P4-DC-10: Plan 04-06 gate choices and wave gates
+
+- **Phase / source:** executor for 04-06 (`04-06-SUMMARY.md`); orchestrator wave gates.
+- **Severity:** Low. **Status:** open.
+- **Gate results:** wave gates `npm run check` exit 0 (seeds 173100, 158544,
+  419001); phase gate on b18b16a: `npm run check` exit 0 (seed 745081,
+  1255/1255), `npm run test:modules` exit 0, `npm run test:cucumber` twice
+  (seeds 325268, 324634, 1255/1255 each), `fallow dupes` clean.
+- **Items:** the gate ran once on the base (equal to the combined tree);
+  `metrics.started` is estimated; the pi-subagents report's repros are
+  described from measured texts (item 1 uses a plain project agent, item 2
+  names `createFauxCore`); item 2's fix names two options without checking
+  jiti exact-match aliases; two CHANGELOG sub-bullets exceed one sentence; the
+  "old files" sub-bullet leaves out `apply`; the `info.ts` line is narrowed to
+  the source-reading view; decision rows cite `P4-DC-NN` IDs, which the parent
+  renumbers when merging the log; D-CF4-11..13 carry no "settled
+  autonomously" tag (CONTEXT does not mark them).
