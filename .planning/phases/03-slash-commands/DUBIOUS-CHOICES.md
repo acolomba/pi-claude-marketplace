@@ -256,3 +256,70 @@ entries into it. Severity and status follow the root file's rules.
      commands-side markers deleted. Rebuild also strips a second BOM, as
      Pi's parser does. `P3-DC-09` is not cited in code comments (phase IDs
      are forbidden there).
+
+### P3-DC-13: Plan 03-02 executor choices (frontmatter)
+
+- **Phase / source:** 03-02 executor (`03-02-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. Pi's menu em dash is matched as `--`, because the `fix-unicode-dashes`
+     pre-commit hook rewrites `—` in the feature file; a description holding
+     `--` cannot be told apart from the join.
+  2. The terminal-menu table lists Phase 2's `demo:demo-skill` alias row, so a
+     skills alias change changes this scenario.
+  3. The menu parser slices fixed 120-column rows (PTY width, Pi pads rows).
+  4. Pi's `[t]` source tag is pinned as rendered.
+  5. Existing unit cases that set `model: sonnet` now also expect the
+     dropped-fields line (inputs unchanged).
+  6. The executor's commits carry this child session's own `Claude-Session`
+     trailer (`session_01EDUMG8nFuockQFTkJixpie`, from its harness reminder)
+     instead of the parent's line the brief asked for; history is not
+     rewritten.
+
+### P3-DC-14: Plan 03-03 executor choices (invocation)
+
+- **Phase / source:** 03-03 executor (`03-03-SUMMARY.md`).
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. A `"kind" in loaded` check narrows the read result instead of an
+     explicit discriminated union.
+  2. Bash-missing is checked even for a body with no `!` command (as skills
+     do; upstream may check only when a pattern exists, not verified).
+  3. The Outline's `placeholder` column only labels rows.
+  4. A staged-file parse failure has no unit case of its own (same `.catch`
+     as a read failure).
+  5. The hooks feature's data-directory literal (`data/demo`) differs from the
+     commands and skills one (`data/<marketplace>/<plugin>`): a parent line
+     for the Hooks phase.
+  6. The handler's slash-line regex became `startsWith` plus one `\s` search
+     (lint `sonarjs/super-linear-regex`); the invoker type is inline (fallow
+     private-type leak).
+
+### P3-DC-15: Plan 03-04 executor choices (declared paths and entry rule)
+
+- **Phase / source:** 03-04 executor (`03-04-SUMMARY.md`).
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. A declared non-`.md` file warns where upstream is silent (D-CF3-05).
+  2. CM-2 elision applies to declared files (`demo-a.md` gives `demo:a`),
+     under the recorded D-141-01 divergence; upstream names it `demo:demo-a`.
+  3. The FG-14 pin runs the install as a `When` (the install Given rejects
+     warnings and this install always notes the shadowed folder).
+  4. An entry `"commands": []` still reads the folder (inferred from E4, not
+     probed).
+  5. A Unix socket stands in for "not a regular file" in a unit case.
+  6. Residuals for the parent: `/claude:plugin info` does not list a declared
+     single-file command (`discoverComponentNames` reads directories only);
+     Phase 2's `commandUpstreamNames` reads each commands path as a directory,
+     so a declared command file adds no name to the D-CF2-03 clash check.
+
+### P3-DC-16: Plan 03-05 executor choices (lifecycle)
+
+- **Phase / source:** 03-05 executor (`03-05-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. The update scenarios replace the whole command file (description and
+     body change together; listing pins one, the model log the other).
+  2. A negative edit keyed on `allowExistingRecord` (temporary).
+  3. `Given pi runs with the scripted model` sits in the Background, because
+     the listing step needs the profile Pi.
