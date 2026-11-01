@@ -46,6 +46,9 @@ const UNSET_KEYWORDS = new Set(["unset", "unsetenv"]);
 // reads a leading `--` with it as part of the name.
 const ASSIGNMENT = /^(?:--)?\w+(?:\[[^\]]*\])?\+?=/;
 const PARAMETER = /\w+|[@*#?$!-]/y;
+// A lone `$` before `\$` and a letter or digit: tree-sitter-bash reads the
+// three characters as one expansion and keeps its backslash.
+const ESCAPED_DOLLAR_NAME = /\\\$[\p{Alphabetic}\p{Nd}]/uy;
 const BARE_WORD = /[^\s;&|<>()'"`$\\]+/y;
 const REDIRECT = /\d*(?:<<<|<<-|<<|<>|<&|>>|>&|>\||&>>|&>|<|>)/y;
 
@@ -230,6 +233,11 @@ function readDollar(cursor: Cursor): Piece {
     return takePiece(cursor, enclosureEnd(text, pos + 2, "{"), "expansion");
   }
 
+  ESCAPED_DOLLAR_NAME.lastIndex = pos + 1;
+  if (ESCAPED_DOLLAR_NAME.test(text)) {
+    return takePiece(cursor, pos + 3, "expansion");
+  }
+
   PARAMETER.lastIndex = pos + 1;
   const name = PARAMETER.exec(text)?.[0] ?? "";
   return takePiece(cursor, pos + 1 + name.length, "expansion");
@@ -395,12 +403,18 @@ function skipArrayValue(cursor: Cursor, word: Word): void {
   }
 }
 
+// Where the command name would be a lone `$` before `\$`, tree-sitter-bash
+// drops the `$` as an error, and the `\$` word names the command.
+function isDroppedDollar(cursor: Cursor, word: Word): boolean {
+  return word.raw === "$" && cursor.text.startsWith("\\$", cursor.pos);
+}
+
 function addWord(cursor: Cursor, command: Command, word: Word): void {
   if (command.named) {
     addArgument(command, word);
   } else if (ASSIGNMENT.test(word.raw)) {
     skipArrayValue(cursor, word);
-  } else {
+  } else if (!isDroppedDollar(cursor, word)) {
     addCommandName(command, word);
   }
 }

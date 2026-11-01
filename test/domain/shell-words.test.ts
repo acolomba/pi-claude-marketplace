@@ -143,6 +143,12 @@ const UPSTREAM_ROWS: readonly TokenRow[] = [
   { text: "x='a'\\$ b", tokens: ["$", "b"] },
   { text: "x=$X\\$ b", tokens: ["$", "b"] },
   { text: 'x=b"a"\\$ b', tokens: ["$", "b"] },
+  { text: "x $\\$5 y", tokens: ["x", "$\\$5", "y"] },
+  { text: "x $\\$a b", tokens: ["x", "$\\$a", "b"] },
+  { text: "x $\\$é y", tokens: ["x", "$\\$é", "y"] },
+  { text: "x $\\$_ y", tokens: ["x", "$_", "y"] },
+  { text: "$\\$ b", tokens: ["$", "b"] },
+  { text: "$\\$$X b", tokens: ["$$X", "b"] },
 ];
 
 // D-CF1-01 licensed residual: tree-sitter-bash error recovery and expansion
@@ -159,6 +165,7 @@ const RESIDUAL_ROWS: readonly ResidualRow[] = [
   { text: "for x in (y); do a b; done", tokens: ["a", "b"], upstream: ["y"] },
   { text: "$@-$1", tokens: ["$@-$1"], upstream: ["$@-$", "1"] },
   { text: 'ab"a\\"', tokens: ['ab"a\\"'], upstream: ["aba\\"] },
+  { text: "$\\$ b; c'", tokens: ["$", "b"], upstream: ["$", "$", "b"] },
 ];
 
 for (const { text, tokens } of [...GOLDEN_ROWS, ...UPSTREAM_ROWS]) {
