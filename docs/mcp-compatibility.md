@@ -505,7 +505,7 @@ The behaviors below differ from Claude Code. Each item names its reason: a recor
 - [Claude Code MCP reference](https://code.claude.com/docs/en/mcp) -- the upstream reference for plugin MCP servers, tool names, timeouts, OAuth, and tool search.
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) -- the Pi package that runs the servers, with its own configuration reference.
 - [pi-mcp-adapter configuration](https://github.com/nicobailon/pi-mcp-adapter/blob/main/docs/configuration.md) -- the file layout, the order in which pi-mcp-adapter reads its files, and the trust rules for project servers.
-- [MCP adapter canary](../test/live-uat/README.md#mcp-adapter-canary----mcp-adapter-canarymjs) -- the live test that runs this extension with pi-mcp-adapter 5.2.0, and its recorded result.
+- [MCP adapter canary](../test/live-uat/README.md#mcp-adapter-canary----mcp-adapter-canarymjs) -- the live test that runs this extension with pi-mcp-adapter 7.0.0. Its recorded result is from a run on pi-mcp-adapter 5.2.0.
 - [Hook compatibility](hooks-compatibility.md) -- how plugin hooks match MCP tools.
 - [Environment variables](env-vars.md) -- the variables that this extension adds to the `env` of stdio servers.
 - [Output catalog](output-catalog.md) -- the exact text of the `{unsupported mcp}` and `{malformed mcp}` rows, the `info` output, and the override notice.
