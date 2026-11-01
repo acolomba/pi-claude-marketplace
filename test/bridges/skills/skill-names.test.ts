@@ -192,6 +192,26 @@ describe("writeSkillRecord", () => {
         "---\nname: demo-review\npi-claude-marketplace:\n  names: [x]\n  y: z\nlicense: MIT\n---\n",
       expectedContent: `---\nname: demo-review\nlicense: MIT\n${recordText}\n---\n`,
     },
+    ...[
+      '"pi-claude-marketplace": old',
+      "'pi-claude-marketplace': old",
+      "pi-claude-marketplace : old",
+      '"pi-claude-\\x6darketplace": old',
+    ].map((keyLine) => ({
+      label: `replaces the record key spelled as ${keyLine}`,
+      content: `---\n${keyLine}\nname: demo-review\n---\n`,
+      expectedContent: `---\nname: demo-review\n${recordText}\n---\n`,
+    })),
+    {
+      label: "keeps a key that only starts with the record key",
+      content: "---\npi-claude-marketplace-note: kept\nname: demo-review\n---\n",
+      expectedContent: `---\npi-claude-marketplace-note: kept\nname: demo-review\n${recordText}\n---\n`,
+    },
+    {
+      label: "keeps a node that does not parse alone, such as an alias of another node's anchor",
+      content: "---\nname: &n demo-review\nlabel: *n\n---\n",
+      expectedContent: `---\nname: &n demo-review\nlabel: *n\n${recordText}\n---\n`,
+    },
     {
       label: "keeps an indented --- inside a block scalar out of the fence search",
       content: "---\nname: demo-review\ndescription: |\n  One.\n  ---\n  Two.\n---\n\nBody.\n",

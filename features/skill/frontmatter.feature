@@ -114,6 +114,36 @@ Feature: Skill frontmatter
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
+  Scenario Outline: Installing a skill whose frontmatter spells this extension's own key differently installs it
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
+      """
+      ---
+      name: review
+      description: Reviews a change.
+      <key and colon> set by the author
+      ---
+
+      Review the change.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+    Examples:
+      | key and colon            |
+      | "pi-claude-marketplace": |
+      | 'pi-claude-marketplace': |
+      | pi-claude-marketplace :  |
+
   Scenario: A skill that disables model invocation stays listed
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
