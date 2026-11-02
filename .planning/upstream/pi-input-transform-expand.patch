@@ -1,0 +1,405 @@
+From 89fbc7421b36d13c5e1f53084a33723ec73ddc36 Mon Sep 17 00:00:00 2001
+From: acolomba <acolomba@gmail.com>
+Date: Mon, 2 Nov 2026 01:52:59 +0000
+Subject: [PATCH] feat(coding-agent): let input transforms skip prompt template
+ expansion
+
+An input handler that returns { action: "transform" } could not stop pi
+from expanding /skill:name and /template in the transformed text, so a
+handler that already expanded a command saw its result expanded again
+when it started with "/". The transform result now accepts
+expandPromptTemplates (default true), matching the prompt() and
+sendUserMessage() option. When false, prompt(), steer(), and followUp()
+send the transformed text as is. A later transform that omits the
+option keeps the value an earlier handler set.
+---
+ packages/coding-agent/docs/extensions.md      | 16 +++-
+ .../coding-agent/src/core/agent-session.ts    | 21 +++--
+ .../src/core/extensions/runner.ts             |  6 ++
+ .../coding-agent/src/core/extensions/types.ts |  8 +-
+ .../test/extensions-input-event.test.ts       | 31 ++++++++
+ .../test/suite/agent-session-prompt.test.ts   | 78 ++++++++++++++++++-
+ .../test/suite/agent-session-queue.test.ts    | 68 +++++++++++++++-
+ 7 files changed, 214 insertions(+), 14 deletions(-)
+
+diff --git a/packages/coding-agent/docs/extensions.md b/packages/coding-agent/docs/extensions.md
+index 5879058..1e8dfc5 100644
+--- a/packages/coding-agent/docs/extensions.md
++++ b/packages/coding-agent/docs/extensions.md
+@@ -1114,8 +1114,8 @@ Fired when user input is received, after extension commands are checked but befo
+ **Processing order:**
+ 1. Extension commands (`/cmd`) checked first - if found, handler runs and input event is skipped. Messages from `pi.sendUserMessage()` are checked only with `expandPromptTemplates: true`.
+ 2. `input` event fires - can intercept, transform, or handle
+-3. If not handled: skill commands (`/skill:name`) expanded to skill content
+-4. If not handled: prompt templates (`/template`) expanded to template content
++3. If not handled: skill commands (`/skill:name`) expanded to skill content, unless a transform set `expandPromptTemplates: false`
++4. If not handled: prompt templates (`/template`) expanded to template content, unless a transform set `expandPromptTemplates: false`
+ 5. Agent processing begins (`before_agent_start`, etc.)
+
+ ```typescript
+@@ -1151,10 +1151,18 @@ pi.on("input", async (event, ctx) => {
+
+ **Results:**
+ - `continue` - pass through unchanged (default if handler returns nothing)
+-- `transform` - modify text/images, then continue to expansion
++- `transform` - modify text/images, then continue to expansion. Set `expandPromptTemplates: false` to skip skill command and prompt template expansion of the transformed text, for example when the handler already expanded a command and its result may itself start with `/`
+ - `handled` - skip agent entirely (first handler to return this wins)
+
+-Transforms chain across handlers. See [input-transform.ts](../examples/extensions/input-transform.ts) and [input-transform-streaming.ts](../examples/extensions/input-transform-streaming.ts) for `streamingBehavior`-aware routing.
++```typescript
++pi.on("input", async (event) => {
++  if (!event.text.startsWith("/my-command")) return { action: "continue" };
++  // The expanded body is sent as is, even if it starts with `/template` or `/skill:name`
++  return { action: "transform", text: expandMyCommand(event.text), expandPromptTemplates: false };
++});
++```
++
++Transforms chain across handlers. A later transform that omits `expandPromptTemplates` keeps the value an earlier handler set. See [input-transform.ts](../examples/extensions/input-transform.ts) and [input-transform-streaming.ts](../examples/extensions/input-transform-streaming.ts) for `streamingBehavior`-aware routing.
+
+ <a id="use-extension-context"></a>
+
+diff --git a/packages/coding-agent/src/core/agent-session.ts b/packages/coding-agent/src/core/agent-session.ts
+index dbe36c3..54d8041 100644
+--- a/packages/coding-agent/src/core/agent-session.ts
++++ b/packages/coding-agent/src/core/agent-session.ts
+@@ -2064,9 +2064,9 @@ export class AgentSession {
+ 		images: ImageContent[] | undefined,
+ 		source: InputSource,
+ 		streamingBehavior?: "steer" | "followUp",
+-	): Promise<{ text: string; images: ImageContent[] | undefined } | undefined> {
++	): Promise<{ text: string; images: ImageContent[] | undefined; expandPromptTemplates: boolean } | undefined> {
+ 		if (!this._extensionRunner.hasHandlers("input")) {
+-			return { text, images };
++			return { text, images, expandPromptTemplates: true };
+ 		}
+
+ 		const inputResult = await this._extensionRunner.emitInput(text, images, source, streamingBehavior);
+@@ -2074,9 +2074,13 @@ export class AgentSession {
+ 			return undefined;
+ 		}
+ 		if (inputResult.action === "transform") {
+-			return { text: inputResult.text, images: inputResult.images ?? images };
++			return {
++				text: inputResult.text,
++				images: inputResult.images ?? images,
++				expandPromptTemplates: inputResult.expandPromptTemplates ?? true,
++			};
+ 		}
+-		return { text, images };
++		return { text, images, expandPromptTemplates: true };
+ 	}
+
+ 	private async _normalizePromptImages(
+@@ -2149,7 +2153,7 @@ export class AgentSession {
+
+ 		// Expand skill commands (/skill:name args) and prompt templates (/template args)
+ 		let expandedText = currentText;
+-		if (expandPromptTemplates) {
++		if (expandPromptTemplates && processedInput.expandPromptTemplates) {
+ 			expandedText = this._expandSkillCommand(expandedText);
+ 			expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
+ 		}
+@@ -2273,8 +2277,11 @@ export class AgentSession {
+ 		);
+ 		if (!processedInput) return "handled";
+
+-		let expandedText = this._expandSkillCommand(processedInput.text);
+-		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
++		let expandedText = processedInput.text;
++		if (processedInput.expandPromptTemplates) {
++			expandedText = this._expandSkillCommand(expandedText);
++			expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
++		}
+
+ 		if (behavior === "steer") {
+ 			await this._queueSteer(expandedText, processedInput.images);
+diff --git a/packages/coding-agent/src/core/extensions/runner.ts b/packages/coding-agent/src/core/extensions/runner.ts
+index 77712e6..1eb35e5 100644
+--- a/packages/coding-agent/src/core/extensions/runner.ts
++++ b/packages/coding-agent/src/core/extensions/runner.ts
+@@ -1531,6 +1531,7 @@ export class ExtensionRunner {
+ 		const ctx = this.createContext();
+ 		let currentText = text;
+ 		let currentImages = images;
++		let expandPromptTemplates: boolean | undefined;
+
+ 		for (const { ext, handlers } of snapshotEventHandlers(this.extensions, "input")) {
+ 			for (const handler of handlers) {
+@@ -1547,6 +1548,8 @@ export class ExtensionRunner {
+ 					if (result?.action === "transform") {
+ 						currentText = result.text;
+ 						currentImages = result.images ?? currentImages;
++						// A later handler sees text an earlier handler may have expanded, so omitting the option keeps the earlier choice.
++						expandPromptTemplates = result.expandPromptTemplates ?? expandPromptTemplates;
+ 					}
+ 				} catch (err) {
+ 					this.emitError({
+@@ -1558,6 +1561,9 @@ export class ExtensionRunner {
+ 				}
+ 			}
+ 		}
++		if (expandPromptTemplates !== undefined) {
++			return { action: "transform", text: currentText, images: currentImages, expandPromptTemplates };
++		}
+ 		return currentText !== text || currentImages !== images
+ 			? { action: "transform", text: currentText, images: currentImages }
+ 			: { action: "continue" };
+diff --git a/packages/coding-agent/src/core/extensions/types.ts b/packages/coding-agent/src/core/extensions/types.ts
+index 098f7fb..ce9555f 100644
+--- a/packages/coding-agent/src/core/extensions/types.ts
++++ b/packages/coding-agent/src/core/extensions/types.ts
+@@ -1203,7 +1203,13 @@ export interface InputEvent {
+ /** Result from input event handler */
+ export type InputEventResult =
+ 	| { action: "continue" }
+-	| { action: "transform"; text: string; images?: ImageContent[] }
++	| {
++			action: "transform";
++			text: string;
++			images?: ImageContent[];
++			/** Expand skill commands and prompt templates in the transformed text. Default: true. */
++			expandPromptTemplates?: boolean;
++	  }
+ 	| { action: "handled" };
+
+ // ============================================================================
+diff --git a/packages/coding-agent/test/extensions-input-event.test.ts b/packages/coding-agent/test/extensions-input-event.test.ts
+index b89dc1c..ae6bcc1 100644
+--- a/packages/coding-agent/test/extensions-input-event.test.ts
++++ b/packages/coding-agent/test/extensions-input-event.test.ts
+@@ -75,6 +75,37 @@ describe("Input Event", () => {
+ 		expect(result).toEqual({ action: "transform", text: "X[1][2]", images: undefined });
+ 	});
+
++	it("returns expandPromptTemplates: false even when the text is unchanged", async () => {
++		const r = await createRunner(
++			`export default p => p.on("input", async e => ({ action: "transform", text: e.text, expandPromptTemplates: false }));`,
++		);
++		const result = await r.emitInput("/review x", undefined, "interactive");
++		expect(result).toEqual({
++			action: "transform",
++			text: "/review x",
++			images: undefined,
++			expandPromptTemplates: false,
++		});
++	});
++
++	it("keeps expandPromptTemplates from an earlier transform when a later one omits it", async () => {
++		const r = await createRunner(
++			`export default p => p.on("input", async e => ({ action: "transform", text: "/x " + e.text, expandPromptTemplates: false }));`,
++			`export default p => p.on("input", async e => ({ action: "transform", text: e.text + "[2]" }));`,
++		);
++		const result = await r.emitInput("y", undefined, "interactive");
++		expect(result).toEqual({ action: "transform", text: "/x y[2]", images: undefined, expandPromptTemplates: false });
++	});
++
++	it("lets a later transform override expandPromptTemplates", async () => {
++		const r = await createRunner(
++			`export default p => p.on("input", async e => ({ action: "transform", text: e.text, expandPromptTemplates: false }));`,
++			`export default p => p.on("input", async e => ({ action: "transform", text: e.text, expandPromptTemplates: true }));`,
++		);
++		const result = await r.emitInput("y", undefined, "interactive");
++		expect(result).toEqual({ action: "transform", text: "y", images: undefined, expandPromptTemplates: true });
++	});
++
+ 	it("short-circuits on handled and skips subsequent handlers", async () => {
+ 		(globalThis as any).testVar = false;
+ 		const r = await createRunner(
+diff --git a/packages/coding-agent/test/suite/agent-session-prompt.test.ts b/packages/coding-agent/test/suite/agent-session-prompt.test.ts
+index 8052fd6..682f424 100644
+--- a/packages/coding-agent/test/suite/agent-session-prompt.test.ts
++++ b/packages/coding-agent/test/suite/agent-session-prompt.test.ts
+@@ -14,7 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
+ import type { BeforeAgentStartEvent, ExtensionAPI, InputEvent } from "../../src/core/extensions/index.ts";
+ import type { PromptTemplate } from "../../src/core/prompt-templates.ts";
+ import { createSyntheticSourceInfo } from "../../src/core/source-info.ts";
+-import { createTestResourceLoader } from "../utilities.ts";
++import { createTestExtensionsResult, createTestResourceLoader } from "../utilities.ts";
+ import { createHarness, getMessageText, type Harness } from "./harness.ts";
+
+ const processImage = vi.hoisted(() =>
+@@ -316,6 +316,82 @@ describe("AgentSession prompt characterization", () => {
+ 		expect(expandedPrompt).toBe("Review this code: src/index.ts");
+ 	});
+
++	it("skips template and skill expansion of transformed input when the transform opts out", async () => {
++		const template: PromptTemplate = {
++			name: "review",
++			description: "Review template",
++			content: "Review this code: $1",
++			filePath: "/virtual/review.md",
++			sourceInfo: createSyntheticSourceInfo("/virtual/review.md", {
++				source: "local",
++				scope: "temporary",
++				origin: "top-level",
++			}),
++		};
++		const extensionsResult = await createTestExtensionsResult([
++			(pi) => {
++				pi.on("input", (event) => {
++					if (event.text === "literal") {
++						return { action: "transform", text: "/review src/index.ts", expandPromptTemplates: false };
++					}
++					if (event.text === "skill") {
++						return { action: "transform", text: "/skill:test body", expandPromptTemplates: false };
++					}
++					if (event.text === "expand skill") return { action: "transform", text: "/skill:test body" };
++					return { action: "transform", text: "/review src/index.ts" };
++				});
++			},
++		]);
++		const tempDir = join(tmpdir(), `pi-skill-${Date.now()}-${Math.random().toString(36).slice(2)}`);
++		mkdirSync(tempDir, { recursive: true });
++		tempDirs.push(tempDir);
++		const skillPath = join(tempDir, "test-skill.md");
++		writeFileSync(skillPath, "# Test Skill\n\nUse the skill body.");
++		const resourceLoader = {
++			...createTestResourceLoader({ extensionsResult }),
++			getPrompts: () => ({ prompts: [template], diagnostics: [] }),
++			getSkills: () => ({
++				skills: [
++					{
++						name: "test",
++						description: "Test skill",
++						filePath: skillPath,
++						disableModelInvocation: false,
++						baseDir: tempDir,
++						sourceInfo: createSyntheticSourceInfo(skillPath, {
++							source: "local",
++							scope: "project",
++							origin: "top-level",
++							baseDir: tempDir,
++						}),
++					},
++				],
++				diagnostics: [],
++			}),
++		};
++		const harness = await createHarness({ resourceLoader });
++		harnesses.push(harness);
++		const sentPrompts: string[] = [];
++		const capturePrompt = (context: TranscriptContext) => {
++			const user = context.messages.filter((message) => message.role === "user").at(-1);
++			sentPrompts.push(user ? getMessageText(user) : "");
++			return fauxAssistantMessage("ok");
++		};
++		harness.setResponses([capturePrompt, capturePrompt, capturePrompt, capturePrompt]);
++
++		await harness.session.prompt("literal");
++		await harness.session.prompt("skill");
++		await harness.session.prompt("expand");
++		await harness.session.prompt("expand skill");
++
++		expect(sentPrompts.slice(0, 3)).toEqual([
++			"/review src/index.ts",
++			"/skill:test body",
++			"Review this code: src/index.ts",
++		]);
++		expect(sentPrompts[3]).toContain("Use the skill body.");
++	});
++
+ 	it("dispatches extension commands without consuming a provider response", async () => {
+ 		const commandRuns: string[] = [];
+ 		const harness = await createHarness({
+diff --git a/packages/coding-agent/test/suite/agent-session-queue.test.ts b/packages/coding-agent/test/suite/agent-session-queue.test.ts
+index d198cbd..70cf4da 100644
+--- a/packages/coding-agent/test/suite/agent-session-queue.test.ts
++++ b/packages/coding-agent/test/suite/agent-session-queue.test.ts
+@@ -3,7 +3,16 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+ import type { ExtensionAPI, InputEvent } from "@earendil-works/pi-coding-agent";
+ import { Type } from "typebox";
+ import { afterEach, describe, expect, it } from "vitest";
+-import { createHarness, getAssistantTexts, getMessageText, getUserTexts, type Harness } from "./harness.ts";
++import { createSyntheticSourceInfo } from "../../src/core/source-info.ts";
++import { createTestExtensionsResult, createTestResourceLoader } from "../utilities.ts";
++import {
++	createHarness,
++	getAssistantTexts,
++	getMessageText,
++	getUserTexts,
++	type Harness,
++	type HarnessOptions,
++} from "./harness.ts";
+
+ async function createWaitingHarness(
+ 	options: {
+@@ -11,6 +20,7 @@ async function createWaitingHarness(
+ 		extensionFactories?: Harness["session"]["extensionRunner"] extends never
+ 			? never
+ 			: Array<(pi: ExtensionAPI) => void>;
++		resourceLoader?: HarnessOptions["resourceLoader"];
+ 	} = {},
+ ): Promise<{
+ 	harness: Harness;
+@@ -38,6 +48,7 @@ async function createWaitingHarness(
+ 	const harness = await createHarness({
+ 		tools: [waitTool, ...(options.tools ?? [])],
+ 		extensionFactories: options.extensionFactories,
++		resourceLoader: options.resourceLoader,
+ 	});
+
+ 	const waitForToolStart = new Promise<void>((resolve) => {
+@@ -203,6 +214,61 @@ describe("AgentSession queue characterization", () => {
+ 		await promptPromise;
+ 	});
+
++	it("skips template expansion of queued input when the input transform opts out", async () => {
++		const extensionsResult = await createTestExtensionsResult([
++			(pi) => {
++				pi.on("input", (event) => {
++					if (event.text === "start") return { action: "continue" };
++					return {
++						action: "transform",
++						text: "/review src/index.ts",
++						expandPromptTemplates: event.text !== "literal",
++					};
++				});
++			},
++		]);
++		const waiting = await createWaitingHarness({
++			resourceLoader: {
++				...createTestResourceLoader({ extensionsResult }),
++				getPrompts: () => ({
++					prompts: [
++						{
++							name: "review",
++							description: "Review template",
++							content: "Review this code: $1",
++							filePath: "/virtual/review.md",
++							sourceInfo: createSyntheticSourceInfo("/virtual/review.md", {
++								source: "local",
++								scope: "temporary",
++								origin: "top-level",
++							}),
++						},
++					],
++					diagnostics: [],
++				}),
++			},
++		});
++		const { harness, waitForToolStart, promptPromise, releaseToolExecution } = waiting;
++		harnesses.push(harness);
++		harness.setResponses([
++			fauxAssistantMessage(fauxToolCall("wait", {}), { stopReason: "toolUse" }),
++			fauxAssistantMessage("steered"),
++			fauxAssistantMessage("followed up"),
++		]);
++
++		await waitForToolStart;
++		try {
++			await harness.session.steer("literal");
++			await harness.session.followUp("expand");
++
++			expect(harness.session.getSteeringMessages()).toEqual(["/review src/index.ts"]);
++			expect(harness.session.getFollowUpMessages()).toEqual(["Review this code: src/index.ts"]);
++		} finally {
++			releaseToolExecution();
++		}
++		await promptPromise;
++	});
++
+ 	it("delivers multiple steering messages in order in one-at-a-time mode", async () => {
+ 		const waiting = await createWaitingHarness();
+ 		const { harness, waitForToolStart, promptPromise, releaseToolExecution } = waiting;
+--
+2.43.0

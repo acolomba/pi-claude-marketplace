@@ -65,6 +65,31 @@ the user reviews it. Creating a Pi fork from this session was refused (the
 repository is outside the session's access), so the patch waits for the user
 to fork `earendil-works/pi`.
 
+**A.2, an agent calling a plugin MCP tool (D-CF6-10, MCP-07): accepted as a
+deviation, with upstream fixes.** Investigation on 2026-11-02 found three
+separate causes:
+
+1. **Design (pi-subagents docs, `agents.md` l.553):** a foreground child never
+   loads ambient extensions. An agent that needs pi-mcp-adapter's tools must
+   run in the background (`async: true`).
+2. **pi-subagents 0.84.0 bug A:** its config validator rejects
+   `directTools: "search"`, which pi-mcp-adapter 7.0 allows and the extension
+   writes for every plugin server (ANAME-04). Every bridged server is dropped,
+   so even a background agent gets "Unresolved MCP direct-tool selectors". This
+   is the cause the D-CF6-10 scenario pins.
+3. **pi-subagents 0.84.0 bug B:** its cache key does not expand
+   `${VAR:-default}` the way pi-mcp-adapter 7.0 does, so a server that uses
+   that form in `env` or `headers` never matches the adapter's cache.
+
+The user accepted the foreground refusal as pi-subagents' design. Actions:
+the extension writes `async: true` for agents granted MCP tools, which is
+consistent with Pi but differs from Claude Code's foreground run. Patches for
+bugs A and B are drafted for the user's review, with no PR. MCP-07 closes as
+an accepted deviation, with a BACKLOG item to prove a background call once
+pi-subagents is fixed and the harness can run background children. The
+earlier "cache-key mismatch" explanation of the D-CF6-10 refusal was wrong for
+that scenario; bug A is the cause.
+
 ### B. Security decisions taken without you
 
 These four are marked "Pending (user review)" in `.planning/PROJECT.md`.
