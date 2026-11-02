@@ -3,7 +3,7 @@ gsd_state_version: "1.0"
 milestone: component-features
 milestone_name: Component Behavioral Tests
 status: Awaiting next milestone
-stopped_at: Phase 06 complete — all phases complete
+stopped_at: Milestone component-features closed; awaiting the next milestone
 last_updated: "2026-11-02T12:28:16.488Z"
 last_activity: 2026-11-02
 last_activity_desc: Milestone component-features completed and archived
@@ -14,19 +14,18 @@ progress:
   total_plans: 61
   completed_plans: 61
   percent: 100
-current_phase: 06
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-01 after Phase 1)
+See: `.planning/PROJECT.md` (updated 2026-11-02 after the component-features milestone)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Skills (verification deferred to the user); all component phases merged
+**Current focus:** Planning the next milestone (`/new-gsd-milestone <name>`). Open for the user: review D-CF2-13..16 and D-CF3-07, review the upstream branches on `acolomba/pi` and `acolomba/pi-subagents`, and decide T-05-33 and T-05-34.
 
 ## Current Position
 
