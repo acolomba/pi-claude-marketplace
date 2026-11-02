@@ -875,3 +875,15 @@ The parent closed P5-DC-11 after the merge: project-scope hooks run only when th
 6. `05-SECURITY.md`: T-05-28 marked mitigated by hand (da72ba4, D-CF2-15); new T-05-31 / AR-05-06 for the hooks residual. The audit re-run follows.
 7. compat-research skill: probes start inside `unshare -rn`, only where `/home/claude/.claude/remote` is absent or unreadable.
 8. CONVENTIONS recount: 41 markers, 23 `code-duplication`. CHANGELOG hook lines are reworded; a few run slightly over 25 words.
+
+### DC-38: Unnamed project re-stages never create ledger entries (fed700e, 408fa23)
+
+**Decision for the user to review: D-CF2-16, taken by the parent without asking.** The post-merge Phase 5 re-audit (`05-SECURITY.md`, 2026-11-02) found T-05-32 (high): a bare `/claude:plugin update` or `reinstall`, the `marketplace update` cascade, and `apply`'s convergence re-staged every project plugin the repository's `state.json` lists and recorded it in this user's ledger, so the repository's hooks, skills and commands ran. Now a re-stage that names no plugin may only refresh entries that already exist (`ProjectLedgerAdmission = "refresh"`); naming the plugin (`install`, `update`, `reinstall`, `enable` X) still creates them, as the abort messages advise. Upstream parity: `/plugin update` touches only `installed_plugins.json` entries. `npm run check` exit 0, 1534/1534 (seed 78049). Red proof: with the eight source files at HEAD, the four new "stays off / stays refused" scenarios fail.
+
+1. **Residual (parent's call):** `apply`'s install, enable and missing-dependency steps for a plugin the project config declares still create entries, because typing `apply` is the explicit consent D-CF2-14 relies on.
+2. **Per plugin, not per entry:** a recorded plugin's new version can add new skill, command or hook entries under refresh. The ledger keys plugins by name only, not marketplace.
+3. **Absent means create:** existing callers keep their behavior and every production "not aimed" site sets `refresh`, but a future caller that leaves the field out gets `create` (not fail-closed).
+4. `@marketplace` targets count as not aimed. Dependencies take the command's admission.
+5. No notice when a plugin is updated but left unrecorded; a refused skill or command prints the recovery command, but a refused hook only logs a debug line.
+6. The missing-dependency install under a bare update is covered by unit tests only.
+- Phase 5 security now has `threats_open: 0`; T-05-33 (a hook's stdout cut at 1 MB under `onFailure: "block"` reads as no decision; HOOKBIGJSON-01) and T-05-34 (project `CLAUDE_PLUGIN_DATA` sits inside the repository; HOOKDATA-01) stay open below the threshold without a disposition.
