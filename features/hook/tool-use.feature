@@ -112,7 +112,7 @@ Feature: Hook tool use
       | 2    | assistant   | tool call bash {"command":"echo from-model"}                                                                                         |
       | 2    | tool result | bash failed: PreToolUse:Bash hook error: [${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block"\nboom |
 
-  Scenario: A PreToolUse hook with onFailure block that fails after overflowing its output blocks the tool call
+  Scenario: A PreToolUse hook with onFailure block that fails after printing more than 1 MB blocks the tool call
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -139,7 +139,7 @@ Feature: Hook tool use
       | 2    | assistant   | tool call bash {"command":"echo from-model"}                                                                                   |
       | 2    | tool result | bash failed: PreToolUse:Bash hook error: [${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block" |
 
-  Scenario: A PreToolUse hook that exits 2 after overflowing its output blocks the tool call with its stderr
+  Scenario: A PreToolUse hook that exits 2 after printing more than 1 MB blocks the tool call with its stderr
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -165,6 +165,87 @@ Feature: Hook tool use
       | 2    | user        | run the echo                                                                                       |
       | 2    | assistant   | tool call bash {"command":"echo from-model"}                                                       |
       | 2    | tool result | bash failed: PreToolUse:Bash hook error: [${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: blocked by policy |
+
+  Scenario: A PreToolUse hook's deny decision larger than 1 MB blocks the tool call
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event      | matcher | form   | output                                                                                                                                      | output bytes | trailing output |
+      | guard | PreToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"too large to skip"},"padding":" | 1048577      | "}              |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                                       |
+      | 1    | user        | run the echo                                               |
+      | 2    | user        | run the echo                                               |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"}               |
+      | 2    | tool result | bash failed: PreToolUse:Bash hook error: too large to skip |
+
+  Scenario: A PreToolUse hook's deny decision keeps its own reason when the hook exits 1 with onFailure block
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event      | matcher | form   | exit code | stderr | output                                                                                                                 | on failure |
+      | guard | PreToolUse | Bash    | script | 1         | boom   | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"no echo"}} | block      |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                             |
+      | 1    | user        | run the echo                                     |
+      | 2    | user        | run the echo                                     |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"}     |
+      | 2    | tool result | bash failed: PreToolUse:Bash hook error: no echo |
+
+  Scenario: A PreToolUse hook with onFailure block that prints an unclosed JSON object lets the tool call run
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event      | matcher | form   | output    | on failure |
+      | guard | PreToolUse | Bash    | script | {not json | block      |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                         |
+      | 1    | user        | run the echo                                 |
+      | 2    | user        | run the echo                                 |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"} |
+      | 2    | tool result | bash returned: from-model\n                  |
 
   Scenario: Matching PreToolUse hooks run in parallel
     Given pi runs with the scripted model

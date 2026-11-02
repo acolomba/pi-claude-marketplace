@@ -1,11 +1,13 @@
 // bridges/hooks/on-failure.ts
 //
 // D-CF5-18 (FG-22): the `onFailure` field of a command hook. Claude Code
-// 2.1.316 (probed, E6) treats four outcomes of a command hook as a failure: it
-// cannot start, it exits with a code other than 0 and 2, its timeout kills
-// it, or it prints stdout that starts a JSON object and does not parse. With
-// `onFailure: "block"` a failure does what exit code 2 does on the event, and
-// the reason is
+// 2.1.316 (probed, E6; static read 2026-11-02) treats four outcomes of a
+// command hook as a failure: it cannot start, it exits with a code other than
+// 0 and 2, its timeout kills it, or it prints broken JSON. Broken JSON is
+// trimmed stdout that starts with `{`, ends with `}`, does not parse, and is
+// not JSON lines. Stdout that starts with `{` and ends with anything else is
+// plain text, which is a success. With `onFailure: "block"` a failure does
+// what exit code 2 does on the event, and the reason is
 //
 //   [<command>]: failed; blocking because onFailure is "block"
 //   <stderr>
@@ -15,8 +17,10 @@
 // Upstream ignores the field on Stop hooks, because a Stop block sends the
 // model back to work and the model cannot repair a hook that will not run,
 // and on background hooks (`async`, `asyncRewake`), whose outcome arrives
-// after the event. Schema validation of JSON that does parse stays
-// permissive: that failure kind is a recorded divergence (D-CF5-18).
+// after the event. A JSON block or deny that a failed hook prints still
+// applies with its own reason, as upstream keeps a deny and drops the rest of
+// the JSON. Schema validation of JSON that does parse stays permissive: that
+// failure kind is a recorded divergence (D-CF5-18, BACKLOG HOOKSCHEMAFAIL-01).
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
@@ -35,20 +39,35 @@ export interface HookExitFacts {
   readonly stderr: string;
 }
 
-// Stdout that starts a JSON object and does not parse. Plain text is not a
-// failure, so only a leading `{` makes the hook's stdout a JSON answer.
+function parses(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Several lines that each parse as JSON. Claude Code does not count them as
+// broken JSON.
+function isJsonLines(trimmed: string): boolean {
+  const lines = trimmed
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  return lines.length > 1 && lines.every(parses);
+}
+
+// Stdout that Claude Code reads as a JSON object and that does not parse. Only
+// trimmed text that starts with `{` and ends with `}` is read as JSON. Any
+// other text is plain text, which is not a failure.
 function isBrokenJson(stdout: string): boolean {
   const trimmed = stdout.trim();
-  if (!trimmed.startsWith("{")) {
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
     return false;
   }
 
-  try {
-    JSON.parse(trimmed);
-    return false;
-  } catch {
-    return true;
-  }
+  return !parses(trimmed) && !isJsonLines(trimmed);
 }
 
 function isFailure(facts: HookExitFacts): boolean {
@@ -75,14 +94,17 @@ function ignoredLane(entry: RoutingEntry): string | undefined {
 
 /**
  * The block a failed hook with `onFailure: "block"` turns into (D-CF5-18), or
- * `undefined` when the hook did not fail, sets no such `onFailure`, or runs
- * where upstream ignores the field. The command in the reason is the declared
- * `command` text, placeholders included, and the reason ends with the trimmed
- * stderr when the hook printed any.
+ * `undefined` when the hook did not fail, sets no such `onFailure`, runs where
+ * upstream ignores the field, or printed a JSON block or deny. `answer` is
+ * what the wire protocol read from the hook's output; when it is a block, the
+ * caller applies it with its own reason. The command in the reason is the
+ * declared `command` text, placeholders included, and the reason ends with the
+ * trimmed stderr when the hook printed any.
  */
 export function onFailureBlock(
   entry: RoutingEntry,
   facts: HookExitFacts,
+  answer: HookExecResult,
 ): HookExecResult | undefined {
   if (entry.handlerDecl.onFailure !== "block") {
     return undefined;
@@ -97,6 +119,13 @@ export function onFailureBlock(
   }
 
   if (!isFailure(facts)) {
+    return undefined;
+  }
+
+  if (answer.kind === "block" && !facts.timedOut) {
+    hookDebugLog(
+      `on-failure: the JSON block of a failed hook applies (${entry.pluginId}/${entry.claudeEvent})`,
+    );
     return undefined;
   }
 

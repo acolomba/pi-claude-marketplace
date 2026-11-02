@@ -1861,26 +1861,26 @@ test(
 );
 
 test(
-  "frames truncated stderr before the surviving tail and rewake message",
+  "injects the whole stderr of a large exit-2 output after the rewake message",
   { concurrency: false },
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const root = await mkdtemp(path.join(tmpdir(), "async-registry-truncated-"));
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-large-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T10:55:00.000Z"));
     shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
-    const context = createContext(root, "session-truncated", true);
+    const context = createContext(root, "session-large", true);
     const pi = createPi();
     const child = createChild(24_692);
-    const survivingTail = "x".repeat(65_536);
+    const largeStderr = `d${"x".repeat(65_536)}`;
 
     try {
       await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
         spawnImpl: createSpawn(child.child, []),
-        dispatchId: () => "dispatch-truncated",
+        dispatchId: () => "dispatch-large",
       });
-      child.stderr.end(Buffer.from(`d${survivingTail}`));
+      child.stderr.end(Buffer.from(largeStderr));
       await once(child.stderr, "end");
 
       // act
@@ -1894,9 +1894,9 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: `Review finding:\n\n[…truncated]\n${survivingTail}`,
+            content: `Review finding:\n\n${largeStderr}`,
             display: false,
-            details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-truncated" },
+            details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-large" },
           },
           options: { deliverAs: "nextTurn" },
         },

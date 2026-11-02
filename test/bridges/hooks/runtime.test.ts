@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { RingBuffer } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -111,8 +110,8 @@ function runtimeChildEntry(
     rewakeSummary: undefined,
     child,
     ladder,
-    stdoutBuffer: new RingBuffer(16),
-    stderrBuffer: new RingBuffer(16),
+    stdout: { text: () => "" },
+    stderr: { text: () => "" },
     capturedGeneration: 1,
     loc,
   };

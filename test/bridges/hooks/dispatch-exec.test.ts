@@ -1685,14 +1685,68 @@ test("blocks a hook that exits 1 when onFailure is block", async (t) => {
   assert.deepStrictEqual(hookOutcome, { kind: "block", reason: `${ON_FAILURE_HEAD}\nboom` });
 });
 
-test("blocks a hook whose stdout starts a JSON object that does not parse", async (t) => {
+test("blocks a hook whose stdout starts and ends a JSON object that does not parse", async (t) => {
   // act
   const hookOutcome = await dispatchDriven(
     t,
     { command: "guard", onFailure: "block" },
     async (child) => {
-      child.stdout?.write("{not json");
+      child.stdout?.write("{not json}\n");
       await child.close(0);
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+});
+
+test("lets a hook pass whose stdout opens a JSON object and does not close it", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(
+    t,
+    { command: "guard", onFailure: "block" },
+    async (child) => {
+      child.stdout?.write("{not json\n");
+      await child.close(0);
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+});
+
+test("applies the JSON deny of a hook that exits 1 with its own reason when onFailure is block", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(
+    t,
+    { command: "guard", onFailure: "block" },
+    async (child) => {
+      child.stdout?.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: "no echo",
+          },
+        }),
+      );
+      child.stderr?.write("boom\n");
+      await child.close(1);
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "no echo" });
+});
+
+test("blocks a hook that exits 1 whose JSON allows the call when onFailure is block", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(
+    t,
+    { command: "guard", onFailure: "block" },
+    async (child) => {
+      child.stdout?.write('{"hookSpecificOutput":{"permissionDecision":"allow"}}');
+      await child.close(1);
     },
   );
 
@@ -1750,7 +1804,7 @@ test("keeps the exit-2 block of a hook with onFailure block", async (t) => {
   assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied", fromStderr: true });
 });
 
-test("blocks a hook that exits 1 after its stderr overflow when onFailure is block", async (t) => {
+test("blocks a hook that exits 1 with its whole stderr past 64 KB when onFailure is block", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
 
@@ -1766,10 +1820,13 @@ test("blocks a hook that exits 1 after its stderr overflow when onFailure is blo
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: `${ON_FAILURE_HEAD}\nboom` });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: `${ON_FAILURE_HEAD}\nboom\n${"e".repeat(64 * 1024)}`,
+  });
 });
 
-test("blocks a hook that exits 2 after its stderr overflow with the stderr it kept", async (t) => {
+test("blocks a hook that exits 2 with its whole stderr past 64 KB", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let signals: readonly NodeJS.Signals[] = [];
@@ -1784,10 +1841,14 @@ test("blocks a hook that exits 2 after its stderr overflow with the stderr it ke
 
   // assert
   assert.deepStrictEqual(signals, []);
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied", fromStderr: true });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: `denied\n${"e".repeat(64 * 1024)}`,
+    fromStderr: true,
+  });
 });
 
-test("blocks a hook that exits 2 after its stdout overflow with its stderr", async (t) => {
+test("blocks a hook that exits 2 after more than 1 MB of plain stdout with its stderr", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let signals: readonly NodeJS.Signals[] = [];
@@ -1805,7 +1866,7 @@ test("blocks a hook that exits 2 after its stdout overflow with its stderr", asy
   assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied", fromStderr: true });
 });
 
-test("applies the stdout deny of a hook whose stderr alone overflows", async (t) => {
+test("applies the stdout deny of a hook whose stderr passes 64 KB", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const deny = JSON.stringify({
@@ -1827,7 +1888,7 @@ test("applies the stdout deny of a hook whose stderr alone overflows", async (t)
   assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "no echo" });
 });
 
-test("keeps a hook that exits 0 after its stdout overflow a noop when onFailure is block", async (t) => {
+test("keeps a hook that exits 0 after more than 1 MB of plain stdout a noop when onFailure is block", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
 
@@ -2005,39 +2066,30 @@ test("contains a synchronous stdin end failure and cancels on child error", asyn
   );
 });
 
-test("accepts the exact independent stdout and stderr byte caps", async (t) => {
+test("applies a JSON deny larger than 1 MB that a hook prints in chunks on exit 0", async (t) => {
   // arrange
-  const runtime = createHooksRuntime();
-  const caseRoot = await makeCaseRoot(t, "dispatch-exact-caps-");
-  const processChild = makeInjectedChild(t);
-  const processBoundary = observeSpawn(t, processChild);
-  const entry = makeEntry(caseRoot);
-  const stdout = Buffer.alloc(1024 * 1024, 0x20);
-  const stderr = Buffer.alloc(64 * 1024, 0x65);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const head =
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny",' +
+    '"permissionDecisionReason":"too large to skip"},"padding":"';
+  let signals: readonly NodeJS.Signals[] = [];
 
   // act
-  const pendingOutcome = dispatchHookExec(
-    entry,
-    { toolName: "bash", input: {} },
-    makeContext(caseRoot),
-    undefined,
-    runtime,
-    { spawnImpl: processBoundary.spawnImpl },
-  );
-  await processBoundary.spawned;
-  processChild.stdout?.write(stdout);
-  processChild.stderr?.write(stderr);
-  await processChild.close(0);
-  const hookOutcome = await pendingOutcome;
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
+    child.stdout?.write(head);
+    child.stdout?.write(Buffer.alloc(1024 * 1024, 0x78));
+    child.stdout?.write(Buffer.alloc(512 * 1024, 0x78));
+    child.stdout?.write('"}\n');
+    signals = [...child.killSignals];
+    await child.close(0);
+  });
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
-  assert.deepStrictEqual(processChild.killSignals, []);
-  assert.strictEqual(stdout.byteLength, 1024 * 1024);
-  assert.strictEqual(stderr.byteLength, 64 * 1024);
+  assert.deepStrictEqual(signals, []);
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "too large to skip" });
 });
 
-test("discards stdout past its cap and lets the hook run to its timeout", async (t) => {
+test("lets a hook that prints more than 1 MB run to its timeout", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-stdout-overflow-");
@@ -2074,7 +2126,7 @@ test("discards stdout past its cap and lets the hook run to its timeout", async 
   });
 });
 
-test("blocks on the exit code of a hook whose two streams overflow", async (t) => {
+test("blocks on the exit code of a hook whose two streams pass 1 MB and 64 KB", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
 
@@ -2088,5 +2140,9 @@ test("blocks on the exit code of a hook whose two streams overflow", async (t) =
   });
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied", fromStderr: true });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: `denied\n${"e".repeat(64 * 1024)}more`,
+    fromStderr: true,
+  });
 });

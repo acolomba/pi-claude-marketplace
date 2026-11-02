@@ -39,7 +39,10 @@
  *   re-entered turn end.
  * - `stderr` and `output`: text it prints, as written, to stderr and stdout.
  * - `output bytes`: a number of `x` bytes it prints to stdout after `output`,
- *   enough to pass the bridge's stdout limit.
+ *   such as more than 1 MB of output.
+ * - `trailing output`: text it prints, as written, to stdout after
+ *   `output bytes`, so `output`, the bytes, and this text can make one JSON
+ *   object whose string field holds the bytes.
  * - `sleep`: seconds it waits after printing.
  * - `exit code`: the code it exits with, 0 by default.
  * - `meets`: before recording, it creates `$HOME/hook-meetings/<name>` and
@@ -79,6 +82,7 @@ export interface RecordingHook {
   readonly arguments?: readonly string[];
   readonly output?: string;
   readonly outputBytes?: number;
+  readonly trailingOutput?: string;
   readonly stderr?: string;
   readonly exitCode?: number;
   readonly sleep?: number;
@@ -103,6 +107,7 @@ const SCRIPT_FORMS: ReadonlySet<RecordingHookForm | undefined> = new Set<Recordi
 const BEHAVIOR_FIELDS = {
   output: "output",
   "output bytes": "outputBytes",
+  "trailing output": "trailingOutput",
   stderr: "stderr",
   "exit code": "exitCode",
   sleep: "sleep",
@@ -178,6 +183,7 @@ const COLUMN_PARSERS: Readonly<Record<string, (cell: string) => Partial<Recordin
   arguments: (cell) => ({ arguments: parseArguments(cell) }),
   output: (cell) => ({ output: cell }),
   "output bytes": (cell) => ({ outputBytes: parseByteCount(cell) }),
+  "trailing output": (cell) => ({ trailingOutput: cell }),
   stderr: (cell) => ({ stderr: cell }),
   "exit code": (cell) => ({ exitCode: parseExitCode(cell) }),
   sleep: (cell) => ({ sleep: parseSeconds(cell, "sleep") }),
@@ -321,6 +327,9 @@ function afterRecording(hook: RecordingHook): string[] {
     ...(hook.outputBytes === undefined
       ? []
       : [String.raw`head -c ${hook.outputBytes} /dev/zero | tr '\0' x`]),
+    ...(hook.trailingOutput === undefined
+      ? []
+      : [`printf '%s' ${shellQuoted(hook.trailingOutput)}`]),
     // The sleep keeps no pipe of the hook open, so killing the script ends
     // the hook's output at once.
     ...(hook.sleep === undefined ? [] : [`sleep ${hook.sleep} </dev/null >/dev/null 2>&1`]),

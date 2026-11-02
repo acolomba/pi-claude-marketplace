@@ -58,6 +58,7 @@ import { translateStopFailure } from "../payloads/stop-failure.ts";
 import { translateStop } from "../payloads/stop.ts";
 import { translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
+import { collectStreamText } from "../stream-text.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 
@@ -68,7 +69,6 @@ import {
   writePidTable,
   type PidTableEntry,
 } from "./pid-table.ts";
-import { RingBuffer, STDERR_CAP_BYTES, STDOUT_CAP_BYTES } from "./ring-buffer.ts";
 
 import type { DispatchableEvent } from "../../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../../persistence/locations.ts";
@@ -89,9 +89,6 @@ const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
 
 /** HOOK-06: separator between `rewakeMessage` and the captured body. */
 const BODY_SEPARATOR = "\n\n";
-
-/** D-62-04: prefix prepended when the ring buffer dropped bytes. */
-const TRUNCATED_PREFIX = "[…truncated]\n";
 
 /** HOOK-06: custom-message type for the exit-2 injection. */
 const REWAKE_CUSTOM_TYPE = "claude-hook-rewake" as const;
@@ -258,32 +255,23 @@ export async function spawnAndRegister(
       return;
     }
 
-    const stderrBuffer = new RingBuffer(STDERR_CAP_BYTES);
-    const stdoutBuffer = new RingBuffer(STDOUT_CAP_BYTES);
     // Each `ChildProcess` is its own EventEmitter; its lifecycle listeners and
     // the owned-stream listeners live on their respective emitters. Node's default
     // `defaultMaxListeners = 10` applies per-instance, not across the
     // bridge, so no `setMaxListeners` adjustment is needed even for
     // large fan-ins.
-    // EPIPE/ECONNRESET defense: attach the error listeners before "data" so a
-    // stream error during the SIGTERM/SIGKILL teardown races this registry
-    // runs cannot surface as an unhandled exception. Mirrors the child.stdin
-    // error defense below.
-    child.stderr?.on("error", (err) => {
+    // EXEC-02: the whole of each stream is kept, as Claude Code keeps every
+    // byte a hook prints. The collectors attach their `end` listeners before
+    // the finalize listeners below, so the decoder tail is in the text first.
+    const stderr = collectStreamText(child.stderr, (err) => {
       hookDebugLog(
         `async-rewake: stderr error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
       );
     });
-    child.stderr?.on("data", (buf: Buffer) => {
-      stderrBuffer.write(buf);
-    });
-    child.stdout?.on("error", (err) => {
+    const stdout = collectStreamText(child.stdout, (err) => {
       hookDebugLog(
         `async-rewake: stdout error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
       );
-    });
-    child.stdout?.on("data", (buf: Buffer) => {
-      stdoutBuffer.write(buf);
     });
 
     const ladder = installTimerLadder(
@@ -306,8 +294,8 @@ export async function spawnAndRegister(
       rewakeSummary: typeof rewakeSummaryField === "string" ? rewakeSummaryField : undefined,
       child,
       ladder,
-      stdoutBuffer,
-      stderrBuffer,
+      stdout,
+      stderr,
       capturedGeneration,
       loc,
     };
@@ -455,16 +443,14 @@ function finalizeChild(
     return;
   }
 
-  const { text: stderrText, truncated: stderrTrunc } = entry.stderrBuffer.read();
-  const { text: stdoutText, truncated: stdoutTrunc } = entry.stdoutBuffer.read();
-  const body = stderrText.length > 0 ? stderrText : stdoutText;
+  const stderrText = entry.stderr.text();
+  const body = stderrText.length > 0 ? stderrText : entry.stdout.text();
   if (body.length === 0) {
     hookDebugLog(`async-rewake: exit 2 with empty body -- no injection (${entry.pluginId})`);
     return;
   }
 
-  const truncated = stderrText.length > 0 ? stderrTrunc : stdoutTrunc;
-  const content = buildInjectionContent(entry.rewakeMessage, body, truncated);
+  const content = buildInjectionContent(entry.rewakeMessage, body);
   try {
     const lane: "nextTurn" | "followUp" = ctx.isIdle() ? "nextTurn" : "followUp";
     pi.sendMessage(
@@ -485,22 +471,15 @@ function finalizeChild(
 }
 
 /**
- * Compose the model-visible injection content. The truncated prefix is
- * prepended to the body BEFORE the rewakeMessage join so the marker
- * appears immediately before the surviving (oldest-tail) bytes -- the
- * correct framing for a "we lost some history" disclosure.
+ * Compose the model-visible injection content: the `rewakeMessage`, when the
+ * hook declares one, then the hook's whole output.
  */
-function buildInjectionContent(
-  rewakeMessage: string | undefined,
-  body: string,
-  truncated: boolean,
-): string {
-  const bodyWithMarker = truncated ? `${TRUNCATED_PREFIX}${body}` : body;
+function buildInjectionContent(rewakeMessage: string | undefined, body: string): string {
   if (rewakeMessage !== undefined && rewakeMessage.length > 0) {
-    return `${rewakeMessage}${BODY_SEPARATOR}${bodyWithMarker}`;
+    return `${rewakeMessage}${BODY_SEPARATOR}${body}`;
   }
 
-  return bodyWithMarker;
+  return body;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

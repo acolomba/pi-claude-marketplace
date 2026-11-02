@@ -45,8 +45,8 @@
   - Hook `additionalContext` now reaches the model from SessionStart, UserPromptSubmit, tool, and Stop hooks, and a prompt hook's context goes beside your prompt instead of replacing it.
   - A hook's `systemMessage` and a blocked prompt's reason now show to you and never reach the model, and JSON and RPC output carry them as `hook-notice` entries.
   - Exec-form hooks now fill in `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and `${CLAUDE_PROJECT_DIR}` in `command` and in each `args` element.
-  - A hook with `onFailure: "block"` now blocks when it cannot start, exits with a code other than 0 and 2, times out, or prints broken JSON.
-  - A hook guard with `onFailure: "block"` or an exit-2 deny now blocks even when the hook writes past its output limits.
+  - A hook with `onFailure: "block"` now blocks when it cannot start, exits with a code other than 0 and 2, times out, or prints a broken JSON object. A JSON deny it prints keeps its own reason.
+  - Hooks now read all of their output, as in Claude Code, so a JSON deny larger than 1 MB blocks the tool call.
   - A plugin whose `plugin.json` names hooks other than `hooks/hooks.json`, or whose marketplace entry declares `hooks`, is now partially available with `{unsupported hooks}`.
   - A hook whose `if` is set on a session, prompt, compaction, or stop event no longer runs, as in Claude Code.
   - A PostToolUse hook's `updatedToolOutput` now reaches the model.
