@@ -4680,7 +4680,7 @@ Deferred by component-features Phase 3 (D-CF3-07 residual, P3-DC-17 item 5). Whe
 
 ## CMDDIGEST-01: plugin-root scripts in the command digest
 
-Deferred by component-features Phase 3 (D-CF3-07 residual, T-03-23). The project-command digest covers only the staged command file. A script under the plugin root that a `!` command runs is not covered, so a changed script still runs. The skills digest covers the whole staged skill directory but not the plugin root either (D-CF2-13 residual AR-02-05), and the hooks digest covers only the staged `hooks.json` (AR-05-01).
+Deferred by component-features Phase 3 (D-CF3-07 residual, T-03-23). The project-command digest covers only the staged command file. A script under the plugin root that a `!` command runs is not covered, so a changed script still runs. The skills digest covers the whole staged skill directory but not the plugin root either (D-CF2-13 residual AR-02-05), and the hooks digest covers only the staged `hooks.json` (AR-05-06).
 
 ## CMDSKILLMD-01: a `SKILL.md` inside `commands/`
 
