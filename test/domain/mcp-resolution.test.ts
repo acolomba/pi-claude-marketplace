@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -664,51 +664,169 @@ test("D-CF6-01: reads an unwrapped string reference", async () => {
   );
 });
 
-test("rejects a string reference that crosses a symlink without reading it", async (testContext) => {
+// A plugin tree on disk with reference links, read through the real file
+// system so the link rule runs against real links.
+async function linkedPluginTree(
+  testContext: { after: (fn: () => Promise<void>) => void },
+  link: (tree: { readonly pluginRoot: string; readonly outsideRoot: string }) => Promise<void>,
+): Promise<{
+  readonly pluginRoot: string;
+  readonly deps: {
+    readonly statKind: StatKindReader;
+    readonly readFileText: (candidate: string) => Promise<string>;
+  };
+  readonly reads: string[];
+}> {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "mcp-resolution-symlink-"));
+  testContext.after(() => rm(temporaryRoot, { recursive: true, force: true }));
+  const realRoot = await realpath(temporaryRoot);
+  const pluginRoot = path.join(realRoot, "plugin");
+  const outsideRoot = path.join(realRoot, "outside");
+  await mkdir(pluginRoot);
+  await mkdir(outsideRoot);
+  await link({ pluginRoot, outsideRoot });
+  const reads: string[] = [];
+  return {
+    pluginRoot,
+    reads,
+    deps: {
+      async statKind(candidate: string) {
+        try {
+          return (await stat(candidate)).isDirectory() ? "dir" : "file";
+        } catch {
+          return null;
+        }
+      },
+      readFileText(candidate: string) {
+        reads.push(candidate);
+        return readFile(candidate, "utf8");
+      },
+    },
+  };
+}
+
+const LINKED_SERVERS = JSON.stringify({ mcpServers: { linked: { command: "node" } } });
+
+test("MCPR-04: refuses a string reference whose link resolves outside the plugin root without reading it", async (testContext) => {
   // arrange
   const { resolveStrictMcp } =
     await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
-  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "mcp-resolution-symlink-"));
-  const pluginRoot = path.join(temporaryRoot, "plugin");
-  const outsideRoot = path.join(temporaryRoot, "outside");
-  await mkdir(pluginRoot);
-  await mkdir(outsideRoot);
-  await symlink(outsideRoot, path.join(pluginRoot, "linked"));
-  testContext.after(() => rm(temporaryRoot, { recursive: true, force: true }));
+  const tree = await linkedPluginTree(testContext, async ({ pluginRoot, outsideRoot }) => {
+    await writeFile(path.join(outsideRoot, "servers.json"), LINKED_SERVERS);
+    await symlink(outsideRoot, path.join(pluginRoot, "linked"));
+  });
   const resolution = emptyResolution();
-  const reads: string[] = [];
 
   // act
   const dirty = await resolveStrictMcp(
     {
       entry: { mcpServers: "linked/servers.json" },
       manifest: null,
-      pluginRoot,
+      pluginRoot: tree.pluginRoot,
       resolution,
     },
-    {
-      statKind: () => Promise.resolve("file"),
-      readFileText: (candidate) => {
-        reads.push(candidate);
-        return Promise.resolve("{}");
-      },
-    },
+    tree.deps,
   );
 
   // assert
   assert.deepStrictEqual(
-    { dirty, reads, resolution },
+    { dirty, reads: tree.reads, resolution },
     {
       dirty: true,
-      reads: [path.join(pluginRoot, ".mcp.json")],
+      reads: [],
       resolution: {
-        notes: ['malformed mcp reference: escapes plugin root: "linked/servers.json"'],
+        notes: [
+          'malformed mcp reference: symbolic link resolves outside plugin root: "linked/servers.json"',
+        ],
         unsupported: [],
         mcpServers: {},
       },
     },
   );
 });
+
+for (const { title, reference, makeLink } of [
+  {
+    title: "a file link",
+    reference: "./servers.json",
+    makeLink: (pluginRoot: string) =>
+      symlink(path.join("config", "real.json"), path.join(pluginRoot, "servers.json")),
+  },
+  {
+    title: "a directory link",
+    reference: "./linked/real.json",
+    makeLink: (pluginRoot: string) =>
+      symlink(path.join(pluginRoot, "config"), path.join(pluginRoot, "linked")),
+  },
+] as const) {
+  test(`MCPR-04: reads a string reference through ${title} at its target inside the plugin root`, async (testContext) => {
+    // arrange
+    const { resolveStrictMcp } =
+      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+    const tree = await linkedPluginTree(testContext, async ({ pluginRoot }) => {
+      await mkdir(path.join(pluginRoot, "config"));
+      await writeFile(path.join(pluginRoot, "config", "real.json"), LINKED_SERVERS);
+      await makeLink(pluginRoot);
+    });
+    const resolution = emptyResolution();
+
+    // act
+    const dirty = await resolveStrictMcp(
+      { entry: { mcpServers: reference }, manifest: null, pluginRoot: tree.pluginRoot, resolution },
+      tree.deps,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { dirty, reads: tree.reads, resolution },
+      {
+        dirty: false,
+        reads: [path.join(tree.pluginRoot, "config", "real.json")],
+        resolution: { notes: [], unsupported: [], mcpServers: { linked: { command: "node" } } },
+      },
+    );
+  });
+}
+
+for (const { title, makeLink } of [
+  {
+    title: "a dangling link",
+    makeLink: (pluginRoot: string) =>
+      symlink(path.join(pluginRoot, "gone.json"), path.join(pluginRoot, "servers.json")),
+  },
+  {
+    title: "a link loop",
+    makeLink: async (pluginRoot: string) => {
+      await symlink(path.join(pluginRoot, "loop.json"), path.join(pluginRoot, "servers.json"));
+      await symlink(path.join(pluginRoot, "servers.json"), path.join(pluginRoot, "loop.json"));
+    },
+  },
+] as const) {
+  test(`D-CF6-02: skips a string reference through ${title} silently`, async (testContext) => {
+    // arrange
+    const { resolveStrictMcp } =
+      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+    const tree = await linkedPluginTree(testContext, ({ pluginRoot }) => makeLink(pluginRoot));
+    const resolution = emptyResolution();
+
+    // act
+    const dirty = await resolveStrictMcp(
+      {
+        entry: { mcpServers: "./servers.json" },
+        manifest: null,
+        pluginRoot: tree.pluginRoot,
+        resolution,
+      },
+      tree.deps,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { dirty, reads: tree.reads, resolution },
+      { dirty: false, reads: [], resolution: emptyResolution() },
+    );
+  });
+}
 
 // D-CF6-02: Claude Code's loader skips every failure of its file read, the
 // transient EMFILE and EIO included, and Node's refusal of a path.

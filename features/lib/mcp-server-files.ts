@@ -15,7 +15,7 @@
  * writes its fixtures through this file.
  */
 
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { MCP_STUB_SERVER } from "./mcp-stub-server.ts";
@@ -190,6 +190,35 @@ export async function publishStubServersFile(
   const text = `${JSON.stringify(withStubServers(plugin, document), null, 2)}\n`;
   await writePublishedPluginFiles(published, plugin, { [file]: text });
   return text;
+}
+
+/**
+ * Makes `file` inside the published plugin `plugin` a symbolic link whose
+ * text is `target`, and returns the path of the link. Only a `dir`
+ * publication takes it, so the plugin is read in place with the link as
+ * written (MCPR-04). It refuses a link path outside the plugin; the target
+ * may point anywhere.
+ */
+export async function linkPublishedMcpFile(
+  published: PublishedMarketplace,
+  plugin: string,
+  file: string,
+  target: string,
+): Promise<string> {
+  if (published.kind !== "dir") {
+    throw new Error(`a ${published.kind} publication cannot hold an mcp file link`);
+  }
+
+  const pluginRoot = path.resolve(published.root, "plugins", plugin);
+  const link = path.resolve(pluginRoot, file);
+  const relative = path.relative(pluginRoot, link);
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`refusing to link ${link} outside the plugin ${pluginRoot}`);
+  }
+
+  await mkdir(path.dirname(link), { recursive: true });
+  await symlink(target, link);
+  return link;
 }
 
 /**

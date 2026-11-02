@@ -213,3 +213,29 @@ Feature: MCP server sources
       | tool                     | active |
       | mcp                      | yes    |
       | mcp__plugin_demo_r__echo | no     |
+
+  Scenario: A server reference that is a symbolic link to a file inside the plugin loads its servers
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {"name": "demo", "version": "1.0.0", "mcpServers": "./servers.json"}
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "config/servers.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"r": {"stub": {}}}}
+      """
+    Given the mcp file "servers.json" of the published plugin "demo" of the marketplace "fixtures" is a symbolic link to "config/servers.json"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given pi runs with the scripted model and these companions:
+      | companion      |
+      | pi-mcp-adapter |
+    Given pi-mcp-adapter has listed the tools of the stub mcp server "r" of the plugin "demo"
+    When the user lists the mcp tools pi offers
+    Then pi offers these mcp tools:
+      | tool                     | active |
+      | mcp                      | yes    |
+      | mcp__plugin_demo_r__echo | no     |
