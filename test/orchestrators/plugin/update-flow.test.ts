@@ -43,6 +43,7 @@ import {
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { provenProjectSkills } from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import {
   loadState,
   saveState,
@@ -14677,6 +14678,96 @@ for (const { label, notified, expected } of [
         assert.deepStrictEqual(settled, expected);
       } finally {
         process.chdir(previousCwd);
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+/** Runs `act` with the process in `cwd`, as the marketplace update cascade reads it. */
+async function inDirectory<T>(cwd: string, act: () => Promise<T>): Promise<T> {
+  const previousCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    return await act();
+  } finally {
+    process.chdir(previousCwd);
+  }
+}
+
+for (const { label, act, recorded } of [
+  {
+    label: "a bare update adds nothing to",
+    act: (cwd: string) => {
+      const { ctx, run } = makeCtx();
+      return updatePlugins({ ctx, run, scope: "project", cwd, target: { kind: "all" } });
+    },
+    recorded: [],
+  },
+  {
+    label: "an update of the marketplace adds nothing to",
+    act: (cwd: string) => {
+      const { ctx, run } = makeCtx();
+      const target = { kind: "marketplace", marketplace: "mp" } as const;
+      return updatePlugins({ ctx, run, scope: "project", cwd, target });
+    },
+    recorded: [],
+  },
+  {
+    label: "an update that names the plugin adds the plugin to",
+    act: (cwd: string) => {
+      const { ctx, run } = makeCtx();
+      const target = { kind: "plugin", plugin: "hello", marketplace: "mp" } as const;
+      return updatePlugins({ ctx, run, scope: "project", cwd, target });
+    },
+    recorded: ["hello-tool"],
+  },
+  {
+    label: "the marketplace update cascade adds nothing to",
+    act: (cwd: string) => inDirectory(cwd, () => updateSinglePlugin("hello", "mp", "project")),
+    recorded: [],
+  },
+  {
+    label: "an apply catalog move adds nothing to",
+    act: (cwd: string) =>
+      convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      }),
+    recorded: [],
+  },
+]) {
+  test(`D-CF2-16: ${label} the project ledger for a plugin it does not list`, async () => {
+    await withHermeticEnvironment("update-ledger-", async ({ agentDir }) => {
+      // arrange
+      const cwd = await createCaseDir("update-ledger-");
+      try {
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+
+        // act
+        await act(cwd);
+
+        // assert
+        const ledger = await provenProjectSkills(agentDir, cwd, (file) => readFile(file, "utf8"));
+        assert.deepStrictEqual([...ledger.keys()], recorded);
+        assert.match(
+          await readFile(
+            path.join(locationsFor("project", cwd).skillsTargetDir, "hello-tool", "SKILL.md"),
+            "utf8",
+          ),
+          /Body for hello 1\.1\.0\./,
+        );
+      } finally {
         await rm(cwd, { recursive: true, force: true });
       }
     });

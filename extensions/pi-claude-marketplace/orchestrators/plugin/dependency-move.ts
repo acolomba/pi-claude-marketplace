@@ -46,6 +46,7 @@ import type {
 import type { CascadeThreePhaseArgs, UpdateRunOutcome } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ProjectLedgerAdmission } from "../../persistence/project-installs.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
@@ -72,6 +73,8 @@ export interface DependencyMoveContext {
   /** The command's `--partial` and `--map-model`, cascade-wide as on an install. */
   readonly partial?: boolean;
   readonly mapModel?: boolean;
+  /** D-CF2-16: the command's ledger admission, shared by every move it makes. */
+  readonly ledgerAdmission?: ProjectLedgerAdmission;
   /** The command's context, so a move authenticates as the command does. */
   readonly notification?: PreparePluginUpdateOptions["notification"];
   readonly credentialOps?: CredentialOps;
@@ -171,6 +174,7 @@ function moveArgs(
     excludedVersions: request.excludedVersions,
     ...(context.partial !== undefined && { partial: context.partial }),
     ...(context.mapModel !== undefined && { mapModel: context.mapModel }),
+    ...(context.ledgerAdmission !== undefined && { ledgerAdmission: context.ledgerAdmission }),
     ...(context.notification !== undefined && { preflightNotification: context.notification }),
     ...(context.credentialOps !== undefined && { credentialOps: context.credentialOps }),
     ...(context.deviceFlowHttp !== undefined && { deviceFlowHttp: context.deviceFlowHttp }),

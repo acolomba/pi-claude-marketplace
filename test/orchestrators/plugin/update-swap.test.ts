@@ -17,6 +17,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
+  NODE_PROJECT_SKILL_LEDGER,
+  provenProjectSkills,
+} from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
+import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -2016,4 +2020,114 @@ for (const { situation, resources, spec, expectedOutcome } of [
     // assert
     assert.deepStrictEqual(outcome, expectedOutcome);
   });
+}
+
+/** A project-scope `hello` 1.0.0 -> 2.0.0 update whose candidate holds a skill, a command and hooks. */
+async function seedLedgerUpdate(
+  t: TestContext,
+): Promise<{ readonly agentDir: string; readonly cwd: string }> {
+  const environment = await createHermeticEnvironment(t, "update-swap-ledger-");
+  await seedPathMarketplace({
+    cwd: environment.cwd,
+    marketplaceRoot: path.join(environment.cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: {
+        version: "2.0.0",
+        hasCommand: true,
+        hooksJson: {
+          hooks: { PreToolUse: [{ hooks: [{ type: "command", command: "echo hi" }] }] },
+        },
+      },
+    },
+    installedVersions: { hello: "1.0.0" },
+  });
+  return { agentDir: environment.agentDir, cwd: environment.cwd };
+}
+
+function readText(file: string): Promise<string> {
+  return readFile(file, "utf8");
+}
+
+test("D-CF2-16: a refresh swap stages a plugin the project ledger does not list and records none of it", async (t) => {
+  // arrange
+  const { agentDir, cwd } = await seedLedgerUpdate(t);
+  const args = { ...cascadeSwapArgs(cwd), ledgerAdmission: "refresh" as const };
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.strictEqual(outcome.partition, "updated");
+  assert.deepStrictEqual(await provenProjectSkills(agentDir, cwd, readText), new Map());
+  assert.match(
+    await readFile(path.join(args.locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"),
+    /Body for hello 2\.0\.0\./,
+  );
+  assert.deepStrictEqual(
+    JSON.parse(await readFile(path.join(args.locations.hooksDir, "hello", "hooks.json"), "utf8")),
+    { PreToolUse: [{ hooks: [{ type: "command", command: "echo hi" }] }] },
+  );
+});
+
+test("D-CF2-16: a refresh swap rewrites the project ledger entries of a plugin the ledger lists", async (t) => {
+  // arrange
+  const { agentDir, cwd } = await seedLedgerUpdate(t);
+  await NODE_PROJECT_SKILL_LEDGER.update({
+    projectPath: cwd,
+    forget: [],
+    remember: new Map([["hello-tool", { plugin: "hello", sha256: "0".repeat(64) }]]),
+  });
+  const args = { ...cascadeSwapArgs(cwd), ledgerAdmission: "refresh" as const };
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.strictEqual(outcome.partition, "updated");
+  const hooksBytes = await readFile(path.join(args.locations.hooksDir, "hello", "hooks.json"));
+  const skillText = await readFile(
+    path.join(args.locations.skillsTargetDir, "hello-tool", "SKILL.md"),
+    "utf8",
+  );
+  const commandText = await readFile(
+    path.join(args.locations.promptsTargetDir, "hello:deploy.md"),
+    "utf8",
+  );
+  assert.deepStrictEqual(
+    await provenProjectSkills(agentDir, cwd, readText),
+    new Map([
+      ["hello-tool", skillDirectoryDigest(skillText)],
+      ["hello:deploy", sha256Hex(commandText)],
+      ["hooks/hello", sha256Hex(hooksBytes)],
+    ]),
+  );
+});
+
+test("D-CF2-16: a swap with no admission adds a plugin the project ledger does not list", async (t) => {
+  // arrange
+  const { agentDir, cwd } = await seedLedgerUpdate(t);
+  const args = cascadeSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  const hooksBytes = await readFile(path.join(args.locations.hooksDir, "hello", "hooks.json"));
+  assert.deepStrictEqual(
+    (await provenProjectSkills(agentDir, cwd, readText)).get("hooks/hello"),
+    sha256Hex(hooksBytes),
+  );
+});
+
+function sha256Hex(bytes: string | Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** The WR-03 digest of a staged skill directory that holds only `SKILL.md` with `text`. */
+function skillDirectoryDigest(text: string): string {
+  return sha256Hex(JSON.stringify([["SKILL.md", "file", sha256Hex(Buffer.from(text, "utf8"))]]));
 }

@@ -318,6 +318,9 @@ function buildDirectThreePhaseArgs(
     // The cascade entrypoint never sets it, so cascade re-installs keep the
     // `requireInstallable` block.
     partial: opts.partial ?? false,
+    // D-CF2-16: only the `<plugin>@<marketplace>` form names the plugin, so
+    // only it may add the plugin to the user's project ledger.
+    ledgerAdmission: opts.target.kind === "plugin" ? "create" : "refresh",
     // LAYER-04: `--local` selects the layer a named update acts on.
     ...(opts.local === true && { local: true }),
     // PURL-06: the test-only clone-cache seam for the git-source candidate
@@ -807,6 +810,9 @@ async function updateSinglePluginWith(
     // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
     // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
     partial: true,
+    // D-CF2-16: the cascade names no plugin, so it may only refresh the
+    // project ledger entries of a plugin the ledger already lists.
+    ledgerAdmission: "refresh",
     // D-10-18: the SAME pair for every plugin of ONE autoupdate run, so a
     // cascade over many plugins of one marketplace lists it once -- see
     // `beginPluginUpdateRun` below for why the pair is allocated per run
@@ -839,6 +845,9 @@ function convergePluginWith(
     // D-26 / WCONV-01: only a record already installed partial admits a
     // partial candidate; a clean record's consent guard declines it.
     partial: target.partial,
+    // D-CF2-16: a catalog move names no plugin, so it may only refresh the
+    // project ledger entries of a plugin the ledger already lists.
+    ledgerAdmission: "refresh",
     cleanupClones: target.cleanupClones ?? collectPluginClonesLocked,
   });
 }

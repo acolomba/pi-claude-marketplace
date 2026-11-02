@@ -40,6 +40,7 @@ import { atomicWriteJson } from "../shared/atomic-json.ts";
 import { ProjectSkillLedgerError } from "../shared/errors-bridges.ts";
 import { assertPathInside } from "../shared/path-safety.ts";
 
+import type { ScopedLocations } from "./locations.ts";
 import type { Dirent } from "node:fs";
 
 const LEDGER_SCHEMA = Type.Object({
@@ -182,6 +183,26 @@ function parseProjectSkills(text: string, project: string): ProjectSkills | unde
 }
 
 /**
+ * The entries the ledger of the project at `projectPath` lists. A missing,
+ * unreadable or malformed ledger lists none.
+ */
+async function listedProjectSkills(
+  agentDir: string,
+  projectPath: string,
+  read: (file: string) => Promise<string>,
+): Promise<ProjectSkills> {
+  const project = await canonicalProjectPath(projectPath);
+  let text: string;
+  try {
+    text = await read(path.join(projectLedgerDir(agentDir, project), "skills.json"));
+  } catch {
+    return {};
+  }
+
+  return parseProjectSkills(text, project) ?? {};
+}
+
+/**
  * D-CF2-13: the generated names of the skills this user installed into the
  * project at `projectPath`, each mapped to the digest its staged directory
  * had. A missing, unreadable or malformed ledger lists none, so every project
@@ -192,15 +213,7 @@ export async function provenProjectSkills(
   projectPath: string,
   read: (file: string) => Promise<string>,
 ): Promise<ReadonlyMap<string, string>> {
-  const project = await canonicalProjectPath(projectPath);
-  let text: string;
-  try {
-    text = await read(path.join(projectLedgerDir(agentDir, project), "skills.json"));
-  } catch {
-    return new Map();
-  }
-
-  const skills = parseProjectSkills(text, project) ?? {};
+  const skills = await listedProjectSkills(agentDir, projectPath, read);
   return new Map(Object.entries(skills).map(([name, skill]) => [name, skill.sha256] as const));
 }
 
@@ -272,3 +285,48 @@ function createProjectSkillLedger(agentDir: () => string): ProjectSkillLedger {
 
 /** The ledger of the Pi agent directory in use. */
 export const NODE_PROJECT_SKILL_LEDGER: ProjectSkillLedger = createProjectSkillLedger(getAgentDir);
+
+/**
+ * D-CF2-16: whether a project-scope stage may add a plugin to the ledger.
+ * `create` is a command that named the plugin. `refresh` is one that did not:
+ * a bulk `update` or `reinstall`, the `marketplace update` cascade, or
+ * `apply`'s catalog moves. Such a command lists the plugins to stage from the
+ * project's own `state.json`, which a repository writes, so it may only
+ * rewrite the entries of a plugin the ledger already lists.
+ */
+export type ProjectLedgerAdmission = "create" | "refresh";
+
+/**
+ * D-CF2-16: the ledger of the Pi agent directory in use, with every entry a
+ * change would remember dropped. Forgetting stays, since a dropped entry only
+ * refuses a file.
+ */
+const NODE_FORGET_ONLY_LEDGER: ProjectSkillLedger = {
+  update: (change) => NODE_PROJECT_SKILL_LEDGER.update({ ...change, remember: new Map() }),
+};
+
+/**
+ * D-CF2-16: the ledger that a stage of `plugin` into the scope of `locations`
+ * writes. A user-scope stage and a `create` admission write the ledger as it
+ * is. A `refresh` admission writes it as it is only when the ledger already
+ * lists an entry of `plugin` for the project. Otherwise the stage records
+ * nothing, so the plugin's project skills, commands and hooks stay refused
+ * until a command names it. The ledger is read once, before the stage writes,
+ * so a stage that drops one kind of entry still records the others.
+ */
+export async function admittedProjectLedger(
+  admission: ProjectLedgerAdmission,
+  locations: ScopedLocations,
+  plugin: string,
+): Promise<ProjectSkillLedger> {
+  if (admission === "create" || locations.scope === "user") {
+    return NODE_PROJECT_SKILL_LEDGER;
+  }
+
+  const projectPath = path.dirname(locations.scopeRoot);
+  const skills = await listedProjectSkills(getAgentDir(), projectPath, (file) =>
+    readFile(file, "utf8"),
+  );
+  const listed = Object.values(skills).some((entry) => entry.plugin === plugin);
+  return listed ? NODE_PROJECT_SKILL_LEDGER : NODE_FORGET_ONLY_LEDGER;
+}

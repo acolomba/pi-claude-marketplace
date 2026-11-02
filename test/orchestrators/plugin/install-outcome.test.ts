@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import { chmod, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
@@ -16,6 +17,10 @@ import {
   runInstallLedger,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import {
+  NODE_PROJECT_SKILL_LEDGER,
+  provenProjectSkills,
+} from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import {
   loadState,
   saveState,
@@ -3349,4 +3354,77 @@ test("D-PL9-05: a state phase failure removes the node_modules the packages phas
     "package-lock.json",
     "package.json",
   ]);
+});
+
+/** A project plugin `empty` with the skill `greet` and one hook, seeded under `cwd`. */
+async function seedLedgerPlugin(cwd: string): Promise<ExtensionState> {
+  const seeded = await seedPlugin(cwd, {
+    components: { skills: ["greet"] },
+    hooksJson: { hooks: { PreToolUse: [{ hooks: [{ type: "command", command: "echo hi" }] }] } },
+  });
+  return seeded.state;
+}
+
+function readText(file: string): Promise<string> {
+  return readFile(file, "utf8");
+}
+
+function sha256Hex(bytes: string | Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+test("D-CF2-16: a refresh install stages a plugin the project ledger does not list and records none of it", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-refresh-unlisted-");
+  const state = await seedLedgerPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    ledgerAdmission: "refresh",
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedSkillNames, ["empty-greet"]);
+  assert.deepStrictEqual(
+    await provenProjectSkills(environment.agentDir, environment.cwd, readText),
+    new Map(),
+  );
+});
+
+test("D-CF2-16: a refresh install rewrites the project ledger entries of a plugin the ledger lists", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-refresh-listed-");
+  const state = await seedLedgerPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  await NODE_PROJECT_SKILL_LEDGER.update({
+    projectPath: environment.cwd,
+    forget: [],
+    remember: new Map([["hooks/empty", { plugin: "empty", sha256: "0".repeat(64) }]]),
+  });
+
+  // act
+  await runInstallLedger(state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    ledgerAdmission: "refresh",
+  });
+
+  // assert
+  const skillText = await readFile(
+    path.join(locations.skillsTargetDir, "empty-greet", "SKILL.md"),
+    "utf8",
+  );
+  const hooksBytes = await readFile(path.join(locations.hooksDir, "empty", "hooks.json"));
+  assert.deepStrictEqual(
+    await provenProjectSkills(environment.agentDir, environment.cwd, readText),
+    new Map([
+      ["hooks/empty", sha256Hex(hooksBytes)],
+      [
+        "empty-greet",
+        sha256Hex(JSON.stringify([["SKILL.md", "file", sha256Hex(Buffer.from(skillText))]])),
+      ],
+    ]),
+  );
 });

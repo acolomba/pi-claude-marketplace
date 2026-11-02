@@ -42,6 +42,7 @@ import type {
   ClosureSubject,
 } from "../../domain/dependency-closure.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ProjectLedgerAdmission } from "../../persistence/project-installs.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -62,6 +63,8 @@ export interface CascadeInstallOptions {
   readonly run: NotificationRun;
   readonly mapModel?: boolean;
   readonly partial?: boolean;
+  /** D-CF2-16: the command's ledger admission, shared by every member. */
+  readonly ledgerAdmission?: ProjectLedgerAdmission;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
@@ -86,6 +89,7 @@ export type InstallLedgerCallerOptions = Pick<
   | "run"
   | "mapModel"
   | "partial"
+  | "ledgerAdmission"
   | "cloneCacheSeam"
   | "credentialOps"
   | "deviceFlowHttp"
@@ -162,6 +166,7 @@ export function buildInstallLedgerOptions(
     ...(core.provenance !== undefined && { provenance: core.provenance }),
     ...(opts.mapModel !== undefined && { mapModel: opts.mapModel }),
     ...(opts.partial !== undefined && { partial: opts.partial }),
+    ...(opts.ledgerAdmission !== undefined && { ledgerAdmission: opts.ledgerAdmission }),
     ...(core.pinVersion !== undefined && { pinVersionOverride: core.pinVersion }),
     ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
     ...(core.cloneCandidates !== undefined && { cloneCandidates: core.cloneCandidates }),

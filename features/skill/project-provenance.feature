@@ -55,6 +55,36 @@ Feature: Skill project provenance
       | status.sh      | printf pwned |
       | notes/added.md | Added.       |
 
+  Scenario: A project skill whose install the user's pi directory does not record stays refused after an update that names no plugin
+    Given the user's pi directory records no plugin install for the project
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the user has run "/claude:plugin update"
+    Given the user has started a new pi session
+    When the user runs "/skill:demo-status"
+    Then the result has these fields:
+      | kind         | usage-error                                                                                                                                                                                                                                                           |
+      | severity     | error                                                                                                                                                                                                                                                                 |
+      | needs reload | false                                                                                                                                                                                                                                                                 |
+      | message      | The skill /skill:demo-status was not installed into the project {project dir} on this machine, or its file changed after the install. Reinstall its plugin into this project with /claude:plugin reinstall demo@fixtures --scope project, then run /reload to use it. |
+      | usage        |                                                                                                                                                                                                                                                                       |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.1.0   | true    |
+
+  Scenario: A project skill whose install the user's pi directory does not record stays refused after a reinstall that names no plugin
+    Given the user's pi directory records no plugin install for the project
+    Given the user has run "/claude:plugin reinstall"
+    Given the user has started a new pi session
+    When the user runs "/skill:demo-status"
+    Then the result has these fields:
+      | kind         | usage-error                                                                                                                                                                                                                                                           |
+      | severity     | error                                                                                                                                                                                                                                                                 |
+      | needs reload | false                                                                                                                                                                                                                                                                 |
+      | message      | The skill /skill:demo-status was not installed into the project {project dir} on this machine, or its file changed after the install. Reinstall its plugin into this project with /claude:plugin reinstall demo@fixtures --scope project, then run /reload to use it. |
+      | usage        |                                                                                                                                                                                                                                                                       |
+
   Scenario: A skill alias of a project skill whose install the user's pi directory does not record reaches the model as typed
     Given the user's pi directory records no plugin install for the project
     Given the user has started a new pi session

@@ -5,7 +5,9 @@ import { mkdir, readFile, realpath, stat, symlink, writeFile } from "node:fs/pro
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
+  admittedProjectLedger,
   NODE_PROJECT_SKILL_LEDGER,
   NODE_SKILL_TREE_LISTER,
   provenProjectSkills,
@@ -419,4 +421,83 @@ describe("provenProjectSkills", () => {
       assert.deepStrictEqual(proven, new Map());
     });
   }
+});
+
+describe("admittedProjectLedger", () => {
+  for (const { label, admission, scope } of [
+    { label: "a create admission at project scope", admission: "create", scope: "project" },
+    { label: "a refresh admission at user scope", admission: "refresh", scope: "user" },
+  ] as const) {
+    test(`D-CF2-16: gives ${label} the ledger as it is`, async (t) => {
+      // arrange
+      const { project } = await allocateCase(t);
+
+      // act
+      const ledger = await admittedProjectLedger(admission, locationsFor(scope, project), "demo");
+
+      // assert
+      assert.strictEqual(ledger, NODE_PROJECT_SKILL_LEDGER);
+    });
+  }
+
+  test("D-CF2-16: gives a refresh admission the ledger as it is when the ledger lists the plugin", async (t) => {
+    // arrange
+    const { project } = await allocateCase(t);
+    await NODE_PROJECT_SKILL_LEDGER.update({
+      projectPath: project,
+      forget: [],
+      remember: new Map([["demo-greet", DEMO_GREET]]),
+    });
+
+    // act
+    const ledger = await admittedProjectLedger("refresh", locationsFor("project", project), "demo");
+
+    // assert
+    assert.strictEqual(ledger, NODE_PROJECT_SKILL_LEDGER);
+  });
+
+  test("D-CF2-16: a refresh admission for a plugin the ledger does not list forgets entries and remembers none", async (t) => {
+    // arrange
+    const { project, file } = await allocateCase(t);
+    const other = { plugin: "other", sha256: "c".repeat(64) };
+    await NODE_PROJECT_SKILL_LEDGER.update({
+      projectPath: project,
+      forget: [],
+      remember: new Map([
+        ["other-a", other],
+        ["other-b", other],
+      ]),
+    });
+    const ledger = await admittedProjectLedger("refresh", locationsFor("project", project), "demo");
+
+    // act
+    await ledger.update({
+      projectPath: project,
+      forget: ["other-a"],
+      remember: new Map([["demo-greet", DEMO_GREET]]),
+    });
+
+    // assert
+    assert.deepStrictEqual(await readLedger(file), {
+      version: 1,
+      project,
+      skills: { "other-b": other },
+    });
+  });
+
+  test("D-CF2-16: a refresh admission with no ledger for the project writes none", async (t) => {
+    // arrange
+    const { project, file } = await allocateCase(t);
+    const ledger = await admittedProjectLedger("refresh", locationsFor("project", project), "demo");
+
+    // act
+    await ledger.update({
+      projectPath: project,
+      forget: [],
+      remember: new Map([["demo-greet", DEMO_GREET]]),
+    });
+
+    // assert
+    await assert.rejects(stat(file), { code: "ENOENT" });
+  });
 });

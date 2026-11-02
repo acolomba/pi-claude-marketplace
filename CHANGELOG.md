@@ -50,6 +50,7 @@
   - Hook notices now drop terminal control characters and stop at 2,000 characters.
   - SessionStart context now survives another hook's block, and prompt context stays with its own prompt, also for steers and follow-ups.
   - A project-scope hook now runs only when you installed its plugin into the project on this machine. For a project hook installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
+  - An `update` or `reinstall` that names no plugin, a `marketplace update`, and the version moves of `apply` no longer make a project plugin's skills, commands, or hooks run when you did not install that plugin into the project. Name the plugin to allow it.
   - A load with `autoapply` on now applies only the user scope and shows the pending changes of the project scope. `/claude:plugin apply` still applies both scopes.
   - The background autoupdate now updates only the user scope. `/claude:plugin update --scope project` or `/claude:plugin marketplace update` still updates the project scope.
   - Agents in subfolders now install under their folder names, such as `demo:review:security`, and hidden agent files, `.MD` files, and declared agent files install too.

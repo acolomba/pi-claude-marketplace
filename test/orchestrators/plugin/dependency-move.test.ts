@@ -19,6 +19,7 @@ import {
   supersedePinRefreshes,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { provenProjectSkills } from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import {
   loadState,
   saveState,
@@ -507,6 +508,30 @@ describe("judgeDependencyMove", () => {
 });
 
 describe("runDependencyMove", () => {
+  for (const { label, admission, recorded } of [
+    { label: "no admission adds", admission: {}, recorded: ["zcore-tool"] },
+    {
+      label: "a refresh admission adds nothing for",
+      admission: { ledgerAdmission: "refresh" },
+      recorded: [],
+    },
+  ] as const) {
+    test(`D-CF2-16: a move under ${label} a dependency the project ledger does not list`, async (t) => {
+      // arrange
+      const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+      const agentDir = process.env.PI_CODING_AGENT_DIR ?? "";
+
+      // act
+      await runDependencyMove(move("2.0.0"), { ...context, ...admission });
+
+      // assert
+      const ledger = await provenProjectSkills(agentDir, context.cwd, (file) =>
+        readFile(file, "utf8"),
+      );
+      assert.deepStrictEqual([...ledger.keys()], recorded);
+    });
+  }
+
   test("moves a dependency into range and reports its update row by its full key", async (t) => {
     // arrange
     t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });

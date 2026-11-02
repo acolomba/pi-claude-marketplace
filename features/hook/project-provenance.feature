@@ -67,3 +67,48 @@ Feature: Hook project provenance
       | 2    | user        | run the echo                                 |
       | 2    | assistant   | tool call bash {"command":"echo from-model"} |
       | 2    | tool result | bash returned: from-model\n                  |
+
+  Scenario: A project hook whose install the user's pi directory does not record stays off after an update that names no plugin
+    Given the user's pi directory records no hook install for the project
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 2.0.0   |
+    Given the user has run "/claude:plugin update"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record no runs
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 2.0.0   | true    |
+
+  Scenario: A project hook whose install the user's pi directory does not record stays off after a reinstall that names no plugin
+    Given the user's pi directory records no hook install for the project
+    Given the user has run "/claude:plugin reinstall"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record no runs
+
+  Scenario: A project hook that an update naming no plugin left off runs after the reinstall that names its plugin
+    Given the user's pi directory records no hook install for the project
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 2.0.0   |
+    Given the user has run "/claude:plugin update"
+    Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments  | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | bash-guard | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |

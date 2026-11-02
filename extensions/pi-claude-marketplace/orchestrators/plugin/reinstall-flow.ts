@@ -414,6 +414,9 @@ async function runReinstall(
       // D-18-06 / BFILL-01: reinstall is partial-capable, so a still-partial
       // plugin re-materializes in place.
       partial: true,
+      // D-CF2-16: only a reinstall that named the plugin may add it to the
+      // user's project ledger; a bulk one refreshes the entries it has.
+      ledgerAdmission: opts.named === true ? "create" : "refresh",
       cleanupClones: collectPluginClonesLocked,
       // D-18-10: the commit or finalize failure is reinstall's own outcome to
       // render, so the callback only captures it.
