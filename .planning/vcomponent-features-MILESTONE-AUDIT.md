@@ -14,12 +14,12 @@ gaps:
 tech_debt:
   - phase: cross-phase
     items:
-      - "W1 (WFL-*, CMD-*): no name-collision check between a plugin's workflow and its command; both become `<plugin>:<name>`, the engine's command wins, and the prompt template is reachable only through run_plugin_command, with no warning"
+      - "RESOLVED 2026-11-02 (41deffd, D-CF7-05): W1 (WFL-*, CMD-*): no name-collision check between a plugin's workflow and its command; both become `<plugin>:<name>`, the engine's command wins, and the prompt template is reachable only through run_plugin_command, with no warning"
       - "W2 (AGT-*, MCP-*): agent MCP grants and async: true come from the resolver's server set, not from what the MCP bridge wrote; a server the MCP stage refuses (e.g. ANAME-03 folded-key collision) still gets a grant"
-      - "W3 (SKL/CMD/HOOK): project installs made before the provenance ledger stop working until reinstalled; hooks skip with only a debug line; no upgrade scenario"
+      - "SCENARIO ADDED 2026-11-02 (19ff1af): W3 (SKL/CMD/HOOK): project installs made before the provenance ledger stop working until reinstalled; hooks skip with only a debug line; no upgrade scenario"
       - "W4 (CMD-*): run_plugin_command keeps a stale description after a second session_start in the same runtime if the new list is empty (Pi has no unregister); calls stay safe"
-      - "W5 (HOOK/CMD/SKL): no scenario pins that UserPromptSubmit hooks see the raw slash text before expansion"
-      - "W6 (HOOK/SKL): no scenario combines a PostToolUse hook with the model-read skill fill"
+      - "SCENARIO ADDED 2026-11-02 (92cd7b3): W5 (HOOK/CMD/SKL): no scenario pins that UserPromptSubmit hooks see the raw slash text before expansion"
+      - "SCENARIO ADDED 2026-11-02 (9789ef5): W6 (HOOK/SKL): no scenario combines a PostToolUse hook with the model-read skill fill"
   - phase: 05-hooks
     items:
       - "T-05-33 (medium, open, no disposition): a hook's stdout cut at 1 MB under onFailure: block reads as no decision (HOOKBIGJSON-01)"
@@ -99,3 +99,14 @@ records the ledger and routes hooks; an unnamed update that stays refused
 Full `npm run check` at 2ba505a: exit 0, cucumber 1554/1554 (seed 82800),
 direct coverage 330 records. Later commits changed only docs and planning
 files.
+
+## Follow-up (2026-11-02, user request)
+
+The user chose to fix W1 and cover W3, W5 and W6 before closing. W1 is fixed
+(D-CF7-05: the workflow wins and the command is skipped with a warning, as the
+Claude Code binary orders them). W3, W5 and W6 now have scenarios. The W3
+behavior itself (a pre-ledger install stops until reinstalled; hooks skip
+silently) is unchanged and remains accepted debt. W6 pins that the model-read
+fill applies by line position to text a PostToolUse hook replaced, which may
+deserve a change. W2 and W4 remain open debt. Full `npm run check` after
+these commits: exit 0, cucumber 1565/1565 (seed 367566), 330 coverage records.
