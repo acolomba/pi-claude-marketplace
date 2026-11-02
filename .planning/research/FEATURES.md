@@ -179,7 +179,7 @@ Existing scenario impact: `features/plugin/session-start-hooks.feature` expects 
 | H3 | UserPromptSubmit fires; exit 2 blocks the prompt; no matcher | doc, HIGH | Matched; matcher refused | MATCH | MF (fires), FX (block keeps the prompt from the model) |
 | H4 | PreToolUse/PostToolUse/PostToolUseFailure tool matchers, pipe-OR | doc, HIGH | Tool map; regex -> partial | MATCH / DIV(Out of Scope: regex) | FX |
 | H5 | Exit 2 blocks with stderr to the model; other codes non-blocking | doc, HIGH | Matched | MATCH | FX |
-| H6 | JSON `permissionDecision`, `updatedInput`, `updatedToolOutput`, `continue:false`, `suppressOutput` | doc, HIGH | Matched (`defer` missing) | MATCH | FX |
+| H6 | JSON `permissionDecision`, `updatedInput`, `updatedToolOutput`, `continue:false`, `suppressOutput` | doc, HIGH | Corrected 2026-11-02: before component-features Phase 5 a deny needed exit 0, `updatedInput` merged instead of replacing, `continue: false` did not end a PreToolUse turn, and `updatedToolOutput` never reached the model. D-CF5-11 fixed all four; `defer` stays ignored (Pi gap) | MATCH | FX |
 | H7 | `additionalContext` on every event | doc, HIGH | SessionStart and Stop only | DIV(hooks-compat, no ID) **EDGE** | FX |
 | H8 | `systemMessage` | doc, HIGH | Dropped | **FG-26** | MF |
 | H9 | `if` field | doc, HIGH | Compiler with fall-open | MATCH | FX |
@@ -193,7 +193,7 @@ Existing scenario impact: `features/plugin/session-start-hooks.feature` expects 
 | H17 | Handler types `http`, `prompt`, `agent`, `mcp_tool` | doc, HIGH | Partial drop `{unsupported hooks}` | DIV(hooks-compat) | MF (install output) |
 | H18 | Unsupported events | bin, HIGH | Partial drop | DIV + **FG-23** | MF |
 | H19 | Manifest `hooks` field merge | doc, HIGH | Ignored | **FG-24** | MF |
-| H20 | Hooks on plugin MCP tools by Claude name; the proxy `mcp({tool})` reaches hooks as `mcp` | doc, HIGH | ANAME-02; proxy = Pi gap | MATCH / PIGAP | FX |
+| H20 | Hooks on plugin MCP tools by Claude name; the proxy `mcp({tool})` reaches hooks as `mcp` | doc, HIGH | ANAME-02. Corrected 2026-11-02: before D-CF5-12 the proxy fired match-all hooks twice (as `mcp` and under the real name). Since D-CF5-12 the outer proxy call runs no hook and the nested call fires once under the real name | MATCH / PIGAP | FX |
 | H21 | `${user_config.*}` / `CLAUDE_PLUGIN_OPTION_*` | doc, HIGH | Not supported | DIV(USRCFG-01 backlog) | -- |
 | H22 | Duplicate `session_start` on RPC `new_session` | -- | Deduplicated (#294, SSDEDUP-01) | MATCH | MF |
 
