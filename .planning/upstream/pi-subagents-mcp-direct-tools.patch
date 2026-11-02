@@ -1,0 +1,175 @@
+From e191b365809d4255c363335743ec1611f1e107cf Mon Sep 17 00:00:00 2001
+From: acolomba <acolomba@gmail.com>
+Date: Mon, 2 Nov 2026 02:08:16 +0000
+Subject: [PATCH 1/2] fix: resolve mcp: selectors on servers with directTools
+ "search"
+
+pi-mcp-adapter 7 accepts `directTools: "search"` on a server and in
+`settings`. The config validator accepted only a boolean or a string
+array, so it dropped such a server from the loaded config and reported
+every `mcp:<server>/<tool>` selector for it as unresolved. A runtime
+snapshot of such a server failed validation the same way.
+
+Accept "search" in both places. Selector resolution does not read
+`directTools`, and the child's MCP_DIRECT_TOOLS selection overrides it
+in the adapter, so "search" needs no other handling here.
+---
+ src/runs/shared/mcp-config-sources.ts        |  5 +++--
+ src/runs/shared/mcp-direct-tool-allowlist.ts |  4 ++--
+ test/unit/mcp-direct-tool-resolution.test.ts | 12 ++++++++++++
+ 3 files changed, 17 insertions(+), 4 deletions(-)
+
+diff --git a/src/runs/shared/mcp-config-sources.ts b/src/runs/shared/mcp-config-sources.ts
+index 2979825..6e3cfca 100644
+--- a/src/runs/shared/mcp-config-sources.ts
++++ b/src/runs/shared/mcp-config-sources.ts
+@@ -36,7 +36,8 @@ export interface McpServerDefinition {
+ 	/** Per-server override of the global `settings.toolPrefix`, matching the adapter. */
+ 	toolPrefix?: McpToolPrefix;
+ 	protocolVersion?: string;
+-	directTools?: boolean | string[];
++	/** pi-mcp-adapter 7 `"search"` registers the tools inactive until searched; `mcp:` selectors do not read this field. */
++	directTools?: boolean | string[] | "search";
+ 	httpTransport?: string;
+ 	pluginDataDir?: string;
+ 	literalEnv?: boolean;
+@@ -59,7 +60,7 @@ export function isMcpServerDefinition(value: unknown): value is McpServerDefinit
+ 	}
+ 	if (value.requestHeadersCommand !== undefined && !isRequestHeadersCommand(value.requestHeadersCommand)) return false;
+ 	if (value.auth !== undefined && value.auth !== "oauth" && value.auth !== "bearer" && value.auth !== false) return false;
+-	return value.directTools === undefined || typeof value.directTools === "boolean" || isStringArray(value.directTools);
++	return value.directTools === undefined || typeof value.directTools === "boolean" || value.directTools === "search" || isStringArray(value.directTools);
+ }
+
+ function isRecord(value: unknown): value is Record<string, unknown> {
+diff --git a/src/runs/shared/mcp-direct-tool-allowlist.ts b/src/runs/shared/mcp-direct-tool-allowlist.ts
+index 3f0f55d..324f778 100644
+--- a/src/runs/shared/mcp-direct-tool-allowlist.ts
++++ b/src/runs/shared/mcp-direct-tool-allowlist.ts
+@@ -40,7 +40,7 @@ export interface McpConfig {
+ 	imports?: ImportKind[];
+ 	settings?: {
+ 		toolPrefix?: McpToolPrefix;
+-		directTools?: boolean;
++		directTools?: boolean | "search";
+ 		agentPluginPaths?: unknown;
+ 	};
+ }
+@@ -392,7 +392,7 @@ function parseServerEntries(value: unknown): Record<string, ServerEntry> {
+ function parseSettings(value: unknown): McpConfig["settings"] | undefined {
+ 	if (!isRecord(value)) return undefined;
+ 	const toolPrefix = value.toolPrefix === "server" || value.toolPrefix === "short" || value.toolPrefix === "none" || value.toolPrefix === "mcp" ? value.toolPrefix : undefined;
+-	const directTools = typeof value.directTools === "boolean" ? value.directTools : undefined;
++	const directTools = typeof value.directTools === "boolean" || value.directTools === "search" ? value.directTools : undefined;
+ 	const settings: NonNullable<McpConfig["settings"]> = {
+ 		...(toolPrefix ? { toolPrefix } : {}),
+ 		...(directTools !== undefined ? { directTools } : {}),
+diff --git a/test/unit/mcp-direct-tool-resolution.test.ts b/test/unit/mcp-direct-tool-resolution.test.ts
+index a910299..5467feb 100644
+--- a/test/unit/mcp-direct-tool-resolution.test.ts
++++ b/test/unit/mcp-direct-tool-resolution.test.ts
+@@ -83,6 +83,18 @@ describe("MCP direct-tool resolution config sources", () => {
+ 		assert.deepEqual(resolution.unresolvedSelectors, []);
+ 	});
+
++	it("resolves direct tools from a server whose directTools is \"search\"", () => {
++		// pi-mcp-adapter 7 accepts "search"; rejecting it dropped the server and left every selector unresolved.
++		const definition: McpServerDefinition = { ...CURRENT_DEFINITION, directTools: "search" };
++		writeServerConfig(path.join(agentDir, "mcp-adapter.json"), definition);
++		writeMetadataCache(definition);
++
++		const resolution = resolveMcpDirectToolResolution(SELECTORS, projectDir);
++
++		assert.deepEqual(resolution.selections.map((selection) => selection.name), SELECTED_NAMES);
++		assert.deepEqual(resolution.unresolvedSelectors, []);
++	});
++
+ 	it("computes config hashes identical to pi-mcp-adapter 3.1.0 for stdio servers", () => {
+ 		// Values reproduced from pi-mcp-adapter 3.1.0's real cache; drift breaks stdio direct-tool resolution.
+ 		assert.equal(computeMcpServerHash(CURRENT_DEFINITION), "d2b80559f0b1c85ccc625a4c7f875f64e0defc60648f56d2a51cbe5dfa3d967e");
+--
+2.43.0
+
+
+From 9a941ca3b8f2709af9e073f341247ff7c28904ea Mon Sep 17 00:00:00 2001
+From: acolomba <acolomba@gmail.com>
+Date: Mon, 2 Nov 2026 02:09:30 +0000
+Subject: [PATCH 2/2] fix: expand ${NAME:-default} in MCP server hashes like
+ pi-mcp-adapter
+
+pi-mcp-adapter expands `${NAME:-default}` in a server's env, headers,
+url, paths and bearer token before it hashes the server for its
+metadata cache, using the default only when NAME is unset. pi-subagents
+expanded only `${NAME}`, so a server that used a default never matched
+the adapter's cache key and its `mcp:` selectors stayed unresolved. A
+url that used a default failed to parse, which failed the launch.
+
+Use the adapter's pattern in interpolateEnvVars, and do not report a
+variable with a default as missing from a server url.
+---
+ src/runs/shared/mcp-direct-tool-allowlist.ts |  9 ++++----
+ test/unit/mcp-direct-tool-resolution.test.ts | 22 ++++++++++++++++++++
+ 2 files changed, 27 insertions(+), 4 deletions(-)
+
+diff --git a/src/runs/shared/mcp-direct-tool-allowlist.ts b/src/runs/shared/mcp-direct-tool-allowlist.ts
+index 324f778..fc440c1 100644
+--- a/src/runs/shared/mcp-direct-tool-allowlist.ts
++++ b/src/runs/shared/mcp-direct-tool-allowlist.ts
+@@ -518,7 +518,8 @@ function interpolateEnvRecord(values: Record<string, string> | undefined): Recor
+
+ function interpolateEnvVars(value: string): string {
+ 	return value
+-		.replace(/\$\{(\w+)\}/g, (_, name: string) => process.env[name] ?? "")
++		// `${NAME:-default}` uses the default only when NAME is unset, as pi-mcp-adapter and Claude Code do.
++		.replace(/\$\{(\w+)(?::-([^}]*))?\}/g, (_, name: string, fallback: string | undefined) => process.env[name] ?? fallback ?? "")
+ 		.replace(/\$env:(\w+)/g, (_, name: string) => process.env[name] ?? "")
+ 		.replace(/\{env:(\w+)\}/g, (_, name: string) => process.env[name] ?? "");
+ }
+@@ -530,9 +531,9 @@ function interpolateSecretExpression(value: string): string {
+
+ function getMissingEnvVars(value: string): string[] {
+ 	const missing = new Set<string>();
+-	for (const match of value.matchAll(/\$\{(\w+)\}|\$env:(\w+)|\{env:(\w+)\}/g)) {
+-		const name = match[1] ?? match[2] ?? match[3];
+-		if (name && process.env[name] === undefined) missing.add(name);
++	for (const match of value.matchAll(/\$\{(\w+)(:-[^}]*)?\}|\$env:(\w+)|\{env:(\w+)\}/g)) {
++		const name = match[1] ?? match[3] ?? match[4];
++		if (name && match[2] === undefined && process.env[name] === undefined) missing.add(name);
+ 	}
+ 	return [...missing];
+ }
+diff --git a/test/unit/mcp-direct-tool-resolution.test.ts b/test/unit/mcp-direct-tool-resolution.test.ts
+index 5467feb..217f49a 100644
+--- a/test/unit/mcp-direct-tool-resolution.test.ts
++++ b/test/unit/mcp-direct-tool-resolution.test.ts
+@@ -101,6 +101,28 @@ describe("MCP direct-tool resolution config sources", () => {
+ 		assert.equal(computeMcpServerHash({ ...CURRENT_DEFINITION, inheritEnv: false }), "345b359732aa3ece7fdf8b98b9927809243685846c2b375e98a312a80e89e333");
+ 	});
+
++	it("expands ${NAME:-default} like pi-mcp-adapter 7.0.0 when hashing", () => {
++		// Values computed by pi-mcp-adapter 7.0.0's computeServerHash with the same environment.
++		const names = ["PI_SUBAGENTS_TEST_SET", "PI_SUBAGENTS_TEST_EMPTY", "PI_SUBAGENTS_TEST_UNSET"] as const;
++		const saved = names.map((name) => process.env[name]);
++		process.env.PI_SUBAGENTS_TEST_SET = "set-value";
++		process.env.PI_SUBAGENTS_TEST_EMPTY = "";
++		delete process.env.PI_SUBAGENTS_TEST_UNSET;
++		try {
++			assert.equal(computeMcpServerHash({ command: "node", env: { E: "${PI_SUBAGENTS_TEST_UNSET:-fallback}" } }), "63b3dd0b3af2e0d992f09b9ad3b5dc664e5a5b2be637efb7fd2ac5b049df1800");
++			assert.equal(computeMcpServerHash({ command: "node", env: { E: "${PI_SUBAGENTS_TEST_SET:-fallback}" } }), "e0ba06cbb914582d09692eb5567676e0440e89d49771feee60d203819bb2f75a");
++			assert.equal(computeMcpServerHash({ command: "node", env: { E: "${PI_SUBAGENTS_TEST_EMPTY:-fallback}" } }), "8d90759297b01c9017f3b000df7efb7b7fea6eb3137bab3d90c14059fc147fc3");
++			assert.equal(computeMcpServerHash({ url: "http://localhost/mcp", headers: { A: "${PI_SUBAGENTS_TEST_UNSET:-token}" } }), "dfe2954daf368fe0b2d99c360398ee02573a8ad8ba802540322ef4f9393e41b2");
++			assert.equal(computeMcpServerHash({ url: "${PI_SUBAGENTS_TEST_UNSET:-http://localhost:3000}/mcp" }), "8f950f5b7a4a5627a3facf5775dc18519ff6f66642e245f0f4c0285adaab8a4d");
++		} finally {
++			names.forEach((name, index) => {
++				const value = saved[index];
++				if (value === undefined) delete process.env[name];
++				else process.env[name] = value;
++			});
++		}
++	});
++
+ 	it("ignores Pi's own mcp.json files, which the adapter no longer reads", () => {
+ 		writeServerConfig(path.join(agentDir, "mcp.json"), CURRENT_DEFINITION);
+ 		writeServerConfig(path.join(getProjectConfigDir(projectDir), "mcp.json"), CURRENT_DEFINITION);
+--
+2.43.0
