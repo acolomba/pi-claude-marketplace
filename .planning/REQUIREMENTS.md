@@ -64,12 +64,12 @@ the parent applies them at merge.
 
 ### Skills
 
-- [ ] **SKL-01**: A new session lists each bridged skill as `/skill:<plugin>-<name>` with its description, including the upstream description fallback as decided
-- [ ] **SKL-02**: Skill frontmatter variants behave as upstream or as a recorded divergence: `disable-model-invocation`, `user-invocable: false` (Pi-gap divergence), frontmatter `name` (FG-07), and each field FG-10 covers
-- [ ] **SKL-03**: Invoking a skill sends the model its body in a `<skill>` block, with path variables expanded and arguments handled as decided
-- [ ] **SKL-04**: A skill and a command (or another skill) with the same qualified name resolve as decided under FG-08
-- [ ] **SKL-05**: The interactive `/plugin:skill` alias works as decided under FG-09, tested through the TUI driver
-- [ ] **SKL-06**: Disable, uninstall, and update remove or replace the skill in a new session, and enable restores it
+- [x] **SKL-01**: A new session lists each bridged skill as `/skill:<plugin>-<name>` with its description, including the upstream description fallback as decided
+- [x] **SKL-02**: Skill frontmatter variants behave as upstream or as a recorded divergence: `disable-model-invocation`, `user-invocable: false` (Pi-gap divergence), frontmatter `name` (FG-07), and each field FG-10 covers
+- [x] **SKL-03**: Invoking a skill sends the model its body in a `<skill>` block, with path variables expanded and arguments handled as decided
+- [x] **SKL-04**: A skill and a command (or another skill) with the same qualified name resolve as decided under FG-08
+- [x] **SKL-05**: The interactive `/plugin:skill` alias works as decided under FG-09, tested through the TUI driver
+- [x] **SKL-06**: Disable, uninstall, and update remove or replace the skill in a new session, and enable restores it
 
 ### Commands
 
@@ -165,12 +165,12 @@ Deferred to a milestone with a real model provider.
 | DEC-01 | Phase 1 | Complete |
 | DEC-02 | Phase 1 | Complete |
 | CI-01 | Phase 1 | Complete |
-| SKL-01 | Phase 2 | Pending |
-| SKL-02 | Phase 2 | Pending |
-| SKL-03 | Phase 2 | Pending |
-| SKL-04 | Phase 2 | Pending |
-| SKL-05 | Phase 2 | Pending |
-| SKL-06 | Phase 2 | Pending |
+| SKL-01 | Phase 2 | Complete |
+| SKL-02 | Phase 2 | Complete |
+| SKL-03 | Phase 2 | Complete |
+| SKL-04 | Phase 2 | Complete |
+| SKL-05 | Phase 2 | Complete |
+| SKL-06 | Phase 2 | Complete |
 | CMD-01 | Phase 3 | Complete |
 | CMD-02 | Phase 3 | Complete |
 | CMD-03 | Phase 3 | Complete |

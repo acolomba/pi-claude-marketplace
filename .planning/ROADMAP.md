@@ -198,7 +198,7 @@ pairs `test/domain/workflow-script.test.ts`,
   touches its files.
 
 - [x] **Phase 1: Harness and Version Raise** - Pi and the three companions at their latest releases, a profile Pi with a scripted model and stand-ins, and a seed scenario per kind, with the pre-fan-out decisions settled (completed 2026-11-01)
-- [ ] **Phase 2: Skills** - Bridged skills list, carry their frontmatter, reach the model, resolve name clashes, and follow the plugin lifecycle as upstream
+- [x] **Phase 2: Skills** - Bridged skills list, carry their frontmatter, reach the model, resolve name clashes, and follow the plugin lifecycle as upstream (completed 2026-11-02)
 - [x] **Phase 3: Slash Commands** - Bridged commands list as prompt templates, expand their arguments as decided, and follow the plugin lifecycle (completed 2026-11-01)
 - [x] **Phase 4: Agents** - pi-subagents lists and runs bridged agents with converted fields, preloaded skills, and companion-missing recovery (completed 2026-11-01)
 - [x] **Phase 5: Hooks** - Hooks fire on Pi's session, tool, prompt, and stop events with Claude's stdin and environment, including the `clear`, `compact`, and `fork` parity fixes (completed 2026-11-01)
@@ -286,7 +286,7 @@ Plans:
 - Wave 3: decision IDs, the Pi report, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/skill/**`, `features/step_definitions/skill/**`, `features/lib/skill-files.ts`, `bridges/skills/**`, `edge/skill-aliases.ts`, `test/bridges/skills/**`, `test/integration/skills-*`.
 
-**Plans:** 7/7 plans executed in 4 waves (the template's wave 1 also stores the upstream names the alias loader reads, so the staged bytes change once; the alias plan moves to wave 3 because it builds on the invocation plan's input handler; the phase gate is wave 4)
+**Plans:** 7/7 plans complete in 4 waves (the template's wave 1 also stores the upstream names the alias loader reads, so the staged bytes change once; the alias plan moves to wave 3 because it builds on the invocation plan's input handler; the phase gate is wave 4)
 
 Plans:
 **Wave 1**
@@ -504,7 +504,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Harness and Version Raise | 15/15 | Complete    | 2026-11-01 |
-| 2. Skills | 7/7 | In Progress | - |
+| 2. Skills | 7/7 | Complete    | 2026-11-02 |
 | 3. Slash Commands | 9/9 | Complete    | 2026-11-01 |
 | 4. Agents | 6/6 | Complete    | 2026-11-01 |
 | 5. Hooks | 9/9 | Complete    | 2026-11-01 |
