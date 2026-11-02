@@ -127,7 +127,7 @@ This phase did not post the report. It holds no credential for Pi's tracker, and
 
 ---
 
-**Title:** Skills: no per-skill way to hide a slash command, no skill display name or alias, and no extension hook when the model loads a skill
+**Title:** Skills and prompt templates: no per-skill hide, no display names or aliases, no hook when the model loads a skill, no model access to templates, and a second expansion after an input transform
 
 **Summary.** pi-claude-marketplace installs Claude Code plugins into Pi. It stages each plugin skill as a Pi skill. Three things that Claude Code plugin skills use have no equal in Pi 1.4.0. The extension works around two of them in part and cannot work around the third. Each section below states what a Claude Code plugin expects, what Pi offers, what users see, and one proposal.
 
@@ -151,6 +151,27 @@ This phase did not post the report. It holds no credential for Pi's tracker, and
 - Pi 1.4.0: the system prompt tells the model to load a skill's file with the read tool. No event lets an extension change that content. `input` handlers run only for text that the user sends.
 - Effect: a skill that the model loads on its own gets the raw file. `$ARGUMENTS`, `${CLAUDE_SESSION_ID}`, and `${CLAUDE_EFFORT}` stay literal, and `!` commands do not run. The extension applies these rules only to skills that the user types.
 - Proposal: emit an event when the model loads a skill, with the skill name, its file, and the text, and let a handler return changed text. A skill tool that loads a skill by name and fires that event would also work.
+
+**4. The model cannot see or run a prompt template**
+
+- Claude Code: a plugin command with a `description` (or `when_to_use`) is in the model's skill list, for example `- probe-plugin:deploy: Deploy things`, under "The following skills are available for use with the Skill tool:". The model can run the command through its Skill tool. `disable-model-invocation: true` takes the command out of the list, and the Skill tool then refuses it. Probed on the 2.1.316 binary (03-UPSTREAM-EVIDENCE E1).
+- Pi 1.4.0: prompt templates are user input only. The system prompt lists skills (`formatSkillsForPrompt` in `dist/core/system-prompt.js`) and no templates, and the model has no tool that runs a template.
+- Effect: the extension stages each Claude Code command as a Pi prompt template. The user can type it, but the model does not know it exists and cannot run it. A plugin that expects the model to run its commands loses that in Pi. Staging the command again as a Pi skill would give the model access, but it would also add a `/skill:<plugin>-<name>` entry to the slash menu, which Pi cannot hide (section 1).
+- Proposal: let a prompt template opt in to the model's view, for example with frontmatter `model-invocable: true`. List such templates in the system prompt with their descriptions, and give the model a way to run one by name with arguments. The same expansion as for user input applies, and the `input` event fires with a source such as `model`. Honor `disable-model-invocation: true` as the opt-out.
+
+**5. A template's name is its file name**
+
+- Claude Code: a plugin can declare its commands as an object map in `plugin.json`. Each key becomes `/<plugin>:<key>` verbatim, so a key can hold `/`, `.`, or non-ASCII characters, and the name does not have to match any file name. Probed on the 2.1.316 binary (03-UPSTREAM-EVIDENCE E3).
+- Pi 1.4.0: `loadTemplateFromFile` in `dist/core/prompt-templates.js` sets `name = basename(filePath).replace(/\.md$/, "")`, and `expandPromptTemplate` finds a template by that name. A frontmatter field cannot set another name.
+- Effect: the extension must stage one file per command and name the file after the command. A map key's `/` becomes `:`, because a file name cannot hold `/`. On Windows, a key with `:` inside it gives a file name that NTFS refuses, so that install fails. The extension also uses `.` in place of `:` in every command name on Windows.
+- Proposal: accept an optional frontmatter `name` on a prompt template, used in place of the file name for listing and expansion. An extension API that registers a template with a name and a body would also work.
+
+**6. A transformed input is expanded again**
+
+- Claude Code: a command whose body starts with `/` sends the body literally. The second command is not expanded. Probed on the 2.1.316 binary (03-UPSTREAM-EVIDENCE E8).
+- Pi 1.4.0: `prompt()` in `dist/core/agent-session.js` runs the `input` handlers first, then `_expandSkillCommand` and `expandPromptTemplate` on the text that a handler returned with `action: "transform"`. The opt-out `expandPromptTemplates: false` exists on `prompt()` and `sendUserMessage()` options, but not on the `transform` result.
+- Effect: the extension fills a typed command's body itself, as Claude Code does, and returns it as a `transform`. When that body starts with `/<another template>` or `/skill:<name>`, Pi expands it a second time, with Pi's own argument rules, no `!` commands, and no provenance check. The model then gets the other template's body instead of the literal text. The extension cannot prevent this without `sendUserMessage`, which changes the RPC `prompt` response to `handled` and reports a missing model as an extension error.
+- Proposal: add an optional `expand: false` (or `expandPromptTemplates: false`) member to the `transform` result, so that Pi sends the returned text as it is.
 
 ---
 
