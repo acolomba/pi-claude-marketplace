@@ -1,8 +1,8 @@
 ---
 phase: 06-mcp-servers
-verified: 2026-11-01T19:30:00Z
-status: human_needed
-score: 4/5 roadmap truths verified (SC4 is met only as a recorded gap pin under D-CF6-10; see Human Verification)
+verified: 2026-11-02T11:15:31Z
+status: passed
+score: 5/5 roadmap truths verified (4 VERIFIED, 1 PASSED (override) on SC4/MCP-07)
 covered_files:
   - ".planning/phases/06-mcp-servers/06-01-PLAN.md"
   - ".planning/phases/06-mcp-servers/06-01-SUMMARY.md"
@@ -23,7 +23,9 @@ covered_files:
   - ".planning/phases/06-mcp-servers/06-09-PLAN.md"
   - ".planning/phases/06-mcp-servers/06-09-SUMMARY.md"
   - "docs/mcp-compatibility.md"
+  - "extensions/pi-claude-marketplace/bridges/agents/convert.ts"
   - "extensions/pi-claude-marketplace/domain/components/mcp.ts"
+  - "extensions/pi-claude-marketplace/domain/manifest-containment.ts"
   - "extensions/pi-claude-marketplace/domain/mcp-resolution.ts"
   - "features/lib/mcp-server-environment.ts"
   - "features/lib/mcp-server-files.ts"
@@ -36,6 +38,8 @@ covered_files:
   - "features/mcp-server/listing.feature"
   - "features/mcp-server/project-scope.feature"
   - "features/mcp-server/sources.feature"
+  - "features/plugin/update.feature"
+  - "features/step_definitions/agent/listing.steps.ts"
   - "features/step_definitions/mcp-server/configuration.steps.ts"
   - "features/step_definitions/mcp-server/invalid-configs.steps.ts"
   - "features/step_definitions/mcp-server/invocation.steps.ts"
@@ -43,6 +47,7 @@ covered_files:
   - "features/step_definitions/mcp-server/listing.steps.ts"
   - "features/step_definitions/mcp-server/sources.steps.ts"
   - "features/step_definitions/mcp-server/status.steps.ts"
+  - "test/bridges/agents/convert.test.ts"
   - "test/domain/components/mcp.test.ts"
   - "test/domain/components/plugin.test.ts"
   - "test/domain/mcp-resolution.test.ts"
@@ -50,27 +55,36 @@ covered_files:
   - "test/integration/mcp-migration.test.ts"
   - "test/orchestrators/plugin/install-flow-ledger.test.ts"
   - "test/orchestrators/reconcile/mcp-migration.test.ts"
-covered_digest: "v4:sha256:c95d059eeef89d79085d6c640ee1a943f0596b5d12b882e41b415c31b8031c33"
+covered_digest: "v4:sha256:0c5c84e28f02057a3c25e1ca898d7dc4271aaa6d79301228df1a214b32586d13"
 behavior_unverified: 0
-overrides_applied: 0
-human_verification:
-  - test: "Decide whether the D-CF6-10 gap pin satisfies MCP-07 and ROADMAP success criterion 4"
-    expected: "Either accept the pin (then record it as an override with an accepted_by name, and apply the SC4/MCP-07 wording lines from 06-09-SUMMARY.md), or reject it and open a gap for a working agent call"
-    why_human: "The literal criterion says an agent calls the tool and the stub logs the call. No scenario shows that. pi-subagents 0.84.0 refuses the foreground launch, and the harness's background children load neither the profile's companions nor the scripted model. D-CF6-10 was settled autonomously, not by the user, so no recorded user acceptance exists."
+overrides_applied: 1
+overrides:
+  - must_have: "An agent granted a plugin MCP tool calls it in a foreground run, and the stub logs the call (MCP-07)"
+    reason: "Accepted deviation (user decision A.2 of 2026-11-02, .planning/DUBIOUS-CHOICES.md). pi-subagents' documented design (docs/agents.md l.553) loads no ambient extension, pi-mcp-adapter included, into a foreground child, so a foreground call cannot reach a plugin MCP tool; the user accepted that refusal as pi-subagents' design. pi-subagents 0.84.0 bug A (its validator rejects directTools: \"search\", which this extension writes for every plugin server) drops every bridged server even for a background child, which is the refusal features/mcp-server/invocation.feature pins; bug B (${VAR:-default} cache-key mismatch) is a second upstream defect. The extension now writes async: true for every agent that runs plugin MCP tools (bridges/agents/convert.ts, commits 204a8e6/fceb752, pinned by the invocation.feature staging scenario). Upstream patches for A and B are drafted in .planning/upstream/pi-subagents-mcp-direct-tools.patch for the user's review. BACKLOG MCPBG-01 tracks proving a background call later."
+    accepted_by: "acolomba"
+    accepted_at: "2026-11-02T11:15:00Z"
+re_verification:
+  previous_status: human_needed
+  previous_score: 4/5
+  gaps_closed:
+    - "SC4/MCP-07: the human decision the previous report requested was made (A.2); recorded here as an override"
+    - "WR-01/WR-02 link rule: implemented as the user decided (A.3); a referenced mcpServers file follows a link whose real target stays inside the plugin root"
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 6: MCP Servers Verification Report
 
 **Phase Goal:** With pi-mcp-adapter 7.x loaded, a bridged MCP server connects under Claude's tool names, receives its configuration as upstream, answers calls from the model and from agents, starts in a project as decided, recovers when the adapter is loaded later, and follows the plugin lifecycle.
-**Verified:** 2026-11-01
-**Status:** human_needed
-**Re-verification:** No -- initial verification
+**Verified:** 2026-11-02T11:15:31Z at `2ba505a` (working tree clean)
+**Status:** passed
+**Re-verification:** Yes. The previous report (2026-11-01) was `human_needed` at 4/5, with no `gaps:` section. It asked a human to decide SC4/MCP-07. The user decided on 2026-11-02 (A.2 and A.3 in `.planning/DUBIOUS-CHOICES.md`). I re-verified the whole tree, not only the open item, because two product changes landed after the previous report.
 
 ## Summary
 
-Every success criterion except the agent-call half of SC4 is backed by passing, whole-literal cucumber scenarios and unit tests that I re-ran. The agent half is a recorded Pi companion gap, not a working call. Judged against locked decision D-CF6-10, the gap pin is delivered and correct. Judged against the literal SC4 and MCP-07 wording, an agent calling a plugin MCP tool and the stub logging the call is NOT demonstrated anywhere. That decision was settled autonomously with no user sign-off, so I route it to a human instead of passing it silently.
+SC1, SC2, SC3, and SC5 hold on the current tree. Each has whole-literal cucumber scenarios that I re-ran at `2ba505a`. SC4 is not met as written: no scenario shows an agent calling a plugin MCP tool, and none shows the stub logging such a call. The user accepted that as a deviation (A.2). I record it as `PASSED (override)` with `accepted_by: acolomba`. The `async: true` change that A.2 asked for is in `bridges/agents/convert.ts` and a scenario pins it. The A.3 link rule is in `domain/mcp-resolution.ts`. A scenario pins each direction, and unit tests cover the note text, dangling links, and link loops.
 
-No BLOCKER was found. The code review (0 critical, 8 warnings) is fully dispositioned in `06-REVIEW-DISPOSITION.md` (open: 0).
+No BLOCKER. I found two warnings, both about wording, and neither changes a must-have. The docs and the install warning describe the background launch as the way to reach MCP tools, but they do not say that on pi-subagents 0.84.0 an agent with an explicit `mcp:` grant still fails in the background (bug A). BACKLOG MCPBG-01 and MCPSUB-01 also predate the A.2 decision. Details are under Anti-Patterns.
 
 ## Goal Achievement
 
@@ -78,63 +92,64 @@ No BLOCKER was found. The code review (0 critical, 8 warnings) is fully disposit
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | SC1 (MCP-01, MCP-02): a bridged stdio server connects (stub logs `initialize`, `notifications/initialized`, `tools/list`), its tools register as `mcp__plugin_<plugin>_<server>__<tool>`, and a scripted `mcp` proxy call reaches the stub with the given arguments and returns the result to the model | VERIFIED | `features/mcp-server/listing.feature`: search returns `Activated as direct tools: mcp__plugin_demo_stub__echo.` and the whole stub log; call 1 is offered no plugin tool, call 2 is; the registry-probe scenario shows `mcp__plugin_demo_stub__echo` registered but inactive; `api` and `my.db` give `mcp__plugin_demo_api__echo` and `mcp__plugin_demo_my_db__echo`; negative controls (no MCP server, search with no match). `invocation.feature`: proxy call logs `tools/call {"name":"echo","arguments":{"text":"ping"}}` and returns `mcp returned: echo:ping`; direct call returns `echo:direct`; an unlisted tool is answered by the adapter and never reaches the stub. Re-run: `npx cucumber-js features/mcp-server` 52/52 scenarios passed. |
-| 2 | SC2 (MCP-03, MCP-04): args, env, `${VAR}`, `${VAR:-default}`, `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and loopback remote servers with headers reach the server as upstream; the documented rows hold on 7.x; multiple sources and a malformed server behave as FG-27/FG-28 decide | VERIFIED | `configuration.feature`: loopback HTTP server receives `Authorization: Bearer t0k3n` and `X-Team: core` on every POST and GET (whole request table); OAuth-entry and unset-header variants pinned (the unset header reaches the server empty, a documented Pi gap); env Outline pins literal, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_PLUGIN_ROOT}`, and `${PI_CM_STUB_TAG:-install-default}`; a variable set when Pi starts; `${CLAUDE_PLUGIN_ROOT}` in args; the stdio server's own environment. `sources.feature` (6 scenarios): union order, array order, entry only without `plugin.json`, ignored with one, `.mcpb` as partially available, reference without `./`. `invalid-configs.feature` (5 scenarios, 8 runs with the Outline): a malformed server in `.mcp.json` is skipped, inline and entry defects and an outside reference make the plugin `(unavailable) {malformed mcp}`, four broken-file states contribute no server. `domain/mcp-resolution.ts` implements both rules (file sources skip silently via `mergeServerFile`, inline defects call `addDefect`, `Map` merge keeps first position). `docs/mcp-compatibility.md` names pi-mcp-adapter 7.0.0 on Pi 1.4.0 and cites the scenarios. |
-| 3 | SC3 (MCP-05, MCP-06): in a trusted project, project-scope plugin servers start as FG-29 decides and the untrusted case is pinned; without the adapter the install shows `{requires pi-mcp-adapter}`, and loading the adapter then `/reload` makes the servers available with no reinstall | VERIFIED | `project-scope.feature`: allowed project server connects and answers (user-global `projectServers: allow`); headless without the setting is blocked (`MCP: 0/0 servers, 0 tools (1 blocked)`, approval-required reason, empty stub log); untrusted project is blocked even with the setting (`blocked by project trust`); `info` shows `{"name":"plugin:demo:stub","status":"pending approval"}`. FG-29 is decided as D-CF6-03, a licensed divergence (adapter-owned trust, NFR-10); no write of `mcp-project-approvals` exists in `extensions/`. `companion-missing.feature`: install reports `installed` with reason `requires pi-mcp-adapter`; a Pi started later with the adapter answers `echo:ping` with no reinstall; `info` names the adapter missing, then present. The fresh-Pi stand-in for `/reload` is D-CF6-11. |
-| 4 | SC4 (MCP-07): an agent granted a plugin MCP tool calls it in a foreground run, and the stub logs the call | UNCERTAIN (met only as a gap pin under D-CF6-10) | `invocation.feature` pins two scenarios, both green on my re-run. (a) A foreground `subagent` run of an agent with `tools: mcp__plugin_demo_stub__echo` returns the whole text `subagent failed: Unresolved MCP direct-tool selectors: plugin_demo_stub_/echo. Direct MCP tools require a matching configured server and fresh metadata cache; ...`, and the stub log holds only the startup listing. (b) A foreground agent with no `tools:` runs, and its child call is offered `read, bash, edit, write, bg_wait, contact_supervisor` with no MCP tool. No scenario shows an agent calling the tool or the stub logging a call. The agent is written by `publishMcpServerAgent` (D-CF6-07), with no Phase 4 file. See Human Verification. |
-| 5 | SC5 (MCP-08): disable, uninstall, and update remove or replace the server entries the adapter sees | VERIFIED | `lifecycle.feature` (8 scenarios): disable and uninstall give `Tool ... not found`, `MCP: 0/0 servers, 0 tools`, and an empty stub log; enable restores the answer; update to a `v2` tag answers `v2:echo:ping`; a published change with no update still answers `echo:ping`; a user's `disabled: true` survives an update (the update also changes `STUB_TAG`, per WR-08), a disable then enable, and an uninstall then install. No Then reads `mcp-adapter.json`. |
+| 1 | SC1 (MCP-01, MCP-02): a bridged stdio server connects (the stub logs `initialize` and `tools/list`), its tools register as `mcp__plugin_<plugin>_<server>__<tool>`, and a scripted `mcp` proxy call reaches the stub with the given arguments and returns its result to the model | VERIFIED | `listing.feature`: search activates `mcp__plugin_demo_stub__echo`, with the whole stub log; `api` and `my.db` give `mcp__plugin_demo_api__echo` and `mcp__plugin_demo_my_db__echo`; negative controls. `invocation.feature`: the proxy call logs `tools/call {"name":"echo","arguments":{"text":"ping"}}` and returns `mcp returned: echo:ping`; a direct call returns `echo:direct`; an unlisted tool never reaches the stub. My re-run: 55/55 scenarios in `features/mcp-server`. |
+| 2 | SC2 (MCP-03, MCP-04): args, env, `${VAR}`, `${VAR:-default}`, `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and loopback remote servers with headers reach the server as upstream; the documented rows hold on 7.x; multiple sources and a malformed server behave as FG-27/FG-28 decide | VERIFIED | `configuration.feature`: whole request tables for loopback headers; env Outline for the literal value, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_PLUGIN_ROOT}`, and `${VAR:-default}`. `sources.feature` (7 scenarios, including the new in-plugin link scenario) and `invalid-configs.feature` (6 scenarios, including the new out-of-plugin link scenario). `domain/mcp-resolution.ts` implements the FG-27 merge order, the FG-28 silent file skip and inline-fatal rule, and the A.3 link rule (see the link section below). `docs/mcp-compatibility.md` names pi-mcp-adapter 7.0.0 on Pi 1.4.0, and its link text (l.46, l.245, l.473) matches the code. |
+| 3 | SC3 (MCP-05, MCP-06): in a trusted project, project-scope plugin servers start as FG-29 decides, and the untrusted case is pinned; without the adapter the install shows `{requires pi-mcp-adapter}`, and loading the adapter then `/reload` makes the servers available with no reinstall | VERIFIED | `project-scope.feature`: an allowed server connects; headless without the setting is blocked; an untrusted project is blocked even with the setting; `info` shows `pending approval` (D-CF6-03). `companion-missing.feature`: the install reason is `requires pi-mcp-adapter`; a Pi started later with the adapter answers `echo:ping` with no reinstall (the fresh-Pi stand-in for `/reload` is D-CF6-11). No change since the previous report; re-run green. |
+| 4 | SC4 (MCP-07): an agent granted a plugin MCP tool calls it in a foreground run, and the stub logs the call | PASSED (override) | Override: accepted deviation. pi-subagents' design refuses MCP tools to foreground children, and 0.84.0 bug A drops every bridged server even for background children. The extension writes `async: true` for MCP agents, and upstream patches for bugs A and B are drafted. Accepted by acolomba on 2026-11-02T11:15:00Z. Codebase evidence for what was delivered: `convert.ts:899-901` computes `backgroundForMcp = runsMcpTools(...)` and pushes the D-CF6-10 warning; `convert.ts:961` emits `async: backgroundForMcp \|\| isTrueBackground(raw.background)`; `runsMcpTools` (l.1011) covers an explicit `mcp:` entry and an omitted list in a plugin with MCP servers. The `invocation.feature` scenario "Installing an agent granted a plugin MCP tool stages it to run in the background (D-CF6-10)" pins the whole staged file, including `async: true` and the warning. Without the change the file would have no `async:` line, so the scenario fails. Unit tests in `test/bridges/agents/convert.test.ts` cover `background: false` with an explicit grant (l.2199) and with an omitted list (l.2219). The two D-CF6-10 refusal pins remain green. No scenario shows a working agent call. |
+| 5 | SC5 (MCP-08): disable, uninstall, and update remove or replace the server entries the adapter sees | VERIFIED | `lifecycle.feature` (8 scenarios): disable and uninstall give `Tool ... not found`, `MCP: 0/0 servers, 0 tools`, and an empty stub log; enable restores the answer; update to `v2` answers `v2:echo:ping`; a user's `disabled: true` survives update, disable then enable, and uninstall then install. No change since the previous report; re-run green. |
 
-**Score:** 4/5 roadmap truths verified. SC4 is UNCERTAIN because it is met only by the D-CF6-10 gap pin. 0 truths are present-but-behavior-unverified.
+**Score:** 5/5 truths: 4 VERIFIED, 1 PASSED (override). 0 present-but-behavior-unverified.
+
+### The A.3 link rule (WR-01/WR-02), checked against the code
+
+| Claim (A.3) | Code | Test evidence | Status |
+|---|---|---|---|
+| A referenced `mcpServers` file follows a link whose real target is inside the plugin root | `mcp-resolution.ts::locateReference` lexically refuses absolute and `..` references, then calls `locateManifestCandidate(copyManifestBoundary(pluginRoot), spelled)`. When `assertPathInside` refuses (a link), `manifest-containment.ts::locateLinkedCandidate` realpaths the plugin root and the candidate and returns `{kind:"open", path: target}` only when `assertPathInside(realRoot, target)` passes. The read opens the resolved target, not the link as written. | `sources.feature` "A server reference that is a symbolic link to a file inside the plugin loads its servers" (`servers.json` -> `config/servers.json`; `mcp__plugin_demo_r__echo` is offered). Before 8aef795 this plugin was refused, so the scenario fails without the change. Unit tests: "reads ... through a file link" and "... through a directory link" assert that the only read is `config/real.json`. | VERIFIED |
+| A link that points outside stays refused | `locateLinkedCandidate` returns `ESCAPES`, and `locateReference` maps it to `refused` with `malformed mcp reference: symbolic link resolves outside plugin root: "<raw>"` | `invalid-configs.feature` "...symbolic link out of the plugin makes the plugin unavailable..." (`(unavailable) {malformed mcp}`). The outside behavior did not change, so this scenario is a regression guard and would also pass without the change. Unit test "refuses ... whose link resolves outside the plugin root without reading it" asserts `reads: []` and the exact note. | VERIFIED |
+| The note stops saying "escapes plugin root" for a link | The note `escapes plugin root` is now produced only by the lexical `..` check. A link outside the root gets the `symbolic link resolves outside` note, and a link inside the root is read. | Unit test pins the new wording. The note reaches only the debug log; users see `{malformed mcp}` (DC-39 item 6). | VERIFIED |
+| The root `.mcp.json` keeps following links anywhere | 8aef795 does not touch the root `.mcp.json` path | The `sources.feature` and `invalid-configs.feature` root-link scenarios from the earlier waves stay green | VERIFIED |
+| A dangling link or a link loop contributes nothing, silently (D-CF6-02) | `ABSENT` -> `unreachable` ("its symbolic link is dangling"); `ELOOP` -> `unresolvable` -> `unreachable` | Unit tests "skips ... through a dangling link / a link loop silently" | VERIFIED |
+
+MCPR-04's amendment is recorded in `.planning/PROJECT.md` l.1213.
 
 ### PLAN must-haves cross-check
 
-The PLAN frontmatter truths add detail to the roadmap contract and reduce none of it. I checked each against the tree.
-
-| Plan | Result |
-|------|--------|
-| 06-01 | `features/step_definitions/mcp-server/calls.steps.ts` is gone (renamed to `listing.steps.ts`); `listing.feature`, `project-scope.feature`, and the exported fixture writers exist; the project-scope scenario moved out of `invocation.feature` |
-| 06-02 | `features/lib/mcp-server-http.ts` binds `127.0.0.1` only and its close is registered as a release; `mcp-server-environment.ts` exists; the pinned request tables are present |
-| 06-03 | `domain/mcp-resolution.ts` and `domain/components/mcp.ts` (`MCP_SERVERS_SCHEMA` union of map and array, `MCP_SERVER_MAP_VALIDATOR`); `resolveStrictMcp` is called from `domain/plugin-resolver.ts:765`; `domain/components/plugin.ts` is unedited |
-| 06-04 | Both D-CF6-10 pins and the direct-call scenarios exist |
-| 06-05 | The four project-scope scenarios and the four companion-missing scenarios exist; no product file was changed for them |
-| 06-06 | All eight lifecycle scenarios exist; the override Given uses `writeMcpAdapterOverride` |
-| 06-07 | The file-source skip and inline-fatal rule are in `mcp-resolution.ts`; the `.mcpb` rule and AMIG-01 integration cases pass |
-| 06-08 | Only `docs/mcp-compatibility.md` changed for FG-30; the canary line still names 5.2.0 as the plan requires |
-| 06-09 | The SUMMARY carries gate evidence, decision rows D-CF6-01..11, the drafted (unfiled) pi-subagents report, and parent lines, including the SC4/MCP-07 wording |
+The PLAN frontmatter truths add detail to the roadmap contract and remove none of it. The 06-01..06-09 rows from the previous report still hold. Two items changed after the plans: 06-04's D-CF6-10 pins now sit beside a third scenario that pins `async: true`, and 06-07's "an escaping reference stays fatal" now covers only a lexical escape or a link whose real target leaves the plugin root. Both changes follow the user decisions. Neither drops a plan truth.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `features/mcp-server/{listing,configuration,sources,invalid-configs,invocation,project-scope,companion-missing,lifecycle}.feature` | one feature per topic | VERIFIED | 8 files, 1456 lines; 52 scenario runs passed |
-| `features/step_definitions/mcp-server/*.steps.ts` (7 modules) | shared and topic steps | VERIFIED | All wired; no unmatched steps (cucumber run clean) |
-| `features/lib/mcp-server-files.ts`, `mcp-server-http.ts`, `mcp-server-environment.ts` | fixture writers and stand-ins | VERIFIED | `mcp-server-http.ts` binds `127.0.0.1` only (T-06-04) |
-| `extensions/pi-claude-marketplace/domain/mcp-resolution.ts` | ordered merge, silent file skip, inline fatal | VERIFIED | 373 lines, substantive; used by `plugin-resolver.ts` |
-| `extensions/pi-claude-marketplace/domain/components/mcp.ts` | map-or-array schema | VERIFIED | Wired through `plugin.ts` via `MCP_SERVERS_SCHEMA` |
-| `docs/mcp-compatibility.md` | 7.0.0 re-measure | VERIFIED | Header, Pi column, and rows name 7.0.0 on Pi 1.4.0 |
+| `features/mcp-server/*.feature` (8 files) | one feature per topic | VERIFIED | 55 scenario runs pass (52 + 3 new) |
+| `features/step_definitions/mcp-server/*.steps.ts` | shared and topic steps | VERIFIED | New link Given in `listing.steps.ts` asserts the link text with `readlink` |
+| `features/lib/mcp-server-files.ts` | fixture writers | VERIFIED | `linkPublishedMcpFile` refuses a link path outside the plugin and takes `dir` publications only |
+| `extensions/pi-claude-marketplace/domain/mcp-resolution.ts` | merge, silent file skip, inline fatal, link rule | VERIFIED | Wired via `resolveStrictMcp` from `plugin-resolver.ts` |
+| `extensions/pi-claude-marketplace/domain/manifest-containment.ts` | the D-PL2-24 locator reused | VERIFIED | `copyManifestBoundary`, `locateManifestCandidate` imported by `mcp-resolution.ts` |
+| `extensions/pi-claude-marketplace/bridges/agents/convert.ts` | `async: true` for MCP agents | VERIFIED | l.899-901, l.961, l.1011 |
+| `docs/mcp-compatibility.md` | 7.0.0 rows; link and agent text | VERIFIED (with a wording warning) | See Anti-Patterns |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `domain/plugin-resolver.ts` | `domain/mcp-resolution.ts` | `resolveStrictMcp(` | WIRED | line 765; AMIG-01 inherits the rule through `resolveStrict` |
-| `domain/components/plugin.ts` | `domain/components/mcp.ts` | `MCP_SERVERS_SCHEMA` | WIRED | no edit to `plugin.ts` was needed |
-| `invocation.steps.ts` | `mcp-server-files.ts` | `publishMcpServerAgent(` | WIRED | D-CF6-07 |
-| `lifecycle.steps.ts` | `mcp-server-files.ts` | `writeMcpAdapterOverride(` | WIRED | |
-| `configuration.steps.ts` | `mcp-server-http.ts` | `onRelease(` close | WIRED | T-06-06 |
+| `domain/plugin-resolver.ts` | `domain/mcp-resolution.ts` | `resolveStrictMcp(` | WIRED | unchanged |
+| `domain/mcp-resolution.ts` | `domain/manifest-containment.ts` | `locateManifestCandidate(copyManifestBoundary(...))` | WIRED | new in 8aef795 |
+| `bridges/agents/convert.ts::convertAgent` | staged agent frontmatter | `async:` field | WIRED | the scenario reads the staged file |
+| `listing.steps.ts` | `mcp-server-files.ts` | `linkPublishedMcpFile(` | WIRED | new in 8aef795 |
+| `invocation.steps.ts` | `mcp-server-files.ts` | `publishMcpServerAgent(` | WIRED | unchanged |
+| `lifecycle.steps.ts` | `mcp-server-files.ts` | `writeMcpAdapterOverride(` | WIRED | unchanged |
 
 ### Data-Flow Trace (Level 4)
 
-Each scenario asserts values that reach the stub or the model through the real Pi 1.4.0 and pi-mcp-adapter 7.0.0, so the data flow is exercised end to end. The stub log, the HTTP request table, and the scripted model's call log are the evidence. No hollow props or static fallbacks were found.
+Each scenario sends values through the real Pi 1.4.0, pi-mcp-adapter 7.0.0, and pi-subagents 0.84.0, and asserts them at the stub, the HTTP request table, the scripted model's call log, or the staged agent file. For the link rule, the in-plugin link scenario shows the linked file's server reaching pi-mcp-adapter as an offered tool. I found no hollow props and no static fallbacks.
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| All MCP scenarios | `nondac-sh -c 'NODE_OPTIONS=--max-old-space-size=6144 npx cucumber-js features/mcp-server'` | 52 scenarios (52 passed), 669 steps (669 passed), random seed 265729 | PASS |
-| Resolver, schema, and AMIG-01 tests | `node --test test/domain/mcp-resolution.test.ts test/domain/components/mcp.test.ts test/domain/plugin-resolver.test.ts test/integration/mcp-migration.test.ts` | 289 pass, 0 fail | PASS |
-
-I did not re-run `npm run check`. The recorded evidence is `npm run check` passing at c6d618e (seed 154136, 1268 scenarios) and the phase gate at 822a1ac (`test:modules` and `test:cucumber` twice, seeds 512508 and 920909). `git diff --stat c6d618e HEAD` should show only `.planning/**/*.md`; I confirmed that HEAD's last commit (787c9b9) is a docs-only commit.
+| All MCP scenarios, including the 3 new ones | `NODE_OPTIONS=--max-old-space-size=6144 npx cucumber-js features/mcp-server` | 55 scenarios (55 passed), 704 steps (704 passed), seed 228118, exit 0 | PASS |
+| Resolver, schema, agents conversion, AMIG-01 | `node --test test/domain/mcp-resolution.test.ts test/domain/components/mcp.test.ts test/bridges/agents/convert.test.ts test/integration/mcp-migration.test.ts` | 229 pass, 0 fail | PASS |
+| Full gate (reused) | `npm run check` at `2ba505a`, reported by the orchestrator | exit 0; cucumber 1554/1554 (seed 82800); direct coverage 330 records; `EXIT=0` in the log `decisions-check.log`. The log does not print the commit; the commit is the orchestrator's statement. `2ba505a` changes only `.planning/DUBIOUS-CHOICES.md` on top of `b68d4ad`. | PASS (reused) |
 
 ### Probe Execution
 
@@ -144,46 +159,36 @@ SKIPPED. The phase declares no `probe-*.sh` scripts, and none exist under `scrip
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
-| MCP-01 | 06-01, 06-09 | stdio server connects; tools named `mcp__plugin_<plugin>_<server>__<tool>` | SATISFIED | `listing.feature` |
-| MCP-02 | 06-04, 06-09 | scripted `mcp` proxy call reaches the stub and returns its result | SATISFIED | `invocation.feature` (proxy, direct, unlisted-tool control) |
-| MCP-03 | 06-02, 06-08, 06-09 | configuration variants reach the server; doc rows re-measured on 7.x | SATISFIED | `configuration.feature`; `docs/mcp-compatibility.md` |
-| MCP-04 | 06-03, 06-07, 06-09 | multiple sources and a malformed server behave as FG-27/FG-28 decide | SATISFIED | `sources.feature`, `invalid-configs.feature`, `mcp-resolution.ts`, unit tests |
-| MCP-05 | 06-05, 06-09 | project-scope servers start as FG-29 decides; untrusted pinned | SATISFIED | `project-scope.feature`; D-CF6-03 |
-| MCP-06 | 06-05, 06-09 | `{requires pi-mcp-adapter}`; adapter loaded later makes servers available | SATISFIED | `companion-missing.feature` |
-| MCP-07 | 06-04, 06-09 | an agent granted a plugin MCP tool can call it in a foreground run | GAP-PINNED, NEEDS HUMAN | Satisfied only as the D-CF6-10 pin; no working call exists. Not literally satisfied. |
-| MCP-08 | 06-06, 06-09 | disable, uninstall, update remove or replace server entries | SATISFIED | `lifecycle.feature` |
+| MCP-01 | 06-01, 06-09 | stdio server connects; Claude Code tool names | SATISFIED | `listing.feature` |
+| MCP-02 | 06-04, 06-09 | proxy call reaches the stub and returns | SATISFIED | `invocation.feature` |
+| MCP-03 | 06-02, 06-08, 06-09 | configuration variants; doc rows on 7.x | SATISFIED | `configuration.feature`; `docs/mcp-compatibility.md` |
+| MCP-04 | 06-03, 06-07, 06-09 | multiple sources and a malformed server (FG-27/FG-28) | SATISFIED | `sources.feature`, `invalid-configs.feature`, `mcp-resolution.ts`, unit tests; link rule per A.3 |
+| MCP-05 | 06-05, 06-09 | project-scope servers per FG-29; untrusted pinned | SATISFIED | `project-scope.feature`; D-CF6-03 |
+| MCP-06 | 06-05, 06-09 | `{requires pi-mcp-adapter}`; recovery with no reinstall | SATISFIED | `companion-missing.feature` |
+| MCP-07 | 06-04, 06-09 | an agent granted a plugin MCP tool can call it in a foreground run | ACCEPTED DEVIATION (override) | User decision A.2; `async: true` emitted and pinned; working call untested (BACKLOG MCPBG-01) |
+| MCP-08 | 06-06, 06-09 | disable, uninstall, update remove or replace entries | SATISFIED | `lifecycle.feature` |
 
-All eight IDs in the roadmap and in the plan frontmatter are accounted for, and `REQUIREMENTS.md` maps no other ID to Phase 6, so there are no orphans. `REQUIREMENTS.md` still shows MCP-01..08 unchecked, as the orchestrator intended; I did not edit it.
+No orphaned requirements: `REQUIREMENTS.md` maps only MCP-01..08 to Phase 6. `REQUIREMENTS.md` l.112 and ROADMAP SC4 still say "in a foreground run" and show MCP-01..08 as Pending. I did not edit them. The parent owns that wording.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| (phase-modified product, feature, doc, and test files) | -- | `TBD`, `FIXME`, `XXX` debt markers | none | grep found none |
-| `domain/mcp-resolution.ts` | `fileSystemFailureDetail` | skips every coded file-system error, so a transient `EMFILE` or `EIO` while reading `.mcp.json` drops its servers silently, and an update, apply, or reload then removes their entries | Warning (accepted) | WR-03 weighed this. The fix keeps the skip because Claude Code 2.1.316's `mit` loader returns no servers for every failed read. It follows D-CF6-02 and is documented. A human may still want a louder signal. |
-| `docs/mcp-compatibility.md` | 96, 9 | two statements still rest on Pi 1.0.0 / adapter 5.x measurements (name lengths, extra `/reload` after an upgrade) | Info | The doc says so itself, and the plan allows a stated earlier measurement. |
-| `test/live-uat/mcp-adapter-canary.mjs` | -- | still pins 5.2.0 | Info | A parent line, as D-CF6-04 and plan 06-08 require. |
-
-Review findings dispositioned in `06-REVIEW-DISPOSITION.md`: 6 fixed, WR-01 and WR-02 skipped with documented upstream evidence, and 7 info findings deferred.
+| phase-modified product, feature, step, lib, and doc files | -- | `TBD`, `FIXME`, `XXX` | none | grep found none |
+| `docs/mcp-compatibility.md`; `bridges/agents/convert.ts` (`MCP_ASYNC_WARNING`) | 277, 474; 120-123 | The docs and the install warning present the background launch as the way to reach plugin MCP tools. They never say that on pi-subagents 0.84.0 an agent with an explicit `mcp:` grant also fails in the background, because bug A drops every server written with `directTools: "search"`. That is every plugin server, per `.planning/upstream/pi-subagents-mcp-direct-tools.md`. The scenario title "A foreground run ... is refused" also gives the foreground launch as the cause. Per A.2, bug A is the cause. | Warning | Wording only. It changes no must-have, and the user accepted the deviation. A reader of the docs may expect a background launch to work on 0.84.0. Suggest one sentence in the docs and the warning that names bug A and the drafted patch. |
+| `.planning/BACKLOG.md` MCPBG-01, MCPSUB-01 | 4587-4593 | MCPBG-01 exists and tracks the later background-call proof. Its trigger names only the harness change; it does not name the pi-subagents bug A/B fix that A.2 makes a precondition. MCPSUB-01 still says "file the gap report" and "replace the D-CF6-10 pin with a working foreground call". Both conflict with A.2: the foreground refusal is accepted as design, and the report became drafted patches. | Warning | Stale tracking. A planner could chase a foreground call that will never exist. |
+| `domain/mcp-resolution.ts` | `fileSystemFailureDetail` | skips every coded fs error (WR-03), as before | Info (accepted) | Unchanged; D-CF6-02 |
+| `test/live-uat/mcp-adapter-canary.mjs` | -- | canary parent line (D-CF6-04) | Info | Unchanged |
 
 ### Human Verification Required
 
-#### 1. Accept or reject the D-CF6-10 gap pin for MCP-07 and SC4
-
-**Test:** Read `features/mcp-server/invocation.feature` (the two D-CF6-10 scenarios), decision row D-CF6-10 in `06-09-SUMMARY.md`, and the drafted pi-subagents report.
-**Expected:** Either the user accepts the pin as satisfying MCP-07 (then add an `overrides:` entry with an `accepted_by` name, and apply the drafted REQUIREMENTS and ROADMAP wording lines from `06-09-SUMMARY.md`, "Parent lines"), or the user rejects it and a gap is opened for a working agent call.
-**Why human:** The literal criterion asks for an agent calling the tool with the stub logging the call, and that is not demonstrated. A background run, the only mode where pi-subagents gives MCP tools, is untested because the harness's background children load neither the profile's companions nor the scripted model (BACKLOG item MCPBG-01). The decision was made autonomously (P6-DC-07, P6-DC-09 in `DUBIOUS-CHOICES.md`), and the user has not accepted it.
-
-Two open items do not block the phase, but a human should know about them:
-
-- **Link rule for MCP files (WR-01, WR-02).** The root `.mcp.json` follows symlinks anywhere (upstream parity, measured). A referenced `mcpServers` file refuses any symlink, even inside the plugin root (licensed by MCPR-04 and NFR-10, a divergence from upstream). `06-REVIEW-FIX.md` lists three options and asks for a user decision. The note text `escapes plugin root` is also wrong for an in-root link.
-- **The pi-subagents gap report** is drafted in `06-09-SUMMARY.md` and not filed. Filing is the user's call.
+None. The one item the previous report raised (SC4/MCP-07) was decided by the user on 2026-11-02 and is recorded above as an override.
 
 ### Gaps Summary
 
-No gaps block the phase. Seven of eight requirements are satisfied with whole-literal scenario evidence that I re-ran. MCP-07 is satisfied only as a recorded Pi/companion gap (D-CF6-10), with the refusal text pinned. The phase goal clause "answers calls ... from agents" is not achieved as written, and the only authority for reading it as met is an autonomous decision. If the user accepts the pin, the status becomes `passed` and an override entry records the acceptance.
+No gaps. Seven of eight requirements are satisfied, each with whole-literal scenario evidence that I re-ran at `2ba505a`. MCP-07 closes as an accepted deviation under the user's A.2 decision: the extension writes `async: true` for MCP agents, a scenario pins it, and BACKLOG MCPBG-01 tracks a later proof of a background call. The A.3 link rule is implemented as decided and pinned in both directions. The two warnings above are wording and tracking fixes. They do not block the phase.
 
 ---
 
-_Verified: 2026-11-01_
+_Verified: 2026-11-02T11:15:31Z_
 _Verifier: Claude (gsd-verifier)_

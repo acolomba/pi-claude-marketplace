@@ -4586,11 +4586,13 @@ Deferred by component-features Phase 7 (07-REVIEW.md). Both touch files that wer
 
 ## MCPBG-01: a harness whose background subagents load the profile's companions
 
-Added 2026-11-01 (component-features Phase 6, D-CF6-10). In the cucumber harness a pi-subagents background child (`async: true`) loads neither the profile Pi's `--extension` companions nor the scripted model, so no scenario can show an agent calling a plugin MCP tool in the background. MCP-07's working call is untested. Trigger: a harness change that passes the profile's companions and model to the detached runner, or a pi-subagents change that gives foreground children MCP tools.
+Added 2026-11-01 (component-features Phase 6, D-CF6-10). In the cucumber harness a pi-subagents background child (`async: true`) loads neither the profile Pi's `--extension` companions nor the scripted model, so no scenario can show an agent calling a plugin MCP tool in the background. MCP-07's working call is untested. Updated 2026-11-02: pi-subagents 0.84.0 also drops every bridged server in a background child (bug A, `directTools: "search"` rejected) and mismatches the cache key of a server that uses `${VAR:-default}` (bug B); patches are drafted in `.planning/upstream/pi-subagents-mcp-direct-tools.patch` for the user's review. Trigger: a pi-subagents release with both fixes, then a harness change that passes the profile's companions and model to the detached runner.
 
-## MCPSUB-01: file the pi-subagents foreground MCP gap report
+## ~~MCPSUB-01: file the pi-subagents foreground MCP gap report~~ -- CLOSED
 
-Added 2026-11-01 (component-features Phase 6, D-CF6-10). The report is drafted in `.planning/phases/06-mcp-servers/06-09-SUMMARY.md` ("pi-subagents gap report"). It was not filed, because a public post is the user's call. Trigger: the user decides to file it. When pi-subagents ships a fix, replace the D-CF6-10 pin in `features/mcp-server/invocation.feature` with a working foreground call.
+**CLOSED 2026-11-02** by the user's decision (`.planning/DUBIOUS-CHOICES.md`, A.2). The foreground refusal is pi-subagents' documented design (docs/agents.md:553) and is accepted as a deviation; no gap report is filed. The two real pi-subagents bugs go upstream as the patches in `.planning/upstream/pi-subagents-mcp-direct-tools.patch` instead. MCPBG-01 tracks the later background-call proof.
+
+Added 2026-11-01 (component-features Phase 6, D-CF6-10).
 
 ## MCPB-01: `.mcpb` and `.dxt` MCP bundles
 

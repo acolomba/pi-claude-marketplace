@@ -432,7 +432,7 @@ Plans:
 1. With pi-mcp-adapter 7.x loaded, a bridged stdio server connects (the stub logs `initialize` and `tools/list`) and its tools register as `mcp__plugin_<plugin>_<server>__<tool>`; a scripted call through the adapter's `mcp` proxy reaches the stub with the given arguments and returns its result to the model (MCP-01, MCP-02).
 2. Args, env, `${VAR}` and `${VAR:-default}`, `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}`, and loopback remote servers with headers reach the server as upstream, the documented rows hold on 7.x, and multiple server sources and a malformed server behave as FG-27 and FG-28 decide (MCP-03, MCP-04).
 3. In a trusted project, project-scope plugin servers start as FG-29 decides and a scenario pins the untrusted behavior; without pi-mcp-adapter the install shows `{requires pi-mcp-adapter}`, and loading the adapter then `/reload` makes the servers available with no reinstall (MCP-05, MCP-06).
-4. An agent granted a plugin MCP tool calls it in a foreground run, and the stub logs the call (MCP-07).
+4. An agent granted a plugin MCP tool calls it in a foreground run, and the stub logs the call (MCP-07). Accepted deviation 2026-11-02 (D-CF6-10): pi-subagents refuses MCP tools to foreground children by design, so the extension launches the agent in the background; the working call waits on pi-subagents fixes and MCPBG-01.
 5. Disable, uninstall, and update remove or replace the server entries the adapter sees (MCP-08).
 
 **Parallel structure:**

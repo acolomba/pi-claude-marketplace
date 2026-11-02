@@ -109,7 +109,7 @@ the parent applies them at merge.
 - [ ] **MCP-04**: Multiple server sources and a malformed server behave as decided under FG-27 and FG-28
 - [ ] **MCP-05**: Project-scope plugin servers start as decided under FG-29 in a trusted project, and the untrusted behavior is pinned
 - [ ] **MCP-06**: Without pi-mcp-adapter, the install shows `{requires pi-mcp-adapter}` and loading the adapter then reloading makes the servers available with no reinstall
-- [ ] **MCP-07**: An agent granted a plugin MCP tool can call it in a foreground run
+- [ ] **MCP-07**: An agent granted a plugin MCP tool can call it in a foreground run (accepted deviation 2026-11-02, D-CF6-10: pi-subagents refuses MCP tools to foreground children by design; the agent is launched in the background, and a working call waits on MCPBG-01)
 - [ ] **MCP-08**: Disable, uninstall, and update remove or replace the server entries the adapter sees
 
 ### Workflows
