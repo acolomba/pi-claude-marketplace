@@ -119,10 +119,6 @@ import {
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
 import {
-  admittedProjectLedger,
-  NODE_PROJECT_SKILL_LEDGER,
-} from "../../persistence/project-installs.ts";
-import {
   ConcurrentInstallError,
   DirectoryPinUnsatisfiedError,
   errorMessage,
@@ -192,10 +188,6 @@ import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type {
-  ProjectLedgerAdmission,
-  ProjectSkillLedger,
-} from "../../persistence/project-installs.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
@@ -265,13 +257,6 @@ export interface InstallLedgerOptions {
    * which re-materializes a KEPT record) leaves the recorded value in place.
    */
   readonly provenance?: PluginInstallRecord["provenance"];
-  /**
-   * D-CF2-16: `refresh` when the command did not name this plugin, such as a
-   * dependency that a bulk update's new version needs. The ledger then
-   * records the plugin only when it already lists it. Absent, the command
-   * named it, or named the plugin this one is installed for (`create`).
-   */
-  readonly ledgerAdmission?: ProjectLedgerAdmission;
   readonly allowExistingRecord?: boolean;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   /** Exact clone-cache keys created by the current dependency-planning attempt. */
@@ -440,8 +425,6 @@ interface InstallLedgerContext {
   /** GV-01: the release tag's semver, when a dependency's range selected one. */
   readonly resolvedVersion?: string;
   readonly pluginDataDir: string;
-  /** D-CF2-16: the project ledger the commits write, chosen before the first one. */
-  readonly projectLedger: ProjectSkillLedger;
   // Prep handles populated by each phase.do before that phase's commit.
   // Each phase.undo reads the matching handle to call the bridge unstage*
   // primitive. The matching handle is undefined when the phase did not run.
@@ -1206,7 +1189,6 @@ async function runInstallLedgerBody(
     ...(resolvedSha !== undefined && { resolvedSha }),
     ...(opts.resolvedVersion !== undefined && { resolvedVersion: opts.resolvedVersion }),
     pluginDataDir,
-    projectLedger: await admittedProjectLedger(opts.ledgerAdmission ?? "create", locations, plugin),
     hooksFileWritten: false,
     stagedSkillNames: [],
     stagedSkillRecords: [],
@@ -1256,7 +1238,7 @@ async function runInstallLedgerBody(
 
       collectStagingWarnings(c, prep.result.warnings);
 
-      const leak = await commitPreparedSkills(opts.removalOps, prep, c.projectLedger);
+      const leak = await commitPreparedSkills(opts.removalOps, prep);
       if (leak !== undefined) {
         c.bridgeWarnings.push(hygieneWarning(leak));
       }
@@ -1304,8 +1286,7 @@ async function runInstallLedgerBody(
 
       collectStagingWarnings(c, prep.result.warnings);
 
-      // D-CF3-07: the user's ledger records the committed project commands.
-      const leak = await commitPreparedCommands(opts.removalOps, prep, c.projectLedger);
+      const leak = await commitPreparedCommands(opts.removalOps, prep);
       if (leak !== undefined) {
         c.bridgeWarnings.push(hygieneWarning(leak));
       }
@@ -1318,7 +1299,6 @@ async function runInstallLedgerBody(
       await unstagePluginCommands({
         locations: c.locations,
         previousCommandNames: c.stagedCommandNames,
-        ledger: NODE_PROJECT_SKILL_LEDGER,
       });
     },
   };
@@ -1415,8 +1395,6 @@ async function runInstallLedgerBody(
         pluginName: c.plugin,
         pluginRoot: c.resolved.pluginRoot,
         hooksValue: parsed.value,
-        // D-CF2-13 / D-CF2-16: the user's ledger records the staged project hooks.
-        ledger: c.projectLedger,
       });
       c.hooksFileWritten = true;
       // D-100-01 / D-100-02 / ENBL-11: describe the hooks this install
@@ -1429,13 +1407,7 @@ async function runInstallLedgerBody(
         return;
       }
 
-      // WR-04: a ledger warning here would report an entry whose own write
-      // may just have failed, so the rollback does not show it.
-      await removeHookConfig({
-        locations: c.locations,
-        pluginName: c.plugin,
-        ledger: NODE_PROJECT_SKILL_LEDGER,
-      });
+      await removeHookConfig({ locations: c.locations, pluginName: c.plugin });
     },
   };
 

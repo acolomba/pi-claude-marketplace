@@ -12,7 +12,8 @@
  * installed plugin's data directory, one deletes a plugin's installed skills,
  * and one writes a file of the user's own in the scope's shared `agents/`
  * directory, where an install writes the agents of every plugin. The other
- * steps only read; one of them lists the files of that `agents/` directory.
+ * steps only read; one of them lists the files of that `agents/` directory,
+ * and one checks that the user scope holds no record of project installs.
  *
  * A missing installation record fails the step; it never reads as no plugins.
  * A scope that has a marketplace added always has one.
@@ -362,6 +363,15 @@ Then(
     assert.deepStrictEqual(rows, table.raw());
   },
 );
+
+// D-LOC-01: a project-scope install writes nothing outside its project. An
+// earlier version kept a record of each project's installs in the user's pi
+// directory, under `pi-claude-marketplace/project-installs/`.
+Then("the user scope holds no record of project installs", async function (this: ScenarioWorld) {
+  await assert.rejects(stat(path.join(extensionRoot(this, "user"), "project-installs")), {
+    code: "ENOENT",
+  });
+});
 
 Then(
   "the agents directory of the {word} scope holds these files:",

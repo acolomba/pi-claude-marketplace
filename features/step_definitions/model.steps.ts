@@ -7,6 +7,8 @@
  */
 
 import assert from "node:assert/strict";
+import { access } from "node:fs/promises";
+import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
@@ -57,6 +59,24 @@ Given(
       commands.filter(({ sourcePath }) => sourcePath !== undefined && isInPeerCache(sourcePath)),
       [],
     );
+  },
+);
+
+// Pi loads every extension twice in a project that needs a trust decision,
+// once to ask the extensions and once with the decision, so this start gets
+// two trusted starts' budget.
+const UNTRUSTED_START_TIMEOUT_MS = 2 * PROFILE_PI_START_TIMEOUT_MS;
+
+// D-CF1-07: the profile Pi starts with no entry in Pi's trust store. With a pi
+// settings file in the project, that alone makes Pi distrust the project.
+Given(
+  "pi runs with the scripted model in an untrusted project",
+  { timeout: UNTRUSTED_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({ companions: [], trust: "untrusted" });
+    await assert.rejects(access(path.join(this.tokens.agentDir, "trust.json")), {
+      code: "ENOENT",
+    });
   },
 );
 

@@ -68,6 +68,16 @@ export interface HooksRuntime {
   readonly getRoutingBucket: (event: BucketAEvent) => readonly RoutingEntry[];
   readonly setRoutingBucket: (event: BucketAEvent, entries: readonly RoutingEntry[]) => void;
   readonly routingTableEntries: () => ReadonlyMap<BucketAEvent, readonly RoutingEntry[]>;
+  /**
+   * D-LOC-01: records whether Pi trusts the project at `cwd`, as the last
+   * project hydrate read it from the session's context.
+   */
+  readonly recordProjectTrust: (cwd: string, trusted: boolean) => void;
+  /**
+   * D-LOC-01: whether the last recorded answer says that Pi trusts the
+   * project at `cwd`. No record, or a record for another directory, is no.
+   */
+  readonly isProjectTrusted: (cwd: string) => boolean;
   readonly appendPendingSessionStartContext: (entry: PendingSessionStartContext) => void;
   readonly pendingSessionStartContextEntries: () => readonly PendingSessionStartContext[];
   readonly drainPendingSessionStartContext: () => readonly PendingSessionStartContext[];
@@ -143,6 +153,7 @@ export function createHooksRuntime(): HooksRuntime {
   const children = new Map<string, HooksRuntimeChildEntry>();
   const pidTableOperations = new Map<string, Promise<void>>();
   let generation = 0;
+  let trustedProject: string | undefined;
   // D-CF5-13: the SessionStart context waits for the next turn of the
   // session; a prompt's context belongs to the turn of that prompt.
   const pendingSessionStartContext = createContextBuffer<PendingSessionStartContext>();
@@ -200,6 +211,14 @@ export function createHooksRuntime(): HooksRuntime {
 
     routingTableEntries(): ReadonlyMap<BucketAEvent, readonly RoutingEntry[]> {
       return new Map(Array.from(routingTable, ([event, entries]) => [event, [...entries]]));
+    },
+
+    recordProjectTrust(cwd: string, trusted: boolean): void {
+      trustedProject = trusted ? cwd : undefined;
+    },
+
+    isProjectTrusted(cwd: string): boolean {
+      return trustedProject === cwd;
     },
 
     appendPendingSessionStartContext: pendingSessionStartContext.append,

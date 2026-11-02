@@ -97,7 +97,6 @@ const preparedCommandsStaged: PreparedCommandsStaged = {
   stagingRoot: "/scope/pi-claude-marketplace/commands-staging/acme",
   result: stageCommandsCommitResult,
   _previousNames: ["acme:old"],
-  _pluginName: "acme",
   _renamePairs: [
     {
       from: "/scope/pi-claude-marketplace/commands-staging/acme/acme:build:deploy.md",
@@ -158,7 +157,6 @@ const preparedCommandsStagedWithoutRenames: PreparedCommandsStaged = {
   stagingRoot: "/scope/pi-claude-marketplace/commands-staging/acme",
   result: stageCommandsCommitResult,
   _previousNames: [],
-  _pluginName: "acme",
 };
 void preparedCommandsStagedWithoutRenames;
 
@@ -168,7 +166,6 @@ void ({ kind: "prepared", result: stageCommandsCommitResult } satisfies Prepared
 const unstageCommandsInput: UnstageCommandsInput = {
   locations: undefined!,
   previousCommandNames: ["acme:build:deploy"],
-  ledger: { update: () => Promise.resolve() },
 } satisfies UnstageCommandsInput;
 void unstageCommandsInput;
 

@@ -183,6 +183,8 @@ export interface RoutingStateOperations extends Pick<
   | "getRoutingBucket"
   | "setRoutingBucket"
   | "routingTableEntries"
+  | "recordProjectTrust"
+  | "isProjectTrusted"
 > {
   readonly currentEpoch: HooksRuntime["currentGeneration"];
   readonly bumpEpoch: HooksRuntime["advanceGeneration"];
@@ -203,5 +205,7 @@ export function createRoutingStateOperations(runtime: HooksRuntime): RoutingStat
     getRoutingBucket: runtime.getRoutingBucket,
     setRoutingBucket: runtime.setRoutingBucket,
     routingTableEntries: runtime.routingTableEntries,
+    recordProjectTrust: runtime.recordProjectTrust,
+    isProjectTrusted: runtime.isProjectTrusted,
   };
 }

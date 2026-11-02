@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import {
   access,
   mkdir,
@@ -14,15 +13,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
-import { mock, verify } from "strong-mock";
-
 import {
   abortPreparedCommands,
   commitPreparedCommands,
   prepareStageCommands,
 } from "../../../extensions/pi-claude-marketplace/bridges/commands/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { CleanupLeakError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import {
   PathContainmentError,
@@ -30,23 +26,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
-import type {
-  ProjectCommandChange,
-  ProjectCommandLedger,
-} from "../../../extensions/pi-claude-marketplace/bridges/commands/project-ledger.ts";
-import type { PreparedCommandsStaged } from "../../../extensions/pi-claude-marketplace/bridges/commands/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { RemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 const PLUGIN_NAME = "acme";
-
-/** A ledger that accepts every change; the cases about the ledger build their own. */
-const projectLedger = { update: () => Promise.resolve() } satisfies ProjectCommandLedger;
-
-function sha256(text: string): string {
-  return createHash("sha256").update(text).digest("hex");
-}
 
 async function createProjectLocations(t: TestContext, prefix: string): Promise<ScopedLocations> {
   const scopeRoot = await mkdtemp(path.join(tmpdir(), prefix));
@@ -133,7 +116,7 @@ test("stages recursive commands with exact names, records, substitutions, and pr
     pluginDataDir,
     resolved: resolvedFor(pluginRoot),
   });
-  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
   const promptNames = (await readdir(locations.promptsTargetDir)).sort();
   const deployBytes = await readFile(
     path.join(locations.promptsTargetDir, "acme:deploy.md"),
@@ -248,7 +231,7 @@ test("stages a source led by a byte-order mark without the marker or a duplicate
     pluginDataDir,
     resolved: resolvedFor(pluginRoot),
   });
-  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
   const deployBytes = await readFile(
     path.join(locations.promptsTargetDir, "acme:deploy.md"),
     "utf8",
@@ -285,7 +268,7 @@ test("returns a complete no-op and materializes no command directories", async (
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
     resolved: resolvedFor(pluginRoot, []),
   });
-  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
   const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
   const stagingExists = await pathIsPresent(locations.commandsStagingDir);
   const promptsExist = await pathIsPresent(locations.promptsTargetDir);
@@ -329,7 +312,7 @@ test("refuses an outside previous command before changing its complete target tr
 
   // act
   try {
-    await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+    await commitPreparedCommands(createRemovalOps(), prepared);
   } catch (error) {
     containmentError = error;
   }
@@ -398,7 +381,7 @@ test("refuses an intermediate symlink before changing its complete target tree",
 
   // act
   try {
-    await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+    await commitPreparedCommands(createRemovalOps(), prepared);
   } catch (error) {
     symlinkError = error;
   }
@@ -490,7 +473,7 @@ test("removes prior owned prompts and tolerates a missing prior prompt during co
     resolved: resolvedFor(pluginRoot),
     previousCommandNames: ["acme:old", "acme:already-missing"],
   });
-  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
   const priorExists = await pathIsPresent(priorTarget);
   const currentBytes = await readFile(
     path.join(locations.promptsTargetDir, "acme:current.md"),
@@ -536,7 +519,7 @@ test("neutralizes malformed frontmatter and preserves exact substituted body byt
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
     resolved: resolvedFor(pluginRoot),
   });
-  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
   const stagedBytes = await readFile(
     path.join(locations.promptsTargetDir, "acme:bad-command.md"),
     "utf8",
@@ -582,7 +565,7 @@ test("substitutes project variables and retains command-inapplicable skill varia
     pluginDataDir,
     resolved: resolvedFor(pluginRoot),
   });
-  await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+  await commitPreparedCommands(createRemovalOps(), prepared);
   const stagedBytes = await readFile(path.join(locations.promptsTargetDir, "acme:vars.md"), "utf8");
 
   // assert
@@ -619,7 +602,7 @@ test("retains the project variable for user scope and restores the user director
     pluginDataDir,
     resolved: resolvedFor(pluginRoot),
   });
-  await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+  await commitPreparedCommands(createRemovalOps(), prepared);
   const stagedBytes = await readFile(path.join(locations.promptsTargetDir, "acme:vars.md"), "utf8");
 
   // assert
@@ -651,7 +634,7 @@ test("D-CF3-06 records the same plugin root and data at user and project scope",
         pluginDataDir,
         resolved: resolvedFor(pluginRoot),
       });
-      await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+      await commitPreparedCommands(createRemovalOps(), prepared);
       return readFile(path.join(locations.promptsTargetDir, "acme:scoped.md"), "utf8");
     }),
   );
@@ -850,7 +833,7 @@ test("rolls back a partial command commit and removes the staging tree", async (
   await writeFile(path.join(betaTarget, "blocker.txt"), "keep blocker\n");
 
   // act
-  const error = await commitPreparedCommands(createRemovalOps(), prepared, projectLedger).then(
+  const error = await commitPreparedCommands(createRemovalOps(), prepared).then(
     () => undefined,
     (reason: unknown) => reason,
   );
@@ -904,7 +887,7 @@ test("reports a commit rollback leak without promoting it to manual recovery", a
   });
 
   // act
-  const error = await commitPreparedCommands(createRemovalOps(), prepared, projectLedger).then(
+  const error = await commitPreparedCommands(createRemovalOps(), prepared).then(
     () => undefined,
     (reason: unknown) => reason,
   );
@@ -936,7 +919,7 @@ test("propagates a non-missing previous-prompt removal failure", async (t) => {
   });
 
   // act
-  const error = await commitPreparedCommands(createRemovalOps(), prepared, projectLedger).then(
+  const error = await commitPreparedCommands(createRemovalOps(), prepared).then(
     () => undefined,
     (reason: unknown) => reason,
   );
@@ -1064,7 +1047,7 @@ test("normalizes lone-CR and repeated malformed blocks to exact body bytes", asy
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
     resolved: resolvedFor(pluginRoot),
   });
-  await commitPreparedCommands(createRemovalOps(), prepared, projectLedger);
+  await commitPreparedCommands(createRemovalOps(), prepared);
   const loneCrBytes = await readFile(
     path.join(locations.promptsTargetDir, "acme:lone-cr.md"),
     "utf8",
@@ -1205,240 +1188,6 @@ test("cleans staging when a repeated malformed block reaches the no-close safegu
   assert.deepStrictEqual(stagingChildren, []);
 });
 
-/** Stages the commands `greet.md` and `build/web.md` of a fresh `acme` plugin into `locations`. */
-async function prepareGreetAndWeb(
-  t: TestContext,
-  locations: ScopedLocations,
-  previousCommandNames: readonly string[],
-): Promise<{ readonly pluginRoot: string; readonly prepared: PreparedCommandsStaged }> {
-  const pluginRoot = await createPluginRoot(t, "commands-ledger-source-");
-  await mkdir(path.join(pluginRoot, "commands", "build"), { recursive: true });
-  await writeFile(path.join(pluginRoot, "commands", "greet.md"), "Greet.\n");
-  await writeFile(path.join(pluginRoot, "commands", "build", "web.md"), "Build web.\n");
-  const prepared = await prepareStageCommands(createRemovalOps(), {
-    locations,
-    cwd: locations.scopeRoot,
-    pluginName: PLUGIN_NAME,
-    pluginRoot,
-    pluginDataDir: path.join(pluginRoot, "data"),
-    resolved: resolvedFor(pluginRoot),
-    previousCommandNames,
-  });
-  assert.strictEqual(prepared.kind, "staged");
-  return { pluginRoot, prepared };
-}
-
-test("D-CF3-07 lists each committed project command with its file digest after the staging cleanup", async (t) => {
-  // arrange
-  const locations = await createProjectLocations(t, "commands-ledger-record-");
-  const { pluginRoot, prepared } = await prepareGreetAndWeb(t, locations, ["acme:old"]);
-  const record = recordLine(pluginRoot, path.join(pluginRoot, "data"));
-  const expectedGreet = '---\n"description": "Greet."\n' + record + "---\nGreet.\n";
-  const expectedWeb = '---\n"description": "Build web."\n' + record + "---\nBuild web.\n";
-  const updates: { change: ProjectCommandChange; stagingPresent: boolean }[] = [];
-  const ledger = {
-    update: async (change: ProjectCommandChange) => {
-      updates.push({ change, stagingPresent: await pathIsPresent(prepared.stagingRoot) });
-    },
-  } satisfies ProjectCommandLedger;
-
-  // act
-  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared, ledger);
-
-  // assert
-  assert.strictEqual(commitLeak, undefined);
-  assert.strictEqual(
-    await readFile(path.join(locations.promptsTargetDir, "acme:greet.md"), "utf8"),
-    expectedGreet,
-  );
-  assert.strictEqual(
-    await readFile(path.join(locations.promptsTargetDir, "acme:build:web.md"), "utf8"),
-    expectedWeb,
-  );
-  assert.deepStrictEqual(updates, [
-    {
-      change: {
-        projectPath: path.dirname(locations.scopeRoot),
-        forget: ["acme:old"],
-        remember: new Map([
-          ["acme:greet", { plugin: "acme", sha256: sha256(expectedGreet) }],
-          ["acme:build:web", { plugin: "acme", sha256: sha256(expectedWeb) }],
-        ]),
-      },
-      stagingPresent: false,
-    },
-  ]);
-});
-
-test("D-CF3-07 a user-scope commit writes no project ledger", async (t) => {
-  // arrange
-  const { agentDir } = await createHermeticEnvironment(t, "commands-ledger-user-");
-  const locations = locationsFor("user", agentDir);
-  const { prepared } = await prepareGreetAndWeb(t, locations, ["acme:old"]);
-  const ledger = mock<ProjectCommandLedger>({ exactParams: true, name: "project ledger" });
-
-  // act
-  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared, ledger);
-
-  // assert
-  assert.strictEqual(commitLeak, undefined);
-  assert.deepStrictEqual((await readdir(locations.promptsTargetDir)).sort(), [
-    "acme:build:web.md",
-    "acme:greet.md",
-  ]);
-  verify(ledger);
-});
-
-test("D-CF3-07 a no-op staging writes no project ledger", async (t) => {
-  // arrange
-  const locations = await createProjectLocations(t, "commands-ledger-noop-");
-  const pluginRoot = await createPluginRoot(t, "commands-ledger-noop-source-");
-  const prepared = await prepareStageCommands(createRemovalOps(), {
-    locations,
-    cwd: locations.scopeRoot,
-    pluginName: PLUGIN_NAME,
-    pluginRoot,
-    pluginDataDir: path.join(pluginRoot, "data"),
-    resolved: resolvedFor(pluginRoot, []),
-  });
-  const ledger = mock<ProjectCommandLedger>({ exactParams: true, name: "project ledger" });
-
-  // act
-  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared, ledger);
-
-  // assert
-  assert.strictEqual(prepared.kind, "noop");
-  assert.strictEqual(commitLeak, undefined);
-  verify(ledger);
-});
-
-test("D-CF3-07 a failed project ledger write fails the commit after removing the staging tree", async (t) => {
-  // arrange
-  const locations = await createProjectLocations(t, "commands-ledger-failed-");
-  const { prepared } = await prepareGreetAndWeb(t, locations, []);
-  const ledgerError = new Error("the project ledger holds content this version cannot update");
-  const ledger = {
-    update: () => Promise.reject(ledgerError),
-  } satisfies ProjectCommandLedger;
-
-  // act
-  const error = await commitPreparedCommands(createRemovalOps(), prepared, ledger).then(
-    () => undefined,
-    (reason: unknown) => reason,
-  );
-
-  // assert
-  assert.strictEqual(error, ledgerError);
-  assert.strictEqual(await pathIsPresent(prepared.stagingRoot), false);
-});
-
-test("WR-01 a failed project ledger write removes the renamed commands and the replaced ones", async (t) => {
-  // arrange
-  const locations = await createProjectLocations(t, "commands-ledger-unrecorded-");
-  await mkdir(locations.promptsTargetDir, { recursive: true });
-  await writeFile(path.join(locations.promptsTargetDir, "acme:old.md"), "Old.\n");
-  const { prepared } = await prepareGreetAndWeb(t, locations, ["acme:old"]);
-  const ledgerError = new Error("the project ledger cannot be written");
-  const ledger = {
-    update: () => Promise.reject(ledgerError),
-  } satisfies ProjectCommandLedger;
-
-  // act
-  const error = await commitPreparedCommands(createRemovalOps(), prepared, ledger).then(
-    () => undefined,
-    (reason: unknown) => reason,
-  );
-
-  // assert
-  assert.strictEqual(error, ledgerError);
-  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), []);
-});
-
-test("WR-01 a failed project ledger write tolerates a renamed command that is already gone", async (t) => {
-  // arrange
-  const locations = await createProjectLocations(t, "commands-ledger-gone-");
-  const { prepared } = await prepareGreetAndWeb(t, locations, []);
-  const ledgerError = new Error("the project ledger cannot be written");
-  const ledger = {
-    update: async () => {
-      await rm(path.join(locations.promptsTargetDir, "acme:greet.md"));
-      throw ledgerError;
-    },
-  } satisfies ProjectCommandLedger;
-
-  // act
-  const error = await commitPreparedCommands(createRemovalOps(), prepared, ledger).then(
-    () => undefined,
-    (reason: unknown) => reason,
-  );
-
-  // assert
-  assert.strictEqual(error, ledgerError);
-  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), []);
-});
-
-test("WR-01 a failed project ledger write carries a renamed command it cannot remove", async (t) => {
-  // arrange
-  const locations = await createProjectLocations(t, "commands-ledger-stuck-");
-  const { prepared } = await prepareGreetAndWeb(t, locations, []);
-  const greetTarget = path.join(locations.promptsTargetDir, "acme:greet.md");
-  const ledgerError = new Error("the project ledger cannot be written");
-  const ledger = {
-    update: async () => {
-      await rm(greetTarget);
-      await mkdir(greetTarget);
-      throw ledgerError;
-    },
-  } satisfies ProjectCommandLedger;
-
-  // act
-  const error = await commitPreparedCommands(createRemovalOps(), prepared, ledger).then(
-    () => undefined,
-    (reason: unknown) => reason,
-  );
-
-  // assert
-  assert.ok(error instanceof CleanupLeakError);
-  assert.deepStrictEqual(
-    { message: error.message, cause: error.cause },
-    {
-      message: `the project ledger cannot be written (additionally: failed to remove unrecorded command ${greetTarget}: EISDIR: illegal operation on a directory, unlink '${greetTarget}')`,
-      cause: ledgerError,
-    },
-  );
-  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), ["acme:greet.md"]);
-});
-
-test("D-CF3-07 a failed project ledger write carries the staging cleanup leak", async (t) => {
-  // arrange
-  const locations = await createProjectLocations(t, "commands-ledger-leak-");
-  const { prepared } = await prepareGreetAndWeb(t, locations, []);
-  t.after(() => rm(prepared.stagingRoot, { recursive: true, force: true }));
-  const ledgerError = new Error("the project ledger cannot be read");
-  const ledger = {
-    update: () => Promise.reject(ledgerError),
-  } satisfies ProjectCommandLedger;
-  const ops = {
-    rm: () => Promise.reject(Object.assign(new Error("permission denied"), { code: "EACCES" })),
-  } satisfies RemovalOps;
-
-  // act
-  const error = await commitPreparedCommands(ops, prepared, ledger).then(
-    () => undefined,
-    (reason: unknown) => reason,
-  );
-
-  // assert
-  assert.ok(error instanceof CleanupLeakError);
-  assert.deepStrictEqual(
-    { message: error.message, cause: error.cause },
-    {
-      message: `the project ledger cannot be read (additionally: failed to clean up commands staging directory at ${prepared.stagingRoot}: permission denied)`,
-      cause: ledgerError,
-    },
-  );
-});
-
 test("D-CF3-03 stages an inline command map entry and records it under the plugin root's commands key", async (t) => {
   // arrange
   const locations = await createProjectLocations(t, "commands-stage-inline-");
@@ -1448,13 +1197,6 @@ test("D-CF3-03 stages an inline command map entry and records it under the plugi
     '---\n"description": "Beta from the manifest."\n' +
     recordLine(pluginRoot, pluginDataDir) +
     "---\nBeta inline body in ${CLAUDE_PLUGIN_ROOT}".replace("${CLAUDE_PLUGIN_ROOT}", pluginRoot);
-  const updates: ProjectCommandChange[] = [];
-  const ledger = {
-    update: (change: ProjectCommandChange) => {
-      updates.push(change);
-      return Promise.resolve();
-    },
-  } satisfies ProjectCommandLedger;
   const resolved: ResolvedPluginInstallable = {
     ...resolvedFor(pluginRoot, []),
     supported: ["commands"],
@@ -1480,7 +1222,7 @@ test("D-CF3-03 stages an inline command map entry and records it under the plugi
     pluginDataDir,
     resolved,
   });
-  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared, ledger);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
 
   // assert
   assert.deepStrictEqual(
@@ -1501,11 +1243,4 @@ test("D-CF3-03 stages an inline command map entry and records it under the plugi
     await readFile(path.join(locations.promptsTargetDir, "acme:beta.md"), "utf8"),
     expectedBeta,
   );
-  assert.deepStrictEqual(updates, [
-    {
-      projectPath: path.dirname(locations.scopeRoot),
-      forget: [],
-      remember: new Map([["acme:beta", { plugin: "acme", sha256: sha256(expectedBeta) }]]),
-    },
-  ]);
 });

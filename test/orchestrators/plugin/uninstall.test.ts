@@ -52,7 +52,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
-import { recordStagedProjectHooks } from "../../bridges/hooks/project-ledger-seeds.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -122,10 +121,8 @@ async function populateRuntimeRoute(
   opts: { readonly command: string; readonly marketplace: string; readonly plugin: string },
 ): Promise<HooksRouting> {
   const pluginRoot = path.join(cwd, "runtime-routes", `${opts.marketplace}-${opts.plugin}`);
-  const { hooksDir } = locationsFor("project", cwd);
-  // D-CF2-13: a project route reads the staged config the user's ledger lists.
-  const hooksJsonPath = path.join(hooksDir, opts.plugin, "hooks.json");
-  await mkdir(path.dirname(hooksJsonPath), { recursive: true });
+  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
+  await mkdir(pluginRoot, { recursive: true });
   await writeFile(
     hooksJsonPath,
     JSON.stringify({
@@ -133,7 +130,6 @@ async function populateRuntimeRoute(
     }),
     "utf8",
   );
-  await recordStagedProjectHooks(locationsFor("user", cwd).scopeRoot, cwd, hooksDir, [opts.plugin]);
   const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await hooksRouting.readAndCachePluginHooks({
     cwd,
@@ -1425,64 +1421,6 @@ test("PU-8 (b): V2 per-variant reload-hint -- emitted on uninstalled even with z
   });
 });
 
-test("WR-04: an uninstall shows the cascade's skill warnings after its row", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-skill-warnings-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      await seedState(locations.extensionRoot, {
-        schemaVersion: 1,
-        marketplaces: {
-          mp: {
-            name: "mp",
-            scope: "project",
-            source: pathSource("./src"),
-            addedFromCwd: cwd,
-            manifestPath: path.join(cwd, "marketplace.json"),
-            marketplaceRoot: cwd,
-            plugins: { warned: makePluginRecord() },
-          },
-        },
-      });
-      const stubCascade: typeof cascadeUnstagePlugin = () =>
-        Promise.resolve({
-          ok: true,
-          dropped: {
-            skills: [],
-            commands: [],
-            agents: [],
-            hooks: [],
-            mcpServers: [],
-            workflows: [],
-          },
-          skillWarnings: ["could not update the project skill ledger: refused"],
-        });
-
-      const { ctx, run, notifications } = makeCtx();
-      await uninstallWithFreshOwner({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "warned",
-        cascade: stubCascade,
-      });
-
-      assert.deepStrictEqual(
-        notifications.map(({ message }) => message),
-        [
-          "● mp [project]\n  ○ warned v0.0.1 (uninstalled)\n\n/reload to pick up changes",
-          'Plugin "warned" [project] uninstalled; 1 cleanup warning.\n\n' +
-            "could not update the project skill ledger: refused",
-        ],
-      );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
 // MSG-SD-3 -- soft-dep markers structurally absent from (uninstalled) rows
 
 test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via V2 PluginUninstalledMessage)", async () => {
@@ -1734,7 +1672,10 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
 
       const { ctx, run, notifications } = makeCtx();
       const ownerRuntime = createHooksRuntime();
+      // D-LOC-01: the session hydrate found the project trusted.
+      ownerRuntime.recordProjectTrust(cwd, true);
       const peerRuntime = createHooksRuntime();
+      peerRuntime.recordProjectTrust(cwd, true);
       const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
         command: "echo partial-owner",
         marketplace: "mp",
@@ -1948,6 +1889,8 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
 
       const { ctx, run, notifications } = makeCtx();
       const ownerRuntime = createHooksRuntime();
+      // D-LOC-01: the session hydrate found the project trusted.
+      ownerRuntime.recordProjectTrust(cwd, true);
       const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
         command: "echo ag5-owner",
         marketplace: "mp",
@@ -3142,7 +3085,10 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
       });
 
       const ownerRuntime = createHooksRuntime();
+      // D-LOC-01: the session hydrate found the project trusted.
+      ownerRuntime.recordProjectTrust(cwd, true);
       const peerRuntime = createHooksRuntime();
+      peerRuntime.recordProjectTrust(cwd, true);
       const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
         command: "echo target",
         marketplace: "mp",

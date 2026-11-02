@@ -56,23 +56,6 @@ Feature: Skill model reads
       | 2    | assistant   | tool call read {"path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md","offset":2,"limit":7}                                                                                                                                                                                                                                                     |
       | 2    | tool result | read returned: name: demo-status\ndescription: Reports the status.\narguments: [target]\npi-claude-marketplace: {"names":["demo:status","status"],"pluginRoot":"{home}/marketplaces/fixtures/plugins/demo","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"}\n---\n\nSession {uuid} at effort low.\n\n[2 more lines in file. Use offset=9 to continue.] |
 
-  Scenario: A project skill file the model reads stays as staged when the user's pi directory records no install for the project
-    Given the marketplace "fixtures" is added to the project scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user's pi directory records no plugin install for the project
-    Given the user has started a new pi session
-    Given the scripted model plays these steps:
-      | reply  | tool | arguments                                                                                |
-      |        | read | {"path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md"} |
-      | Noted. |      |                                                                                          |
-    When the user prompts "Check the status."
-    Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-      | 1    | user        | Check the status.                                                                                                                                                                                                                                                                                                                                                                                                                         |
-      | 2    | user        | Check the status.                                                                                                                                                                                                                                                                                                                                                                                                                         |
-      | 2    | assistant   | tool call read {"path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md"}                                                                                                                                                                                                                                                                                                                                   |
-      | 2    | tool result | read returned: ---\nname: demo-status\ndescription: Reports the status.\narguments: [target]\npi-claude-marketplace: {"names":["demo:status","status"],"pluginRoot":"{home}/marketplaces/fixtures/plugins/demo","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"}\n---\n\nSession ${CLAUDE_SESSION_ID} at effort ${CLAUDE_EFFORT}.\nArguments [$ARGUMENTS], target [$target], first [$0].\nStatus: !`printf ran` |
-
   Scenario: A file the model reads that pi did not load as a skill stays as it is
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"

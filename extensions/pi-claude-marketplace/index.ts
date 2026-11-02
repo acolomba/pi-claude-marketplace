@@ -139,15 +139,25 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   ): Promise<void> {
     requireNotificationMode(ctx.mode);
     const run = openNotificationRun(pi, { kind: "load" });
+    // D-LOC-01: an untrusted project's hooks are not routed, and a load with
+    // autoapply on does not apply its scope.
+    const projectTrusted = ctx.isProjectTrusted();
     try {
-      await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
+      await hooksHydration.hydrateProjectScopeForCwd(event.cwd, projectTrusted);
     } catch (err) {
       hookDebugLog(`project-scope hydrate threw unexpectedly: ${errorMessage(err)}`, "hydrate");
     }
 
     requireNotificationMode(ctx.mode);
     try {
-      await loadReconcile({ ctx, run, cwd: event.cwd, hooksRouting, completionCache });
+      await loadReconcile({
+        ctx,
+        run,
+        cwd: event.cwd,
+        projectTrusted,
+        hooksRouting,
+        completionCache,
+      });
     } catch (err) {
       try {
         notifyReconcileAborted(ctx, run, err);

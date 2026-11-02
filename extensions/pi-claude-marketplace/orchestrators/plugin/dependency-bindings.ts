@@ -20,7 +20,6 @@ import type { MaterializationPolicy } from "./update-preflight.ts";
 import type { ThreePhaseArgs } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ProjectLedgerAdmission } from "../../persistence/project-installs.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -55,11 +54,6 @@ export interface DependencyCaller {
   readonly run: NotificationRun;
   readonly mapModel?: boolean;
   readonly partial?: boolean;
-  /**
-   * D-CF2-16: the admission of the plugin the command acts on, which its
-   * dependencies share. Absent, the command named that plugin.
-   */
-  readonly ledgerAdmission?: ProjectLedgerAdmission;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -84,18 +78,11 @@ function callerFields(
   caller: DependencyCaller,
 ): Pick<
   DependencyMoveContext,
-  | "authMemo"
-  | "credentialOps"
-  | "deviceFlowHttp"
-  | "ledgerAdmission"
-  | "mapModel"
-  | "notification"
-  | "partial"
+  "authMemo" | "credentialOps" | "deviceFlowHttp" | "mapModel" | "notification" | "partial"
 > {
   return {
     notification: { ctx: caller.ctx, run: caller.run },
     ...(caller.partial !== undefined && { partial: caller.partial }),
-    ...(caller.ledgerAdmission !== undefined && { ledgerAdmission: caller.ledgerAdmission }),
     ...(caller.mapModel !== undefined && { mapModel: caller.mapModel }),
     ...(caller.credentialOps !== undefined && { credentialOps: caller.credentialOps }),
     ...(caller.deviceFlowHttp !== undefined && { deviceFlowHttp: caller.deviceFlowHttp }),
@@ -158,7 +145,6 @@ export function updateCaller(
     ...notification,
     ...(args.mapModel !== undefined && { mapModel: args.mapModel }),
     ...(!args.cascade && args.partial !== undefined && { partial: args.partial }),
-    ...(args.ledgerAdmission !== undefined && { ledgerAdmission: args.ledgerAdmission }),
     ...(args.credentialOps !== undefined && { credentialOps: args.credentialOps }),
     ...(args.deviceFlowHttp !== undefined && { deviceFlowHttp: args.deviceFlowHttp }),
     ...(args.authMemo !== undefined && { authMemo: args.authMemo }),

@@ -95,7 +95,6 @@ import {
 import { shadowedFolderWarning } from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { admittedProjectLedger } from "../../persistence/project-installs.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CleanupContextError,
@@ -134,10 +133,6 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type {
-  ProjectLedgerAdmission,
-  ProjectSkillLedger,
-} from "../../persistence/project-installs.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
@@ -220,12 +215,6 @@ export interface ThreePhaseArgsBase {
   readonly mapModel?: boolean;
   readonly local?: boolean;
   readonly partial?: boolean;
-  /**
-   * D-CF2-16: `refresh` when the command did not name this plugin, so the
-   * swap rewrites only the project ledger entries of a plugin the ledger
-   * already lists. Absent, the command named it (`create`).
-   */
-  readonly ledgerAdmission?: ProjectLedgerAdmission;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   readonly cloneCandidates?: Set<string>;
   readonly credentialOps?: CredentialOps;
@@ -1087,11 +1076,10 @@ async function finalizeUpdateRecord(
 async function commitUpdateHooks(
   args: ThreePhaseArgs,
   installable: PluginPreflight["installable"],
-  ledger: ProjectSkillLedger,
 ): Promise<readonly HookSummaryEntry[] | undefined> {
   if (installable.hooksConfigPath === undefined) {
     // Version B has no hooks: remove any stale file from version A.
-    await removeHookConfig({ locations: args.locations, pluginName: args.plugin, ledger });
+    await removeHookConfig({ locations: args.locations, pluginName: args.plugin });
     return undefined;
   }
 
@@ -1110,8 +1098,6 @@ async function commitUpdateHooks(
     pluginName: args.plugin,
     pluginRoot: installable.pluginRoot,
     hooksValue: parsed.value,
-    // D-CF2-13 / D-CF2-16: the user's ledger records the staged project hooks.
-    ledger,
   });
   // D-100-02 / ENBL-11: `parsed.value` is the supported subset already.
   return projectHookSummaryEntries(parsed.value);
@@ -1236,15 +1222,9 @@ async function commitUpdatePhase3a(
   readonly mcpConfigNotices: readonly McpConfigNotice[];
 }> {
   const failures: UpdatePhase3Failure[] = [];
-  // D-CF2-16: read once, before the first commit writes the ledger.
-  const ledger = await admittedProjectLedger(
-    args.ledgerAdmission ?? "create",
-    args.locations,
-    args.plugin,
-  );
 
   try {
-    const leak = await commitPreparedSkills(ops, handles.skills, ledger);
+    const leak = await commitPreparedSkills(ops, handles.skills);
     if (leak !== undefined) {
       const cleanupFailure = commitCleanupFailure(
         "skills",
@@ -1263,8 +1243,7 @@ async function commitUpdatePhase3a(
   }
 
   try {
-    // D-CF3-07: the user's ledger records the committed project commands.
-    const leak = await commitPreparedCommands(ops, handles.commands, ledger);
+    const leak = await commitPreparedCommands(ops, handles.commands);
     if (leak !== undefined) {
       const cleanupFailure = commitCleanupFailure(
         "commands",
@@ -1303,7 +1282,7 @@ async function commitUpdatePhase3a(
 
   let hookEntries: readonly HookSummaryEntry[] | undefined;
   try {
-    hookEntries = await commitUpdateHooks(args, preflight.installable, ledger);
+    hookEntries = await commitUpdateHooks(args, preflight.installable);
   } catch (err) {
     failures.push({ phase: "hooks", msg: errorMessage(err), cause: err as Error });
   }

@@ -98,28 +98,6 @@ Feature: Slash command aliases
       | call | role | text                                                                                                                                                                                                                                                                  |
       | 1    | user | <skill name="demo-review" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review.\n\nReview the change.\n\nARGUMENTS: Ada\n</skill> |
 
-  Scenario: A project command's alias reaches the model as typed when the user's pi directory records no install for the project
-    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "ship" with this command file:
-      """
-      ---
-      name: fancy
-      description: Ships the branch.
-      ---
-
-      Ship the branch.
-      """
-    Given the marketplace "fixtures" is added to the project scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user's pi directory records no plugin install for the project
-    Given the user has started a new pi session
-    Given the scripted model plays these steps:
-      | reply  |
-      | Noted. |
-    When the user prompts "/fancy production"
-    Then the model receives these calls:
-      | call | role | text              |
-      | 1    | user | /fancy production |
-
   Scenario: Pi's terminal menu offers a command's plugin-qualified alias
     Given the published plugin "demo" of the marketplace "fixtures" has the slash command "ship" with this command file:
       """

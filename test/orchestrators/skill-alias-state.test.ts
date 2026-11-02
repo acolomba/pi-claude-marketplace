@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
@@ -7,10 +6,6 @@ import { test } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import { loadPluginAliases } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
-import {
-  NODE_PROJECT_SKILL_LEDGER,
-  skillTreeDigest,
-} from "../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
@@ -86,43 +81,11 @@ function stateWith(plugins: Readonly<Record<string, readonly string[]>>): SkillA
   };
 }
 
-function sha256(content: string): string {
-  return createHash("sha256").update(content, "utf8").digest("hex");
-}
-
-/** IN-06: the ledger file of the project `/work` under the agent directory `/agent`. */
-const LEDGER = `/agent/pi-claude-marketplace/project-installs/${sha256("/work")}/skills.json`;
-
-/**
- * D-CF2-13: a user ledger that lists `skills` (name to staged bytes) for the
- * project `project`, each skill directory holding only its `SKILL.md`.
- */
-function ledgerText(project: string, skills: Readonly<Record<string, string>>): string {
-  const listed = Object.entries(skills).map(
-    ([name, content]) => [name, { plugin: "demo", sha256: skillTreeDigest([], content) }] as const,
-  );
-  return JSON.stringify({ version: 1, project, skills: Object.fromEntries(listed) });
-}
-
-/** A ledger that lists every project skill among `files` with the digest of its bytes. */
-function provingLedger(files: Readonly<Record<string, string>>): string {
-  const projectSkills = Object.entries(files)
-    .filter(([file]) => file.startsWith(`${PROJECT_ROOT}/`))
-    .map(([file, content]) => [path.basename(path.dirname(file)), content] as const);
-  return ledgerText(CWD, Object.fromEntries(projectSkills));
-}
-
-/**
- * Dependencies over in-memory states per scope root, in-memory files, and the
- * user ledger `ledger` (by default one that lists each project skill among
- * `files`, and none for `null`).
- */
+/** Dependencies over in-memory states per scope root and in-memory files. */
 function dependencies(
   states: Readonly<Record<string, SkillAliasState>>,
-  readable: Readonly<Record<string, string>>,
-  ledger: string | null = provingLedger(readable),
+  files: Readonly<Record<string, string>>,
 ): SkillAliasDependencies {
-  const files = ledger === null ? readable : { ...readable, [LEDGER]: ledger };
   return {
     getAgentDir: () => AGENT_DIR,
     loadState: (extensionRoot) => {
@@ -137,15 +100,6 @@ function dependencies(
         ? Promise.reject(new Error(`unreadable ${file}`))
         : Promise.resolve(text);
     },
-    // WR-03: the files directly inside `dir`, which is all a staged skill here holds.
-    listSkillTree: (dir) =>
-      Promise.resolve(
-        Object.entries(readable).flatMap(([file, text]) =>
-          path.dirname(file) === dir
-            ? [{ path: path.basename(file), kind: "file" as const, sha256: sha256(text) }]
-            : [],
-        ),
-      ),
   };
 }
 
@@ -542,11 +496,6 @@ test("D-CF2-02: reads the staged skill file from disk with the production reader
   await mkdir(path.dirname(file), { recursive: true });
   const content = recordedSkill("demo-review", ["demo:review", "fancy"]);
   await writeFile(file, content, "utf8");
-  await NODE_PROJECT_SKILL_LEDGER.update({
-    projectPath: cwd,
-    forget: [],
-    remember: new Map([["demo-review", { plugin: "demo", sha256: skillTreeDigest([], content) }]]),
-  });
   const pi = piWith([skillCommand("demo-review", file)]);
 
   // act
@@ -568,95 +517,6 @@ test("D-CF2-02: reads the staged skill file from disk with the production reader
   );
   verify(pi);
 });
-
-for (const { title, ledger } of [
-  { title: "lists no project", ledger: () => null },
-  {
-    title: "lists another digest for the skill",
-    ledger: () => ledgerText(CWD, { "demo-review": recordedSkill("demo-review", ["demo:other"]) }),
-  },
-  {
-    title: "lists the skill for another project",
-    ledger: () =>
-      ledgerText("/elsewhere", { "demo-review": recordedSkill("demo-review", ["fancy"]) }),
-  },
-]) {
-  test(`D-CF2-13: a project skill claims no name when the user ledger ${title}, and a user skill still does`, async () => {
-    // arrange
-    const projectFile = stagedPath(PROJECT_ROOT, "demo-review");
-    const userFile = stagedPath(AGENT_DIR, "tools-lint");
-    const pi = piWith([
-      skillCommand("tools-lint", userFile),
-      skillCommand("demo-review", projectFile),
-    ]);
-
-    // act
-    const aliases = await loadPluginAliases(
-      pi,
-      CWD,
-      true,
-      dependencies(
-        {
-          [AGENT_DIR]: stateWith({ tools: ["tools-lint"] }),
-          [PROJECT_ROOT]: stateWith({ demo: ["demo-review"] }),
-        },
-        {
-          [userFile]: recordedSkill("tools-lint", ["tools:lint"]),
-          [projectFile]: recordedSkill("demo-review", ["demo:review", "fancy"]),
-        },
-        ledger(),
-      ),
-    );
-
-    // assert
-    assert.deepStrictEqual([...aliases], [["tools:lint", skill("tools-lint")]]);
-    verify(pi);
-  });
-}
-
-for (const { title, listSkillTree } of [
-  {
-    title: "a file was added to its directory after the install",
-    listSkillTree: undefined,
-  },
-  {
-    title: "its directory cannot be listed",
-    listSkillTree: () => Promise.reject(new Error("EACCES")),
-  },
-]) {
-  test(`WR-03: a project skill claims no name when ${title}, and a user skill still does`, async () => {
-    // arrange
-    const projectFile = stagedPath(PROJECT_ROOT, "demo-review");
-    const userFile = stagedPath(AGENT_DIR, "tools-lint");
-    const projectSkill = recordedSkill("demo-review", ["demo:review", "fancy"]);
-    const pi = piWith([
-      skillCommand("tools-lint", userFile),
-      skillCommand("demo-review", projectFile),
-    ]);
-    const resolved = dependencies(
-      {
-        [AGENT_DIR]: stateWith({ tools: ["tools-lint"] }),
-        [PROJECT_ROOT]: stateWith({ demo: ["demo-review"] }),
-      },
-      {
-        [userFile]: recordedSkill("tools-lint", ["tools:lint"]),
-        [projectFile]: projectSkill,
-        [path.join(path.dirname(projectFile), "added.sh")]: "printf added",
-      },
-      ledgerText(CWD, { "demo-review": projectSkill }),
-    );
-
-    // act
-    const aliases = await loadPluginAliases(pi, CWD, true, {
-      ...resolved,
-      ...(listSkillTree === undefined ? {} : { listSkillTree }),
-    });
-
-    // assert
-    assert.deepStrictEqual([...aliases], [["tools:lint", skill("tools-lint")]]);
-    verify(pi);
-  });
-}
 
 /** The table target of the bridged skill `generatedName`. */
 function skill(generatedName: string): PluginAliasTarget {
@@ -705,14 +565,6 @@ function stateWithCommands(
   };
 }
 
-/** D-CF3-07: a user ledger that lists `commands` (name to staged text) for `/work`. */
-function commandLedger(commands: Readonly<Record<string, string>>): string {
-  const listed = Object.entries(commands).map(
-    ([name, content]) => [name, { plugin: "demo", sha256: sha256(content) }] as const,
-  );
-  return JSON.stringify({ version: 1, project: CWD, skills: Object.fromEntries(listed) });
-}
-
 test("P3-DC-07: maps a loaded command's frontmatter name aliases to the command's Pi name", async () => {
   // arrange
   const file = stagedCommandPath(AGENT_DIR, "demo:ship");
@@ -726,7 +578,6 @@ test("P3-DC-07: maps a loaded command's frontmatter name aliases to the command'
     dependencies(
       { [AGENT_DIR]: stateWithCommands({ demo: { prompts: ["demo:ship"] } }) },
       { [file]: namedCommand("fancy") },
-      null,
     ),
   );
 
@@ -754,7 +605,6 @@ test("P3-DC-07: a command whose frontmatter name is its own file name answers to
     dependencies(
       { [AGENT_DIR]: stateWithCommands({ demo: { prompts: ["demo:ship"] } }) },
       { [file]: namedCommand("ship") },
-      null,
     ),
   );
 
@@ -763,23 +613,18 @@ test("P3-DC-07: a command whose frontmatter name is its own file name answers to
   verify(pi);
 });
 
-for (const { title, ledger, expectedAliases } of [
+for (const { title, projectTrusted, expectedAliases } of [
   {
-    title: "lists the digest of its staged file",
-    ledger: () => commandLedger({ "demo:ship": namedCommand("fancy") }),
+    title: "Pi trusts the project",
+    projectTrusted: true,
     expectedAliases: [
       ["demo:fancy", command("demo:ship")],
       ["fancy", command("demo:ship")],
     ],
   },
-  {
-    title: "lists another digest",
-    ledger: () => commandLedger({ "demo:ship": namedCommand("other") }),
-    expectedAliases: [],
-  },
-  { title: "lists no project", ledger: () => null, expectedAliases: [] },
+  { title: "Pi does not trust the project", projectTrusted: false, expectedAliases: [] },
 ]) {
-  test(`D-CF3-07: a project command claims its names only when the user ledger ${title}`, async () => {
+  test(`D-LOC-01: a project command claims its names only when ${title}`, async () => {
     // arrange
     const file = stagedCommandPath(PROJECT_ROOT, "demo:ship");
     const pi = piWith([stagedPromptCommand("demo:ship", file)]);
@@ -788,11 +633,10 @@ for (const { title, ledger, expectedAliases } of [
     const aliases = await loadPluginAliases(
       pi,
       CWD,
-      true,
+      projectTrusted,
       dependencies(
         { [PROJECT_ROOT]: stateWithCommands({ demo: { prompts: ["demo:ship"] } }) },
         { [file]: namedCommand("fancy") },
-        ledger(),
       ),
     );
 
@@ -833,7 +677,6 @@ test("P3-DC-07: the plugin table keeps every skill alias and gives a command the
         [shipFile]: namedCommand("fancy"),
         [deployFile]: namedCommand("release"),
       },
-      null,
     ),
   );
 

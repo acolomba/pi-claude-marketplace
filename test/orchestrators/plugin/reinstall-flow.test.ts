@@ -32,7 +32,6 @@ import {
   createReinstallPlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { provenProjectSkills } from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import {
   loadState,
   saveState,
@@ -3935,7 +3934,10 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
     try {
       // arrange
       const ownerRuntime = createHooksRuntime();
+      // D-LOC-01: the session hydrate found the project trusted.
+      ownerRuntime.recordProjectTrust(cwd, true);
       const peerRuntime = createHooksRuntime();
+      peerRuntime.recordProjectTrust(cwd, true);
       const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
       const { pluginRoot } = await seedMarketplace({
         cwd,
@@ -10226,50 +10228,3 @@ test("AFILE-02: reinstalling a plugin with no MCP servers over an unparseable mc
     }
   });
 });
-
-for (const { label, target, recorded } of [
-  { label: "a bare reinstall adds nothing to", target: { kind: "all" }, recorded: [] },
-  {
-    label: "a reinstall of the marketplace adds nothing to",
-    target: { kind: "marketplace", marketplace: "mp" },
-    recorded: [],
-  },
-  {
-    label: "a reinstall that names the plugin adds the plugin to",
-    target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-    recorded: ["hello-tool", "hello:deploy"],
-  },
-] as const) {
-  test(`D-CF2-16: ${label} the project ledger for a plugin it does not list`, async () => {
-    await withHermeticEnvironment("reinstall-ledger-", async ({ agentDir }) => {
-      // arrange
-      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-ledger-"));
-      try {
-        await seedMarketplace({
-          cwd,
-          marketplaceRoot: path.join(cwd, "mp-src"),
-          resources: { skill: "old skill", command: "old command" },
-          install: true,
-        });
-        await rm(path.join(agentDir, "pi-claude-marketplace", "project-installs"), {
-          recursive: true,
-          force: true,
-        });
-        const { ctx, run } = makeCtx();
-
-        // act
-        const outcomes = await reinstallPlugins({ ctx, run, cwd, scope: "project", target });
-
-        // assert
-        assert.deepStrictEqual(
-          outcomes.map((outcome) => outcome.partition),
-          ["reinstalled"],
-        );
-        const ledger = await provenProjectSkills(agentDir, cwd, (file) => readFile(file, "utf8"));
-        assert.deepStrictEqual([...ledger.keys()].sort(), recorded);
-      } finally {
-        await rm(cwd, { recursive: true, force: true });
-      }
-    });
-  });
-}

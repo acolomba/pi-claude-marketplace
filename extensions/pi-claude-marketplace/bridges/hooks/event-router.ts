@@ -37,11 +37,12 @@
 // DISP-01 / DISP-02 / DISP-03 / DISP-04 / OBS-01 anchor the contracts this
 // module enforces; D-59-01 / D-59-02 / D-59-03 anchor the decisions.
 //
-// D-CF2-13: both cache writers route a project-scope config only when the
-// user's project ledger lists the staged `hooks.json` bytes for that project.
-// A project whose `.pi/` tree came from a repository, not from this user's
-// install, contributes no hooks. The skip is silent, as Claude Code's
-// `not_installed_here` skip is; the reason goes to the OBS-01 debug log.
+// D-LOC-01: both cache writers route a project-scope config only when Pi
+// trusts the project (`ctx.isProjectTrusted()`), as Claude Code loads no
+// project-scope plugin before the workspace is trusted. The project hydrate
+// runs with the session's context and records the answer in the runtime; the
+// command-time writer reads that record. The skip is silent; the reason goes
+// to the OBS-01 debug log.
 
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -51,13 +52,11 @@ import { BUCKET_A_EVENTS, type BucketAEvent } from "../../domain/components/hook
 import { parseHooksConfig, parseMatcher, type HooksConfig } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
-import { provenProjectSkills } from "../../persistence/project-installs.ts";
 import {
   DEFAULT_STATE,
   isRecordedButDisabled,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
-import { getAgentDir } from "../../platform/pi-api.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -71,7 +70,6 @@ import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapt
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
 import { claudeSessionStartSource } from "./payloads/session-start.ts";
-import { hookConfigDigest, projectHookLedgerKey } from "./project-ledger.ts";
 import {
   createRoutingStateOperations,
   type CacheEntry,
@@ -122,41 +120,12 @@ type EventRouterRoutingState = Pick<
   RoutingStateOperations,
   | "deleteParsedConfig"
   | "getRoutingBucket"
+  | "isProjectTrusted"
   | "parsedConfigEntries"
+  | "recordProjectTrust"
   | "setParsedConfig"
   | "setRoutingBucket"
 >;
-
-/**
- * D-CF2-13: the hook configs the user's project ledger lists for the project
- * whose scope `loc` names, each key mapped to the digest of its staged bytes.
- * The ledger is read through the hooks read port. A missing, unreadable, or
- * malformed ledger lists none. A user scope needs no ledger: no repository can
- * write it, so it returns `undefined`.
- */
-async function provenProjectHooks(
-  reader: HooksFileReader,
-  loc: ScopedLocations,
-): Promise<ReadonlyMap<string, string> | undefined> {
-  if (loc.scope === "user") {
-    return undefined;
-  }
-
-  return provenProjectSkills(getAgentDir(), path.dirname(loc.scopeRoot), reader.readHooksJson);
-}
-
-/**
- * D-CF2-13: whether the staged config `raw` of the hooks slug `slug` may be
- * routed. A user-scope config always may. A project-scope config may only
- * when the ledger lists the slug with the digest of exactly these bytes.
- */
-function isInstalledHere(
-  proven: ReadonlyMap<string, string> | undefined,
-  slug: string,
-  raw: string,
-): boolean {
-  return proven === undefined || proven.get(projectHookLedgerKey(slug)) === hookConfigDigest(raw);
-}
 
 /**
  * Read `hooks.json` from disk, parse via `parseHooksConfig`, and
@@ -166,10 +135,8 @@ function isInstalledHere(
  * The detail routes through the OBS-01 debug seam; reconcile rehydrates
  * the cache from disk on the next pass.
  *
- * D-CF2-13: a project-scope call reads the config that the install staged
- * under the project's hooks directory, not `hooksJsonPath`, and caches it only
- * when the user's project ledger lists those bytes. The command that called
- * it wrote that entry under the project's state lock.
+ * D-LOC-01: a project-scope call caches nothing unless the last project
+ * hydrate found that Pi trusts the project at `cwd`.
  *
  * `logPrefix` distinguishes install / reinstall / update call sites in
  * debug-log lines so the same shared helper can serve all three
@@ -180,7 +147,6 @@ export interface ReadAndCachePluginHooksOptions {
   readonly marketplace: string;
   readonly plugin: string;
   readonly resolvedSource: AbsolutePluginRoot;
-  /** The config a user-scope call reads; a project-scope call reads the staged one. */
   readonly hooksJsonPath: string;
   readonly cwd: string;
   readonly logPrefix: string;
@@ -191,23 +157,19 @@ async function readAndCachePluginHooksWith(
   routingState: EventRouterRoutingState,
   opts: ReadAndCachePluginHooksOptions,
 ): Promise<void> {
-  const loc = locationsFor(opts.scope, opts.cwd);
-  const proven = await provenProjectHooks(reader, loc);
-  const hooksJsonPath =
-    proven === undefined ? opts.hooksJsonPath : path.join(loc.hooksDir, opts.plugin, "hooks.json");
-  let raw: string;
-  try {
-    raw = await reader.readHooksJson(hooksJsonPath);
-  } catch (err) {
+  if (opts.scope === "project" && !routingState.isProjectTrusted(opts.cwd)) {
     hookDebugLog(
-      `${opts.logPrefix}: hooks.json read failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(err)}`,
+      `${opts.logPrefix}: hooks.json of ${opts.plugin}@${opts.marketplace} skipped: Pi does not trust the project`,
     );
     return;
   }
 
-  if (!isInstalledHere(proven, opts.plugin, raw)) {
+  let raw: string;
+  try {
+    raw = await reader.readHooksJson(opts.hooksJsonPath);
+  } catch (err) {
     hookDebugLog(
-      `${opts.logPrefix}: hooks.json of ${opts.plugin}@${opts.marketplace} skipped: the project ledger does not list it`,
+      `${opts.logPrefix}: hooks.json read failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(err)}`,
     );
     return;
   }
@@ -551,7 +513,8 @@ export interface RegisterHooksBridgeOptions {
 
 /** Hooks hydration operations bound to one required state reader. */
 export interface HooksHydration {
-  readonly hydrateProjectScopeForCwd: (cwd: string) => Promise<void>;
+  /** `projectTrusted` is Pi's answer for the project at `cwd` (`ctx.isProjectTrusted()`). */
+  readonly hydrateProjectScopeForCwd: (cwd: string, projectTrusted: boolean) => Promise<void>;
   readonly registerHooksBridge: (
     pi: ExtensionAPI,
     opts: RegisterHooksBridgeOptions,
@@ -644,16 +607,9 @@ async function hydrateScopeFromState(
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
 ): Promise<void> {
-  const targets = hydrateTargets(state, loc, cwd);
-  if (targets.length === 0) {
-    return;
-  }
-
-  // D-CF2-13: one ledger read covers every project config of this pass.
-  const proven = await provenProjectHooks(reader, loc);
-  for (const target of targets) {
+  for (const target of hydrateTargets(state, loc, cwd)) {
     // eslint-disable-next-line no-await-in-loop -- each plugin's hydrate writes the shared routing table
-    await tryHydrateOnePlugin(reader, routingState, generationIsCurrent, { ...target, proven });
+    await tryHydrateOnePlugin(reader, routingState, generationIsCurrent, target);
     if (!generationIsCurrent()) {
       return;
     }
@@ -665,7 +621,7 @@ function hydrateTargets(
   state: ExtensionState,
   loc: ScopedLocations,
   cwd: string,
-): Omit<HydrateOnePluginTarget, "proven">[] {
+): HydrateOnePluginTarget[] {
   const scopedMarketplaces = Object.entries(state.marketplaces).filter(
     ([, marketplace]) => marketplace.scope === loc.scope,
   );
@@ -686,7 +642,6 @@ function hydrateTargets(
           marketplace: mpName,
           pluginId,
           resolvedSource: pluginRecord.resolvedSource,
-          slug,
           hooksJsonPath: path.join(loc.hooksDir, slug, "hooks.json"),
           hooksDir: loc.hooksDir,
           cwd,
@@ -708,13 +663,9 @@ interface HydrateOnePluginTarget {
   readonly marketplace: string;
   readonly pluginId: string;
   readonly resolvedSource: string;
-  /** The generated name `resources.hooks` records; the staged config's directory. */
-  readonly slug: string;
   readonly hooksJsonPath: string;
   readonly hooksDir: string;
   readonly cwd: string;
-  /** D-CF2-13: the project ledger's digests, or `undefined` for the user scope. */
-  readonly proven: ReadonlyMap<string, string> | undefined;
 }
 
 async function tryHydrateOnePlugin(
@@ -771,13 +722,6 @@ async function tryHydrateOnePlugin(
     return;
   }
 
-  if (!isInstalledHere(target.proven, target.slug, raw)) {
-    hookDebugLog(
-      `hydrate: ${scope}/${marketplace}/${pluginId} skipped: the project ledger does not list ${hooksJsonPath}`,
-    );
-    return;
-  }
-
   // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot;
   // homedir from `os.homedir()` anchors `~`-prefixed path globs.
   const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
@@ -816,10 +760,15 @@ async function tryHydrateOnePlugin(
  *
  * DISP-02: cache mutations only; no pi.on, no epoch bump, no rebuild --
  * the caller's `applyReconcile` rebuilds the routing tables per scope.
+ *
+ * D-LOC-01: `projectTrusted` is Pi's answer for the project at `cwd`. It is
+ * recorded for the command-time writer, and an untrusted project caches no
+ * config, as Claude Code loads no project-scope plugin before trust.
  */
 async function hydrateProjectScopeForCwdWith(
   reader: HooksHydrationDeps,
   cwd: string,
+  projectTrusted: boolean,
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
 ): Promise<void> {
@@ -845,6 +794,12 @@ async function hydrateProjectScopeForCwdWith(
     if (key.startsWith(projectKeyPrefix)) {
       routingState.deleteParsedConfig(key);
     }
+  }
+
+  routingState.recordProjectTrust(cwd, projectTrusted);
+  if (!projectTrusted) {
+    hookDebugLog(`hydrate-project: cwd=${cwd} skipped: Pi does not trust the project`);
+    return;
   }
 
   const loc = locationsFor("project", cwd);
@@ -1163,7 +1118,13 @@ async function registerHooksBridgeWith(
 
           lastSessionStart = sessionStart;
           try {
-            await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState, generationIsCurrent);
+            await hydrateProjectScopeForCwdWith(
+              reader,
+              ctx.cwd,
+              ctx.isProjectTrusted(),
+              routingState,
+              generationIsCurrent,
+            );
           } catch (err) {
             hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
           }
@@ -1285,10 +1246,16 @@ export function createHooksHydration(
 ): HooksHydration {
   const routingState = createRoutingStateOperations(runtime);
   return {
-    async hydrateProjectScopeForCwd(cwd: string): Promise<void> {
+    async hydrateProjectScopeForCwd(cwd: string, projectTrusted: boolean): Promise<void> {
       const capturedGeneration = runtime.currentGeneration();
       const generationIsCurrent = (): boolean => runtime.currentGeneration() === capturedGeneration;
-      await hydrateProjectScopeForCwdWith(reader, cwd, routingState, generationIsCurrent);
+      await hydrateProjectScopeForCwdWith(
+        reader,
+        cwd,
+        projectTrusted,
+        routingState,
+        generationIsCurrent,
+      );
       if (!generationIsCurrent()) {
         return;
       }

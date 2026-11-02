@@ -430,6 +430,7 @@ test("same-runtime reload makes every retained registration inert before argumen
     {
       cwd: projectRoot,
       mode: "print",
+      isProjectTrusted: () => true,
       sessionManager: { getSessionId: () => "lifecycle-session" },
     },
   );

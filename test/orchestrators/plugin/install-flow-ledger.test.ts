@@ -7,7 +7,6 @@ import {
   mkdtemp,
   readdir,
   readFile,
-  realpath,
   rm,
   stat,
   symlink,
@@ -2937,6 +2936,8 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
 test("T-102-01: the same hooks fixture installed ENABLED does get its routing entry", async () => {
   await withHermeticHome(async ({ hooksRuntime, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-enabled-"));
+    // D-LOC-01: the session hydrate found the project trusted.
+    hooksRuntime.recordProjectTrust(cwd, true);
     try {
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
@@ -5265,22 +5266,8 @@ for (const allowed of [false, true]) {
         }
 
         assert.equal(await readFile(user.stateJsonPath, "utf8"), userStateBefore);
-        // D-CF2-13 / IN-06: a project install lists its skills in the user's
-        // ledger of that project, named by the SHA-256 of the project's real path.
-        const ledgerKey = createHash("sha256")
-          .update(await realpath(cwd))
-          .digest("hex");
-        assert.deepEqual(
-          await retryTree(user.scopeRoot),
-          allowed
-            ? [
-                ...userTreeBefore,
-                "pi-claude-marketplace/project-installs/",
-                `pi-claude-marketplace/project-installs/${ledgerKey}/`,
-                `pi-claude-marketplace/project-installs/${ledgerKey}/skills.json`,
-              ].sort()
-            : userTreeBefore,
-        );
+        // D-LOC-01: a project install writes nothing under the user scope.
+        assert.deepEqual(await retryTree(user.scopeRoot), userTreeBefore);
         assert.equal(notifications.length, 1);
         assert.equal(notifications[0]?.severity, allowed ? undefined : "error");
         assert.equal(
@@ -10827,6 +10814,8 @@ test("RESV-01 / WR-03: a cascade-installed dependency's hooks reach the routing 
       // immediately; a member the cascade installed is owed the same, or its
       // hooks sit on disk inert until the next `/reload`.
       const ownerRuntime = createHooksRuntime();
+      // D-LOC-01: the session hydrate found the project trusted.
+      ownerRuntime.recordProjectTrust(cwd, true);
       const runtimeInstallPlugin = createInstallOperation(
         createHooksRouting(ownerRuntime, { readHooksJson }),
         createCompletionCache(),

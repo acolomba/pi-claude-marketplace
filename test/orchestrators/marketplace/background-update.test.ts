@@ -53,6 +53,7 @@ function sessionContext(mode: string): BackgroundContext {
   return {
     mode,
     cwd: RECORDED_CTX_CWD,
+    isProjectTrusted: () => true,
     get ui(): NotificationUi {
       throw new Error("the scheduler must not touch the session UI");
     },
@@ -447,6 +448,7 @@ test("NFR-2: a stale context leaves the input handler quietly, with no timer", (
       throw new Error("stale context");
     },
     cwd: RECORDED_CTX_CWD,
+    isProjectTrusted: () => true,
     get ui(): NotificationUi {
       throw new Error("the scheduler must not touch the session UI");
     },

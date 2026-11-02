@@ -53,12 +53,13 @@ function applyNeverRuns(): Promise<void> {
 
 const loadReconcile = createLoadReconcile({ loadState }, applyNeverRuns);
 
-/** One load over the case's tree with a fresh routing owner. */
+/** One load over the case's tree with a fresh routing owner, in a project Pi trusts. */
 function load(
-  opts: Omit<LoadReconcileOptions, "hooksRouting" | "run" | "completionCache">,
+  opts: Omit<LoadReconcileOptions, "hooksRouting" | "run" | "completionCache" | "projectTrusted">,
 ): Promise<void> {
   return loadReconcile({
     ...opts,
+    projectTrusted: true,
     run: runWithNothingLoaded(),
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
@@ -592,7 +593,7 @@ function declaringAutoapply(
   return JSON.stringify({ schemaVersion: 1, marketplaces: { mp: { source } }, plugins, autoapply });
 }
 
-test("D-CF2-14: a project config that turns autoapply on hands the apply step the user scope only and prints the project's pending block", async (t) => {
+test("AAP-02 / D-05: a project config that turns autoapply on hands the load to the apply step and prints nothing itself", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "autoapply-on");
   await seedInstalled(scope, scope.project, {}, ["hello"]);
@@ -605,10 +606,10 @@ test("D-CF2-14: a project config that turns autoapply on hands the apply step th
   const run = runWithNothingLoaded();
   const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const completionCache = createCompletionCache();
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  await autoLoad({ ctx, run, cwd: scope.cwd, hooksRouting, completionCache });
+  await autoLoad({ ctx, run, cwd: scope.cwd, projectTrusted: true, hooksRouting, completionCache });
 
   // assert
   assert.equal(applied.length, 1);
@@ -619,14 +620,44 @@ test("D-CF2-14: a project config that turns autoapply on hands the apply step th
     "cwd",
     "hooksRouting",
     "run",
-    "scope",
   ]);
   assert.equal(handed?.ctx, ctx);
   assert.equal(handed?.run, run);
   assert.equal(handed?.cwd, scope.cwd);
   assert.equal(handed?.hooksRouting, hooksRouting);
   assert.equal(handed?.completionCache, completionCache);
-  assert.equal(handed?.scope, "user");
+  assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  verifyBoundary();
+});
+
+test("D-LOC-01: in a project Pi does not trust, an autoapply load applies the user scope and prints the project's pending block", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "autoapply-untrusted");
+  await seedInstalled(scope, scope.project, {}, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaringAutoapply(scope.marketplaceRoot, { "hello@mp": {} }, true),
+  );
+  const before = await scopeFiles(scope.project);
+  const { loadReconcile: autoLoad, applied } = recordingLoad();
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await autoLoad({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: scope.cwd,
+    projectTrusted: false,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    applied.map((opts) => opts.scope),
+    ["user"],
+  );
   assert.deepStrictEqual(notifications, [
     {
       message:
@@ -634,31 +665,6 @@ test("D-CF2-14: a project config that turns autoapply on hands the apply step th
     },
   ]);
   assert.deepStrictEqual(await scopeFiles(scope.project), before);
-  verifyBoundary();
-});
-
-test("AAP-02 / D-05: an autoapply load whose project scope matches its config prints nothing itself", async (t) => {
-  // arrange
-  const scope = await createLoadScope(t, "autoapply-silent");
-  await writeUnder(scope.user.baseConfigJsonPath, JSON.stringify({ autoapply: true }));
-  const { loadReconcile: autoLoad, applied } = recordingLoad();
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
-
-  // act
-  await autoLoad({
-    ctx,
-    run: runWithNothingLoaded(),
-    cwd: scope.cwd,
-    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
-    completionCache: createCompletionCache(),
-  });
-
-  // assert
-  assert.deepStrictEqual(
-    applied.map((handed) => handed.scope),
-    ["user"],
-  );
-  assert.deepStrictEqual(notifications, []);
   verifyBoundary();
 });
 
@@ -675,6 +681,7 @@ test("AAP-02 / D-22: an autoapply load hands the apply step its MCP move", async
     ctx,
     run: runWithNothingLoaded(),
     cwd: scope.cwd,
+    projectTrusted: true,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
     migrateMcpEntries,
@@ -705,6 +712,7 @@ test("AAP-03 / NFR-2: an apply step that throws is reported as aborted, then the
     ctx,
     run: runWithNothingLoaded(),
     cwd: scope.cwd,
+    projectTrusted: true,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
   });
@@ -749,6 +757,7 @@ test("AAP-03 / NFR-2: a refused abort notice still lets the read-only pass run",
     ctx,
     run: runWithNothingLoaded(),
     cwd: scope.cwd,
+    projectTrusted: true,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
   });
@@ -776,6 +785,7 @@ test("AAP-01 / D-03: a config that turns autoapply on beside an invalid config k
     ctx,
     run: runWithNothingLoaded(),
     cwd: scope.cwd,
+    projectTrusted: true,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
   });

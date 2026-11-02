@@ -89,7 +89,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
-import { stageListedProjectHooks } from "../../bridges/hooks/project-ledger-seeds.ts";
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
@@ -551,15 +550,15 @@ async function populateRuntimeRoute(
   opts: { readonly command: string; readonly marketplace: string; readonly plugin: string },
 ): Promise<HooksRouting> {
   const pluginRoot = path.join(cwd, "runtime-routes", `${opts.marketplace}-${opts.plugin}`);
-  // D-CF2-13: a project route reads the staged config the user's ledger lists.
-  const hooksJsonPath = await stageListedProjectHooks(
-    locationsFor("user", cwd).scopeRoot,
-    cwd,
-    opts.plugin,
+  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
+  await writeUnder(
+    hooksJsonPath,
     JSON.stringify({
       PreToolUse: [{ hooks: [{ command: opts.command, type: "command" }], matcher: "" }],
     }),
   );
+  // D-LOC-01: the session hydrate found the project trusted.
+  runtime.recordProjectTrust(cwd, true);
   const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await hooksRouting.readAndCachePluginHooks({
     cwd,
@@ -571,8 +570,6 @@ async function populateRuntimeRoute(
     scope: "project",
   });
   hooksRouting.rebuildRoutingTables();
-  // The route is cached; the cases inventory the project tree without it.
-  await rm(path.dirname(path.dirname(hooksJsonPath)), { recursive: true, force: true });
   return hooksRouting;
 }
 
@@ -2948,6 +2945,8 @@ describe("applyReconcile", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
+    // D-LOC-01: the session hydrate found the project trusted.
+    ownerRuntime.recordProjectTrust(cwd, true);
     const peerRuntime = createHooksRuntime();
     const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
 

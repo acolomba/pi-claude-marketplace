@@ -33,12 +33,6 @@ import {
   substituteArguments,
 } from "../domain/argument-substitution.ts";
 import { ContextInjectionError, expandContextInjections } from "../domain/context-injection.ts";
-import {
-  NODE_SKILL_TREE_LISTER,
-  provenProjectSkills,
-  skillTreeDigest,
-} from "../persistence/project-installs.ts";
-import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 import {
   bashMissingMessage,
@@ -49,8 +43,6 @@ import {
 } from "../platform/prompt-shell.ts";
 import { errorMessage } from "../shared/errors.ts";
 
-import type { SkillAliasState } from "./skill-alias-state.ts";
-import type { SkillTreeLister } from "../persistence/project-installs.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
 
@@ -81,10 +73,6 @@ export type SkillInvocationOutcome =
 export interface SkillInvocationDependencies {
   readonly getAgentDir: () => string;
   readonly readFile: (file: string) => Promise<string>;
-  /** Reads the `state.json` of the scope whose extension root is given. */
-  readonly loadState: (extensionRoot: string) => Promise<SkillAliasState>;
-  /** Lists the files and symbolic links of a staged skill directory (WR-03). */
-  readonly listSkillTree: SkillTreeLister;
   /** The machine facts that choose a shell and give the commands their environment. */
   readonly host: PromptShellHost;
   readonly runShell: PromptShellRunner;
@@ -93,8 +81,6 @@ export interface SkillInvocationDependencies {
 const DEFAULT_DEPENDENCIES: SkillInvocationDependencies = {
   getAgentDir,
   readFile: (file) => readFile(file, "utf8"),
-  loadState,
-  listSkillTree: NODE_SKILL_TREE_LISTER,
   host: NODE_PROMPT_SHELL_HOST,
   runShell: createPromptShellRunner({
     spawn: NODE_PROMPT_SHELL_SPAWN,
@@ -224,78 +210,6 @@ function untrustedProjectMessage(request: SkillInvocationRequest): string {
   return `The skill ${request.typed} belongs to the project ${request.cwd}, which Pi does not trust. Trust the project folder, then run /reload to use it.`;
 }
 
-/**
- * The command that stages the project skill again and records it as this
- * user's install. The project's `state.json` already records the plugin, so
- * `install` would refuse it as installed; `reinstall` names the plugin that
- * the record lists the skill under, or every project plugin when no record
- * lists it.
- */
-async function reinstallCommand(
-  request: SkillInvocationRequest,
-  skill: BridgedSkill,
-  dependencies: SkillInvocationDependencies,
-): Promise<string> {
-  let state: SkillAliasState;
-  try {
-    state = await dependencies.loadState(path.join(request.cwd, ".pi", "pi-claude-marketplace"));
-  } catch {
-    return "/claude:plugin reinstall --scope project";
-  }
-
-  const owner = Object.entries(state.marketplaces)
-    .flatMap(([marketplace, entry]) =>
-      Object.entries(entry.plugins).map(([plugin, record]) => ({ marketplace, plugin, record })),
-    )
-    .find(({ record }) => record.resources.skills.includes(skill.name));
-  return owner === undefined
-    ? "/claude:plugin reinstall --scope project"
-    : `/claude:plugin reinstall ${owner.plugin}@${owner.marketplace} --scope project`;
-}
-
-/**
- * The abort message for a project skill that this user did not install into
- * the project, or whose file changed after the install (D-CF2-13).
- */
-async function notInstalledHereMessage(
-  request: SkillInvocationRequest,
-  skill: BridgedSkill,
-  dependencies: SkillInvocationDependencies,
-): Promise<string> {
-  const command = await reinstallCommand(request, skill, dependencies);
-  return `The skill ${request.typed} was not installed into the project ${request.cwd} on this machine, or its file changed after the install. Reinstall its plugin into this project with ${command}, then run /reload to use it.`;
-}
-
-/**
- * D-CF2-13 / WR-03: whether the user's project ledger lists the project skill
- * with the digest of its staged directory as it is now, `content` standing
- * for its `SKILL.md`. A directory that cannot be listed fails the check. A
- * user skill needs no ledger: no repository can write the user scope.
- */
-async function isInstalledHere(
-  request: Pick<SkillInvocationRequest, "cwd">,
-  skill: BridgedSkill,
-  content: string,
-  agentDir: string,
-  dependencies: SkillInvocationDependencies,
-): Promise<boolean> {
-  if (!skill.projectScope) {
-    return true;
-  }
-
-  const proven = await provenProjectSkills(agentDir, request.cwd, dependencies.readFile);
-  const recorded = proven.get(skill.name);
-  if (recorded === undefined) {
-    return false;
-  }
-
-  try {
-    return recorded === skillTreeDigest(await dependencies.listSkillTree(skill.baseDir), content);
-  } catch {
-    return false;
-  }
-}
-
 /** The abort message for a staged skill file that cannot be read or parsed. */
 function unreadableSkillMessage(typed: string, error: unknown): string {
   return `Cannot read the skill ${typed}: ${errorMessage(error)}. Run /reload to load the installed skills again.`;
@@ -304,17 +218,15 @@ function unreadableSkillMessage(typed: string, error: unknown): string {
 /**
  * D-CF2-06: builds what the model receives for a typed bridged skill, reports
  * that the skill is not one this extension staged, or aborts with Claude
- * Code's message (T-01-24). A project skill in a project Pi does not trust,
- * a project skill this user did not install into the project (D-CF2-13), and
- * a staged file that cannot be read or parsed, abort too. A failure other
+ * Code's message (T-01-24). A project skill in a project Pi does not trust
+ * and a staged file that cannot be read or parsed abort too. A failure other
  * than these propagates.
  */
 export async function invokeBridgedSkill(
   request: SkillInvocationRequest,
   dependencies: SkillInvocationDependencies = DEFAULT_DEPENDENCIES,
 ): Promise<SkillInvocationOutcome> {
-  const agentDir = dependencies.getAgentDir();
-  const skill = findBridgedSkill(request, agentDir);
+  const skill = findBridgedSkill(request, dependencies.getAgentDir());
   if (skill === undefined) {
     return { kind: "not-bridged" };
   }
@@ -330,22 +242,11 @@ export async function invokeBridgedSkill(
   // A file that changed after Pi loaded it, such as one an uninstall,
   // disable, or update removed before `/reload`, aborts the invocation: Pi's
   // own expansion would send the body with its `!` commands not run.
-  let content: string;
   let parsed: ParsedSkill;
   try {
-    content = await dependencies.readFile(skill.location);
-    parsed = parseFrontmatter(content);
+    parsed = parseFrontmatter(await dependencies.readFile(skill.location));
   } catch (error) {
     return { kind: "abort", message: unreadableSkillMessage(request.typed, error) };
-  }
-
-  // D-CF2-13: Pi trusts a project that holds only this extension's tree, so
-  // trust alone cannot tell a cloned repository's staged skill from one this
-  // user installed. The ledger in the user scope can. The digest covers the
-  // very `SKILL.md` bytes that run below and every other file of the staged
-  // skill directory, such as a script a `!` command runs (WR-03).
-  if (!(await isInstalledHere(request, skill, content, agentDir, dependencies))) {
-    return { kind: "abort", message: await notInstalledHereMessage(request, skill, dependencies) };
   }
 
   try {
@@ -423,16 +324,14 @@ function readSkill(request: SkillReadRequest, agentDir: string): BridgedSkill | 
  * offset or stops at a limit gets exactly the lines a whole read would.
  *
  * Returns `undefined`, and the model keeps the text it read, for any other
- * file, a project skill in a project Pi does not trust, a project skill this
- * user did not install into the project (D-CF2-13), a file that cannot be
+ * file, a project skill in a project Pi does not trust, a file that cannot be
  * read or parsed, and a fill past Claude Code's size limit.
  */
 export async function fillSkillRead(
   request: SkillReadRequest,
   dependencies: SkillInvocationDependencies = DEFAULT_DEPENDENCIES,
 ): Promise<string | undefined> {
-  const agentDir = dependencies.getAgentDir();
-  const skill = readSkill(request, agentDir);
+  const skill = readSkill(request, dependencies.getAgentDir());
   if (skill === undefined || (skill.projectScope && !request.projectTrusted)) {
     return undefined;
   }
@@ -443,10 +342,6 @@ export async function fillSkillRead(
     content = await dependencies.readFile(skill.location);
     parsed = parseFrontmatter(content);
   } catch {
-    return undefined;
-  }
-
-  if (!(await isInstalledHere(request, skill, content, agentDir, dependencies))) {
     return undefined;
   }
 

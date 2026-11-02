@@ -56,7 +56,6 @@ import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/inde
 import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
 import { loadState } from "../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-import { recordStagedProjectHooks } from "./bridges/hooks/project-ledger-seeds.ts";
 import {
   buildInstalledPluginRecord,
   mergeMarketplaceIntoState,
@@ -741,9 +740,9 @@ function hookContext(cwd: string, sessionId: string): ExtensionContext {
     isIdle(): never {
       throw new Error("the synchronous hook path must not inspect idle state");
     },
-    isProjectTrusted(): never {
-      throw new Error("the synchronous hook path must not inspect trust");
-    },
+    // D-LOC-01: the session_start hydrate routes project hooks only in a
+    // project Pi trusts.
+    isProjectTrusted: () => true,
     signal: undefined,
     abort(): never {
       throw new Error("the synchronous hook path must not abort Pi");
@@ -767,7 +766,7 @@ function hookContext(cwd: string, sessionId: string): ExtensionContext {
 }
 
 /** Seed one enabled project plugin whose PreToolUse hook denies Bash. */
-async function seedBlockingHookPlugin(cwd: string, agentDir: string): Promise<void> {
+async function seedBlockingHookPlugin(cwd: string): Promise<void> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "hook-marketplace");
   const pluginRoot = path.join(marketplaceRoot, "plugins", "hook-owner");
@@ -827,8 +826,6 @@ async function seedBlockingHookPlugin(cwd: string, agentDir: string): Promise<vo
     }),
     "utf8",
   );
-  // D-CF2-13: the user's ledger lists the staged config, as an install does.
-  await recordStagedProjectHooks(agentDir, cwd, path.join(extensionRoot, "hooks"), ["hook-owner"]);
 }
 
 /** Seed a path marketplace accepted by the public `marketplace add` command. */
@@ -1409,7 +1406,7 @@ test("APL-03: the discover handler hands the load reconcile the event's cwd and 
   // act
   const loadCalls =
     source.match(
-      /loadReconcile\(\{\s*ctx,\s*run,\s*cwd:\s*event\.cwd,\s*hooksRouting,\s*completionCache,?\s*\}\)/g,
+      /loadReconcile\(\{\s*ctx,\s*run,\s*cwd:\s*event\.cwd,\s*projectTrusted,\s*hooksRouting,\s*completionCache,?\s*\}\)/g,
     ) ?? [];
 
   // assert
@@ -1451,10 +1448,10 @@ async function turnAutoapplyOn(scopeRoot: string): Promise<void> {
   await writeFile(configPath, JSON.stringify({ ...config, autoapply: true }), "utf8");
 }
 
-test("AAP-02 / D-06: an autoapply reload installs a user plugin's missing dependency and the same discover returns its skill", async (t) => {
+test("AAP-02 / D-06 / D-LOC-01: an autoapply reload installs a trusted project plugin's missing dependency and the same discover returns its skill", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "autoapply-reload");
-  await seedEnabledPluginWithMissingDependency(scope.cwd, scope.agentDir);
+  await seedEnabledPluginWithMissingDependency(scope.cwd);
   const skillSource = path.join(scope.cwd, "mp-src", "plugins", "helper", "skills", "assist");
   await mkdir(skillSource, { recursive: true });
   await writeFile(
@@ -1462,8 +1459,8 @@ test("AAP-02 / D-06: an autoapply reload installs a user plugin's missing depend
     "---\nname: assist\ndescription: Assists.\n---\n# assist\n",
     "utf8",
   );
-  await turnAutoapplyOn(scope.agentDir);
-  const extensionRoot = path.join(scope.agentDir, "pi-claude-marketplace");
+  await turnAutoapplyOn(path.join(scope.cwd, ".pi"));
+  const extensionRoot = path.join(scope.cwd, ".pi", "pi-claude-marketplace");
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     1,
     PROBES_PER_DISCOVER,
@@ -1476,7 +1473,7 @@ test("AAP-02 / D-06: an autoapply reload installs a user plugin's missing depend
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user]\n  ● helper v1.0.0 (installed) {dependency installed}\n\n" +
+        "● mp [project]\n  ● helper v1.0.0 (installed) {dependency installed}\n\n" +
         "Reconcile: 1 success\n\n/reload to pick up changes",
     },
   ]);
@@ -1602,7 +1599,7 @@ test("keeps hook routing and command completion state inside each extension-load
   const ownerCwd = scope.cwd;
   const peerCwd = path.join(scope.cwd, "peer-project");
   await mkdir(peerCwd, { recursive: true });
-  await seedBlockingHookPlugin(ownerCwd, scope.agentDir);
+  await seedBlockingHookPlugin(ownerCwd);
   const ownerMarketplace = await seedMarketplaceSource(ownerCwd, "owned-rows", "hello");
   process.chdir(ownerCwd);
   // One probe: the command's notification run is the only one, and the add
@@ -1702,7 +1699,8 @@ test("T-02-17: discovers the user scope's prompts and not the project's when Pi 
 
   // assert
   assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [userPromptPath] });
-  assert.strictEqual(trustReads, 1);
+  // D-LOC-01: the load preparation reads trust once, and the discovery once.
+  assert.strictEqual(trustReads, 2);
   loaded.verifyBoundary();
 });
 

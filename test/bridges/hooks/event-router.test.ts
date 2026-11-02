@@ -45,8 +45,6 @@ import {
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
-import { recordStagedProjectHooks } from "./project-ledger-seeds.ts";
-
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HooksHydrationDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
@@ -177,7 +175,7 @@ test(
       shutdownInMemoryChildren(peerRuntime);
       peerChild.destroy();
     });
-    const { agentDir, root } = await createHermeticEnvironment(t, "hooks-router-reload-");
+    const { root } = await createHermeticEnvironment(t, "hooks-router-reload-");
     const projectRoot = path.join(root, "project");
     shutdownInMemoryChildren(runtime);
     const userLocations = locationsFor("user", projectRoot);
@@ -286,9 +284,6 @@ test(
     );
     await saveState(userLocations.extensionRoot, userState);
     await saveState(projectLocations.extensionRoot, projectState);
-    await recordStagedProjectHooks(agentDir, projectRoot, projectLocations.hooksDir, [
-      "project-hooks",
-    ]);
     const notifications: Array<{
       readonly text: string;
       readonly severity: "info" | "warning" | "error" | undefined;
@@ -732,7 +727,6 @@ function makeScopeState(input: {
 }
 
 interface ProjectHookFixture {
-  readonly agentDir: string;
   readonly root: string;
   readonly factoryRoot: string;
   readonly projectRoot: string;
@@ -769,7 +763,7 @@ async function makeProjectHookFixture(
   label: string,
   event: "PreToolUse" | "SessionStart",
 ): Promise<ProjectHookFixture> {
-  const { agentDir, root } = await createHermeticEnvironment(t, `hooks-router-${label}-`);
+  const { root } = await createHermeticEnvironment(t, `hooks-router-${label}-`);
   const factoryRoot = path.join(root, "factory");
   const projectRoot = path.join(root, "project");
   const locations = locationsFor("project", projectRoot);
@@ -777,9 +771,7 @@ async function makeProjectHookFixture(
   const hookBytes = JSON.stringify(makeConfig([{ event, handlers: 1 }]));
   await mkdir(path.dirname(hookPath), { recursive: true });
   await writeFile(hookPath, hookBytes, "utf8");
-  await recordStagedProjectHooks(agentDir, projectRoot, locations.hooksDir, ["owner-hooks"]);
   return {
-    agentDir,
     root,
     factoryRoot,
     projectRoot,
@@ -799,7 +791,7 @@ async function makeProjectHookFixture(
   };
 }
 
-function makeContext(cwd: string, sessionRoot: string): ExtensionContext {
+function makeContext(cwd: string, sessionRoot: string, projectTrusted = true): ExtensionContext {
   return {
     ui: {
       notify(message: string, severity?: "info" | "warning" | "error"): void {
@@ -817,7 +809,7 @@ function makeContext(cwd: string, sessionRoot: string): ExtensionContext {
     model: undefined,
     scopedModels: [],
     isIdle: () => true,
-    isProjectTrusted: () => true,
+    isProjectTrusted: () => projectTrusted,
     signal: undefined,
     abort(): never {
       throw new Error("event router must not abort Pi");
@@ -841,7 +833,7 @@ async function makeSessionStartFixture(t: TestContext): Promise<{
   readonly projectRoot: string;
   readonly sharedPaths: readonly string[];
 }> {
-  const { agentDir, root } = await createHermeticEnvironment(t, "hooks-router-session-mode-");
+  const { root } = await createHermeticEnvironment(t, "hooks-router-session-mode-");
   const projectRoot = path.join(root, "project");
   const sharedPaths: string[] = [];
   for (const scope of ["user", "project"] as const) {
@@ -865,12 +857,6 @@ async function makeSessionStartFixture(t: TestContext): Promise<{
     sharedPaths.push(path.join(loc.dataRoot, "_shared"));
   }
 
-  await recordStagedProjectHooks(
-    agentDir,
-    projectRoot,
-    locationsFor("project", projectRoot).hooksDir,
-    ["session-hooks"],
-  );
   return { root, projectRoot, sharedPaths };
 }
 
@@ -1769,10 +1755,7 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const { agentDir, cwd: root } = await createHermeticEnvironment(
-      t,
-      "hooks-router-hydrate-matrix-",
-    );
+    const { cwd: root } = await createHermeticEnvironment(t, "hooks-router-hydrate-matrix-");
     const locations = locationsFor("project", root);
     const projectState = makeScopeState({
       scope: "project",
@@ -1858,17 +1841,11 @@ test(
       "utf8",
     );
     await saveState(locations.extensionRoot, state);
-    await recordStagedProjectHooks(agentDir, root, locations.hooksDir, [
-      "disabled-hooks",
-      "foreign-hooks",
-      "invalid-hooks",
-      "valid-hooks-a",
-      "valid-hooks-b",
-    ]);
 
     // act
     await createHooksHydration(runtime, { loadState, readHooksJson }).hydrateProjectScopeForCwd(
       root,
+      true,
     );
     createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
     const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
@@ -1963,7 +1940,7 @@ test(
     // act
     const hooksHydration = createHooksHydration(runtime, hydrationReader);
 
-    await hooksHydration.hydrateProjectScopeForCwd(root);
+    await hooksHydration.hydrateProjectScopeForCwd(root, true);
     const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
@@ -2258,7 +2235,7 @@ test("runtime hydration stops before mirroring when registration advances its ge
   };
   const runtime = createHooksRuntime();
   const hydration = createHooksHydration(runtime, reader);
-  const pendingHydration = hydration.hydrateProjectScopeForCwd(fixture.projectRoot);
+  const pendingHydration = hydration.hydrateProjectScopeForCwd(fixture.projectRoot, true);
   await readStarted.promise;
   const { pi } = makeRecordingPi();
   await hydration.registerHooksBridge(pi, {
@@ -2336,7 +2313,7 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
   const runtime = createHooksRuntime();
 
   // act
-  await createHooksHydration(runtime, reader).hydrateProjectScopeForCwd(fixture.projectRoot);
+  await createHooksHydration(runtime, reader).hydrateProjectScopeForCwd(fixture.projectRoot, true);
 
   // assert
   assert.deepStrictEqual(
@@ -2369,42 +2346,76 @@ function fixtureStateReader(fixture: ProjectHookFixture): HooksHydrationDeps {
   };
 }
 
-test("D-CF2-13 project hydration skips a config the user's project ledger does not list", async (t) => {
+test("D-LOC-01 project hydration caches nothing in a project Pi does not trust", async (t) => {
   // arrange
-  const fixture = await makeProjectHookFixture(t, "unlisted-project-hydration", "PreToolUse");
-  await rm(path.join(fixture.agentDir, "pi-claude-marketplace", "project-installs"), {
-    recursive: true,
+  const fixture = await makeProjectHookFixture(t, "untrusted-project-hydration", "PreToolUse");
+  const runtime = createHooksRuntime();
+
+  // act
+  await createHooksHydration(runtime, fixtureStateReader(fixture)).hydrateProjectScopeForCwd(
+    fixture.projectRoot,
+    false,
+  );
+
+  // assert
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+  assert.strictEqual(runtime.isProjectTrusted(fixture.projectRoot), false);
+});
+
+test("D-LOC-01 project hydration in an untrusted project drops the project configs it held", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "untrusted-project-rehydration", "PreToolUse");
+  const runtime = createHooksRuntime();
+  const hydration = createHooksHydration(runtime, fixtureStateReader(fixture));
+  await hydration.hydrateProjectScopeForCwd(fixture.projectRoot, true);
+
+  // act
+  await hydration.hydrateProjectScopeForCwd(fixture.projectRoot, false);
+
+  // assert
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+});
+
+for (const { title, hydratedCwd, trusted } of [
+  { title: "no project hydrate ran", hydratedCwd: undefined, trusted: false },
+  { title: "Pi does not trust the project", hydratedCwd: "project", trusted: false },
+  { title: "the trusted project is another one", hydratedCwd: "other", trusted: true },
+] as const) {
+  test(`D-LOC-01 readAndCachePluginHooks caches no project config when ${title}`, async (t) => {
+    // arrange
+    const fixture = await makeProjectHookFixture(t, "untrusted-project-read", "PreToolUse");
+    const runtime = createHooksRuntime();
+    if (hydratedCwd !== undefined) {
+      runtime.recordProjectTrust(
+        hydratedCwd === "project" ? fixture.projectRoot : path.join(fixture.root, "other"),
+        trusted,
+      );
+    }
+
+    // act
+    await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
+      scope: "project",
+      marketplace: "catalog",
+      plugin: "owner-hooks",
+      resolvedSource: asAbsolutePluginRoot(path.join(fixture.root, "plugins", "owner")),
+      hooksJsonPath: fixture.hookPath,
+      cwd: fixture.projectRoot,
+      logPrefix: "install",
+    });
+
+    // assert
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
   });
-  const runtime = createHooksRuntime();
+}
 
-  // act
-  await createHooksHydration(runtime, fixtureStateReader(fixture)).hydrateProjectScopeForCwd(
-    fixture.projectRoot,
-  );
-
-  // assert
-  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
-});
-
-test("D-CF2-13 project hydration skips a config whose bytes changed after the ledger listed them", async (t) => {
+test("D-LOC-01 readAndCachePluginHooks caches a project config once the hydrate found the project trusted", async (t) => {
   // arrange
-  const fixture = await makeProjectHookFixture(t, "changed-project-hydration", "PreToolUse");
-  await writeFile(fixture.hookPath, `${fixture.hookBytes}\n`, "utf8");
+  const fixture = await makeProjectHookFixture(t, "trusted-project-read", "PreToolUse");
   const runtime = createHooksRuntime();
-
-  // act
-  await createHooksHydration(runtime, fixtureStateReader(fixture)).hydrateProjectScopeForCwd(
-    fixture.projectRoot,
-  );
-
-  // assert
-  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
-});
-
-test("D-CF2-13 readAndCachePluginHooks caches the staged project config the ledger lists", async (t) => {
-  // arrange
-  const fixture = await makeProjectHookFixture(t, "listed-project-read", "PreToolUse");
-  const runtime = createHooksRuntime();
+  await createHooksHydration(runtime, {
+    loadState: () => Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
+    readHooksJson,
+  }).hydrateProjectScopeForCwd(fixture.projectRoot, true);
 
   // act
   await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
@@ -2412,7 +2423,7 @@ test("D-CF2-13 readAndCachePluginHooks caches the staged project config the ledg
     marketplace: "catalog",
     plugin: "owner-hooks",
     resolvedSource: asAbsolutePluginRoot(path.join(fixture.root, "plugins", "owner")),
-    hooksJsonPath: path.join(fixture.root, "plugins", "owner", "missing-source-hooks.json"),
+    hooksJsonPath: fixture.hookPath,
     cwd: fixture.projectRoot,
     logPrefix: "install",
   });
@@ -2432,27 +2443,6 @@ test("D-CF2-13 readAndCachePluginHooks caches the staged project config the ledg
       },
     ],
   );
-});
-
-test("D-CF2-13 readAndCachePluginHooks skips a staged project config the ledger does not list", async (t) => {
-  // arrange
-  const fixture = await makeProjectHookFixture(t, "unlisted-project-read", "PreToolUse");
-  await writeFile(fixture.hookPath, `${fixture.hookBytes}\n`, "utf8");
-  const runtime = createHooksRuntime();
-
-  // act
-  await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
-    scope: "project",
-    marketplace: "catalog",
-    plugin: "owner-hooks",
-    resolvedSource: asAbsolutePluginRoot(path.join(fixture.root, "plugins", "owner")),
-    hooksJsonPath: fixture.hookPath,
-    cwd: fixture.projectRoot,
-    logPrefix: "install",
-  });
-
-  // assert
-  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
 });
 
 test("project hydration stops before parsing a plugin's hooks.json read under a stale generation", async (t) => {
@@ -2490,7 +2480,7 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
   const hydration = createHooksHydration(runtime, reader);
 
   // act
-  await hydration.hydrateProjectScopeForCwd(fixture.projectRoot);
+  await hydration.hydrateProjectScopeForCwd(fixture.projectRoot, true);
 
   // assert
   assert.strictEqual(runtime.currentGeneration(), 1);
@@ -3120,7 +3110,7 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const { agentDir, root } = await createHermeticEnvironment(t, "hooks-router-lazy-project-");
+    const { root } = await createHermeticEnvironment(t, "hooks-router-lazy-project-");
     const factoryRoot = path.join(root, "factory-cwd");
     const projectRoot = path.join(root, "actual-project");
     const projectLocations = locationsFor("project", projectRoot);
@@ -3149,10 +3139,6 @@ test(
     }
 
     await saveState(projectLocations.extensionRoot, projectState);
-    await recordStagedProjectHooks(agentDir, projectRoot, projectLocations.hooksDir, [
-      "alpha-hooks",
-      "beta-hooks",
-    ]);
     const context = makeContext(projectRoot, root);
     const { pi, registrations, messages } = makeRecordingPi();
     const dispatches: Array<{ readonly pluginId: string; readonly event: string }> = [];
@@ -3230,6 +3216,57 @@ test(
     assert.deepStrictEqual(messages, []);
   },
 );
+
+test("D-LOC-01 session_start in a project Pi does not trust runs no project SessionStart hook", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const { root } = await createHermeticEnvironment(t, "hooks-router-untrusted-project-");
+  const projectRoot = path.join(root, "project");
+  const projectLocations = locationsFor("project", projectRoot);
+  const hooksDirectory = path.join(projectLocations.hooksDir, "alpha-hooks");
+  await mkdir(hooksDirectory, { recursive: true });
+  await writeFile(
+    path.join(hooksDirectory, "hooks.json"),
+    JSON.stringify(makeConfig([{ event: "SessionStart", handlers: 1, prefix: "alpha" }])),
+    "utf8",
+  );
+  await saveState(
+    projectLocations.extensionRoot,
+    makeScopeState({
+      scope: "project",
+      cwd: projectRoot,
+      plugins: {
+        alpha: makeStoredPlugin({
+          root: path.join(root, "plugins", "alpha"),
+          hooks: ["alpha-hooks"],
+        }),
+      },
+    }),
+  );
+  const context = makeContext(projectRoot, root, false);
+  const { pi, registrations } = makeRecordingPi();
+  const dispatches: string[] = [];
+  const executor: HookExecutor = (entry) => {
+    dispatches.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    cwd: path.join(root, "factory-cwd"),
+    executor,
+  });
+  const sessionStart = registeredHandler(registrations, "session_start");
+
+  // act
+  await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+  // assert
+  assert.deepStrictEqual(dispatches, []);
+  assert.deepStrictEqual(
+    Array.from(runtime.parsedConfigEntries().values()).filter((entry) => entry.scope === "project"),
+    [],
+  );
+});
 
 test("session_start contains a lazy project cwd failure and still delegates safely", async (t) => {
   // arrange

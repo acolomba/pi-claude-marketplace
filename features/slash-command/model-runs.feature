@@ -101,19 +101,3 @@ Feature: Slash command model runs
       | 2    | user        | Run the manual command.                                                                                                                                                                                                                                                                                                |
       | 2    | assistant   | tool call run_plugin_command {"command":"demo:manual"}                                                                                                                                                                                                                                                                 |
       | 2    | tool result | run_plugin_command failed: Command demo:manual cannot be used with run_plugin_command due to disable-model-invocation. Ask the user to run /demo:manual themselves; it cannot be invoked via run_plugin_command. Do not replicate this command's workflow by other means; it is reserved for explicit user invocation. |
-
-  Scenario: The model is offered no command tool when the user's pi directory records no install of the project's commands
-    Given the marketplace "fixtures" is added to the project scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user's pi directory records no plugin install for the project
-    Given the user has started a new pi session
-    Given the scripted model plays these steps:
-      | reply  |
-      | Hello. |
-    When the user prompts "hello"
-    Then the model receives these calls:
-      | call | role | text  |
-      | 1    | user | hello |
-    Then the model calls are offered these tools:
-      | call | tools                                                                                  |
-      | 1    | read, bash, edit, write, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |

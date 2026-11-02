@@ -7,7 +7,7 @@ Feature: Skill project trust
 
   Background:
     Given the project holds a pi settings file
-    Given pi runs with the scripted model in an untrusted project that holds skills
+    Given pi runs with the scripted model in an untrusted project
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

@@ -22,18 +22,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { commandFileDigest } from "../bridges/commands/project-ledger.ts";
 import { frontmatterNameAliases, readSkillRecord } from "../bridges/skills/skill-names.ts";
 import { generatedSkillName } from "../domain/name.ts";
-import {
-  NODE_SKILL_TREE_LISTER,
-  provenProjectSkills,
-  skillTreeDigest,
-} from "../persistence/project-installs.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 
-import type { SkillTreeLister } from "../persistence/project-installs.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 
 export interface SkillAliasState {
@@ -61,8 +54,6 @@ export interface SkillAliasDependencies {
   readonly loadState: (extensionRoot: string) => Promise<SkillAliasState>;
   readonly getAgentDir: () => string;
   readonly readFile: (file: string) => Promise<string>;
-  /** Lists the files and symbolic links of a staged skill directory (WR-03). */
-  readonly listSkillTree: SkillTreeLister;
 }
 
 /** What a plugin alias stands for: a bridged skill or a bridged command. */
@@ -74,7 +65,6 @@ const DEFAULT_DEPENDENCIES: SkillAliasDependencies = {
   loadState,
   getAgentDir,
   readFile: (file) => readFile(file, "utf8"),
-  listSkillTree: NODE_SKILL_TREE_LISTER,
 };
 
 /** A skill or command of the state whose staged file Pi has loaded. */
@@ -83,14 +73,9 @@ interface LoadedEntry {
   /** The generated skill name, or the command's Pi name. */
   readonly name: string;
   readonly file: string;
-  /**
-   * D-CF2-13 / D-CF3-07: for a project entry, the digests the user's project
-   * ledger lists for the project; `undefined` for a user entry.
-   */
-  readonly proven: ReadonlyMap<string, string> | undefined;
 }
 
-/** How one kind of bridged resource is found, proven, and named. */
+/** How one kind of bridged resource is found and named. */
 interface AliasKind {
   /** The Pi command source that loads the kind. */
   readonly source: "skill" | "prompt";
@@ -101,12 +86,6 @@ interface AliasKind {
   }) => readonly string[];
   /** The staged file of `name` under the scope root `root`. */
   readonly stagedFile: (root: string, name: string) => string;
-  /** The digest the ledger must list for the entry whose staged file holds `content`. */
-  readonly digest: (
-    entry: LoadedEntry,
-    content: string,
-    listSkillTree: SkillTreeLister,
-  ) => Promise<string>;
   /** The names the entry claims, read from its staged frontmatter. */
   readonly names: (entry: LoadedEntry, frontmatter: Record<string, unknown>) => readonly string[];
 }
@@ -156,9 +135,6 @@ const SKILL_KIND: AliasKind = {
   resources: (record) => record.skills,
   stagedFile: (root, name) =>
     path.join(root, "pi-claude-marketplace", "resources", "skills", name, "SKILL.md"),
-  // WR-03: the digest covers every file of the staged skill directory.
-  digest: async (entry, content, listSkillTree) =>
-    skillTreeDigest(await listSkillTree(path.dirname(entry.file)), content),
   names: (entry, frontmatter) => {
     const record = readSkillRecord(frontmatter);
     return record === undefined
@@ -172,53 +148,19 @@ const COMMAND_KIND: AliasKind = {
   resources: (record) => record.prompts ?? [],
   stagedFile: (root, name) =>
     path.join(root, "pi-claude-marketplace", "resources", "prompts", `${name}.md`),
-  digest: (_entry, content) => Promise.resolve(commandFileDigest(content)),
   names: (entry, frontmatter) => frontmatterNameAliases(entry.pluginName, frontmatter.name),
 };
 
-/**
- * D-CF2-13 / D-CF3-07 / WR-03: whether a project entry's staged file,
- * holding `content`, has the digest the user's project ledger lists. A user
- * entry (`proven` undefined) passes; a digest that cannot be taken fails.
- */
-async function matchesLedger(
-  kind: AliasKind,
-  entry: LoadedEntry,
-  content: string,
-  listSkillTree: SkillTreeLister,
-): Promise<boolean> {
-  if (entry.proven === undefined) {
-    return true;
-  }
-
-  const recorded = entry.proven.get(entry.name);
-  try {
-    return recorded === (await kind.digest(entry, content, listSkillTree));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * The names the staged file of `entry` claims; none when it cannot be read,
- * and none for a project entry that the user's project ledger does not list
- * with the digest of its staged file as it is now (D-CF2-13, WR-03).
- */
+/** The names the staged file of `entry` claims; none when it cannot be read. */
 async function entryNames(
   kind: AliasKind,
   entry: LoadedEntry,
-  dependencies: Pick<SkillAliasDependencies, "readFile" | "listSkillTree">,
+  dependencies: Pick<SkillAliasDependencies, "readFile">,
 ): Promise<readonly string[]> {
-  let content: string;
   let frontmatter: Record<string, unknown>;
   try {
-    content = await dependencies.readFile(entry.file);
-    frontmatter = parseFrontmatter(content).frontmatter;
+    frontmatter = parseFrontmatter(await dependencies.readFile(entry.file)).frontmatter;
   } catch {
-    return [];
-  }
-
-  if (!(await matchesLedger(kind, entry, content, dependencies.listSkillTree))) {
     return [];
   }
 
@@ -231,7 +173,6 @@ function loadedEntries(
   state: SkillAliasState,
   root: string,
   loadedPaths: ReadonlySet<string>,
-  proven: ReadonlyMap<string, string> | undefined,
 ): readonly LoadedEntry[] {
   return Object.values(state.marketplaces)
     .flatMap((marketplace) => Object.entries(marketplace.plugins))
@@ -240,38 +181,30 @@ function loadedEntries(
         pluginName,
         name,
         file: path.resolve(kind.stagedFile(root, name)),
-        proven,
       })),
     )
     .filter((entry) => loadedPaths.has(entry.file));
 }
 
-/** One scope root whose state could be read, with the ledger digests of a project root. */
+/** One scope root whose state could be read. */
 interface ReadScope {
   readonly root: string;
   readonly state: SkillAliasState;
-  readonly proven: ReadonlyMap<string, string> | undefined;
 }
 
 /**
  * The scope roots whose state can be read, user first. T-02-17: the project
  * root is read only when Pi trusts the project (`projectTrusted`), as Claude
  * Code loads no project-scope plugin before the workspace is trusted.
- * D-CF2-13 / D-CF3-07: a project root carries the user's ledger digests,
- * because the project's own `state.json` sits in the repository.
  */
 async function readScopes(
   cwd: string,
   projectTrusted: boolean,
   resolved: SkillAliasDependencies,
 ): Promise<readonly ReadScope[]> {
-  const agentDir = resolved.getAgentDir();
-  const roots = [
-    { root: agentDir, project: false },
-    ...(projectTrusted ? [{ root: path.join(cwd, ".pi"), project: true }] : []),
-  ];
+  const roots = [resolved.getAgentDir(), ...(projectTrusted ? [path.join(cwd, ".pi")] : [])];
   const scopes: ReadScope[] = [];
-  for (const { root, project } of roots) {
+  for (const root of roots) {
     let state: SkillAliasState;
     try {
       // eslint-disable-next-line no-await-in-loop -- two scope roots, one state read each
@@ -280,11 +213,7 @@ async function readScopes(
       continue;
     }
 
-    const proven = project
-      ? // eslint-disable-next-line no-await-in-loop -- the project root alone reads the ledger
-        await provenProjectSkills(agentDir, cwd, resolved.readFile)
-      : undefined;
-    scopes.push({ root, state, proven });
+    scopes.push({ root, state });
   }
 
   return scopes;
@@ -293,8 +222,7 @@ async function readScopes(
 /**
  * D-CF2-02 / P3-DC-07: maps each name that a loaded entry of `kind` claims to
  * the entry's own name. The first claim wins, and a name that a Pi command of
- * another source has is never mapped (SK-6). A project entry claims names
- * only when the user's project ledger lists it (D-CF2-13, D-CF3-07).
+ * another source has is never mapped (SK-6).
  */
 async function kindAliases(
   kind: AliasKind,
@@ -310,8 +238,8 @@ async function kindAliases(
       .filter((command) => command.source === kind.source)
       .map((command) => path.resolve(command.sourceInfo.path)),
   );
-  const entries = scopes.flatMap(({ root, state, proven }) =>
-    loadedEntries(kind, state, root, loadedPaths, proven),
+  const entries = scopes.flatMap(({ root, state }) =>
+    loadedEntries(kind, state, root, loadedPaths),
   );
   const claims = await Promise.all(
     entries.map(async (entry) => ({

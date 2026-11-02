@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
@@ -12,9 +11,7 @@ import {
   prepareStageSkills,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { skillTreeDigest } from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import { SkillFrontmatterNodeError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
-import { CleanupLeakError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -22,10 +19,6 @@ import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 
 import type { StageSkillsCommitResult } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
-import type {
-  ProjectSkillLedger,
-  ProjectSkillLedgerChange,
-} from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 
 // Builtin-module patching that remains in this file, and why. The removal port
 // carries cleanupStaging's removals only. Every fault that reaches that helper
@@ -42,9 +35,6 @@ import type {
 const filesystemPromises = createRequire(import.meta.url)(
   "node:fs/promises",
 ) as typeof import("node:fs/promises");
-
-/** A project ledger for commits whose ledger change a case does not check. */
-const NO_LEDGER: ProjectSkillLedger = { update: () => Promise.resolve() };
 
 async function allocateCasePaths(
   t: TestContext,
@@ -1636,7 +1626,7 @@ describe("commitPreparedSkills", () => {
     });
 
     // act
-    const leak = await commitPreparedSkills(createRemovalOps(), prepared, NO_LEDGER);
+    const leak = await commitPreparedSkills(createRemovalOps(), prepared);
     const targetDirectory = await stat(locations.skillsTargetDir).catch(() => undefined);
 
     // assert
@@ -1695,7 +1685,7 @@ describe("commitPreparedSkills", () => {
       pluginDataDir,
       resolved,
     });
-    const leak = await commitPreparedSkills(createRemovalOps(), prepared, NO_LEDGER);
+    const leak = await commitPreparedSkills(createRemovalOps(), prepared);
     const committedBytes = await readFile(targetFile);
 
     // assert
@@ -1747,16 +1737,8 @@ describe("commitPreparedSkills", () => {
     });
     assert.strictEqual(prepared.kind, "staged");
 
-    const changes: ProjectSkillLedgerChange[] = [];
-    const ledger: ProjectSkillLedger = {
-      update: (change) => {
-        changes.push(change);
-        return Promise.resolve();
-      },
-    };
-
     // act
-    const leak = await commitPreparedSkills(createRemovalOps(), prepared, ledger);
+    const leak = await commitPreparedSkills(createRemovalOps(), prepared);
     const targetBytes = await readFile(
       path.join(locations.skillsTargetDir, "acme-alpha", "SKILL.md"),
       "utf8",
@@ -1783,139 +1765,6 @@ describe("commitPreparedSkills", () => {
     assert.strictEqual(previousState, undefined);
     assert.strictEqual(staleState, undefined);
     assert.strictEqual(stagingState, undefined);
-    assert.deepStrictEqual(changes, [
-      {
-        projectPath: scopeRoot,
-        forget: ["previous"],
-        remember: new Map([
-          [
-            "acme-alpha",
-            {
-              plugin: "acme",
-              sha256: skillTreeDigest(
-                [
-                  {
-                    path: "resources/a.txt",
-                    kind: "file",
-                    sha256: createHash("sha256").update(resourceBytes, "utf8").digest("hex"),
-                  },
-                ],
-                targetBytes,
-              ),
-            },
-          ],
-        ]),
-      },
-    ]);
-  });
-
-  for (const scope of ["project", "user"] as const) {
-    test(`D-CF2-13: ${scope === "project" ? "propagates a project ledger failure after the rename" : "leaves the project ledger alone at user scope"}`, async (t) => {
-      // arrange
-      const environment = await createHermeticEnvironment(t, "skills-commit-ledger-");
-      const locations = locationsFor(scope, environment.cwd);
-      const pluginRoot = path.join(environment.root, "plugin");
-      const skillsDirectory = path.join(pluginRoot, "skills");
-      await mkdir(path.join(skillsDirectory, "alpha"), { recursive: true });
-      await writeFile(
-        path.join(skillsDirectory, "alpha", "SKILL.md"),
-        "---\nname: alpha\ndescription: Alpha\n---\nBody.\n",
-      );
-      const resolved = {
-        installable: true,
-        state: "installable",
-        name: "acme",
-        pluginRoot,
-        supported: ["skills"],
-        unsupported: [],
-        notes: [],
-        componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-        mcpServers: {},
-        defaultEnabled: true,
-      } satisfies ResolvedPluginInstallable;
-      const prepared = await prepareStageSkills(createRemovalOps(), {
-        locations,
-        cwd: environment.cwd,
-        knownWorkflowNames: [],
-        pluginName: "acme",
-        pluginRoot,
-        pluginDataDir: path.join(environment.root, "plugin-data"),
-        resolved,
-      });
-      assert.strictEqual(prepared.kind, "staged");
-      const ledgerError = new Error("ledger is read-only");
-      const ledger: ProjectSkillLedger = { update: () => Promise.reject(ledgerError) };
-
-      // act
-      const outcome = await commitPreparedSkills(createRemovalOps(), prepared, ledger).then(
-        (leak) => ({ leak }),
-        (error: unknown) => ({ error }),
-      );
-
-      // assert
-      assert.deepStrictEqual(
-        outcome,
-        scope === "project" ? { error: ledgerError } : { leak: undefined },
-      );
-      assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["acme-alpha"]);
-      assert.deepStrictEqual(await readdir(locations.skillsStagingDir), []);
-    });
-  }
-
-  test("IN-02: appends a staging cleanup leak to a project ledger failure", async (t) => {
-    // arrange
-    const environment = await createHermeticEnvironment(t, "skills-commit-ledger-leak-");
-    const locations = locationsFor("project", environment.cwd);
-    const pluginRoot = path.join(environment.root, "plugin");
-    const skillsDirectory = path.join(pluginRoot, "skills");
-    await mkdir(path.join(skillsDirectory, "alpha"), { recursive: true });
-    await writeFile(
-      path.join(skillsDirectory, "alpha", "SKILL.md"),
-      "---\nname: alpha\ndescription: Alpha\n---\nBody.\n",
-    );
-    const prepared = await prepareStageSkills(createRemovalOps(), {
-      locations,
-      cwd: environment.cwd,
-      knownWorkflowNames: [],
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir: path.join(environment.root, "plugin-data"),
-      resolved: {
-        installable: true,
-        state: "installable",
-        name: "acme",
-        pluginRoot,
-        supported: ["skills"],
-        unsupported: [],
-        notes: [],
-        componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-        mcpServers: {},
-        defaultEnabled: true,
-      },
-    });
-    assert.strictEqual(prepared.kind, "staged");
-    const ledgerError = new Error("ledger is read-only");
-    const removal = createRemovalOpsFake({
-      boundary: "memory",
-      rmErrors: [[prepared.stagingRoot, new Error("staging cleanup denied")]],
-    });
-
-    // act & assert
-    await assert.rejects(
-      commitPreparedSkills(removal.removalOps, prepared, {
-        update: () => Promise.reject(ledgerError),
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof CleanupLeakError);
-        assert.strictEqual(error.cause, ledgerError);
-        assert.strictEqual(
-          error.message,
-          "ledger is read-only (additionally: failed to clean up skills staging directory at " +
-            `${prepared.stagingRoot}: staging cleanup denied)`,
-        );
-        return true;
-      },
-    );
   });
 
   test("propagates a previous-directory removal error without renaming staged bytes", async (t) => {
@@ -1982,7 +1831,7 @@ describe("commitPreparedSkills", () => {
     // act
     let commitError: unknown;
     try {
-      await commitPreparedSkills(createRemovalOps(), prepared, NO_LEDGER);
+      await commitPreparedSkills(createRemovalOps(), prepared);
     } catch (error) {
       commitError = error;
     }
@@ -2059,7 +1908,7 @@ describe("commitPreparedSkills", () => {
     // act
     let commitError: unknown;
     try {
-      await commitPreparedSkills(createRemovalOps(), prepared, NO_LEDGER);
+      await commitPreparedSkills(createRemovalOps(), prepared);
     } catch (error) {
       commitError = error;
     }
@@ -2118,7 +1967,7 @@ describe("commitPreparedSkills", () => {
     // act
     let commitError: unknown;
     try {
-      await commitPreparedSkills(createRemovalOps(), prepared, NO_LEDGER);
+      await commitPreparedSkills(createRemovalOps(), prepared);
     } catch (error) {
       commitError = error;
     }
@@ -2182,7 +2031,7 @@ describe("commitPreparedSkills", () => {
       ": staging cleanup denied";
 
     // act
-    const leak = await commitPreparedSkills(removal.removalOps, prepared, NO_LEDGER);
+    const leak = await commitPreparedSkills(removal.removalOps, prepared);
     const targetBytes = await readFile(
       path.join(locations.skillsTargetDir, "acme-alpha", "SKILL.md"),
       "utf8",

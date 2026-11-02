@@ -469,6 +469,7 @@ test("WCONV-01 / WCONV-02: a load leaves a record whose kind was invisible alone
         ctx: load.ctx,
         run: runWithNothingLoaded(),
         cwd,
+        projectTrusted: true,
         hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache: createCompletionCache(),
       });

@@ -28,7 +28,7 @@
 // the unlink is a no-op.
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
@@ -44,15 +44,12 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 import { discoveryWarning } from "../../shared/staging-warnings.ts";
 
 import { discoverPluginCommands } from "./discover.ts";
-import { commandFileDigest, projectCommandChange } from "./project-ledger.ts";
 import { buildStagedCommand } from "./staged-command.ts";
 
-import type { ProjectCommandEntry, ProjectCommandLedger } from "./project-ledger.ts";
 import type { StagedCommandContext } from "./staged-command.ts";
 import type {
   CommandDegradeRecord,
   DiscoveredCommand,
-  PreparedCommandsStaged,
   PreparedCommandsStaging,
   StageCommandsInput,
   StagedCommandRecord,
@@ -261,74 +258,17 @@ export async function prepareStageCommands(
       degraded: Object.freeze(degraded),
     },
     _previousNames: Object.freeze([...previousNames]),
-    _pluginName: pluginName,
     _renamePairs: Object.freeze(renamePairs),
   };
 }
 
 /**
- * D-CF3-07: lists the committed commands of a project-scope stage in the
- * user's project ledger, each with the digest of its file as it now sits at
- * its target, and drops the previous names this stage replaced. A user-scope
- * stage reads no file and writes no ledger.
- */
-async function recordCommittedCommands(
-  ledger: ProjectCommandLedger,
-  prepared: PreparedCommandsStaged,
-): Promise<void> {
-  const change = projectCommandChange(prepared.locations, prepared._previousNames);
-  if (change === undefined) {
-    return;
-  }
-
-  const committed = new Map<string, ProjectCommandEntry>();
-  for (const command of prepared.result.recorded) {
-    // eslint-disable-next-line no-await-in-loop -- the digest reads each committed file once, in commit order
-    const text = await readFile(command.targetPath, "utf8");
-    committed.set(command.generatedName, {
-      plugin: prepared._pluginName,
-      sha256: commandFileDigest(text),
-    });
-  }
-
-  await ledger.update({ ...change, remember: committed });
-}
-
-/**
- * WR-01: removes the renamed commands of a commit whose project ledger write
- * failed. The update runner has no undo, so a commit that throws must leave
- * no command on disk that the ledger and the state record do not list. A
- * file that is already gone needs no removal. Any other failure becomes a
- * leak message, in rename order.
- */
-async function removeUnrecordedCommands(
-  prepared: PreparedCommandsStaged,
-): Promise<(string | undefined)[]> {
-  return Promise.all(
-    prepared._renamePairs.map(async ({ to }) =>
-      unlink(to).then(
-        () => undefined,
-        (err: unknown) =>
-          (err as NodeJS.ErrnoException).code === "ENOENT"
-            ? undefined
-            : `failed to remove unrecorded command ${to}: ${errorMessage(err)}`,
-      ),
-    ),
-  );
-}
-
-/**
  * Commit a prepared staging into the target dir. Removes any
  * previously-named target files (re-stage path -- ENOENT-tolerant), then
- * issues the per-file `rename(stagedFile, targetFile)` calls. Then it
- * cleans up the staging dir; if cleanup fails, it returns the leak message
+ * issues the per-file `rename(stagedFile, targetFile)` calls. Finally,
+ * cleans up the staging dir; if cleanup fails, returns the leak message
  * string so the caller can surface it via `appendLeakToError` without
- * losing the install's success state. Last, at project scope, it lists the
- * committed commands in the user's project ledger (D-CF3-07). IN-02: the
- * cleanup runs first. WR-01: a failed ledger write removes the renamed
- * commands, then throws with any cleanup leak and removal leak appended. So
- * a throw means no new command was committed, for the install ledger and
- * for the update runner, which has no undo.
+ * losing the install's success state.
  *
  * Returns `undefined` on a successful commit (or for a noop). Returns the
  * leak message when staging cleanup fails.
@@ -336,7 +276,6 @@ async function removeUnrecordedCommands(
 export async function commitPreparedCommands(
   ops: RemovalOps,
   prepared: PreparedCommandsStaging,
-  ledger: ProjectCommandLedger,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
     return undefined;
@@ -397,14 +336,7 @@ export async function commitPreparedCommands(
     ]);
   }
 
-  const leak = await cleanupStaging(ops, prepared.stagingRoot, "commands staging directory");
-  try {
-    await recordCommittedCommands(ledger, prepared);
-  } catch (err) {
-    throw appendLeaks(err, [leak, ...(await removeUnrecordedCommands(prepared))]);
-  }
-
-  return leak;
+  return cleanupStaging(ops, prepared.stagingRoot, "commands staging directory");
 }
 
 /**

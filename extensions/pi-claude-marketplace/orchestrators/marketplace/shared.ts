@@ -35,7 +35,6 @@ import { unstagePluginSkills } from "../../bridges/skills/index.ts";
 import { unstagePluginWorkflows } from "../../bridges/workflows/index.ts";
 import { generatedMcpServerKey } from "../../domain/name.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { NODE_PROJECT_SKILL_LEDGER } from "../../persistence/project-installs.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -463,20 +462,6 @@ export interface UnstageOutcome {
    * non-empty, on success and on failure, like `mcpConfigNotices`.
    */
   readonly writtenMcpFiles?: readonly McpWrittenFile[];
-  /**
-   * WR-04: the warnings of the skills slot, then those of the commands slot,
-   * such as a project ledger either could not update (D-CF2-13, D-CF3-07).
-   * The removal still happened, so the caller shows them after its rows. Set
-   * only when non-empty, on success and on failure.
-   */
-  readonly skillWarnings?: readonly string[];
-}
-
-/** WR-04: spreads `skillWarnings` onto an outcome only when there is at least one. */
-function skillWarningsMember(warnings: readonly string[]): {
-  readonly skillWarnings?: readonly string[];
-} {
-  return warnings.length > 0 ? { skillWarnings: warnings } : {};
 }
 
 /**
@@ -581,7 +566,6 @@ export async function cascadeUnstagePlugin(
   };
   let mcpConfigNotices: readonly McpConfigNotice[] = [];
   let writtenMcpFiles: readonly McpWrittenFile[] = [];
-  let skillWarnings: readonly string[] = [];
 
   try {
     const skillsResult = await unstagePluginSkills({
@@ -589,15 +573,12 @@ export async function cascadeUnstagePlugin(
       previousSkillNames: installedPlugin.resources.skills,
     });
     dropped.skills = [...skillsResult.removedNames];
-    skillWarnings = skillsResult.warnings;
 
     const cmdResult = await unstagePluginCommands({
       locations,
       previousCommandNames: installedPlugin.resources.prompts,
-      ledger: NODE_PROJECT_SKILL_LEDGER,
     });
     dropped.commands = [...cmdResult.removedNames];
-    skillWarnings = [...skillWarnings, ...cmdResult.warnings];
 
     const agentsResult = await unstagePluginAgents({
       locations,
@@ -626,13 +607,8 @@ export async function cascadeUnstagePlugin(
     // LIFE-01 / D-63-01: 5th cascade slot between the agents foreign-content
     // guard and mcp. removeHookConfig is idempotent (NFR-3) -- a plugin that
     // never staged hooks returns `{ removed: pluginName }` cleanly.
-    const hooksResult = await removeHookConfig({
-      locations,
-      pluginName: plugin,
-      ledger: NODE_PROJECT_SKILL_LEDGER,
-    });
+    const hooksResult = await removeHookConfig({ locations, pluginName: plugin });
     dropped.hooks = [hooksResult.removed];
-    skillWarnings = [...skillWarnings, ...hooksResult.warnings];
 
     const mcpResult = await unstageMcpServers({
       locations,
@@ -675,7 +651,6 @@ export async function cascadeUnstagePlugin(
       dropped: freezeDropped(dropped),
       ...mcpConfigNoticesMember(mcpConfigNotices),
       ...writtenMcpFilesMember(writtenMcpFiles),
-      ...skillWarningsMember(skillWarnings),
     });
   } catch (err) {
     // AFILE-04: an MCP unstage that rewrote the adapter file before its legacy
@@ -700,7 +675,6 @@ export async function cascadeUnstagePlugin(
       cause: failure instanceof Error ? failure : new Error(String(failure)),
       ...mcpConfigNoticesMember(mcpConfigNotices),
       ...writtenMcpFilesMember(writtenMcpFiles),
-      ...skillWarningsMember(skillWarnings),
     });
   }
 }

@@ -63,7 +63,6 @@ import {
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { makeUninstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { stageListedProjectHooks } from "../../../bridges/hooks/project-ledger-seeds.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
@@ -180,13 +179,17 @@ async function populateRuntimeRoute(
   command: string,
 ): Promise<HooksRouting> {
   const pluginRoot = path.join(workspace.cwd, "runtime-routes", `${plugin}-${command}`);
-  // D-CF2-13: a project route reads the staged config the user's ledger lists.
-  const hooksJsonPath = await stageListedProjectHooks(
-    workspace.userRoot,
-    workspace.cwd,
-    plugin,
-    JSON.stringify({ PreToolUse: [{ hooks: [{ command, type: "command" }], matcher: "" }] }),
+  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
+  await mkdir(pluginRoot, { recursive: true });
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ command, type: "command" }], matcher: "" }],
+    }),
+    "utf8",
   );
+  // D-LOC-01: the session hydrate found the project trusted.
+  runtime.recordProjectTrust(workspace.cwd, true);
   const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await hooksRouting.readAndCachePluginHooks({
     cwd: workspace.cwd,

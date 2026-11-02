@@ -115,7 +115,7 @@ import {
   type TargetLayers,
   type writeAdoptingConfigEntries,
 } from "./shared.ts";
-import { surfaceStagingDiagnostics, surfaceUnstageWarnings } from "./staging-diagnostics.ts";
+import { surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
 
 import type { RecordDeclarations } from "./dependency-index.ts";
 import type {
@@ -244,8 +244,6 @@ export interface McpConfigNoticesCarrier {
 interface McpConfigNoticeSink {
   mcpConfigNotices: readonly McpConfigNotice[];
   stagingWarnings?: readonly StagingWarning[];
-  /** WR-04: the disable cascade's skill warnings, shown after the rows. */
-  unstageWarnings?: readonly string[];
 }
 
 /**
@@ -1539,7 +1537,6 @@ async function dispatchBranch(args: {
 
   const disableResult = await runDisableBranch(transaction, opts, locations, installed);
   sink.mcpConfigNotices = disableResult.mcpConfigNotices;
-  sink.unstageWarnings = disableResult.unstageWarnings;
   // ENBL-02: on a clean disable, replace the map slot with the branded
   // `DisabledPluginRecord` the branch built via `toDisabledRecord` (rather
   // than mutating `installed` in place). The terminal `tx.save()` -- here on
@@ -1751,7 +1748,6 @@ async function runDisableBranch(
   removeRoutesAfterSave: boolean;
   disabled?: DisabledPluginRecord;
   mcpConfigNotices: readonly McpConfigNotice[];
-  unstageWarnings: readonly string[];
 }> {
   const recordedVersion = installed.version;
   const cascade = await transaction.cascadeUnstagePlugin(
@@ -1791,7 +1787,6 @@ async function runDisableBranch(
       saveShrunken: true,
       removeRoutesAfterSave: cascade.dropped.hooks.length > 0,
       mcpConfigNotices,
-      unstageWarnings: cascade.skillWarnings ?? [],
     };
   }
 
@@ -1831,7 +1826,6 @@ async function runDisableBranch(
     removeRoutesAfterSave: true,
     disabled,
     mcpConfigNotices,
-    unstageWarnings: cascade.skillWarnings ?? [],
   };
 }
 
@@ -2676,12 +2670,6 @@ async function runSetEnabledOutcome(
     surfaceEnableStagingWarnings({ ctx, run, plugin, scope, enable, outcome, sink });
     // AFILE-04: the notices follow the rows, on success and on failure.
     notifyMcpConfigNotices(ctx, run, sink.mcpConfigNotices);
-    surfaceUnstageWarnings(
-      ctx,
-      run,
-      { plugin, scope, verb: "disabled" },
-      sink.unstageWarnings ?? [],
-    );
   }
 
   return outcomeToTypedResult({

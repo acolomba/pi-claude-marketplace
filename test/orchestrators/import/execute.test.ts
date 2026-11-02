@@ -66,7 +66,6 @@ import {
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
-import { stageListedProjectHooks } from "../../bridges/hooks/project-ledger-seeds.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -4715,12 +4714,12 @@ async function seedHookRoute(
   command: string,
 ): Promise<void> {
   const pluginRoot = path.join(cwd, `${marketplace}-${plugin}`);
-  // D-CF2-13: a project route reads the staged config the user's ledger lists.
-  const hooksJsonPath = await stageListedProjectHooks(
-    locationsFor("user", cwd).scopeRoot,
-    cwd,
-    plugin,
-    JSON.stringify({ PreToolUse: [{ matcher: "", hooks: [{ type: "command", command }] }] }),
+  const hooksJsonPath = path.join(pluginRoot, "hooks", "hooks.json");
+  await writeUnder(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command }] }],
+    }),
   );
   await hooksRouting.readAndCachePluginHooks({
     cwd,
@@ -4760,7 +4759,10 @@ test("resolves every collaborator from production when the caller supplies no de
   const { cwd, project } = await createHermeticScopes(t, "no-deps");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
   const ownerRuntime = createHooksRuntime();
+  // D-LOC-01: the session hydrate found the project trusted.
+  ownerRuntime.recordProjectTrust(cwd, true);
   const peerRuntime = createHooksRuntime();
+  peerRuntime.recordProjectTrust(cwd, true);
   const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
   const peerHooksRouting = createHooksRouting(peerRuntime, { readHooksJson });
   await seedHookRoute(hooksRouting, cwd, "unrelated-mp", "unrelated", "echo unrelated");

@@ -188,7 +188,6 @@ describe("writeHookConfig", () => {
     const writtenHook = await writeHookConfig({
       locations,
       pluginName: "acme",
-      ledger: { update: () => Promise.resolve() },
       pluginRoot,
       hooksValue,
     });
@@ -196,7 +195,6 @@ describe("writeHookConfig", () => {
     const repeatedHook = await writeHookConfig({
       locations,
       pluginName: "acme",
-      ledger: { update: () => Promise.resolve() },
       pluginRoot,
       hooksValue,
     });
@@ -238,7 +236,6 @@ describe("writeHookConfig", () => {
     const writeError: unknown = await writeHookConfig({
       locations,
       pluginName: "acme",
-      ledger: { update: () => Promise.resolve() },
       pluginRoot,
       hooksValue: { replacement: true },
     }).then(

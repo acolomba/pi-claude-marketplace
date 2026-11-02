@@ -118,6 +118,34 @@ function runtimeChildEntry(
   };
 }
 
+for (const { title, records, expected } of [
+  { title: "no answer was recorded", records: [], expected: false },
+  { title: "Pi trusts the project", records: [["/work", true]], expected: true },
+  { title: "Pi does not trust the project", records: [["/work", false]], expected: false },
+  { title: "Pi trusts only another project", records: [["/other", true]], expected: false },
+  {
+    title: "a later answer for the project says no",
+    records: [
+      ["/work", true],
+      ["/work", false],
+    ],
+    expected: false,
+  },
+] as const) {
+  test(`D-LOC-01: the project is trusted only by the last recorded answer for it when ${title}`, () => {
+    // arrange
+    const runtime = createHooksRuntime();
+
+    // act
+    for (const [cwd, trusted] of records) {
+      runtime.recordProjectTrust(cwd, trusted);
+    }
+
+    // assert
+    assert.strictEqual(runtime.isProjectTrusted("/work"), expected);
+  });
+}
+
 test("keeps every state family isolated between runtime instances", () => {
   // arrange
   const firstRuntime = createHooksRuntime();

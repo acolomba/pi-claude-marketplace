@@ -23,11 +23,6 @@ import { descriptionFallback } from "../../domain/description-fallback.ts";
 import { droppedInvocationFieldsWarning } from "../../domain/invocation-frontmatter.ts";
 import { assertSafeName } from "../../domain/name.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
-import {
-  NODE_PROJECT_SKILL_LEDGER,
-  NODE_SKILL_TREE_LISTER,
-  skillTreeDigest,
-} from "../../persistence/project-installs.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
 import { SkillFrontmatterNodeError } from "../../shared/errors-bridges.ts";
@@ -57,14 +52,12 @@ import {
 import type { SkillNameClaims } from "./skill-names.ts";
 import type {
   DiscoveredSkill,
-  PreparedSkillsStaged,
   PreparedSkillsStaging,
   SkillDegradeRecord,
   StagedSkillRecord,
   StageSkillsInput,
 } from "./types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
-import type { ProjectSkillLedger } from "../../persistence/project-installs.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { ClaudePluginVars } from "../../shared/vars.ts";
 
@@ -520,6 +513,7 @@ export async function prepareStageSkills(
     );
   }
 
+  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   return {
     kind: "staged",
     locations,
@@ -532,38 +526,8 @@ export async function prepareStageSkills(
       degraded: Object.freeze(degraded),
     },
     _previousNames: Object.freeze(previousNames),
-    _pluginName: pluginName,
     _renamePairs: Object.freeze(renamePairs),
   };
-}
-
-/**
- * D-CF2-13: lists the committed skills of a project-scope stage in the user's
- * project ledger, with the digest of each skill directory as it now sits at
- * its target (WR-03), and drops the previous names this stage replaced. A
- * user-scope stage needs no ledger: no repository can write the user scope.
- */
-async function recordProjectSkills(
-  ledger: ProjectSkillLedger,
-  prepared: PreparedSkillsStaged,
-): Promise<void> {
-  if (prepared.locations.scope !== "project") {
-    return;
-  }
-
-  const digests = await Promise.all(
-    prepared.result.recorded.map(async (skill) => {
-      const content = await readFile(path.join(skill.targetPath, "SKILL.md"), "utf8");
-      const entries = await NODE_SKILL_TREE_LISTER(skill.targetPath);
-      const entry = { plugin: prepared._pluginName, sha256: skillTreeDigest(entries, content) };
-      return [skill.generatedName, entry] as const;
-    }),
-  );
-  await ledger.update({
-    projectPath: path.dirname(prepared.locations.scopeRoot),
-    forget: prepared._previousNames,
-    remember: new Map(digests),
-  });
 }
 
 /**
@@ -574,16 +538,12 @@ async function recordProjectSkills(
  *   4. Best-effort cleanup of the now-empty staging UUID dir; any leak
  *      message is RETURNED (not thrown) so the caller can fold it into a
  *      higher-level rollback marker without breaking the success path.
- *   5. D-CF2-13: at project scope, list the committed skills in the user's
- *      project ledger. A failed ledger write throws, with any cleanup leak
- *      appended, so the caller's undo removes skills that could never run.
  *
  * For the noop variant: no-op; returns undefined.
  */
 export async function commitPreparedSkills(
   ops: RemovalOps,
   prepared: PreparedSkillsStaging,
-  ledger: ProjectSkillLedger = NODE_PROJECT_SKILL_LEDGER,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
     return undefined;
@@ -637,27 +597,8 @@ export async function commitPreparedSkills(
     await rename(pair.from, pair.to);
   }
 
-  return cleanUpAndRecord(ops, ledger, prepared);
-}
-
-/**
- * Steps 4 and 5 of the commit. IN-02: the staging cleanup runs before the
- * ledger write, so a failed write leaves no staging dir behind, and a cleanup
- * leak rides the write's error.
- */
-async function cleanUpAndRecord(
-  ops: RemovalOps,
-  ledger: ProjectSkillLedger,
-  prepared: PreparedSkillsStaged,
-): Promise<string | undefined> {
-  const leak = await cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
-  try {
-    await recordProjectSkills(ledger, prepared);
-  } catch (err) {
-    throw appendLeakToError(err, leak);
-  }
-
-  return leak;
+  // Step 4: best-effort cleanup of the staging UUID dir.
+  return cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
 }
 
 /**

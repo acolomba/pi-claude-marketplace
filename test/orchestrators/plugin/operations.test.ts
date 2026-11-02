@@ -414,7 +414,10 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
   t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1) });
   const { cwd } = await createHermeticEnvironment(t, "install-operation-wr03-");
   const ownerRuntime = createHooksRuntime();
+  // D-LOC-01: the session hydrate found the project trusted.
+  ownerRuntime.recordProjectTrust(cwd, true);
   const peerRuntime = createHooksRuntime();
+  peerRuntime.recordProjectTrust(cwd, true);
   const installPlugin = createInstallOperation(
     createHooksRouting(ownerRuntime, { readHooksJson }),
     createCompletionCache(),
@@ -753,6 +756,8 @@ async function installHooksDeclaringPlugin(
 }> {
   const { cwd } = await createHermeticEnvironment(t, prefix);
   const runtime = createHooksRuntime();
+  // D-LOC-01: the session hydrate found the project trusted.
+  runtime.recordProjectTrust(cwd, true);
   const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await seedHooksDeclaringPlugin({
     cwd,
