@@ -103,14 +103,14 @@ the parent applies them at merge.
 
 ### MCP servers
 
-- [ ] **MCP-01**: With pi-mcp-adapter 7.x loaded, a bridged stdio server connects (the stub logs `initialize` and `tools/list`) and its tools register as `mcp__plugin_<plugin>_<server>__<tool>`
-- [ ] **MCP-02**: A scripted call through the adapter's `mcp` proxy reaches the stub with the given arguments and returns its result to the model
-- [ ] **MCP-03**: Server configuration variants reach the server as upstream: args, env, `${VAR}` and `${VAR:-default}`, `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}`, and loopback remote servers with headers; the documented rows are re-measured on 7.x (FG-30)
-- [ ] **MCP-04**: Multiple server sources and a malformed server behave as decided under FG-27 and FG-28
-- [ ] **MCP-05**: Project-scope plugin servers start as decided under FG-29 in a trusted project, and the untrusted behavior is pinned
-- [ ] **MCP-06**: Without pi-mcp-adapter, the install shows `{requires pi-mcp-adapter}` and loading the adapter then reloading makes the servers available with no reinstall
-- [ ] **MCP-07**: An agent granted a plugin MCP tool can call it in a foreground run (accepted deviation 2026-11-02, D-CF6-10: pi-subagents refuses MCP tools to foreground children by design; the agent is launched in the background, and a working call waits on MCPBG-01)
-- [ ] **MCP-08**: Disable, uninstall, and update remove or replace the server entries the adapter sees
+- [x] **MCP-01**: With pi-mcp-adapter 7.x loaded, a bridged stdio server connects (the stub logs `initialize` and `tools/list`) and its tools register as `mcp__plugin_<plugin>_<server>__<tool>`
+- [x] **MCP-02**: A scripted call through the adapter's `mcp` proxy reaches the stub with the given arguments and returns its result to the model
+- [x] **MCP-03**: Server configuration variants reach the server as upstream: args, env, `${VAR}` and `${VAR:-default}`, `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}`, and loopback remote servers with headers; the documented rows are re-measured on 7.x (FG-30)
+- [x] **MCP-04**: Multiple server sources and a malformed server behave as decided under FG-27 and FG-28
+- [x] **MCP-05**: Project-scope plugin servers start as decided under FG-29 in a trusted project, and the untrusted behavior is pinned
+- [x] **MCP-06**: Without pi-mcp-adapter, the install shows `{requires pi-mcp-adapter}` and loading the adapter then reloading makes the servers available with no reinstall
+- [x] **MCP-07**: An agent granted a plugin MCP tool can call it in a foreground run (accepted deviation 2026-11-02, D-CF6-10: pi-subagents refuses MCP tools to foreground children by design; the agent is launched in the background, and a working call waits on MCPBG-01)
+- [x] **MCP-08**: Disable, uninstall, and update remove or replace the server entries the adapter sees
 
 ### Workflows
 
@@ -192,14 +192,14 @@ Deferred to a milestone with a real model provider.
 | HOOK-07 | Phase 5 | Complete |
 | HOOK-08 | Phase 5 | Complete |
 | HOOK-09 | Phase 5 | Complete |
-| MCP-01 | Phase 6 | Pending |
-| MCP-02 | Phase 6 | Pending |
-| MCP-03 | Phase 6 | Pending |
-| MCP-04 | Phase 6 | Pending |
-| MCP-05 | Phase 6 | Pending |
-| MCP-06 | Phase 6 | Pending |
-| MCP-07 | Phase 6 | Pending |
-| MCP-08 | Phase 6 | Pending |
+| MCP-01 | Phase 6 | Complete |
+| MCP-02 | Phase 6 | Complete |
+| MCP-03 | Phase 6 | Complete |
+| MCP-04 | Phase 6 | Complete |
+| MCP-05 | Phase 6 | Complete |
+| MCP-06 | Phase 6 | Complete |
+| MCP-07 | Phase 6 | Complete |
+| MCP-08 | Phase 6 | Complete |
 | WFL-01 | Phase 7 | Complete |
 | WFL-02 | Phase 7 | Complete |
 | WFL-03 | Phase 7 | Complete |

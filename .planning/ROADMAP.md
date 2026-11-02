@@ -202,7 +202,7 @@ pairs `test/domain/workflow-script.test.ts`,
 - [x] **Phase 3: Slash Commands** - Bridged commands list as prompt templates, expand their arguments as decided, and follow the plugin lifecycle (completed 2026-11-01)
 - [x] **Phase 4: Agents** - pi-subagents lists and runs bridged agents with converted fields, preloaded skills, and companion-missing recovery (completed 2026-11-01)
 - [x] **Phase 5: Hooks** - Hooks fire on Pi's session, tool, prompt, and stop events with Claude's stdin and environment, including the `clear`, `compact`, and `fork` parity fixes (completed 2026-11-01)
-- [ ] **Phase 6: MCP Servers** - pi-mcp-adapter 7.x connects bridged servers under Claude's tool names, with configuration variants, project scope, and companion-missing recovery
+- [x] **Phase 6: MCP Servers** - pi-mcp-adapter 7.x connects bridged servers under Claude's tool names, with configuration variants, project scope, and companion-missing recovery (completed 2026-11-02)
 - [x] **Phase 7: Workflows** - The workflow engine registers and runs bridged workflows, reports refused scripts, and recovers when the engine is loaded later (completed 2026-11-01)
 
 ## Phase Details
@@ -442,7 +442,7 @@ Plans:
 - Wave 3: decision IDs, the re-measured `docs/mcp-compatibility.md` rows (FG-30), SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/mcp-server/**`, `features/step_definitions/mcp-server/**`, `features/lib/mcp-server-files.ts`, `bridges/mcp/**` (including Phase 1's escape fix once merged), `platform/mcp-status.ts`, `domain/mcp-resolution.ts`, `domain/components/mcp.ts`, `docs/mcp-compatibility.md`, `test/bridges/mcp/**`, `test/integration/mcp-*`. MCP-07 uses Phase 1's agent fixture writer and stand-ins, never a Phase 4 file.
 
-**Plans:** 9/9 plans executed in 4 waves (the template's wave-2 "configuration variants and sources" plan splits into a configuration plan and a sources plan with disjoint files; FG-28's silent skip moves to wave 3 because it edits `domain/mcp-resolution.ts`, which the wave-2 sources plan owns, and it changes outcomes that non-owned tests pin; the docs re-measure runs in wave 3 beside it, so the decision records, the parent lines, and the phase gate are wave 4; wave 1 also moves the Phase 1 seed's steps out of `calls.steps.ts` and the allowed project-scope scenario into `project-scope.feature`)
+**Plans:** 9/9 plans complete in 4 waves (the template's wave-2 "configuration variants and sources" plan splits into a configuration plan and a sources plan with disjoint files; FG-28's silent skip moves to wave 3 because it edits `domain/mcp-resolution.ts`, which the wave-2 sources plan owns, and it changes outcomes that non-owned tests pin; the docs re-measure runs in wave 3 beside it, so the decision records, the parent lines, and the phase gate are wave 4; wave 1 also moves the Phase 1 seed's steps out of `calls.steps.ts` and the allowed project-scope scenario into `project-scope.feature`)
 
 Plans:
 **Wave 1**
@@ -508,7 +508,7 @@ Plans:
 | 3. Slash Commands | 9/9 | Complete    | 2026-11-01 |
 | 4. Agents | 6/6 | Complete    | 2026-11-01 |
 | 5. Hooks | 9/9 | Complete    | 2026-11-01 |
-| 6. MCP Servers | 9/9 | In Progress | - |
+| 6. MCP Servers | 9/9 | Complete    | 2026-11-02 |
 | 7. Workflows | 6/6 | Complete    | 2026-11-01 |
 
 ## Carried Forward
