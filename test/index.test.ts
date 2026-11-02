@@ -503,6 +503,11 @@ async function loadExtension(
   })
     .thenReturn()
     .times(1);
+  when(() => {
+    pi.on("tool_result", It.willCapture<EventListener<ToolResultEvent>>("skill read fill"));
+  })
+    .thenReturn()
+    .times(1);
 
   await claudeMarketplaceExtension(pi);
 

@@ -10,8 +10,9 @@
 //
 // The command runner is a port (`ShellRun`), so this module never starts a
 // process; the edge passes a runner built by platform/prompt-shell.ts.
-// D-CF1-03: only user-invoked skills and commands reach this module, because
-// Pi offers no hook on the path where the model reads a skill by itself.
+// D-CF1-03: only user-invoked skills and commands reach this module. A skill
+// file that the model reads by itself gets its variables filled, but its `!`
+// commands never run.
 //
 // The parser, the order, the replacement, and the texts follow Claude Code
 // 2.1.316 (`FUr`, `TGe`, `d$o`, `qTn`, `MRr`). Residual differences recorded

@@ -9,6 +9,7 @@ import {
 import { registerCommandInvocation } from "./edge/command-invocation.ts";
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { registerSkillAliases } from "./edge/skill-aliases.ts";
+import { registerSkillReadFill } from "./edge/skill-read.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { createBackgroundGate } from "./orchestrators/marketplace/background-gate.ts";
 import { createBackgroundPass } from "./orchestrators/marketplace/background-pass.ts";
@@ -272,4 +273,8 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // D-CF1-01 / D-CF1-02: Pi runs input handlers in registration order, so the
   // command invocation handler sees the text after the skill-alias rewrite.
   registerCommandInvocation(pi);
+  // Amends D-CF1-03: a staged `SKILL.md` that the model reads gets its
+  // variables filled. The hooks bridge registered its `tool_result` handler
+  // first, so PostToolUse hooks see the file as read.
+  registerSkillReadFill(pi);
 }

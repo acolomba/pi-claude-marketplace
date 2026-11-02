@@ -18,6 +18,7 @@
   - Install now warns about the skill frontmatter fields that Pi cannot honor, such as `model` or `effort`, with one line for each skill.
   - Typed skills now fill in arguments, `${CLAUDE_*}` variables, and `` !`command` `` output as Claude Code does, in the terminal UI and over RPC.
   - A failing `` !`command` `` now stops its skill with Claude Code's message, and the model gets nothing.
+  - A skill file that the model reads on its own now has its `${CLAUDE_*}` variables filled and its arguments empty, as a typed skill with no arguments. Its `` !`command` `` lines stay literal.
   - Skill aliases now match Claude Code: `/<plugin>:<skill folder>`, `/<plugin>:<frontmatter name>`, and the bare `/<frontmatter name>`, without the old shortened alias. Update or reinstall a plugin to get them for skills installed earlier.
   - A command now keeps a name that a skill of its plugin also has, as in Claude Code, and install skips that skill with a warning.
   - A skill in `skills/` now wins over a skill of the same name in a declared skills path, as in Claude Code.

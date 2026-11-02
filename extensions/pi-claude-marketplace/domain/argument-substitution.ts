@@ -4,9 +4,9 @@
 // the value and body transforms that plugin skills and commands pass to it:
 // the variable pass `FZt`, the `!` guard `xM`, and the value wrapper `m1t`.
 //
-// Scope (D-CF1-03): Pi calls this only for skills and commands the user
-// invokes. When the model reads a skill on its own, Pi gives the extension no
-// hook, so that content is never substituted.
+// Scope (D-CF1-03, as amended): the extension calls this for skills and
+// commands the user invokes, and, with no arguments, for the body lines of a
+// staged skill file that the model reads with Pi's read tool.
 //
 // Residuals recorded under D-CF1-01:
 // - Pi writes `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`,

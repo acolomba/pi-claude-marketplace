@@ -13,10 +13,14 @@
 // missing Bash aborts the invocation with Claude Code's message, and nothing
 // reaches the model.
 //
-// D-CF1-03: only a skill the user types reaches this module. The model's own
-// skill reads have no extension hook, so they get neither arguments nor
-// injection. A skill outside this extension's two staged skills directories,
-// such as the user's own Pi skill, is `not-bridged` and keeps Pi's expansion.
+// D-CF1-03 (amended by the 2026-11-02 user decision on the Pi gap report,
+// item 3): a skill the user types gets the whole invocation. When the model
+// reads a staged `SKILL.md` on its own with Pi's read tool, `fillSkillRead`
+// fills the same `${CLAUDE_*}` values and empties the arguments as for an
+// invocation with none, but runs no `!` command: the model's read is not an
+// invocation, and Claude Code's Skill tool path has no Pi equivalent. A skill
+// outside this extension's two staged skills directories, such as the user's
+// own Pi skill, is `not-bridged` and keeps Pi's expansion.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -119,7 +123,7 @@ function stagedSkillPath(root: string, generatedName: string): string {
 
 /** Finds the loaded skill when its file is one this extension staged. */
 function findBridgedSkill(
-  request: SkillInvocationRequest,
+  request: Pick<SkillInvocationRequest, "commands" | "generatedName" | "cwd">,
   agentDir: string,
 ): BridgedSkill | undefined {
   const name = `skill:${request.generatedName}`;
@@ -149,7 +153,7 @@ function findBridgedSkill(
 
 /** D-CF2-06: the `${CLAUDE_*}` values a typed argument or the body may name. */
 function invocationVariables(
-  request: SkillInvocationRequest,
+  request: Pick<SkillInvocationRequest, "cwd" | "sessionId" | "thinkingLevel">,
   skill: BridgedSkill,
   frontmatter: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, string>> {
@@ -269,7 +273,7 @@ async function notInstalledHereMessage(
  * user skill needs no ledger: no repository can write the user scope.
  */
 async function isInstalledHere(
-  request: SkillInvocationRequest,
+  request: Pick<SkillInvocationRequest, "cwd">,
   skill: BridgedSkill,
   content: string,
   agentDir: string,
@@ -352,5 +356,116 @@ export async function invokeBridgedSkill(
     }
 
     throw error;
+  }
+}
+
+/** A read of a file by the model's read tool, as Pi reports its result. */
+export interface SkillReadRequest {
+  /** Pi's commands, as `pi.getCommands()` returns them. */
+  readonly commands: ReturnType<ExtensionAPI["getCommands"]>;
+  /** The absolute path the read tool read. */
+  readonly file: string;
+  /** The text the read tool returned. */
+  readonly text: string;
+  /** The 0-based index of the file line the returned text starts with. */
+  readonly startLine: number;
+  readonly cwd: string;
+  /** Whether Pi trusts the project at `cwd` (`ctx.isProjectTrusted()`). */
+  readonly projectTrusted: boolean;
+  readonly sessionId: string;
+  /** Pi's session thinking level, which `${CLAUDE_EFFORT}` follows. */
+  readonly thinkingLevel: string | undefined;
+}
+
+/**
+ * The 0-based index of the first body line of `content`, found as Pi's
+ * frontmatter parser finds the closing fence: the first line after the first
+ * that starts with `---`, when the text starts with `---`. A text without a
+ * closed frontmatter is all body.
+ */
+function bodyStartLine(content: string): number {
+  const lines = content.split("\n");
+  if (!content.startsWith("---")) {
+    return 0;
+  }
+
+  const close = lines.findIndex((line, index) => index > 0 && line.startsWith("---"));
+  return close === -1 ? 0 : close + 1;
+}
+
+/**
+ * The staged skill that `file` names, when Pi loaded it from one of this
+ * extension's two staged skills directories.
+ */
+function readSkill(request: SkillReadRequest, agentDir: string): BridgedSkill | undefined {
+  if (path.basename(request.file) !== "SKILL.md") {
+    return undefined;
+  }
+
+  const skill = findBridgedSkill(
+    {
+      commands: request.commands,
+      generatedName: path.basename(path.dirname(request.file)),
+      cwd: request.cwd,
+    },
+    agentDir,
+  );
+  return skill !== undefined && path.resolve(skill.location) === request.file ? skill : undefined;
+}
+
+/**
+ * Amends D-CF1-03: the text the model gets when its read tool returns a
+ * staged `SKILL.md`. Each returned line of the skill's body is filled as a
+ * typed invocation with no arguments fills it: the `${CLAUDE_*}` values, and
+ * `$ARGUMENTS` and named arguments empty. No `!` command runs; its line stays
+ * literal. Frontmatter lines stay as they are. Every fill is local to one
+ * line and an empty argument appends nothing, so a read that starts at an
+ * offset or stops at a limit gets exactly the lines a whole read would.
+ *
+ * Returns `undefined`, and the model keeps the text it read, for any other
+ * file, a project skill in a project Pi does not trust, a project skill this
+ * user did not install into the project (D-CF2-13), a file that cannot be
+ * read or parsed, and a fill past Claude Code's size limit.
+ */
+export async function fillSkillRead(
+  request: SkillReadRequest,
+  dependencies: SkillInvocationDependencies = DEFAULT_DEPENDENCIES,
+): Promise<string | undefined> {
+  const agentDir = dependencies.getAgentDir();
+  const skill = readSkill(request, agentDir);
+  if (skill === undefined || (skill.projectScope && !request.projectTrusted)) {
+    return undefined;
+  }
+
+  let content: string;
+  let parsed: ParsedSkill;
+  try {
+    content = await dependencies.readFile(skill.location);
+    parsed = parseFrontmatter(content);
+  } catch {
+    return undefined;
+  }
+
+  if (!(await isInstalledHere(request, skill, content, agentDir, dependencies))) {
+    return undefined;
+  }
+
+  const lines = request.text.split("\n");
+  const bodyFrom = Math.max(0, bodyStartLine(content) - request.startLine);
+  if (bodyFrom >= lines.length) {
+    return undefined;
+  }
+
+  // InvocationTooLargeError is the one error the substitution throws.
+  try {
+    const body = substituteArguments({
+      body: lines.slice(bodyFrom).join("\n"),
+      args: "",
+      argumentNames: parseArgumentNames(parsed.frontmatter.arguments),
+      variables: invocationVariables(request, skill, parsed.frontmatter),
+    });
+    return [...lines.slice(0, bodyFrom), body].join("\n");
+  } catch {
+    return undefined;
   }
 }
