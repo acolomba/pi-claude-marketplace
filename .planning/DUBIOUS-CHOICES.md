@@ -855,3 +855,13 @@ The parent closed P5-DC-11 after the merge: project-scope hooks run only when th
 5. The second cache writer now parses the staged `hooks.json` it checked, not the plugin source path. The ledger read goes through the existing reader and `getAgentDir()` rather than a new port member.
 6. Gaps: the update swap's "new version drops hooks" removal and the install undo ignore ledger warnings (WR-04 residual pattern); a retry after a failed forget can leave a stale entry; no scenario covers `update` or `enable` keeping a project hook runnable.
 7. **Found while fixing it: the background autoupdate pass (D-PL8-01) updates project-scope plugins with no trust check, and the update writes this user's ledger, so a cloned repository can get its plugin "installed by this user" with no command typed.** This defeats D-CF2-13 for skills, commands and hooks. The parent is closing it as D-CF2-15 (see DC-37).
+
+### DC-37: Background autoupdate kept out of the project scope (0b29f66, e8d600a)
+
+**Decision for the user to review: D-CF2-15, taken by the parent without asking.** The background autoupdate pass (D-PL8-01, run after the first input of a TUI session) used to refresh project marketplaces and update project plugins with no trust check. The update writes this user's provenance ledger, so a cloned repository could get its plugin recorded as installed by this user with no command typed, defeating D-CF2-13 for skills, commands and hooks. The pass now covers the user scope only. A project's pending update shows in the load's pending block, as under D-CF2-14. `/claude:plugin update --scope project` and `marketplace update` still change the project scope. `npm run check` exit 0, 1529/1529 (seed 505638). Red proof: with the source stashed, the new scenario shows "Plugins updated: demo and beta" instead of "Plugin updated: beta".
+
+1. **No trust check, just a skip.** A user who explicitly trusted a project and turned on its autoupdate also loses background updates there; Pi 1.4.0 cannot tell explicit trust from automatic trust (same trade-off as D-CF2-14).
+2. **No other automatic route writes project installs or the ledger.** The pass was the only one besides load-time autoapply (already closed). Its only trigger is the first TUI input.
+3. The scenario "the TUI background notice names a plugin once while both updated installs remain" was removed: it needed one plugin updated in both scopes, which cannot happen now. The notice's de-duplication stays unit-tested only.
+4. The new scenario checks a skill only; commands and hooks share the same skipped write.
+5. Docs point to `marketplace update` or `update --scope project`, not `apply`, because `apply` does not refresh a git marketplace.
