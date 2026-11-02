@@ -96,6 +96,35 @@ function commandSourcePath(command: DiscoveredCommand, pluginRoot: string): stri
 }
 
 /**
+ * Splits off the commands whose generated name a workflow of the plugin also
+ * takes, with one warning for each. Claude Code 2.1.316 lists a plugin's
+ * workflows before its commands and runs the first command whose name matches
+ * what the user typed, so the workflow keeps the name. In Pi the workflow
+ * engine's command also wins over a prompt template of the same name, so a
+ * staged command could be reached only through `run_plugin_command`.
+ */
+function dropWorkflowNamedCommands(
+  discovered: readonly DiscoveredCommand[],
+  workflowNames: readonly string[],
+): { readonly kept: readonly DiscoveredCommand[]; readonly warnings: readonly string[] } {
+  const workflows = new Set(workflowNames);
+  const kept: DiscoveredCommand[] = [];
+  const warnings: string[] = [];
+  for (const command of discovered) {
+    if (workflows.has(command.generatedName)) {
+      warnings.push(
+        `command source "${command.sourceName}" has the same name "${command.generatedName}" ` +
+          `as a workflow of the plugin; ignoring the command.`,
+      );
+    } else {
+      kept.push(command);
+    }
+  }
+
+  return { kept, warnings };
+}
+
+/**
  * Stage commands into a fresh `<commandsStagingDir>/<uuid>/` tree. Builds
  * each source `.md` into its staged text through `buildStagedCommand`
  * (substitution, reference rewrite, rebuilt frontmatter with the D-CF3-08
@@ -103,9 +132,9 @@ function commandSourcePath(command: DiscoveredCommand, pluginRoot: string): stri
  * `commitPreparedCommands`.
  *
  * The result's warnings are the discover warnings, then one discovery warning
- * per command whose source frontmatter sets fields Pi cannot honor, in
- * command order (D-CF3-09); the install renders each as a declared-component
- * note.
+ * per command a workflow's name displaced, then one per command whose source
+ * frontmatter sets fields Pi cannot honor, in command order (D-CF3-09); the
+ * install renders each as a declared-component note.
  *
  * Returns a `kind: "noop"` short-circuit when `discovered.length === 0 &&
  * previousCommandNames.length === 0`: nothing to stage AND nothing to
@@ -121,10 +150,12 @@ export async function prepareStageCommands(
   // duplicate-generated-name first-wins skips across multiple
   // componentPaths.commands entries.
   // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
-  const { discovered, warnings: discoverWarnings } = await discoverPluginCommands({
-    pluginName,
-    resolved,
-  });
+  const discovery = await discoverPluginCommands({ pluginName, resolved });
+  const { kept: discovered, warnings: workflowWarnings } = dropWorkflowNamedCommands(
+    discovery.discovered,
+    input.workflowNames ?? [],
+  );
+  const discoverWarnings = [...discovery.warnings, ...workflowWarnings];
 
   // Materialization gate (symmetry with skills bridge). D-07: surface
   // discoverWarnings even on noop so duplicate-generated-name skips

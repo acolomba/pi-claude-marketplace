@@ -2180,6 +2180,48 @@ test("D-CF1-06: a commands folder the manifest's declared path leaves unread joi
   );
 });
 
+test("stages the workflow and skips a command of the same name with a discovery warning", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-workflow-command-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { commands: ["delta", "echo"], workflows: ["delta"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(
+    {
+      discoveryWarnings: ledgerOutcome.summary.discoveryWarnings,
+      stagedCommandNames: ledgerOutcome.summary.stagedCommandNames,
+      stagedWorkflowNames: ledgerOutcome.summary.stagedWorkflowNames,
+    },
+    {
+      discoveryWarnings: [
+        {
+          kind: "discovery",
+          message:
+            'command source "delta" has the same name "empty:delta" as a workflow of the plugin; ignoring the command.',
+        },
+      ],
+      stagedCommandNames: ["empty:echo"],
+      stagedWorkflowNames: ["empty:delta"],
+    },
+  );
+});
+
 test("D-PL1-13: an mcp phase failure captures the warnings the agents phase collected", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-failure-warnings-");

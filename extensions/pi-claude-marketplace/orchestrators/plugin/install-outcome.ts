@@ -1289,6 +1289,8 @@ async function runInstallLedgerBody(
         pluginDataDir: c.pluginDataDir,
         resolved: c.resolved,
         referenceNames: generatedNames,
+        // A workflow keeps a name it shares with a command of its plugin.
+        workflowNames: generatedNames.workflows,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: c.cwd,
       });

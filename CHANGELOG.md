@@ -69,6 +69,7 @@
   - Install now warns that Claude Code also ignores `initialPrompt`, `observer`, `observerMessage`, and `observeSubagents` in plugin agents.
   - An agent now gets the content of each plugin skill it preloads, except a skill that the model cannot invoke, which install skips with a warning.
   - Agents installed before this release keep their old files until their plugin is installed, updated, reinstalled, or enabled again. Run `/claude:plugin reinstall <plugin>@<marketplace>` to update them now.
+  - A workflow now keeps a name that a command of its plugin also has, as in Claude Code, and install skips that command with a warning.
   - Internal: behavioral tests now cover plugin workflows, from the command list and runs to refused scripts, a missing engine, and uninstall.
 - A plugin's `SessionStart` hook now runs once when an RPC client starts, switches, forks, or clones a session, as in Claude Code. (#294)
 - Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)

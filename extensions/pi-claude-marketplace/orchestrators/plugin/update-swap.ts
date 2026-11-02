@@ -404,6 +404,8 @@ async function prepareUpdateHandles(
       resolved: installable,
       referenceNames,
       previousCommandNames: record.resources.prompts,
+      // A workflow keeps a name it shares with a command of its plugin.
+      workflowNames: referenceNames.workflows,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });

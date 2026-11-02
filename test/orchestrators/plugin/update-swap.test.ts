@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -994,6 +1004,52 @@ test("D-CF1-06: a swap to a version whose declared commands path leaves commands
       },
     ],
   });
+});
+
+test("a swap to a version whose workflow takes a command's name warns and stages no prompt for it", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-workflow-command-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasCommand: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "workflows", "deploy.js"),
+    'export const meta = { name: "deploy", description: "Deploys." };\n',
+  );
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+  const locations = locationsFor("project", cwd);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+  const prompts = await readdir(locations.promptsTargetDir).catch(() => []);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      stagingWarnings: "stagingWarnings" in outcome ? outcome.stagingWarnings : undefined,
+      prompts,
+    },
+    {
+      partition: "updated",
+      stagingWarnings: [
+        {
+          kind: "discovery",
+          message:
+            'command source "deploy" has the same name "hello:deploy" as a workflow of the plugin; ignoring the command.',
+        },
+      ],
+      prompts: [],
+    },
+  );
 });
 
 test("NREG-01: a clean swap's updated outcome has neither stagingWarnings nor notes", async (t) => {

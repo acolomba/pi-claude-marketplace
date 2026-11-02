@@ -693,6 +693,95 @@ test("preserves first-wins discovery warnings on a staged result", async (t) => 
   assert.strictEqual(abortLeak, undefined);
 });
 
+test("skips a command that a workflow of its plugin names and stages the others", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-workflow-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-workflow-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  await mkdir(path.join(commandsRoot, "tools"), { recursive: true });
+  await writeFile(path.join(commandsRoot, "hello.md"), "Hello command.\n");
+  await writeFile(path.join(commandsRoot, "tools", "lint.md"), "Lint command.\n");
+  await writeFile(path.join(commandsRoot, "zeta.md"), "Zeta command.\n");
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+    workflowNames: ["acme:hello", "acme:tools:lint", "acme:other"],
+  });
+  const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      kind: prepared.kind,
+      stagedNames: prepared.result.stagedNames,
+      recorded: prepared.result.recorded.map((record) => record.generatedName),
+      warnings: prepared.result.warnings,
+    },
+    {
+      kind: "staged",
+      stagedNames: ["acme:zeta"],
+      recorded: ["acme:zeta"],
+      warnings: [
+        {
+          kind: "discovery",
+          message:
+            'command source "hello" has the same name "acme:hello" as a workflow of the plugin; ignoring the command.',
+        },
+        {
+          kind: "discovery",
+          message:
+            'command source "tools/lint" has the same name "acme:tools:lint" as a workflow of the plugin; ignoring the command.',
+        },
+      ],
+    },
+  );
+  assert.strictEqual(abortLeak, undefined);
+});
+
+test("returns a no-op with the warning when a workflow names the only command", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-workflow-noop-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-workflow-noop-");
+  await mkdir(path.join(pluginRoot, "commands"), { recursive: true });
+  await writeFile(path.join(pluginRoot, "commands", "hello.md"), "Hello command.\n");
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+    workflowNames: ["acme:hello"],
+  });
+  const stagingExists = await pathIsPresent(locations.commandsStagingDir);
+
+  // assert
+  assert.deepStrictEqual(prepared, {
+    kind: "noop",
+    result: {
+      stagedNames: [],
+      recorded: [],
+      warnings: [
+        {
+          kind: "discovery",
+          message:
+            'command source "hello" has the same name "acme:hello" as a workflow of the plugin; ignoring the command.',
+        },
+      ],
+      degraded: [],
+    },
+  });
+  assert.strictEqual(stagingExists, false);
+});
+
 test("D-CF3-09 returns the discover warnings, then each dropped-fields line in command order", async (t) => {
   // arrange
   const locations = await createProjectLocations(t, "commands-stage-dropped-");

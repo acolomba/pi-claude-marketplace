@@ -76,6 +76,13 @@ export interface StageCommandsInput {
   /** Names previously staged for this (mp, plugin) -- read from state.json on re-stage. */
   readonly previousCommandNames?: readonly string[];
   /**
+   * The generated names of the plugin's workflows. A command whose generated
+   * name is in this list is not staged, because the workflow keeps the name.
+   * The orchestrator supplies it from its name preview, since this bridge
+   * cannot read the workflows bridge.
+   */
+  readonly workflowNames?: readonly string[];
+  /**
    * Install cwd (the project root for project-scope installs), substituted for
    * `${CLAUDE_PROJECT_DIR}` in command content (SUB-02). Required so a
    * project-scope caller cannot silently omit it and ship the token literal.
