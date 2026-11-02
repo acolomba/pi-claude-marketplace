@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, readlink, rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
@@ -21,6 +21,7 @@ import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import {
   LATE_TAG_ENVIRONMENT,
+  linkPublishedMcpFile,
   publishStubMcpServer,
   publishStubServersFile,
   stubMcpFileText,
@@ -163,6 +164,15 @@ Given(
     const written = await publishStubServersFile(published, plugin, file, text);
     const target = path.join(published.root, "plugins", plugin, file);
     assert.strictEqual(await readFile(target, "utf8"), written);
+  },
+);
+
+// MCPR-04: the link's text is the target as written, relative to the link.
+Given(
+  "the mcp file {string} of the published plugin {string} of the marketplace {string} is a symbolic link to {string}",
+  async function (this: ScenarioWorld, file: string, plugin: string, name: string, target: string) {
+    const link = await linkPublishedMcpFile(this.requirePublished(name), plugin, file, target);
+    assert.strictEqual(await readlink(link), target);
   },
 );
 

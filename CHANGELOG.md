@@ -14,6 +14,7 @@
   - The marketplace entry's `mcpServers` now counts only for a plugin without a `plugin.json`, as in Claude Code.
   - A broken `.mcp.json` or MCP file, or a bad server in one, is now skipped with no message, and the rest of the plugin installs, as in Claude Code.
   - A plugin that names an `.mcpb` or `.dxt` MCP bundle is now partially available, because pi-mcp-adapter cannot run a bundle.
+  - An MCP file path in `mcpServers` can now be a symbolic link to a file inside the plugin, as in Claude Code. A link to a file outside the plugin still makes the plugin unavailable.
   - A skill with no `description` is now listed with Claude Code's text: the first line of its body, or `Plugin skill` for an empty body.
   - Install now warns about the skill frontmatter fields that Pi cannot honor, such as `model` or `effort`, with one line for each skill.
   - Typed skills now fill in arguments, `${CLAUDE_*}` variables, and `` !`command` `` output as Claude Code does, in the terminal UI and over RPC.

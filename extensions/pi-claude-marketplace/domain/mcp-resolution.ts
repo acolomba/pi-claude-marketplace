@@ -11,15 +11,16 @@
 // D-CF6-02: a defect in a file source makes that file, or that one server,
 // contribute nothing, silently, as Claude Code's loader drops it. A defect
 // written inline, or a reference that is absolute or leaves the plugin root,
-// refuses the plugin, as Claude Code refuses that manifest.
+// refuses the plugin, as Claude Code refuses that manifest. A reference link
+// whose real target leaves the plugin root is refused too (MCPR-04).
 
 import path from "node:path";
 
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage, isErrnoException } from "../shared/errors.ts";
 
-import { resolveContainedComponentPath } from "./component-paths.ts";
 import { MCP_SERVER_MAP_VALIDATOR } from "./components/mcp.ts";
+import { copyManifestBoundary, locateManifestCandidate } from "./manifest-containment.ts";
 import { classifyMcpServer } from "./mcp-server-features.ts";
 
 import type { DroppedMcpServer, McpUnsupportedFeature } from "./mcp-server-features.ts";
@@ -212,30 +213,59 @@ type LocatedReference =
   | { readonly kind: "refused"; readonly note: string }
   | { readonly kind: "unreachable"; readonly detail: string };
 
+function isLexicallyOutside(pluginRoot: string, absolutePath: string): boolean {
+  const relative = path.relative(pluginRoot, absolutePath);
+  return relative === ".." || relative.startsWith(`..${path.sep}`);
+}
+
+/**
+ * Locates a reference string inside the plugin root. A reference that
+ * crosses a symbolic link is read when the link's real target lies inside
+ * the plugin root, as Claude Code 2.1.316 reads it (MCPR-04, amended by the
+ * user decision of 2026-11-02). A real target outside the plugin root is
+ * refused, where Claude Code would read it.
+ *
+ * The link rule is the D-PL2-24 manifest locator over a boundary of the
+ * plugin root alone. It opens the resolved target, never the spelled link,
+ * and its containment walk re-checks that target after the resolution, so
+ * a link swapped after the resolution cannot redirect the read. The window
+ * between that walk and the read is the one `createPathSafetyGuard`
+ * accepts. A dangling link names a missing file, which contributes nothing
+ * (D-CF6-02).
+ */
 async function locateReference(raw: string, pluginRoot: string): Promise<LocatedReference> {
-  let contained: Awaited<ReturnType<typeof resolveContainedComponentPath>>;
-  try {
-    contained = await resolveContainedComponentPath(pluginRoot, raw, "mcpServers reference");
-  } catch (error: unknown) {
-    return { kind: "unreachable", detail: fileSystemFailureDetail(error) };
+  if (path.isAbsolute(raw)) {
+    return {
+      kind: "refused",
+      note: `malformed mcp reference: must be relative (got absolute "${raw}")`,
+    };
   }
 
-  if (contained.ok) {
-    return { kind: "inside", absolutePath: contained.absolutePath };
+  const spelled = path.resolve(pluginRoot, raw);
+  if (isLexicallyOutside(pluginRoot, spelled)) {
+    return { kind: "refused", note: `malformed mcp reference: escapes plugin root: "${raw}"` };
   }
 
-  return {
-    kind: "refused",
-    note:
-      contained.cause === "absolute"
-        ? `malformed mcp reference: must be relative (got absolute "${raw}")`
-        : `malformed mcp reference: escapes plugin root: "${raw}"`,
-  };
+  const location = await locateManifestCandidate(copyManifestBoundary(pluginRoot), spelled);
+  switch (location.kind) {
+    case "open":
+      return { kind: "inside", absolutePath: location.path };
+    case "absent":
+      return { kind: "unreachable", detail: "its symbolic link is dangling" };
+    case "escapes":
+      return {
+        kind: "refused",
+        note: `malformed mcp reference: symbolic link resolves outside plugin root: "${raw}"`,
+      };
+    case "unresolvable":
+      return { kind: "unreachable", detail: fileSystemFailureDetail(location.error) };
+  }
 }
 
 /**
  * Reads a reference string. Containment runs before any read, so an absolute
- * or escaping reference is never read (T-06-07). A bundle is never read
+ * or escaping reference, and a link whose real target leaves the plugin
+ * root, is never read (T-06-07). A bundle is never read
  * either: it makes the plugin partially available. A reference without a
  * leading `./` still resolves from the plugin root, where Claude Code
  * refuses the manifest (a residual kept under D-CF6-01).

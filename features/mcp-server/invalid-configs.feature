@@ -134,3 +134,28 @@ Feature: MCP server invalid configs
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status      | reasons       |
       | fixtures         | user              | demo@fixtures | demo | unavailable | malformed mcp |
+
+  Scenario: A server reference that is a symbolic link out of the plugin makes the plugin unavailable, a recorded divergence (MCPR-04)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {"name": "demo", "version": "1.0.0", "mcpServers": "./servers.json"}
+      """
+    Given the published plugin "other" of the marketplace "fixtures" has the file "servers.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"r": {"stub": {}}}}
+      """
+    Given the mcp file "servers.json" of the published plugin "demo" of the marketplace "fixtures" is a symbolic link to "../other/servers.json"
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons       |
+      | fixtures         | user              | demo@fixtures | demo | unavailable | malformed mcp |
