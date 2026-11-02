@@ -4612,7 +4612,9 @@ Added 2026-11-01 (component-features Phase 6, review WR-01 and WR-02). Waits for
 
 Added 2026-11-01 (component-features Phase 6, D-CF6-04). `test/live-uat/mcp-adapter-canary.mjs` already pins pi-mcp-adapter 7.0.0, but its recorded result is the 2026-10-09 run on 5.2.0. Run it live on 7.0.0 and Pi 1.4.0, and add an "Observed result (<date>, pi-mcp-adapter 7.0.0, pi 1.4.0)" section to `test/live-uat/README.md` beside the 5.2.0 one. Then name the new run in `docs/mcp-compatibility.md`: the header's extra `/reload` after an upgrade, measured on 2026-10-09 on Pi 1.0.0, and the Further reading line that says the recorded result is from 5.2.0.
 
-## HOOKNEST-01: plugin hooks for an MCP call made through the `mcp` proxy
+## ~~HOOKNEST-01: plugin hooks for an MCP call made through the `mcp` proxy~~ -- CLOSED
+
+**CLOSED 2026-11-01** by component-features Phase 5 (D-CF5-12). The hooks scenarios measured it: the outer proxy call runs no hook, and the nested call fires each matching hook once under the tool's Claude Code name. `docs/hooks-compatibility.md` and `docs/mcp-compatibility.md` state the result.
 
 Added 2026-11-01 (component-features Phase 6). Since pi-mcp-adapter 6.0, a call through the `mcp` proxy tool runs the real tool as a nested Pi tool call under its Claude Code name (measured on 7.0.0, Pi 1.4.0). No run has checked whether the hooks bridge fires a plugin's `PreToolUse` and `PostToolUse` matchers and `if` predicates for that nested call. Measure it with the hooks scenarios, then state the result in `docs/hooks-compatibility.md` (the two MCP matcher rows and the paragraph under "Tool name mapping") and in `docs/mcp-compatibility.md` "Hooks and agents".
 
@@ -4655,3 +4657,143 @@ Deferred by component-features Phase 4 (D-CF4-09, D-CF4-10). The report is draft
 ## COMPSEV-01: install and reinstall disagree on a missing companion's severity
 
 Noted by component-features Phase 4 (D-CF4-11). Install reports a missing pi-subagents as `warning` (SEV-01 `companionSeverity`), and reinstall reports the same companion at `info` (`features/plugin/reinstall.feature`). Decide whether reinstall also warns.
+
+## CMDNAME-01: command frontmatter `name` aliases
+
+Deferred by component-features Phase 3 (03-CONTEXT E9, DUBIOUS-CHOICES P3-DC-07). Claude Code gives a plugin command with a frontmatter `name` the aliases `/<plugin>:<name>` and, for a name with no `:`, the bare `/<name>`, as it does for skills. The commands bridge stages only `/<plugin>:<file name>`. Resolving the aliases in `edge/command-invocation.ts`, as D-CF2-02 does for skills, would close the gap.
+
+## CMDTAG-01: Claude Code's command tag block
+
+Deferred by component-features Phase 3 (D-CF3-06, D-CF1-01 residual, P3-DC-08). Claude Code sends a typed command as a `<command-message>`, `<command-name>`, and `<command-args>` tag block followed by the substituted body. Pi sends only the body. Adding the block in the command invocation would match upstream's framing for the model.
+
+## CMDMODEL-01: commands for the model
+
+Deferred by component-features Phase 3 (D-CF3-01, P3-DC-03). Claude Code lists a plugin command with a description in the model's skill list and lets the model run it through the Skill tool. Pi gives the model no access to prompt templates. Trigger: Pi adds model access to templates (gap 4 of the Pi gap report, appended to the D-CF2-10 draft).
+
+## CMDINFO-01: `info` lists declared command files and map entries
+
+Deferred by component-features Phase 3 (D-CF3-03, D-CF3-05 residuals). `discoverComponentNames` in `orchestrators/plugin/info.ts` reads declared command directories only, so a declared `.md` file and an object-map entry install but are not listed by `/claude:plugin info` of a plugin read from its source. The state-only view reads the recorded names and is not affected.
+
+## LEDGERPRUNE-01: restore ledger entries on a `prune` rollback
+
+Deferred by component-features Phase 3 (D-CF3-07 residual, P3-DC-17 item 5). When a `prune` rolls back, `orchestrators/plugin/prune-rollback.ts` restores the staged skill and command files but not their entries in the user's project ledger, so a restored project skill or command aborts until its plugin is reinstalled. Hook entries (`hooks/<plugin>`) have the same gap.
+
+## CMDDIGEST-01: plugin-root scripts in the command digest
+
+Deferred by component-features Phase 3 (D-CF3-07 residual, T-03-23). The project-command digest covers only the staged command file. A script under the plugin root that a `!` command runs is not covered, so a changed script still runs. The skills digest covers the whole staged skill directory but not the plugin root either (D-CF2-13 residual AR-02-05), and the hooks digest covers only the staged `hooks.json` (AR-05-01).
+
+## CMDSKILLMD-01: a `SKILL.md` inside `commands/`
+
+Deferred by component-features Phase 3 (03-CONTEXT E9). Claude Code loads a `SKILL.md` found inside `commands/` as a skill named after its folder. The commands walk has no `SKILL.md` rule, so `commands/x/SKILL.md` stages as the command `<plugin>:x:SKILL`.
+
+## LEDGERNAME-01: neutral names for the shared project-install ledger
+
+Noted by component-features Phase 3 (Phase 2 follow-up) and the project-hook provenance check (DUBIOUS-CHOICES DC-36 item 1). Skills, commands, and hooks now share one ledger, but its names still say "skill": the file `skills.json` under `<agentDir>/pi-claude-marketplace/project-installs/<sha256>/`, `ProjectSkillLedgerError` and its text "The project skill ledger ...", `NODE_PROJECT_SKILL_LEDGER`, `provenProjectSkills`, the WR-04 outcome member `skillWarnings` in `orchestrators/marketplace/shared.ts`, the commands warning `could not remove the commands from the project skill ledger: ...`, and the step texts "the user's record of project skill installs ...". A neutral form: `project-installs.json`, `ProjectInstallLedgerError`, `NODE_PROJECT_INSTALL_LEDGER`, `provenProjectInstalls`, `ledgerWarnings`, "the user's record of project installs". A file rename needs a reader for both names. The warning texts are user-visible, so the change needs a cucumber scenario.
+
+## SKILLCLASH-01: the skill-command clash check misses declared command files and map entries
+
+Noted by component-features Phase 3 (Phase 2 follow-up, D-CF3-03, D-CF3-05). `bridges/skills/skill-names.ts::commandUpstreamNames` reads each `componentPaths.commands` entry as a directory and does not read `componentPaths.commandMap`. So neither a declared command file nor an object-map key adds a name to the D-CF2-03 clash set. A skill with the same name as such a command is staged, and both names reach Pi, where Claude Code keeps the command and skips the skill. The fix changes what install stages, so it needs a cucumber scenario.
+
+## SKILLSTATE-01: the skill invocation saves a state migration
+
+Noted by component-features Phase 3 (Phase 2 follow-up). `orchestrators/skill-invocation.ts` loads the state with a persisted migration to word its reinstall line, while `orchestrators/command-invocation.ts` reads a snapshot (`persistMigration: false`). Make the skills side read-only too, or record why it saves.
+
+## ENTRYDECL-01: re-probe marketplace-entry `agents` and `workflows` declarations
+
+Noted by component-features Phase 3 (D-CF3-04). The Claude Code 2.1.316 binary reads `commands/` unless `plugin.json` declares `commands`, and a marketplace entry's declaration adds to the folder. That corrected the entry half of D-CF1-06 for commands only. Probe `agents` and `workflows` the same way. If they behave alike, D-CF1-06's entry half is wrong for them too, and so is the CHANGELOG line "A declared `commands`, `agents`, or `workflows` path now replaces the conventional folder".
+
+## REDACTCUT-01: path redaction cuts a warning short
+
+Noted by component-features Phase 3 (03-08). When quoted text follows a quoted absolute path on one line, `shared/redact-absolute-paths.ts` replaces the rest of the line with `[redacted path]`. That cuts the commands walk's duplicate and subdirectory warnings short. The command map warnings avoid it by leaving out the plugin root.
+
+## HOOKDATA-01: the hook `CLAUDE_PLUGIN_DATA` differs from the skills and commands one
+
+Noted by component-features Phase 3 (03-03). Hooks set `CLAUDE_PLUGIN_DATA` to `<dataRoot>/<pluginId>` (`bridges/hooks/hook-env.ts`; `features/hook/tool-use.feature` expects `{project dir}/.pi/pi-claude-marketplace/data/demo`). Skills and commands record `pluginDataDir(marketplace, plugin)`, which is `data/<marketplace>/<plugin>`. Claude Code gives a plugin one data folder. Decide which root is right and align the other.
+
+## PIAPITYPES-01: the unused `ThinkingLevel` and `InputSource` boundary types
+
+Noted by component-features Phase 3. `platform/pi-api.ts` exports `ThinkingLevel` and `InputSource` under `fallow-ignore-next-line unused-type` markers that name the invocation handlers as their consumers, but neither handler imports them: `edge/command-invocation.ts` and `edge/skill-aliases.ts` call `pi.getThinkingLevel()` and compare `event.source` with literals. Either import the types there (and where the effort is mapped) and delete both markers, which keeps NFR-11's rule that Pi types come through the boundary, or delete the two exports, their markers, and their checks in `test/platform/pi-api.test.ts`.
+
+## PIAPITURN-01: re-export `TurnEndEvent` from the Pi boundary
+
+Noted by component-features Phase 5 (DUBIOUS-CHOICES P5-DC-23 item 5). `test/index.test.ts` imports `TurnEndEvent` straight from the Pi peer, because `platform/pi-api.ts` does not re-export it. A re-export alone fails `fallow dead-code` as an unused type, because the `turn_end` handler in `bridges/hooks/event-router.ts` types its event with the structural `FollowUpTurnEnd`. Re-export it when a production module names the type, for example that handler.
+
+## HOOKLAUNCH-01: SessionStart `resume` and `fork` for resumed and forked launches
+
+Deferred by component-features Phase 5 (D-CF5-06). A Pi launch with `--continue`, `--resume`, `--session`, or `--fork` sends SessionStart `startup`, where Claude Code sends `resume` or `fork`. Detect them through the session header: `parentSession` means fork, existing entries mean resume. Its scenario needs a launcher change in the cucumber harness.
+
+## HOOKHEAL-01: let reconcile restore dropped `clear`, `compact`, and `fork` hook groups
+
+Deferred by component-features Phase 5 (D-CF5-08). An install made before the session matcher change dropped these groups, and only `/claude:plugin reinstall` restores them. Add a growth move to `pending` and `apply` (the BFILL-01 planner) so reconcile heals such a plugin.
+
+## HOOKENV-01: the remaining Claude Code hook variables
+
+Deferred by component-features Phase 5 (D-CF5-16). Set `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ATTENDED`, `CLAUDE_PID`, and `CLAUDE_EFFORT` in the hook env as Claude Code does. `docs/env-vars.md` "Not delivered" lists two of them today.
+
+## HOOKMERGE-01: merge declared `hooks` fields as Claude Code does
+
+Deferred by component-features Phase 5 (D-CF5-20). Merge a `plugin.json` `hooks` field (path, array, or inline object) with `hooks/hooks.json` per event, and apply a marketplace entry's inline `hooks` as upstream: an entry event replaces that event, and without `plugin.json` the entry replaces the whole config. Then drop the `{unsupported hooks}` report for these fields. Also decide whether `plugin info` names the declared field.
+
+## HOOKPAYLOAD-01: missing fields in the tool hook payloads
+
+Deferred by component-features Phase 5 (D-CF5-28, 05-09 addendum). Add `tool_use_id` and `mcp_server` to the tool stdin payloads, and `tool_use_id`, `is_interrupt`, and `duration_ms` to the PostToolUseFailure payload, as Claude Code sends them.
+
+## HOOKOUTPUT-01: other `updatedToolOutput` shapes
+
+Deferred by component-features Phase 5. A PostToolUse `updatedToolOutput` is read only in Pi's `content`-array form. Read it in the tool's own output shape too, and read `updatedMCPToolOutput`.
+
+## HOOKPOSTSTOP-01: PostToolUse `continue: false`
+
+Deferred by component-features Phase 5 (D-CF5-11). A PostToolUse or PostToolUseFailure `continue: false` only writes a debug line, because Pi's `tool_result` cannot end the turn without aborting it.
+
+## HOOKERRNOTE-01: Claude Code's non-blocking hook error notice
+
+Noted by component-features Phase 5. Claude Code shows `<hook name> hook error` and `Failed with non-blocking status code: ...` for a hook that exits with a code other than 0 and 2. The bridge shows nothing. No decision covers it yet.
+
+## HOOKPROMPTSTOP-01: a UserPromptSubmit `continue: false` stops silently
+
+Noted by component-features Phase 5. Claude Code shows `Operation stopped by hook: <reason>`. The bridge stops the prompt with no notice.
+
+## HOOKORIGPROMPT-01: the `Original prompt:` line of the blocked-prompt notice
+
+Noted by component-features Phase 5 (D-CF5-24). Decide whether the blocked-prompt notice adds Claude Code's third line, `Original prompt: <prompt>`.
+
+## HOOKSTOPNOTE-01: a notice for a blocking Stop hook
+
+Noted by component-features Phase 5. Decide whether a blocking Stop hook also shows Claude Code's `Stop hook blocking error from command: "<command>": <reason>` notice. Claude Code shows none for a Stop `additionalContext`.
+
+## HOOKSEV-01: per-notice severity for `hook-notice`
+
+Noted by component-features Phase 5 (D-CF5-24, P5-DC-22 item 4). The `hook-notice` kind has one severity, `info`. Claude Code draws the blocked prompt and the PreCompact block as warnings and the hook error in the error color. Decide whether the kind gets a severity per notice. That extends the closed notification vocabulary.
+
+## HOOKSTOPREASON-01: a Stop block with no `reason`
+
+Noted by component-features Phase 5 (D-CF5-25). A Stop `decision: "block"` with no `reason` re-enters with an empty `Stop hook feedback:\n` part. Claude Code calls `reason` required. Probe and align.
+
+## HOOKJSONLINES-01: several JSON lines on hook stdout
+
+Noted by component-features Phase 5. Stdout of several JSON lines, where the first line starts with `{` and the last ends with `}`, is a parse failure here. Claude Code reads it as plain text when no line sets a field. Probe and align.
+
+## HOOKSTOPCAP-01: the Stop re-entry cap and upstream's per-tool-call reset
+
+Noted by component-features Phase 5. Claude Code resets its 8-block Stop re-entry cap per tool call. Check the STOP-07 cap against it, and fix the "8-block cap ... identical" sentence in `docs/hooks-compatibility.md` if they differ.
+
+## HOOKSCHEMAFAIL-01: `onFailure: "block"` and JSON that fails the output schema
+
+Noted by component-features Phase 5 (D-CF5-18, low impact). JSON that parses but fails the event's output schema counts as success under `onFailure: "block"`. Claude Code counts it as a failure.
+
+## HOOKIFBLANK-01: a whitespace-only `if` on a tool-less event
+
+Noted by component-features Phase 5 (D-CF5-23). A whitespace-only `if` on an event with no tool still compiles to match-all, so the hook runs. Claude Code skips only a non-empty `if`, so check what it does with whitespace before changing it.
+
+## HOOKFOLLOWUP-01: follow-up prompt context edge cases
+
+Deferred by component-features Phase 5 (DUBIOUS-CHOICES P5-DC-24, `05-REVIEW.md` iteration 3). A follow-up whose UserPromptSubmit hook is still running when the run ends, a follow-up queued after the last `turn_end`, a terminating tool batch, and `followUpMode: "all"` lose their hook context, with only a debug line. Suggested fix: check `ctx.isIdle()` in `queuePromptContext`, match `event.prompt` in `before_agent_start`, and send every matching queued follow-up.
+
+## HOOKBIGJSON-01: hook JSON over the stdout cap
+
+Noted by component-features Phase 5 (DUBIOUS-CHOICES P5-DC-23 item 1). Hook JSON on stdout over the 1 MB EXEC-02 cap is not read, so a JSON deny that large on exit 0 fails open. Claude Code keeps all output.
+
+## HOOKREVIEW-01: the open info findings of the hooks code review
+
+Deferred by component-features Phase 5 (DUBIOUS-CHOICES P5-DC-24). The 12 info findings of `.planning/phases/05-hooks/05-REVIEW.md` (iteration 3) are still open. Triage each into a fix or a recorded decision.
