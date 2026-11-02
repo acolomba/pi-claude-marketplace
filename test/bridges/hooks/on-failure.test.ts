@@ -7,6 +7,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/on-failure.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
+import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 
@@ -21,6 +22,8 @@ const CLEAN_EXIT = {
   stdout: "",
   stderr: "boom\n",
 } satisfies HookExitFacts;
+
+const NOOP = { kind: "noop" } satisfies HookExecResult;
 
 function guardEntry(
   handler: Readonly<Record<string, unknown>>,
@@ -68,13 +71,17 @@ describe("onFailureBlock with onFailure block", () => {
     { name: "exit code 1", facts: { ...CLEAN_EXIT, exitCode: 1 } },
     { name: "an exit with no code", facts: { ...CLEAN_EXIT, exitCode: null } },
     {
-      name: "stdout that starts a JSON object and does not parse",
-      facts: { ...CLEAN_EXIT, stdout: " {not json\n" },
+      name: "stdout that starts and ends a JSON object and does not parse",
+      facts: { ...CLEAN_EXIT, stdout: " {not json}\n" },
+    },
+    {
+      name: "JSON lines mixed with a broken line",
+      facts: { ...CLEAN_EXIT, stdout: '{"continue":true}\n{not json}' },
     },
   ] as const) {
     test(`blocks with upstream's failed message for ${name}`, () => {
       // act
-      const result = onFailureBlock(entry, facts);
+      const result = onFailureBlock(entry, facts, NOOP);
 
       // assert
       assert.deepStrictEqual(result, { kind: "block", reason: FAILED_REASON });
@@ -83,7 +90,7 @@ describe("onFailureBlock with onFailure block", () => {
 
   test("says timed out for a hook its timeout killed", () => {
     // act
-    const result = onFailureBlock(entry, { ...CLEAN_EXIT, timedOut: true, exitCode: null });
+    const result = onFailureBlock(entry, { ...CLEAN_EXIT, timedOut: true, exitCode: null }, NOOP);
 
     // assert
     assert.deepStrictEqual(result, {
@@ -94,7 +101,7 @@ describe("onFailureBlock with onFailure block", () => {
 
   test("ends the message at the reason when the hook printed no stderr", () => {
     // act
-    const result = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1, stderr: " \n" });
+    const result = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1, stderr: " \n" }, NOOP);
 
     // assert
     assert.deepStrictEqual(result, {
@@ -108,7 +115,7 @@ describe("onFailureBlock with onFailure block", () => {
     const commandless = { ...entry, handlerDecl: { type: "command", onFailure: "block" } };
 
     // act
-    const result = onFailureBlock(commandless, { ...CLEAN_EXIT, exitCode: 1, stderr: "" });
+    const result = onFailureBlock(commandless, { ...CLEAN_EXIT, exitCode: 1, stderr: "" }, NOOP);
 
     // assert
     assert.deepStrictEqual(result, {
@@ -120,16 +127,64 @@ describe("onFailureBlock with onFailure block", () => {
   for (const { name, facts } of [
     { name: "exit 0 with valid JSON", facts: { ...CLEAN_EXIT, stdout: '{"continue":true}' } },
     { name: "exit 0 with plain text", facts: { ...CLEAN_EXIT, stdout: "all good" } },
+    {
+      name: "exit 0 with text that opens a JSON object and does not close it",
+      facts: { ...CLEAN_EXIT, stdout: " {not json\n" },
+    },
+    {
+      name: "exit 0 with JSON lines",
+      facts: { ...CLEAN_EXIT, stdout: '{"continue":true}\n\n{"suppressOutput":true}\n' },
+    },
     { name: "exit 2", facts: { ...CLEAN_EXIT, exitCode: 2 } },
   ] as const) {
     test(`leaves ${name} to the wire protocol`, () => {
       // act
-      const result = onFailureBlock(entry, facts);
+      const result = onFailureBlock(entry, facts, NOOP);
 
       // assert
       assert.strictEqual(result, undefined);
     });
   }
+
+  test("leaves the JSON deny of a hook that exits 1 to apply with its own reason", (t) => {
+    // arrange
+    const lines = observeDebug(t);
+    const deny = { kind: "block", reason: "no echo" } satisfies HookExecResult;
+
+    // act
+    const result = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, deny);
+
+    // assert
+    assert.strictEqual(result, undefined);
+    assert.deepStrictEqual(lines, [
+      "[hooks] on-failure: the JSON block of a failed hook applies (guard-plugin/UserPromptSubmit)",
+    ]);
+  });
+
+  test("blocks with the timed out message over the JSON deny of a hook its timeout killed", () => {
+    // arrange
+    const deny = { kind: "block", reason: "no echo" } satisfies HookExecResult;
+
+    // act
+    const result = onFailureBlock(entry, { ...CLEAN_EXIT, timedOut: true, exitCode: 1 }, deny);
+
+    // assert
+    assert.deepStrictEqual(result, {
+      kind: "block",
+      reason: `[${COMMAND}]: timed out; blocking because onFailure is "block"\nboom`,
+    });
+  });
+
+  test("blocks a hook that exits 1 whose JSON allows the call", () => {
+    // arrange
+    const allow = { kind: "mutate", permissionDecision: "allow" } satisfies HookExecResult;
+
+    // act
+    const result = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, allow);
+
+    // assert
+    assert.deepStrictEqual(result, { kind: "block", reason: FAILED_REASON });
+  });
 });
 
 describe("onFailureBlock without onFailure block", () => {
@@ -140,7 +195,7 @@ describe("onFailureBlock without onFailure block", () => {
   ] as const) {
     test(`changes nothing for a failing hook with ${name}`, () => {
       // act
-      const result = onFailureBlock(guardEntry(handler), { ...CLEAN_EXIT, exitCode: 1 });
+      const result = onFailureBlock(guardEntry(handler), { ...CLEAN_EXIT, exitCode: 1 }, NOOP);
 
       // assert
       assert.strictEqual(result, undefined);
@@ -171,7 +226,7 @@ describe("onFailureBlock without onFailure block", () => {
       const lines = observeDebug(t);
 
       // act
-      const result = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 });
+      const result = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, NOOP);
 
       // assert
       assert.strictEqual(result, undefined);

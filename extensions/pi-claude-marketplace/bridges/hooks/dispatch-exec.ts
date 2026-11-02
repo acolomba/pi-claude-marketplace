@@ -26,10 +26,9 @@
 //      runs from the shared `settle()` closure, which both `child.once(
 //      "close", ...)` and `child.once("error", ...)` call, to close the
 //      TOCTOU window against the timer firing on a recycled pid.
-//   6. Stream stdout / stderr with manual caps (1 MB / 64 KB) -- maxBuffer
-//      does NOT apply to `spawn`, so past a cap the dispatcher drops the
-//      rest of that stream and lets the child run to its exit, whose code
-//      still decides (an exit 2 blocks). Stdout cut at its cap is not read.
+//   6. Collect the whole of stdout and stderr through `./stream-text.ts`. As
+//      in Claude Code, no size limit applies, so a JSON answer of any size
+//      decides (EXEC-02).
 //   7. Stream stdin: attach `child.stdin.on("error", hookDebugLog)` BEFORE
 //      `child.stdin.end(payload)` so an EPIPE from a fast-exiting child
 //      cannot escape as an unhandled exception.
@@ -37,7 +36,8 @@
 //      NO `ctx.ui.notify`) then return `parseHookStdout(code, stdout,
 //      stderr, entry.claudeEvent)`, unless the hook failed and sets `onFailure: "block"`
 //      (D-CF5-18, `./on-failure.ts`): then a start failure (`error`), an exit
-//      other than 0 and 2, a timeout, or broken JSON stdout is a block.
+//      other than 0 and 2, a timeout, or broken JSON stdout is a block. A JSON
+//      deny still wins over that block.
 //
 // Never-throws contract: every error path resolves to `{ kind: "noop" }` +
 // `hookDebugLog`, or to the onFailure block when the hook asks for one. The outer `try/catch` wraps spawn-time errors (ENOENT,
@@ -54,7 +54,6 @@
 // justification in the docstring header.
 
 import { spawn } from "node:child_process";
-import { StringDecoder } from "node:string_decoder";
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -75,6 +74,7 @@ import { translateStopFailure } from "./payloads/stop-failure.ts";
 import { translateStop } from "./payloads/stop.ts";
 import { translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
+import { collectStreamText } from "./stream-text.ts";
 import { resolveTimeoutSeconds } from "./timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
 import { parseHookStdout } from "./wire-protocol.ts";
@@ -98,15 +98,6 @@ import type { ClaudePluginVars } from "../../shared/vars.ts";
 // truth keeps the two execution paths from drifting. The cap itself
 // (`STDIN_TRUNCATION_BYTES`) is module-private to spawn-helpers.ts, applied
 // only inside `serializeWithTruncation`; neither execution site names it.
-/** EXEC-02: hard stdout buffer cap; past it the rest is dropped and stdout is not read. */
-const STDOUT_MAX_BYTES = 1024 * 1024;
-/** EXEC-02: hard stderr buffer cap; past it the rest is dropped. */
-const STDERR_MAX_BYTES = 64 * 1024;
-
-/** Whether a collected stream passed its cap and lost text. */
-interface StreamCap {
-  readonly cut: () => boolean;
-}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Translator dispatch table (PAYL-01 / D-60-04)
@@ -141,8 +132,8 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
 /**
  * EXEC-01..04 + PAYL-01 + HOOK-05 + D-60-01 + D-60-06 execution layer.
  *
- * NEVER throws. Every error / overflow / timeout / parse failure path
- * resolves to `{ kind: "noop" }` + `hookDebugLog`, except that a hook with
+ * NEVER throws. Every error / timeout / parse failure path resolves to
+ * `{ kind: "noop" }` + `hookDebugLog`, except that a hook with
  * `onFailure: "block"` turns a start failure, an unexpected exit, a timeout,
  * or broken JSON stdout into a block (D-CF5-18). The composite handler
  * reducer folds the returned arms across the bucket and dispatches to the
@@ -308,8 +299,6 @@ async function spawnAndCollect(
   });
 
   return await new Promise<HookExecResult>((resolve) => {
-    let stdout = "";
-    let stderr = "";
     let settled = false;
 
     const ladder = installTimerLadder(child, timeoutSeconds, ladderLabel);
@@ -324,61 +313,50 @@ async function spawnAndCollect(
       resolve(result);
     };
 
-    const stdoutCap = accumulateStream(
-      child.stdout,
-      STDOUT_MAX_BYTES,
-      (chunk) => {
-        stdout += chunk;
-      },
-      "stdout",
-      ladderLabel,
-    );
-
-    accumulateStream(
-      child.stderr,
-      STDERR_MAX_BYTES,
-      (chunk) => {
-        stderr += chunk;
-      },
-      "stderr",
-      ladderLabel,
-    );
+    const stdout = collectStreamText(child.stdout, (err) => {
+      hookDebugLog(`exec: stdout error (${ladderLabel}): ${errorMessage(err)}`);
+    });
+    const stderr = collectStreamText(child.stderr, (err) => {
+      hookDebugLog(`exec: stderr error (${ladderLabel}): ${errorMessage(err)}`);
+    });
 
     child.once("error", (err) => {
       hookDebugLog(
         `exec: spawn error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
       );
       // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
-      const failure = onFailureBlock(entry, {
-        startFailed: true,
-        timedOut: false,
-        exitCode: null,
-        stdout: "",
-        stderr,
-      });
-      settle(failure ?? { kind: "noop" });
+      const noop: HookExecResult = { kind: "noop" };
+      const failure = onFailureBlock(
+        entry,
+        { startFailed: true, timedOut: false, exitCode: null, stdout: "", stderr: stderr.text() },
+        noop,
+      );
+      settle(failure ?? noop);
     });
 
     child.once("close", (code) => {
+      const errText = stderr.text();
       // EXEC-03: stderr sole-sink through hookDebugLog. NO ctx.ui.notify.
-      if (stderr.length > 0) {
-        hookDebugLog(`exec: stderr (${entry.pluginId}/${entry.claudeEvent}): ${stderr.trim()}`);
+      if (errText.length > 0) {
+        hookDebugLog(`exec: stderr (${entry.pluginId}/${entry.claudeEvent}): ${errText.trim()}`);
       }
 
-      // EXEC-02: stdout cut at its cap is a part of the hook's answer, so it
-      // is not read. The exit code still decides, so an exit 2 blocks with the
-      // stderr the bridge kept.
-      const answer = stdoutCap.cut() ? "" : stdout;
-      // D-CF5-18: the onFailure check runs before the parse, so a failed hook
-      // that sets onFailure "block" blocks whatever its stdout says.
-      const failure = onFailureBlock(entry, {
-        startFailed: false,
-        timedOut: ladder.fired(),
-        exitCode: code,
-        stdout: answer,
-        stderr,
-      });
-      settle(failure ?? parseHookStdout(code, answer, stderr, entry.claudeEvent));
+      const outText = stdout.text();
+      const parsed = parseHookStdout(code, outText, errText, entry.claudeEvent);
+      // D-CF5-18: a failed hook that sets onFailure "block" blocks whatever its
+      // stdout says, except that a JSON deny keeps its own reason.
+      const failure = onFailureBlock(
+        entry,
+        {
+          startFailed: false,
+          timedOut: ladder.fired(),
+          exitCode: code,
+          stdout: outText,
+          stderr: errText,
+        },
+        parsed,
+      );
+      settle(failure ?? parsed);
     });
 
     // EPIPE defense: attach the error listener BEFORE write so a child
@@ -392,73 +370,4 @@ async function spawnAndCollect(
     });
     child.stdin.end(stdinJson);
   });
-}
-
-/**
- * WR-05: decode incoming Buffers through a `StringDecoder` so a multi-
- * byte UTF-8 sequence that straddles a chunk boundary is reassembled
- * rather than rendered as `U+FFFD` replacement characters. The decoder's
- * tail (`decoder.end()`) is flushed on stream `end` so any final partial
- * sequence is not silently dropped. Direct per-buffer `chunk.toString
- * ("utf8")` would corrupt non-ASCII strings whose code-point bytes
- * happen to land on a chunk boundary -- the downstream JSON parser
- * (wire-protocol) would silently propagate the U+FFFD into string
- * values without failing `JSON.parse`.
- *
- * CR-02: cap accounting measures UTF-8 bytes (`Buffer.byteLength(...,
- * "utf8")`), not UTF-16 code units (`String.prototype.length`), so the
- * documented "stdout 1 MB / stderr 64 KB" guarantees hold for multi-byte
- * payloads.
- *
- * EXEC-02: the chunk that crosses the cap and every later chunk are
- * dropped, but the `data` listener stays, so the pipe keeps draining and
- * the child runs to its own exit. Claude Code 2.1.316 never stops a hook
- * for its output and reads its exit code, so an exit 2 still blocks; the
- * timeout ladder stops a child that never exits. The returned `cut()`
- * reports whether the stream lost text.
- */
-function accumulateStream(
-  stream: NodeJS.ReadableStream | null,
-  cap: number,
-  onChunk: (chunk: string) => void,
-  which: "stdout" | "stderr",
-  label: string,
-): StreamCap {
-  if (stream === null) {
-    return { cut: () => false };
-  }
-
-  let cut = false;
-
-  const decoder = new StringDecoder("utf8");
-  let accumulated = 0;
-  // EPIPE/ECONNRESET defense: attach the error listener before "data" so a
-  // stream error during the SIGTERM/SIGKILL teardown races this dispatcher
-  // runs cannot surface as an unhandled exception. Mirrors child.stdin's
-  // error defense below.
-  stream.on("error", (err) => {
-    hookDebugLog(`exec: ${which} error (${label}): ${errorMessage(err)}`);
-  });
-  stream.on("data", (chunk: Buffer | string) => {
-    if (cut) {
-      return;
-    }
-
-    const text = typeof chunk === "string" ? chunk : decoder.write(chunk);
-    accumulated += Buffer.byteLength(text, "utf8");
-    if (accumulated > cap) {
-      cut = true;
-      hookDebugLog(`exec: ${which} overflow (${label}); dropping the rest of the output`);
-      return;
-    }
-
-    onChunk(text);
-  });
-  stream.on("end", () => {
-    const tail = decoder.end();
-    if (!cut && tail !== "") {
-      onChunk(tail);
-    }
-  });
-  return { cut: () => cut };
 }

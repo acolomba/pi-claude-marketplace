@@ -22,10 +22,10 @@ Feature: Hook failures
       | UserPromptSubmit | first   | say done | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
 
     Examples:
-      | exit code | stderr | output    | timeout | sleep |
-      | 1         | boom   |           |         |       |
-      |           |        | {not json |         |       |
-      |           |        |           | 1       | 3     |
+      | exit code | stderr | output     | timeout | sleep |
+      | 1         | boom   |            |         |       |
+      |           |        | {not json} |         |       |
+      |           |        |            | 1       | 3     |
 
   Scenario: A failing prompt hook without onFailure lets the prompt through
     Given pi runs with the scripted model

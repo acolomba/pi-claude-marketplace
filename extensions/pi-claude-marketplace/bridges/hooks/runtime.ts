@@ -1,4 +1,3 @@
-import type { RingBuffer } from "./async-rewake/ring-buffer.ts";
 import type { ChildLike, TimerLadder } from "./exec-timer.ts";
 import type {
   CacheEntry,
@@ -7,6 +6,7 @@ import type {
   PendingSessionStartContext,
   RoutingEntry,
 } from "./routing-state.ts";
+import type { StreamText } from "./stream-text.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { AssistantMessage } from "../../platform/pi-api.ts";
@@ -30,8 +30,8 @@ export interface HooksRuntimeChildEntry {
   readonly rewakeSummary: string | undefined;
   readonly child: ChildLike;
   readonly ladder: TimerLadder;
-  readonly stdoutBuffer: RingBuffer;
-  readonly stderrBuffer: RingBuffer;
+  readonly stdout: StreamText;
+  readonly stderr: StreamText;
   readonly capturedGeneration: number;
   readonly loc: ScopedLocations;
 }
