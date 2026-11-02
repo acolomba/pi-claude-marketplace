@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: component-features
 milestone_name: Component Behavioral Tests
-current_phase: 06
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 06 complete — all phases complete
-last_updated: "2026-11-02T11:23:35.583Z"
+last_updated: "2026-11-02T12:28:16.488Z"
 last_activity: 2026-11-02
-last_activity_desc: Phase 06 complete
-state_head: fd485a566b9e5afd92f7af23ac1ed0d2b5db318f
+last_activity_desc: Milestone component-features completed and archived
+state_head: c78ec90bc4d4bb6d0d30704094e7af2b23dd2791
 progress:
   total_phases: 7
   completed_phases: 7
   total_plans: 61
   completed_plans: 61
   percent: 100
+current_phase: 06
 ---
 
 # Project State
@@ -30,18 +30,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 06
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-11-02 — Phase 06 complete
-
-Progress: [██████████] 100% (5/7 phases complete: 1, 3, 4, 5 and 7; Phases 2 and 6 await the user's verification items)
-
-Phase 1 is the only prerequisite. After it merges to `claude/quirky-planck-hhm592`,
-Phases 2-7 (Skills, Slash Commands, Agents, Hooks, MCP Servers, Workflows) run
-in parallel, each in its own session and worktree. Suggested merge order:
-Workflows, MCP Servers, Agents, Skills, Slash Commands, Hooks.
-
+Phase: Milestone component-features complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-02 — Milestone component-features completed and archived
 
 ### mcp-4 closeout
 
@@ -279,7 +271,8 @@ archived milestone artifacts.
 ## Operator Next Steps
 
 
-- Start the next milestone with $gsd-new-milestone
+
+- Start the next milestone with /gsd-new-milestone
 
 
 ## Performance Metrics

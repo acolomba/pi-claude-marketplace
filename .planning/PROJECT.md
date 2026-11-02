@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Current Milestone: component-features -- Component Behavioral Tests (branch: claude/quirky-planck-hhm592, started 2026-10-31)
+## Previous Milestone: component-features -- Component Behavioral Tests (branch: claude/quirky-planck-hhm592, started 2026-10-31, completed 2026-11-02, not yet merged, no npm release)
 
 **Goal:** The cucumber suite checks every bridged component kind -- skills,
 commands, agents, hooks, MCP servers, workflows -- as Pi and its companion
@@ -703,6 +703,20 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
+**Completed on branch `claude/quirky-planck-hhm592`, no PR yet:** milestone
+`component-features` (2026-11-02, Phases 1-7, 61 plans, 58/58 requirements;
+archived to `.planning/milestones/component-features-*`). The cucumber suite
+now checks every bridged component kind as Pi and its companions see it after
+a real install, with a scripted model and no authenticated LLM: 1565
+scenarios. Shipped behavior changes: Claude Code's argument substitution and
+`!` commands for typed skills and commands, skill and command name aliases, a
+`run_plugin_command` tool for the model, variable fill on a model's skill
+read, a user-scope provenance ledger that gates project skills, commands and
+hooks (D-CF2-13..16), merged MCP sources and in-plugin reference links,
+background launch for MCP agents, hook parity fixes, and the workflow-wins
+name rule (D-CF7-05). Upstream fixes for Pi and pi-subagents wait on the
+user's forks for review. Audit `tech_debt`, no blockers.
+
 **Completed on PR branch; PR #290 open:** milestone `plugin-lifecycle`
 (2026-10-29, Phases 1-11, 80 plans, 64/64 requirements; archived to
 `.planning/milestones/plugin-lifecycle-*`). Marketplace and plugin lifecycle
@@ -851,8 +865,10 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-Milestone `component-features` is active; its requirements are in
-[REQUIREMENTS.md](REQUIREMENTS.md). The 64
+No milestone is active. The 58 component-features requirements are validated
+and archived in
+[milestones/component-features-REQUIREMENTS.md](milestones/component-features-REQUIREMENTS.md);
+the 64
 plugin-lifecycle requirements are validated and archived in
 [milestones/plugin-lifecycle-REQUIREMENTS.md](milestones/plugin-lifecycle-REQUIREMENTS.md);
 the 104 lifecycle-coverage requirements are validated and archived in
@@ -863,6 +879,23 @@ the 36 json-output requirements in
 [milestones/json-output-REQUIREMENTS.md](milestones/json-output-REQUIREMENTS.md).
 
 ### Validated
+
+- ✓ Bridged skills have behavioral tests: Pi lists each skill with Claude
+  Code's names and description fallback, reports the frontmatter fields Pi
+  cannot honor, sends a typed skill with Claude Code's argument substitution,
+  variables and `!` commands, fills the variables when the model reads a skill
+  file, resolves name clashes as upstream, and follows the plugin lifecycle;
+  project skills need this user's install record (D-CF2-13..16); the gap
+  report was resolved by the user (D-CF2-10) -- component-features Phase 2,
+  2026-11-02 (SKL-01..06).
+
+- ✓ Plugin MCP servers have behavioral tests: pi-mcp-adapter 7.x connects
+  bridged servers under Claude Code's tool names, with configuration values,
+  variables, headers, merged sources (D-CF6-01), silently skipped file-source
+  defects (D-CF6-02), in-plugin reference links, project trust, the missing
+  adapter, and the lifecycle; an agent's MCP call is an accepted deviation
+  (D-CF6-10: pi-subagents design plus two pi-subagents bugs, fixes drafted
+  upstream) -- component-features Phase 6, 2026-11-02 (MCP-01..08).
 
 - ✓ Plugin hooks have behavioral tests: session, compaction, prompt, tool,
   and Stop hooks get Claude Code's values and matchers, matching hooks run in
@@ -2103,3 +2136,5 @@ _Last updated: 2026-11-01 after component-features Phase 4 (Agents) was merged. 
 _Last updated: 2026-11-02 after component-features Phase 3 (Slash Commands) was merged. CMD-01..05 validated; D-CF3-01..13 recorded, D-CF3-07 waits for user review with D-CF2-13._
 
 _Last updated: 2026-11-02 after component-features Phase 5 (Hooks) was merged. HOOK-01..09 validated; D-CF5-01..28 recorded (D-CF5-09 as amended by the code review), five of them Deferred to BACKLOG; the project-hook provenance check extends D-CF2-13._
+
+_Last updated: 2026-11-02 after the component-features milestone closed. SKL-01..06 and MCP-01..08 validated; all 58 requirements archived; D-CF7-05 added._
