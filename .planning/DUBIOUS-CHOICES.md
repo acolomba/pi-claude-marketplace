@@ -3040,3 +3040,19 @@ The user chose to fix audit warning W1 and add scenarios for W3, W5 and W6 befor
 3. **Git credentials: the one explicit exception.** A project-scope clone or fetch may `approve` a Device Flow token into, or `reject` a refused credential from, the user's git credential helper. Credentials belong to the user, not the project.
 4. **T-05-34 closed as consistent:** a project's `CLAUDE_PLUGIN_DATA` inside the project is correct under this principle (Claude Code keeps it under the user config dir).
 - Pending: T-05-33 (large hook stdout under `onFailure: "block"`) waits on an upstream probe the user asked for.
+
+### DC-42: Carrying out DC-41 and T-05-33 (5ecd962..64c2c9d, 209a4ba, 3795720, merged ed29766)
+
+**Locality redesign** (`npm run check` exit 0, 1532/1532, seed 507232):
+1. **Hook trust at command time comes from the last hydrate.** The second hook cache writer runs inside install, update, enable and apply, which have no `ctx`; it reads the trust answer recorded by the last project hydrate (`recordProjectTrust`/`isProjectTrusted` on the hooks runtime) and caches nothing without one. A mid-session trust change takes effect at the next reload, as skill and prompt discovery does. The factory-time hydrate (cwd = home, no `ctx`) is not trust-gated; session_start clears its project entries first.
+2. **Old workflow copies are deleted from the user's home.** For installs made before this change, uninstall, disable, update and reinstall remove that plugin's own recorded envelopes from `~/.pi/workflows/projects/<key>/saved/`, because the engine reads that folder before the in-project one and an old copy would hide the new one. Only recorded names are touched, and nothing new is written there. This is a cleanup write outside the project during a project operation, for migration.
+3. Autoapply in an untrusted project still applies the user scope and shows the project's pending block, so a project config can still turn on a user-scope apply.
+4. The unstage-warning plumbing added for the ledger (4f57d1f) is removed in full; `pending` now lists retained workflow staging per scope without naming the scope; an uninstalled project leaves an empty `.pi/workflows/saved/`.
+5. `AGENTS.md`'s constraints block is generated from PROJECT.md and still shows the old NFR-10 wording until GSD regenerates it.
+
+**T-05-33, hook output matches upstream** (`npm run check` exit 0, 1568/1568, seed 140152 on its branch):
+6. Background (asyncRewake) hooks also lost their output limits, so an exit-2 background hook sends its whole output to the model; that part of Claude Code was not read.
+7. Any JSON the wire protocol reads as a block counts as a kept deny under `onFailure: "block"` with a bad exit code (also top-level `decision: "block"`); a timeout still overrides a printed deny.
+8. JSON lines are detected as more than one non-empty line that each parse (upstream's exact rule was not in the excerpts).
+9. Not aligned, still in BACKLOG: a hook whose output never ends hangs the turn where upstream blocks with "output distrusted" (HKDR-01); output schema validation (HOOKSCHEMAFAIL-01), because the bridge has no output schema.
+10. The upstream evidence is a static read of the 2.1.316 binary; no live probe ran, because the host token folder was readable.
