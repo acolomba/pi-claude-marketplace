@@ -21,6 +21,99 @@ this project.
 - **Status.** `open` until the user reviews it; the user marks it `accepted`,
   `reversed`, or `follow-up`.
 
+## Decisions waiting on you
+
+The short list. Each item names the entry that holds the details. The per-phase
+logs (P3-DC, P4-DC, P5-DC, P6-DC, P7-DC) are copied in full in the
+[appendix](#appendix-per-phase-logs-in-full).
+
+### A. What blocks the milestone close
+
+The milestone audit, complete, and cleanup steps wait on these three.
+Afterwards, run `/gsd-verify-work 02` and `/gsd-verify-work 06`.
+
+1. **Phase 2: the Pi gap report.** File the draft in
+   `.planning/phases/02-skills/02-07-SUMMARY.md`, or decide not to. It lists
+   the skill gaps and, since Phase 3, the command gaps (D-CF2-10; DC-24 item 4,
+   DC-29).
+2. **Phase 6: the agent MCP-tool gap (D-CF6-10, MCP-07).** pi-subagents 0.84.0
+   refuses an agent's call to a plugin MCP tool. The phase pins that refusal as
+   a recorded gap instead of showing a working call. Accept the pin, or reject
+   it, which needs a pi-subagents change and harness work (DC-32 item 1).
+3. **Phase 6: symlinks in a referenced MCP file (WR-01, WR-02).** A referenced
+   `mcpServers` file now refuses every symlink, even one inside the plugin
+   folder. Claude Code follows it. The refusal text also says "escapes plugin
+   root" for an in-root link (DC-32 item 2).
+
+### B. Security decisions taken without you
+
+These four are marked "Pending (user review)" in `.planning/PROJECT.md`.
+Together, they make a project's skills, commands, and hooks run only when this
+user installed that plugin into that project, as Claude Code does.
+
+1. **D-CF2-13: a user-scope install record per project** (DC-29, DC-36; also
+   D-CF3-07 for commands). Project installs made before this change stop
+   working until the user reinstalls them.
+2. **D-CF2-14: a load with autoapply on changes only the user scope** (DC-30).
+   An explicit `/claude:plugin apply` still applies both scopes.
+3. **D-CF2-15: background autoupdate changes only the user scope** (DC-37).
+4. **D-CF2-16: a re-stage that names no plugin never creates a record**
+   (DC-38). This covers bare `update` and `reinstall`, the `marketplace update`
+   cascade, and `apply`'s catalog moves. Residual: `apply` still records the
+   plugins the project config declares.
+5. **Two open medium threats with no decision yet** (DC-38, last bullet):
+   T-05-33 (a hook's output cut at 1 MB reads as "no decision" under
+   `onFailure: "block"`) and T-05-34 (a project's `CLAUDE_PLUGIN_DATA` folder
+   sits inside the repository).
+6. **Accepted risks to confirm:** AR-02-05 and AR-05-06. The record covers only
+   the staged skill folder or `hooks.json`, not other plugin files (DC-30
+   item 6, DC-36 item 4).
+
+### C. High-severity choices that change what a user sees
+
+- **Skills (DC-24):** the frontmatter-name aliases follow Claude Code, and the
+  old elided alias is gone. A command now wins over a skill of the same name.
+- **Commands (DC-34):**
+  - Commands stay hidden from the model, a Pi gap (P3-DC-03).
+  - `user-invocable: false` commands stay listed and runnable (P3-DC-04).
+  - A marketplace entry's `commands` now adds to `commands/`. This corrects
+    DC-07 / D-CF1-06 for commands (P3-DC-06).
+- **Agents (DC-33):**
+  - A preloaded skill goes into the agent's system prompt (D-CF4-04).
+  - Agents run in the foreground by default (D-CF4-05).
+  - Every bridged agent is shown to the parent model (D-CF4-14).
+  - Project agents are refused in untrusted folders (D-CF4-09).
+  - No background-agent scenario exists (D-CF4-10).
+- **Hooks (DC-35):**
+  - `fork` sends SessionEnd `resume`, and `/reload` runs no session hooks
+    (P5-DC-03).
+  - Three parity gaps are licensed only by phase ownership (P5-DC-04).
+  - Unrecorded project hooks are skipped with no message (DC-36 item 3).
+- **MCP servers (DC-32):**
+  - `.mcp.json` and declared servers now merge, replacing PRD MC-1
+    (P6-DC-01).
+  - A broken or unreadable server file is skipped with no message, including
+    on a permission error (P6-DC-02, P6-DC-07, P6-DC-18).
+  - Project servers keep the adapter's approval step (P6-DC-03).
+- **Workflows (DC-31):**
+  - A workflow runs with no approval prompt (P7-DC-03).
+  - Arguments arrive as an object (D-CF7-02).
+  - Bad scripts are refused at install (D-CF7-03); a script with bad `meta`
+    is installed with a warning (D-CF7-04).
+- **Earlier milestone choices:** `$N` and `${...}` substitution at invocation
+  time (DC-03). `` !`cmd` `` runs with no permission gate (DC-04). Declared
+  paths replace the folder (DC-07; changed for commands by P3-DC-06).
+
+### D. Process findings
+
+- **Upstream probes leaked.** The Claude Code binary read the host's token
+  files under `/home/claude/.claude/remote` (DC-33 item 6). It also contacted
+  `api.anthropic.com` and received a signed policy (DC-34 item 1), even under
+  `env -i`. No credential was saved, and the key results were re-run offline.
+  The research skill now requires `unshare -rn`.
+- The phase sessions are finished but not archived. Archiving needs your
+  approval.
+
 ## Entries
 
 ### DC-01: Pre-fan-out decisions settled without the user
@@ -887,3 +980,1976 @@ The parent closed P5-DC-11 after the merge: project-scope hooks run only when th
 5. No notice when a plugin is updated but left unrecorded; a refused skill or command prints the recovery command, but a refused hook only logs a debug line.
 6. The missing-dependency install under a bare update is covered by unit tests only.
 - Phase 5 security now has `threats_open: 0`; T-05-33 (a hook's stdout cut at 1 MB under `onFailure: "block"` reads as no decision; HOOKBIGJSON-01) and T-05-34 (project `CLAUDE_PLUGIN_DATA` sits inside the repository; HOOKDATA-01) stay open below the threshold without a disposition.
+
+## Appendix: per-phase logs in full
+
+Copied verbatim from each phase directory on 2026-11-02, with headings shifted. The phase files stay the source; the summary entries DC-31 to DC-35 above point here.
+
+### Phase 3 (Slash Commands): Dubious Choices Log
+
+Phase log for the child session on `features/component-features-phase-3`. Same
+shape as the root `.planning/DUBIOUS-CHOICES.md`; the parent merges these
+entries into it. Severity and status follow the root file's rules.
+
+
+#### P3-DC-01: Branch fast-forwarded to the milestone head before discuss
+
+- **Phase / source:** Phase 3 child session, before discuss.
+- **Severity:** Low. **Status:** open.
+- **Choice:** `features/component-features-phase-3` (at `3a7a707`, an
+  ancestor of the milestone) was fast-forwarded to
+  `origin/claude/quirky-planck-hhm592` at `0e360ca`, so Phase 3 builds on
+  Phase 2's executed and reviewed skills code (D-CF2-13 ledger,
+  `orchestrators/skill-invocation.ts`), and its gates run on that combined tree.
+- **Alternatives:** Stay on `3a7a707` and design against the expected shape of
+  the ledger, as the parent's brief suggested.
+- **Why dubious:** The parent expected to reconcile at merge. A fast-forward
+  is a merge with no new commit and breaks no git rule; any later Phase 2
+  change still merges normally.
+- **Recorded in:** `03-CONTEXT.md` header.
+
+#### P3-DC-02: The upstream probe reached api.anthropic.com
+
+- **Phase / source:** Phase 3 research subagent (`03-UPSTREAM-EVIDENCE.md`,
+  "Isolation gap").
+- **Severity:** High (process). **Status:** open.
+- **Choice:** The probe ran `claude plugin` commands under `env -i` with a
+  throwaway HOME and config dir. The binary still fetched
+  `https://api.anthropic.com/api/claude_code/policy_limits` (its built-in API
+  address, not `ANTHROPIC_BASE_URL`) in the first 16 trees and received a
+  signed policy tied to an identity the probe cannot name. The subagent
+  stopped networked runs and re-ran the core probes (base, object map, mixed
+  array) in a loopback-only namespace (`unshare -rn`, `tree/bin/netns.sh`)
+  with identical results. A few edge variants (Q3 extras, Q7 string form)
+  rest on the networked runs only.
+- **Alternatives:** Discard all networked results and re-run every variant in
+  the namespace.
+- **Why dubious:** It broke the probe's localhost-only rule. Future probes
+  should start inside `unshare -rn`. The research skill's recipe should say so
+  (parent line).
+- **Recorded in:** `03-UPSTREAM-EVIDENCE.md`, `03-CONTEXT.md`.
+
+#### P3-DC-03: Commands stay invisible to the model (FG-11)
+
+- **Phase / source:** Phase 3 discuss (D-CF3-01).
+- **Severity:** High. **Status:** open.
+- **Choice:** Record a Pi gap. A command with a description is in Claude
+  Code's model skill list and runnable through the Skill tool (E1); in Pi it
+  stays a user-only prompt template.
+- **Alternatives:** Also stage each command as a Pi skill, which gives the
+  model the command but adds a `/skill:<plugin>-<name>` entry upstream lacks
+  and Pi cannot hide.
+- **Why dubious:** Model-invoked commands are common upstream; a plugin that
+  relies on the model running its commands loses that in Pi.
+- **Recorded in:** `03-CONTEXT.md` D-CF3-01.
+
+#### P3-DC-04: `user-invocable: false` commands stay listed and runnable (FG-12)
+
+- **Phase / source:** Phase 3 discuss (D-CF3-02, extends D-CF1-09).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Keep listed and runnable. Upstream hides and refuses the command
+  but lets the model run it (E2); with D-CF3-01, hiding it in Pi would make it
+  unreachable.
+- **Alternatives:** Refuse the typed command in the invocation handler, as
+  upstream does.
+- **Why dubious:** The user sees a command the author hid.
+- **Recorded in:** `03-CONTEXT.md` D-CF3-02.
+
+#### P3-DC-05: Object-map keys go through the Pi command naming (FG-13)
+
+- **Phase / source:** Phase 3 discuss (D-CF3-03).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Support the object map. Keys go through `generatedCommandName`:
+  CM-2 elision applies, a `/` becomes a `:` segment, and keys that upstream
+  refuses (trailing `:`, `<`, `>`) or that Pi cannot type (whitespace) are
+  skipped with a warning. Missing or non-`.md` sources, and a second key on
+  one file, skip the entry with a warning (upstream is silent, or reports
+  "failed to load" in `plugin list`).
+- **Alternatives:** Keep keys verbatim (impossible for `/` in a Pi file name);
+  record the object map as unsupported.
+- **Why dubious:** Names differ from upstream for elided and `/` keys; the
+  warnings are this project's, not upstream's.
+- **Recorded in:** `03-CONTEXT.md` D-CF3-03.
+
+#### P3-DC-06: A marketplace entry's `commands` adds to `commands/` (corrects D-CF1-06)
+
+- **Phase / source:** Phase 3 discuss (D-CF3-04).
+- **Severity:** High. **Status:** open.
+- **Choice:** Follow the binary: `commands/` is read unless `plugin.json`
+  declares `commands`; an entry declaration adds to it, and an entry's inline
+  `content` commands are dropped with a warning. This supersedes the
+  marketplace-entry half of D-CF1-06 for commands only.
+- **Alternatives:** Keep D-CF1-06 (the docs say a plugin with no
+  `plugin.json` treats the entry as the manifest).
+- **Why dubious:** It changes a Phase 1 decision the parent made, the docs
+  disagree with the binary, and agents and workflows may have the same
+  difference (parent line to Phases 4 and 7).
+- **Recorded in:** `03-CONTEXT.md` D-CF3-04.
+
+#### P3-DC-07: Command frontmatter `name` aliases deferred
+
+- **Phase / source:** Phase 3 discuss (deferred ideas, E9).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Upstream gives a command with frontmatter `name` the aliases
+  `/<plugin>:<name>` and `/<name>`. Phase 3 does not add them; a backlog line
+  goes to the parent.
+- **Alternatives:** Resolve them in the command invocation handler, as
+  D-CF2-02 does for skills.
+- **Why dubious:** An unlicensed parity gap left open to keep the phase
+  bounded.
+- **Recorded in:** `03-CONTEXT.md` `<deferred>`.
+
+#### P3-DC-08: Claude Code's command tag block not sent
+
+- **Phase / source:** Phase 3 discuss (D-CF3-06).
+- **Severity:** Low. **Status:** open.
+- **Choice:** The model receives the substituted body only, as Pi's template
+  expansion sends it; upstream prefixes `<command-message>`/`<command-name>`/
+  `<command-args>` tags (E6). Residual under D-CF1-01.
+- **Alternatives:** Prepend upstream's tag block.
+- **Why dubious:** The model sees different framing than in Claude Code.
+- **Recorded in:** `03-CONTEXT.md` D-CF3-06.
+
+#### P3-DC-09: Phase 3 research choices (accepted by the orchestrator)
+
+- **Phase / source:** Phase 3 researcher (`03-RESEARCH.md`); the orchestrator
+  accepted each item for planning and answered the open questions.
+- **Severity:** Medium (items 1-4); the rest Low. **Status:** open.
+- **Items:**
+  1. **Staged command frontmatter rebuilt as one `"key": <JSON>` line per
+     key** (Pi's YAML refuses duplicate keys, so appending `description:`
+     breaks a file with `description: ""`; the rebuild avoids copying Phase 2's
+     line scanner). Every staged command's bytes change.
+  2. **Ledger writer passed in:** `commitPreparedCommands` and
+     `UnstageCommandsInput` take a required `ledger`; the four orchestrator call
+     sites (`install-outcome.ts` twice, `update-swap.ts`,
+     `marketplace/shared.ts`) pass Phase 2's `NODE_PROJECT_SKILL_LEDGER`, whose
+     name says "skill" (rename is a parent line). Project commands installed
+     before this phase abort until updated or reinstalled (CHANGELOG line).
+  3. **E8 residual:** a returned body that starts with `/<template>` is
+     expanded again by Pi; resending through `sendUserMessage` would turn the
+     RPC response into `handled` and change error routing. Pinned by a unit
+     test.
+  4. **Four waves, not three:** the staged-file writer is touched by the
+     frontmatter (wave 2) and manifest-forms (wave 3) plans.
+  5. Object-map entries ride on `componentPaths.commandMap` (optional field);
+     `componentPaths.commands` stays `string[]` for Phase 2's shadow check.
+  6. Abort origin `{kind: "command", commandId: <typed name without "/">}`
+     (open string, no closed-set edit; a `docs/json-output.md` parent line).
+  7. First-wins order: `commands/`, then `plugin.json` paths, then
+     marketplace-entry paths (inferred from upstream's listing order).
+  8. The lenient `info` mirror always includes `commands/` because it cannot
+     see `plugin.json`.
+  9. A map `source` that escapes the plugin root or is a symlink makes the
+     plugin unavailable, like any escaping component path.
+  10. Phase 3 features reuse two Phase 2 step texts (system-prompt skill list,
+      "the user's pi directory records no plugin install for the project").
+  11. An untrusted project keeps its own abort text, as skills do.
+- **Open questions answered by the orchestrator (recommended options):**
+  map keys with hidden or direction-changing characters (`\p{Cf}`) are
+  skipped with a warning, as upstream refuses them; a plugin whose only
+  commands come from a map counts `commands` as supported; the collision
+  order is item 7; the TUI source tag is spiked before the expected value is
+  written.
+- **Recorded in:** `03-RESEARCH.md`, `03-VALIDATION.md`.
+
+#### P3-DC-10: Phase 3 planning choices
+
+- **Phase / source:** Phase 3 planner (`03-01..09-PLAN.md`).
+- **Severity:** Medium (items 1-4); the rest Low. **Status:** open.
+- **Items:**
+  1. **Five waves, nine plans** (the ledger writer and the object map split
+     out): wave 1 tracer 03-01; wave 2 frontmatter 03-02, invocation 03-03,
+     declared paths and entry rule 03-04, lifecycle 03-05; wave 3 ledger writer
+     03-06; wave 4 ledger check 03-07 and object map 03-08; wave 5 gate 03-09.
+  2. **Project commands run without the ledger check between waves 2 and 4**;
+     only the phase gate covers the finished rule.
+  3. **D-CF3-07's abort text follows D-CF2-13's current wording** (it names
+     reinstall), not the CONTEXT literal.
+  4. **The "uninstall before `/reload`" abort scenario lives in invocation
+     (03-03)**, not lifecycle.
+  5. Command ledger warnings ride Phase 2's `skillWarnings` member (wording
+     names the commands; rename is a parent line).
+  6. Ledger scenarios use a commands-only plugin `solo`, because
+     `offers these plugins:` always adds a skill.
+  7. The description fallback reads the body after install-time substitution
+     and reference rewrite (differs from upstream only for a first line naming
+     `${CLAUDE_PLUGIN_ROOT}`).
+  8. The writer's read-back compares the JSON form of the frontmatter, so a
+     non-finite YAML number stages as `null`.
+  9. The reinstall-owner lookup reads `state.json` with
+     `persistMigration: false` (skills side saves one; Phase 2 parent line).
+  10. The argument-hint check uses `this.startTuiSession()` in the shared
+      sandbox after a spike; the source tag is unconfirmed.
+  11. Extra scenario: `info` of an unavailable plugin with entry-declared
+      `commands`.
+  12. Entry maps with both or neither of `source`/`content` make the plugin
+      unavailable (unprobed for entries).
+  13. `\p{Cf}` map keys are skipped (beyond D-CF3-03's list, per upstream).
+  14. A declared path or map `source` through a symlink makes the plugin
+      unavailable (today's containment rule).
+  15. The ledger digest covers only the staged command file, not plugin
+      scripts a `!` command runs (residual).
+  16. The "user's own template" Given writes `<agent dir>/prompts/<name>.md`.
+  17. `test/index.test.ts` gets more than an expected-value edit (`pi` exposed
+      on `LoadedExtension`; the listener type may return a Promise), limited
+      by a `git diff` criterion.
+  18. Inline map commands record a synthetic `sourcePath`
+      `<plugin root>#commands.<key>` (MCP bridge precedent).
+  19. An abort's `commandId` is the command name without its slash.
+  20. `/claude:plugin info` still does not list declared command files or map
+      entries (residual parent line).
+  21. 03-01 carries an extra `promote` assumption-delta block.
+  22. 03-01's degraded-command scenario assumes that install reports only
+      warnings (`, which warned`).
+- **Recorded in:** the plans.
+
+#### P3-DC-11: Orchestration choices for Phase 3 execution
+
+- **Phase / source:** Phase 3 orchestrator (execute-phase).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. Executor prompts tell each executor to Read the GSD execution files by
+     absolute path instead of inlining them (DC-17 precedent), and add the
+     project rules and environment facts blocks.
+  2. The post-merge gate is the project's `npm run check` (AGENTS.md), not the
+     workflow's build-command sniff. When a wave's merge result has the same
+     build inputs as a tree the executor already passed `npm run check` on
+     (the wave base had not moved, only the SUMMARY was added), the passing
+     result is reused, as AGENTS.md allows. Wave 1: the executor's run at
+     `b6a3912`; the merged tree adds only `03-01-SUMMARY.md`.
+
+#### P3-DC-12: Plan 03-01 executor choices (staged command writer)
+
+- **Phase / source:** 03-01 executor (`03-01-SUMMARY.md`).
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. The read-back check can fail an install: a frontmatter key over 1024
+     characters (legal as an explicit `? key`) becomes an implicit key in the
+     JSON-flow rebuild, which Pi's parser refuses (`BridgeStagingError`, no
+     degrade).
+  2. The description fallback is computed on the body after CM-3
+     substitution and the reference rewrite (upstream: raw body).
+  3. A frontmatter that parses to a list or a scalar is dropped without a
+     warning.
+  4. Outline rows with no declared description write `description:` (YAML
+     null); scenarios cover null, `""`, and no frontmatter.
+  5. The 101-character fallback row pins a 97-character cut that ends on a
+     space, as `A2e` does.
+  6. Mocked neutralize-safeguard unit cases kept (the function moved
+     unchanged, with branches real input cannot reach).
+  7. One live marker each side keeps `dup:23c99c81` hidden; three stale
+     commands-side markers deleted. Rebuild also strips a second BOM, as
+     Pi's parser does. `P3-DC-09` is not cited in code comments (phase IDs
+     are forbidden there).
+
+#### P3-DC-13: Plan 03-02 executor choices (frontmatter)
+
+- **Phase / source:** 03-02 executor (`03-02-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. Pi's menu em dash is matched as `--`, because the `fix-unicode-dashes`
+     pre-commit hook rewrites `—` in the feature file; a description holding
+     `--` cannot be told apart from the join.
+  2. The terminal-menu table lists Phase 2's `demo:demo-skill` alias row, so a
+     skills alias change changes this scenario.
+  3. The menu parser slices fixed 120-column rows (PTY width, Pi pads rows).
+  4. Pi's `[t]` source tag is pinned as rendered.
+  5. Existing unit cases that set `model: sonnet` now also expect the
+     dropped-fields line (inputs unchanged).
+  6. The executor's commits carry this child session's own `Claude-Session`
+     trailer (`session_01EDUMG8nFuockQFTkJixpie`, from its harness reminder)
+     instead of the parent's line the brief asked for; history is not
+     rewritten.
+
+#### P3-DC-14: Plan 03-03 executor choices (invocation)
+
+- **Phase / source:** 03-03 executor (`03-03-SUMMARY.md`).
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. A `"kind" in loaded` check narrows the read result instead of an
+     explicit discriminated union.
+  2. Bash-missing is checked even for a body with no `!` command (as skills
+     do; upstream may check only when a pattern exists, not verified).
+  3. The Outline's `placeholder` column only labels rows.
+  4. A staged-file parse failure has no unit case of its own (same `.catch`
+     as a read failure).
+  5. The hooks feature's data-directory literal (`data/demo`) differs from the
+     commands and skills one (`data/<marketplace>/<plugin>`): a parent line
+     for the Hooks phase.
+  6. The handler's slash-line regex became `startsWith` plus one `\s` search
+     (lint `sonarjs/super-linear-regex`); the invoker type is inline (fallow
+     private-type leak).
+
+#### P3-DC-15: Plan 03-04 executor choices (declared paths and entry rule)
+
+- **Phase / source:** 03-04 executor (`03-04-SUMMARY.md`).
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. A declared non-`.md` file warns where upstream is silent (D-CF3-05).
+  2. CM-2 elision applies to declared files (`demo-a.md` gives `demo:a`),
+     under the recorded D-141-01 divergence; upstream names it `demo:demo-a`.
+  3. The FG-14 pin runs the install as a `When` (the install Given rejects
+     warnings and this install always notes the shadowed folder).
+  4. An entry `"commands": []` still reads the folder (inferred from E4, not
+     probed).
+  5. A Unix socket stands in for "not a regular file" in a unit case.
+  6. Residuals for the parent: `/claude:plugin info` does not list a declared
+     single-file command (`discoverComponentNames` reads directories only);
+     Phase 2's `commandUpstreamNames` reads each commands path as a directory,
+     so a declared command file adds no name to the D-CF2-03 clash check.
+
+#### P3-DC-16: Plan 03-05 executor choices (lifecycle)
+
+- **Phase / source:** 03-05 executor (`03-05-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. The update scenarios replace the whole command file (description and
+     body change together; listing pins one, the model log the other).
+  2. A negative edit keyed on `allowExistingRecord` (temporary).
+  3. `Given pi runs with the scripted model` sits in the Background, because
+     the listing step needs the profile Pi.
+
+#### P3-DC-17: Plan 03-06 executor choices (project-command ledger writer)
+
+- **Phase / source:** 03-06 executor (`03-06-SUMMARY.md`); wave 3 gate reuse.
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. Commands share Phase 2's per-project `skills.json` ledger; on Windows a
+     command name uses `.` as the separator, which still never equals a skill
+     name (skill names are `a-z0-9-` only).
+  2. The digest is over the file's UTF-8 text (03-07 must read it the same
+     way).
+  3. When the install undo runs after a failed ledger write, the second
+     forget warning is dropped.
+  4. Command ledger warnings ride the `skillWarnings` member and read
+     `could not remove the commands from the project skill ledger: ...`; the
+     "skill" wording across the ledger is a rename parent line.
+  5. A `prune` rollback does not restore ledger entries (parent line).
+  6. Wave 3's post-merge gate reuses the executor's `npm run check` at
+     `ce2330b` (seed 713944, 1299 scenarios); the merged tree adds only the
+     SUMMARY.
+
+#### P3-DC-18: Plan 03-07 executor choices (provenance check)
+
+- **Phase / source:** 03-07 executor (`03-07-SUMMARY.md`).
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. The digest covers only the staged command file; a plugin script a `!`
+     command runs is not covered (the skills digest covers the whole staged
+     directory). Accepted as T-03-23; parent gap line.
+  2. The refusal names `/claude:plugin reinstall <plugin>@<marketplace>
+     --scope project` from the project record that lists the command (state
+     read with `persistMigration: false`), or a generic reinstall line.
+  3. An unparseable staged file refuses with `Cannot read the command ...`
+     before the ledger is read.
+  4. The unit fake hard-codes Phase 2's ledger layout and key.
+  5. A negative edit counted calls on `globalThis` (temporary).
+
+#### P3-DC-19: Plan 03-08 executor choices (object-map commands)
+
+- **Phase / source:** 03-08 executor (`03-08-SUMMARY.md`).
+- **Severity:** Medium (items 1-2); the rest Low. **Status:** open.
+- **Items:**
+  1. **`allowedTools` accepts a string** (the plan's wording); upstream's
+     schema accepts only an array of strings, so `"allowedTools": "Read"`
+     installs here and fails upstream.
+  2. **A missing map source is an install warning**; upstream shows "failed
+     to load" in `plugin list` and says nothing at install.
+  3. `\p{Cf}` (and `\p{Cc}`) keys are skipped; hidden characters print as
+     `\u{XXXX}` in map warnings only.
+  4. Map warnings drop the plugin root (path redaction cut them short); the
+     walk's own duplicate warning is still cut short (pre-existing; parent
+     line for `shared/redact-absolute-paths.ts`).
+  5. A map source inside `commands/` suppresses the shadow note (D-CF1-06's
+     reach rule extended; not probed).
+  6. A directory source under a bad key is still walked (upstream ignores the
+     key for a directory).
+  7. Malformed entries (both/neither, wrong types, absolute, escaping, linked
+     source) make the plugin unavailable with reason `unsupported source`.
+  8. Non-owned test edit: `test/architecture/declared-component-path-overlap.test.ts`
+     gains `kind: "file"` in an expected value (`DiscoveredCommand` is now a
+     union).
+  9. On Windows a key with an inner `:` yields a file name NTFS refuses
+     (parent line); `info` still does not list map entries (parent line).
+
+#### P3-DC-20: Milestone merged before the phase gate; a clone fixed on the commands side
+
+- **Phase / source:** Phase 3 orchestrator, before wave 5.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Before the phase gate, the milestone branch (Phases 4, 6, and 7
+  merged, Phase 2 review fixes) was merged into this branch (`bf0b58f`), so
+  the phase gate runs on the combined tree. Only `.planning/ROADMAP.md` and
+  `.planning/STATE.md` conflicted: the Progress table keeps Phase 3 at 8/9
+  and Phase 4 complete; STATE takes the milestone's text. The combined tree
+  showed one new clone group (`dup:5cc56bd6`, `bridges/commands/unstage.ts`
+  against Phase 2's `bridges/skills/unstage.ts`), born of the milestone's
+  marker cleanup and the newer skills return shape. The commands side was
+  restructured (`unlinkIfPresent` helper, `d164a80`) instead of adding a
+  marker. `npm run check` then passed on the combined tree (seed 412895, 1451
+  scenarios).
+- **Alternatives:** Leave the integration to the parent's merge; add a
+  reviewed `code-duplication` marker.
+- **Why dubious:** The parent planned to merge; doing it here front-loads
+  conflict resolution in tool-written files.
+
+#### P3-DC-21: Security audit choices
+
+- **Phase / source:** Phase 3 security auditor and orchestrator (`03-SECURITY.md`).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. The 13 accept rows were closed on their plan-time acceptance; the
+     orchestrator wrote the accepted-risks log (AR-03-01..10) afterwards.
+  2. T-03-28 (gap report not posted) and T-03-03 (Pi sends no frontmatter)
+     rest on the SUMMARY text and on a Pi fact the repo cannot check.
+  3. `!` command output size stays uncapped (D-CF1-02 residual); not a new
+     decision.
+  4. Pre-existing, outside the register: `orchestrators/plugin/info.ts`
+     lists entry names of declared directories of an unavailable plugin
+     without containment (all kinds, names only). Parent line candidate.
+  5. The orchestrator skipped the workflow's own preliminary classification
+     and sent the whole register to the auditor.
+
+#### P3-DC-22: Code review and fix choices
+
+- **Phase / source:** Phase 3 code reviewer (two iterations), code fixer
+  (`03-REVIEW.md`, `03-REVIEW-FIX.md`).
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. WR-01 fix: a failed ledger write now removes the renamed command files
+     (direct `unlink`, not the removal port) and rethrows. Old command files
+     unlinked before the renames are not restored, so a failed update can
+     leave old names recorded with no files (pre-existing for rename
+     failures; a retry recovers). The new scenario pins "no commands listed"
+     after a failed update.
+  2. WR-02 fix: a file claims its path only when its command is admitted; a
+     file reached through overlapping commands paths whose first-depth name
+     lost now loads under its second-depth name (not probed upstream).
+  3. Info items left open: IN-01 (`argument-hint: [x]` parses as a YAML list
+     and is dropped silently, upstream not probed), IN-02 (reinstall hint
+     names come from the project's `state.json`, as skills do), IN-03
+     (map-directory duplicate warnings name the plugin root), IN-04 (menu
+     step slices fixed 120-column rows), IN-05 (staged-path match is byte
+     exact; a mismatch falls back to Pi's own expansion, no `!` runs), IN-06
+     (one unit case asserts the Linux `EISDIR` text; macOS would say EPERM).
+  4. The fixer's two commits carry its harness's `Claude-Session` trailer
+     (`session_01EDUMG8nFuockQFTkJixpie`) rather than the parent's.
+  5. The `--auto` re-review was limited to the two files the fixes touched.
+
+#### P3-DC-23: Phase completion and transition choices
+
+- **Phase / source:** Phase 3 orchestrator (execute-phase `update_roadmap`,
+  transition in post-completion mode).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. The regression gate was satisfied by the full `npm run check` on the
+     final product tree `a041d22` (seed 843376, 1453 scenarios), which runs
+     every prior phase's tests; no separate prior-phase test list was built.
+  2. `phase.complete 3` reported nine "references files not on disk"
+     warnings; all are false positives (SUMMARY paths relative to the
+     extension root, and shell commands). It also advanced STATE.md's
+     position to Phase 2, as the tool does; the parent owns STATE.md at merge.
+  3. The transition's `evolve_project` step (PROJECT.md Validated line, Key
+     Decisions rows, footer) was not run here: PROJECT.md is parent-owned, so
+     those edits are parent lines in `03-09-SUMMARY.md`. STATE.md got one
+     Recent Decisions bullet; graduation scan found no LEARNINGS files.
+  4. Verification passed (5/5); the verifier relied on the orchestrator's
+     full-gate measurement and ran focused suites itself (cucumber seed
+     800431).
+
+Source: `.planning/phases/03-slash-commands/DUBIOUS-CHOICES.md`.
+
+### Phase 4 (Agents): Dubious Choices Log
+
+Phase log for the child session running Phase 4 of `component-features`, in the
+shape of the root `.planning/DUBIOUS-CHOICES.md`. The parent merges these
+entries into the root file. Severity and status follow the root file's rules.
+
+
+#### P4-DC-01: Commit attribution names this child session
+
+- **Phase / source:** Phase 4 child session, setup.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Commit trailers use this session's own `Claude-Session` URL
+  (`session_01EDUMG75mZrbnf4k1GJQjc9`), as the session's attribution notice
+  says, not the parent's URL that `CHILD-SESSION-BRIEF.md` prints.
+- **Alternatives:** Copy the brief's trailer exactly.
+- **Why dubious:** The brief says "exactly"; the parent may grep for its own
+  URL.
+
+#### P4-DC-02: Upstream probes read host token files
+
+- **Phase / source:** upstream research subagent (discuss step).
+- **Severity:** Medium (process/security). **Status:** open.
+- **Choice:** The Claude Code 2.1.316 probes ran under `env -i` with a fresh
+  HOME and config dir, but the binary reads the hard-coded
+  `/home/claude/.claude/remote/.oauth_token` and `.session_ingress_token`
+  regardless. All 52 captured requests went to the local stub; no auth
+  header was saved; no credential files were written. Found after the last
+  probe; no probe ran afterwards. The subagent also added
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` and `TMPDIR`, and edited only
+  the probe's own `.claude.json` to reach the trust dialog.
+- **Why dubious:** The compat-research skill requires full isolation; it was
+  not achievable. Future probes should run where `/home/claude/.claude/remote`
+  does not exist or is unreadable.
+
+#### P4-DC-03: Discuss decisions settled without the user
+
+- **Phase / source:** Phase 4 smart discuss (`04-CONTEXT.md`, D-CF4-01..14).
+- **Severity:** High for items 1-4, Medium for 5-7, Low for the rest.
+  **Status:** open.
+- **Items:**
+  1. **D-CF4-04 (skill preload, XK-01):** the bridge inlines preloaded skill
+     content into the agent's system prompt, because pi-subagents passes only
+     a path. Upstream puts it in the child's first user message. A skill
+     update now needs the agent re-staged (same install, so it happens), and
+     the generated agent file grows by each preloaded skill.
+  2. **D-CF4-05 (`async`):** every non-MCP bridged agent now emits
+     `async: false` (foreground default, as upstream), changing behavior for
+     users who relied on pi-subagents' async default; `background: true`
+     emits `async: true`. MCP-granted agents are left alone for Phase 6.
+  3. **D-CF4-14 (`advertise: true`):** bridged agents enter the parent system
+     prompt, which changes every parent prompt with pi-subagents loaded and
+     may break sibling phases' whole-prompt comparisons at merge.
+  4. **D-CF4-09 (trust):** the untrusted-project refusal is kept as a Pi-gap
+     divergence (upstream runs plugin agents untrusted); the alternative of
+     writing project agents into user scope was rejected.
+  5. **D-CF4-01 (nested):** dotfiles and case-insensitive `.md` now load, as
+     upstream; flattening nested segments with `-` can collide with a flat
+     name (first wins, warns).
+  6. **D-CF4-07 (`--map-model`):** targets refreshed to the 5.x model IDs
+     upstream's first-party table names (account-dependent upstream).
+  7. **D-CF4-03:** the fallback description text changes to upstream's.
+  8. **D-CF4-10:** AGT-04 may close on a recorded gap instead of a scenario.
+  9. **D-CF4-08:** the stale ANAME-02 "cannot narrow" warning is left for
+     Phase 6 / the parent instead of fixed here.
+- **Upstream evidence:** `04-UPSTREAM-AGENTS.md`; pi-subagents facts in
+  `04-PI-SUBAGENTS.md`.
+
+#### P4-DC-04: Planning-workflow deviations
+
+- **Phase / source:** Phase 4 plan-phase orchestration (child session).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. The `ai-integration` plan:pre step hook was not dispatched although the
+     phase goal contains "agent": the phase translates plugin agents for
+     pi-subagents and builds no AI system (same reasoning as DC-11).
+  2. Plans are made with `REVERSIBILITY_GATES: false`, as DC-12 does for the
+     whole run.
+  3. Background planner/checker spawns are awaited through the harness's
+     completion notifications instead of `gsd_stall_watch` polling (the
+     notification is reliable here, and polling would read subagent
+     transcripts).
+  4. VALIDATION.md is seeded from the template (frontmatter only); the
+     validation map lives in `04-RESEARCH.md` "Validation Architecture".
+
+#### P4-DC-05: Research open questions answered by the orchestrator
+
+- **Phase / source:** Phase 4 researcher (`04-RESEARCH.md`); answered in
+  `04-CONTEXT.md` "Amendments after research".
+- **Severity:** Medium (items 1, 4, 6); the rest Low. **Status:** open.
+- **Items:**
+  1. AGT-04 closes on a recorded gap (D-CF4-10): the detached runner cannot
+     load the scripted model (`JITI_ALIAS` maps `@earendil-works/pi-ai` to
+     `./compat`, no `providers/faux`), measured; the parent/child call race
+     also remains. A fix needs a frozen file or pi-subagents.
+  2. `opusplan` maps to sonnet (upstream record) instead of opus (D-CF4-07 as
+     first written).
+  3. Declared folder paths recurse (upstream refuses folders); a declared
+     symlinked file is refused (upstream follows it).
+  4. The untrusted default-scope run is not pinned (its error text names
+     repository paths no frozen token covers); only the explicit-scope pair.
+  5. `Tool(spec)` maps by tool name; `effort` is lowercased.
+  6. D-CF4-04 edits two orchestrator call sites outside Phase 4 ownership
+     (`install-outcome.ts`, `update-swap.ts`), minimal and inside their own
+     functions; the preload reads the plugin source `SKILL.md`, which can
+     differ from the staged copy when the skills bridge repairs YAML or when
+     Phase 2 adds a transform later.
+  7. Agents without `tools` in a plugin that ships MCP servers keep today's
+     output (no `async` field), extending the D-CF4-05 exception.
+  8. Researcher choices accepted: `$ARGUMENTS` in a preloaded skill stays
+     literal (frozen port, upstream would empty it); AGT-05 "load the
+     companion, then `/reload`" is stood in by starting a profile Pi with the
+     companion after the shared-Pi install; the default fixture skill from
+     `path-marketplace.ts` is an acceptable Phase 1 stand-in for XK-01.
+  9. Tests outside Phase 4 ownership need expected-value edits (generated
+     bytes, 4.x model IDs): `update-swap.test.ts`, `reinstall-flow.test.ts`,
+     `install-flow-ledger.test.ts`, `edge/handlers/plugin/install.test.ts`,
+     `update.test.ts`.
+
+#### P4-DC-06: Phase 4 planning choices
+
+- **Phase / source:** Phase 4 planner (`04-01..06-PLAN.md`, `COVERAGE.md`).
+- **Severity:** Medium (items 1, 2, 5, 9); the rest Low. **Status:** open.
+- **Items:**
+  1. The D-CF4-04 skip warnings and the D-CF4-05 guided-field warnings go to
+     the existing hygiene channel, so a standalone install does not print them;
+     scenarios see them through an `apply` that moves the plugin. CONTEXT says
+     "install warning".
+  2. The builtins control hides only the builtin `researcher` (the em-dash
+     fixer rewrites its description), so it shows 12 of 13 builtins; new step
+     `pi-subagents hides the builtin agent {string}`.
+  3. Settings Givens merge into `{agent dir}/settings.json` after the profile
+     Pi starts; a release restores the previous bytes.
+  4. The `has these agents:` table reads any column other than `file` and
+     `body` as a frontmatter key (loosens the unknown-column rule).
+  5. One trailing `[1m]` is stripped from a model alias; the `claude-`
+     pass-through is case-sensitive and refuses `:` and whitespace (T-04-06,
+     beyond the decision text). `thinking` is matched exactly; only `effort`
+     is normalized.
+  6. A `Tool(spec)` in `disallowedTools` disallows the whole tool; a `*`
+     anywhere in `tools` takes the omitted-tools path.
+  7. Preloads are read lazily for named skills only; read errors propagate;
+     an unparseable skill is skipped; skipped skills are left out of
+     `skills:`; a known skill with no source row keeps its `skills:` entry.
+  8. The walk is depth first, so a nested agent wins over a flat file with
+     the same flattened name (upstream lists both); a folder at 32 segments
+     is skipped silently (upstream debug-logs).
+  9. AGT-04 closes on the recorded gap from the researcher's measured runs;
+     no new probe is planned.
+  10. `install-outcome.ts` gains a `stagedSkillRecords` context field (4 edits)
+      to keep 100% coverage; two `update-flow.test.ts` cases outside
+      ownership get new expectations and titles.
+  11. AGT-06 gains two pins: a trusted default-scope run and a user-scope
+      agent run in an untrusted project.
+  12. Three tasks exceed the five-file split rule (04-01: 17 files plus a
+      deletion; 04-02 Task 1: 9; 04-05 Task 1: 10), forced by the wave split.
+  13. Wave 1 deletes the seed `features/step_definitions/agent/runs.steps.ts`;
+      wave 3 creates a new one. Expected agent literals in tests change twice
+      (`advertise` in wave 1, `async` in wave 2).
+  14. The planner wrote `COVERAGE.md` and edited ROADMAP.md's Phase 4 plan
+      list unasked; estimates are its own (`confidence: low`).
+
+#### P4-DC-07: Plan 04-01 executor choices (agent listing)
+
+- **Phase / source:** executor for 04-01 (`04-01-SUMMARY.md`).
+- **Severity:** Low, except item 2 (Medium: changes generated bytes).
+  **Status:** open.
+- **Items:**
+  1. The fallback warning fires whenever `description` is missing, even when
+     `when_to_use`/`when-to-use` supplies the listed text (plan behavior rows).
+  2. A present description is now trimmed (upstream `zie` trims), so
+     re-staging changes the bytes of an agent whose description had
+     surrounding spaces.
+  3. An existing flat-discovery unit case was rewritten (its expectation
+     contradicted D-CF4-01), against the plan's "keep every case" line.
+  4. The settings merge (`withSetting`, `mergeUserSetting`) is private to
+     `listing.steps.ts`; it writes two-space JSON, not Pi's key order.
+  5. The builtins control pins pi-subagents 0.84.0's 12 builtin descriptions
+     as literals; an upgrade that rewords one breaks it.
+  6. Expected listing order is pi-subagents' own name sort, measured.
+  7. The declared-file scenario writes its file with the frozen generic file
+     Given (the file lives outside `agents/`).
+  8. Deviations: the advertised-agents lookup was moved into a private helper
+     to clear a fallow clone with the frozen `model.steps.ts` and Phase 2's
+     `skill/frontmatter.steps.ts` (no marker); the plan's start commit is
+     recorded in the executor scratch folder (the worktree guard blocks
+     `.git` writes).
+- **Parent lines from 04-01:** a CHANGELOG bullet; `shared/fs-utils.ts`
+  `isPlainMarkdownFile` doc comment still names the agents bridge;
+  `docs/prd/pi-claude-marketplace-prd.md:471` still states the old fallback.
+
+#### P4-DC-08: Wave 2 executor choices (04-02 conversion, 04-03 companion and trust, 04-04 lifecycle)
+
+- **Phase / source:** executors for 04-02, 04-03, 04-04 (their SUMMARYs).
+- **Severity:** Medium for 04-03 item 1 and 04-02 item 1; the rest Low.
+  **Status:** open.
+- **04-02 (frontmatter conversion):**
+  1. `background: 'true'` (single-quoted) counts as true, like `true` and
+     `"true"`; an agent that runs MCP tools gets no `async` line even with
+     `background: true` (pi-subagents' own default is background).
+  2. `originalModel` and the unknown-model warning keep the untrimmed source
+     value; the thinking-fallback warning quotes the raw effort value while
+     the emitted level is normalized.
+  3. A quoted tool item with a space splits inside the quotes
+     (`["Read Grep"]` gives `"Read` and `Grep"`); upstream would give two
+     tools. Scenario (G) writes `tools: *` unquoted.
+  4. `MODEL_MAP` became a `Map`; one skill-reference unit test now expects a
+     tab to split a reference (D-CF4-08); `stage.test.ts` model lines edited
+     in Task 2 although listed only in the plan's file list.
+  5. Found, not fixed by the executor: `TOOL_MAP` is a plain object, so
+     `tools: constructor` matches a built-in key (pre-existing bug).
+- **04-03 (companion missing, trust):**
+  1. An install without pi-subagents reports `warning` (SEV-01
+     `companionSeverity`), not the plan's `info`; pinned as today's behavior.
+     Reinstall reports `info` for the same missing companion (parent line).
+  2. `project-trust.feature`'s description grew to four lines; scenario D
+     reuses the seed's full call table; companion scenario C starts no new
+     session after the profile Pi starts.
+  3. The untrusted default-scope text and the trust-blind list were measured
+     and recorded in the SUMMARY, not pinned (D-CF4-09).
+- **04-04 (lifecycle):**
+  1. The profile Pi with pi-subagents and the hidden-builtins Given moved to
+     the top of the Background, before the install (the shared Pi has no
+     pi-subagents, so its install warns); every verb runs through that Pi.
+  2. The update scenario's new body is not observed; closing model replies
+     are free text past the compared calls; tables aligned by a scratch
+     script (no Gherkin formatter in the repo).
+
+#### P4-DC-09: Plan 04-05 executor choices (skill preload, child runs, AGT-04 gap)
+
+- **Phase / source:** executor for 04-05 (`04-05-SUMMARY.md`).
+- **Severity:** Low, except item 1 (Medium: which skills preload).
+  **Status:** open.
+- **Items:**
+  1. Only `description` and `when_to_use` make a skill preloadable; the
+     hyphenated `when-to-use` does not (plan and upstream pool rule).
+  2. The skill body is trimmed whether or not it has frontmatter; frontmatter
+     that parses to a non-object counts as "no description"; the unparseable
+     warning omits "(Claude Code skips it too)"; a skipped skill named twice
+     warns once; the agent body loses trailing blank lines only when a skill
+     is inlined.
+  3. Preloads are read in parallel and the first read error rejects the stage;
+     a skill row no agent names is never read.
+  4. Scenario (C) (`disable-model-invocation` skipped) failed before the change
+     (pi-subagents wrote two stray blank lines), so it counts as a red proof
+     and the seed is the negative control, as the plan allows.
+  5. Scenario (F) records the observed child tools `read`, `bash`,
+     `contact_supervisor` (no `bg_wait`); (E) records the plugin row's
+     `requires pi-subagents` reason.
+  6. Orchestrator-assigned bug fix: `TOOL_MAP` is now a `ReadonlyMap`
+     (`tools: constructor` threw, `disallowedTools: constructor toString`
+     wrote function source); `THINKING_VALUES` and `SUPPORTED_SOURCE_FIELDS`
+     are Sets and unaffected.
+  7. AGT-04 stays a recorded gap: pi-subagents' `HOST_PEER_ALIASES` maps the
+     bare `@earendil-works/pi-ai` to `./compat` by prefix, so the scripted
+     model's faux import resolves under `compat.js`; the parent/child call race
+     also remains. Fix routes (parent lines): change the frozen scripted
+     model's import, or report the alias-prefix problem to pi-subagents.
+
+#### P4-DC-10: Plan 04-06 gate choices and wave gates
+
+- **Phase / source:** executor for 04-06 (`04-06-SUMMARY.md`); orchestrator wave gates.
+- **Severity:** Low. **Status:** open.
+- **Gate results:** wave gates `npm run check` exit 0 (seeds 173100, 158544,
+  419001); phase gate on b18b16a: `npm run check` exit 0 (seed 745081,
+  1255/1255), `npm run test:modules` exit 0, `npm run test:cucumber` twice
+  (seeds 325268, 324634, 1255/1255 each), `fallow dupes` clean.
+- **Items:** the gate ran once on the base (equal to the combined tree);
+  `metrics.started` is estimated; the pi-subagents report's repros are
+  described from measured texts (item 1 uses a plain project agent, item 2
+  names `createFauxCore`); item 2's fix names two options without checking
+  jiti exact-match aliases; two CHANGELOG sub-bullets exceed one sentence; the
+  "old files" sub-bullet leaves out `apply`; the `info.ts` line is narrowed to
+  the source-reading view; decision rows cite `P4-DC-NN` IDs, which the parent
+  renumbers when merging the log; D-CF4-11..13 carry no "settled
+  autonomously" tag (CONTEXT does not mark them).
+
+#### P4-DC-11: Verification-step choices (Nyquist, security, code review, regression gate)
+
+- **Phase / source:** verify:post subagents (validate-phase, secure-phase),
+  code review and fixer, orchestrator regression gate.
+- **Severity:** Medium for items 4 and 5; the rest Low. **Status:** open.
+- **Items:**
+  1. validate-phase and secure-phase ran as general-purpose subagents (as
+     DC-22 C); both reused the phase gate instead of re-running it.
+     Nyquist: 0 gaps, AGT-04 counted COVERED by the recorded gap plus the
+     pinned `Async: true` line, with the real background run manual-only.
+  2. Security: 19 threats (package-install rows of six plans counted as one),
+     15 mitigated, 4 accepted, 0 open. Not registered: the preload reader's
+     `readFile` follows a symlinked `SKILL.md` swapped in after discovery
+     (only the plugin's own author could do it).
+  3. Code review ran without subagents (the reviewer could not spawn any):
+     round 1 one warning, three info; WR-01 fixed (`Skill(spec)` maps to the
+     Skill tool, red-proofed scenario). The three info findings were deferred
+     with reasons by the fixer: IN-01 a full `claude-*` ID keeps a `[1m]`
+     suffix Pi cannot resolve; IN-02 the thinking-fallback warning quotes the
+     raw effort; IN-03 `agents/.md` or an unsafe nested folder name now fails
+     the whole install (the old flat walk skipped dotfiles).
+  4. WR-01 widens a pattern grant: `tools: Skill(helper)` gives the child all
+     skills (pi-subagents cannot limit inheritance to one skill).
+  5. A non-conforming commit is on the branch: `72f9a02 docs(04): record code
+     review disposition`, made by the disposition step's `gsd-tools query
+     commit` (phase number in the title, no trailers). It is pushed; amend
+     and rebase are forbidden, so it stays (a squash merge removes it).
+  6. The regression gate reuses the post-review `npm run check` (exit 0,
+     seed 17555, 1256/1256), which runs every prior phase's tests, instead of
+     a separate run over Phase 1's listed test files.
+
+#### P4-DC-12: Phase transition done without PROJECT.md edits
+
+- **Phase / source:** Phase 4 transition (post-completion mode).
+- **Severity:** Low. **Status:** open.
+- **Choice:** `phase.complete` advanced STATE.md to Phase 2 (the first
+  incomplete phase on this branch, which the parent is finishing). The
+  transition's `evolve_project` step was skipped: PROJECT.md Key Decisions and
+  requirement moves are parent lines (`04-06-SUMMARY.md`), per the child brief,
+  to avoid conflicts across five parallel branches. STATE.md got a minimal
+  update (focus, recent decisions, two concerns, session continuity).
+  graduation_scan is a no-op (`features.global_learnings` off).
+- **Verification:** `04-VERIFICATION.md` status `passed` (5/5 must-haves);
+  verifier choices: AGT-05 recovery is simulated by a new Pi with the
+  companion (Pi cannot add an extension to a running process), XK-01 counts
+  the system-prompt placement (D-CF4-04), `--map-model` parity is shown
+  through `get` output and the unknown-model error.
+
+Source: `.planning/phases/04-agents/04-DUBIOUS-CHOICES.md`.
+
+### Phase 5 (Hooks): Dubious Choices Log
+
+The Phase 5 child session's review queue for the choices it made without the
+user. It has the same shape as the root `.planning/DUBIOUS-CHOICES.md`
+(DC-01..DC-27), and the parent merges it into that file. Only the Phase 5
+session writes this file. Each subagent ends its report with a
+`## Dubious Choices` section, and the session copies the items here.
+
+- **Severity.** High: changes what a user sees or diverges from upstream.
+  Medium: a judgment call that a reviewer may reverse at low cost. Low:
+  process, naming, or tooling.
+- **Status.** `open` until the user reviews it; the user marks it `accepted`,
+  `reversed`, or `follow-up`.
+
+
+#### P5-DC-01: Commit trailers name this child session, not the parent session
+
+- **Phase / source:** Phase 5 child session, git process.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Commits on `features/component-features-phase-5` end with
+  `Claude-Session: https://claude.ai/code/session_01EDUMG8q84hyEek3xsuxpLu`,
+  the session that made them.
+- **Alternatives:** The `Claude-Session` line in
+  `.planning/CHILD-SESSION-BRIEF.md`
+  (`session_01EDUMG5ARYqF6oZYKmj6oB3`), which names the parent session.
+- **Why dubious:** The brief says "End every commit message with exactly" that
+  line. The session's own attribution instruction names this session, and a
+  trailer that names the session that made the commit keeps the record
+  traceable.
+- **Recorded in:** every Phase 5 commit message.
+
+#### P5-DC-02: Phase 5 discuss decisions settled without the user
+
+- **Phase / source:** Phase 5 smart discuss (child session, research agents A, B, C).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** All FG-20..FG-26 items, the compaction order, the SSDEDUP-01 key,
+  the MCP proxy event, parallel hooks, and dedupe are settled from upstream
+  probes and binary greps as D-CF5-01..22 in `05-CONTEXT.md`, without asking.
+- **Alternatives:** Stop and ask the user, as ROADMAP's "the user's answers to
+  FG-20 and FG-21 as one batch" says.
+- **Why dubious:** The roadmap named FG-20/FG-21 as user questions. Each
+  choice below has its own entry so it can be reversed.
+- **Recorded in:** `.planning/phases/05-hooks/05-CONTEXT.md`.
+
+#### P5-DC-03: Pi `fork` sends SessionEnd `resume`; Pi `reload` runs no session hooks
+
+- **Severity:** High. **Status:** open.
+- **Choice:** D-CF5-02 maps Pi `fork` to SessionEnd `resume` (upstream
+  `/branch` calls the resume path) and Pi `quit` to `prompt_input_exit` in TUI,
+  `other` elsewhere. D-CF5-03 runs neither SessionStart nor SessionEnd on Pi
+  `/reload`, as upstream `/reload-plugins`.
+- **Alternatives:** `other` for `fork` and `reload`; SessionStart `startup`
+  on reload; keep `reload` as a Pi-gap value.
+- **Why dubious:** The `fork`->`resume` mapping comes from reading `/branch`
+  in the binary; `/branch` is interactive only and was not probed. Users with
+  cleanup hooks lose the run on reload. The `logout` matcher is admitted
+  although it never fires (upstream also never sends it).
+- **Recorded in:** D-CF5-02, D-CF5-03.
+
+#### P5-DC-04: Deviations licensed by phase ownership, not by upstream or Pi
+
+- **Severity:** High. **Status:** open.
+- **Choice:** Three items stop short of parity because the fix lives in files
+  another phase or the parent owns: D-CF5-20 reports a manifest/marketplace-
+  entry `hooks` field as `{unsupported hooks}` instead of merging it (upstream
+  merges); D-CF5-08 tells existing partial installs to `reinstall` instead of
+  healing them in `apply`; D-CF5-06 keeps `startup` for Pi `--resume`/`--fork`
+  launches (the harness launcher is frozen).
+- **Alternatives:** Implement the merge and the reconcile growth move now,
+  touching orchestrators (`install-outcome.ts`, `enable-disable.ts`,
+  `install-cascade.ts`, `reconcile/convergence.ts`).
+- **Why dubious:** The parity rule names only a decision ID or a Pi gap as
+  licenses; the child-session brief asks for zero edits outside ownership.
+  Each deferral has a BACKLOG parent line. D-CF5-20 still edits
+  `domain/hooks-resolution.ts` minimally, which no phase lists.
+- **Recorded in:** D-CF5-06, D-CF5-08, D-CF5-20.
+
+#### P5-DC-05: Parallel hook execution supersedes DISP-04
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** D-CF5-09 runs matching hooks in parallel with a deterministic
+  fold, as upstream, replacing the v1.13 DISP-04 sequential fan-out.
+- **Alternatives:** Keep sequential and record a divergence.
+- **Why dubious:** A large change in `dispatch.ts`; a later hook's side
+  effects now happen even when an earlier one blocks; the recorder's line
+  order becomes nondeterministic, so scenarios key runs by hook name.
+- **Recorded in:** D-CF5-09.
+
+#### P5-DC-06: MCP proxy outer call runs no hook
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** D-CF5-12: a call-mode `mcp` proxy event fires no hook; the
+  nested call fires once under the real tool name. Non-call actions still
+  fire as `mcp`.
+- **Alternatives:** Map the outer call to the inner name and skip the nested
+  one; keep firing both (today's double fire for match-all hooks).
+- **Why dubious:** Calls the adapter runs inside the proxy without a nested Pi
+  call (its fallbacks) then reach no hook at all, so a policy hook can be
+  bypassed on those paths; today a match-all hook could block them as `mcp`.
+- **Recorded in:** D-CF5-12.
+
+#### P5-DC-07: systemMessage severity and the extra decision fixes
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** D-CF5-14 uses `info` severity (stream-json says `notice`; docs
+  say "Warning message") and also shows SessionStart's message (medium
+  evidence). D-CF5-11 makes PreToolUse `ask` confirm in the TUI and block
+  elsewhere, ignores `defer` (Pi gap), and lets the planner defer uncovered
+  decision fixes to BACKLOG.
+- **Alternatives:** `warning` severity; scope the decision fixes out.
+- **Why dubious:** The probes ran in `-p` only; interactive `ask` was not seen.
+- **Recorded in:** D-CF5-11, D-CF5-14.
+
+#### P5-DC-08: Phase 1's empty `transcript_path` finding closed as a harness artifact
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** D-CF5-07 keeps `""` for a `--no-session` Pi (Pi gap) and closes
+  the finding: a saved Pi session sends a path from the first turn.
+- **Alternatives:** Invent a path for in-memory sessions, as upstream does
+  under `--no-session-persistence`.
+- **Why dubious:** A hook that calls `Path(transcript_path)` in Python sees
+  the current directory for `""`.
+- **Recorded in:** D-CF5-07.
+
+#### P5-DC-09: UI design-contract step skipped on a false frontend match
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** `check ui-plan-gate 5` answered `frontend: true` from the token
+  "form" with no frontend evidence; `ui_phase` is false. The step was skipped,
+  as DC-11 did for Phase 1.
+- **Alternatives:** Run `gsd-ai-integration-phase 5`, the only `plan:pre`
+  step hook with a skill.
+- **Recorded in:** this file.
+
+#### P5-DC-10: Research open questions settled by the session
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** D-CF5-23..28 in `05-CONTEXT.md`: skip `if` hooks on tool-less
+  events (upstream); one `HookSurface` kind for every hook notice; one Stop
+  feedback message with a paragraph per reason, first deny reason wins;
+  `/reload` through the TUI driver and resume unit-tested only; a manifest
+  `hooks` string naming `hooks/hooks.json` is not partial; `tool_use_id` and
+  `mcp_server` deferred; four waves instead of three.
+- **Alternatives:** A second notice kind; one message per Stop reason; a
+  hook-owned Pi extension to trigger reload; adding the stdin extras now.
+- **Why dubious:** Upstream's choice among several deny reasons was not
+  probed; the TUI reload scenario's stability is unverified; the researcher
+  ran spike scenarios from the scratchpad (no repo edit).
+- **Recorded in:** `05-CONTEXT.md` "Planning clarifications", `05-RESEARCH.md`.
+
+#### P5-DC-11: Project-scope hook provenance check (D-CF2-13) deferred to the merge
+
+- **Phase / source:** parent note to the Hooks phase (2026-11-01).
+- **Severity:** High. **Status:** open.
+- **Choice:** Phase 5 does not add the D-CF2-13 provenance check to
+  project-scope hooks, because the ledger module
+  (`bridges/skills/project-installs.ts`) is not on this branch yet. A parent
+  line in the last plan's SUMMARY asks for the hydrate of project-scope hooks
+  to consult the generalized ledger (kind `hooks`) after the merge.
+- **Alternatives:** Build a hooks-only ledger now (a second file the parent
+  would need to reconcile); wait for the parent to merge Phase 2 first.
+- **Why dubious:** Until then, project-scope hooks from repository-controlled
+  state can run commands with no provenance check (pre-existing exposure).
+- **Recorded in:** the last plan's SUMMARY "Parent lines".
+
+#### P5-DC-12: Phase 5 planning choices
+
+- **Phase / source:** gsd-planner (8 plans, 4 waves) and the pattern mapper.
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. Four waves instead of the ROADMAP's three; both wave-3 plans depend on
+     every wave-2 plan, which serializes the waves.
+  2. `onFailure` lands in wave 1 (05-02), reading the field through the
+     handler index signature; 05-04 adds it to the schema in wave 2.
+  3. The notice kind is named `hook-notice`; error notices use `info`
+     severity; exit-2 block notices also show on SessionStart, SessionEnd,
+     and PostCompact (beyond D-CF5-24); the blocked-prompt notice leaves out
+     upstream's "Original prompt:" line.
+  4. `ask` stays a mutate `permissionDecision` with no new result arm; the
+     PreToolUse block reason uses upstream's text (D-CF5-11).
+  5. The prompt-context buffer sits beside the SessionStart buffer (different
+     lifetimes).
+  6. Deferred to BACKLOG parent lines: PostToolUse `continue:false`, a Stop
+     hook error notice, non-blocking error notices for exits other than 0 and
+     2, PreCompact exit-2 blocking, the `updatedToolOutput` shapes.
+  7. If the TUI driver is flaky, the TUI reload and quit scenarios fall back
+     to unit tests. Async-rewake substitution and the Stop/async `onFailure`
+     ignore are unit-tested only. The second-compaction scenario states only
+     the second run.
+  8. D-CF5-20's "info names it" is met through the unsupported reason only.
+  9. Threat T-05-28 (project-scope hooks without provenance, high) is
+     `transfer` to the merge (P5-DC-11), which `/gsd-secure-phase` may flag.
+     The guard insertion point is named as `tryHydrateOnePlugin`; a second
+     routing-cache writer (`readAndCachePluginHooksWith`) is named for the
+     parent.
+  10. `planSpawn` substitution takes the three path values, not the env
+      (pattern mapper; avoids unreachable `?? ""` branches).
+  11. Unverified assumptions: how plain stdout is trimmed, and the
+      `[command]` text in `onFailure` messages.
+- **Recorded in:** `05-0*-PLAN.md`, `05-PATTERNS.md`.
+
+#### P5-DC-13: Plan-check revision: a 25-file plan accepted, five waves
+
+- **Phase / source:** plan checker iteration 1 and the planner's revision.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The old 05-07 was split: 05-07 keeps the `hook-notice` kind
+  with its first caller (25 files, justified in its "Scope note" because the
+  kind must land in one commit), the new 05-08 owns tool context and Stop, and
+  the gate plan became 05-09. Phase 5 now has 9 plans in 5 waves (supersedes
+  P5-DC-12's "8 plans, 4 waves"). 05-01, 05-02, 05-06 keep 15-18 files with a
+  scope note. The 05-06/05-07 ordering is `coupling_justified`, not a
+  dependency.
+- **Alternatives:** Spread the kind over two commits (red tree between them);
+  six waves with a dependency.
+- **Why dubious:** The per-plan budget is exceeded by design; the coupling
+  justification holds only if 05-07's tests never assert a context value.
+- **Recorded in:** `05-07-PLAN.md` "Scope note", `05-08-PLAN.md`, `05-09-PLAN.md`.
+
+#### P5-DC-14: Executor prompts read the GSD execution files by path
+
+- **Phase / source:** Phase 5 execute-phase orchestration.
+- **Severity:** Low. **Status:** open.
+- **Choice:** As DC-17 did for Phase 1, each executor prompt names
+  `execute-plan.md`, `summary.md`, `checkpoints.md`, `tdd.md`,
+  `worktree-path-safety.md`, and `executor-examples.md` by absolute path for
+  the executor to read, instead of inlining their text. The worktree branch
+  check is embedded verbatim.
+- **Alternatives:** Inline the files verbatim, as the workflow says.
+- **Why dubious:** Departs from the literal build-time embed instruction; an
+  executor that skipped a read would miss the contract.
+- **Recorded in:** this file.
+
+#### P5-DC-15: Wave 1 executor choices (05-01 session tracer, 05-02 process)
+
+- **Phase / source:** executors of 05-01 and 05-02.
+- **Severity:** Medium. **Status:** open.
+- **05-01:**
+  1. Terminal (TUI) scenarios start a profile Pi and install to the user
+     scope through it, instead of using the shared Pi: the shared Pi kept the
+     plugin's SessionEnd hook routed and recreated `<home>/harness` in the
+     next scenario's reset.
+  2. Edited two byte cases in `test/bridges/hooks/dispatch-exec.test.ts`
+     (05-02's file); the merge was clean.
+  3. A failed compaction SessionStart leg logs and still runs PostCompact; a
+     stale generation stops both.
+  4. The terminal Given polls the hook log every 50 ms (30 s cap) for the
+     `startup` run.
+  5. The `compact_summary` literal is Pi's own split-turn summary text, so it
+     changes if Pi changes that text.
+  6. The session-id projection applies to every cell, not only
+     `CLAUDE_ENV_FILE`.
+  7. Task 3's red run restored base sources temporarily (not committed).
+- **05-02:**
+  1. Edited one line of `runs.steps.ts` (05-01's file) so the `arguments`
+     cell gets run-token projection; also `test/bridges/hooks/runtime.test.ts`
+     (outside its file list) for the new `TimerLadder.fired()`.
+  2. The `onFailure` message drops `\n<stderr>` when stderr is empty; broken
+     JSON reports the hook's stderr; the `onFailure` check runs before the
+     parse, so exit 1 with valid deny JSON blocks with the `onFailure`
+     message (upstream order unprobed).
+  3. The "ignored" debug line for Stop/async `onFailure` fires on every run.
+  4. `TimerLadder.fired()` is true only when SIGTERM reaches a child still
+     running at its deadline (HKDR-01 grandchild case not counted).
+  5. Script hooks need a `dir` or `file` publication (mode bit).
+- **Recorded in:** `05-01-SUMMARY.md`, `05-02-SUMMARY.md`.
+
+#### P5-DC-16: Wave 2 executor choices (05-03 tool use, 05-04 configuration, 05-05 lifecycle)
+
+- **Phase / source:** executors of 05-03, 05-04, 05-05.
+- **Severity:** Medium. **Status:** open.
+- **05-03:**
+  1. On an exit other than 0 and 2, a JSON object on stdout is applied whole
+     ("the fields alone decide"); a signal kill and plain stdout stay noop.
+  2. Default reasons taken from the binary: `[<command>]: No stderr output`,
+     `Blocked by hook`; `Operation stopped by hook` for `continue:false`
+     without `stopReason` (not verified upstream).
+  3. `ask` without a terminal blocks with the hook's reason alone; an `ask`
+     without a reason uses Pi's default block text; the TUI dialog wording
+     (`PreToolUse:<Tool> hook asks to allow this call`) is the bridge's own.
+  4. One type assertion widens `tool_result` content past the frozen
+     `pi-api.ts` text-only type (parent line to widen it).
+  5. Contexts: empty ones dropped; the SessionStart buffer now holds one joined
+     entry (before, only the last hook's context survived).
+  6. `applyMutationInPlace` and its three tests removed; the dispatch-level
+     UserPromptSubmit context case deleted, not moved (fallow clone).
+  7. Tests outside its list edited minimally: `dispatch-exec.test.ts`,
+     `event-router.test.ts`, `test/index.test.ts`.
+  8. Found, not fixed in 05-03: PostToolUse `updatedToolOutput` edits
+     `event.content` in place and returns `undefined`, so Pi 1.4 drops it.
+     The session routes the fix to 05-06 (owns `event-adapters.ts` in wave 3)
+     under the bug policy.
+- **05-04:**
+  1. Edited `test/domain/plugin-resolver.test.ts` (3 cases) and
+     `test/orchestrators/plugin/list-flow.test.ts` (1 case), which pinned the
+     old silent-ignore rule.
+  2. A marketplace-entry `hooks` counts in every form; only the manifest gets
+     the D-CF5-27 convention-path exception. An empty inline `{}` counts as
+     declared; `""`, `null`, `[]`, `[""]` do not.
+  3. A whitespace-only `if` on a tool-less event still compiles to match-all
+     (upstream skips only an empty `if`).
+  4. Info names manifest/entry hooks only through the `unsupported hooks`
+     reason (`orchestrators/plugin/info.ts` is not owned).
+  5. One commit per TDD task (no separate red commit); one style-only commit.
+- **05-05:** no product change; the update scenario checks hook runs, not
+  model calls.
+- **Recorded in:** `05-03-SUMMARY.md`, `05-04-SUMMARY.md`, `05-05-SUMMARY.md`.
+
+#### P5-DC-17: Wave 3 executor choices (05-06 additional context, 05-07 hook notices)
+
+- **Phase / source:** executors of 05-06 and 05-07.
+- **Severity:** Medium. **Status:** open.
+- **05-06:**
+  1. Edited two cases in `test/bridges/hooks/dispatch.test.ts` (05-07's file)
+     for the returned `updatedToolOutput` patch; merge was clean.
+  2. Plain-text context follows the documented rule: stdout not starting
+     with `{` and ending with `}` is plain text (a JSON array or number
+     counts as context); braced stdout that fails to parse adds nothing;
+     multi-line JSON is a parse failure (upstream edge not probed).
+  3. Context reaches the model as one hidden custom message
+     (`claude-hook-additional-context`, `display: false`), one text part per
+     event; upstream injects a system-reminder in the same request.
+  4. Whitespace-only context is dropped when the message is built; a prompt
+     queued while streaming sends its context with the next run (not probed).
+  5. The `updatedToolOutput` fix (routed by the session) is pinned by unit
+     cases and an uncommitted probe scenario; the session routes the
+     committed scenario to 05-08, which owns `tool-use.feature`.
+  6. A type assertion keeps 100% branch coverage in `wire-protocol.ts`.
+- **05-07:**
+  1. Session notices are labelled `<Event>:<value>` (`SessionStart:clear says:
+     ...`), not D-CF5-14's literal `<Event>[:<Tool>]`; SessionStart is verified
+     upstream, SessionEnd and PostCompact by inference.
+  2. The kind has one severity, `info`; upstream draws the blocked-prompt
+     message as a warning and the hook error in the error colour.
+  3. Exit-2 blocks on SessionStart, SessionEnd, PostCompact are reported too;
+     a blocked prompt still shows its hooks' system messages first (unverified
+     upstream); UserPromptSubmit `continue:false` shows no notice (BACKLOG).
+  4. `HOOK_NOTICE_PAYLOAD` sits before the `internal-error` arm, moving it from
+     index 22 to 23; an extra step `the hooks show the user no messages`.
+  5. A manual TruffleHog run flags existing fake `ghp_` fixtures as verified
+     through the proxy; commits ran without any skip.
+- **Recorded in:** `05-06-SUMMARY.md`, `05-07-SUMMARY.md`.
+
+#### P5-DC-18: Wave 4 executor choices (05-08 tool context and Stop feedback)
+
+- **Phase / source:** executor of 05-08.
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. A Stop block with no reason still re-enters with an empty
+     `Stop hook feedback:\n` part (upstream requires `reason`; not probed).
+  2. A Stop hook that blocks and gives `additionalContext` sends two parts,
+     reason first (not probed).
+  3. The re-entry's `details.pluginId` and the STOP-07 cap notice name the
+     first hook that sends feedback (before: the first blocking hook).
+  4. Tool context uses its own custom type `claude-hook-tool-context`, not
+     05-06's `claude-hook-additional-context` (that constant lives in
+     `event-router.ts`, not owned by 05-08).
+  5. Tool context is sent even after a PreToolUse `continue:false`; Stop
+     notices show before the re-entry decision, so also under `continue:false`.
+  6. The new When requires the prompt disposition `started`; the routed
+     `updatedToolOutput` scenario is its own test-only commit.
+- **Recorded in:** `05-08-SUMMARY.md`.
+
+#### P5-DC-19: Docs and gate plan choices (05-09)
+
+- **Phase / source:** executor of 05-09.
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. `docs/hooks-compatibility.md` downgrades five rows from ✓ to ⚠ where a
+     plan measured a gap (PreCompact exit 2 does not stop compaction; "other
+     exit" stderr not shown; `continue:false` on PostToolUse only logs and on
+     UserPromptSubmit gives no notice; `updatedToolOutput` reads only Pi's
+     content array; `transcript_path` is `""` under `--no-session`) and raises
+     PostCompact to ✓.
+  2. Fixed two TOOL-02 comments in `hook-events.ts` that said "unavailable"
+     where the code gives "partially-available".
+  3. Left the stale `bypass_permissions_disabled` in
+     `docs/research/claude-hook-config-syntax.md:103` as a parent line (file
+     outside the plan; D-CF5-21 says such mentions are removed).
+  4. The session events table lists Pi `/new` beside RPC `new_session` and
+     saved-session resume as `resume`; scenarios drive only RPC `new_session`,
+     resume is unit-tested only.
+  5. Decision rows mark D-CF5-06, 08, 16, 20, 28 "Deferred", the rest "Locked".
+  6. The GSD plan-commit ledger write was refused by the worktree guard, so
+     `plan_head_before` is the known base `df1a1fbc`.
+- **Gate:** the merged tree's build inputs equal the gated commit `e3f0676`, so
+  the session reused 05-09's phase-gate result instead of rerunning it.
+- **Recorded in:** `05-09-SUMMARY.md`.
+
+#### P5-DC-20: Security audit closures that rest on judgment
+
+- **Phase / source:** `/gsd-secure-phase 5` (security auditor), 31/31 closed.
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. T-05-28 (project-scope hooks with no D-CF2-13 provenance check, high) is
+     CLOSED by documented transfer only; the exposure is live on this branch
+     until the parent applies the guard (P5-DC-11) and re-runs
+     `/gsd-secure-phase` after the merge.
+  2. T-05-23 (escape sequences in hook-notice text) is closed at L1; hook
+     notice text reaches `ctx.ui.notify` verbatim, with no control-character
+     filter (open at L2, low).
+  3. T-05-12 (outer `mcp` proxy runs no hook, D-CF5-12) is an accepted
+     medium policy-bypass risk for adapter paths without a nested Pi call.
+  4. The five accepted risks are persisted as AR-05-01..05 in `05-SECURITY.md`.
+  5. Unregistered flag: the routed `updatedToolOutput` fix (`6bbe6ba`) lets a
+     plugin hook replace the tool output the model reads (upstream parity;
+     content whitelist in place), with no threat ID.
+  6. Fail-open edges noticed, not registered: stdout/stderr overflow settles
+     `noop` before the `onFailure` check; a generation change mid-bucket drops
+     a computed deny. Handed to code review.
+- **Recorded in:** `05-SECURITY.md`.
+
+#### P5-DC-21: Nyquist gap fill exposed a PostToolUseFailure stdin divergence
+
+- **Phase / source:** `/gsd-validate-phase 5` (Nyquist auditor) and the session.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** The auditor's only gap (HOOK-04 had no PostToolUseFailure
+  scenario) was filled with a scenario that showed the bridge sends
+  `tool_response`, while Claude Code 2.1.316's schema sends `error: string`
+  (binary grep). Under the bug policy the session dispatched a fix in the
+  same phase: `error` carries the joined text parts of Pi's content, and the
+  scenario pins upstream's shape. `tool_use_id`, `is_interrupt`, and
+  `duration_ms` stay deferred (D-CF5-28).
+- **Alternatives:** Pin today's `tool_response` shape and record a divergence.
+- **Why dubious:** Found after the plans ran, so the fix was not planned; a
+  plugin that read `tool_response` on PostToolUseFailure (non-upstream) would
+  break.
+- **Recorded in:** `05-VALIDATION.md`, the fix commit.
+
+#### P5-DC-22: Code review fixes and the D-CF5-09 rewrite rule
+
+- **Phase / source:** `/gsd-code-review 5 --fix --auto` (reviewer and fixer).
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. WR-01 skipped and D-CF5-09 reworded: the input rewrite is the last one in
+     routing order whatever the hook decided, as upstream's fold (`jFt`) keeps
+     the last `updatedInput` (the old wording "of the winning decision"
+     contradicted E11). Upstream uses finish order; the bridge uses routing
+     order for determinism.
+  2. WR-02: a steer's or follow-up's prompt context reaches the model just
+     before the queued prompt, not after it (Pi gap: no carrier after a queued
+     prompt), documented in `docs/hooks-compatibility.md`.
+  3. WR-03: hook notices lose control characters (except line breaks and tabs)
+     and are cut at 2,000 user-visible characters with `… (+N chars)`; the cap
+     is the fixer's choice (no upstream cap found).
+  4. WR-04: a PreCompact block now cancels the compaction (upstream stops it
+     and reports `Compaction blocked by PreCompact hook: ...`); the notice is
+     `info`, not upstream's warning (new severity would extend the closed set).
+  5. CR-01: only the bridge's own overflow kill counts as an `onFailure`
+     failure; a hook that exits 0 after overflowing stays a noop.
+  6. One fix commit (`0df61e7`) ran its hook without the non-DAC env; the hook
+     still passed.
+  7. IN-01 (generation-change discard) refuted as intended (DISP-03); the six
+     info findings were left out of the fix scope.
+- **Recorded in:** `05-REVIEW.md`, `05-REVIEW-FIX.md`, `05-CONTEXT.md` D-CF5-09.
+
+#### P5-DC-23: Code review iteration 2 fixes
+
+- **Phase / source:** `/gsd-code-review 5 --fix --auto`, iteration 2 fixer.
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. CR-01: an output overflow no longer kills the hook; the bridge drains past
+     its EXEC-02 caps (1 MB stdout, 64 KB stderr) and the exit code decides,
+     so an exit-2 deny is never lost. Upstream keeps all output; stdout cut at
+     the cap is not read as JSON, so a JSON answer over 1 MB is lost (no D-CF5
+     ID; EXEC-02 cited in the docs). A hook that writes forever now runs to
+     its timeout.
+  2. WR-01: every PreCompact block cancels the compaction and is named in the
+     notice, as upstream's `blockedBy`.
+  3. WR-02: a follow-up's prompt context waits in a runtime queue and is sent
+     at the `turn_end` whose next queued message has the follow-up's text
+     (Pi's `deliverAs` gives the context its own model call in Pi's default
+     one-at-a-time mode). Text matching misses expanded follow-ups (skill or
+     template), and identical texts could swap contexts; documented.
+  4. Removed one `fallow-ignore` code-duplication marker that is no longer
+     needed, so `.planning/codebase/CONVENTIONS.md`'s "exactly 41" marker
+     count is now 40 (parent line).
+  5. `test/index.test.ts` imports `TurnEndEvent` straight from the Pi peer
+     because the frozen `platform/pi-api.ts` does not re-export it (parent
+     line: re-export it).
+- **Recorded in:** `05-REVIEW-FIX.md`.
+
+#### P5-DC-24: Code review stopped at the iteration cap with two open warnings
+
+- **Phase / source:** `/gsd-code-review 5 --fix --auto`, iteration 3 (cap 3).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** The iteration-3 review left 0 critical and 2 warnings, both edge
+  cases of the follow-up prompt-context carrier (`a17639b`): (WR-01) a
+  follow-up whose UserPromptSubmit hook is still running when the run ends
+  loses its context (Pi rechecks `isStreaming` after the input handlers); a
+  follow-up queued after the last `turn_end` is read with no `turn_end` before
+  it; (WR-02) a terminating tool batch (a PreToolUse `continue:false`) and
+  `followUpMode: "all"` read follow-ups the bridge does not send context for.
+  They are not fixed in this phase; both go to BACKLOG parent lines with the
+  reviewer's suggested fix (check `ctx.isIdle()` in `queuePromptContext`,
+  match `event.prompt` in `before_agent_start`, send all matching queued
+  follow-ups). The 12 info findings stay open in `05-REVIEW.md`.
+- **Alternatives:** A fourth fix pass beyond the workflow's cap.
+- **Why dubious:** The main follow-up path is right; the edge cases lose hook
+  context silently (debug line only), which D-CF5-13's intent forbids.
+- **Recorded in:** `05-REVIEW.md` (iteration 3), this entry.
+
+#### P5-DC-25: Transition run without PROJECT.md edits; security audit not re-run after fixes
+
+- **Phase / source:** Phase 5 transition (post-completion mode) and verification.
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. `evolve_project` was skipped: the child-session rules forbid PROJECT.md
+     edits, and `05-09-SUMMARY.md` carries the PROJECT.md parent lines (the 28
+     D-CF5 rows, the line-1344 correction). STATE.md got only its focus and
+     progress lines; decisions and blockers sections are left to the parent's
+     merge to avoid conflicts with sibling phases.
+  2. `05-SECURITY.md` was audited at `b5ff1e7`, before the code-review fix
+     commits `0d877aa`..`a17639b` (overflow handling, notice escape stripping,
+     follow-up context queue). Those fixes strengthen mitigations and were
+     reviewed by three review passes, but no second security audit ran; the
+     parent's post-merge `/gsd-secure-phase` (T-05-28) can cover them.
+  3. `phase.complete` reported "files not on disk" warnings for command
+     strings in the SUMMARYs; they are parser false positives.
+- **Recorded in:** this file.
+
+Source: `.planning/phases/05-hooks/DUBIOUS-CHOICES.md`.
+
+### Phase 6 (MCP Servers): Dubious Choices Log
+
+Choices made without the user in the Phase 6 child session
+(`features/component-features-phase-6`). Same shape as the root
+`.planning/DUBIOUS-CHOICES.md`; the parent merges these entries into it.
+Severity: High changes what a user sees or diverges from upstream; Medium is a
+judgment call a reviewer may reverse at low cost; Low is process, naming, or
+tooling. Status stays `open` until the user reviews it.
+
+
+#### P6-DC-01: MCP server sources merge as upstream (MC-1 superseded)
+
+- **Phase / source:** Phase 6 smart discuss (D-CF6-01, FG-27).
+- **Severity:** High. **Status:** open.
+- **Choice:** A plugin's MCP servers become the union of `.mcp.json` and the
+  declared `mcpServers` values, with a later same-name server replacing an
+  earlier one, replacing PRD MC-1's "first match wins, no merge".
+- **Alternatives:** Keep MC-1 and record it as a licensed divergence.
+- **Why dubious:** MC-1 is a recorded PRD requirement, so it could count as
+  a license; it was not chosen for an implementation reason, so parity wins
+  under the user's instruction. Plugins that declared the same server in two
+  places now install more servers than before.
+- **Upstream evidence:** binary 2.1.316 manifest schema text "MCP servers to
+  include in the plugin (in addition to those in the .mcp.json file, if it
+  exists)"; plugins reference "mcpServers".
+- **Recorded in:** `06-CONTEXT.md` D-CF6-01.
+
+#### P6-DC-02: One malformed server is skipped, not the whole plugin
+
+- **Phase / source:** Phase 6 smart discuss (D-CF6-02, FG-28).
+- **Severity:** High. **Status:** open.
+- **Choice:** Skip a malformed server with an install warning and install the
+  rest of the plugin, as upstream does.
+- **Alternatives:** Keep `(unavailable) {malformed mcp}` for the whole plugin
+  and give it a decision ID.
+- **Why dubious:** The docs cite ANAME-07 as the license, but ANAME-07 covers
+  unsupported transport features, not malformed servers; a reviewer may read
+  "a malformed component makes a plugin unavailable everywhere" as a project
+  principle worth keeping.
+- **Upstream evidence:** docs (mcp "Invalid server configs"), to be confirmed
+  on the binary by the phase researcher.
+- **Recorded in:** `06-CONTEXT.md` D-CF6-02.
+
+#### P6-DC-03: Project-scope plugin servers keep adapter approval
+
+- **Phase / source:** Phase 6 smart discuss (D-CF6-03, FG-29).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Keep the adapter's project trust (a headless session needs the
+  user-global `projectServers: "allow"`) as a licensed divergence, and pin
+  the blocked cases.
+- **Alternatives:** Write the adapter's approval file at install (outside
+  NFR-10's write set); install project-scope servers into the user file.
+- **Why dubious:** Upstream never asks to approve a plugin server, so a
+  project-scope plugin user sees a prompt or a blocked server that Claude
+  Code users never see.
+- **Upstream evidence:** docs (Claude Code asks only for project `.mcp.json`
+  servers); adapter 7.0.0 `project-server-trust.ts`.
+- **Recorded in:** `06-CONTEXT.md` D-CF6-03.
+
+#### P6-DC-04: Phase 6 adds its own stand-ins and agent fixture writer
+
+- **Phase / source:** Phase 6 smart discuss (D-CF6-06, D-CF6-07).
+- **Severity:** Low. **Status:** open.
+- **Choice:** New stand-ins (such as a loopback HTTP MCP server) live in
+  Phase 6-owned `features/lib/mcp-server-*.ts` files, and the MCP-07 agent is
+  written by a helper in `mcp-server-files.ts`, not by `agent-files.ts`.
+- **Alternatives:** Extend the frozen stub (a parent line); import Phase 4's
+  `agent-files.ts`.
+- **Why dubious:** The ownership table names only `mcp-server-files.ts` for
+  Phase 6's lib; new `mcp-server-*` files widen it. Writing an agent outside
+  `agent-files.ts` duplicates a little fixture code.
+- **Recorded in:** `06-CONTEXT.md` D-CF6-06, D-CF6-07.
+
+#### P6-DC-05: Commit trailer names this child session
+
+- **Phase / source:** Phase 6 child session, git.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Commits end with `Claude-Session:
+  https://claude.ai/code/session_01EDUMG6ciPE7kp9aMmHch1m` (this child
+  session, as the session's own attribution reminder gives), not the parent's
+  `session_01EDUMG5ARYqF6oZYKmj6oB3` that the brief prints.
+- **Alternatives:** Copy the brief's trailer verbatim.
+- **Why dubious:** The brief says "exactly"; the trailer is meant to point at
+  the session that made the commit, which is this one.
+- **Recorded in:** this file; every Phase 6 commit.
+
+#### P6-DC-06: AI-integration planning step skipped on a keyword match
+
+- **Phase / source:** Phase 6 plan-phase, plan:pre `ai-integration` hook.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The hook fires because the phase goal says "agents"; the
+  phase tests MCP tool calls with a scripted model and builds no AI system,
+  so no AI-SPEC.md is generated (as DC-11 did for the UI contract).
+- **Alternatives:** Run `/gsd-ai-integration-phase 6`.
+- **Recorded in:** this file.
+
+#### P6-DC-07: Research amendments accepted by the orchestrator
+
+- **Phase / source:** Phase 6 researcher (`06-RESEARCH.md`); amendments in `06-CONTEXT.md`.
+- **Severity:** High (items 1, 2, 4); the rest Low-Medium. **Status:** open.
+- **Items:**
+  1. **D-CF6-02 silent skip:** a malformed server in a file, or an unparseable, missing, or unreadable file, is dropped with no warning (upstream's loader is silent; only `claude plugin validate` reports). The earlier "install warning" text is withdrawn. A user loses a server with no message.
+  2. **Permission-denied MCP file skipped** (upstream), changing the WR-03 `{permission denied}` classification; proven from binary source only (root container cannot probe it).
+  3. **`.mcpb`/`.dxt`** become `{unsupported mcp}` with no named dropped server (no closed-set change).
+  4. **D-CF6-10 MCP-07 as a recorded gap:** a foreground pi-subagents 0.84.0 agent cannot use a plugin MCP tool (`Unresolved MCP direct-tool selectors: ...`); the requirement is met by pinning that result, not by a working call. Root cause (possibly a cache-hash mismatch) unproven.
+  5. **Reference without `./` kept installable** (upstream refuses the manifest): a divergence recorded under D-CF6-01 to avoid breaking plugins that install today.
+  6. **D-CF6-11:** a fresh profile Pi stands in for `/reload` where the harness has no reload step.
+  7. **Out-of-ownership test edits:** `test/domain/plugin-resolver.test.ts` (MCPR-03, WR-03, entry-wins, MM-5) changes with the resolver fix.
+  8. **Doc finding for Phase 5:** since adapter 6.0 hooks do see proxied MCP calls (nested call under the real tool name); `docs/hooks-compatibility.md` reconciliation is a parent line.
+
+#### P6-DC-08: Planner choices for the nine Phase 6 plans
+
+- **Phase / source:** Phase 6 gsd-planner (`06-01`..`06-09-PLAN.md`).
+- **Severity:** Medium (items 2, 3, 5, 6); the rest Low. **Status:** open.
+- **Items:**
+  1. Four waves, not three: the merge (06-03, wave 2) and the silent skip (06-07, wave 3) are split because both edit `domain/mcp-resolution.ts`; the gate is 06-09 in wave 4, and the docs plan 06-08 runs in wave 3 beside 06-07.
+  2. Array-form `mcpServers` is admitted in the owned `domain/components/mcp.ts` (`MCP_SERVERS_SCHEMA`), leaving the unowned `domain/components/plugin.ts` unchanged; its stale comment (lines 48-52) is a parent line. Three cases in `test/domain/components/plugin.test.ts` change expected outcomes only.
+  3. Out-of-ownership tests edited under CONTEXT's general clause: `test/domain/components/plugin.test.ts` and `test/orchestrators/reconcile/mcp-migration.test.ts`, each bounded by a `git diff` check.
+  4. Paired tests of owned sources treated as owned (`test/domain/mcp-resolution.test.ts`, `test/domain/components/mcp.test.ts`, and, on a measured break, `test/platform/mcp-status.test.ts`, `test/shared/concerns/soft-dep.test.ts`).
+  5. Downstream fatal-path tests keep their titles by moving the bad server inline into `plugin.json`; one commit between 06-07 Task 1 and Task 2 leaves those suites red.
+  6. I/O errors while locating an MCP file (ENOTDIR and similar) are skipped silently, read as D-CF6-02's "missing or unreadable file".
+  7. The Phase 1 `calls.steps.ts` is moved into `listing.steps.ts` and deleted.
+  8. `.mcpb` gets no extra note beyond `(partially-available) {unsupported mcp}`.
+  9. Two new libs (`features/lib/mcp-server-http.ts`, `features/lib/mcp-server-environment.ts`) beyond the single `mcp-server-files.ts` the ownership table names.
+  10. The `MCP_DIRECT_TOOLS` doc row may rest on reading adapter source if a scratch RPC measurement fails.
+  11. `COVERAGE.md` declares "No external API integration" against four detector keyword signals.
+  12. D-CF6-07 followed over ROADMAP wording ("uses Phase 1's agent fixture writer").
+  13. Conditional ownership in wave 2 (`bridges/mcp/**` to 06-02; the soft-dep adapter arm and `mcp-status.ts` to 06-05), only on a measured break; other product breaks hand over to 06-07 with no failing scenario committed.
+  14. 06-08 documents the skip rule while 06-07 builds it; 06-09 Task 1 checks the doc against merged code.
+  15. 06-09's diff base is the fixed hash `3a7a707`, with a `git merge-base` fallback.
+- **Recorded in:** this file; the plans' `<assumption_delta_decision>` and task bodies.
+
+#### P6-DC-09: Plan-checker warnings handled without a revision round
+
+- **Phase / source:** Phase 6 gsd-plan-checker (0 blockers, 2 warnings, 3 info).
+- **Severity:** Low. **Status:** open.
+- **Choice:** Warning 1 (MCP-07 and ROADMAP SC4 still ask for a working agent call) is fixed in place: 06-09 now carries a parent line to mark MCP-07 "gap-pinned (D-CF6-10)" and amend SC4, and its SUMMARY states SC4 is met by the pin. Warning 2 (commit trailer differs from the brief) is kept as decided in P6-DC-05. The three advisories are left as written: `calls.steps.ts` stays in both `files_modified` and `files_deleted`, the plans keep this session's scratchpad wrapper path (executors run in this session), and 06-09 Task 1 still reconciles 06-08's doc with 06-07's merged code. The checker rated MCP-07's gap a warning rather than a blocker because D-CF6-10 licenses it.
+- **Alternatives:** Re-spawn the planner for a revision round; edit REQUIREMENTS.md and ROADMAP SC4 in this phase.
+- **Recorded in:** `06-09-PLAN.md` Task 3 parent lines.
+
+#### P6-DC-10: Executor prompts load the GSD procedure files by Read, not inline
+
+- **Phase / source:** Phase 6 execute-phase orchestration (step 3 dispatch).
+- **Severity:** Low. **Status:** open.
+- **Choice:** Each executor prompt tells the executor to Read `execute-plan.md`, `summary.md`, `checkpoints.md`, `worktree-path-safety.md`, and `executor-examples.md` in full before any work, instead of the orchestrator pasting their ~130 KB verbatim into every prompt. The small `worktree_branch_check` guard is still embedded verbatim with the base SHA substituted. The prompts also carry the brief's git, project, and environment rules and the dubious-choices protocol.
+- **Alternatives:** Inline the five files verbatim in every dispatch, as the workflow's build-time-embed note asks.
+- **Why dubious:** The workflow's note forbids leaving the content to the executor; the reason it gives (an `@path` line never expands) does not apply to an explicit Read instruction, but an executor that skips the Read would run without the procedure.
+- **Recorded in:** this file.
+
+#### P6-DC-11: Plan 06-01 executor choices (listing tracer)
+
+- **Phase / source:** Phase 6 executor for `06-01-PLAN.md` (`06-01-SUMMARY.md`).
+- **Severity:** Medium (items 1, 2, 3); the rest Low. **Status:** open.
+- **Items:**
+  1. **Connect before listing:** the adapter's lazy `mcp({ server })` listing holds an em dash that the `fix-unicode-dashes` pre-commit hook rewrites in every committed feature file, so the scenario lists status, connects, then lists the server; the first listing a model sees is not compared whole. Any adapter message with an em dash has the same limit.
+  2. **250 ms quiet window for the registry probe:** the tool-listing When repeats the probe until two reports 250 ms apart agree (15 s deadline), after one flip under 8 workers; a heuristic, not a readiness signal.
+  3. **`/** @public */` on 8 fixture-writer exports** nothing imports until wave 2, to pass fallow dead-code without a marker that could go stale; the tags hide dead code until removed (parent line to remove them after wave 2).
+  4. Array elements of `mcpServers` are not expanded as stub markers (a server takes its name from a member key).
+  5. The MCP-07 agent fixture body text "Call the tools the task names." was chosen by the executor.
+- **Recorded in:** `06-01-SUMMARY.md`.
+
+#### P6-DC-12: Plan 06-04 executor choices (tool calls and the agent gap)
+
+- **Phase / source:** Phase 6 executor for `06-04-PLAN.md` (`06-04-SUMMARY.md`).
+- **Severity:** Medium (item 1); the rest Low. **Status:** open.
+- **Items:**
+  1. The negative control pins the measured stub log (adapter 7.0.0 reconnects and lists tools a second time before answering "not found", sending no `tools/call`) and is retitled "A call to a tool the plugin's server does not list is never sent to the server", against the plan's must-have "its log holds only the startup listing".
+  2. "(D-CF6-10)" appears in two scenario titles and the feature description, relying on the layout rule that a divergence scenario names its ID.
+  3. The no-tools agent scenario keeps a stub server and compares its log, beyond the plan's list, to prove a plugin tool exists but is withheld.
+  4. The agent Givens check only the written file's `tools:` lines, not the whole text.
+  5. REQUIREMENTS.md was not updated by the executor (MCP-02/MCP-07 left to the orchestrator; MCP-07 is met only as a gap).
+- **Recorded in:** `06-04-SUMMARY.md`.
+
+#### P6-DC-13: Plan 06-02 executor choices (server configuration)
+
+- **Phase / source:** Phase 6 executor for `06-02-PLAN.md` (`06-02-SUMMARY.md`).
+- **Severity:** Medium (items 2, 4); the rest Low. **Status:** open.
+- **Items:**
+  1. HTTP request Thens state the POSTs in arrival order and the other requests (the SDK's event-stream `GET`, which arrives within 1 ms of `tools/list`) in any order.
+  2. The HTTP listing wait ends at the first logged `tools/list`; a small gap remains before the adapter closes its client (no failure in 15 runs).
+  3. A header the request did not carry shows as `(none)`, not the plan's empty cell, so an unset-variable header (`x-team: ""`) is told apart from a dropped one.
+  4. The OAuth scenario cannot tell OAuth mode from non-OAuth mode: it pins that an `auth: "oauth"` entry connects, sends the header, and starts no sign-in; only the integration test pins the written field.
+  5. Server names `tag` and `root` instead of the plan's `stub`, because 06-01's `withStubServers` reads a lone server named `stub` as a stub marker (parent line).
+  6. The environment preload is passed in `args` as a `file://` URL.
+  7. The loopback stand-in's answers differ slightly from the frozen stub's (no protocol-version fallback, no `required` in the echo schema) to avoid a fallow clone.
+- **Recorded in:** `06-02-SUMMARY.md`.
+
+#### P6-DC-14: Plan 06-06 executor choices (lifecycle)
+
+- **Phase / source:** Phase 6 executor for `06-06-PLAN.md` (`06-06-SUMMARY.md`).
+- **Severity:** Medium (item 1); the rest Low. **Status:** open.
+- **Items:**
+  1. The update scenario's replacement `.mcp.json` uses the wrapper-less root form (`{"stub": {...}}`) because 06-01's `withStubServers` reads a `mcpServers` member as a stub marker; the scenario now also depends on a root `.mcp.json` being read without its wrapper, not checked against Claude Code 2.1.316.
+  2. Kept the named `readFile` import, leaving the criterion `grep -c readFile <= 1` unmet as written (one call site).
+  3. The override-survives-update scenario changes only the version, not the server definition.
+  4. The no-update control compares the stub's whole log, which cannot tell the versions apart; only the model's answer does.
+- **Recorded in:** `06-06-SUMMARY.md`.
+
+#### P6-DC-15: Plan 06-05 executor choices (companion missing, project trust)
+
+- **Phase / source:** Phase 6 executor for `06-05-PLAN.md` (`06-05-SUMMARY.md`).
+- **Severity:** Medium (item 1); the rest Low. **Status:** open.
+- **Items:**
+  1. A Phase 6 copy of the calls step, `the model receives these mcp calls:`, reads `{em dash}` as U+2014 so the adapter's blocked reasons can be compared whole despite the `fix-unicode-dashes` hook; two calls steps now differ only in that projection, and the token is not yet in the frozen cucumber skill (parent line).
+  2. A polling Given runs `info` every 50 ms (15 s) until pi-mcp-adapter has reported, so the command under test doubles as the wait; a status that never leaves `status unknown` fails in the Given.
+- **Recorded in:** `06-05-SUMMARY.md`.
+
+#### P6-DC-16: Plan 06-03 executor choices (server sources merge)
+
+- **Phase / source:** Phase 6 executor for `06-03-PLAN.md` (`06-03-SUMMARY.md`).
+- **Severity:** Medium (items 1, 2, 9); the rest Low. **Status:** open.
+- **Items:**
+  1. An `mcpServers` array with one bad element is refused whole (one note, no element read); upstream refuses the whole manifest, so there is no partial behavior to copy.
+  2. A file's server map is read with `Object.hasOwn(document, "mcpServers")`, not upstream's `G.mcpServers || G`; they differ when `mcpServers` is falsy (`null`, `0`, `""`).
+  3. A non-object `.mcp.json` document (`5`, `null`) now gets the note `malformed mcpServers: must be object` instead of an incidental "Cannot use 'in' operator" note; both stay `{malformed mcp}`.
+  4. A `.mcpb`/`.dxt` source adds no note, so `info` shows only `{unsupported mcp}` without naming the bundle.
+  5. An absolute or escaping `.mcpb` path is a fatal `malformed mcp reference` (containment runs first), matching upstream's refusal of such paths.
+  6. The no-plugin.json step text names its kind (`... has no plugin.json, so its marketplace entry declares its mcp servers`), differing from the plan's wording.
+  7. The comment above the MCPR-01 backstop test in `test/domain/plugin-resolver.test.ts` was edited, just outside the plan's strict `git diff` bound.
+  8. `[1]` replaces `[]` in the two refused plugin-schema lists in `test/domain/components/plugin.test.ts`.
+  9. The four Task 3 scenarios (entry, bundle, reference rules) have no measured red run; their red is argued from the old code.
+- **Recorded in:** `06-03-SUMMARY.md`.
+
+#### P6-DC-17: Plan 06-08 executor choices (compatibility doc)
+
+- **Phase / source:** Phase 6 executor for `06-08-PLAN.md` (`06-08-SUMMARY.md`).
+- **Severity:** Medium (items 4, 5, 6); the rest Low. **Status:** open.
+- **Items:**
+  1. The `MCP_DIRECT_TOOLS` deferred-tool name (`mcp__plugin_demo_stub___echo`, three underscores) is recorded as its own Naming divergence although ADOC-01 covers adapter settings in general.
+  2. The hooks paragraph states only the adapter fact (a proxied call is also a nested call under the real name) and leaves whether plugin matchers fire to the Phase 5 reconcile (parent line).
+  3. The header names the canary run without its version and points to Further reading, pulling against the must-have to state the old basis.
+  4. The Upgrading bullet says a skipped file-source server counts as "no longer declared" for AMIG-01; inferred from `resolveStrict` reuse, not run.
+  5. The D-CF6-10 item says Claude Code runs a subagent with a plugin MCP tool in the foreground; follows MCP-07's wording, no 2.1.316 probe.
+  6. The Migration divergence item is kept, reworded, although upstream also refuses such a plugin.
+  7. Scenario file names are cited in the user-facing doc.
+  8. The `--mcp-config` sentence ("Pi still does not run its built-in MCP") rests on an adapter source comment, not a run.
+- **Recorded in:** `06-08-SUMMARY.md`.
+
+#### P6-DC-18: Plan 06-07 executor choices (silent skip)
+
+- **Phase / source:** Phase 6 executor for `06-07-PLAN.md` (`06-07-SUMMARY.md`).
+- **Severity:** High (items 1, 2); the rest Low. **Status:** open.
+- **Items:**
+  1. A skipped MCP file source or malformed server gets no user message, only an env-gated `hookDebugLog(..., "mcp")` line; a user loses a bad server silently, as in Claude Code.
+  2. EACCES and containment-walk I/O errors (ENOTDIR) are skipped rather than reported as `{permission denied}`, following upstream's loader; a real permission problem now goes unreported.
+  3. One Outline state Given (`the mcp file ... is {string}`, states `missing`, `not valid JSON`, `readable by nobody`) replaces the plan's three Givens; the plan's `cannot be read by anyone` step text is not registered.
+  4. The Outline's surviving server is inline in every row, so ".mcp.json survives a bad reference" is pinned by unit tests only.
+  5. The 7 named plugin-resolver tests keep their arrange and now expect installable with no servers, instead of gaining a second source.
+- **Recorded in:** `06-07-SUMMARY.md`.
+
+#### P6-DC-19: Plan 06-09 executor choices (phase gate and records)
+
+- **Phase / source:** Phase 6 executor for `06-09-PLAN.md` (`06-09-SUMMARY.md`).
+- **Severity:** Medium (items 2, 9); the rest Low. **Status:** open.
+- **Items:**
+  1. The doc check edited `docs/mcp-compatibility.md`, outside the plan's `files_modified`, as Task 1's action directs.
+  2. The new doc sentence "a skipped server does not replace an earlier one" rests on code, unit tests, and the research's reading of upstream; no scenario or 2.1.316 probe checks it.
+  3. The Upgrading bullet still covers only a malformed server, not a whole skipped file (no test runs that case).
+  4. The canary parent line is "re-run live on 7.0.0" rather than "raise to 7.0.0", since Phase 1 already pinned `ADAPTER_VERSION = "7.0.0"`.
+  5. A first gate run was stopped after 2 minutes and restarted whole after a docs-only fix; none of its output is used.
+  6. The Outcome column of the drafted Key Decisions rows: "✓ Good" for ten, "⚠ Revisit (gap pinned; report not filed)" for D-CF6-10.
+  7. The pi-subagents gap report ranks its requests; its reproduction steps were not run outside the harness.
+  8. The CHANGELOG draft has five sub-bullets and omits the re-measured doc and the agent gap.
+  9. The drafted MCP-07 line is checked `[x]` with "gap-pinned (D-CF6-10)", which could be read as a working foreground call.
+  10. The four drafted BACKLOG IDs (MCPBG-01, MCPSUB-01, MCPB-01, MCPREF-01) were chosen by the executor.
+  11. The `@public` tag clean-up and the `collision-*.ts` comment fixes stay parent lines although Phase 6 owns those files.
+  12. The SUMMARY was committed in three commits (one per task).
+- **Recorded in:** `06-09-SUMMARY.md`.
+
+#### P6-DC-20: Verification-step choices (validation and security audit)
+
+- **Phase / source:** Phase 6 verify:post steps (`06-VALIDATION.md`, `06-SECURITY.md`), orchestrator and gsd-security-auditor.
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. The Nyquist audit found no gap and spawned no auditor: every MCP requirement maps to a committed feature file that passed in the phase gate's three cucumber runs; the user gate ("Fix all gaps" / "mark manual-only") was not shown because nothing was missing.
+  2. T-06-SC (named in all nine plans) is one register row.
+  3. The six `accept` threats were closed by writing their Accepted Risks Log rows (AR-06-01..06), with "plan threat model (Phase 6 planner)" as the accepter rather than the user.
+  4. The no-read proof for T-06-07/T-06-16 rests on the unit cases; the outside-reference scenario proves only the fatal refusal.
+  5. T-06-14 was checked at L1 depth (the three lifecycle scenarios); the D-08-02 field carry-over was not traced.
+  6. The root `.mcp.json` is read through symlink-following `stat`/`readFile` without containment (predates Phase 6); recorded as an observation, not a threat.
+- **Recorded in:** `06-VALIDATION.md`, `06-SECURITY.md`.
+
+#### P6-DC-21: Code review fix choices
+
+- **Phase / source:** Phase 6 code review (`06-REVIEW.md`, 0 critical, 8 warnings, 8 info) and gsd-code-fixer (`06-REVIEW-FIX.md`).
+- **Severity:** Medium (items 1, 2); the rest Low. **Status:** open.
+- **Items:**
+  1. WR-03: the MCP file-source skip now skips any Error carrying a Node `code` (EMFILE and EIO included, as upstream's loader skips every `readFile` failure) and rethrows errors without a code and non-Error values; a pre-Phase-6 plugin-resolver test was restored to its "propagates" form. The rethrow in `locateReference` has no dedicated test.
+  2. WR-01/WR-02: no resolver change. A probe of Claude Code 2.1.316 shows upstream reads `.mcp.json` and named server files through symlinks wherever they point; the root file already matches, and the refusal of every symlinked reference (MCPR-04, D-14) is now a documented divergence. Whether to follow in-root links is left as a parent line for the user. Evidence covers a directory marketplace and `file://` url plugins only.
+  3. WR-04: the reconcile move's "no longer declares it." wording for a skipped malformed server is kept (product code Phase 6 does not own) with a test comment and a parent line.
+  4. WR-05: the WLIF-01 test was retitled to what it proves instead of adding a mock; an existing case already reaches the branch.
+  5. WR-06: a bad POST to the HTTP stand-in is answered 400 and logged but does not fail the release; an append or answer failure does.
+  6. The orchestrator scoped the fix to warnings plus IN-06 and wrote `06-REVIEW-DISPOSITION.md` by hand (the other info items `deferred`) instead of running the disposition script.
+- **Recorded in:** `06-REVIEW-FIX.md`, `06-REVIEW-DISPOSITION.md`.
+
+#### P6-DC-22: Phase 6 stops at human verification, not transitioned
+
+- **Phase / source:** Phase 6 verifier (`06-VERIFICATION.md`, status `human_needed`, 4/5 success criteria verified).
+- **Severity:** High. **Status:** open.
+- **Choice:** The orchestrator persisted the one human item as `06-UAT.md` and did not run the phase transition (`phase.complete`, ROADMAP/STATE/REQUIREMENTS marks). The item is whether the D-CF6-10 gap pin (pi-subagents 0.84.0 refuses a foreground agent's plugin MCP tool; the refusal is pinned whole) satisfies MCP-07 and ROADMAP success criterion 4, whose literal wording asks for a working agent call. D-CF6-10 was settled autonomously, so recording an override with an `accepted_by` name would claim a user acceptance that does not exist.
+- **Alternatives:** Treat the user's standing "make decisions as you see fit" instruction as acceptance and write the override, then transition; or open a gap plan for a working agent call (needs a harness whose background children load the companions and the scripted model, BACKLOG MCPBG-01, and a pi-subagents change).
+- **Why dubious:** The brief asks the child to carry the phase through the transition; stopping leaves the parent one decision to make before merging. Every other success criterion passes.
+- **Recorded in:** `06-UAT.md`, `06-VERIFICATION.md`.
+
+Source: `.planning/phases/06-mcp-servers/DUBIOUS-CHOICES.md`.
+
+### Phase 7 (Workflows): Dubious Choices Log
+
+Phase 7's share of the component-features review queue. Same shape as the root
+`.planning/DUBIOUS-CHOICES.md`; the parent folds these entries into it at
+merge. Only the Phase 7 orchestrator session writes this file; subagents report
+theirs under `## Dubious Choices` and the orchestrator copies them here.
+
+
+#### P7-DC-01: Phase 7 discuss decisions settled without the user
+
+- **Phase / source:** Phase 7 smart discuss (`07-CONTEXT.md`).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** FG-31 and FG-32, and the Phase 7 grey areas (refusal coverage,
+  companion-missing recovery, lifecycle), were settled from upstream evidence
+  and the engine 3.15.0 source, per the user's standing instruction and
+  `CHILD-SESSION-BRIEF.md`.
+- **Alternatives:** Ask the user, as the smart-discuss workflow would.
+- **Why dubious:** The workflow presents each grey area for acceptance.
+- **Recorded in:** `07-CONTEXT.md`.
+
+#### P7-DC-02: The engine's `{_, _raw, key=value}` argument shape is pinned (FG-32)
+
+- **Phase / source:** Phase 7 discuss (D-CF7-02).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Accept the engine's slash-path shape and pin it in a scenario;
+  record it as engine-owned behavior with an ID, not as a divergence.
+- **Alternatives:** Pass the typed text as one string (upstream's Workflow tool
+  passes `args` verbatim, so a string is the closest literal reading); or parse
+  JSON typed after the command into a structured value.
+- **Why dubious:** Upstream states no rule for text typed after
+  `/<plugin>:<name>` (MEDIUM confidence; the 2.1.316 binary documents only the
+  tool's `args` input). A script written for upstream that reads `args` as a
+  string or as an array breaks here. Changing the shape would need an engine
+  change, outside this project.
+- **Upstream evidence:** 2.1.316 binary prose "args: any -- the value passed as
+  Workflow's `args` input, verbatim"; engine 3.15.0
+  `src/saved-commands.ts::parseCommandArgs`.
+- **Recorded in:** `07-CONTEXT.md` D-CF7-02; `docs/workflows-compatibility.md`
+  (wave 3).
+
+#### P7-DC-03: No run approval recorded as a Pi gap (FG-31)
+
+- **Phase / source:** Phase 7 discuss (D-CF7-01).
+- **Severity:** High. **Status:** open.
+- **Choice:** Record the missing run approval as a Pi-gap divergence; the
+  bridge adds no approval of its own.
+- **Alternatives:** A bridge-side confirmation before the engine runs (needs a
+  hook on the engine's command handler that the engine does not offer;
+  wrapping the engine's command would mean the bridge registers commands the
+  engine owns).
+- **Why dubious:** Upstream asks before a plugin workflow runs in manual mode;
+  here third-party code runs on a slash command with no prompt. It is a
+  security-relevant difference, though the user already typed the command.
+- **Recorded in:** `07-CONTEXT.md` D-CF7-01.
+
+#### P7-DC-04: Install-time refusal of nondeterministic and unparseable scripts kept (D-CF7-03)
+
+- **Phase / source:** Phase 7 discuss (D-CF7-03).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Keep refusing these scripts at install and give the timing
+  difference an ID, rather than admitting them and letting the engine refuse
+  them at run as upstream's loader effectively does.
+- **Alternatives:** Admit them with a caveat (as the six warned checks are),
+  which matches upstream's timing.
+- **Why dubious:** It is a divergence the project rules license only with a
+  recorded decision; the doc recorded it without an ID until now.
+- **Recorded in:** `07-CONTEXT.md` D-CF7-03.
+
+#### P7-DC-05: Commit trailer names this child session, not the parent
+
+- **Phase / source:** Phase 7 session setup.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Commits end with this session's `Claude-Session` link
+  (`session_01EDUMG6U1zk7CfbwevqpZYJ`), which the session's own attribution
+  settings give, instead of the parent's link that `CHILD-SESSION-BRIEF.md`
+  quotes.
+- **Alternatives:** Copy the brief's line verbatim.
+- **Why dubious:** The brief says "exactly". The child's link is the one that
+  leads to the transcript that made the commit.
+- **Recorded in:** this file only.
+
+#### P7-DC-06: Phase 7 research choices (accepted by the orchestrator)
+
+- **Phase / source:** Phase 7 research (`07-RESEARCH.md`); CONTEXT revised to match.
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. **Engine-later recovery uses a settings `packages` entry plus a new
+     session, not a literal `/reload`.** Over RPC `/reload` goes to the model,
+     and a scenario can start only one profile Pi. A new session re-reads Pi's
+     settings as `/reload` does; verified live. Alternatives: drive `/reload`
+     through the TUI driver, or edit frozen `world.ts` for a second profile Pi.
+     Dubious because the session starts with reason `new`, not `reload`.
+  2. **D-CF7-02 is now a divergence (supersedes P7-DC-02's "no upstream
+     position").** The 2.1.316 binary makes a plugin workflow command a prompt
+     command that tells the model `Workflow({ name, args: "<typed text>" })`,
+     so upstream `args` is one string; the engine passes an object. Kept,
+     licensed as a Pi-side gap (the engine owns the slash handler).
+  3. **D-CF7-04 reworded:** Claude Code skips scripts whose `meta` is not
+     first, has a reserved key, or lacks a description at load; the bridge
+     admits them with a warning and the engine refuses them at run. Kept
+     (WGATE decisions); switching to per-file skips would break tests outside
+     this phase.
+  4. **The install warning "the engine will refuse to load it" stays pinned**
+     although the engine registers the command and refuses only at run; tests
+     and the output catalog outside this phase pin it. Backlog parent line.
+  5. **The listing `Then` picks bridged commands by the engine path plus a `:`
+     in the name,** not by a hard-coded list of the engine's own commands.
+  6. **Engine notices are compared after converting U+2014 to `--`,** because
+     the commit hook rewrites em dashes outside `.planning/` and the hook
+     config is not Phase 7's.
+  7. **The refusal-fixture install is read with a `When`** (an info cascade
+     plus a warning diagnostic), replacing CONTEXT's implied "the install
+     shows a warning".
+- **Recorded in:** `07-RESEARCH.md`, `07-CONTEXT.md`.
+
+#### P7-DC-07: Phase 7 pattern-map choices
+
+- **Phase / source:** Phase 7 pattern map (`07-PATTERNS.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. **Shared record-reading helpers live in `features/lib/workflow-files.ts`**
+     (documented as the fixture writer), because it is the only lib file
+     Phase 7 may edit (`layout.md` freezes the others). Alternative: a new
+     `features/lib/workflow-runs.ts`.
+  2. **The shared topic module keeps the name `listing.steps.ts`,** close to a
+     verb name, following the skill and slash-command precedent.
+  3. **The notices step names its kind** (`the workflow engine shows these
+     notices:`) instead of RESEARCH's `pi shows these notices:`, per
+     `layout.md`'s rule that a new step names its kind.
+- **Recorded in:** `07-PATTERNS.md`.
+
+#### P7-DC-08: Phase 7 planning choices
+
+- **Phase / source:** Phase 7 planner (`07-01..07-06-PLAN.md`).
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. Wave 1 also creates `features/workflow/lifecycle.feature` with one
+     scenario (the stale notice after uninstall), so the no-run `When` and the
+     notices `Then` that 07-02 and 07-05 share are used in wave 1 and
+     `check:features` stays green in every wave-2 worktree.
+  2. `runs.steps.ts` keeps the three seed run steps; only the four new shared
+     steps go to `listing.steps.ts` (Phase 2 instead moved every shared step to
+     `listing.steps.ts`).
+  3. 07-03 rewrites the `run.feature` description to name D-CF7-01 and keeps
+     the seed scenario byte-identical.
+  4. `sendWorkflowCommand` in `features/lib/workflow-files.ts` imports
+     `promptDisposition` from `test/e2e/_rpc.ts`, using `layout.md`'s exception
+     for a driver that reuses a process harness.
+  5. T-07-07 (no run approval) is rated medium with disposition `transfer`,
+     not high: the user consented at install and typed the command, and the
+     missing hook belongs to the engine and Pi. P7-DC-03 still rates the
+     decision High for review.
+  6. 07-03's negative control is a script that throws, with a new failed-run
+     `Then`.
+  7. 07-02's caveat-run Outline puts each script on one line in an `Examples:`
+     cell substituted into a doc string.
+  8. The fixture `nope.js` ends with an unreachable `return "never";` to honor
+     "every fixture script ends in a return".
+  9. 07-04 runs its install-rows and list scenarios on the shared Pi, with no
+     profile Pi.
+  10. The listing `Then` compares the registry snapshot's command `path` with
+      `resolveCompanion(...).entry`, which assumes each worktree runs
+      `node scripts/install-test-peers.mjs`.
+- **Recorded in:** `07-01..07-06-PLAN.md`.
+
+#### P7-DC-09: Wave 1 executor choices (listing tracer)
+
+- **Phase / source:** Phase 7 wave 1 executor (`07-01-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. `requirements-completed` lists only WFL-01, not WFL-05: this plan
+     delivers only the WLIF-06 stale notice after uninstall, and 07-05
+     finishes WFL-05.
+  2. The listing filter keeps only commands whose name holds a colon
+     (research assumption A3). A future engine built-in with a colon, or a
+     bridged command that lost its `<plugin>:` prefix, would still fail the
+     whole-table comparison rather than pass silently.
+  3. The WNAM-06 (prefix elision) scenario title does not name the ID, because
+     the feature rules forbid ticket references in titles; the ID is in the
+     commit and the SUMMARY only.
+- **Process note:** the Write tool saved a raw U+2014 where the `—`
+  escape was meant, and the `fix-unicode-dashes` hook turned the constant
+  into `"--"`; the executor caught it and rewrote the escape byte-exactly.
+  Later executors are warned.
+- **Recorded in:** `07-01-SUMMARY.md`.
+
+#### P7-DC-10: Wave 2 executor choices (refusals)
+
+- **Phase / source:** Phase 7 wave 2, refusals executor (`07-02-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. The setup `Given` (`..., which reported notes on workflow scripts of the
+     plugin`) checks the shape only (an info cascade, then a warning diagnostic
+     whose lines all start with `workflow script "`); a zero-line diagnostic
+     would pass it. The one-script installs are pinned whole only in the
+     install scenarios.
+  2. `late.js` puts `const greeting = "late";` directly above the `meta` line;
+     the other fixtures follow the plan's `meta`, blank line, `return` form.
+  3. One `check:static` run lost its lint job to out-of-memory beside a warm-up
+     ESLint; a lone `npm run lint` and a later full `check:static` passed.
+  4. The SUMMARY's commit count was measured before the SUMMARY commit.
+- **Parent line (BACKLOG):** the caveat text "was installed but the engine will
+  refuse to load it" in `bridges/workflows/discover.ts` is inaccurate (the
+  engine registers the command and refuses at run); rewording touches three
+  unit tests, `docs/output-catalog.md`, and `refusals.feature`.
+- **Recorded in:** `07-02-SUMMARY.md`.
+
+#### P7-DC-11: Wave 2 executor choices (lifecycle)
+
+- **Phase / source:** Phase 7 wave 2, lifecycle executor (`07-05-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. The worktree isolation guard refused a write of the plan-ledger file
+     under `.git/worktrees/...`; the plan base was recorded in the executor's
+     scratch folder instead, and the SUMMARY's commit count excludes the
+     SUMMARY commit.
+  2. The plan duration in the SUMMARY is estimated (no start time captured).
+  3. Plan 07-01's stale-notice scenario keeps its title and steps; only its
+     setup moved into the new `Background:`.
+- **Recorded in:** `07-05-SUMMARY.md`.
+
+#### P7-DC-12: Wave 2 executor choices (argument runs)
+
+- **Phase / source:** Phase 7 wave 2, runs executor (`07-03-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. `run.feature`'s description names the no-approval gap in words ("a Pi
+     gap") without the ID D-CF7-01, since no feature file in the suite cites
+     decision IDs; the SUMMARY maps the wording to D-CF7-01 and D-CF7-02.
+  2. The three-line description dropped "ends with the value the script
+     returns" (the seed title still states it); its third line is about 92
+     characters.
+  3. `nope.js` keeps an unreachable `return "never";` after its `throw` so
+     every fixture body ends in a `return`.
+- **Recorded in:** `07-03-SUMMARY.md`.
+
+#### P7-DC-13: Wave 2 executor choices (engine missing)
+
+- **Phase / source:** Phase 7 wave 2, companion-missing executor (`07-04-SUMMARY.md`).
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. **Merge into Pi's user settings instead of a `wx` write.** Every profile
+     Pi already has `<agentDir>/settings.json` (`{"retry":{"enabled":false}}`,
+     saved when the frozen `usePiWithProfile` sends `set_auto_retry`), which
+     research's probe never sent. The step refuses a file that already has a
+     `packages` member, adds `packages: [<engine root>]` beside the other
+     members as `pi install` does, and restores the exact text it found (or
+     removes the file) at release. Alternative: project settings
+     (`<project>/.pi/settings.json`), unverified and entangled with project
+     trust (HAR-06). Threat T-07-09 now rests on merge-and-restore.
+  2. No `Background:` in `companion-missing.feature`: two scenarios start a
+     profile Pi first, and the wave-1 features repeat their setup per scenario.
+  3. The marker scenarios run on the shared Pi and rely on every settings edit
+     being restored at release.
+- **Recorded in:** `07-04-SUMMARY.md`.
+
+#### P7-DC-14: Wave 3 executor choices (docs and gate)
+
+- **Phase / source:** Phase 7 wave 3 executor (`07-06-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. A new evidence grade, `scenario-measured at 3.15.0`, in
+     `docs/workflows-compatibility.md` for claims a `features/workflow/`
+     scenario measures.
+  2. The `export let/var` and second-declarator rows were read from the
+     2.1.316 binary offline (skipped at load upstream) rather than marked
+     `not read`.
+  3. The `args` row's Pi cell changed from `--` to `⚠`, and the old advice to
+     call structured scripts through the engine's tool was removed (its
+     premise was wrong).
+  4. A reserved-key row was added to the admit-versus-run table.
+  5. Quotes of engine and Claude Code text use `--` for U+2014 (commit hook).
+  6. The CHANGELOG parent line is marked Internal (no product fix).
+  7. The SUMMARY's commit count excludes its own final commit.
+- **Recorded in:** `07-06-SUMMARY.md`.
+
+#### P7-DC-15: Code review and fix loop choices
+
+- **Phase / source:** Phase 7 code review (`07-REVIEW.md`, `07-REVIEW-FIX.md`), 3 iterations.
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. **WR-01 pinned in every run scenario:** each run scenario states the
+     engine's `info` start notice and its `warning` "delivery ... deferred:
+     ... has no thenable send function" (engine 3.15.0 over RPC never posts
+     the result back). If a later Pi or engine fixes delivery, six scenarios
+     change at once.
+  2. New local tokens `{run id}` and `{session id}` in the notices step (not
+     in the frozen `run-tokens.ts` or the cucumber skill's token list), and a
+     read-only RPC `get_state` inside a `Then` to read the session id (the
+     frozen world turn has no field for it). Parent line: list the tokens in
+     the skill and keep a turn's session id in the world (IN-06).
+  3. The engine-absent negative control checks every command source for a
+     name containing the workflow name; a future command containing "hello"
+     would need a new fixture name.
+  4. WR-03 was fixed by adding coverage (three refusal rows, two lifecycle
+     scenarios) rather than narrowing the doc's grades.
+  5. The joined diagnostic `lines` column stays next to the new per-line
+     table (the frozen results step appends any omitted column; IN-08 parent
+     line for `features/lib/field-rows.ts`).
+  6. IN-05: only the notices step marks a run turn compared. This follows
+     `steps.md` but contradicts the literal `world-and-stand-ins.md:66`
+     ("A `Then` that reads the turn marks it compared"); kept as Info IN-10
+     with a parent line to fix the skill text.
+  7. Fixers worked in the main checkout (no worktree) so the cucumber red
+     proofs could run; the review/fix reports were committed per iteration
+     (the stop hook requires a clean tree) instead of once at the end, and
+     the iteration backups were kept in the scratchpad.
+- **Recorded in:** `07-REVIEW.md`, `07-REVIEW-FIX.md`, `07-REVIEW-DISPOSITION.md`.
+
+#### P7-DC-16: Verification choices
+
+- **Phase / source:** Phase 7 verifier (`07-VERIFICATION.md`, status passed 5/5).
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. WFL-04 passed on the settings `packages` entry plus a new session (with
+     a negative control), not a literal `/reload`; a stricter reading would
+     mark it uncertain and ask a human.
+  2. WFL-03's "reserved names" read as the engine's reserved `meta` keys
+     (`__proto__`, `constructor`, `prototype`); `<plugin>:` command names
+     cannot collide with Pi's reserved commands.
+  3. The verifier re-ran only `features/workflow` and relied on the
+     orchestrator's recorded full gate.
+- **Recorded in:** `07-VERIFICATION.md`.
+
+#### P7-DC-17: Transition step skipped for PROJECT.md
+
+- **Phase / source:** Phase 7 transition (post-completion mode).
+- **Severity:** Low. **Status:** open.
+- **Choice:** The transition's `evolve_project` step (validated requirements,
+  Key Decisions rows, "Last updated" footer in `.planning/PROJECT.md`) was not
+  run in this child session. `CHILD-SESSION-BRIEF.md` forbids editing
+  PROJECT.md Key Decisions, and the other edits to that shared 2.6 MB file
+  would conflict with the sibling phases' merges. The parent applies the
+  D-CF7-01..04 Key Decisions rows from `07-06-SUMMARY.md` "Parent lines" and
+  moves WFL-01..05 to Validated at merge. `phase.complete` already updated
+  ROADMAP.md, STATE.md, and REQUIREMENTS.md (WFL-01..05 checked).
+- **Alternatives:** Edit PROJECT.md's requirement and footer sections here.
+- **Recorded in:** this file only.
+
+Source: `.planning/phases/07-workflows/DUBIOUS-CHOICES.md`.
