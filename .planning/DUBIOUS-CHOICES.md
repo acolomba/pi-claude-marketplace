@@ -865,3 +865,13 @@ The parent closed P5-DC-11 after the merge: project-scope hooks run only when th
 3. The scenario "the TUI background notice names a plugin once while both updated installs remain" was removed: it needed one plugin updated in both scopes, which cannot happen now. The notice's de-duplication stays unit-tested only.
 4. The new scenario checks a skill only; commands and hooks share the same skipped write.
 5. Docs point to `marketplace update` or `update --scope project`, not `apply`, because `apply` does not refresh a git marketplace.
+
+#### Phase 3 and Phase 5 parent lines (applied by the parent at 807f9b8..eb838b6; `npm run check` exit 0, 1529/1529, seed 732992)
+1. Decision rows keep their drafted outcomes: D-CF3-07 "Pending (user review, with D-CF2-13)", D-CF3-13 "✓ Good", D-CF5-06/08/16/20/28 "-- Deferred"; the rest `-- Locked`. Rows are shortened; full text stays in 03-09/05-09 SUMMARY. Some rows cite BACKLOG IDs the agent named.
+2. `platform/pi-api.ts`: `tool_result` content widened to text and image parts (two casts removed); `TurnEndEvent` not re-exported because fallow flags it unused (PIAPITURN-01).
+3. `.fallowrc.json`: `dynamicallyLoaded` and `ignoreExports` removed (Phase 3 line), fallow green.
+4. The Pi gap report draft in 02-07-SUMMARY gained the command gaps (sections 4-6). Still unfiled.
+5. BACKLOG: 35 items. The two Phase 2 follow-ups are recorded, not fixed (LEDGERNAME-01, SKILLCLASH-01). HOOKNEST-01 closed by D-CF5-12. HOOKDATA-01 records a likely real mismatch: hooks use `data/<pluginId>` while skills and commands use `data/<marketplace>/<plugin>`.
+6. `05-SECURITY.md`: T-05-28 marked mitigated by hand (da72ba4, D-CF2-15); new T-05-31 / AR-05-06 for the hooks residual. The audit re-run follows.
+7. compat-research skill: probes start inside `unshare -rn`, only where `/home/claude/.claude/remote` is absent or unreadable.
+8. CONVENTIONS recount: 41 markers, 23 `code-duplication`. CHANGELOG hook lines are reworded; a few run slightly over 25 words.
