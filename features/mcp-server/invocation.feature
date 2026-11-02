@@ -200,3 +200,44 @@ Feature: MCP server invocation
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
       | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
       | request      | tools/list                |                                                                                                                                                                                                                                                                 |
+
+  Scenario: Installing an agent granted a plugin MCP tool stages it to run in the background (D-CF6-10)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "runner" granted the mcp tool "mcp__plugin_demo_stub__echo"
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                             |
+      | cascade | warning  | true         | A plugin operation needs attention. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons                                        | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed | requires pi-subagents, requires pi-mcp-adapter | user  | 1.0.0   |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-runner.md" with this text:
+      """
+      ---
+      name: demo:runner
+      description: Calls the tools the task names.
+      aliases: pi-claude-marketplace-demo-runner
+      tools: mcp:plugin_demo_stub_/echo
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: false
+      advertise: true
+      async: true
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: runner
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/runner.md
+        droppedFields: []
+        droppedTools: []
+        warnings:
+          - tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails
+      ---
+
+      Call the tools the task names.
+      """

@@ -152,3 +152,15 @@ Then(
     this.markTurnCompared();
   },
 );
+
+// The whole text of the agent file that the agents bridge staged for pi-subagents
+// in the agents folder of a scope, with the run tokens projected. The doc
+// string holds the text without the line feed that ends the file.
+Then(
+  "the agents folder of the {word} scope holds the file {string} with this text:",
+  async function (this: ScenarioWorld, scope: string, fileName: string, expected: string) {
+    const root = scope === "user" ? this.tokens.agentDir : path.join(this.tokens.projectDir, ".pi");
+    const text = await readFile(path.join(root, "agents", fileName), "utf8");
+    assert.strictEqual(projectTokens("text", text, this.tokens), `${expected}\n`);
+  },
+);

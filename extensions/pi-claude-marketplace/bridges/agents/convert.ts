@@ -113,10 +113,14 @@ interface ExplicitDisallow {
   readonly perTool: readonly { readonly token: string; readonly server: string }[];
 }
 
+/**
+ * D-CF6-10: why an agent that runs plugin MCP tools launches in the
+ * background, where Claude Code runs it in the foreground.
+ */
 const MCP_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents runs only in background launches -- " +
-  "launch this agent with `async: true`; a foreground launch fails, and so does a launch " +
-  "before pi-mcp-adapter has cached the server's tools";
+  "tools include MCP tools, which pi-subagents serves only to background children -- " +
+  "the agent runs in the background (`async: true`), where Claude Code runs it in the " +
+  "foreground; a launch before pi-mcp-adapter has cached the server's tools still fails";
 
 /**
  * Allowlist for thinking/effort values. D-CF4-06 as amended: `max` is one of
@@ -496,8 +500,7 @@ function isDisallowed(entry: string, disallow: ExplicitDisallow): boolean {
  * survives the filter, so it warns. pi-subagents 0.62 and later do apply
  * `excludeTools` beside an explicit `tools:` list (D-CF4-08); the per-tool
  * warning text still says otherwise and stays unchanged, because it belongs
- * to the MCP-07 warning surface. Any `mcp:` entry in the final list needs a
- * background launch, which this extension states and never injects.
+ * to the MCP-07 warning surface.
  */
 function explicitMcpWarnings(kept: readonly string[], disallow: ExplicitDisallow): string[] {
   const keptSet = new Set(kept);
@@ -508,10 +511,6 @@ function explicitMcpWarnings(kept: readonly string[], disallow: ExplicitDisallow
         `disallowedTools entry ${token} cannot narrow the whole-server grant ${server} -- ` +
         "pi-subagents takes no excludeTools beside an explicit tools: list, so the agent keeps every tool of that server",
     );
-  if (kept.some((name) => name.startsWith("mcp:"))) {
-    warnings.push(MCP_ASYNC_WARNING);
-  }
-
   return dedupePreservingOrder(warnings);
 }
 
@@ -897,6 +896,10 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
   );
   assertMappedToolsNonEmpty(toolsResult, { raw, sourceName, pluginName });
   warnings.push(...toolsResult.warnings);
+  const backgroundForMcp = runsMcpTools(toolsResult, mcpServerNames);
+  if (backgroundForMcp) {
+    warnings.push(MCP_ASYNC_WARNING);
+  }
 
   // 4. Thinking / effort mapping
   const thinkingResult = mapThinking(raw.thinking, raw.effort);
@@ -955,7 +958,7 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
       ...optionalThinking(thinkingResult.emit),
       skills: skillsResult.emit,
       inheritSkills: toolsResult.inheritSkills,
-      ...optionalAsync(asyncSetting(raw.background, toolsResult, mcpServerNames)),
+      async: backgroundForMcp || isTrueBackground(raw.background),
     },
     provenance: {
       pluginName,
@@ -985,25 +988,19 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
 }
 
 /**
- * D-CF4-05: the `async` launch default of a bridged agent. Claude Code runs a
- * plugin agent in the foreground unless its source sets `background` to
+ * D-CF4-05: whether the source asks for a background launch. Claude Code runs
+ * a plugin agent in the foreground unless its source sets `background` to
  * `true` or `"true"`, so the agent gets `async: true` for that value and
  * `async: false` otherwise, which replaces pi-subagents' background default.
  * Residual: a pi-subagents call can still ask for either launch mode, where
  * Claude Code forces the background for `background: true`.
- * An agent that runs MCP tools gets no line at all (D-CF4-05 as amended):
- * pi-subagents serves MCP tools only in background launches, and its
- * MCP async warning stays the guidance there.
+ *
+ * D-CF6-10 amends D-CF4-05: an agent that runs plugin MCP tools always gets
+ * `async: true`, even for `background: false`. pi-subagents 0.84.0 loads no
+ * ambient extension, pi-mcp-adapter among them, into a foreground child
+ * (its docs/agents.md), so a foreground launch could not reach the tools.
  */
-function asyncSetting(
-  rawBackground: unknown,
-  toolsResult: ToolMappingResult,
-  mcpServerNames: readonly string[] | undefined,
-): boolean | undefined {
-  if (runsMcpTools(toolsResult, mcpServerNames)) {
-    return undefined;
-  }
-
+function isTrueBackground(rawBackground: unknown): boolean {
   return typeof rawBackground === "string" && withoutMatchingQuotes(rawBackground) === "true";
 }
 
@@ -1020,10 +1017,6 @@ function runsMcpTools(
   }
 
   return toolsResult.mapped.some((name) => name.startsWith("mcp:"));
-}
-
-function optionalAsync(launchAsync: boolean | undefined): { async?: boolean } {
-  return launchAsync === undefined ? {} : { async: launchAsync };
 }
 
 function optionalModel(model: string | undefined): { model?: string } {

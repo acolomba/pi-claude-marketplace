@@ -60,6 +60,7 @@
   - Agents in subfolders now install under their folder names, such as `demo:review:security`, and hidden agent files, `.MD` files, and declared agent files install too.
   - An agent with no description now gets Claude Code's text: its `when_to_use` text, or `Agent from <plugin> plugin`.
   - Plugin agents now run in the foreground unless they set `background: true`, as in Claude Code.
+  - A plugin agent that uses the plugin's MCP tools now runs in the background, because pi-subagents gives MCP tools only to background agents. Install warns about it.
   - The main model now sees every plugin agent in its system prompt, as in Claude Code.
   - Agent `effort` now accepts `max`, `med`, and any case.
   - `--map-model` now maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, and keeps full `claude-` model IDs.

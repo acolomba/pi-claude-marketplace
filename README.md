@@ -24,7 +24,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`. Agents run in the foreground unless they set `background: true`. An agent gets the content of the skills it preloads.
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`. Agents run in the foreground unless they set `background: true`. An agent that uses the plugin's MCP tools runs in the background, because pi-subagents gives MCP tools only to background agents. An agent gets the content of the skills it preloads.
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).

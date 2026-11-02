@@ -2093,7 +2093,7 @@ test("ANAME-02: a server left out by a partial install is not granted to the plu
     {
       kind: "hygiene",
       message:
-        "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+        "[bot] tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails",
     },
     { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_empty_live__stream" },
   ]);

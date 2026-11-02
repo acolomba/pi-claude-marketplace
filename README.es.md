@@ -24,7 +24,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 
 - Comandos.
 - Habilidades.
-- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`. Los agentes se ejecutan en primer plano, salvo que indiquen `background: true`. Un agente recibe el contenido de las habilidades que precarga.
+- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`. Los agentes se ejecutan en primer plano, salvo que indiquen `background: true`. Un agente que usa las herramientas MCP del complemento se ejecuta en segundo plano, porque pi-subagents solo da herramientas MCP a los agentes en segundo plano. Un agente recibe el contenido de las habilidades que precarga.
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
 - Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 - Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).

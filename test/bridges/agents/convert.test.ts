@@ -15,7 +15,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 const MCP_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools";
+  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails";
 
 function convertMcpAgent(
   raw: RawAgentFrontmatter,
@@ -1923,6 +1923,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read,mcp:plugin_acme_db_",
       inheritSkills: false,
+      async: true,
       droppedTools: ["mcp__plugin_acme_db__"],
       warnings: [MCP_ASYNC_WARNING],
     });
@@ -1945,6 +1946,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: mcp:plugin_acme_db__x_/run,mcp:plugin_acme_db__x_",
       inheritSkills: false,
+      async: true,
       droppedTools: [],
       warnings: [MCP_ASYNC_WARNING],
     });
@@ -2012,6 +2014,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: mcp:plugin_acme_db_/b",
       inheritSkills: false,
+      async: true,
       droppedTools: [],
       warnings: [MCP_ASYNC_WARNING],
     });
@@ -2059,6 +2062,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: mcp:plugin_acme_db_",
       inheritSkills: false,
+      async: true,
       droppedTools: [],
       warnings: [
         "disallowedTools entry mcp__plugin_acme_db__a cannot narrow the whole-server grant mcp:plugin_acme_db_ -- pi-subagents takes no excludeTools beside an explicit tools: list, so the agent keeps every tool of that server",
@@ -2085,10 +2089,12 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "excludeTools: mcp__plugin_acme_db__a",
       inheritSkills: true,
+      async: true,
       droppedTools: [],
       warnings: [
         "disallowedTools entries with no Pi tool mapping (mcp__plugin_acme_db) cannot narrow the default tool set -- ignored",
         "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set",
+        MCP_ASYNC_WARNING,
       ],
     });
 
@@ -2102,11 +2108,12 @@ Body.\r
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
-  test("ANAME-02: an explicit list of only mcp: entries converts with the async warning and no async field", () => {
+  test("D-CF6-10: an explicit list of only mcp: entries converts with async: true and the background warning", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: mcp:plugin_acme_db_/query",
       inheritSkills: false,
+      async: true,
       droppedTools: [],
       warnings: [MCP_ASYNC_WARNING],
     });
@@ -2132,23 +2139,27 @@ Body.\r
     assert.deepStrictEqual(agent, expectedAgent);
   });
 
-  test("D-CF4-05: an agent with an omitted tools: list loses only its async line when the plugin writes MCP servers", () => {
+  test("D-CF6-10: an agent with an omitted tools: list runs in the background with the warning when the plugin writes MCP servers", () => {
     // arrange
-    const raw = { description: "d", disallowedTools: "Edit, Unknown" };
-    const withoutServers = convertMcpAgent(raw, undefined);
+    const expectedWarnings = [
+      "disallowedTools entries with no Pi tool mapping (Unknown) cannot narrow the default tool set -- ignored",
+      "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set",
+      MCP_ASYNC_WARNING,
+    ];
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "excludeTools: edit",
+      inheritSkills: true,
+      async: true,
+      droppedTools: [],
+      warnings: expectedWarnings,
+    });
 
     // act
-    const agent = convertMcpAgent(raw, ["db"]);
+    const agent = convertMcpAgent({ description: "d", disallowedTools: "Edit, Unknown" }, ["db"]);
 
     // assert
-    assert.deepStrictEqual(agent, {
-      ...withoutServers,
-      fileContent: withoutServers.fileContent.replace(
-        "advertise: true\nasync: false\n",
-        "advertise: true\n",
-      ),
-    });
-    assert.notStrictEqual(agent.fileContent, withoutServers.fileContent);
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+    assert.deepStrictEqual(agent.warnings, expectedWarnings);
   });
 
   for (const { label, background, expectedAsync } of [
@@ -2185,18 +2196,19 @@ Body.\r
     });
   }
 
-  test("D-CF4-05: an explicit list with an mcp: entry converts with no async line even for background: true", () => {
+  test("D-CF6-10: an explicit list with an mcp: entry converts with async: true even for background: false", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read,mcp:plugin_acme_db_",
       inheritSkills: false,
+      async: true,
       droppedTools: [],
       warnings: [MCP_ASYNC_WARNING],
     });
 
     // act
     const agent = convertMcpAgent(
-      { description: "d", tools: "Read, mcp__plugin_acme_db", background: "true" },
+      { description: "d", tools: "Read, mcp__plugin_acme_db", background: "false" },
       ["db"],
     );
 
@@ -2204,7 +2216,7 @@ Body.\r
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
-  test("D-CF4-05: an omitted list in a plugin that writes MCP servers converts with no async line even for background: true", () => {
+  test("D-CF6-10: an omitted list in a plugin that writes MCP servers converts with async: true even for background: false", () => {
     // arrange
     const expectedFileContent = `---
 name: acme:bot
@@ -2214,6 +2226,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
+async: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -2221,14 +2234,15 @@ provenance:
   sourcePath: /abs/path/source.md
   droppedFields: []
   droppedTools: []
-  warnings: []
+  warnings:
+    - ${MCP_ASYNC_WARNING}
 ---
 
 Body content.
 `;
 
     // act
-    const agent = convertMcpAgent({ description: "d", background: "true" }, ["db"]);
+    const agent = convertMcpAgent({ description: "d", background: "false" }, ["db"]);
 
     // assert
     assert.strictEqual(agent.fileContent, expectedFileContent);
@@ -2346,6 +2360,7 @@ Body content.
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read,mcp:plugin_acme_db_",
       inheritSkills: false,
+      async: true,
       droppedTools: [],
       warnings: [MCP_ASYNC_WARNING],
     });
