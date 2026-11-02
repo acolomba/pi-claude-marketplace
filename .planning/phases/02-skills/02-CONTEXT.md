@@ -332,6 +332,28 @@ user has not reviewed them yet.
   parity: Claude Code never acts on a repository's plugin settings before the
   trust dialog and the install consent. This changes D-PL8-01 behavior for
   the project scope.
+- **D-CF2-16 (a project re-stage that names no plugin only refreshes the
+  ledger; parent, pending user review):** A project-scope stage that the
+  user did not aim at that plugin may rewrite the D-CF2-13 ledger entries of
+  a plugin that the ledger already lists for the project, and it never adds
+  a plugin the ledger does not list. "Not aimed" means `update` and
+  `reinstall` with no `<plugin>@<marketplace>` (the bare and `@marketplace`
+  forms), the `marketplace update` cascade, and `apply`'s catalog moves. The
+  dependencies such a command installs or moves share its admission. A
+  command that names the plugin (`install`, `update`, `reinstall`, or
+  `enable` with `<plugin>@<marketplace>`) still adds it, which is the
+  recovery that the abort messages print. A skipped plugin is still updated
+  on disk, and its skills, commands, and hooks stay refused until the user
+  names it. The check reads the ledger once per plugin, before the stage
+  writes: a plugin with at least one entry counts as listed, so a new
+  version can add a skill or a hook to it. Rationale: these commands list
+  their plugins from the project's own `state.json`, which a cloned
+  repository writes, and before this rule the stage writers recorded every
+  one of them in this user's ledger (T-05-32). Upstream parity: Claude Code's
+  `/plugin update` acts only on `installed_plugins.json` entries, which a
+  repository cannot write. Residual: `apply`'s install, enable, and
+  missing-dependency steps for a plugin that the project config declares
+  still add ledger entries, because the user typed `apply` (D-CF2-14).
 
 ### Claude's Discretion
 
