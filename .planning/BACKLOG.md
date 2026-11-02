@@ -4676,11 +4676,15 @@ Deferred by component-features Phase 3 (D-CF3-01, P3-DC-03). Claude Code lists a
 
 Deferred by component-features Phase 3 (D-CF3-03, D-CF3-05 residuals). `discoverComponentNames` in `orchestrators/plugin/info.ts` reads declared command directories only, so a declared `.md` file and an object-map entry install but are not listed by `/claude:plugin info` of a plugin read from its source. The state-only view reads the recorded names and is not affected.
 
-## LEDGERPRUNE-01: restore ledger entries on a `prune` rollback
+## ~~LEDGERPRUNE-01: restore ledger entries on a `prune` rollback~~ -- CLOSED
+
+**CLOSED 2026-11-02 as moot** by the user's decision DC-41 (D-LOC-01): the user-folder project-install ledger was removed, and project skills, commands, and hooks are gated on Pi's project trust alone.
 
 Deferred by component-features Phase 3 (D-CF3-07 residual, P3-DC-17 item 5). When a `prune` rolls back, `orchestrators/plugin/prune-rollback.ts` restores the staged skill and command files but not their entries in the user's project ledger, so a restored project skill or command aborts until its plugin is reinstalled. Hook entries (`hooks/<plugin>`) have the same gap.
 
-## CMDDIGEST-01: plugin-root scripts in the command digest
+## ~~CMDDIGEST-01: plugin-root scripts in the command digest~~ -- CLOSED
+
+**CLOSED 2026-11-02 as moot** by the user's decision DC-41 (D-LOC-01): the user-folder project-install ledger was removed, and project skills, commands, and hooks are gated on Pi's project trust alone.
 
 Deferred by component-features Phase 3 (D-CF3-07 residual, T-03-23). The project-command digest covers only the staged command file. A script under the plugin root that a `!` command runs is not covered, so a changed script still runs. The skills digest covers the whole staged skill directory but not the plugin root either (D-CF2-13 residual AR-02-05), and the hooks digest covers only the staged `hooks.json` (AR-05-06).
 
@@ -4688,7 +4692,9 @@ Deferred by component-features Phase 3 (D-CF3-07 residual, T-03-23). The project
 
 Deferred by component-features Phase 3 (03-CONTEXT E9). Claude Code loads a `SKILL.md` found inside `commands/` as a skill named after its folder. The commands walk has no `SKILL.md` rule, so `commands/x/SKILL.md` stages as the command `<plugin>:x:SKILL`.
 
-## LEDGERNAME-01: neutral names for the shared project-install ledger
+## ~~LEDGERNAME-01: neutral names for the shared project-install ledger~~ -- CLOSED
+
+**CLOSED 2026-11-02 as moot** by the user's decision DC-41 (D-LOC-01): the user-folder project-install ledger was removed, and project skills, commands, and hooks are gated on Pi's project trust alone.
 
 Noted by component-features Phase 3 (Phase 2 follow-up) and the project-hook provenance check (DUBIOUS-CHOICES DC-36 item 1). Skills, commands, and hooks now share one ledger, but its names still say "skill": the file `skills.json` under `<agentDir>/pi-claude-marketplace/project-installs/<sha256>/`, `ProjectSkillLedgerError` and its text "The project skill ledger ...", `NODE_PROJECT_SKILL_LEDGER`, `provenProjectSkills`, the WR-04 outcome member `skillWarnings` in `orchestrators/marketplace/shared.ts`, the commands warning `could not remove the commands from the project skill ledger: ...`, and the step texts "the user's record of project skill installs ...". A neutral form: `project-installs.json`, `ProjectInstallLedgerError`, `NODE_PROJECT_INSTALL_LEDGER`, `provenProjectInstalls`, `ledgerWarnings`, "the user's record of project installs". A file rename needs a reader for both names. The warning texts are user-visible, so the change needs a cucumber scenario.
 
@@ -4803,3 +4809,7 @@ Deferred by component-features Phase 5 (DUBIOUS-CHOICES P5-DC-24). The 12 info f
 ## PIEXPAND-01: drop the zero-width-space prefix once Pi can skip a transform's expansion
 
 Added 2026-11-02 (component-features, user decision A.1 item 6). When the extension finishes a typed command or skill whose text starts with `/`, `edge/input-transform.ts` (`finishedTransform`) prefixes one U+200B so Pi does not expand the text a second time; the model receives that invisible character. The proper fix is upstream: an `expandPromptTemplates: false` member on the `input` event's `transform` result, drafted on the user's fork `acolomba/pi`, branch `fix/input-transform-expand-opt-out` (patch and notes in `.planning/upstream/pi-input-transform-expand.*`). Trigger: a Pi release that ships the option. Then raise the `@earendil-works/pi-coding-agent` peer floor to it, return `expandPromptTemplates: false` from `finishedTransform` instead of the prefix, drop the `{zero width space}` run token where it is no longer needed, and update the scenarios that pin the prefix (`features/slash-command/invocation.feature`, `features/skill/invocation.feature`).
+
+## WFLOCAL-01: the workflow engine may stop reading a project's `.pi/workflows/saved/`
+
+Recorded by the project locality decision (DC-41, D-LOC-01, which reverses WPTH-02). A project install now saves its workflow envelopes in `<cwd>/.pi/workflows/saved/`. pi-dynamic-workflows 3.15.0 reads that directory as a full source, after `~/.pi/workflows/projects/<key>/saved/` and before the user's `saved/`, with no warning. But since engine PR #19 (June 2026) the engine writes its own saves and runtime state under `~/.pi/workflows/projects/<key>/`, and its module header says so that projects do not collect `.pi/workflows` directories. A later engine release that drops the in-project source would hide every project install's workflows with no error. No engine patch was made (user's choice). Watch each engine release: `src/workflow-saved.ts::createWorkflowStorage` must keep the `legacy` source, and `features/workflow/storage.feature` runs a project workflow against the declared engine floor. If the source is dropped, decide with the user between asking upstream to keep it and an opt-in move to the engine's project directory.
