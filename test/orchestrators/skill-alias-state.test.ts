@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
-import { loadQualifiedSkillAliases } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
+import { loadPluginAliases } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import {
   NODE_PROJECT_SKILL_LEDGER,
   skillTreeDigest,
@@ -14,6 +14,7 @@ import {
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
+  PluginAliasTarget,
   SkillAliasDependencies,
   SkillAliasState,
 } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
@@ -163,7 +164,7 @@ test("D-CF2-02: maps each name a loaded skill stored to its generated name", asy
   const pi = piWith([skillCommand("demo-review", file)]);
 
   // act
-  const aliases = await loadQualifiedSkillAliases(
+  const aliases = await loadPluginAliases(
     pi,
     CWD,
     true,
@@ -177,9 +178,9 @@ test("D-CF2-02: maps each name a loaded skill stored to its generated name", asy
   assert.deepStrictEqual(
     [...aliases],
     [
-      ["demo:review", "demo-review"],
-      ["demo:fancy", "demo-review"],
-      ["fancy", "demo-review"],
+      ["demo:review", skill("demo-review")],
+      ["demo:fancy", skill("demo-review")],
+      ["fancy", skill("demo-review")],
     ],
   );
   verify(pi);
@@ -191,7 +192,7 @@ test("D-CF2-02: a skill with a record no longer answers to the name its plugin p
   const pi = piWith([skillCommand("demo-tool", file)]);
 
   // act
-  const aliases = await loadQualifiedSkillAliases(
+  const aliases = await loadPluginAliases(
     pi,
     CWD,
     true,
@@ -205,8 +206,8 @@ test("D-CF2-02: a skill with a record no longer answers to the name its plugin p
   assert.deepStrictEqual(
     [...aliases],
     [
-      ["demo:demo-tool", "demo-tool"],
-      ["demo-tool", "demo-tool"],
+      ["demo:demo-tool", skill("demo-tool")],
+      ["demo-tool", skill("demo-tool")],
     ],
   );
   verify(pi);
@@ -221,7 +222,7 @@ test("DC-25: a skill staged without a record keeps the alias its plugin prefix w
   const pi = piWith(skills.map((name) => skillCommand(name, stagedPath(AGENT_DIR, name))));
 
   // act
-  const aliases = await loadQualifiedSkillAliases(
+  const aliases = await loadPluginAliases(
     pi,
     CWD,
     true,
@@ -232,8 +233,8 @@ test("DC-25: a skill staged without a record keeps the alias its plugin prefix w
   assert.deepStrictEqual(
     [...aliases],
     [
-      ["foo:bar", "foo-bar"],
-      ["foo:foo", "foo"],
+      ["foo:bar", skill("foo-bar")],
+      ["foo:foo", skill("foo")],
     ],
   );
   verify(pi);
@@ -245,7 +246,7 @@ test("DC-25: a skill staged without a record under a plugin name that names no s
   const pi = piWith([skillCommand("invalid", file)]);
 
   // act
-  const aliases = await loadQualifiedSkillAliases(
+  const aliases = await loadPluginAliases(
     pi,
     CWD,
     true,
@@ -273,7 +274,7 @@ for (const { problem, brokenFiles } of [
     const pi = piWith([skillCommand("demo-broken", BROKEN_FILE), skillCommand("demo-greet", kept)]);
 
     // act
-    const aliases = await loadQualifiedSkillAliases(
+    const aliases = await loadPluginAliases(
       pi,
       CWD,
       true,
@@ -281,7 +282,7 @@ for (const { problem, brokenFiles } of [
     );
 
     // assert
-    assert.deepStrictEqual([...aliases], [["demo:greet", "demo-greet"]]);
+    assert.deepStrictEqual([...aliases], [["demo:greet", skill("demo-greet")]]);
     verify(pi);
   });
 }
@@ -292,7 +293,7 @@ test("D-CF2-02: a skill whose staged file Pi did not load adds no alias", async 
   const pi = piWith([skillCommand("demo-review", "/elsewhere/demo-review/SKILL.md")]);
 
   // act
-  const aliases = await loadQualifiedSkillAliases(
+  const aliases = await loadPluginAliases(
     pi,
     CWD,
     true,
@@ -317,7 +318,7 @@ test("T-02-17: an untrusted project adds no alias, while the user scope still do
   ]);
 
   // act
-  const aliases = await loadQualifiedSkillAliases(
+  const aliases = await loadPluginAliases(
     pi,
     CWD,
     false,
@@ -334,7 +335,7 @@ test("T-02-17: an untrusted project adds no alias, while the user scope still do
   );
 
   // assert
-  assert.deepStrictEqual([...aliases], [["tools:lint", "tools-lint"]]);
+  assert.deepStrictEqual([...aliases], [["tools:lint", skill("tools-lint")]]);
   verify(pi);
 });
 
@@ -344,7 +345,7 @@ test("T-02-17: keeps only the stored names install writes: the plugin's own pref
   const pi = piWith([skillCommand("demo-review", file)]);
 
   // act
-  const aliases = await loadQualifiedSkillAliases(
+  const aliases = await loadPluginAliases(
     pi,
     CWD,
     true,
@@ -366,9 +367,9 @@ test("T-02-17: keeps only the stored names install writes: the plugin's own pref
   assert.deepStrictEqual(
     [...aliases],
     [
-      ["demo:review", "demo-review"],
-      ["review", "demo-review"],
-      ["demo:other:thing", "demo-review"],
+      ["demo:review", skill("demo-review")],
+      ["review", skill("demo-review")],
+      ["demo:other:thing", skill("demo-review")],
     ],
   );
   verify(pi);
@@ -380,7 +381,7 @@ test("SK-6: a name that a command of another source has stays with that command"
   const pi = piWith([skillCommand("demo-review", file), promptCommand("fancy")]);
 
   // act
-  const aliases = await loadQualifiedSkillAliases(
+  const aliases = await loadPluginAliases(
     pi,
     CWD,
     true,
@@ -394,8 +395,8 @@ test("SK-6: a name that a command of another source has stays with that command"
   assert.deepStrictEqual(
     [...aliases],
     [
-      ["demo:review", "demo-review"],
-      ["demo:fancy", "demo-review"],
+      ["demo:review", skill("demo-review")],
+      ["demo:fancy", skill("demo-review")],
     ],
   );
   verify(pi);
@@ -408,7 +409,7 @@ test("D-CF2-02: a name the user scope claimed is not mapped again by the project
   const pi = piWith([skillCommand("tools-same", userFile), skillCommand("demo-same", projectFile)]);
 
   // act
-  const aliases = await loadQualifiedSkillAliases(
+  const aliases = await loadPluginAliases(
     pi,
     CWD,
     true,
@@ -428,9 +429,9 @@ test("D-CF2-02: a name the user scope claimed is not mapped again by the project
   assert.deepStrictEqual(
     [...aliases],
     [
-      ["tools:same", "tools-same"],
-      ["same", "tools-same"],
-      ["demo:same", "demo-same"],
+      ["tools:same", skill("tools-same")],
+      ["same", skill("tools-same")],
+      ["demo:same", skill("demo-same")],
     ],
   );
   verify(pi);
@@ -447,7 +448,7 @@ test("D-CF2-02: reads the project scope when the user scope state cannot be read
   );
 
   // act
-  const aliases = await loadQualifiedSkillAliases(pi, CWD, true, {
+  const aliases = await loadPluginAliases(pi, CWD, true, {
     ...projectOnly,
     loadState: (extensionRoot) => {
       loadedRoots.push(extensionRoot);
@@ -456,7 +457,7 @@ test("D-CF2-02: reads the project scope when the user scope state cannot be read
   });
 
   // assert
-  assert.deepStrictEqual([...aliases], [["foo:foo-bar", "foo-bar"]]);
+  assert.deepStrictEqual([...aliases], [["foo:foo-bar", skill("foo-bar")]]);
   assert.deepStrictEqual(loadedRoots, [
     path.join(AGENT_DIR, "pi-claude-marketplace"),
     path.join(PROJECT_ROOT, "pi-claude-marketplace"),
@@ -471,9 +472,9 @@ for (const { claimants, reservedNames, expectedAliases } of [
     claimants: [{ skill: "demo-a", names: ["demo:a", "demo:x", "x"] }],
     reservedNames: [],
     expectedAliases: [
-      ["demo:a", "demo-a"],
-      ["demo:x", "demo-a"],
-      ["x", "demo-a"],
+      ["demo:a", skill("demo-a")],
+      ["demo:x", skill("demo-a")],
+      ["x", skill("demo-a")],
     ],
   },
   {
@@ -483,10 +484,10 @@ for (const { claimants, reservedNames, expectedAliases } of [
     ],
     reservedNames: [],
     expectedAliases: [
-      ["demo:a", "demo-a"],
-      ["demo:same", "demo-a"],
-      ["same", "demo-a"],
-      ["demo:b", "demo-b"],
+      ["demo:a", skill("demo-a")],
+      ["demo:same", skill("demo-a")],
+      ["same", skill("demo-a")],
+      ["demo:b", skill("demo-b")],
     ],
   },
   {
@@ -495,7 +496,7 @@ for (const { claimants, reservedNames, expectedAliases } of [
       { skill: "demo-b", names: ["demo:b"] },
     ],
     reservedNames: ["demo:a"],
-    expectedAliases: [["demo:b", "demo-a"]],
+    expectedAliases: [["demo:b", skill("demo-a")]],
   },
   {
     claimants: [{ skill: "demo-a", names: [] }],
@@ -517,7 +518,7 @@ for (const { claimants, reservedNames, expectedAliases } of [
     ]);
 
     // act
-    const aliases = await loadQualifiedSkillAliases(
+    const aliases = await loadPluginAliases(
       pi,
       CWD,
       true,
@@ -549,7 +550,7 @@ test("D-CF2-02: reads the staged skill file from disk with the production reader
   const pi = piWith([skillCommand("demo-review", file)]);
 
   // act
-  const aliases = await loadQualifiedSkillAliases(pi, cwd, true, {
+  const aliases = await loadPluginAliases(pi, cwd, true, {
     getAgentDir: () => agentDir,
     loadState: (extensionRoot) =>
       extensionRoot === path.join(projectRoot, "pi-claude-marketplace")
@@ -561,8 +562,8 @@ test("D-CF2-02: reads the staged skill file from disk with the production reader
   assert.deepStrictEqual(
     [...aliases],
     [
-      ["demo:review", "demo-review"],
-      ["fancy", "demo-review"],
+      ["demo:review", skill("demo-review")],
+      ["fancy", skill("demo-review")],
     ],
   );
   verify(pi);
@@ -590,7 +591,7 @@ for (const { title, ledger } of [
     ]);
 
     // act
-    const aliases = await loadQualifiedSkillAliases(
+    const aliases = await loadPluginAliases(
       pi,
       CWD,
       true,
@@ -608,7 +609,7 @@ for (const { title, ledger } of [
     );
 
     // assert
-    assert.deepStrictEqual([...aliases], [["tools:lint", "tools-lint"]]);
+    assert.deepStrictEqual([...aliases], [["tools:lint", skill("tools-lint")]]);
     verify(pi);
   });
 }
@@ -646,13 +647,206 @@ for (const { title, listSkillTree } of [
     );
 
     // act
-    const aliases = await loadQualifiedSkillAliases(pi, CWD, true, {
+    const aliases = await loadPluginAliases(pi, CWD, true, {
       ...resolved,
       ...(listSkillTree === undefined ? {} : { listSkillTree }),
     });
 
     // assert
-    assert.deepStrictEqual([...aliases], [["tools:lint", "tools-lint"]]);
+    assert.deepStrictEqual([...aliases], [["tools:lint", skill("tools-lint")]]);
     verify(pi);
   });
 }
+
+/** The table target of the bridged skill `generatedName`. */
+function skill(generatedName: string): PluginAliasTarget {
+  return { kind: "skill", generatedName };
+}
+
+/** The table target of the bridged command `name`. */
+function command(name: string): PluginAliasTarget {
+  return { kind: "command", name };
+}
+
+/** The staged command file of `name` under the scope root `root`. */
+function stagedCommandPath(root: string, name: string): string {
+  return path.join(root, "pi-claude-marketplace", "resources", "prompts", `${name}.md`);
+}
+
+/** A staged command file whose frontmatter `name` is `frontmatterName`. */
+function namedCommand(frontmatterName: string): string {
+  return `---\nname: ${frontmatterName}\ndescription: A command.\n---\n\nBody.\n`;
+}
+
+/** A command Pi loaded from the prompt file `file`. */
+function stagedPromptCommand(name: string, file: string): Command {
+  return {
+    name,
+    source: "prompt",
+    sourceInfo: { path: file, source: "user", scope: "user", origin: "top-level" },
+  };
+}
+
+/** One marketplace whose plugins hold the given skills and command (prompt) names. */
+function stateWithCommands(
+  plugins: Readonly<Record<string, { skills?: readonly string[]; prompts: readonly string[] }>>,
+): SkillAliasState {
+  return {
+    marketplaces: {
+      fixtures: {
+        plugins: Object.fromEntries(
+          Object.entries(plugins).map(([plugin, { skills = [], prompts }]) => [
+            plugin,
+            { resources: { skills, prompts } },
+          ]),
+        ),
+      },
+    },
+  };
+}
+
+/** D-CF3-07: a user ledger that lists `commands` (name to staged text) for `/work`. */
+function commandLedger(commands: Readonly<Record<string, string>>): string {
+  const listed = Object.entries(commands).map(
+    ([name, content]) => [name, { plugin: "demo", sha256: sha256(content) }] as const,
+  );
+  return JSON.stringify({ version: 1, project: CWD, skills: Object.fromEntries(listed) });
+}
+
+test("P3-DC-07: maps a loaded command's frontmatter name aliases to the command's Pi name", async () => {
+  // arrange
+  const file = stagedCommandPath(AGENT_DIR, "demo:ship");
+  const pi = piWith([stagedPromptCommand("demo:ship", file)]);
+
+  // act
+  const aliases = await loadPluginAliases(
+    pi,
+    CWD,
+    true,
+    dependencies(
+      { [AGENT_DIR]: stateWithCommands({ demo: { prompts: ["demo:ship"] } }) },
+      { [file]: namedCommand("fancy") },
+      null,
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    [...aliases],
+    [
+      ["demo:fancy", command("demo:ship")],
+      ["fancy", command("demo:ship")],
+    ],
+  );
+  verify(pi);
+});
+
+test("P3-DC-07: a command whose frontmatter name is its own file name answers to the bare name only", async () => {
+  // arrange
+  const file = stagedCommandPath(AGENT_DIR, "demo:ship");
+  const pi = piWith([stagedPromptCommand("demo:ship", file)]);
+
+  // act
+  const aliases = await loadPluginAliases(
+    pi,
+    CWD,
+    true,
+    dependencies(
+      { [AGENT_DIR]: stateWithCommands({ demo: { prompts: ["demo:ship"] } }) },
+      { [file]: namedCommand("ship") },
+      null,
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual([...aliases], [["ship", command("demo:ship")]]);
+  verify(pi);
+});
+
+for (const { title, ledger, expectedAliases } of [
+  {
+    title: "lists the digest of its staged file",
+    ledger: () => commandLedger({ "demo:ship": namedCommand("fancy") }),
+    expectedAliases: [
+      ["demo:fancy", command("demo:ship")],
+      ["fancy", command("demo:ship")],
+    ],
+  },
+  {
+    title: "lists another digest",
+    ledger: () => commandLedger({ "demo:ship": namedCommand("other") }),
+    expectedAliases: [],
+  },
+  { title: "lists no project", ledger: () => null, expectedAliases: [] },
+]) {
+  test(`D-CF3-07: a project command claims its names only when the user ledger ${title}`, async () => {
+    // arrange
+    const file = stagedCommandPath(PROJECT_ROOT, "demo:ship");
+    const pi = piWith([stagedPromptCommand("demo:ship", file)]);
+
+    // act
+    const aliases = await loadPluginAliases(
+      pi,
+      CWD,
+      true,
+      dependencies(
+        { [PROJECT_ROOT]: stateWithCommands({ demo: { prompts: ["demo:ship"] } }) },
+        { [file]: namedCommand("fancy") },
+        ledger(),
+      ),
+    );
+
+    // assert
+    assert.deepStrictEqual([...aliases], expectedAliases);
+    verify(pi);
+  });
+}
+
+test("P3-DC-07: the plugin table keeps every skill alias and gives a command the names no skill claimed", async () => {
+  // arrange
+  const skillFile = stagedPath(AGENT_DIR, "demo-review");
+  const shipFile = stagedCommandPath(AGENT_DIR, "demo:ship");
+  const deployFile = stagedCommandPath(AGENT_DIR, "demo:deploy");
+  const commands = [
+    skillCommand("demo-review", skillFile),
+    stagedPromptCommand("demo:ship", shipFile),
+    stagedPromptCommand("demo:deploy", deployFile),
+  ];
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  when(() => pi.getCommands())
+    .thenReturn(commands)
+    .times(1);
+
+  // act
+  const aliases = await loadPluginAliases(
+    pi,
+    CWD,
+    true,
+    dependencies(
+      {
+        [AGENT_DIR]: stateWithCommands({
+          demo: { skills: ["demo-review"], prompts: ["demo:ship", "demo:deploy"] },
+        }),
+      },
+      {
+        [skillFile]: recordedSkill("demo-review", ["demo:review", "demo:fancy", "fancy"]),
+        [shipFile]: namedCommand("fancy"),
+        [deployFile]: namedCommand("release"),
+      },
+      null,
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    [...aliases],
+    [
+      ["demo:review", { kind: "skill", generatedName: "demo-review" }],
+      ["demo:fancy", { kind: "skill", generatedName: "demo-review" }],
+      ["fancy", { kind: "skill", generatedName: "demo-review" }],
+      ["demo:release", { kind: "command", name: "demo:deploy" }],
+      ["release", { kind: "command", name: "demo:deploy" }],
+    ],
+  );
+  verify(pi);
+});

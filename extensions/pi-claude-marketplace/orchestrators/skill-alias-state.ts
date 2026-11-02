@@ -6,14 +6,24 @@
 // `SKILL.md` (`readSkillRecord`); this module reads them back at session time
 // and never reads the plugin source.
 //
-// A name goes to the first skill that claims it, in loader order: the user
-// root before the project root, and state order within a root. SK-6: a name
-// that a Pi command of another source already has stays with that command.
+// P3-DC-07: a bridged command with a frontmatter `name` also answers to
+// `<plugin>:<name>` and, for a name with no `:`, the bare `<name>`, as Claude
+// Code 2.1.316 names it (03-UPSTREAM-EVIDENCE, supplementary observations).
+// The staged command keeps its source frontmatter, so its names are read from
+// the staged file at session time with the skills' own rule
+// (`frontmatterNameAliases`).
+//
+// A name goes to the first skill or command that claims it, in loader order:
+// the user root before the project root, and state order within a root. Every
+// skill claims before any command, so a command alias never takes a name a
+// skill already answers to. SK-6: a name that a Pi command of another source
+// already has stays with that command.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { readSkillRecord } from "../bridges/skills/skill-names.ts";
+import { commandFileDigest } from "../bridges/commands/project-ledger.ts";
+import { frontmatterNameAliases, readSkillRecord } from "../bridges/skills/skill-names.ts";
 import { generatedSkillName } from "../domain/name.ts";
 import {
   NODE_SKILL_TREE_LISTER,
@@ -32,7 +42,15 @@ export interface SkillAliasState {
       string,
       {
         readonly plugins: Readonly<
-          Record<string, { readonly resources: { readonly skills: readonly string[] } }>
+          Record<
+            string,
+            {
+              readonly resources: {
+                readonly skills: readonly string[];
+                readonly prompts?: readonly string[];
+              };
+            }
+          >
         >;
       }
     >
@@ -47,6 +65,11 @@ export interface SkillAliasDependencies {
   readonly listSkillTree: SkillTreeLister;
 }
 
+/** What a plugin alias stands for: a bridged skill or a bridged command. */
+export type PluginAliasTarget =
+  | { readonly kind: "skill"; readonly generatedName: string }
+  | { readonly kind: "command"; readonly name: string };
+
 const DEFAULT_DEPENDENCIES: SkillAliasDependencies = {
   loadState,
   getAgentDir,
@@ -54,16 +77,38 @@ const DEFAULT_DEPENDENCIES: SkillAliasDependencies = {
   listSkillTree: NODE_SKILL_TREE_LISTER,
 };
 
-/** A skill of the state whose staged `SKILL.md` Pi has loaded. */
-interface LoadedSkill {
+/** A skill or command of the state whose staged file Pi has loaded. */
+interface LoadedEntry {
   readonly pluginName: string;
-  readonly generatedName: string;
-  readonly skillPath: string;
+  /** The generated skill name, or the command's Pi name. */
+  readonly name: string;
+  readonly file: string;
   /**
-   * D-CF2-13: for a project skill, the digests the user's project ledger
-   * lists for the project; `undefined` for a user skill.
+   * D-CF2-13 / D-CF3-07: for a project entry, the digests the user's project
+   * ledger lists for the project; `undefined` for a user entry.
    */
   readonly proven: ReadonlyMap<string, string> | undefined;
+}
+
+/** How one kind of bridged resource is found, proven, and named. */
+interface AliasKind {
+  /** The Pi command source that loads the kind. */
+  readonly source: "skill" | "prompt";
+  /** The names a plugin record lists for the kind. */
+  readonly resources: (record: {
+    readonly skills: readonly string[];
+    readonly prompts?: readonly string[];
+  }) => readonly string[];
+  /** The staged file of `name` under the scope root `root`. */
+  readonly stagedFile: (root: string, name: string) => string;
+  /** The digest the ledger must list for the entry whose staged file holds `content`. */
+  readonly digest: (
+    entry: LoadedEntry,
+    content: string,
+    listSkillTree: SkillTreeLister,
+  ) => Promise<string>;
+  /** The names the entry claims, read from its staged frontmatter. */
+  readonly names: (entry: LoadedEntry, frontmatter: Record<string, unknown>) => readonly string[];
 }
 
 /** Removes the plugin prefix from a generated Pi skill name. */
@@ -89,8 +134,8 @@ function skillSuffix(pluginName: string, generatedName: string): string | undefi
  * names, derived from its generated name with the plugin prefix cut off. Claude
  * Code has no such name; the skill keeps it until its plugin is staged again.
  */
-function legacyAliases(skill: LoadedSkill): readonly string[] {
-  const suffix = skillSuffix(skill.pluginName, skill.generatedName);
+function legacyAliases(skill: LoadedEntry): readonly string[] {
+  const suffix = skillSuffix(skill.pluginName, skill.name);
   return suffix === undefined ? [] : [`${skill.pluginName}:${suffix}`];
 }
 
@@ -106,111 +151,126 @@ function installedForms(pluginName: string, names: readonly string[]): readonly 
   return names.filter((name) => name.startsWith(prefix) || name === bare);
 }
 
+const SKILL_KIND: AliasKind = {
+  source: "skill",
+  resources: (record) => record.skills,
+  stagedFile: (root, name) =>
+    path.join(root, "pi-claude-marketplace", "resources", "skills", name, "SKILL.md"),
+  // WR-03: the digest covers every file of the staged skill directory.
+  digest: async (entry, content, listSkillTree) =>
+    skillTreeDigest(await listSkillTree(path.dirname(entry.file)), content),
+  names: (entry, frontmatter) => {
+    const record = readSkillRecord(frontmatter);
+    return record === undefined
+      ? legacyAliases(entry)
+      : installedForms(entry.pluginName, record.names);
+  },
+};
+
+const COMMAND_KIND: AliasKind = {
+  source: "prompt",
+  resources: (record) => record.prompts ?? [],
+  stagedFile: (root, name) =>
+    path.join(root, "pi-claude-marketplace", "resources", "prompts", `${name}.md`),
+  digest: (_entry, content) => Promise.resolve(commandFileDigest(content)),
+  names: (entry, frontmatter) => frontmatterNameAliases(entry.pluginName, frontmatter.name),
+};
+
 /**
- * D-CF2-13 / WR-03: whether a project skill's staged directory, `content`
- * standing for its `SKILL.md`, has the digest the user's project ledger
- * lists. A user skill (`proven` undefined) passes; a directory that cannot be
- * listed fails.
+ * D-CF2-13 / D-CF3-07 / WR-03: whether a project entry's staged file,
+ * holding `content`, has the digest the user's project ledger lists. A user
+ * entry (`proven` undefined) passes; a digest that cannot be taken fails.
  */
 async function matchesLedger(
-  skill: LoadedSkill,
+  kind: AliasKind,
+  entry: LoadedEntry,
   content: string,
   listSkillTree: SkillTreeLister,
 ): Promise<boolean> {
-  if (skill.proven === undefined) {
+  if (entry.proven === undefined) {
     return true;
   }
 
-  const recorded = skill.proven.get(skill.generatedName);
+  const recorded = entry.proven.get(entry.name);
   try {
-    return (
-      recorded === skillTreeDigest(await listSkillTree(path.dirname(skill.skillPath)), content)
-    );
+    return recorded === (await kind.digest(entry, content, listSkillTree));
   } catch {
     return false;
   }
 }
 
 /**
- * The names stored in the staged `SKILL.md` of `skill`; none when it cannot
- * be read, and none for a project skill that the user's project ledger does
- * not list with the digest of its directory as it is now (D-CF2-13, WR-03).
+ * The names the staged file of `entry` claims; none when it cannot be read,
+ * and none for a project entry that the user's project ledger does not list
+ * with the digest of its staged file as it is now (D-CF2-13, WR-03).
  */
-async function skillNames(
-  skill: LoadedSkill,
+async function entryNames(
+  kind: AliasKind,
+  entry: LoadedEntry,
   dependencies: Pick<SkillAliasDependencies, "readFile" | "listSkillTree">,
 ): Promise<readonly string[]> {
   let content: string;
   let frontmatter: Record<string, unknown>;
   try {
-    content = await dependencies.readFile(skill.skillPath);
+    content = await dependencies.readFile(entry.file);
     frontmatter = parseFrontmatter(content).frontmatter;
   } catch {
     return [];
   }
 
-  if (!(await matchesLedger(skill, content, dependencies.listSkillTree))) {
+  if (!(await matchesLedger(kind, entry, content, dependencies.listSkillTree))) {
     return [];
   }
 
-  const record = readSkillRecord(frontmatter);
-  return record === undefined
-    ? legacyAliases(skill)
-    : installedForms(skill.pluginName, record.names);
+  return kind.names(entry, frontmatter);
 }
 
-/** The skills of the state under `root` whose staged file Pi has loaded, in state order. */
-function loadedSkills(
+/** The entries of the state under `root` whose staged file Pi has loaded, in state order. */
+function loadedEntries(
+  kind: AliasKind,
   state: SkillAliasState,
   root: string,
   loadedPaths: ReadonlySet<string>,
   proven: ReadonlyMap<string, string> | undefined,
-): readonly LoadedSkill[] {
-  const skillsDir = path.resolve(root, "pi-claude-marketplace", "resources", "skills");
+): readonly LoadedEntry[] {
   return Object.values(state.marketplaces)
     .flatMap((marketplace) => Object.entries(marketplace.plugins))
     .flatMap(([pluginName, plugin]) =>
-      plugin.resources.skills.map((generatedName) => ({
+      kind.resources(plugin.resources).map((name) => ({
         pluginName,
-        generatedName,
-        skillPath: path.join(skillsDir, generatedName, "SKILL.md"),
+        name,
+        file: path.resolve(kind.stagedFile(root, name)),
         proven,
       })),
     )
-    .filter((skill) => loadedPaths.has(skill.skillPath));
+    .filter((entry) => loadedPaths.has(entry.file));
+}
+
+/** One scope root whose state could be read, with the ledger digests of a project root. */
+interface ReadScope {
+  readonly root: string;
+  readonly state: SkillAliasState;
+  readonly proven: ReadonlyMap<string, string> | undefined;
 }
 
 /**
- * D-CF2-02: maps each name that a loaded bridged skill stored to its
- * generated name. The first claim wins, and a name that `reserved` holds is
- * never mapped (SK-6). T-02-17: the project root is read only when Pi trusts
- * the project (`projectTrusted`), as Claude Code loads no project-scope
- * plugin before the workspace is trusted. D-CF2-13: a project skill claims
- * names only when the user's project ledger lists it, because the project's
- * own `state.json` sits in the repository.
+ * The scope roots whose state can be read, user first. T-02-17: the project
+ * root is read only when Pi trusts the project (`projectTrusted`), as Claude
+ * Code loads no project-scope plugin before the workspace is trusted.
+ * D-CF2-13 / D-CF3-07: a project root carries the user's ledger digests,
+ * because the project's own `state.json` sits in the repository.
  */
-export async function loadQualifiedSkillAliases(
-  pi: ExtensionAPI,
+async function readScopes(
   cwd: string,
   projectTrusted: boolean,
-  dependencies: Partial<SkillAliasDependencies> = {},
-): Promise<ReadonlyMap<string, string>> {
-  const resolved = { ...DEFAULT_DEPENDENCIES, ...dependencies };
-  const commands = pi.getCommands();
-  const reserved = new Set(
-    commands.filter((command) => command.source !== "skill").map((command) => command.name),
-  );
-  const loadedPaths = new Set(
-    commands
-      .filter((command) => command.source === "skill")
-      .map((command) => path.resolve(command.sourceInfo.path)),
-  );
-  const skills: LoadedSkill[] = [];
+  resolved: SkillAliasDependencies,
+): Promise<readonly ReadScope[]> {
   const agentDir = resolved.getAgentDir();
   const roots = [
     { root: agentDir, project: false },
     ...(projectTrusted ? [{ root: path.join(cwd, ".pi"), project: true }] : []),
   ];
+  const scopes: ReadScope[] = [];
   for (const { root, project } of roots) {
     let state: SkillAliasState;
     try {
@@ -224,21 +284,82 @@ export async function loadQualifiedSkillAliases(
       ? // eslint-disable-next-line no-await-in-loop -- the project root alone reads the ledger
         await provenProjectSkills(agentDir, cwd, resolved.readFile)
       : undefined;
-    skills.push(...loadedSkills(state, root, loadedPaths, proven));
+    scopes.push({ root, state, proven });
   }
 
+  return scopes;
+}
+
+/**
+ * D-CF2-02 / P3-DC-07: maps each name that a loaded entry of `kind` claims to
+ * the entry's own name. The first claim wins, and a name that a Pi command of
+ * another source has is never mapped (SK-6). A project entry claims names
+ * only when the user's project ledger lists it (D-CF2-13, D-CF3-07).
+ */
+async function kindAliases(
+  kind: AliasKind,
+  commands: ReturnType<ExtensionAPI["getCommands"]>,
+  scopes: readonly ReadScope[],
+  resolved: SkillAliasDependencies,
+): Promise<ReadonlyMap<string, string>> {
+  const reserved = new Set(
+    commands.filter((command) => command.source !== "skill").map((command) => command.name),
+  );
+  const loadedPaths = new Set(
+    commands
+      .filter((command) => command.source === kind.source)
+      .map((command) => path.resolve(command.sourceInfo.path)),
+  );
+  const entries = scopes.flatMap(({ root, state, proven }) =>
+    loadedEntries(kind, state, root, loadedPaths, proven),
+  );
   const claims = await Promise.all(
-    skills.map(async (skill) => ({
-      generatedName: skill.generatedName,
-      names: await skillNames(skill, resolved),
+    entries.map(async (entry) => ({
+      name: entry.name,
+      names: await entryNames(kind, entry, resolved),
     })),
   );
   const aliases = new Map<string, string>();
-  for (const { generatedName, names } of claims) {
-    for (const name of names) {
-      if (!reserved.has(name) && !aliases.has(name)) {
-        aliases.set(name, generatedName);
+  for (const { name, names } of claims) {
+    for (const alias of names) {
+      if (!reserved.has(alias) && !aliases.has(alias)) {
+        aliases.set(alias, name);
       }
+    }
+  }
+
+  return aliases;
+}
+
+/**
+ * D-CF2-02 / P3-DC-07: the plugin alias table under the rules of
+ * `kindAliases`: every name a loaded bridged skill stored, mapped to its
+ * generated name, then each name that the frontmatter `name` of a loaded
+ * bridged command gives it and no skill claimed, mapped to the command's Pi
+ * name. A skill keeps every name it already answers to, as before commands
+ * had aliases.
+ */
+export async function loadPluginAliases(
+  pi: ExtensionAPI,
+  cwd: string,
+  projectTrusted: boolean,
+  dependencies: Partial<SkillAliasDependencies> = {},
+): Promise<ReadonlyMap<string, PluginAliasTarget>> {
+  const resolved = { ...DEFAULT_DEPENDENCIES, ...dependencies };
+  const commands = pi.getCommands();
+  const scopes = await readScopes(cwd, projectTrusted, resolved);
+  const [skills, prompts] = await Promise.all([
+    kindAliases(SKILL_KIND, commands, scopes, resolved),
+    kindAliases(COMMAND_KIND, commands, scopes, resolved),
+  ]);
+  const aliases = new Map<string, PluginAliasTarget>();
+  for (const [alias, generatedName] of skills) {
+    aliases.set(alias, { kind: "skill", generatedName });
+  }
+
+  for (const [alias, name] of prompts) {
+    if (!aliases.has(alias)) {
+      aliases.set(alias, { kind: "command", name });
     }
   }
 

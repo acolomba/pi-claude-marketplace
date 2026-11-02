@@ -108,6 +108,8 @@ Los comandos usan dos puntos (`:`) en POSIX y un punto (`.`) en Windows:
 | `foo`                  | `foo-bar`          | `/foo:bar`           | `/foo.bar`             |
 | `foo`                  | `foo`              | `/foo:foo`           | `/foo.foo`             |
 
+Un comando también tiene alias en las sesiones interactivas y por RPC. Si el frontmatter del comando define `name`, el comando también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos. Por ejemplo, `bar` con el frontmatter `name: baz` en el complemento `foo` también responde a `/foo:baz` y a `/baz`. Si dos comandos definen el mismo `name`, el primer comando recibe el alias. Una habilidad conserva un alias que ya tiene. Los alias de comandos usan dos puntos en todas las plataformas.
+
 Las habilidades usan la forma `/skill:` de Pi y también tienen alias en las sesiones interactivas y por RPC:
 
 | Nombre del complemento | Nombre de la habilidad                   | Forma de Pi      | Alias                          |

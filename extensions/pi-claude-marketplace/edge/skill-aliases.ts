@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { loadQualifiedSkillAliases } from "../orchestrators/skill-alias-state.ts";
+import { loadPluginAliases } from "../orchestrators/skill-alias-state.ts";
 import { invokeBridgedSkill } from "../orchestrators/skill-invocation.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
 import { openNotificationRun } from "../shared/notification-run.ts";
 
+import type { PluginAliasTarget } from "../orchestrators/skill-alias-state.ts";
 import type {
   SkillInvocationOutcome,
   SkillInvocationRequest,
@@ -19,6 +20,9 @@ import type {
 } from "../platform/pi-api.ts";
 
 type Suggestions = Awaited<ReturnType<AutocompleteProvider["getSuggestions"]>>;
+
+/** The plugin alias table of one directory and trust state. */
+type PluginAliases = ReadonlyMap<string, PluginAliasTarget>;
 
 /** Adds unclaimed skill aliases alongside Pi's native suggestions. */
 function appendAliasSuggestions(
@@ -41,14 +45,11 @@ function appendAliasSuggestions(
       };
 }
 
-/** Wraps Pi's suggestions with plugin-qualified skill aliases. */
+/** Wraps Pi's suggestions with plugin-qualified skill and command aliases. */
 function aliasProvider(
   ctx: ExtensionContext,
   current: AutocompleteProvider,
-  getQualifiedAliases: (
-    cwd: string,
-    projectTrusted: boolean,
-  ) => Promise<ReadonlyMap<string, string>>,
+  getQualifiedAliases: (cwd: string, projectTrusted: boolean) => Promise<PluginAliases>,
 ): AutocompleteProvider {
   return {
     getSuggestions: async (lines, line, col, options) => {
@@ -99,9 +100,22 @@ function inputResult(
 }
 
 /**
+ * P3-DC-07: the typed line with a command alias replaced by the command's Pi
+ * name. The command invocation handler, registered after this one, fills it.
+ */
+function commandAliasResult(name: string, token: string, event: InputEvent): InputEventResult {
+  return {
+    action: "transform",
+    text: `/${name}${event.text.slice(token.length + 1)}`,
+    ...(event.images !== undefined && { images: event.images }),
+  };
+}
+
+/**
  * D-CF2-05 / D-CF2-06: resolves a typed `/skill:` token or plugin-qualified
  * alias, from interactive or RPC input, and sends a bridged skill through the
- * invocation; `extension` input passes through unchanged.
+ * invocation; `extension` input passes through unchanged. P3-DC-07: a command
+ * alias becomes the command's own name, for the command invocation handler.
  */
 export function registerSkillAliases(
   pi: ExtensionAPI,
@@ -109,7 +123,7 @@ export function registerSkillAliases(
     pi: ExtensionAPI,
     cwd: string,
     projectTrusted: boolean,
-  ) => Promise<ReadonlyMap<string, string>> = loadQualifiedSkillAliases,
+  ) => Promise<ReadonlyMap<string, PluginAliasTarget>> = loadPluginAliases,
   invokeSkill: (
     request: SkillInvocationRequest,
   ) => Promise<SkillInvocationOutcome> = invokeBridgedSkill,
@@ -128,11 +142,8 @@ export function registerSkillAliases(
 
   // T-02-17: the table of an untrusted project leaves out its project skills,
   // so it is kept apart from the table of the same directory once trusted.
-  const cache = new Map<string, Promise<ReadonlyMap<string, string>>>();
-  const getQualifiedAliases = (
-    cwd: string,
-    projectTrusted: boolean,
-  ): Promise<ReadonlyMap<string, string>> => {
+  const cache = new Map<string, Promise<PluginAliases>>();
+  const getQualifiedAliases = (cwd: string, projectTrusted: boolean): Promise<PluginAliases> => {
     const key = `${projectTrusted ? "trusted" : "untrusted"}\0${cwd}`;
     let aliases = cache.get(key);
     if (aliases === undefined) {
@@ -205,10 +216,14 @@ export function registerSkillAliases(
     // A table that cannot be loaded holds no alias, so the token stays Pi's.
     return getQualifiedAliases(ctx.cwd, ctx.isProjectTrusted()).then(
       (aliases) => {
-        const generatedName = aliases.get(token);
-        return generatedName === undefined
-          ? { action: "continue" }
-          : invoke(generatedName, token, commands, event, ctx);
+        const target = aliases.get(token);
+        if (target === undefined) {
+          return { action: "continue" };
+        }
+
+        return target.kind === "skill"
+          ? invoke(target.generatedName, token, commands, event, ctx)
+          : commandAliasResult(target.name, token, event);
       },
       (): InputEventResult => ({ action: "continue" }),
     );

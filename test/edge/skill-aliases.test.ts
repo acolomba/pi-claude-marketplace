@@ -6,6 +6,7 @@ import { It, mock, verify, when } from "strong-mock";
 
 import { registerSkillAliases } from "../../extensions/pi-claude-marketplace/edge/skill-aliases.ts";
 
+import type { PluginAliasTarget } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import type {
   SkillInvocationOutcome,
   SkillInvocationRequest,
@@ -45,7 +46,12 @@ type AliasLoader = (
   pi: ExtensionAPI,
   cwd: string,
   projectTrusted: boolean,
-) => Promise<ReadonlyMap<string, string>>;
+) => Promise<ReadonlyMap<string, PluginAliasTarget>>;
+
+/** The alias target of the bridged skill `generatedName`. */
+function skillAlias(generatedName: string): PluginAliasTarget {
+  return { kind: "skill", generatedName };
+}
 
 /** Registers the handlers on strict mocks and captures the input listener. */
 function registerWithInvoker(
@@ -224,9 +230,9 @@ test("D-CF1-03: leaves a skill the invocation does not own to Pi's expansion", a
   verify(invokeSkill);
 });
 
-const GREET_ALIASES: ReadonlyMap<string, string> = new Map([
-  ["demo:greet", "demo-greet"],
-  ["greet", "demo-greet"],
+const GREET_ALIASES: ReadonlyMap<string, PluginAliasTarget> = new Map([
+  ["demo:greet", skillAlias("demo-greet")],
+  ["greet", skillAlias("demo-greet")],
 ]);
 
 // D-CF2-05: one table over both user sources, so an alias and `/skill:` reach
@@ -293,6 +299,60 @@ test("T-02-17: passes Pi's project trust to the alias table and the invocation",
   verify(ctx);
   verify(invokeSkill);
 });
+
+const SHIP_ALIASES: ReadonlyMap<string, PluginAliasTarget> = new Map([
+  ["demo:fancy", { kind: "command", name: "demo:ship" }],
+  ["fancy", { kind: "command", name: "demo:ship" }],
+]);
+
+for (const { token, event, expected } of [
+  {
+    token: "demo:fancy",
+    event: { type: "input", text: "/demo:fancy  to production", source: "interactive" },
+    expected: { action: "transform", text: "/demo:ship  to production" },
+  },
+  {
+    token: "fancy",
+    event: {
+      type: "input",
+      text: "/fancy",
+      source: "rpc",
+      images: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
+    },
+    expected: {
+      action: "transform",
+      text: "/demo:ship",
+      images: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
+    },
+  },
+] satisfies { token: string; event: InputEvent; expected: InputEventResult }[]) {
+  test(`P3-DC-07: rewrites the command alias /${token} to the command's own name`, async () => {
+    // arrange
+    const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
+    when(() => ctx.cwd)
+      .thenReturn("/workspace")
+      .times(1);
+    when(() => ctx.isProjectTrusted())
+      .thenReturn(true)
+      .times(1);
+    const { pi, input } = registerWithInvoker(invokeSkill, {
+      loadAliases: () => Promise.resolve(SHIP_ALIASES),
+    });
+    when(() => pi.getCommands())
+      .thenReturn([GREET_SKILL])
+      .times(1);
+
+    // act
+    const sent = await input.value?.(event, ctx);
+
+    // assert
+    assert.deepStrictEqual(sent, expected);
+    verify(pi);
+    verify(ctx);
+    verify(invokeSkill);
+  });
+}
 
 test("leaves text that is not a slash token to Pi without reading commands", () => {
   // arrange
@@ -690,7 +750,7 @@ test("offers plugin-qualified completion without replacing native commands", asy
   } satisfies AutocompleteProvider;
 
   // act
-  registerSkillAliases(pi, () => Promise.resolve(new Map([["foo:bar", "foo-bar"]])));
+  registerSkillAliases(pi, () => Promise.resolve(new Map([["foo:bar", skillAlias("foo-bar")]])));
   session.value?.({ type: "session_start", reason: "startup" }, ctx);
   const suggestions = await factory
     .value?.(base)
@@ -762,7 +822,7 @@ test("creates a plugin-qualified completion when Pi has none", async () => {
   } satisfies AutocompleteProvider;
 
   // act
-  registerSkillAliases(pi, () => Promise.resolve(new Map([["foo:bar", "foo-bar"]])));
+  registerSkillAliases(pi, () => Promise.resolve(new Map([["foo:bar", skillAlias("foo-bar")]])));
   session.value?.({ type: "session_start", reason: "startup" }, ctx);
   const provider = factory.value?.(base);
   const matched = await provider?.getSuggestions(["/foo:b"], 0, 6, {
@@ -955,8 +1015,8 @@ test("DC-25: offers only plugin-qualified aliases in completion", async () => {
   registerSkillAliases(pi, () =>
     Promise.resolve(
       new Map([
-        ["demo:fancy", "demo-review"],
-        ["fancy", "demo-review"],
+        ["demo:fancy", skillAlias("demo-review")],
+        ["fancy", skillAlias("demo-review")],
       ]),
     ),
   );

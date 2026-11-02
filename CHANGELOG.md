@@ -28,6 +28,7 @@
   - Typed commands now fill in arguments, `${CLAUDE_*}` variables, and `` !`command` `` output as Claude Code does, in the terminal UI and over RPC.
   - A failing `` !`command` `` now stops its command with Claude Code's message, and the model gets nothing.
   - A plugin's `commands` can now name single command files, and an object map of commands from files or inline text, as in Claude Code.
+  - A command with a frontmatter `name` now also runs as `/<plugin>:<name>` and, when the name has no colon, as `/<name>`, as in Claude Code. Tab completion offers the `/<plugin>:<name>` form.
   - A project-scope command now runs only when you installed its plugin into the project on this machine. For a project command installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
   - Commands installed earlier keep their old description, and typed arguments keep `${CLAUDE_PLUGIN_ROOT}` literal, until you update or reinstall their plugin. Then run `/reload`.
   - Plugin session hooks now get Claude Code's `source` and `reason` values, such as `clear` for a new session and `fork` for a fork, and their matchers filter on these values.
