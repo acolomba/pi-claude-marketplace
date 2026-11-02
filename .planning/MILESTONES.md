@@ -2,7 +2,16 @@
 
 ## component-features Component Behavioral Tests (Shipped: 2026-11-02)
 
+**Branch:** `claude/quirky-planck-hhm592` (no PR yet, no npm release)
+
 **Phases completed:** 7 phases, 61 plans, 137 tasks
+
+**Delivered:** A cucumber harness that runs a real Pi 1.4.0 with a scripted faux model and its three companions, and behavioral tests for every bridged component kind (skills, commands, agents, hooks, MCP servers, workflows) with Claude Code as the reference and no authenticated LLM: 1,565 scenarios. Parity fixes for typed skills and commands, name aliases, a `run_plugin_command` model tool, MCP source merging, hook parity, and the workflow-wins name rule; a user-scope provenance ledger that keeps a cloned repository from running its plugin skills, commands, or hooks (D-CF2-13..16); upstream fixes for Pi and pi-subagents pushed to the user's forks for review.
+
+**Closeout:** Audit `tech_debt`, no blockers: 58/58 requirements, 7/7 phases, 7/7 integration groups, 5/5 flows. MCP-07 is an accepted deviation (D-CF6-10); W2, W4, T-05-33, T-05-34 and MCPBG-01 carry forward; D-CF2-13..16 and D-CF3-07 await user review. Known verification overrides: 2 newly accepted by the user (Phase 2 criterion 5, Phase 6 SC4). [Roadmap](milestones/component-features-ROADMAP.md), [requirements](milestones/component-features-REQUIREMENTS.md), [audit](milestones/component-features-MILESTONE-AUDIT.md), and [phase records](milestones/component-features-phases/).
+
+<details>
+<summary>Generated phase accomplishments</summary>
 
 **Key accomplishments:**
 - Pi 1.4.0 with an exact pi-ai 1.4.0, optional peers pi-mcp-adapter 7.0.0, pi-subagents 0.84.0, and pi-dynamic-workflows 3.15.0 in a three-peer test cache, plus an escape fix that stops adapter 7.x from expanding literal `${NAME:-default}` text into an environment value
@@ -55,6 +64,8 @@
 - The combined Phase 6 tree passes the whole gate at `822a1ac` on Node v24.22.1: `npm run check` (1268 scenarios, seed 961879), `npm run test:modules`, and `npm run test:cucumber` twice (seeds 512508 and 920909), all exit 0. `docs/mcp-compatibility.md` now matches the merged resolver. The parent gets eleven D-CF6 decision rows, a drafted pi-subagents gap report, and every line a component phase may not apply.
 
 ---
+
+</details>
 
 ## plugin-lifecycle Marketplace and Plugin Lifecycle Backlog (Shipped: 2026-10-29)
 
