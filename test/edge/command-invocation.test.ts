@@ -265,7 +265,7 @@ test("D-CF3-06: keeps the images of the typed prompt in the transformed input", 
   verify(invoke);
 });
 
-test("D-CF1-01: returns a sent body that starts with another command unchanged, which pi expands again", async () => {
+test("E8: prefixes a sent body that starts with another command with a zero-width space, so pi does not expand it again", async () => {
   // arrange
   const invoke = mock<CommandInvoker>({ exactParams: true, name: "command invocation" });
   when(() => invoke(greetRequest("Ada")))
@@ -282,7 +282,7 @@ test("D-CF1-01: returns a sent body that starts with another command unchanged, 
   );
 
   // assert
-  assert.deepStrictEqual(outcome, { action: "transform", text: "/demo:other Ada" });
+  assert.deepStrictEqual(outcome, { action: "transform", text: "\u200B/demo:other Ada" });
   verify(pi);
   verify(ctx);
   verify(invoke);

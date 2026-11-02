@@ -6,6 +6,8 @@ import { errorMessage } from "../shared/errors.ts";
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
 import { openNotificationRun } from "../shared/notification-run.ts";
 
+import { finishedTransform } from "./input-transform.ts";
+
 import type { PluginAliasTarget } from "../orchestrators/skill-alias-state.ts";
 import type {
   SkillInvocationOutcome,
@@ -86,11 +88,7 @@ function inputResult(
 ): InputEventResult {
   switch (outcome.kind) {
     case "ok":
-      return {
-        action: "transform",
-        text: outcome.text,
-        ...(event.images !== undefined && { images: event.images }),
-      };
+      return finishedTransform(outcome.text, event);
     case "abort":
       reportAbort(outcome.message);
       return { action: "handled" };

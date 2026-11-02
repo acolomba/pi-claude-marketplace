@@ -30,10 +30,17 @@ import type { ScenarioWorld } from "../support/world.ts";
 // mission id pi-subagents appends to a subagent result.
 const UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gu;
 
-// A text Pi sent the model, with the run tokens projected and each UUID read
-// as `{uuid}`, so a scenario states a per-run id without knowing its value.
+// The extension prefixes a finished input that starts with `/` with U+200B,
+// which a feature file cannot show, so a scenario states it as a token.
+const ZERO_WIDTH_SPACE = /\u200B/gu;
+
+// A text Pi sent the model, with the run tokens projected, each UUID read as
+// `{uuid}`, so a scenario states a per-run id without knowing its value, and
+// each zero-width space read as `{zero width space}`.
 function projectCallText(text: string, tokens: RunTokens): string {
-  return projectTokens("text", text, tokens).replaceAll(UUID_PATTERN, "{uuid}");
+  return projectTokens("text", text, tokens)
+    .replaceAll(UUID_PATTERN, "{uuid}")
+    .replaceAll(ZERO_WIDTH_SPACE, "{zero width space}");
 }
 
 // HAR-01: a profile Pi started with no companion loads none, so no command

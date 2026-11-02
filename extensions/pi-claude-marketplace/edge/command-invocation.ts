@@ -5,6 +5,8 @@ import { errorMessage } from "../shared/errors.ts";
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
 import { openNotificationRun } from "../shared/notification-run.ts";
 
+import { finishedTransform } from "./input-transform.ts";
+
 import type {
   CommandInvocationOutcome,
   CommandInvocationRequest,
@@ -113,9 +115,7 @@ export function registerCommandInvocation(
       return PASS_THROUGH;
     }
 
-    return event.images === undefined
-      ? { action: "transform", text: outcome.text }
-      : { action: "transform", text: outcome.text, images: event.images };
+    return finishedTransform(outcome.text, event);
   };
 
   pi.on("input", (event, ctx) => {

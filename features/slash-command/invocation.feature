@@ -209,3 +209,28 @@ Feature: Slash command invocation
       | needs reload | false                                                                                                                                                                                                     |
       | message      | Cannot read the command /demo:greet: ENOENT: no such file or directory, open '{project dir}/.pi/pi-claude-marketplace/resources/prompts/demo:greet.md'. Run /reload to load the installed commands again. |
       | usage        |                                                                                                                                                                                                           |
+
+  Scenario: A command whose body starts with another command sends that line to the model as it is
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "release" described as "Releases the branch." with this body:
+      """
+      /demo:deploy production
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "deploy" described as "Deploys the branch." with this body:
+      """
+      Deploy the branch to $ARGUMENTS.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:release"
+    Then the model receives these calls:
+      | call | role | text                                      |
+      | 1    | user | {zero width space}/demo:deploy production |

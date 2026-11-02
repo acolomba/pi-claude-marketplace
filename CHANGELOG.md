@@ -28,6 +28,7 @@
   - Install now warns about the command frontmatter fields that Pi cannot honor, such as `model` or `effort`, with one line for each command.
   - Typed commands now fill in arguments, `${CLAUDE_*}` variables, and `` !`command` `` output as Claude Code does, in the terminal UI and over RPC.
   - A failing `` !`command` `` now stops its command with Claude Code's message, and the model gets nothing.
+  - A command whose body starts with another slash command now sends that line to the model as it is, as in Claude Code, instead of running the second command. A zero-width space before the line keeps Pi from expanding it.
   - The model can now run a plugin command with the new `run_plugin_command` tool, which lists the commands that Claude Code lists for its model. The tool fills in the arguments and runs no `` !`command` `` line.
   - A plugin's `commands` can now name single command files, and an object map of commands from files or inline text, as in Claude Code.
   - A command with a frontmatter `name` now also runs as `/<plugin>:<name>` and, when the name has no colon, as `/<name>`, as in Claude Code. Tab completion offers the `/<plugin>:<name>` form.

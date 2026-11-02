@@ -195,3 +195,28 @@ Feature: Skill invocation
     Then the model receives these calls:
       | call | role | text                                                                                                                                                                                                                                                                                       |
       | 1    | user | <skill name="demo-greet" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet.\n\nGreet the person named in the arguments.\n\nARGUMENTS: Ada\n</skill> |
+
+  Scenario: A skill whose body starts with a command sends that line to the model inside the skill block
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "release" described as "Releases the branch." with this body:
+      """
+      /demo:deploy production
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "deploy" described as "Deploys the branch." with this body:
+      """
+      Deploy the branch to $ARGUMENTS.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/skill:demo-release"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                                          |
+      | 1    | user | <skill name="demo-release" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-release/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-release.\n\n/demo:deploy production\n</skill> |
