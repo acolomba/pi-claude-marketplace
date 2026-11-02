@@ -416,7 +416,7 @@ describe("prepareStageWorkflows", () => {
     const outsideDir = await createPluginRoot(t, "workflows-symlink-outside-");
     const workflowsDir = await createWorkflowsDir(pluginRoot);
     await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
-    await mkdir(locations.workflowsHomeDir, { recursive: true });
+    await mkdir(path.dirname(locations.workflowsStagingDir), { recursive: true });
     await symlink(outsideDir, locations.workflowsStagingDir);
 
     // act
@@ -808,6 +808,99 @@ describe("commitPreparedWorkflows", () => {
     assert.strictEqual(commitLeak, undefined);
     assert.deepStrictEqual(savedEntries, ["acme:greet.json"]);
     assert.deepStrictEqual(placed, [["acme:greet"]]);
+  });
+
+  test("D-LOC-01: a project re-stage places the envelope in the project and removes the earlier copy under the workflow home", async (t) => {
+    // arrange
+    const { locations } = await createWorkflowScope(t, "workflows-commit-former-");
+    const pluginRoot = await createPluginRoot(t, "workflows-commit-former-source-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    const formerDirectory = locations.formerWorkflowsSavedDir ?? "";
+    await mkdir(formerDirectory, { recursive: true });
+    await writeFile(path.join(formerDirectory, "acme:greet.json"), "earlier envelope\n");
+    await writeFile(path.join(formerDirectory, "other:keep.json"), "foreign envelope\n");
+    const prepared = await prepareStageWorkflows({
+      locations,
+      pluginName: PLUGIN_NAME,
+      resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+      previousWorkflowNames: ["acme:greet"],
+    });
+
+    // act
+    const commitLeak = await commitPreparedWorkflows(prepared);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        commitLeak,
+        saved: await readdir(locations.workflowsSavedDir),
+        former: await readdir(formerDirectory),
+        savedUnderProject: locations.workflowsSavedDir.startsWith(locations.scopeRoot),
+      },
+      {
+        commitLeak: undefined,
+        saved: ["acme:greet.json"],
+        former: ["other:keep.json"],
+        savedUnderProject: true,
+      },
+    );
+  });
+
+  test("D-LOC-01: a project re-stage reports an earlier copy it cannot remove as a leak", async (t) => {
+    // arrange
+    const { locations } = await createWorkflowScope(t, "workflows-commit-former-stuck-");
+    const pluginRoot = await createPluginRoot(t, "workflows-commit-former-stuck-source-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    const stuck = path.join(locations.formerWorkflowsSavedDir ?? "", "acme:greet.json");
+    await mkdir(stuck, { recursive: true });
+    const prepared = await prepareStageWorkflows({
+      locations,
+      pluginName: PLUGIN_NAME,
+      resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+      previousWorkflowNames: ["acme:greet"],
+    });
+    // unlink(2) on a directory fails with EPERM on macOS and EISDIR on Linux.
+    const unlinkDirectoryFailure =
+      process.platform === "darwin"
+        ? "EPERM: operation not permitted"
+        : "EISDIR: illegal operation on a directory";
+
+    // act
+    const commitLeak = await commitPreparedWorkflows(prepared);
+
+    // assert
+    assert.strictEqual(
+      commitLeak,
+      `failed to remove earlier workflow envelope of acme:greet: ${unlinkDirectoryFailure}, unlink '${stuck}'`,
+    );
+    assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), ["acme:greet.json"]);
+  });
+
+  test("a user re-stage has no earlier directory to clean", async (t) => {
+    // arrange
+    const { locations: projectLocations } = await createWorkflowScope(
+      t,
+      "workflows-commit-user-previous-",
+    );
+    const locations = locationsFor("user", path.dirname(projectLocations.scopeRoot));
+    const pluginRoot = await createPluginRoot(t, "workflows-commit-user-previous-source-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    const prepared = await prepareStageWorkflows({
+      locations,
+      pluginName: PLUGIN_NAME,
+      resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+      previousWorkflowNames: ["acme:greet"],
+    });
+
+    // act
+    const commitLeak = await commitPreparedWorkflows(prepared);
+
+    // assert
+    assert.strictEqual(commitLeak, undefined);
+    assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), ["acme:greet.json"]);
   });
 
   test("propagates a displacement failure that is not a missing previous file", async (t) => {

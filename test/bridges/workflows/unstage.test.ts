@@ -235,3 +235,53 @@ test("raises the first symlinked target after removing the names after it", asyn
   assert.deepStrictEqual(savedEntries, ["acme:linked.json", "acme:relinked.json"]);
   assert.strictEqual(await readFile(outsideEnvelopePath, "utf8"), "outside bytes\n");
 });
+
+test("D-LOC-01: removes a project name from the former saved directory under the workflow home too", async (t) => {
+  // arrange
+  const { savedDirectory, locations } = await createWorkflowScope(t, "workflows-unstage-former-");
+  const formerDirectory = locations.formerWorkflowsSavedDir ?? "";
+  await mkdir(formerDirectory, { recursive: true });
+  await writeFile(path.join(formerDirectory, "acme:deploy.json"), '{"name":"acme:deploy"}\n');
+  await writeFile(path.join(formerDirectory, "other:keep.json"), '{"name":"other:keep"}\n');
+  await writeFile(path.join(savedDirectory, "acme:status.json"), '{"name":"acme:status"}\n');
+  await writeFile(path.join(formerDirectory, "acme:status.json"), '{"name":"acme:status"}\n');
+
+  // act
+  const unstagedWorkflows = await unstagePluginWorkflows({
+    locations,
+    previousWorkflowNames: ["acme:deploy", "acme:status"],
+  });
+
+  // assert
+  assert.deepStrictEqual(unstagedWorkflows, {
+    removedNames: ["acme:deploy", "acme:status"],
+    warnings: [],
+    failed: [],
+  });
+  assert.deepStrictEqual(
+    { saved: await readdir(savedDirectory), former: await readdir(formerDirectory) },
+    { saved: [], former: ["other:keep.json"] },
+  );
+});
+
+test("removes a user name from the user saved directory alone", async (t) => {
+  // arrange
+  const { locations: projectLocations } = await createWorkflowScope(t, "workflows-unstage-user-");
+  const locations = locationsFor("user", path.dirname(projectLocations.scopeRoot));
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await writeFile(path.join(locations.workflowsSavedDir, "acme:deploy.json"), "{}\n");
+
+  // act
+  const unstagedWorkflows = await unstagePluginWorkflows({
+    locations,
+    previousWorkflowNames: ["acme:deploy"],
+  });
+
+  // assert
+  assert.deepStrictEqual(unstagedWorkflows, {
+    removedNames: ["acme:deploy"],
+    warnings: [],
+    failed: [],
+  });
+  assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), []);
+});

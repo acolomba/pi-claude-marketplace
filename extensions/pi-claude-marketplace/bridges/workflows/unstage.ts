@@ -9,8 +9,14 @@
 // in the directory is enumerated, read or unlinked. The `<plugin>:` prefix is
 // what keeps those names from colliding.
 //
-// This is the only thing that cleans up after a failed install. The envelopes
-// live outside every scope root, so no scope-root cleanup will ever find them.
+// This is the only thing that cleans up after a failed install. A user-scope
+// envelope lives outside every scope root, so no scope-root cleanup will ever
+// find it.
+//
+// D-LOC-01: a project-scope name is also removed from the directory where an
+// earlier version placed the project's envelopes, under the user's workflow
+// home, which the engine reads before the in-project one. A name counts as
+// removed when either copy was removed.
 //
 // Two failure policies, split by class rather than by position: an ordinary
 // per-name failure accumulates into `failed[]` and the loop carries on
@@ -28,6 +34,29 @@ import type {
   UnstageWorkflowsInput,
   UnstageWorkflowsResult,
 } from "./types.ts";
+
+/**
+ * Removes `target` and reports whether it was there. ENOENT means the file is
+ * already gone (a prior failed install never finished its commit, or a
+ * repeated call), so the unlink is idempotent; `undefined` names no file. Any
+ * other error propagates.
+ */
+async function unlinkIfPresent(target: string | undefined): Promise<boolean> {
+  if (target === undefined) {
+    return false;
+  }
+
+  try {
+    await unlink(target);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+
+    throw err;
+  }
+}
 
 export async function unstagePluginWorkflows(
   input: UnstageWorkflowsInput,
@@ -49,10 +78,16 @@ export async function unstagePluginWorkflows(
       // time.
       // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
       const target = await input.locations.workflowArtifactPath(name);
+      // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
+      const former = await input.locations.formerWorkflowArtifactPath(name);
 
       // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
-      await unlink(target);
-      removed.push(name);
+      const removedHere = await unlinkIfPresent(target);
+      // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
+      const removedThere = await unlinkIfPresent(former);
+      if (removedHere || removedThere) {
+        removed.push(name);
+      }
     } catch (err) {
       if (err instanceof PathContainmentError) {
         // PI-14: a containment refusal is NOT an ordinary per-name failure and
@@ -73,17 +108,11 @@ export async function unstagePluginWorkflows(
         continue;
       }
 
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        // WLIF-03: accumulate rather than throw. A throw at the first bad name
-        // would abandon every later envelope -- executable files left behind,
-        // and the caller told nothing about them. The loop continues so the
-        // caller learns the full picture in one pass.
-        failed.push({ name, reason: errorMessage(err) });
-        continue;
-      }
-      // ENOENT: the previously-staged file is already gone (e.g. a prior
-      // failed install never finished commit). Idempotent -- skip without
-      // adding to `removed`.
+      // WLIF-03: accumulate rather than throw. A throw at the first bad name
+      // would abandon every later envelope -- executable files left behind,
+      // and the caller told nothing about them. The loop continues so the
+      // caller learns the full picture in one pass.
+      failed.push({ name, reason: errorMessage(err) });
     }
   }
 

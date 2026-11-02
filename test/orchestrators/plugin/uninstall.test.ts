@@ -4307,6 +4307,9 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
+        "workflows/saved/hello:greet.json",
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
@@ -4321,6 +4324,8 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
       assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), configBytes);
       assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
@@ -4451,6 +4456,9 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
+        "workflows/saved/hello:greet.json",
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
@@ -4463,6 +4471,8 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
       assert.equal(
         "hello" in ((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
@@ -4574,6 +4584,9 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
         "pi-claude-marketplace/resources/skills/uni-skill/",
         "pi-claude-marketplace/resources/skills/uni-skill/SKILL.md",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
+        "workflows/saved/hello:greet.json",
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
@@ -4585,6 +4598,8 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
       assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
         mcpServers: {},
@@ -4690,6 +4705,9 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
         "pi-claude-marketplace/resources/skills/uni-skill/",
         "pi-claude-marketplace/resources/skills/uni-skill/SKILL.md",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
+        "workflows/saved/hello:greet.json",
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
@@ -4701,6 +4719,8 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
     } finally {
       restoreSchedule?.();
@@ -5111,6 +5131,8 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
     } finally {
@@ -5194,6 +5216,8 @@ test("retry proof: uninstall: a refused data-dir removal keeps the directory and
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
     } finally {
@@ -5286,6 +5310,8 @@ test("retry proof: uninstall: a refused clone reclaim orphans the last-reference
         "pi-claude-marketplace/plugin-clones/keySolo/",
         "pi-claude-marketplace/plugin-clones/keySolo/pin.txt",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
     } finally {
@@ -5498,10 +5524,14 @@ test("retry proof: uninstall: a clone-scan failure is swallowed and the retry co
         "pi-claude-marketplace/",
         "pi-claude-marketplace/plugin-clones",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "pi-claude-marketplace/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
     } finally {
       restoreSchedule?.();
@@ -5603,6 +5633,8 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
@@ -5616,6 +5648,8 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
     } finally {
       restoreSchedule?.();
@@ -5701,6 +5735,8 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
@@ -5715,6 +5751,8 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
+        "workflows/",
+        "workflows/saved/",
       ]);
     } finally {
       restoreSchedule?.();

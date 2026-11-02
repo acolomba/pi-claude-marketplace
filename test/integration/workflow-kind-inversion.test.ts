@@ -217,15 +217,14 @@ test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag
         `workflows must not be recorded unsupported; got: ${record.compatibility.unsupported.join(" / ")}`,
       );
 
-      // assert -- WLIF-01 / WBRG-01 / WPTH-01: the install itself now drives
-      // the bridge, so the engine's storage root exists and the script has
-      // materialized as an envelope at the project scope's canonical saved
-      // path. The whole object is compared so a missing or extra field fails
-      // the case; the byte-level key order is pinned by the staging module's
-      // own owner test.
-      await stat(path.join(home, ".pi", "workflows"));
-      const locations = locationsFor("project", cwd);
-      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      // assert -- WLIF-01 / WBRG-01 / D-LOC-01: the install itself now drives
+      // the bridge, so the script has materialized as an envelope in the
+      // project's own saved directory, and nothing was written under the
+      // user's workflow home. The whole object is compared so a missing or
+      // extra field fails the case; the byte-level key order is pinned by the
+      // staging module's own owner test.
+      await assert.rejects(stat(path.join(home, ".pi", "workflows")), { code: "ENOENT" });
+      const envelopePath = path.join(cwd, ".pi", "workflows", "saved", "hello:greet.json");
 
       assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
         name: "hello:greet",

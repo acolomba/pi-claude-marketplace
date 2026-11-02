@@ -5,9 +5,11 @@
 // `<workflowsStagingDir>/<uuid>/` is created before the envelope write loop and
 // removed only by a successful commit or an explicit abort. A crash or a kill
 // signal leaves it behind holding verbatim third-party executable JavaScript.
-// That tree sits under the home directory and NOT under any scope root, so
-// uninstall and `/reload` never reach it and it accumulates for the life of the
-// machine.
+// Nothing else removes it: uninstall and `/reload` never reach it, so it
+// accumulates for the life of the machine. A user-scope tree sits under the
+// engine's root in the home directory; a project-scope tree sits under that
+// project's `.pi/` (D-LOC-01), so a sweep after a project operation reaches
+// only that project's trees.
 //
 // WR-02: one aged tree is deliberately NOT swept -- one whose `.previous/` still
 // holds displaced envelopes. The commit keeps that tree because it is the only
@@ -51,9 +53,10 @@ const MS_PER_SECOND = 1000;
  * This bound is the ENTIRE liveness mechanism, not a refinement of one.
  * `clone-gc.ts` derives liveness from the persisted `resolvedSha` /
  * `resolvedSource` fields; a staging root is a `randomUUID()` that nothing
- * persists, and `workflowsStagingDir` is scope-independent so the per-scope
- * `proper-lockfile` state guard does not serialize access to it either. Two
- * processes on different scopes can hold staging roots here at once.
+ * persists, and the user scope's `workflowsStagingDir` is shared by every
+ * project's user-scope operations, so the per-scope `proper-lockfile` state
+ * guard does not serialize access to it either. Two processes can hold
+ * staging roots here at once.
  *
  * The directory's modification time tracks last transaction activity: the
  * prepare writes one envelope per admitted workflow into it, the displacement
@@ -81,7 +84,7 @@ const WORKFLOWS_STAGING_MAX_AGE_MS =
  *      Anything modified inside `WORKFLOWS_STAGING_MAX_AGE_MS` is skipped, so a
  *      concurrent installation's in-flight envelopes survive.
  *   3. For an aged directory, run the containment assertion against
- *      `workflowsHomeDir` -- one level ABOVE the staging directory, so the
+ *      `workflowsHomeDir` -- above the staging directory, so the
  *      staging segment itself is walked (WPTH-04; anchoring at the staging root
  *      skips an lstat of the one segment an attacker could have replaced,
  *      leaving a check that cannot fail). Resolved OUTSIDE the removal's try,

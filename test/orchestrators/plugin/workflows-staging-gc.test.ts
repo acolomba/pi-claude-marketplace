@@ -23,7 +23,10 @@ const WELL_PAST_THE_BOUND_MS = 2 * 24 * 60 * 60 * 1000;
 
 interface StagingScope {
   readonly home: string;
+  /** The user scope's locations, whose staging sits under the relocated home. */
   readonly locations: ScopedLocations;
+  /** The locations of a project scope rooted outside the home (D-LOC-01). */
+  readonly projectLocations: ScopedLocations;
 }
 
 /**
@@ -68,7 +71,11 @@ async function createStagingScope(t: TestContext, prefix: string): Promise<Stagi
   const scopeRoot = await mkdtemp(path.join(tmpdir(), `${prefix}scope-`));
 
   t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
-  return { home, locations: locationsFor("project", scopeRoot) };
+  return {
+    home,
+    locations: locationsFor("user", scopeRoot),
+    projectLocations: locationsFor("project", scopeRoot),
+  };
 }
 
 /** Backdate an entry so the sweep reads it as abandoned rather than in flight. */
@@ -155,6 +162,29 @@ test("returns an empty leak list when the staging directory is absent", async (t
   // assert
   assert.deepStrictEqual(leaks, []);
   assert.deepStrictEqual(await stagingEntries(locations), []);
+});
+
+test("D-LOC-01: a project sweep removes only that project's aged staging trees", async (t) => {
+  // arrange
+  const { locations, projectLocations } = await createStagingScope(
+    t,
+    "workflows-staging-gc-project-",
+  );
+  await seedStagingTree(projectLocations, "project-abandoned", { aged: true });
+  await seedStagingTree(locations, "user-abandoned", { aged: true });
+
+  // act
+  const leaks = await garbageCollectWorkflowsStaging(projectLocations);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      leaks,
+      project: await stagingEntries(projectLocations),
+      user: await stagingEntries(locations),
+    },
+    { leaks: [], project: [], user: ["user-abandoned"] },
+  );
 });
 
 test("rethrows a non-ENOENT staging read failure without changing the path", async (t) => {
