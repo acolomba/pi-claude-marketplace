@@ -3056,3 +3056,4 @@ The user chose to fix audit warning W1 and add scenarios for W3, W5 and W6 befor
 8. JSON lines are detected as more than one non-empty line that each parse (upstream's exact rule was not in the excerpts).
 9. Not aligned, still in BACKLOG: a hook whose output never ends hangs the turn where upstream blocks with "output distrusted" (HKDR-01); output schema validation (HOOKSCHEMAFAIL-01), because the bridge has no output schema.
 10. The upstream evidence is a static read of the 2.1.316 binary; no live probe ran, because the host token folder was readable.
+- **User confirmed 2026-11-02:** item 2 (deleting a plugin's own old workflow copies from the home folder as a migration cleanup) and item 1 (hook trust at command time from the session-load answer). Both recorded in D-LOC-01.
