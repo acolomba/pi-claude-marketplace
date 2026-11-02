@@ -76,11 +76,15 @@ When the user invokes a skill, as `/skill:` or an alias, a typed argument that n
 
 Command content does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped).
 
-| Variable                | Claude Code | Pi  | Notes                                                                                                                |
-| ----------------------- | ----------- | --- | -------------------------------------------------------------------------------------------------------------------- |
-| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into command content at install time (SUB-01).                                                           |
-| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into command content at install time.                                                                    |
-| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "`CLAUDE_PROJECT_DIR` at user scope". |
+When the user invokes a command, a typed argument that names `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, or, at project scope, `${CLAUDE_PROJECT_DIR}` is filled in from the values that install recorded (D-CF3-06). Commands installed before this release have no record, so such an argument stays literal until the plugin is updated or reinstalled.
+
+| Variable                | Claude Code | Pi  | Notes                                                                                                                                                                                                           |
+| ----------------------- | ----------- | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into command content at install time (SUB-01).                                                                                                                                                      |
+| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into command content at install time.                                                                                                                                                               |
+| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "`CLAUDE_PROJECT_DIR` at user scope".                                                                                            |
+| `${CLAUDE_SESSION_ID}`  | ✓           | ✓   | Replaced with the Pi session id when the user invokes the command (D-CF1-01, D-CF3-06). The model cannot run a command (D-CF3-01).                                                                              |
+| `${CLAUDE_EFFORT}`      | ✓           | ✓   | Replaced at invocation with the thinking level of the Pi session: `low`, `medium`, `high`, `xhigh`, and `max` as themselves, `off` and `minimal` as `low`, and an unknown level as `high` (D-CF1-01, D-CF3-06). |
 
 ### Agents content
 
@@ -158,7 +162,7 @@ Both hook lanes spread `...process.env` before adding the parity keys. When Pi i
 
 ### Pi-only `CLAUDE_SESSION_ID` alias
 
-`CLAUDE_SESSION_ID` is a pi-only alias of the session id, set alongside `CLAUDE_CODE_SESSION_ID` and `CLAUDECODE` from the single shared producer (`claudeSessionEnvFor`). It is present in bash children and on both hook lanes, and carries the same value as `CLAUDE_CODE_SESSION_ID` within one dispatch, so the three stay internally consistent (SENV-03, D-91-02). No upstream equivalent exists. The `${CLAUDE_SESSION_ID}` token in skill content is a different thing: Claude Code fills it in when the user invokes a skill, and so does this extension (see "Skills content").
+`CLAUDE_SESSION_ID` is a pi-only alias of the session id, set alongside `CLAUDE_CODE_SESSION_ID` and `CLAUDECODE` from the single shared producer (`claudeSessionEnvFor`). It is present in bash children and on both hook lanes, and carries the same value as `CLAUDE_CODE_SESSION_ID` within one dispatch, so the three stay internally consistent (SENV-03, D-91-02). No upstream equivalent exists. The `${CLAUDE_SESSION_ID}` token in skill and command content is a different thing: Claude Code fills it in when the user invokes a skill or command, and so does this extension (see "Skills content" and "Commands content").
 
 ### `CLAUDE_ENV_FILE` is exposed but not sourced
 
@@ -252,7 +256,7 @@ The following Claude Code variables are recognized but not delivered by the exte
 - **`${user_config.*}` / `CLAUDE_PLUGIN_OPTION_*`** -- needs a plugin-options feature Pi does not have.
 - **`CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_ENTRYPOINT`** -- identity and entrypoint semantics of a different host; Pi is not Claude Code and sets no host-identity var.
 - **`CLAUDE_CODE_MCP_SERVER_NAME`, `CLAUDE_CODE_MCP_SERVER_URL`** (headersHelper vars) -- pi-mcp-adapter territory, not this extension's to inject.
-- **`CLAUDE_EFFORT`** -- a Pi `thinkingLevel` mapping is possible but semantically approximate; deferred (EFRT-01).
+- **`CLAUDE_EFFORT`** (the environment variable) -- not set for Bash children, hooks, or MCP servers; deferred (EFRT-01, D-CF5-16). The `${CLAUDE_EFFORT}` token in skill and command content is filled in when the user invokes the skill or command (see "Skills content" and "Commands content").
 
 One absence is recorded affirmatively rather than by silence:
 
