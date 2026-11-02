@@ -7,6 +7,7 @@
   - Plugin agents now need pi-subagents 0.84.0 or newer.
   - Plugin workflows now need `@quintinshaw/pi-dynamic-workflows` 3.15.0 or a later 3.x release, which the package now declares as an optional peer.
   - A declared `commands`, `agents`, or `workflows` path now replaces the conventional folder, as in Claude Code, and install and update warn when that folder exists.
+  - A marketplace entry's `commands` now adds to the `commands/` folder instead of replacing it, as in Claude Code.
   - A `${NAME:-default}` in a plugin's MCP settings now reads a variable set after install, as in Claude Code, without a reinstall.
   - A plugin's MCP servers from `.mcp.json` and from `plugin.json` now both install, as in Claude Code, and the later of two servers with one name wins.
   - A plugin's `mcpServers` can now be an array of server maps and file paths, and an MCP file can hold its servers without the `mcpServers` wrapper.
@@ -22,6 +23,32 @@
   - A skill in `skills/` now wins over a skill of the same name in a declared skills path, as in Claude Code.
   - Pi now gets no plugin skills or prompt templates from a project that it does not trust.
   - A project-scope skill now runs its `` !`command` `` lines only when you installed its plugin into the project on this machine. For a project skill installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
+  - A command with no `description` is now listed with Claude Code's text: the first line of its body, or `Plugin command` for an empty body.
+  - Install now warns about the command frontmatter fields that Pi cannot honor, such as `model` or `effort`, with one line for each command.
+  - Typed commands now fill in arguments, `${CLAUDE_*}` variables, and `` !`command` `` output as Claude Code does, in the terminal UI and over RPC.
+  - A failing `` !`command` `` now stops its command with Claude Code's message, and the model gets nothing.
+  - A plugin's `commands` can now name single command files, and an object map of commands from files or inline text, as in Claude Code.
+  - A project-scope command now runs only when you installed its plugin into the project on this machine. For a project command installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
+  - Commands installed earlier keep their old description, and typed arguments keep `${CLAUDE_PLUGIN_ROOT}` literal, until you update or reinstall their plugin. Then run `/reload`.
+  - Plugin session hooks now get Claude Code's `source` and `reason` values, such as `clear` for a new session and `fork` for a fork, and their matchers filter on these values.
+  - A terminal quit now sends SessionEnd `prompt_input_exit`, and a quit in other modes sends `other`, as in Claude Code.
+  - Each compaction now runs SessionStart `compact` between PreCompact and PostCompact, PostCompact gets `compact_summary`, and a PreCompact block cancels the compaction.
+  - `/reload` now runs no session hook, as `/reload-plugins` in Claude Code.
+  - Hook groups for `clear`, `compact`, and `fork` now install. To restore the groups that an earlier install dropped, run `/claude:plugin reinstall <plugin>@<marketplace>`.
+  - Matching hooks of one event now run in parallel, and identical hooks of one plugin run once, as in Claude Code.
+  - Tool hooks now decide as in Claude Code: a deny blocks at any exit code, `ask` asks in the terminal, `updatedInput` replaces the whole input, and `continue: false` ends the turn.
+  - A hook on a plugin MCP tool now runs once per call under the tool's real name, also through the `mcp` proxy.
+  - Hook `additionalContext` now reaches the model from SessionStart, UserPromptSubmit, tool, and Stop hooks, and a prompt hook's context goes beside your prompt instead of replacing it.
+  - A hook's `systemMessage` and a blocked prompt's reason now show to you and never reach the model, and JSON and RPC output carry them as `hook-notice` entries.
+  - Exec-form hooks now fill in `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and `${CLAUDE_PROJECT_DIR}` in `command` and in each `args` element.
+  - A hook with `onFailure: "block"` now blocks when it cannot start, exits with a code other than 0 and 2, times out, or prints broken JSON.
+  - A hook guard with `onFailure: "block"` or an exit-2 deny now blocks even when the hook writes past its output limits.
+  - A plugin whose `plugin.json` names hooks other than `hooks/hooks.json`, or whose marketplace entry declares `hooks`, is now partially available with `{unsupported hooks}`.
+  - A hook whose `if` is set on a session, prompt, compaction, or stop event no longer runs, as in Claude Code.
+  - A PostToolUse hook's `updatedToolOutput` now reaches the model.
+  - PostToolUseFailure hooks now receive the error as `error`, as in Claude Code, instead of `tool_response`.
+  - Hook notices now drop terminal control characters and stop at 2,000 characters.
+  - SessionStart context now survives another hook's block, and prompt context stays with its own prompt, also for steers and follow-ups.
   - A project-scope hook now runs only when you installed its plugin into the project on this machine. For a project hook installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
   - A load with `autoapply` on now applies only the user scope and shows the pending changes of the project scope. `/claude:plugin apply` still applies both scopes.
   - The background autoupdate now updates only the user scope. `/claude:plugin update --scope project` or `/claude:plugin marketplace update` still updates the project scope.
