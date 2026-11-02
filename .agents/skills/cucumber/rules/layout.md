@@ -79,6 +79,10 @@ For workflows, `runs.steps.ts` stays the seed module and `features/step_definiti
 
 For agents, `listing.steps.ts` is the shared step module: the agent `Given` steps, the pi-subagents settings `Given` steps, and the advertised-agents `Then`. The run steps live in `features/step_definitions/agent/runs.steps.ts`. The directory now holds six features: `listing`, `frontmatter`, `invocation`, `companion-missing`, `project-trust`, and `lifecycle`.
 
+For slash commands, `listing.steps.ts` is the shared step module. The invocation, frontmatter, and project-provenance steps live in their own modules beside it. The directory now holds six features: `listing`, `frontmatter`, `invocation`, `manifest-forms`, `lifecycle`, and `project-provenance`.
+
+For hooks, `runs.steps.ts` stays the seed module and holds the runs `Then` steps (`the hooks record these runs in any order:` and `the hooks record no runs`). `session.steps.ts` holds the session `Given` and `When` steps, `tool-use.steps.ts` the stub MCP server `Given` steps, `messages.steps.ts` the hook notice steps (`the hooks show the user these messages:` and `the hooks show the user no messages`), `prompt-and-stop.steps.ts` the Stop re-entry `When`, and `project-provenance.steps.ts` the project ledger steps. The directory now holds ten features: `tool-use`, `session`, `configuration`, `failures`, `process`, `messages`, `additional-context`, `prompt-and-stop`, `lifecycle`, and `project-provenance`.
+
 For MCP servers, `listing.steps.ts` is the shared step module, and every MCP step module writes its fixtures through `features/lib/mcp-server-files.ts`. Its stub marker, an object whose one own member is `stub`, is read wherever it sits in a document. So a wrapped file whose only server is named `stub`, `{"mcpServers": {"stub": {...}}}`, cannot be written through the stub-marker `Given` steps: the marker becomes a server named `mcpServers`.
 
 ### Frozen after Phase 1
