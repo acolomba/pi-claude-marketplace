@@ -2,28 +2,6 @@
   "entry": ["extensions/pi-claude-marketplace/index.ts"],
   "rulePacks": ["rule-packs/architecture.json"],
   "ignorePatterns": [".pi/**", ".planning/**"],
-  "dynamicallyLoaded": [
-    "extensions/pi-claude-marketplace/domain/argument-substitution.ts",
-    "extensions/pi-claude-marketplace/domain/shell-words.ts",
-    "extensions/pi-claude-marketplace/domain/context-injection.ts",
-    "extensions/pi-claude-marketplace/domain/description-fallback.ts",
-    "extensions/pi-claude-marketplace/domain/invocation-frontmatter.ts",
-    "extensions/pi-claude-marketplace/platform/prompt-shell.ts"
-  ],
-  "ignoreExports": [
-    {
-      "file": "extensions/pi-claude-marketplace/domain/argument-substitution.ts",
-      "exports": ["*"]
-    },
-    { "file": "extensions/pi-claude-marketplace/domain/shell-words.ts", "exports": ["*"] },
-    { "file": "extensions/pi-claude-marketplace/domain/context-injection.ts", "exports": ["*"] },
-    { "file": "extensions/pi-claude-marketplace/domain/description-fallback.ts", "exports": ["*"] },
-    {
-      "file": "extensions/pi-claude-marketplace/domain/invocation-frontmatter.ts",
-      "exports": ["*"]
-    },
-    { "file": "extensions/pi-claude-marketplace/platform/prompt-shell.ts", "exports": ["*"] }
-  ],
   "production": {
     "deadCode": true,
     "health": false,
