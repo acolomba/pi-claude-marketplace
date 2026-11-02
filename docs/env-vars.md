@@ -78,13 +78,13 @@ Command content does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped).
 
 When the user invokes a command, a typed argument that names `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, or, at project scope, `${CLAUDE_PROJECT_DIR}` is filled in from the values that install recorded (D-CF3-06). Commands installed before this release have no record, so such an argument stays literal until the plugin is updated or reinstalled.
 
-| Variable                | Claude Code | Pi  | Notes                                                                                                                                                                                                           |
-| ----------------------- | ----------- | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into command content at install time (SUB-01).                                                                                                                                                      |
-| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into command content at install time.                                                                                                                                                               |
-| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "`CLAUDE_PROJECT_DIR` at user scope".                                                                                            |
-| `${CLAUDE_SESSION_ID}`  | ✓           | ✓   | Replaced with the Pi session id when the user invokes the command (D-CF1-01, D-CF3-06). The model cannot run a command (D-CF3-01).                                                                              |
-| `${CLAUDE_EFFORT}`      | ✓           | ✓   | Replaced at invocation with the thinking level of the Pi session: `low`, `medium`, `high`, `xhigh`, and `max` as themselves, `off` and `minimal` as `low`, and an unknown level as `high` (D-CF1-01, D-CF3-06). |
+| Variable                | Claude Code | Pi  | Notes                                                                                                                                                                                                                 |
+| ----------------------- | ----------- | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into command content at install time (SUB-01).                                                                                                                                                            |
+| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into command content at install time.                                                                                                                                                                     |
+| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "`CLAUDE_PROJECT_DIR` at user scope".                                                                                                  |
+| `${CLAUDE_SESSION_ID}`  | ✓           | ✓   | Replaced with the Pi session id when the user invokes the command (D-CF1-01, D-CF3-06), and when the model runs it with the `run_plugin_command` tool, which fills the same values and runs no `` !`command` `` line. |
+| `${CLAUDE_EFFORT}`      | ✓           | ✓   | Replaced at invocation with the thinking level of the Pi session: `low`, `medium`, `high`, `xhigh`, and `max` as themselves, `off` and `minimal` as `low`, and an unknown level as `high` (D-CF1-01, D-CF3-06).       |
 
 ### Agents content
 

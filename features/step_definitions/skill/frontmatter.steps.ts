@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { type DataTable, Then } from "@cucumber/cucumber";
 
 import { projectTokens } from "../../lib/run-tokens.ts";
-import { modelCallsOf } from "../../lib/scripted-model/script.ts";
+import { numberedModelCall } from "../../lib/scripted-model/script.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -64,10 +64,7 @@ function availableSkillRows(systemPrompt: string): [string, string, string][] {
 Then(
   "the model call {int} lists these skills in its system prompt:",
   function (this: ScenarioWorld, number: number, table: DataTable) {
-    const call = modelCallsOf(this.requireTurn().logs).find(({ index }) => index + 1 === number);
-    if (call === undefined) {
-      assert.fail(`the last turn has no model call ${number}`);
-    }
+    const call = numberedModelCall(this.requireTurn().logs, number);
 
     const rows = availableSkillRows(call.systemPrompt).map(([name, description, location]) => [
       name,

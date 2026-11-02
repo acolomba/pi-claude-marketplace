@@ -13,9 +13,11 @@
 // staged file that cannot be read refuse the invocation, and nothing reaches
 // the model.
 //
-// D-CF1-03: only a command the user types reaches this module. A prompt
-// template outside this extension's two staged prompts directories, such as
-// the user's own, is `not-staged` and keeps Pi's expansion.
+// D-CF1-03: a command the user types, and a command the model runs with the
+// `run_plugin_command` tool (`expandStagedCommand`, which runs no `!` command),
+// reach this module. A prompt template outside this extension's two staged
+// prompts directories, such as the user's own, is `not-staged` and keeps Pi's
+// expansion.
 //
 // D-CF3-07: a project's `.pi/pi-claude-marketplace/` tree can come from the
 // repository, so a project command runs only when the user's own ledger of
@@ -27,6 +29,7 @@ import path from "node:path";
 
 import { readCommandRecord } from "../bridges/commands/command-record.ts";
 import { commandFileDigest } from "../bridges/commands/project-ledger.ts";
+import { truncate1536 } from "../bridges/skills/frontmatter-degrade.ts";
 import {
   claudeEffort,
   InvocationTooLargeError,
@@ -34,6 +37,7 @@ import {
   substituteArguments,
 } from "../domain/argument-substitution.ts";
 import { ContextInjectionError, expandContextInjections } from "../domain/context-injection.ts";
+import { descriptionFallback } from "../domain/description-fallback.ts";
 import { provenProjectSkills } from "../persistence/project-installs.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
@@ -144,7 +148,7 @@ function refusal(message: string): CommandInvocationOutcome {
  * this extension's.
  */
 function locateStagedCommand(
-  request: CommandInvocationRequest,
+  request: Pick<CommandInvocationRequest, "commands" | "name" | "cwd">,
   agentDir: string,
 ): StagedCommand | undefined {
   const listed = request.commands.find(
@@ -306,18 +310,20 @@ async function unprovenRefusal(
   );
 }
 
+/** A staged command read for one invocation, or the outcome that ends it early. */
+type PreparedCommand =
+  | { readonly kind: "ready"; readonly command: StagedCommand; readonly file: CommandFile }
+  | CommandInvocationOutcome;
+
 /**
- * D-CF3-06: builds what the model receives for a typed staged command,
- * reports that the command is not one this extension staged, or refuses it
- * with Claude Code's message (T-01-24). A project command in a project Pi
- * does not trust, a project command this user's ledger does not list with
- * the digest of its file (D-CF3-07), and a staged file that cannot be read
- * or parsed, refuse too. A failure other than these propagates.
+ * Finds the staged command, refuses it in an untrusted project, reads its
+ * file once, and refuses a project command this user's ledger does not list
+ * with the digest of that text (D-CF3-07).
  */
-export async function invokeStagedCommand(
+async function prepareCommand(
   request: CommandInvocationRequest,
-  dependencies: CommandInvocationDependencies = NODE_DEPENDENCIES,
-): Promise<CommandInvocationOutcome> {
+  dependencies: CommandInvocationDependencies,
+): Promise<PreparedCommand> {
   const agentDir = dependencies.getAgentDir();
   const command = locateStagedCommand(request, agentDir);
   if (command === undefined) {
@@ -349,9 +355,168 @@ export async function invokeStagedCommand(
   }
 
   const unproven = await unprovenRefusal(request, command, loaded.text, agentDir, dependencies);
-  if (unproven !== undefined) {
-    return unproven;
+  return unproven ?? { kind: "ready", command, file: loaded.file };
+}
+
+/**
+ * D-CF3-06: builds what the model receives for a typed staged command,
+ * reports that the command is not one this extension staged, or refuses it
+ * with Claude Code's message (T-01-24). A project command in a project Pi
+ * does not trust, a project command this user's ledger does not list with
+ * the digest of its file (D-CF3-07), and a staged file that cannot be read
+ * or parsed, refuse too. A failure other than these propagates.
+ */
+export async function invokeStagedCommand(
+  request: CommandInvocationRequest,
+  dependencies: CommandInvocationDependencies = NODE_DEPENDENCIES,
+): Promise<CommandInvocationOutcome> {
+  const prepared = await prepareCommand(request, dependencies);
+  return prepared.kind === "ready"
+    ? renderCommand(request, prepared.command, prepared.file, dependencies).catch(refusalFor)
+    : prepared;
+}
+
+/**
+ * Closes the D-CF3-01 gap: the text the model's command tool returns for a
+ * staged command. The body is filled with the arguments and variables as a
+ * typed invocation fills it, but its `!` commands do not run; each stays
+ * literal. The same refusals as a typed invocation apply, and a command whose
+ * frontmatter sets `disable-model-invocation: true` refuses with Claude Code
+ * 2.1.316's Skill tool message, named for `toolName`.
+ */
+export async function expandStagedCommand(
+  request: CommandInvocationRequest,
+  toolName: string,
+  dependencies: CommandInvocationDependencies = NODE_DEPENDENCIES,
+): Promise<CommandInvocationOutcome> {
+  const prepared = await prepareCommand(request, dependencies);
+  if (prepared.kind !== "ready") {
+    return prepared;
   }
 
-  return renderCommand(request, command, loaded.file, dependencies).catch(refusalFor);
+  const { command, file } = prepared;
+  if (file.frontmatter["disable-model-invocation"] === true) {
+    return refusal(
+      `Command ${request.name} cannot be used with ${toolName} due to disable-model-invocation. Ask the user to run ${request.typed} themselves; it cannot be invoked via ${toolName}. Do not replicate this command's workflow by other means; it is reserved for explicit user invocation.`,
+    );
+  }
+
+  try {
+    return {
+      kind: "send",
+      text: substituteArguments({
+        body: file.body,
+        args: request.args,
+        argumentNames: parseArgumentNames(file.frontmatter.arguments),
+        variables: commandVariables(request, command, file.frontmatter),
+      }),
+    };
+  } catch (error) {
+    return refusalFor(error);
+  }
+}
+
+/** A staged command the model's command tool lists, with the text it is listed with. */
+export interface ModelCommand {
+  readonly name: string;
+  readonly text: string;
+}
+
+/** What the listing reads from Pi and the session. */
+export interface ModelCommandListRequest {
+  /** Pi's commands, as `pi.getCommands()` returns them. */
+  readonly commands: ReturnType<ExtensionAPI["getCommands"]>;
+  readonly cwd: string;
+  /** Whether Pi trusts the project at `cwd` (`ctx.isProjectTrusted()`). */
+  readonly projectTrusted: boolean;
+}
+
+/** A frontmatter value that is a string with text in it, or `undefined`. */
+function textValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+/**
+ * Claude Code 2.1.316's listing rule (03-UPSTREAM-EVIDENCE Q1): a command is
+ * listed when its source set a `description` or a `when_to_use`, and not when
+ * it sets `disable-model-invocation: true`. Install wrote Claude Code's
+ * fallback into a staged file whose source set no description (D-CF3-08), so
+ * a staged description equal to that fallback counts as unset. The text is
+ * the description, then ` - ` and `when_to_use` when set, cut at the skills'
+ * 1,536-character listing cap.
+ */
+function listingText(file: CommandFile): string | undefined {
+  if (file.frontmatter["disable-model-invocation"] === true) {
+    return undefined;
+  }
+
+  const fallback = descriptionFallback(file.body, "Plugin command");
+  const description = textValue(file.frontmatter.description) ?? fallback;
+  const whenToUse = textValue(file.frontmatter.when_to_use);
+  if (whenToUse === undefined) {
+    return description === fallback ? undefined : truncate1536(description);
+  }
+
+  return truncate1536(`${description} - ${whenToUse}`);
+}
+
+/**
+ * The listed text of the Pi command `name`, or `undefined` when it is not a
+ * staged command the model may see: a project command in an untrusted
+ * project or one this user's ledger does not list with the digest of its
+ * file (D-CF3-07), a file that cannot be read or parsed, and a command the
+ * listing rule leaves out.
+ */
+async function modelListing(
+  request: ModelCommandListRequest,
+  name: string,
+  proven: () => Promise<ReadonlyMap<string, string>>,
+  dependencies: CommandInvocationDependencies,
+): Promise<string | undefined> {
+  const command = locateStagedCommand({ ...request, name }, dependencies.getAgentDir());
+  if (command === undefined || (command.scope === "project" && !request.projectTrusted)) {
+    return undefined;
+  }
+
+  let text: string;
+  let file: CommandFile;
+  try {
+    text = await dependencies.readFile(command.file);
+    file = parseFrontmatter(text);
+  } catch {
+    return undefined;
+  }
+
+  if (command.scope === "project" && (await proven()).get(name) !== commandFileDigest(text)) {
+    return undefined;
+  }
+
+  return listingText(file);
+}
+
+/**
+ * Closes the D-CF3-01 gap: the staged commands Pi loaded that the model's
+ * command tool lists, in Pi's order, with the text Claude Code lists each
+ * with. The user's ledger is read once, and only for a project command.
+ */
+export async function listModelCommands(
+  request: ModelCommandListRequest,
+  dependencies: CommandInvocationDependencies = NODE_DEPENDENCIES,
+): Promise<readonly ModelCommand[]> {
+  let ledger: Promise<ReadonlyMap<string, string>> | undefined;
+  const proven = (): Promise<ReadonlyMap<string, string>> => {
+    ledger ??= provenProjectSkills(dependencies.getAgentDir(), request.cwd, dependencies.readFile);
+    return ledger;
+  };
+
+  const names = request.commands
+    .filter((command) => command.source === "prompt")
+    .map((command) => command.name);
+  const texts = await Promise.all(
+    names.map(async (name) => modelListing(request, name, proven, dependencies)),
+  );
+  return names.flatMap((name, index) => {
+    const text = texts[index];
+    return text === undefined ? [] : [{ name, text }];
+  });
 }

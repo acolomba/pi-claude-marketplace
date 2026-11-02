@@ -195,6 +195,22 @@ export function modelCallsOf(logs: ReadonlyMap<string, readonly unknown[]>): Mod
   return (logs.get(CALLS_FILE) ?? []).map((record) => checkCall(record));
 }
 
+/**
+ * The call of `logs` numbered `number` from 1, as the calls step numbers
+ * them. Throws when the turn has no such call.
+ */
+export function numberedModelCall(
+  logs: ReadonlyMap<string, readonly unknown[]>,
+  number: number,
+): ModelCall {
+  const call = modelCallsOf(logs).find(({ index }) => index + 1 === number);
+  if (call === undefined) {
+    throw new Error(`the last turn has no model call ${number}`);
+  }
+
+  return call;
+}
+
 // The parts of a logged message that the call rows read.
 const MESSAGE_PART_SCHEMA = Type.Object({
   type: Type.String(),

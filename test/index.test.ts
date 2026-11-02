@@ -508,6 +508,19 @@ async function loadExtension(
   })
     .thenReturn()
     .times(1);
+  when(() => {
+    pi.on("session_start", It.willCapture<EventListener<SessionStartEvent>>("command tool"));
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on(
+      "before_agent_start",
+      It.willCapture<EventListener<BeforeAgentStartEvent>>("command tool start"),
+    );
+  })
+    .thenReturn()
+    .times(1);
 
   await claudeMarketplaceExtension(pi);
 

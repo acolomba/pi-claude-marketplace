@@ -7,6 +7,7 @@ import {
   readHooksJson,
 } from "./bridges/hooks/index.ts";
 import { registerCommandInvocation } from "./edge/command-invocation.ts";
+import { registerCommandTool } from "./edge/command-tool.ts";
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { registerSkillAliases } from "./edge/skill-aliases.ts";
 import { registerSkillReadFill } from "./edge/skill-read.ts";
@@ -277,4 +278,6 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // variables filled. The hooks bridge registered its `tool_result` handler
   // first, so PostToolUse hooks see the file as read.
   registerSkillReadFill(pi);
+  // Closes the D-CF3-01 gap: the model runs a plugin command through a tool.
+  registerCommandTool(pi);
 }

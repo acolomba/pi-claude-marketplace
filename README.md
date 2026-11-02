@@ -112,6 +112,8 @@ Commands use a colon (`:`) on POSIX and a dot (`.`) on Windows:
 
 A command also has aliases in interactive sessions and over RPC. If the command's frontmatter sets `name`, the command also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. For example, `bar` with frontmatter `name: baz` in plugin `foo` also answers to `/foo:baz` and `/baz`. If two commands set the same `name`, the first command gets the alias. A skill keeps an alias that it already has. Command aliases use a colon on every platform.
 
+The model can run a plugin command with the `run_plugin_command` tool, as Claude Code's model runs one with its Skill tool. The tool lists each command that sets `description` or `when_to_use` and does not set `disable-model-invocation: true`. The tool returns the command's text with the arguments filled in. The command's `` !`command` `` lines do not run. After an install or an uninstall, run `/reload` to update the list.
+
 Skills use Pi's `/skill:` form and also have aliases in interactive sessions and over RPC:
 
 | Plugin name | Skill name                          | Pi skill form    | Aliases                        |

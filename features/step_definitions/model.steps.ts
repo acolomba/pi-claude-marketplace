@@ -16,6 +16,7 @@ import { expandTokens, projectTokens } from "../lib/run-tokens.ts";
 import {
   callMessageRows,
   modelCallsOf,
+  numberedModelCall,
   parseScriptTable,
   readModelScript,
   writeModelScript,
@@ -81,10 +82,7 @@ Then("the model receives these calls:", function (this: ScenarioWorld, table: Da
 Then(
   "the model call {int} receives this system prompt:",
   function (this: ScenarioWorld, number: number, expected: string) {
-    const call = modelCallsOf(this.requireTurn().logs).find(({ index }) => index + 1 === number);
-    if (call === undefined) {
-      assert.fail(`the last turn has no model call ${number}`);
-    }
+    const call = numberedModelCall(this.requireTurn().logs, number);
 
     assert.strictEqual(projectCallText(call.systemPrompt, this.tokens), expected);
     this.markTurnCompared();
