@@ -1,12 +1,3 @@
-# Requirements Archive: component-features Component Behavioral Tests
-
-**Archived:** 2026-11-02
-**Status:** SHIPPED
-
-For current requirements, see `.planning/REQUIREMENTS.md`.
-
----
-
 # Requirements: pi-claude-marketplace — component-features
 
 **Defined:** 2026-10-31

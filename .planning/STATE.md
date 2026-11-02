@@ -2,11 +2,11 @@
 gsd_state_version: "1.0"
 milestone: component-features
 milestone_name: Component Behavioral Tests
-status: Awaiting next milestone
-stopped_at: Milestone component-features closed; awaiting the next milestone
+status: executing
+stopped_at: Milestone reopened 2026-11-02; Phases 1-7 complete; locality redesign and hook output parity merged
 last_updated: "2026-11-02T12:28:16.488Z"
 last_activity: 2026-11-02
-last_activity_desc: Milestone component-features completed and archived
+last_activity_desc: Milestone component-features reopened for further work
 state_head: c78ec90bc4d4bb6d0d30704094e7af2b23dd2791
 progress:
   total_phases: 7
@@ -25,14 +25,14 @@ See: `.planning/PROJECT.md` (updated 2026-11-02 after the component-features mil
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone (`/new-gsd-milestone <name>`). Open for the user: review D-CF2-13..16 and D-CF3-07, review the upstream branches on `acolomba/pi` and `acolomba/pi-subagents`, and decide T-05-33 and T-05-34.
+**Current focus:** component-features reopened 2026-11-02: user review of the remaining decisions, possible new phases. Open for the user: review D-CF2-13..16 and D-CF3-07, review the upstream branches on `acolomba/pi` and `acolomba/pi-subagents`, and decide T-05-33 and T-05-34.
 
 ## Current Position
 
-Phase: Milestone component-features complete
+Phase: Milestone component-features reopened (Phases 1-7 complete)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-02 — Milestone component-features completed and archived
+Status: Reopened for further work
+Last activity: 2026-11-02 — Milestone component-features reopened
 
 ### mcp-4 closeout
 

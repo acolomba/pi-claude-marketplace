@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Previous Milestone: component-features -- Component Behavioral Tests (branch: claude/quirky-planck-hhm592, started 2026-10-31, completed 2026-11-02, not yet merged, no npm release)
+## Current Milestone: component-features -- Component Behavioral Tests (branch: claude/quirky-planck-hhm592, started 2026-10-31, closed and reopened 2026-11-02 for further work)
 
 **Goal:** The cucumber suite checks every bridged component kind -- skills,
 commands, agents, hooks, MCP servers, workflows -- as Pi and its companion
@@ -703,19 +703,12 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**Completed on branch `claude/quirky-planck-hhm592`, no PR yet:** milestone
-`component-features` (2026-11-02, Phases 1-7, 61 plans, 58/58 requirements;
-archived to `.planning/milestones/component-features-*`). The cucumber suite
-now checks every bridged component kind as Pi and its companions see it after
-a real install, with a scripted model and no authenticated LLM: 1565
-scenarios. Shipped behavior changes: Claude Code's argument substitution and
-`!` commands for typed skills and commands, skill and command name aliases, a
-`run_plugin_command` tool for the model, variable fill on a model's skill
-read, a user-scope provenance ledger that gates project skills, commands and
-hooks (D-CF2-13..16), merged MCP sources and in-plugin reference links,
-background launch for MCP agents, hook parity fixes, and the workflow-wins
-name rule (D-CF7-05). Upstream fixes for Pi and pi-subagents wait on the
-user's forks for review. Audit `tech_debt`, no blockers.
+**In progress on branch `claude/quirky-planck-hhm592`:** milestone
+`component-features`, reopened 2026-11-02 after its first close (7 phases,
+61 plans, 58/58 requirements at that close). Since the reopen: the locality
+principle (D-LOC-01) replaced the user-folder provenance ledger with Pi's
+project trust, project workflows are stored in the project, and hook output
+is read in full as upstream (T-05-33). More phases may follow.
 
 **Completed on PR branch; PR #290 open:** milestone `plugin-lifecycle`
 (2026-10-29, Phases 1-11, 80 plans, 64/64 requirements; archived to
@@ -865,10 +858,8 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-No milestone is active. The 58 component-features requirements are validated
-and archived in
-[milestones/component-features-REQUIREMENTS.md](milestones/component-features-REQUIREMENTS.md);
-the 64
+Milestone `component-features` is active (reopened 2026-11-02); its requirements are in
+[REQUIREMENTS.md](REQUIREMENTS.md). The 64
 plugin-lifecycle requirements are validated and archived in
 [milestones/plugin-lifecycle-REQUIREMENTS.md](milestones/plugin-lifecycle-REQUIREMENTS.md);
 the 104 lifecycle-coverage requirements are validated and archived in
@@ -2141,3 +2132,5 @@ _Last updated: 2026-11-02 after component-features Phase 5 (Hooks) was merged. H
 _Last updated: 2026-11-02 after the component-features milestone closed. SKL-01..06 and MCP-01..08 validated; all 58 requirements archived; D-CF7-05 added._
 
 _Last updated: 2026-11-02 after the project locality decision (DC-41). D-LOC-01 added; D-CF2-13, D-CF2-14, D-CF2-15, D-CF2-16, and D-CF3-07 reversed; project workflows moved into the project (amends WPTH-02)._
+
+_Last updated: 2026-11-02 after the component-features milestone was reopened for further work (locality redesign, hook output parity, possible new phases)._

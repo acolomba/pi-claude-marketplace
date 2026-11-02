@@ -2,54 +2,6 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
-## Milestone: component-features -- Component Behavioral Tests
-
-**Completed:** 2026-11-02 on `claude/quirky-planck-hhm592` (no PR yet, no npm release)
-**Phases:** 7 | **Plans:** 61 | **Tasks:** 137 | **Requirements:** 58/58 | **Audit:** `tech_debt`, no blockers (integration 7/7, flows 5/5)
-
-### What Was Built
-
-- A cucumber harness that runs a real Pi 1.4.0 with a scripted faux model and the three companions (pi-subagents 0.84.0, pi-mcp-adapter 7.0.0, pi-dynamic-workflows 3.15.0), and compares whole model messages, so every bridged component kind is checked as Pi sees it after a real install, with no authenticated LLM. The suite ended at 1,565 scenarios.
-- Claude Code parity for typed skills and commands (argument substitution, variables, `!` commands), name aliases, a `run_plugin_command` tool, variable fill on a model's skill read, merged MCP sources, hook session/compaction/prompt/tool parity, and the workflow-wins name rule.
-- A user-scope provenance ledger (D-CF2-13..16) so a cloned repository cannot get its plugin skills, commands, or hooks run, closed across install, load-time autoapply, background autoupdate, and unnamed re-stages.
-- Upstream fixes for Pi and pi-subagents, pushed to the user's forks for review.
-
-### What Worked
-
-- **Phase 1 as a harness phase, then six parallel component sessions.** Each child session owned its files and ran its own discuss/plan/execute/review/verify loop; the parent merged in a fixed order with `npm run check` after each merge, and conflicts stayed in the tracking files.
-- **One dubious-choices log collected from every session.** The user reviewed 40 entries through a short "waiting on you" digest instead of the raw log.
-- **Classifying each Pi gap as a bug or a design difference before reporting it.** Four of six Pi report items turned into accepted deviations with code changes, one became an upstream patch, and an investigation found the real pi-subagents bugs behind the MCP-07 gap.
-- **Re-auditing security after merges.** The post-merge Phase 5 re-audit found the bulk-update ledger adoption hole (T-05-32) that no single phase could see.
-
-### What Was Inefficient
-
-- **Security fixes chained.** D-CF2-13 led to D-CF2-14, the hooks gap, D-CF2-15, then D-CF2-16: each fix exposed the next automatic route that wrote the ledger. Mapping every ledger writer at the start would have found them together.
-- **A child session stalled in setup** and needed a replacement; the original later woke and had to stand down.
-- **A background `npm run check` started with a plain `&` died on a worker restart** and was reported as running for hours.
-- **Stale verification fingerprints** after doc-only edits forced extra verifier refreshes.
-- **A first, wrong root cause** (a cache-key mismatch) was presented for the MCP-07 refusal before a probe found the validator bug.
-
-### Patterns Established
-
-- **Upstream probes run offline:** `unshare -rn`, and only where the host's `/home/claude/.claude/remote` token directory is absent; two probes leaked to `api.anthropic.com` or read host tokens under `env -i`.
-- **A bug-or-design rule for upstream gaps:** report only real bugs (as patches on the user's fork); accept design differences and keep the extension consistent with them.
-- **Admission on ledger writes:** a write the user did not aim at a plugin may refresh but never create a provenance entry.
-- **Background jobs are tracked tasks,** never shell `&`, and status is read from the process, not the log.
-
-### Key Lessons
-
-1. Any state an attacker-controlled tree can write must not be able to vouch for itself; enumerate every writer of a trust record, automatic paths first.
-2. Verify a suspected root cause with a probe before presenting it.
-3. Doc edits to files a verification report covers make the report stale; batch wording fixes before the final verification.
-
-### Cost Observations
-
-- Model mix: Opus orchestrator and child sessions; Sonnet for the integration checker; exact percentages were not recorded.
-- Sessions: one parent and six child sessions (one replacement).
-- Timeline: 2026-10-31 -> 2026-11-02.
-
----
-
 ## Milestone: plugin-lifecycle -- Marketplace and Plugin Lifecycle Backlog
 
 **Completed:** 2026-10-29 on `features/plugin-lifecycle-p11` (PR #290, not yet merged, no npm release)
@@ -1145,7 +1097,6 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | json-output | 9 | Byte corpus captured before the first renderer change; one presentation model behind mode-selected text and JSON strategies; end-of-milestone tech-debt phases instead of carried items |
 | lifecycle-coverage | 30 | Command-complete Cucumber coverage against real headless Pi; many parallel sessions with explicit file ownership; read-only load plus explicit apply |
 | plugin-lifecycle | 11 | Parallel backlog closure followed by shared test/cleanup sweeps; one exact-tree gate reused by concurrent verifiers; dry-run archive validation |
-| component-features | 7 | A harness phase, then parallel component sessions with file ownership; a user-reviewed dubious-choices log; upstream gaps split into bugs (patches) and design differences (accepted) |
 
 ### Cumulative Quality
 
@@ -1164,7 +1115,6 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | json-output | 10,228 (corpus run) | 3,149-record text corpus and output catalog byte-identical apart from ledgered exceptions; wire schema validated against all 260 catalog examples; real headless Pi at 0.87.1 and the 0.86.1 floor |
 | lifecycle-coverage | 825 scenarios | Every plugin lifecycle verb driven through a real headless Pi; path, GitHub, URL, and git-subdir source coverage |
 | plugin-lifecycle | 1,151 scenarios / 11,854 steps | 16 hooks and 309 direct-coverage records; all 64 requirements and 11 phase verifications current on the closeout tree |
-| component-features | 1,565 scenarios / 16,956 steps | Every bridged component kind checked against a real Pi with a scripted model; 330 direct-coverage records; 58/58 requirements and 7 current phase verifications |
 
 ### Top Lessons (Verified Across Milestones)
 
