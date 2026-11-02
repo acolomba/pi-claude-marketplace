@@ -45,6 +45,26 @@ Afterwards, run `/gsd-verify-work 02` and `/gsd-verify-work 06`.
    folder. Claude Code follows it. The refusal text also says "escapes plugin
    root" for an in-root link (DC-32 item 2).
 
+### User decisions (2026-11-02)
+
+**A.1, the Pi gap report: resolved item by item.** The user's rule: report
+only what is a real Pi bug. Where Pi simply works differently from Claude
+Code, accept the deviation and keep the extension consistent.
+
+| Item | Pi's position | User's decision | Action |
+| --- | --- | --- | --- |
+| 1. Hide a skill from `/` (`user-invocable: false`) | Design: typed `/skill:name` always works | Accept, keep as is | None. D-CF1-09 and D-CF3-02 stand |
+| 2. Skill display names and aliases | Design: Agent Skills naming rule | Accept; add command aliases | Implement command frontmatter-name aliases (closes P3-DC-07) |
+| 3. Hook when the model loads a skill | Design: the model reads `SKILL.md` | Accept; fill variables | Rewrite a model read of a staged `SKILL.md` through `tool_result`: fill `${CLAUDE_*}`, no `!` commands (amends D-CF1-03) |
+| 4. Model can't see or run templates | Design: templates are user input | Build the tool now | Extension tool that lists described commands and returns the expanded body, no `!` commands (closes the D-CF3-01 gap) |
+| 5. Template name is the file name | Design: documented | Accept, keep as is | None |
+| 6. Transform result expanded again | Inconsistent design (`prompt()` has an opt-out, a transform does not) | Fix here, and fix Pi upstream | Zero-width-space prefix here; a Pi patch in `.planning/upstream/` for the user to review before an upstream PR |
+
+No gap report is filed. Item 6 goes upstream as a pull request instead, after
+the user reviews it. Creating a Pi fork from this session was refused (the
+repository is outside the session's access), so the patch waits for the user
+to fork `earendil-works/pi`.
+
 ### B. Security decisions taken without you
 
 These four are marked "Pending (user review)" in `.planning/PROJECT.md`.
