@@ -90,6 +90,14 @@ pi-subagents is fixed and the harness can run background children. The
 earlier "cache-key mismatch" explanation of the D-CF6-10 refusal was wrong for
 that scenario; bug A is the cause.
 
+**A.3, symlinks in MCP config files (WR-01, WR-02): follow links that stay
+inside the plugin.** A referenced `mcpServers` file may now follow a symbolic
+link whose real target resolves inside the plugin folder, as Claude Code
+2.1.316 does (probed). A link that points outside stays refused. The root
+`.mcp.json` keeps following links anywhere, as upstream does. The refusal
+message for a link stops saying "escapes plugin root" when the link stays
+inside. MCPR-04 is amended for in-plugin links.
+
 ### B. Security decisions taken without you
 
 These four are marked "Pending (user review)" in `.planning/PROJECT.md`.
