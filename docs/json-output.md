@@ -207,11 +207,11 @@ The ten structured kinds through `prune-committed-warning` also permit this fiel
 
 Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
 
-A bridged plugin skill that stops when you invoke it reports a `usage-error` whose `origin.commandId` is `skill`. This happens when a `` !`command` `` fails, the invocation is too large, Bash is missing, or the skill file cannot be read. A project skill also stops when Pi no longer trusts the project or when this machine has no record of its install. Nothing reaches the model (D-CF2-06).
+A bridged plugin skill that stops when you invoke it reports a `usage-error` whose `origin.commandId` is `skill`. This happens when a `` !`command` `` fails, the invocation is too large, Bash is missing, or the skill file cannot be read. A project skill also stops when Pi no longer trusts the project. Nothing reaches the model (D-CF2-06).
 
-A bridged plugin command that stops when you invoke it reports a `usage-error` whose `origin.commandId` is the command's name without its slash, such as `demo:greet`. This happens when a `` !`command` `` fails, the invocation is too large, Bash is missing, or the command file cannot be read. A project command also stops when Pi does not trust the project, when this machine has no record of its install, or when its file changed after the install. Nothing reaches the model (D-CF3-06, D-CF3-07).
+A bridged plugin command that stops when you invoke it reports a `usage-error` whose `origin.commandId` is the command's name without its slash, such as `demo:greet`. This happens when a `` !`command` `` fails, the invocation is too large, Bash is missing, or the command file cannot be read. A project command also stops when Pi does not trust the project. Nothing reaches the model (D-CF3-06, D-LOC-01).
 
-A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` for the user scope only and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. The project scope still gets the read-only pass, so its pending changes arrive as a `cascade` whose `origin.kind` is `load` (D-CF2-14). Such a load with nothing to change emits nothing. A background update changes the user scope only (D-CF2-15), and reports the plugins it moved as one `background-update` whose `origin.kind` is `load`. Only a tui session runs the background update, so a json or rpc session never receives this entry; the kind stays in the schema (D-PL8-20).
+A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. The apply covers the project scope only when Pi trusts the project. In a project that Pi does not trust, it covers the user scope, and the project scope gets the read-only pass, so its pending changes arrive as a `cascade` whose `origin.kind` is `load` (D-LOC-01). Such a load with nothing to change emits nothing. A background update changes the project scope only when Pi trusts the project (D-LOC-01), and reports the plugins it moved as one `background-update` whose `origin.kind` is `load`. Only a tui session runs the background update, so a json or rpc session never receives this entry; the kind stays in the schema (D-PL8-20).
 
 ### Command origin
 
@@ -570,10 +570,10 @@ The one notice of a background update, which runs after the first message of a s
 
 <!-- use: common-fields -->
 
-| Field path    | Type                                                    | Presence | Meaning                                                                                                          |
-| ------------- | ------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
-| `needsReload` | boolean                                                 | required | Always `true`.                                                                                                   |
-| `plugins`     | [Background update plugin](#background-update-plugin)[] | required | At least one row, one per updated install, in update order. A plugin updated from two marketplaces has two rows. |
+| Field path    | Type                                                    | Presence | Meaning                                                                                                                            |
+| ------------- | ------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `needsReload` | boolean                                                 | required | Always `true`.                                                                                                                     |
+| `plugins`     | [Background update plugin](#background-update-plugin)[] | required | At least one row, one per updated install, in update order. A plugin updated in both scopes or from two marketplaces has two rows. |
 
 <!-- /fields -->
 
@@ -830,13 +830,13 @@ The plain branch has `event` and an optional `matcher`. The lenient branch adds 
 
 <!-- fields: background-update-plugin -->
 
-| Field path    | Type   | Presence | Meaning                                                 |
-| ------------- | ------ | -------- | ------------------------------------------------------- |
-| `name`        | string | required | Plugin name, without `@marketplace`.                    |
-| `marketplace` | string | required | Marketplace of the plugin.                              |
-| `scope`       | Scope  | required | Scope of the updated install, always `user` (D-CF2-15). |
-| `fromVersion` | string | optional | Version the install moved from.                         |
-| `toVersion`   | string | required | Version the install moved to.                           |
+| Field path    | Type   | Presence | Meaning                              |
+| ------------- | ------ | -------- | ------------------------------------ |
+| `name`        | string | required | Plugin name, without `@marketplace`. |
+| `marketplace` | string | required | Marketplace of the plugin.           |
+| `scope`       | Scope  | required | Scope of the updated install.        |
+| `fromVersion` | string | optional | Version the install moved from.      |
+| `toVersion`   | string | required | Version the install moved to.        |
 
 <!-- /fields -->
 

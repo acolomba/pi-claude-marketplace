@@ -244,7 +244,7 @@ The layout did not move between 3.10.1 and 3.13.1: `src/workflow-paths.ts`, the 
 
 Specifically, at 3.10.1 and unchanged at 3.13.1:
 
-- User-scope envelopes live under `~/.pi/workflows/saved/`, project-scope under `~/.pi/workflows/projects/<key>/saved/`, where `<key>` is a slug of the project directory's basename joined to the first 12 hex characters of a SHA-256 of its resolved absolute path (source-read at 3.10.1, `src/workflow-paths.ts:36-55`).
+- The engine reads saved workflows from three directories: `~/.pi/workflows/projects/<key>/saved/`, then `<project>/.pi/workflows/saved/`, then `~/.pi/workflows/saved/`. `<key>` is a slug of the project directory's basename joined to the first 12 hex characters of a SHA-256 of its resolved absolute path (source-read at 3.10.1, `src/workflow-paths.ts:36-55`; the three sources source-read at 3.15.0, `src/workflow-saved.ts::createWorkflowStorage`). The engine's own new saves go to the first; it reads the second as a full source with no warning.
 - There is no environment-variable override and no settings knob to relocate that storage. The home directory is read from `os.homedir()` and nothing else.
 - Engine 3.14.0 changes the root when `PI_CODING_AGENT_DIR` is set. The paragraph after this list describes it.
 - The vendored determinism blocklist is a private constant with no exported contract, so it has to be re-checked against each engine upgrade rather than imported.
@@ -257,6 +257,16 @@ Releases before 3.14.0 do not include that pull request and ignore the variable.
 The engine's 3.14.0 release notes say that setting the variable does not move existing workflow data. To keep the workflows saved under `~/.pi/workflows/`, copy that directory to `$PI_CODING_AGENT_DIR/workflows/`.
 
 This extension does not move them either. It recomputes the root on every command. After you set or change the variable, uninstall, update, reinstall and reconcile look under the new root. Uninstall skips a workflow file that is missing there without an error, so the files under the old root stay in place. After the variable changes, reinstall the bridge-installed workflows or move them.
+
+## Where this extension saves workflows
+
+A user-scope install saves envelopes in `~/.pi/workflows/saved/` (or `$PI_CODING_AGENT_DIR/workflows/saved/`), and stages them in `.pi-claude-marketplace-staging/` beside it.
+
+A project-scope install saves envelopes in the project's `.pi/workflows/saved/`, and stages them in `.pi/pi-claude-marketplace/workflows-staging/`. Both sit in the project, on one filesystem, so the commit rename stays atomic (NFR-1). The staging sweep after a project operation reaches only that project's staging. This follows the project's locality rule, under which a project-scope operation writes only inside its project (D-LOC-01, which reverses WPTH-02).
+
+The engine still reads the in-project directory as a full source at 3.15.0, but its own new saves go to `~/.pi/workflows/projects/<key>/saved/`, and its module header says so that projects do not collect `.pi/workflows` directories. **A later engine release that stops reading the in-project directory would hide the workflows of every project install until the engine reads it again.** This risk is tracked in `.planning/BACKLOG.md`.
+
+Earlier versions of this extension saved a project's envelopes in `~/.pi/workflows/projects/<key>/saved/`. Those installs keep working. Uninstall and disable remove a recorded name from that directory too, and an update or reinstall removes the earlier copies of its previous names once it has placed the new ones in the project, since the engine reads that directory first. Nothing new is written there.
 
 ## Install-time disposition
 

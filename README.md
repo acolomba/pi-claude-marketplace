@@ -141,6 +141,8 @@ The project scope inherits the user scope. So you can install a plugin from a us
 
 You can also install the same plugin in both the user and project scopes. Then the user-scope plugin takes precedence.
 
+A project-scope plugin's skills, commands, and hooks work only in a project that Pi trusts. A project install writes only inside the project's `.pi/` folder, and saves workflows in `.pi/workflows/saved/`. The one exception is a git credential, which it stores in your git credential helper.
+
 ### Partially available plugins
 
 Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, an MCP server that uses a feature pi-mcp-adapter cannot run, or an MCP bundle. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
@@ -195,14 +197,14 @@ This sets the top-level `autoapply` key of a config to `true`. Like `enable`, it
 }
 ```
 
-The default is `false`. When `autoapply` is on, the load runs `/claude:plugin apply` for both scopes before Pi looks for skills and prompts. So the plugins that it installs are ready in the same session. The load can clone repositories from the network, as `apply` does. A failed change shows as a failed row and stays in `pending`. The next load tries it again.
+The default is `false`. When `autoapply` is on, the load runs `/claude:plugin apply` for both scopes before Pi looks for skills and prompts. It applies the project scope only when Pi trusts the project. So the plugins that it installs are ready in the same session. The load can clone repositories from the network, as `apply` does. A failed change shows as a failed row and stays in `pending`. The next load tries it again.
 
 Any config can set `autoapply`. The most specific config that sets it wins, in this order: the project local config, the project base config, the user local config, and the user base config. If a config is not valid, for example because `autoapply` is not `true` or `false`, the load does not apply anything and reports the config.
 
 A user config cannot turn off a project's `autoapply`, because the project configs are more specific. To stop it on your machine, set `"autoapply": false` in the project local config. A load never asks you to sign in. If a clone needs a credential that you have not stored, its row fails, and `/claude:plugin apply` can then ask you to sign in.
 
 > [!WARNING]
-> A project's base config is usually in version control. If it sets `autoapply` to `true`, starting `pi` in that project installs its plugins, hooks and MCP servers included, with no prompt. Read `.pi/claude-plugins.json` before you start `pi` in a project that you cloned. Claude Code has no such setting: it does not install a plugin that only a project's settings enable, and you install it with a command.
+> A project's base config is usually in version control. If it sets `autoapply` to `true`, starting `pi` in that project installs its plugins, hooks and MCP servers included, with no prompt, when Pi trusts the project. Pi trusts a project without asking when the project has none of Pi's own settings files. Read `.pi/claude-plugins.json` before you start `pi` in a project that you cloned. Claude Code has no such setting: it does not install a plugin that only a project's settings enable, and you install it with a command.
 
 ### The local config
 
@@ -312,7 +314,7 @@ Remove a marketplace and uninstall its plugins. A dependency that another plugin
 Autoupdate is a setting for each marketplace. It controls what happens when the marketplace updates:
 
 - If autoupdate is on, the extension updates the marketplace and its installed plugins in the background. The update starts after the first message of a `tui` session, with a random delay of up to ten minutes. A manual `marketplace update` also updates the installed plugins of the marketplace.
-- The background update changes only the marketplaces of the user scope. A repository can turn autoupdate on in its project config, so the background update never changes the project scope. To update the project scope, run `/claude:plugin marketplace update` or `/claude:plugin update --scope project`.
+- The background update changes the marketplaces of the project scope only when Pi trusts the project.
 - If autoupdate is off, `marketplace update` refreshes only the list of plugins in the marketplace.
 
 Turn autoupdate on or off for one marketplace.

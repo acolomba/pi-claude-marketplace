@@ -24,7 +24,7 @@
   - A command now keeps a name that a skill of its plugin also has, as in Claude Code, and install skips that skill with a warning.
   - A skill in `skills/` now wins over a skill of the same name in a declared skills path, as in Claude Code.
   - Pi now gets no plugin skills or prompt templates from a project that it does not trust.
-  - A project-scope skill now runs its `` !`command` `` lines only when you installed its plugin into the project on this machine. For a project skill installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
+  - Project-scope skills, commands, and hooks now follow Pi's project trust: they run only in a project that Pi trusts, and a project install writes nothing outside the project.
   - A command with no `description` is now listed with Claude Code's text: the first line of its body, or `Plugin command` for an empty body.
   - Install now warns about the command frontmatter fields that Pi cannot honor, such as `model` or `effort`, with one line for each command.
   - Typed commands now fill in arguments, `${CLAUDE_*}` variables, and `` !`command` `` output as Claude Code does, in the terminal UI and over RPC.
@@ -33,7 +33,6 @@
   - The model can now run a plugin command with the new `run_plugin_command` tool, which lists the commands that Claude Code lists for its model. The tool fills in the arguments and runs no `` !`command` `` line.
   - A plugin's `commands` can now name single command files, and an object map of commands from files or inline text, as in Claude Code.
   - A command with a frontmatter `name` now also runs as `/<plugin>:<name>` and, when the name has no colon, as `/<name>`, as in Claude Code. Tab completion offers the `/<plugin>:<name>` form.
-  - A project-scope command now runs only when you installed its plugin into the project on this machine. For a project command installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
   - Commands installed earlier keep their old description, and typed arguments keep `${CLAUDE_PLUGIN_ROOT}` literal, until you update or reinstall their plugin. Then run `/reload`.
   - Plugin session hooks now get Claude Code's `source` and `reason` values, such as `clear` for a new session and `fork` for a fork, and their matchers filter on these values.
   - A terminal quit now sends SessionEnd `prompt_input_exit`, and a quit in other modes sends `other`, as in Claude Code.
@@ -54,10 +53,8 @@
   - PostToolUseFailure hooks now receive the error as `error`, as in Claude Code, instead of `tool_response`.
   - Hook notices now drop terminal control characters and stop at 2,000 characters.
   - SessionStart context now survives another hook's block, and prompt context stays with its own prompt, also for steers and follow-ups.
-  - A project-scope hook now runs only when you installed its plugin into the project on this machine. For a project hook installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
-  - An `update` or `reinstall` that names no plugin, a `marketplace update`, and the version moves of `apply` no longer make a project plugin's skills, commands, or hooks run when you did not install that plugin into the project. Name the plugin to allow it.
-  - A load with `autoapply` on now applies only the user scope and shows the pending changes of the project scope. `/claude:plugin apply` still applies both scopes.
-  - The background autoupdate now updates only the user scope. `/claude:plugin update --scope project` or `/claude:plugin marketplace update` still updates the project scope.
+  - A load with `autoapply` on now applies the project scope only when Pi trusts the project, and shows the project's pending changes otherwise.
+  - The background autoupdate now updates the project scope only when Pi trusts the project.
   - Agents in subfolders now install under their folder names, such as `demo:review:security`, and hidden agent files, `.MD` files, and declared agent files install too.
   - An agent with no description now gets Claude Code's text: its `when_to_use` text, or `Agent from <plugin> plugin`.
   - Plugin agents now run in the foreground unless they set `background: true`, as in Claude Code.
@@ -70,6 +67,7 @@
   - An agent now gets the content of each plugin skill it preloads, except a skill that the model cannot invoke, which install skips with a warning.
   - Agents installed before this release keep their old files until their plugin is installed, updated, reinstalled, or enabled again. Run `/claude:plugin reinstall <plugin>@<marketplace>` to update them now.
   - A workflow now keeps a name that a command of its plugin also has, as in Claude Code, and install skips that command with a warning.
+  - A project install now saves its plugin's workflows in the project's `.pi/workflows/saved/`, not under `~/.pi/workflows/`. Uninstall and update also remove the copies that an earlier install saved there.
   - Internal: behavioral tests now cover plugin workflows, from the command list and runs to refused scripts, a missing engine, and uninstall.
 - A plugin's `SessionStart` hook now runs once when an RPC client starts, switches, forks, or clones a session, as in Claude Code. (#294)
 - Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)

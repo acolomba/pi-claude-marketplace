@@ -139,6 +139,8 @@ El ámbito del proyecto hereda el ámbito de usuario. Así, puedes instalar un c
 
 También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y el de proyecto. En ese caso, el complemento del ámbito de usuario tiene prioridad.
 
+Las habilidades, los comandos y los hooks de un complemento del ámbito del proyecto solo funcionan en un proyecto en el que Pi confía. Una instalación en el proyecto solo escribe dentro de la carpeta `.pi/` del proyecto, y guarda los workflows en `.pi/workflows/saved/`. La única excepción es una credencial de git, que guarda en tu asistente de credenciales de git.
+
 ### Complementos parcialmente disponibles
 
 Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema, un servidor MCP que usa una función que pi-mcp-adapter no puede ejecutar o un paquete MCP. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
@@ -193,14 +195,14 @@ Esto pone la clave de primer nivel `autoapply` de una configuración en `true`. 
 }
 ```
 
-El valor predeterminado es `false`. Cuando `autoapply` está activada, la carga ejecuta `/claude:plugin apply` en los dos ámbitos antes de que Pi busque habilidades y prompts. Así, los complementos que instala están listos en la misma sesión. La carga puede clonar repositorios desde la red, como hace `apply`. Un cambio que falla aparece como una fila fallida y sigue en `pending`. La carga siguiente lo intenta otra vez.
+El valor predeterminado es `false`. Cuando `autoapply` está activada, la carga ejecuta `/claude:plugin apply` en los dos ámbitos antes de que Pi busque habilidades y prompts. Aplica el ámbito del proyecto solo cuando Pi confía en el proyecto. Así, los complementos que instala están listos en la misma sesión. La carga puede clonar repositorios desde la red, como hace `apply`. Un cambio que falla aparece como una fila fallida y sigue en `pending`. La carga siguiente lo intenta otra vez.
 
 Cualquier configuración puede fijar `autoapply`. Gana la configuración más específica que la fija, en este orden: la configuración local del proyecto, la configuración base del proyecto, la configuración local del usuario y la configuración base del usuario. Si una configuración no es válida, por ejemplo porque `autoapply` no es `true` ni `false`, la carga no aplica nada e informa de esa configuración.
 
 Una configuración de usuario no puede desactivar el `autoapply` de un proyecto, porque las configuraciones del proyecto son más específicas. Para desactivarlo en tu máquina, pon `"autoapply": false` en la configuración local del proyecto. Una carga nunca te pide iniciar sesión. Si un clon necesita una credencial que no guardaste, su fila falla, y después `/claude:plugin apply` puede pedirte que inicies sesión.
 
 > [!WARNING]
-> La configuración base de un proyecto suele estar en el control de versiones. Si fija `autoapply` en `true`, iniciar `pi` en ese proyecto instala sus complementos, incluidos sus hooks y servidores MCP, sin preguntar. Lee `.pi/claude-plugins.json` antes de iniciar `pi` en un proyecto que clonaste. Claude Code no tiene este ajuste: no instala un complemento que solo activa la configuración de un proyecto, y tú lo instalas con un comando.
+> La configuración base de un proyecto suele estar en el control de versiones. Si fija `autoapply` en `true`, iniciar `pi` en ese proyecto instala sus complementos, incluidos sus hooks y servidores MCP, sin preguntar, cuando Pi confía en el proyecto. Pi confía sin preguntar en un proyecto que no tiene ninguno de los archivos de configuración propios de Pi. Lee `.pi/claude-plugins.json` antes de iniciar `pi` en un proyecto que clonaste. Claude Code no tiene este ajuste: no instala un complemento que solo activa la configuración de un proyecto, y tú lo instalas con un comando.
 
 ### La configuración local
 
@@ -301,7 +303,7 @@ Elimina un mercado y desinstala sus complementos. Una dependencia que otro compl
 `autoupdate` es un ajuste de cada mercado. Controla lo que pasa cuando el mercado se actualiza:
 
 - Si `autoupdate` está activado, la extensión actualiza el mercado y sus complementos instalados en segundo plano. La actualización empieza después del primer mensaje de una sesión `tui`, con un retraso aleatorio de hasta diez minutos. Un `marketplace update` manual también actualiza los complementos instalados del mercado.
-- La actualización en segundo plano solo cambia los mercados del ámbito de usuario. Un repositorio puede activar `autoupdate` en su configuración de proyecto, así que la actualización en segundo plano nunca cambia el ámbito de proyecto. Para actualizar el ámbito de proyecto, ejecuta `/claude:plugin marketplace update` o `/claude:plugin update --scope project`.
+- La actualización en segundo plano cambia los mercados del ámbito del proyecto solo cuando Pi confía en el proyecto.
 - Si `autoupdate` está desactivado, `marketplace update` solo actualiza la lista de complementos del mercado.
 
 Activa o desactiva `autoupdate` para un mercado.
