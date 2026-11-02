@@ -171,9 +171,7 @@ function toolResultPatch(updatedToolOutput: unknown): ToolResultEventResult | un
   const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;
   const toolResult: ToolResultEventResult = {};
   if (Array.isArray(patch.content)) {
-    // Pi's `tool_result` slot takes image parts too; the frozen Pi boundary
-    // types it as text parts only, so the patch's parts are widened to it.
-    toolResult.content = patch.content as NonNullable<ToolResultEventResult["content"]>;
+    toolResult.content = patch.content;
   }
 
   if (typeof patch.isError === "boolean") {
@@ -294,9 +292,7 @@ function withFeedback(
       result.fromStderr === true,
     ),
   } as const;
-  // Pi's `tool_result` slot takes image parts too; the frozen Pi boundary
-  // types it as text parts only, so the kept output is widened to it.
-  return [...(event.content as NonNullable<ToolResultEventResult["content"]>), feedback];
+  return [...event.content, feedback];
 }
 
 /**

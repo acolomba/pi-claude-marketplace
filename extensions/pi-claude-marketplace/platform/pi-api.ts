@@ -68,6 +68,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
   InputEvent,
+  ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 
 /** Pi's mode union, derived from its context because the root omits the alias. */
@@ -103,11 +104,12 @@ export interface PiTextContentBlock {
  * an `ExtensionHandler<ToolResultEvent, ToolResultEventResult>` whose
  * return-shape interface (defined in the peer-dep's internal
  * `core/extensions/types.d.ts`) carries the three optional fields
- * mirrored here. Tracked as a peer-dep export gap; structurally
- * compatible with the upstream declaration.
+ * mirrored here. `content` takes Pi's text and image parts, as the event
+ * carries them. Tracked as a peer-dep export gap; structurally compatible
+ * with the upstream declaration.
  */
 export interface ToolResultEventResult {
-  content?: PiTextContentBlock[];
+  content?: ToolResultEvent["content"];
   details?: unknown;
   isError?: boolean;
 }

@@ -106,6 +106,9 @@ void ({
   details: { command: "build" },
   isError: false,
 } satisfies PiBoundary.ToolResultEventResult);
+void ({
+  content: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
+} satisfies PiBoundary.ToolResultEventResult);
 void (true satisfies Same<PiBoundary.ResourcesDiscoverEvent, UpstreamResourcesDiscoverEvent>);
 void (true satisfies PeerChecksLocalResourcesDiscoverHandler);
 void ({
@@ -158,7 +161,7 @@ void ({
 
 // @ts-expect-error a text content block requires text
 void ({ type: "text" } satisfies PiBoundary.PiTextContentBlock);
-// @ts-expect-error a tool result accepts text content blocks only
+// @ts-expect-error an image content block needs its data and MIME type
 void ({ content: [{ type: "image", text: "message" }] } satisfies PiBoundary.ToolResultEventResult);
 // @ts-expect-error a resources-discover event has a closed reason set
 void ("manual" satisfies PiBoundary.ResourcesDiscoverEvent["reason"]);
