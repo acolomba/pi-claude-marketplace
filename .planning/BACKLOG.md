@@ -4784,6 +4784,8 @@ Noted by component-features Phase 5. Claude Code resets its 8-block Stop re-entr
 
 Noted by component-features Phase 5 (D-CF5-18, low impact). JSON that parses but fails the event's output schema counts as success under `onFailure: "block"`. Claude Code counts it as a failure.
 
+Updated 2026-11-02 (`209a4ba`): the user decided to match Claude Code 2.1.316's hook output handling fully. That change narrowed broken JSON to upstream's rule and kept a failed hook's JSON deny, but left this case open. The bridge has no output schema to check against: `bridges/hooks/wire-protocol.ts` reads the fields it knows and ignores the rest. Closing this item needs a per-event schema of upstream's hook output (top-level fields, each event's `hookSpecificOutput`, and what upstream rejects), a validator, and an `onFailure` check that runs it. That is larger than the output change, so it stays here.
+
 ## HOOKIFBLANK-01: a whitespace-only `if` on a tool-less event
 
 Noted by component-features Phase 5 (D-CF5-23). A whitespace-only `if` on an event with no tool still compiles to match-all, so the hook runs. Claude Code skips only a non-empty `if`, so check what it does with whitespace before changing it.
@@ -4792,9 +4794,11 @@ Noted by component-features Phase 5 (D-CF5-23). A whitespace-only `if` on an eve
 
 Deferred by component-features Phase 5 (DUBIOUS-CHOICES P5-DC-24, `05-REVIEW.md` iteration 3). A follow-up whose UserPromptSubmit hook is still running when the run ends, a follow-up queued after the last `turn_end`, a terminating tool batch, and `followUpMode: "all"` lose their hook context, with only a debug line. Suggested fix: check `ctx.isIdle()` in `queuePromptContext`, match `event.prompt` in `before_agent_start`, and send every matching queued follow-up.
 
-## HOOKBIGJSON-01: hook JSON over the stdout cap
+## ~~HOOKBIGJSON-01: hook JSON over the stdout cap~~ -- CLOSED
 
 Noted by component-features Phase 5 (DUBIOUS-CHOICES P5-DC-23 item 1). Hook JSON on stdout over the 1 MB EXEC-02 cap is not read, so a JSON deny that large on exit 0 fails open. Claude Code keeps all output.
+
+Closed 2026-11-02 by `209a4ba` (user decision: match Claude Code 2.1.316). Both hook lanes now keep all of stdout and stderr with no size limit, so a JSON deny of any size decides. Security record: T-05-33, mitigated.
 
 ## HOOKREVIEW-01: the open info findings of the hooks code review
 
