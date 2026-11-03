@@ -110,3 +110,28 @@ Feature: Agent lifecycle
       | 2    | user        | List the agents.                                                                                                                            |
       | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                        |
       | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- tools:auditor (user, aliases: pi-claude-marketplace-tools-auditor): Audits the build. |
+
+  Scenario: An install that fails in its mcp phase leaves no agent of the plugin in the list
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | demo  | 1.0.0   |
+      | tools | 1.0.0   |
+    Given the published plugin "tools" of the marketplace "fixtures" has the agent "auditor" described as "Audits the build." with this body:
+      """
+      Audit the build and report what fails.
+      """
+    Given the published plugin "tools" of the marketplace "fixtures" declares the mcp server "search"
+    Given a directory blocks the mcp-adapter.json file of the user scope
+    Given the user has run "/claude:plugin install tools@fixtures --scope user", which failed
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                | tool     | arguments         |
+      |                      | subagent | {"action":"list"} |
+      | One agent is listed. |          |                   |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                     |
+      | 1    | user        | List the agents.                                                                                                                                         |
+      | 2    | user        | List the agents.                                                                                                                                         |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                     |
+      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given. |

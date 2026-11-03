@@ -28,3 +28,17 @@ Then(
     assert.strictEqual(projectTokens("text", tool.description, this.tokens), expected);
   },
 );
+
+// A tool that one call of the last turn did not offer. A scenario that uses
+// it also states the calls, so this step leaves the turn for that step.
+Then(
+  "the model call {int} is not offered the tool {string}",
+  function (this: ScenarioWorld, number: number, name: string) {
+    const call = numberedModelCall(this.requireTurn().logs, number);
+
+    assert.deepStrictEqual(
+      call.tools.filter((offered) => offered.name === name).map((offered) => offered.name),
+      [],
+    );
+  },
+);

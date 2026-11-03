@@ -15,9 +15,9 @@ tech_debt:
   - phase: cross-phase
     items:
       - "RESOLVED 2026-11-02 (41deffd, D-CF7-05): W1 (WFL-*, CMD-*): no name-collision check between a plugin's workflow and its command; both become `<plugin>:<name>`, the engine's command wins, and the prompt template is reachable only through run_plugin_command, with no warning"
-      - "W2 (AGT-*, MCP-*): agent MCP grants and async: true come from the resolver's server set, not from what the MCP bridge wrote; a server the MCP stage refuses (e.g. ANAME-03 folded-key collision) still gets a grant"
+      - "NOT A DEFECT 2026-11-03 (DC-44, scenario added): W2 (AGT-*, MCP-*): agent MCP grants and async: true come from the resolver's server set, not from what the MCP bridge wrote; a server the MCP stage refuses (e.g. ANAME-03 folded-key collision) still gets a grant"
       - "SCENARIO ADDED 2026-11-02 (19ff1af): W3 (SKL/CMD/HOOK): project installs made before the provenance ledger stop working until reinstalled; hooks skip with only a debug line; no upgrade scenario"
-      - "W4 (CMD-*): run_plugin_command keeps a stale description after a second session_start in the same runtime if the new list is empty (Pi has no unregister); calls stay safe"
+      - "NOT A DEFECT 2026-11-03 (DC-44, scenario added): W4 (CMD-*): run_plugin_command keeps a stale description after a second session_start in the same runtime if the new list is empty (Pi has no unregister); calls stay safe"
       - "SCENARIO ADDED 2026-11-02 (92cd7b3): W5 (HOOK/CMD/SKL): no scenario pins that UserPromptSubmit hooks see the raw slash text before expansion"
       - "RESOLVED 2026-11-02 (a7fb423): SCENARIO ADDED 2026-11-02 (9789ef5): W6 (HOOK/SKL): no scenario combines a PostToolUse hook with the model-read skill fill"
   - phase: 05-hooks
@@ -110,3 +110,15 @@ silently) is unchanged and remains accepted debt. W6 pins that the model-read
 fill applies by line position to text a PostToolUse hook replaced, which may
 deserve a change. W2 and W4 remain open debt. Full `npm run check` after
 these commits: exit 0, cucumber 1565/1565 (seed 367566), 330 coverage records.
+
+## Follow-up (2026-11-03, user request)
+
+W2 and W4 are not defects; neither can happen, and each now has a scenario
+that guards the reason (DC-44). W2: every way a declared server can go
+unwritten throws in the mcp stage (an unreadable `mcp-adapter.json` refuses
+whenever the plugin has servers, AFILE-02, and both name collisions throw),
+and the ledger then removes the plugin's agents, so a finished install has
+written every server its agents are granted. W4: Pi builds a new extension
+runtime, and with it a new tool registry, for every `session_start` (new,
+resume, fork, reload), so no tool from an earlier session survives into the
+next.

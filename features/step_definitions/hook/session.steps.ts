@@ -173,25 +173,26 @@ Given(
 
 // A prompt that gives a compaction a turn to summarize. Pi starts a turn for
 // it, and the step waits for `agent_settled`, never for a fixed time, and
-// keeps no turn.
-Given(
-  "the user has prompted {string} with the hooks recording",
-  async function (this: ScenarioWorld, text: string) {
-    const harness = this.profileHarness();
-    const from = this.pi.recordCount();
-    const message = expandTokens(text, this.tokens);
-    const { response } = await this.pi.request({ type: "prompt", message });
-    assert.strictEqual(promptDisposition(response), "started", JSON.stringify(response));
-    const settled = await this.pi.waitForRecord(
-      from,
-      (record) => record.type === "agent_settled",
-      SETUP_TURN_TIMEOUT_MS,
-    );
-    assert.strictEqual(settled.aborted, false, JSON.stringify(settled));
-    assert.deepStrictEqual(faultsOf(this.pi.recordsSince(from)), []);
-    assert.deepStrictEqual(overflowingCalls(await readModelCalls(harness)), []);
-  },
-);
+// keeps no turn. A setup turn before a later session needs the same, with or
+// without hooks, so both phrases share it.
+async function promptSetup(this: ScenarioWorld, text: string): Promise<void> {
+  const harness = this.profileHarness();
+  const from = this.pi.recordCount();
+  const message = expandTokens(text, this.tokens);
+  const { response } = await this.pi.request({ type: "prompt", message });
+  assert.strictEqual(promptDisposition(response), "started", JSON.stringify(response));
+  const settled = await this.pi.waitForRecord(
+    from,
+    (record) => record.type === "agent_settled",
+    SETUP_TURN_TIMEOUT_MS,
+  );
+  assert.strictEqual(settled.aborted, false, JSON.stringify(settled));
+  assert.deepStrictEqual(faultsOf(this.pi.recordsSince(from)), []);
+  assert.deepStrictEqual(overflowingCalls(await readModelCalls(harness)), []);
+}
+
+Given("the user has prompted {string} with the hooks recording", promptSetup);
+Given("the user has prompted {string}", promptSetup);
 
 Given(
   "the user has compacted the session with the hooks recording",
