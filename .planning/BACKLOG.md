@@ -4660,7 +4660,10 @@ Deferred by component-features Phase 4 (D-CF4-09, D-CF4-10). The report is draft
 
 Noted by component-features Phase 4 (D-CF4-11). Install reports a missing pi-subagents as `warning` (SEV-01 `companionSeverity`), and reinstall reports the same companion at `info` (`features/plugin/reinstall.feature`). Decide whether reinstall also warns.
 
-## CMDNAME-01: command frontmatter `name` aliases
+## ~~CMDNAME-01: command frontmatter `name` aliases~~ -- CLOSED
+
+Closed 2026-11-02 by db5622a (user decision A.1 item 2): commands answer to their frontmatter-name aliases as Claude Code does, pinned by `features/slash-command/aliases.feature`.
+
 
 Deferred by component-features Phase 3 (03-CONTEXT E9, DUBIOUS-CHOICES P3-DC-07). Claude Code gives a plugin command with a frontmatter `name` the aliases `/<plugin>:<name>` and, for a name with no `:`, the bare `/<name>`, as it does for skills. The commands bridge stages only `/<plugin>:<file name>`. Resolving the aliases in `edge/command-invocation.ts`, as D-CF2-02 does for skills, would close the gap.
 
@@ -4668,7 +4671,10 @@ Deferred by component-features Phase 3 (03-CONTEXT E9, DUBIOUS-CHOICES P3-DC-07)
 
 Deferred by component-features Phase 3 (D-CF3-06, D-CF1-01 residual, P3-DC-08). Claude Code sends a typed command as a `<command-message>`, `<command-name>`, and `<command-args>` tag block followed by the substituted body. Pi sends only the body. Adding the block in the command invocation would match upstream's framing for the model.
 
-## CMDMODEL-01: commands for the model
+## ~~CMDMODEL-01: commands for the model~~ -- CLOSED
+
+Closed 2026-11-02 by cd3b5b1 (user decision A.1 item 4): the `run_plugin_command` tool lists the described commands and returns a command's filled body, pinned by `features/slash-command/model-runs.feature`.
+
 
 Deferred by component-features Phase 3 (D-CF3-01, P3-DC-03). Claude Code lists a plugin command with a description in the model's skill list and lets the model run it through the Skill tool. Pi gives the model no access to prompt templates. Trigger: Pi adds model access to templates (gap 4 of the Pi gap report, appended to the D-CF2-10 draft).
 

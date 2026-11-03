@@ -1,6 +1,6 @@
 ---
 phase: 02-skills
-verified: 2026-11-02T11:20:00Z
+verified: 2026-11-03T12:00:00Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
@@ -41,12 +41,14 @@ covered_files:
   - extensions/pi-claude-marketplace/orchestrators/reconcile/load.ts
   - extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts
   - extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts
-  - extensions/pi-claude-marketplace/persistence/project-installs.ts
+  - extensions/pi-claude-marketplace/platform/pi-api.ts
   - extensions/pi-claude-marketplace/shared/errors-bridges.ts
   - features/lib/pi-tui.ts
   - features/lib/skill-files.ts
   - features/plugin/autoapply.feature
   - features/plugin/install-dependencies.feature
+  - features/plugin/project-locality.feature
+  - features/plugin/project-trust.feature
   - features/plugin/update-dependencies.feature
   - features/skill/aliases.feature
   - features/skill/collisions.feature
@@ -55,17 +57,13 @@ covered_files:
   - features/skill/lifecycle.feature
   - features/skill/listing.feature
   - features/skill/model-reads.feature
-  - features/skill/project-autoapply.feature
-  - features/skill/project-provenance.feature
   - features/skill/project-trust.feature
   - features/step_definitions/plugin/installation.steps.ts
   - features/step_definitions/skill/aliases.steps.ts
   - features/step_definitions/skill/collisions.steps.ts
   - features/step_definitions/skill/frontmatter.steps.ts
   - features/step_definitions/skill/listing.steps.ts
-  - features/step_definitions/skill/project-provenance.steps.ts
-  - features/step_definitions/skill/project-trust.steps.ts
-covered_digest: "v4:sha256:253357bcdf551d5e420d0b15df4ac09c6176cfd46c42362cfcd8c88efe86bfae"
+covered_digest: "v4:sha256:8d640381a953335f80811024c18ec05d1cc8d91bc605adcbf7a3262aa20c8803"
 behavior_unverified: 0
 overrides_applied: 1
 overrides:
@@ -74,10 +72,9 @@ overrides:
     accepted_by: "acolomba"
     accepted_at: "2026-11-02T11:15:00Z"
 re_verification:
-  previous_status: human_needed
-  previous_score: 4/5
-  gaps_closed:
-    - "Criterion 5, report half: resolved by the user's 2026-11-02 decision (A.1) and recorded as an override"
+  previous_status: passed
+  previous_score: 5/5
+  gaps_closed: []
   gaps_remaining: []
   regressions: []
 ---
@@ -85,12 +82,12 @@ re_verification:
 # Phase 2: Skills Verification Report
 
 **Phase Goal:** A bridged skill looks to Pi the way Claude Code defines it: listed under its qualified name with its description, its frontmatter honored or licensed as a divergence, its body sent to the model on invocation, name clashes resolved as decided, and the plugin lifecycle reflected in a new session.
-**Verified:** 2026-11-02T11:20:00Z
+**Verified:** 2026-11-03 (first verified 2026-11-01, re-verified 2026-11-02 at `2ba505a`)
 **Status:** passed
-**Re-verification:** Yes. The previous report (2026-11-01, head `3bfaab5`) scored 4/5, `human_needed`, with no `gaps:` section, so this run checks every criterion again against the current tree.
-**Head:** `2ba505a` on `claude/quirky-planck-hhm592`, working tree clean before and after this run.
+**Re-verification:** Yes. This run rechecks every criterion at `03f9a45` after the locality redesign (D-LOC-01), the model-read fill change (W6) and the untrusted-autoapply fix (03d7c97). See "Re-verification 2026-11-03" below.
+**Head:** `03f9a45` on `claude/quirky-planck-hhm592`. The working tree was clean before and after this run.
 
-Since `3bfaab5` the tree took 425 commits. Those that touch this phase: the project install ledger moved from `bridges/skills/project-installs.ts` to `persistence/project-installs.ts` (`29a755e`); D-CF2-15 (background autoupdate changes only the user scope, `0b29f66`); D-CF2-16 (a re-stage that names no plugin only refreshes the ledger, `fed700e`); command frontmatter-name aliases, which renamed the alias loader to `loadPluginAliases` and added a `command` alias target (`db5622a`); the model-read variable fill (`dfba92a`, new `edge/skill-read.ts` and `features/skill/model-reads.feature`); the `run_plugin_command` tool (`cd3b5b1`, Phase 3 scope); and the second-expansion fix (`b48e1e4`, new `edge/input-transform.ts`).
+The 2026-11-02 run read the tree at `2ba505a`. Changes it described there that are now gone: the project install ledger (`persistence/project-installs.ts`), D-CF2-13, D-CF2-14, D-CF2-15 and D-CF2-16. The user reversed all of them on 2026-11-02 (D-LOC-01, DC-41), and 5ecd962 deleted the ledger and its scenarios. Changes it described that still stand: command frontmatter-name aliases (`db5622a`), the model-read variable fill (`dfba92a`, now narrowed by `a7fb423`), the `run_plugin_command` tool (`cd3b5b1`, Phase 3 scope) and the second-expansion guard (`b48e1e4`).
 
 ## Goal Achievement
 
@@ -98,11 +95,11 @@ Since `3bfaab5` the tree took 425 commits. Those that touch this phase: the proj
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | A new session lists each bridged skill as `/skill:<plugin>-<name>` with its description, including the description fallback as decided, and `disable-model-invocation`, `user-invocable: false` (under its Pi-gap divergence ID), frontmatter `name` (FG-07), and each FG-10 field behave as upstream or as a recorded divergence (SKL-01, SKL-02). | ✓ VERIFIED | `features/skill/listing.feature`: the generated name and description, the first-line fallback, the heading / 100-character cut / `Plugin skill` outline, and the `when_to_use` fold. `features/skill/frontmatter.feature`: the `dropped fields` diagnostic for all eight D-CF1-05 fields in frontmatter order; no diagnostic for `allowed-tools`, `arguments`, `shell`, `user-invocable`; `disable-model-invocation` stays listed, runs on `/skill:demo-hidden`, and is absent from the model's system-prompt skill list (D-CF2-09); `user-invocable: false` stays listed and runnable (D-CF1-09, PROJECT.md:1743); frontmatter `name: fancy` is listed under directory `review` (D-CF2-01). These files did not change since the previous report except one step file (`frontmatter.steps.ts`, the ledger import path). |
-| 2 | Invoking a skill through the scripted model sends the model the skill body in a `<skill>` block, with path variables expanded and arguments handled as decided, and the model call log shows the whole message (SKL-03). | ✓ VERIFIED | `features/skill/invocation.feature` compares each whole model message: `ARGUMENTS:` append, named / positional / indexed / missing-index / raw placeholders, `${CLAUDE_SESSION_ID}` and `${CLAUDE_EFFORT}`, a `!` command, the failing-command abort, the escaped `!` argument, the companions-loaded run, the RPC `/demo:greet` alias, and (new) a body that starts with `/demo:deploy` reaching the model inside the block. Path variables: `project-provenance.feature` runs ``!`sh ${CLAUDE_SKILL_DIR}/status.sh` `` and gets `Status: ran`, which needs the substitution. My own throwaway probe (scratchpad, not committed) put `${CLAUDE_SKILL_DIR}`, `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_PROJECT_DIR}` in a body and the exact expected expansion passed (1 scenario, 12 steps). Wiring: `index.ts:273` `registerSkillAliases(pi)` -> `edge/skill-aliases.ts` input handler -> `orchestrators/skill-invocation.ts::invokeBridgedSkill` -> `fillSkill` (`invocationVariables` supplies the four path values) -> `finishedTransform`. New: `model-reads.feature` shows the D-CF1-03 amendment (variables filled, arguments empty, `!` left literal, untrusted-ledger and non-staged files untouched), wired through `index.ts:280` `registerSkillReadFill` -> `edge/skill-read.ts` `tool_result` -> `fillSkillRead`. |
-| 3 | A skill and a command, or two skills, with one qualified name resolve as FG-08 decides, and the interactive `/plugin:skill` alias works as FG-09 decides, proven through the TUI driver (SKL-04, SKL-05). | ✓ VERIFIED | `features/skill/collisions.feature` (unchanged): the command wins and the skill is skipped with a warning (D-CF2-03), no `/skill:demo-clash` is offered, `/demo:clash` sends `COMMAND CLASH BODY`, `skills/` wins over a declared path (D-CF2-04), two directories eliding to one name keep the first. `features/skill/aliases.feature` (unchanged): `/demo:review`, `/demo:fancy`, `/fancy` reach `demo-review`; a shared name goes to the first skill; the elided `/demo:tool` alias is gone; a command keeps a frontmatter-name alias equal to its name; disable/enable remove/restore the alias. The terminal scenario drives `PiTuiSession` (`aliases.steps.ts`): types `/demo:fa`, waits for Pi's completion menu marker, presses Tab, sends `Ada`, and compares the whole model message. The command-alias change keeps skill precedence correct: `edge/skill-aliases.ts` routes `target.kind === "skill"` to `invokeBridgedSkill` and only a `command` target to `commandAliasResult`. |
-| 4 | After disable, uninstall, or update, a new session no longer offers the skill or offers the new version, and after enable it offers the skill again (SKL-06). | ✓ VERIFIED | Behavior-dependent (state transition); exercised by passing scenarios, not by presence. `features/skill/lifecycle.feature` (unchanged): disable gives no skills and the typed text passes through; enable offers the skill again; uninstall gives no skills, and an invocation before `/reload` aborts with the missing-file message; update lists the new description and sends the new body. `project-provenance.feature` adds the project-scope variants: update, reinstall, and disable+enable keep a `!` skill runnable, and (new, D-CF2-16) a bare `update` or `reinstall` leaves an unrecorded skill refused. All passed in the reused gate run. |
-| 5 | The `user-invocable: false` gap is reported to Pi, and `npm run check` passes on the phase branch. | PASSED (override) | **`npm run check` half: VERIFIED.** The reused log `decisions-check.log` (written 11:12 UTC, after `2ba505a` at 02:58 UTC, tree clean) shows typecheck and the static checks, unpaired, integration, cucumber `1554 scenarios (1554 passed)`, `16785 steps (16785 passed)` (seed 82800), direct coverage `330 records`, `EXIT=0`. **Report half: Override.** The user resolved the gap report on 2026-11-02 (DUBIOUS-CHOICES A.1): items 1, 2, 3, 5 are Pi design and accepted as deviations, no report is filed, item 6 goes upstream as a pull request after the user's review (`.planning/upstream/pi-input-transform-expand.patch`, present). Accepted by acolomba on 2026-11-02T11:15:00Z. |
+| 1 | A new session lists each bridged skill as `/skill:<plugin>-<name>` with its description, including the description fallback as decided, and `disable-model-invocation`, `user-invocable: false` (under its Pi-gap divergence ID), frontmatter `name` (FG-07), and each FG-10 field behave as upstream or as a recorded divergence (SKL-01, SKL-02). | ✓ VERIFIED | `features/skill/listing.feature` (4 scenarios): the generated name and description, the first-line fallback, the heading / 100-character cut / `Plugin skill` outline, and the `when_to_use` fold. `features/skill/frontmatter.feature` (13): the `dropped fields` diagnostic for all eight D-CF1-05 fields in frontmatter order; no diagnostic for `allowed-tools`, `arguments`, `shell`, `user-invocable`; `disable-model-invocation` stays listed, runs on `/skill:demo-hidden`, and is absent from the model's system-prompt skill list (D-CF2-09); `user-invocable: false` stays listed and runnable (D-CF1-09); frontmatter `name: fancy` is listed under directory `review` (D-CF2-01). Neither feature changed after `2ba505a`. Both passed in this run. |
+| 2 | Invoking a skill through the scripted model sends the model the skill body in a `<skill>` block, with path variables expanded and arguments handled as decided, and the model call log shows the whole message (SKL-03). | ✓ VERIFIED | `features/skill/invocation.feature` (9 scenarios) compares each whole model message: `ARGUMENTS:` append, named / positional / indexed / missing-index / raw placeholders, `${CLAUDE_SESSION_ID}` and `${CLAUDE_EFFORT}`, a `!` command, the failing-command abort, the escaped `!` argument, the companions-loaded run, the RPC `/demo:greet` alias, and a body that starts with `/demo:deploy` reaching the model inside the block. **Path variables (refreshed):** the old committed evidence, `project-provenance.feature` running ``!`sh ${CLAUDE_SKILL_DIR}/status.sh` ``, was deleted with the ledger (5ecd962). Current evidence: the unit tests `test/orchestrators/skill-invocation.test.ts:252-298` and `:617-721` fill `${CLAUDE_SKILL_DIR}`, `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_PROJECT_DIR}` (334/334 passed in this run). I also re-ran a throwaway probe in the scratchpad, outside the repo: a skill body with all four variables reached the model as `{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-paths`, `{home}/marketplaces/fixtures/plugins/demo`, `{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo`, `{project dir}` (1 scenario, 12 steps passed). Wiring: `index.ts:283` `registerSkillAliases(pi)` -> `edge/skill-aliases.ts` -> `orchestrators/skill-invocation.ts::invokeBridgedSkill` (`:227`; trust gate `:240`) -> `fillSkill` (`invocationVariables`, `:143`) -> `finishedTransform`. **Model reads (refreshed, W6):** `model-reads.feature` (5): whole read and part read are filled; a non-staged file stays as it is; a PostToolUse hook on the read sees the staged text while the model gets the filled text; a hook's replacement reaches the model as the hook wrote it. Wired through `index.ts:290` `registerSkillReadFill` -> `edge/skill-read.ts` (`fill = fillSkillRead`, `:50`; `projectTrusted: ctx.isProjectTrusted()`, `:67`) -> `fillSkillRead` (`skill-invocation.ts:352-372`) -> `readToolReturns` (`platform/pi-api.ts:301`). The old "untrusted ledger" model-read scenario is gone, because the ledger is gone. |
+| 3 | A skill and a command, or two skills, with one qualified name resolve as FG-08 decides, and the interactive `/plugin:skill` alias works as FG-09 decides, proven through the TUI driver (SKL-04, SKL-05). | ✓ VERIFIED | `features/skill/collisions.feature` (7, unchanged): the command wins and the skill is skipped with a warning (D-CF2-03), no `/skill:demo-clash` is offered, `/demo:clash` sends `COMMAND CLASH BODY`, `skills/` wins over a declared path (D-CF2-04), two directories eliding to one name keep the first. `features/skill/aliases.feature` (10, unchanged): `/demo:review`, `/demo:fancy`, `/fancy` reach `demo-review`; a shared name goes to the first skill; the elided `/demo:tool` alias is gone; a command keeps a frontmatter-name alias equal to its name; disable/enable remove and restore the alias. The terminal scenario drives `PiTuiSession` (`aliases.steps.ts`). `orchestrators/skill-alias-state.ts` lost its ledger filter in 5ecd962 (-94 lines). It now gates project aliases on trust only (`:205`). `features/skill/project-trust.feature` "A skill alias of an untrusted project reaches the model as typed" pins the gate. |
+| 4 | After disable, uninstall, or update, a new session no longer offers the skill or offers the new version, and after enable it offers the skill again (SKL-06). | ✓ VERIFIED | Behavior-dependent (state transition), exercised by passing scenarios. `features/skill/lifecycle.feature` (7, unchanged, project scope): disable gives no skills and the typed text passes through; enable offers the skill again; uninstall gives no skills, and an invocation before `/reload` aborts with the missing-file message; update lists the new description and sends the new body. These now run with no user-scope ledger. The project-scope variants that lived in `project-provenance.feature` (update, reinstall, disable+enable keep a `!` skill runnable; D-CF2-16) were deleted with the ledger. `features/plugin/project-locality.feature` "A project skill runs its context command with no record of the install in the user scope" shows a trusted project's `!` skill runs with no ledger. |
+| 5 | The `user-invocable: false` gap is reported to Pi, and `npm run check` passes on the phase branch. | PASSED (override) | **`npm run check` half: VERIFIED (reused gate).** The parent's last full gate is `npm run check` exit 0 at `b9f40ad` (cucumber 1537/1537, seed 469568, direct coverage 327 records). After it, only 03d7c97 changed code (`orchestrators/reconcile/load.ts`, `edge/handlers/plugin/autoapply.ts`, `autoapply-setting.ts`). I re-ran `features/plugin/autoapply.feature` with the trust and locality features: 42/42 scenarios passed. I did not run the full gate, as the brief asked. **Report half: Override.** The user resolved the gap report on 2026-11-02 (DUBIOUS-CHOICES A.1). Accepted by acolomba on 2026-11-02T11:15:00Z. |
 
 **Score:** 5/5 truths verified (4 VERIFIED, 1 PASSED by override; 0 present but behavior-unverified)
 
@@ -112,42 +109,45 @@ Since `3bfaab5` the tree took 425 commits. Those that touch this phase: the proj
 |------|-----------|-----------|--------------|
 | 02-01 | 5/5 | 3/3 | none |
 | 02-02 | 3/3 | 2/2 | 1 test-tier: all eight fields reported. Enforced by the frontmatter-order scenario. |
-| 02-03 | 3/3 | 4/4 | 2 test-tier. Extension input never reaches the runner: the handler returns `continue` for `source === "extension"` and `test/edge/skill-aliases.test.ts` covers it. An aborted invocation sends nothing: the abort scenarios plus the scripted model's overflow guard. |
+| 02-03 | 3/3 | 4/4 | 2 test-tier. Extension input never reaches the runner: the handler returns `continue` for `source === "extension"`, and `test/edge/skill-aliases.test.ts` covers it. An aborted invocation sends nothing: the abort scenarios plus the scripted model's overflow guard. |
 | 02-04 | 3/3 | 2/2 | 1 test-tier: a skipped skill is named in the diagnostic. Enforced by the collisions warning scenario. |
 | 02-05 | 1/1 | 1/1 | none |
-| 02-06 | 4/4 | 3/3 (one renamed, see below) | 1 test-tier: an alias never takes another source's command name. Enforced by the `command.source !== "skill" && command.name === token` early return in `edge/skill-aliases.ts` and the "frontmatter name a command of the plugin has" scenario. |
+| 02-06 | 4/4 | 2/3 (one renamed, see below) | 1 test-tier: an alias never takes another source's command name. Enforced by the `command.source !== "skill" && command.name === token` early return in `edge/skill-aliases.ts` and the "frontmatter name a command of the plugin has" scenario. |
 | 02-07 | 1/1 | 1/1 | none |
 
-`gsd-tools query verify.artifacts` exited 0 for every plan. `verify.key-links` exited 0 for every plan except 02-06, which reported 2/3: its pattern `loadQualifiedSkillAliases` no longer exists, because `db5622a` renamed it `loadPluginAliases` when command aliases joined the table. The link itself is intact: `edge/skill-aliases.ts` imports `loadPluginAliases` from `orchestrators/skill-alias-state.ts` as the default `loadAliases`, and every `skill` target in the table goes to `invokeBridgedSkill`. I count it as WIRED (renamed), not a regression. Every test-tier prohibition has wired enforcement, so none is flagged.
+I re-ran `gsd-tools query verify.artifacts` and `verify.key-links` on every plan at `03f9a45`. The results are the same as on 2026-11-02. No Phase 2 plan names the ledger, so its removal broke no plan artifact or link. 02-06 still reports 2/3 because its pattern `loadQualifiedSkillAliases` is the old name of `loadPluginAliases` (`db5622a`). The link is wired under the new name.
 
 ### Required Artifacts (changed since the previous report)
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `persistence/project-installs.ts` | D-CF2-13 ledger (moved from `bridges/skills/`) | ✓ VERIFIED | Imported by `bridges/skills/index.ts`, `stage.ts`, `unstage.ts`, `skill-invocation.ts`, `command-invocation.ts`, hooks `event-router.ts`, `update-swap.ts` (`admittedProjectLedger`, D-CF2-16). Paired test `test/persistence/project-installs.test.ts`. |
-| `edge/skill-read.ts` | Model-read fill (D-CF1-03 amendment) | ✓ VERIFIED | Registered at `index.ts:280`, after the hooks bridge's `tool_result` handler. Paired test present. Scenarios in `model-reads.feature`. |
-| `edge/input-transform.ts` | Zero-width-space guard (item 6) | ✓ VERIFIED | `finishedTransform` used by `skill-aliases.ts::inputResult` and by the command invocation handler. Paired test present. A skill block never starts with `/`, so skill output is unchanged; the new invocation scenario pins that. |
-| `orchestrators/skill-alias-state.ts` | Alias table, now skills and commands | ✓ VERIFIED | `loadPluginAliases` returns `PluginAliasTarget = skill | command`. Skill alias scenarios unchanged and passing. |
+| `persistence/project-installs.ts` | D-CF2-13 ledger | REMOVED (by decision) | Deleted in 5ecd962 under D-LOC-01. No reference is left under `extensions/`. Not a Phase 2 plan artifact. |
+| `edge/skill-read.ts` | Model-read fill | ✓ VERIFIED | Registered at `index.ts:290`, after the hooks bridge's `tool_result` handler. Passes `offset`, `limit` and the read text (W6). Paired test passes. |
+| `platform/pi-api.ts::readToolReturns` | Re-runs Pi's read tool to check that a result is the skill's own text (W6) | ✓ VERIFIED | `:301`; called by `fillSkillRead`. |
+| `edge/input-transform.ts` | Zero-width-space guard | ✓ VERIFIED | Unchanged since `2ba505a`. |
+| `orchestrators/skill-alias-state.ts` | Alias table for skills and commands | ✓ VERIFIED | Ledger filter removed; trust gate only (`:205`). |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `index.ts` | `edge/skill-aliases.ts` | `registerSkillAliases(pi)` | WIRED | `index.ts:273` |
+| `index.ts` | `edge/skill-aliases.ts` | `registerSkillAliases(pi)` | WIRED | `index.ts:283` (was `:273`) |
 | `edge/skill-aliases.ts` | `orchestrators/skill-invocation.ts` | `invokeBridgedSkill` default | WIRED | `/skill:` tokens and `skill` alias targets |
 | `edge/skill-aliases.ts` | `orchestrators/skill-alias-state.ts` | `loadPluginAliases` default | WIRED (renamed) | See the 02-06 note above |
-| `index.ts` | `edge/skill-read.ts` | `registerSkillReadFill(pi)` | WIRED | `index.ts:280` |
-| `edge/skill-read.ts` | `orchestrators/skill-invocation.ts` | `fillSkillRead` default | WIRED | `skill-read.ts:52` |
-| `bridges/skills/{stage,unstage}.ts` | `persistence/project-installs.ts` | `ProjectSkillLedger` | WIRED | `bridges/skills/index.ts:13` binds `NODE_PROJECT_SKILL_LEDGER` |
+| `index.ts` | `edge/skill-read.ts` | `registerSkillReadFill(pi)` | WIRED | `index.ts:290` (was `:280`) |
+| `edge/skill-read.ts` | `orchestrators/skill-invocation.ts` | `fillSkillRead` default | WIRED | `skill-read.ts:50` |
+| `fillSkillRead` | `platform/pi-api.ts` | `readToolReturns` | WIRED | `skill-invocation.ts:367` |
+| `bridges/skills/{stage,unstage}.ts` | `persistence/project-installs.ts` | `ProjectSkillLedger` | REMOVED (by decision) | D-LOC-01 reversed D-CF2-13. The skill gates now read only `ctx.isProjectTrusted()`: `skill-invocation.ts:240,357`, `skill-alias-state.ts:205`, `edge/skill-read.ts:67`, discovery `index.ts:211`. |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Path variables in a skill body reach the model expanded | `npx cucumber-js --parallel 1 <scratchpad>/probe/paths.feature` (throwaway, outside the repo) | `1 scenario (1 passed)`, `12 steps (12 passed)`; the exact expected text with `{project dir}/.pi/.../demo-paths`, `{home}/marketplaces/fixtures/plugins/demo`, `{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo`, `{project dir}` matched | ✓ PASS |
-| Full gate | reused `npm run check` log at `2ba505a` | `EXIT=0`, cucumber 1554/1554 | ✓ PASS |
-
-The working tree was clean after the probe.
+| All skill scenarios | `npx cucumber-js features/skill` | 74/74 scenarios, 816/816 steps (seed 893164) | ✓ PASS |
+| Trust, locality, autoapply (incl. 03d7c97) | `npx cucumber-js features/plugin/autoapply.feature features/plugin/project-trust.feature features/plugin/project-locality.feature` | 42/42 scenarios, 403/403 steps (seed 513417) | ✓ PASS |
+| Path variables in a skill body reach the model expanded | throwaway probe in the scratchpad, `npx cucumber-js --parallel 1 <scratchpad>/probe/paths.feature` | 1 scenario, 12 steps passed | ✓ PASS |
+| Skill bridge, aliases, read fill, invocation unit tests | `node --test test/bridges/skills/*.test.ts test/edge/skill-aliases.test.ts test/edge/skill-read.test.ts test/edge/input-transform.test.ts test/orchestrators/skill-invocation.test.ts test/orchestrators/skill-alias-state.test.ts` | 334/334 | ✓ PASS |
+| Full gate | reused `npm run check` at `b9f40ad` | exit 0, cucumber 1537/1537 | ✓ PASS (reused) |
 
 ### Probe Execution
 
@@ -159,31 +159,48 @@ Step 7c: not applicable. No plan declares a `scripts/*/tests/probe-*.sh` probe.
 |-------------|-------------|--------|----------|
 | SKL-01 | 02-01 | ✓ SATISFIED | `listing.feature` |
 | SKL-02 | 02-02 | ✓ SATISFIED | `frontmatter.feature` |
-| SKL-03 | 02-03 | ✓ SATISFIED | `invocation.feature`, `project-provenance.feature`, `model-reads.feature`, verifier probe |
+| SKL-03 | 02-03 | ✓ SATISFIED | `invocation.feature`, `model-reads.feature`, `skill-invocation.test.ts`, verifier probe |
 | SKL-04 | 02-04 | ✓ SATISFIED | `collisions.feature`, alias clash scenario |
 | SKL-05 | 02-06 | ✓ SATISFIED | `aliases.feature` (RPC and TUI) |
-| SKL-06 | 02-05 | ✓ SATISFIED | `lifecycle.feature`, alias disable/enable scenarios, project re-stage scenarios |
+| SKL-06 | 02-05 | ✓ SATISFIED | `lifecycle.feature` (project scope, no ledger), alias disable/enable scenarios |
 
-No orphaned requirements: REQUIREMENTS.md maps only SKL-01..SKL-06 to Phase 2. Their checkboxes and table rows still read `Pending`; phase completion updates them.
+No orphaned requirements: REQUIREMENTS.md maps only SKL-01..SKL-06 to Phase 2, and all six are now `[x]` / `Complete` (lines 67-72, 177-182).
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
 | (all covered source, feature, and step files) | - | TBD / FIXME / XXX / TODO / HACK / placeholder | none found | - |
-| `.planning/PROJECT.md` | 1737, 1743, 1761 | D-CF1-03 still reads "applies only to user-invoked skills" with no amendment note; D-CF1-09 still says "The gap is reported to Pi"; D-CF2-10 still reads "Pending (user files)" | ℹ️ Info | Decision records lag the 2026-11-02 user decision. Code and DUBIOUS-CHOICES agree with the decision; the parent should update these rows. Does not affect the goal. |
-| `.planning/phases/02-skills/02-06-PLAN.md` (key link 3) | - | Stale pattern `loadQualifiedSkillAliases` | ℹ️ Info | The checker reports 2/3 until the pattern is updated; the link is wired under its new name. |
-| D-CF2-13, D-CF2-14, D-CF2-15, D-CF2-16 | - | Security decisions "Pending (user review)" | ℹ️ Info | Not success criteria of this phase. Listed in DUBIOUS-CHOICES section B for the user. |
+| `features/skill/invocation.feature` | - | Resolved 2026-11-03: the scenario "A skill's path variables are filled in when it runs" now pins `${CLAUDE_SKILL_DIR}`, `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}` and `${CLAUDE_PROJECT_DIR}` in a typed skill's body. | ℹ️ Info | Was a warning in this re-verification. |
+| `.planning/PROJECT.md` | 1823 | D-CF3-01 still says the model cannot run a bridged command, but `run_plugin_command` (A.1 item 4) lets it | ℹ️ Info | Phase 3 record lag; noted in 03-VERIFICATION.md |
+| `.planning/phases/02-skills/02-06-PLAN.md` (key link 3) | - | Stale pattern `loadQualifiedSkillAliases` | ℹ️ Info | The checker reports 2/3. The link is wired under its new name. |
+
+The 2026-11-02 Info rows are resolved. D-CF2-13..16 are no longer "Pending (user review)": the user reversed them (PROJECT.md:1788 and the rows after it, "Reversed 2026-11-02 (user, DC-41)"). The SKL requirement rows now read Complete.
 
 ### Human Verification Required
 
-None for the success criteria. Two non-blocking manual items from `02-VALIDATION.md` stay as before (unit tests cover them, they are not success criteria): `shell: powershell` with a real `pwsh` plus the Windows `bash-missing` abort, and a typed argument naming `${CLAUDE_PLUGIN_ROOT}`.
+None for the success criteria. Two non-blocking manual items from `02-VALIDATION.md` stay as before (unit tests cover them, and they are not success criteria): `shell: powershell` with a real `pwsh` plus the Windows `bash-missing` abort, and a typed argument naming `${CLAUDE_PLUGIN_ROOT}`.
 
 ### Gaps Summary
 
-No gaps. Criteria 1-4 are proven by passing cucumber scenarios that compare what Pi lists and what the model receives, and the changes since the previous report (ledger move, D-CF2-15/16, command aliases, model-read fill, second-expansion guard) left the skill scenarios green and the links wired. Criterion 5's `npm run check` half passes at `2ba505a`; its report half is closed by the user's recorded decision, carried here as an override.
+No gaps. Criteria 1-4 are proven by passing cucumber scenarios that compare what Pi lists and what the model receives. Criterion 5's `npm run check` half rests on the parent's gate at `b9f40ad` plus my re-run of the only feature that 03d7c97 touched. Its report half is closed by the user's recorded decision, carried here as an override. One warning: the path-variable clause of SC2 lost its only committed scenario with the ledger. Unit tests and a probe in this run show the behavior still holds.
+
+## Re-verification 2026-11-03
+
+**What I rechecked:** all five ROADMAP criteria and SKL-01..06 at `03f9a45`. I ran `features/skill` (74/74), the autoapply, project-trust and project-locality features (42/42), the skill unit tests (334/334), and the plan artifact and key-link checks. I also ran a throwaway path-variable probe.
+
+**What changed since 2026-11-02:**
+
+- **Ledger removed (D-LOC-01, 5ecd962).** `persistence/project-installs.ts`, `features/skill/project-provenance.feature`, `features/skill/project-autoapply.feature`, `features/step_definitions/skill/project-provenance.steps.ts` and `project-trust.steps.ts` no longer exist. I dropped them from `covered_files`. The previous report cited `project-provenance.feature` as evidence for SC2 (path variables) and SC4 (project re-stage), and cited D-CF2-14/15/16 as live behavior. That evidence is replaced above. D-CF2-13..16 are reversed, not pending.
+- **Trust through Pi alone.** Project skills, aliases and the read fill are gated only on `ctx.isProjectTrusted()`. The lifecycle scenarios run at project scope with no ledger and pass.
+- **W6 (a7fb423).** `fillSkillRead` now fills only when the result equals Pi's own re-read of the staged file. `model-reads.feature` swapped its untrusted-ledger scenario for two hook scenarios. SC2's fill evidence is refreshed.
+- **03d7c97.** An untrusted project's configs no longer turn autoapply on. `autoapply.feature` passes. No skill criterion depends on it.
+- Line references moved: `index.ts:283/290`, `skill-read.ts:50/67`.
+- Added to `covered_files`: `platform/pi-api.ts`, `features/plugin/project-locality.feature`, `features/plugin/project-trust.feature`. The digest is recomputed.
+
+**Verdict:** still passed, 5/5. One new warning (path-variable scenario coverage). No gap.
 
 ---
 
-_Verified: 2026-11-02T11:20:00Z_
+_Verified: 2026-11-03_
 _Verifier: Claude (gsd-verifier)_
