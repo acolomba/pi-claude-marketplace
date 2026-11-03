@@ -24,7 +24,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`. Agents run in the foreground unless they set `background: true`. An agent that uses the plugin's MCP tools runs in the background, because pi-subagents gives MCP tools only to background agents. An agent gets the content of the skills it preloads.
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`.
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
@@ -37,8 +37,8 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 - [Pi Coding Agent](https://pi.dev) 1.4.0 or newer
 - [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 or a later 7.x release (optional but recommended, `pi install npm:pi-mcp-adapter`). Pi's built-in MCP support does not satisfy this requirement.
-- [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 or a later 3.x release (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 or a later 7.x release (optional but recommended, `pi install npm:pi-mcp-adapter`).
+- [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 or newer (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Usage
 
@@ -112,8 +112,6 @@ Commands use a colon (`:`) on POSIX and a dot (`.`) on Windows:
 
 A command also has aliases in interactive sessions and over RPC. If the command's frontmatter sets `name`, the command also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. For example, `bar` with frontmatter `name: baz` in plugin `foo` also answers to `/foo:baz` and `/baz`. If two commands set the same `name`, the first command gets the alias. A skill keeps an alias that it already has. Command aliases use a colon on every platform.
 
-The model can run a plugin command with the `run_plugin_command` tool, as Claude Code's model runs one with its Skill tool. The tool lists each command that sets `description` or `when_to_use` and does not set `disable-model-invocation: true`. The tool returns the command's text with the arguments filled in. The command's `` !`command` `` lines do not run. After an install or an uninstall, run `/reload` to update the list.
-
 Skills use Pi's `/skill:` form and also have aliases in interactive sessions and over RPC:
 
 | Plugin name | Skill name                          | Pi skill form    | Aliases                        |
@@ -123,7 +121,7 @@ Skills use Pi's `/skill:` form and also have aliases in interactive sessions and
 | `foo`       | `foo`                               | `/skill:foo`     | `/foo:foo`                     |
 | `foo`       | `bar`, with frontmatter `name: baz` | `/skill:foo-bar` | `/foo:bar`, `/foo:baz`, `/baz` |
 
-The aliases are the names that Claude Code gives a skill. The skill name is the name of the skill's folder. If the skill's frontmatter sets `name`, the skill also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. If two skills of a plugin set the same `name`, the first skill gets the alias. Skill aliases use a colon on every platform. If an alias conflicts with a command, the command takes precedence. If a skill has the same name as a command of its plugin, install skips the skill and warns. Use `/skill:foo-bar` to invoke the skill.
+The aliases are the names that Claude Code gives a skill. The skill name is the name of the skill's folder. If the skill's frontmatter sets `name`, the skill also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon.
 
 Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`.
 
@@ -140,8 +138,6 @@ You can install marketplaces and plugins in the user scope or the project scope.
 The project scope inherits the user scope. So you can install a plugin from a user-scope marketplace into the project scope.
 
 You can also install the same plugin in both the user and project scopes. Then the user-scope plugin takes precedence.
-
-A project-scope plugin's skills, commands, and hooks work only in a project that Pi trusts. A project install writes only inside the project's `.pi/` folder, and saves workflows in `.pi/workflows/saved/`. The one exception is a git credential, which it stores in your git credential helper.
 
 ### Partially available plugins
 
@@ -197,14 +193,14 @@ This sets the top-level `autoapply` key of a config to `true`. Like `enable`, it
 }
 ```
 
-The default is `false`. When `autoapply` is on, the load runs `/claude:plugin apply` for both scopes before Pi looks for skills and prompts. It applies the project scope only when Pi trusts the project, and it ignores the `autoapply` key of a project that Pi does not trust. So the plugins that it installs are ready in the same session. The load can clone repositories from the network, as `apply` does. A failed change shows as a failed row and stays in `pending`. The next load tries it again.
+The default is `false`. When `autoapply` is on, the load runs `/claude:plugin apply` for both scopes before Pi looks for skills and prompts. So the plugins that it installs are ready in the same session. The load can clone repositories from the network, as `apply` does. A failed change shows as a failed row and stays in `pending`. The next load tries it again.
 
 Any config can set `autoapply`. The most specific config that sets it wins, in this order: the project local config, the project base config, the user local config, and the user base config. If a config is not valid, for example because `autoapply` is not `true` or `false`, the load does not apply anything and reports the config.
 
 A user config cannot turn off a project's `autoapply`, because the project configs are more specific. To stop it on your machine, set `"autoapply": false` in the project local config. A load never asks you to sign in. If a clone needs a credential that you have not stored, its row fails, and `/claude:plugin apply` can then ask you to sign in.
 
 > [!WARNING]
-> A project's base config is usually in version control. If it sets `autoapply` to `true`, starting `pi` in that project installs its plugins, hooks and MCP servers included, with no prompt, when Pi trusts the project. Pi trusts a project without asking when the project has none of Pi's own settings files. Read `.pi/claude-plugins.json` before you start `pi` in a project that you cloned. Claude Code has no such setting: it does not install a plugin that only a project's settings enable, and you install it with a command.
+> A project's base config is usually in version control. If it sets `autoapply` to `true`, starting `pi` in that project installs its plugins, hooks and MCP servers included, with no prompt. Read `.pi/claude-plugins.json` before you start `pi` in a project that you cloned. Claude Code has no such setting: it does not install a plugin that only a project's settings enable, and you install it with a command.
 
 ### The local config
 

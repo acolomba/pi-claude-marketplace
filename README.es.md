@@ -24,7 +24,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 
 - Comandos.
 - Habilidades.
-- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`. Los agentes se ejecutan en primer plano, salvo que indiquen `background: true`. Un agente que usa las herramientas MCP del complemento se ejecuta en segundo plano, porque pi-subagents solo da herramientas MCP a los agentes en segundo plano. Un agente recibe el contenido de las habilidades que precarga.
+- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`.
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
 - Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 - Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
@@ -37,8 +37,8 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 
 - [Pi Coding Agent](https://pi.dev) 1.4.0 o posterior
 - [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 o una versión 7.x posterior (opcional pero recomendado, `pi install npm:pi-mcp-adapter`). La compatibilidad con MCP integrada en Pi no cumple este requisito.
-- [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 o una versión 3.x posterior (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 o una versión 7.x posterior (opcional pero recomendado, `pi install npm:pi-mcp-adapter`).
+- [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 o posterior (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Uso
 
@@ -110,8 +110,6 @@ Los comandos usan dos puntos (`:`) en POSIX y un punto (`.`) en Windows:
 
 Un comando también tiene alias en las sesiones interactivas y por RPC. Si el frontmatter del comando define `name`, el comando también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos. Por ejemplo, `bar` con el frontmatter `name: baz` en el complemento `foo` también responde a `/foo:baz` y a `/baz`. Si dos comandos definen el mismo `name`, el primer comando recibe el alias. Una habilidad conserva un alias que ya tiene. Los alias de comandos usan dos puntos en todas las plataformas.
 
-El modelo puede ejecutar un comando de un complemento con la herramienta `run_plugin_command`, como el modelo de Claude Code ejecuta uno con su herramienta Skill. La herramienta lista cada comando que define `description` o `when_to_use` y que no define `disable-model-invocation: true`. La herramienta devuelve el texto del comando con los argumentos ya completados. Las líneas `` !`command` `` del comando no se ejecutan. Después de una instalación o una desinstalación, ejecuta `/reload` para actualizar la lista.
-
 Las habilidades usan la forma `/skill:` de Pi y también tienen alias en las sesiones interactivas y por RPC:
 
 | Nombre del complemento | Nombre de la habilidad                   | Forma de Pi      | Alias                          |
@@ -121,7 +119,7 @@ Las habilidades usan la forma `/skill:` de Pi y también tienen alias en las ses
 | `foo`                  | `foo`                                    | `/skill:foo`     | `/foo:foo`                     |
 | `foo`                  | `bar`, con `name: baz` en el frontmatter | `/skill:foo-bar` | `/foo:bar`, `/foo:baz`, `/baz` |
 
-Los alias son los nombres que Claude Code da a una habilidad. El nombre de la habilidad es el nombre de su carpeta. Si el frontmatter de la habilidad define `name`, la habilidad también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos. Si dos habilidades de un complemento definen el mismo `name`, la primera recibe el alias. Los alias de habilidades usan dos puntos en todas las plataformas. Si un alias entra en conflicto con un comando, el comando tiene prioridad. Si una habilidad tiene el mismo nombre que un comando de su complemento, la instalación omite la habilidad y muestra un aviso. Usa `/skill:foo-bar` para ejecutar la habilidad.
+Los alias son los nombres que Claude Code da a una habilidad. El nombre de la habilidad es el nombre de su carpeta. Si el frontmatter de la habilidad define `name`, la habilidad también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos.
 
 Los servidores MCP de los complementos reciben los nombres que les da Claude Code. El modelo ve cada herramienta como `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter guarda cada servidor bajo una clave que termina en `_`. `/claude:plugin info` muestra cada servidor como `plugin:<plugin>:<server>`.
 
@@ -138,8 +136,6 @@ Puedes instalar mercados y complementos en el ámbito de usuario o en el ámbito
 El ámbito del proyecto hereda el ámbito de usuario. Así, puedes instalar un complemento desde un mercado de ámbito de usuario en el ámbito del proyecto.
 
 También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y el de proyecto. En ese caso, el complemento del ámbito de usuario tiene prioridad.
-
-Las habilidades, los comandos y los hooks de un complemento del ámbito del proyecto solo funcionan en un proyecto en el que Pi confía. Una instalación en el proyecto solo escribe dentro de la carpeta `.pi/` del proyecto, y guarda los workflows en `.pi/workflows/saved/`. La única excepción es una credencial de git, que guarda en tu asistente de credenciales de git.
 
 ### Complementos parcialmente disponibles
 
@@ -195,14 +191,14 @@ Esto pone la clave de primer nivel `autoapply` de una configuración en `true`. 
 }
 ```
 
-El valor predeterminado es `false`. Cuando `autoapply` está activada, la carga ejecuta `/claude:plugin apply` en los dos ámbitos antes de que Pi busque habilidades y prompts. Aplica el ámbito del proyecto solo cuando Pi confía en el proyecto, e ignora la clave `autoapply` de un proyecto en el que Pi no confía. Así, los complementos que instala están listos en la misma sesión. La carga puede clonar repositorios desde la red, como hace `apply`. Un cambio que falla aparece como una fila fallida y sigue en `pending`. La carga siguiente lo intenta otra vez.
+El valor predeterminado es `false`. Cuando `autoapply` está activada, la carga ejecuta `/claude:plugin apply` en los dos ámbitos antes de que Pi busque habilidades y prompts. Así, los complementos que instala están listos en la misma sesión. La carga puede clonar repositorios desde la red, como hace `apply`. Un cambio que falla aparece como una fila fallida y sigue en `pending`. La carga siguiente lo intenta otra vez.
 
 Cualquier configuración puede fijar `autoapply`. Gana la configuración más específica que la fija, en este orden: la configuración local del proyecto, la configuración base del proyecto, la configuración local del usuario y la configuración base del usuario. Si una configuración no es válida, por ejemplo porque `autoapply` no es `true` ni `false`, la carga no aplica nada e informa de esa configuración.
 
 Una configuración de usuario no puede desactivar el `autoapply` de un proyecto, porque las configuraciones del proyecto son más específicas. Para desactivarlo en tu máquina, pon `"autoapply": false` en la configuración local del proyecto. Una carga nunca te pide iniciar sesión. Si un clon necesita una credencial que no guardaste, su fila falla, y después `/claude:plugin apply` puede pedirte que inicies sesión.
 
 > [!WARNING]
-> La configuración base de un proyecto suele estar en el control de versiones. Si fija `autoapply` en `true`, iniciar `pi` en ese proyecto instala sus complementos, incluidos sus hooks y servidores MCP, sin preguntar, cuando Pi confía en el proyecto. Pi confía sin preguntar en un proyecto que no tiene ninguno de los archivos de configuración propios de Pi. Lee `.pi/claude-plugins.json` antes de iniciar `pi` en un proyecto que clonaste. Claude Code no tiene este ajuste: no instala un complemento que solo activa la configuración de un proyecto, y tú lo instalas con un comando.
+> La configuración base de un proyecto suele estar en el control de versiones. Si fija `autoapply` en `true`, iniciar `pi` en ese proyecto instala sus complementos, incluidos sus hooks y servidores MCP, sin preguntar. Lee `.pi/claude-plugins.json` antes de iniciar `pi` en un proyecto que clonaste. Claude Code no tiene este ajuste: no instala un complemento que solo activa la configuración de un proyecto, y tú lo instalas con un comando.
 
 ### La configuración local
 
