@@ -777,7 +777,7 @@ test("AAP-03 / NFR-2: a refused abort notice still lets the read-only pass run",
     Promise.reject(new Error("the pass ended")),
   );
   const attempted: string[] = [];
-  const ctx = {
+  const ctx: LoadReconcileOptions["ctx"] = {
     mode: "tui",
     ui: {
       notify: (message: string): never => {
@@ -785,7 +785,7 @@ test("AAP-03 / NFR-2: a refused abort notice still lets the read-only pass run",
         throw new Error("host notification refused");
       },
     },
-  } as unknown as LoadReconcileOptions["ctx"];
+  };
 
   // act
   await throwingLoad({

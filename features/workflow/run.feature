@@ -4,7 +4,7 @@ Feature: Workflow run
   hands it the engine's argument object; Pi asks no approval first, unlike Claude Code
   in its manual permission mode (a Pi gap). A scripted model and a local marketplace stand in.
 
-  Scenario: Running a bridged workflow completes with the result its script returns
+  Background:
     Given pi runs with the scripted model and these companions:
       | companion            |
       | pi-dynamic-workflows |
@@ -12,6 +12,8 @@ Feature: Workflow run
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
+
+  Scenario: Running a bridged workflow completes with the result its script returns
     Given the published plugin "demo" of the marketplace "fixtures" has the workflow "hello" described as "Says hello." that returns "Hello from demo."
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
@@ -23,13 +25,6 @@ Feature: Workflow run
       | started /demo:hello |
 
   Scenario Outline: Typed text reaches the workflow script as the engine's argument object, because the engine runs the command itself
-    Given pi runs with the scripted model and these companions:
-      | companion            |
-      | pi-dynamic-workflows |
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/echo.js" with this text:
       """
       export const meta = {name:"echo",description:"Echoes its arguments."};
@@ -52,13 +47,6 @@ Feature: Workflow run
       | /demo:echo a=1 b= =c x=y=z tail | {"a":"1","b":"","x":"y=z","_":"=c tail","_raw":"a=1 b= =c x=y=z tail"} |
 
   Scenario: A workflow whose script throws ends failed with the error it threw
-    Given pi runs with the scripted model and these companions:
-      | companion            |
-      | pi-dynamic-workflows |
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/nope.js" with this text:
       """
       export const meta = {name:"nope",description:"Always fails."};

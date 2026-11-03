@@ -236,7 +236,8 @@ export async function runPiRuntimeSmoke(): Promise<{
     );
     const output = `${stdout}\n${stderr}`;
     return { ok: !/failed to load|error loading/i.test(output), output };
-  } catch (err) {
+  } catch (err: unknown) {
+    // execFile rejects with an Error that also carries the child's stdout and stderr.
     const error = err as { stdout?: string; stderr?: string; message?: string };
     const output = `${error.stdout ?? ""}\n${error.stderr ?? ""}\n${error.message ?? ""}`;
     return { ok: false, output };

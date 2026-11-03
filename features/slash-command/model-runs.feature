@@ -1,9 +1,8 @@
 Feature: Slash command model runs
 
-  Protects how the model runs a bridged command on its own, as Claude Code's model does through its
-  Skill tool: a tool lists the described commands and returns a command's filled body, with its
-  context commands not run. A local marketplace and a scripted model stand in for published and
-  real ones.
+  Protects how the model runs a bridged command on its own, as Claude Code's Skill tool does: a tool
+  lists the described commands and returns a command's filled body without running its context
+  commands. A local marketplace and a scripted model stand in for published and real ones.
 
   Background:
     Given pi runs with the scripted model

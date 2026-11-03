@@ -193,6 +193,9 @@ const PROBES_PER_DISCOVER = 1;
 /** `ctx.mode` reads per `resources_discover` pass: one before each load stage. */
 const MODE_READS_PER_DISCOVER = 3;
 
+/** Trust reads per `resources_discover` pass: the load preparation reads once, the discovery once (D-LOC-01). */
+const TRUST_READS_PER_DISCOVER = 2;
+
 /** The cascade the reconcile renders for a project scope whose state is unreadable. */
 const RECONCILE_CASCADE_FOR_UNREADABLE_STATE =
   "Some operations have failed.\n\n" +
@@ -312,6 +315,15 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
  * rather than `times(0)`, so the first unwanted read fails where it happens.
  * `modeReads` defaults to a case whose probes are all discover passes; a case
  * that dispatches a command states it.
+ *
+ * `trustReads` counts the `ctx.isProjectTrusted()` calls the case promises. A
+ * trust read is one question to Pi whether it trusts the project: each
+ * `resources_discover` pass asks twice (the load preparation, then the
+ * discovery, D-LOC-01), and each project-scope gate that asks Pi adds one. It
+ * defaults to a case whose probes are all discover passes that use this
+ * context. A case that hands the extension its own context, or wraps this one
+ * to answer the trust reads itself, states 0, which states no expectation, so
+ * the first unwanted read fails where it happens.
  */
 async function loadExtension(
   emissions: number,
@@ -323,13 +335,16 @@ async function loadExtension(
     readonly attempts: number;
     readonly inventoryError?: Error;
   },
+  trustReads = TRUST_READS_PER_DISCOVER * probes,
 ): Promise<LoadedExtension> {
   const boundary = createNotificationBoundary(emissions, cwd, modeReads);
-  // T-02-17: every discover pass asks whether Pi trusts the project; the
-  // untrusted case states its own expectation.
-  when(() => boundary.ctx.isProjectTrusted())
-    .thenReturn(true)
-    .anyTimes();
+  // T-02-17: the untrusted case states its own expectation.
+  if (trustReads > 0) {
+    when(() => boundary.ctx.isProjectTrusted())
+      .thenReturn(true)
+      .times(trustReads);
+  }
+
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   if (output?.inventoryError === undefined) {
     expectSoftDepProbes(pi, probes);
@@ -1093,15 +1108,22 @@ for (const mode of ["json", "rpc"]) {
       );
       const promptPath = await seedPrompt(scope.cwd, "kept.md");
       const capture = createJsonCapture();
-      const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0, {
-        attempts: 3,
-        appendEntry(customType, payload) {
-          capture.entrySink.appendEntry(customType, payload);
-          if (refusesAppend) {
-            throw new Error("entry refused");
-          }
+      const loaded = await loadExtension(
+        0,
+        PROBES_PER_DISCOVER,
+        undefined,
+        0,
+        {
+          attempts: 3,
+          appendEntry(customType, payload) {
+            capture.entrySink.appendEntry(customType, payload);
+            if (refusesAppend) {
+              throw new Error("entry refused");
+            }
+          },
         },
-      });
+        0,
+      );
       const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_RECONCILE);
       const ctx = {
         isProjectTrusted: () => true,
@@ -1185,6 +1207,7 @@ for (const failure of ["mode", "inventory"] as const) {
         appendEntry: capture.entrySink.appendEntry,
         inventoryError: new Error("stale pi"),
       },
+      0,
     );
     const ctx = {
       isProjectTrusted: () => true,
@@ -1224,7 +1247,7 @@ for (const unsupportedRead of [2, 3]) {
     await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "plugin"));
     const promptPath = await seedPrompt(scope.cwd, "kept.md");
     const capture = createJsonCapture();
-    const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0);
+    const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0, undefined, 0);
     let reads = 0;
     const ctx = {
       isProjectTrusted: () => true,
@@ -1267,13 +1290,20 @@ test("a refused load append leaves install state untouched and still runs the in
   const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
   const stateBytes = await readFile(statePath, "utf8");
   const capture = createJsonCapture();
-  const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0, {
-    attempts: 2,
-    appendEntry(customType, payload) {
-      capture.entrySink.appendEntry(customType, payload);
-      throw new Error("entry refused");
+  const loaded = await loadExtension(
+    0,
+    PROBES_PER_DISCOVER,
+    undefined,
+    0,
+    {
+      attempts: 2,
+      appendEntry(customType, payload) {
+        capture.entrySink.appendEntry(customType, payload);
+        throw new Error("entry refused");
+      },
     },
-  });
+    0,
+  );
   const ctx = {
     isProjectTrusted: () => true,
     mode: "json",
@@ -1551,7 +1581,7 @@ test("ASTAT-01: /claude:plugin info shows the status pi-mcp-adapter last publish
   // arrange
   const scope = await createHermeticScope(t, "mcp-status");
   await seedRecordedMcpPlugin(scope.cwd);
-  const first = await loadExtension(2, 2, { value: scope.cwd, reads: 2 }, 6);
+  const first = await loadExtension(2, 2, { value: scope.cwd, reads: 2 }, 6, undefined, 0);
 
   // act
   await first.command.handler("info hello@mp --scope project", first.ctx);
@@ -1560,7 +1590,7 @@ test("ASTAT-01: /claude:plugin info shows the status pi-mcp-adapter last publish
     servers: [{ name: "plugin_hello_srv_", status: "connected" }],
   });
   await first.command.handler("info hello@mp --scope project", first.ctx);
-  const reloaded = await loadExtension(1, 1, { value: scope.cwd, reads: 1 }, 3);
+  const reloaded = await loadExtension(1, 1, { value: scope.cwd, reads: 1 }, 3, undefined, 0);
   await reloaded.command.handler("info hello@mp --scope project", reloaded.ctx);
 
   // assert
@@ -1604,7 +1634,7 @@ test("keeps hook routing and command completion state inside each extension-load
   process.chdir(ownerCwd);
   // One probe: the command's notification run is the only one, and the add
   // notification renders from its snapshot (D-05).
-  const owner = await loadExtension(1, 1, { value: ownerCwd, reads: 1 }, 3);
+  const owner = await loadExtension(1, 1, { value: ownerCwd, reads: 1 }, 3, undefined, 0);
   const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
   await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
   const toolEvent: ToolCallEvent = {
@@ -1679,7 +1709,8 @@ test("T-02-17: discovers the user scope's prompts and not the project's when Pi 
   await mkdir(userPromptsDir, { recursive: true });
   const userPromptPath = path.join(userPromptsDir, "user.md");
   await writeFile(userPromptPath, "# prompt\n", "utf8");
-  const loaded = await loadExtension(0, PROBES_PER_DISCOVER);
+  // The case's own proxy answers the trust reads, so the mock promises none.
+  const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, undefined, undefined, 0);
   let trustReads = 0;
   const untrusted = new Proxy(loaded.ctx, {
     get(target, property, receiver): unknown {

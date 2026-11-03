@@ -1,9 +1,8 @@
 Feature: Workflow collisions
 
-  A workflow and a command of one plugin can claim one name. These scenarios
-  protect that the workflow keeps the name, as in Claude Code, and that the
-  install warns about the command it skips. A local marketplace stands in for a
-  published one, and a registry probe in Pi for the user's view of the commands.
+  A workflow and a command of one plugin can claim one name. The workflow keeps the name,
+  as in Claude Code, and the install warns about the command it skips. A local marketplace
+  and a registry probe in Pi stand in for a published one and the user's command list.
 
   Scenario: A command that shares its name with a workflow of its plugin is skipped with a warning
     Given pi runs with the scripted model and these companions:

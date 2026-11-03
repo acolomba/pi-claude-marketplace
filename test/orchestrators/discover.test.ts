@@ -72,10 +72,10 @@ test("aggregateDiscoveredResources keeps scope order and sorts within each resou
   await stagePrompt(project, "aardvark");
 
   // act
-  const result = await aggregateDiscoveredResources(user, project);
+  const discoveredResources = await aggregateDiscoveredResources(user, project);
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepEqual(discoveredResources, {
     skillPaths: [
       path.join(user.skillsTargetDir, "alpha"),
       path.join(user.skillsTargetDir, "zulu"),
@@ -87,8 +87,8 @@ test("aggregateDiscoveredResources keeps scope order and sorts within each resou
       path.join(project.promptsTargetDir, "aardvark.md"),
     ],
   });
-  assert.equal(Object.isFrozen(result.skillPaths), true);
-  assert.equal(Object.isFrozen(result.promptPaths), true);
+  assert.equal(Object.isFrozen(discoveredResources.skillPaths), true);
+  assert.equal(Object.isFrozen(discoveredResources.promptPaths), true);
 });
 
 test("T-02-17: aggregateDiscoveredResources leaves out an untrusted project's skills and prompts", async (t) => {
@@ -100,10 +100,10 @@ test("T-02-17: aggregateDiscoveredResources leaves out an untrusted project's sk
   await stagePrompt(project, "aardvark");
 
   // act
-  const result = await aggregateDiscoveredResources(user, undefined);
+  const discoveredResources = await aggregateDiscoveredResources(user, undefined);
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepEqual(discoveredResources, {
     skillPaths: [path.join(user.skillsTargetDir, "alpha")],
     promptPaths: [path.join(user.promptsTargetDir, "alpha.md")],
   });
@@ -144,10 +144,10 @@ test("aggregateDiscoveredResources excludes hidden, nonmatching, nondirectory, a
   await symlink(linkedPromptSource, path.join(user.promptsTargetDir, "linked-prompt.md"), "file");
 
   // act
-  const result = await aggregateDiscoveredResources(user, project);
+  const discoveredResources = await aggregateDiscoveredResources(user, project);
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepEqual(discoveredResources, {
     skillPaths: [path.join(user.skillsTargetDir, "visible-skill")],
     promptPaths: [path.join(user.promptsTargetDir, "visible-prompt.md")],
   });
@@ -158,12 +158,12 @@ test("aggregateDiscoveredResources soft-skips missing resource directories", asy
   const { user, project } = await makeTestLocations(t, "resources-discover-missing-");
 
   // act
-  const result = await aggregateDiscoveredResources(user, project);
+  const discoveredResources = await aggregateDiscoveredResources(user, project);
 
   // assert
-  assert.deepEqual(result, { skillPaths: [], promptPaths: [] });
-  assert.equal(Object.isFrozen(result.skillPaths), true);
-  assert.equal(Object.isFrozen(result.promptPaths), true);
+  assert.deepEqual(discoveredResources, { skillPaths: [], promptPaths: [] });
+  assert.equal(Object.isFrozen(discoveredResources.skillPaths), true);
+  assert.equal(Object.isFrozen(discoveredResources.promptPaths), true);
 });
 
 test("aggregateDiscoveredResources soft-skips resource paths below a regular file", async (t) => {
@@ -173,10 +173,10 @@ test("aggregateDiscoveredResources soft-skips resource paths below a regular fil
   await writeFile(path.dirname(user.skillsTargetDir), "not a resource directory");
 
   // act
-  const result = await aggregateDiscoveredResources(user, project);
+  const discoveredResources = await aggregateDiscoveredResources(user, project);
 
   // assert
-  assert.deepEqual(result, { skillPaths: [], promptPaths: [] });
+  assert.deepEqual(discoveredResources, { skillPaths: [], promptPaths: [] });
 });
 
 test("aggregateDiscoveredResources aggregates all four hard read failures in traversal order", async (t) => {

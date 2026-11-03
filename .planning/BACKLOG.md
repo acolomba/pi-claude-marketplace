@@ -4849,3 +4849,7 @@ Partly covered:
 8. `info` of an agent read from the plugin source (AGTINFO-01): nested agents, `.MD` agents, and declared agent files are left out. The fix and its scenario go together.
 
 Suggested order: 1-4 and 6 as one small milestone; 5 once the pi-subagents fixes merge upstream; 7 and 8 when the hooks and agents code next changes.
+
+## CATCHNAME-01: catch clauses read `catch (error: unknown)`
+
+Noted 2026-11-03 by the babysit-pr review of PR #295. `.agents/skills/typescript-style/rules/functions.md` says a catch reads `catch (error: unknown)`, but the extension still has about 270 `catch (err)` clauses against about 51 in the rule's form. The PR's review left them, because converting only the files one PR touches leaves the codebase half-converted. Convert every `catch (err)` under `extensions/` and `test/` in one change, keeping behavior; strict TypeScript already types the variable as `unknown`, so this is a rename plus the annotation.
