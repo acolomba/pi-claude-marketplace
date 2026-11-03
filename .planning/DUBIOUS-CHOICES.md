@@ -3057,3 +3057,11 @@ The user chose to fix audit warning W1 and add scenarios for W3, W5 and W6 befor
 9. Not aligned, still in BACKLOG: a hook whose output never ends hangs the turn where upstream blocks with "output distrusted" (HKDR-01); output schema validation (HOOKSCHEMAFAIL-01), because the bridge has no output schema.
 10. The upstream evidence is a static read of the 2.1.316 binary; no live probe ran, because the host token folder was readable.
 - **User confirmed 2026-11-02:** item 2 (deleting a plugin's own old workflow copies from the home folder as a migration cleanup) and item 1 (hook trust at command time from the session-load answer). Both recorded in D-LOC-01.
+
+### DC-43: W6, a model-read skill is filled only while it is the skill's own text (a7fb423, 227d603)
+
+User decision 2026-11-02. Upstream (Claude Code 2.1.316, static read): a `Read` of a `SKILL.md` returns the raw file, a hook-replaced Read reaches the model as written, and on the Skill tool a hook only sees `Launching skill: <name>`, so upstream never fills text a hook wrote. The fill-on-read itself remains a Pi-gap stand-in for the Skill tool (A.1 item 3). `npm run check` exit 0, 1535/1535 (seed 50578); the scenario count fell from 1565 because the locality redesign removed the provenance scenarios. Red proof: with the old sources the renamed scenario got `Tail 7 at effort low, arguments [].`
+
+1. The match re-runs Pi's own read tool (`readToolReturns` in `platform/pi-api.ts`) over the staged file's text with the call's offset and limit, so whole reads, slices, continuation notices and truncation notices match exactly; any other text passes through unfilled. Cost: one extra in-memory read per skill-file read.
+2. The re-run uses the resolved absolute path, so the one Pi notice that contains a path (a single line over 50 KB) never matches; such a result passes through unfilled.
+3. A staged file that changes between Pi's read and the fill is not filled (previously it was filled by position).
