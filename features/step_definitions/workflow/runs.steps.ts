@@ -38,17 +38,64 @@ function endsRun(record: RpcRecord): boolean {
   return typeof status === "string" && TERMINAL_STATUSES.has(status);
 }
 
+// The engine reports what a script threw as text that can carry the error's
+// class before the message, such as `Error: Nope.`, and stack lines after it.
+// The message the script threw is the rest of the first line after the last
+// such class.
+const THROWN_CLASS = /^.*\b\w*Error: /u;
+
+/** What a run ended with: its status, and the text its script returned or threw. */
+interface RunOutcome {
+  readonly status: string;
+  readonly result: string | undefined;
+  readonly error: string | undefined;
+}
+
+// The first of `fields` of `entry` that holds text.
+function textField(
+  entry: Readonly<Record<string, unknown>>,
+  fields: readonly string[],
+): string | undefined {
+  for (const field of fields) {
+    const value = entry[field];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
 // The last progress entry of the turn's one run carries the run's final
-// status, the whole text of a text result, and the error a failed run threw.
-function runOutcome(world: ScenarioWorld): Readonly<Record<string, unknown>> {
+// status, the text the script returned, and the error it threw. The engine
+// names and wraps those values its own way, so this reads them tolerantly,
+// and fails with the entry when it finds no status or not the value that the
+// status calls for.
+function runOutcome(world: ScenarioWorld): RunOutcome {
   const entries = world.requireTurn().records.flatMap((record) => {
     const progress = progressOf(record);
     return progress === undefined ? [] : [progress];
   });
   const runs = [...new Set(entries.map((entry) => entry.runId))];
   assert.strictEqual(runs.length, 1, `the command started ${runs.length} runs`);
-  const last = entries.at(-1);
-  return { status: last?.status, result: last?.resultPreview, error: last?.error };
+  const last: Readonly<Record<string, unknown>> = entries.at(-1) ?? {};
+  const unreadable = `cannot read the run's outcome from its last progress entry: ${JSON.stringify(last)}`;
+  const { status } = last;
+  if (typeof status !== "string") {
+    assert.fail(unreadable);
+  }
+
+  const result = textField(last, ["resultPreview", "result"]);
+  const thrown = textField(last, ["error"])?.split("\n")[0]?.replace(THROWN_CLASS, "").trim();
+  const error = thrown === "" ? undefined : thrown;
+  if (
+    (status === "completed" && result === undefined) ||
+    (status === "failed" && error === undefined)
+  ) {
+    assert.fail(unreadable);
+  }
+
+  return { status, result, error };
 }
 
 Given(
@@ -93,7 +140,7 @@ Then(
   },
 );
 
-// A run whose script throws ends with the thrown error and no result.
+// A run whose script throws ends with the message it threw and no result.
 Then(
   "the workflow run ends with the status {string} and the error {string}",
   function (this: ScenarioWorld, status: string, error: string) {

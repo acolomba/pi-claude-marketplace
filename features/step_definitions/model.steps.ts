@@ -3,7 +3,9 @@
  * profile Pi with it, arming its script, and the calls it receives (D-CF1-17).
  *
  * A feature file writes the whole script as literals. The calls step reads
- * the call log, never the script, so it states what Pi sent the model.
+ * the call log, never the script, so it states what Pi sent the model. A
+ * companion's tool result or task message reads as `features/lib/upstream/`
+ * reduces it, so a row states only the facts this extension owns.
  */
 
 import assert from "node:assert/strict";
@@ -18,7 +20,6 @@ import { expandTokens, projectTokens } from "../lib/run-tokens.ts";
 import {
   callMessageRows,
   modelCallsOf,
-  numberedModelCall,
   parseScriptTable,
   readModelScript,
   writeModelScript,
@@ -28,8 +29,8 @@ import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 import type { ScenarioWorld } from "../support/world.ts";
 
-// A companion stamps some texts with an id it draws for each run, such as the
-// mission id pi-subagents appends to a subagent result.
+// Some texts carry an id drawn for each run, such as the session id that a
+// skill or a slash command puts in its text.
 const UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gu;
 
 // The extension prefixes a finished input that starts with `/` with U+200B,
@@ -102,16 +103,3 @@ Then("the model receives these calls:", function (this: ScenarioWorld, table: Da
   assert.deepStrictEqual([["call", "role", "text"], ...rows], table.raw());
   this.markTurnCompared();
 });
-
-// The whole system prompt of one call of the last turn, numbered from 1 as
-// the calls step numbers them, with the run tokens projected. A child agent's
-// call is one of the turn's calls, so this states the prompt the child ran on.
-Then(
-  "the model call {int} receives this system prompt:",
-  function (this: ScenarioWorld, number: number, expected: string) {
-    const call = numberedModelCall(this.requireTurn().logs, number);
-
-    assert.strictEqual(projectCallText(call.systemPrompt, this.tokens), expected);
-    this.markTurnCompared();
-  },
-);

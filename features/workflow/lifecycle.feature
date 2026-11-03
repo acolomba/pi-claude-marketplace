@@ -21,8 +21,8 @@ Feature: Workflow lifecycle
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope user", which warned
     When the user runs the workflow command "/demo:hello", which starts no run
     Then the workflow engine shows these notices:
-      | severity | message                                                                                       |
-      | warning  | /demo:hello is not available in this project -- reload the session to drop the stale command. |
+      | notice                  |
+      | unavailable /demo:hello |
 
   Scenario: Uninstalling a plugin with a workflow reports that its command lingers until a new session
     When the user runs "/claude:plugin uninstall demo@fixtures --scope user"
@@ -52,8 +52,8 @@ Feature: Workflow lifecycle
     Given the user has run "/claude:plugin disable demo@fixtures --scope user", which warned
     When the user runs the workflow command "/demo:hello", which starts no run
     Then the workflow engine shows these notices:
-      | severity | message                                                                                       |
-      | warning  | /demo:hello is not available in this project -- reload the session to drop the stale command. |
+      | notice                  |
+      | unavailable /demo:hello |
 
   Scenario: A new session after the disable offers no workflow command
     Given the user has run "/claude:plugin disable demo@fixtures --scope user", which warned
@@ -69,9 +69,8 @@ Feature: Workflow lifecycle
     When the user runs the workflow command "/demo:hello"
     Then the workflow run ends with the status "completed" and the result "Hello from demo."
     Then the workflow engine shows these notices:
-      | severity | message                                                                                                                                         |
-      | info     | /demo:hello running in the background ({run id}) -- check progress with /workflows status {run id}; the result is posted here when it finishes. |
-      | warning  | [workflow-delivery] delivery for {run id} deferred: endpoint for session {session id} has no thenable send function                             |
+      | notice              |
+      | started /demo:hello |
 
   Scenario: Updating a plugin runs the new script of its workflow at once, because the engine reads the script when the command runs
     Given the marketplace "fixtures" offers these plugins:
@@ -87,9 +86,8 @@ Feature: Workflow lifecycle
     When the user runs the workflow command "/demo:hello"
     Then the workflow run ends with the status "completed" and the result "Hello 2."
     Then the workflow engine shows these notices:
-      | severity | message                                                                                                                                         |
-      | info     | /demo:hello running in the background ({run id}) -- check progress with /workflows status {run id}; the result is posted here when it finishes. |
-      | warning  | [workflow-delivery] delivery for {run id} deferred: endpoint for session {session id} has no thenable send function                             |
+      | notice              |
+      | started /demo:hello |
 
   Scenario: The session that ran the update still lists the old description, because pi cannot change a command it already offers
     Given the marketplace "fixtures" offers these plugins:
@@ -155,8 +153,8 @@ Feature: Workflow lifecycle
     Given the user has run "/claude:plugin update demo@fixtures --scope user", which warned
     When the user runs the workflow command "/demo:hello", which starts no run
     Then the workflow engine shows these notices:
-      | severity | message                                                                                       |
-      | warning  | /demo:hello is not available in this project -- reload the session to drop the stale command. |
+      | notice                  |
+      | unavailable /demo:hello |
 
   Scenario: A new session after a renaming update offers only the new workflow command
     Given the marketplace "fixtures" offers these plugins:

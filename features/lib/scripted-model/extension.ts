@@ -32,27 +32,71 @@ import type { AssistantMessage, Message, Tool } from "@earendil-works/pi-ai";
 import type { FauxResponseFactory } from "@earendil-works/pi-ai/providers/faux";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-function textOf(content: string | readonly { readonly type: string; text?: string }[]): string {
+// The text of a system message's content: a string, or text parts. Pi lays
+// out its system messages itself, so content of any other shape fails the
+// call loudly rather than log a prompt with a part missing.
+function textOf(content: unknown): string {
   if (typeof content === "string") {
     return content;
   }
 
-  return content.map((part) => part.text ?? "").join("");
+  if (!Array.isArray(content)) {
+    throw new TypeError(
+      `scripted model: unreadable system message content ${JSON.stringify(content)}`,
+    );
+  }
+
+  return content
+    .map((part: unknown) => {
+      if (
+        typeof part !== "object" ||
+        part === null ||
+        !("text" in part) ||
+        typeof part.text !== "string"
+      ) {
+        throw new TypeError(
+          `scripted model: unreadable system message part ${JSON.stringify(part)}`,
+        );
+      }
+
+      return part.text;
+    })
+    .join("");
 }
 
-// Pi carries the system prompt and the tool declarations in system messages:
-// the leading one holds the base prompt and its sections, and later ones add
-// and remove tools.
+// Pi carries the system prompt in system messages: the leading one holds the
+// base prompt and its named sections, and a later one adds instructions or
+// replaces or removes a section by name. The logged prompt replays them in
+// order: every instruction text, then each section that is still present, in
+// the order Pi set them, each part separated by a blank line. A section that
+// is neither text nor removed fails the call, as above.
 function systemPromptOf(messages: readonly Message[]): string {
-  const leading = messages.find((message) => message.role === "system");
-  if (leading === undefined) {
+  const systemMessages = messages.filter((message) => message.role === "system");
+  if (systemMessages.length === 0) {
     return "";
   }
 
-  const sections = Object.values(leading.sections ?? {}).filter(
-    (section): section is string => section !== null,
-  );
-  return [textOf(leading.content), ...sections].join("\n\n");
+  const instructions: string[] = [];
+  const sections = new Map<string, string>();
+  for (const [index, message] of systemMessages.entries()) {
+    const text = textOf(message.content);
+    if (index === 0 || text !== "") {
+      instructions.push(text);
+    }
+
+    const declared: [string, unknown][] = Object.entries(message.sections ?? {});
+    for (const [name, section] of declared) {
+      if (section === null) {
+        sections.delete(name);
+      } else if (typeof section === "string") {
+        sections.set(name, section);
+      } else {
+        throw new TypeError(`scripted model: unreadable system prompt section ${name}`);
+      }
+    }
+  }
+
+  return [...instructions, ...sections.values()].join("\n\n");
 }
 
 function toolsOf(messages: readonly Message[]): ModelCall["tools"] {

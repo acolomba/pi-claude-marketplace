@@ -26,19 +26,16 @@ Feature: Agent listing
       | One agent is listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                     |
-      | 1    | user        | List the agents.                                                                                                                                         |
-      | 2    | user        | List the agents.                                                                                                                                         |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                     |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given. |
+      | call | role        | text                                                                                                                |
+      | 1    | user        | List the agents.                                                                                                    |
+      | 2    | user        | List the agents.                                                                                                    |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                |
+      | 2    | tool result | subagent returned: agent demo:reviewer, aliases pi-claude-marketplace-demo-reviewer: Reviews the files it is given. |
 
   Scenario: The list keeps pi-subagents' own agents beside a bridged one
     Given pi runs with the scripted model and these companions:
       | companion    |
       | pi-subagents |
-    # The builtin researcher's description holds an em dash, which the
-    # fix-unicode-dashes pre-commit fixer rewrites in every feature file.
-    Given pi-subagents hides the builtin agent "researcher"
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -56,11 +53,11 @@ Feature: Agent listing
       | The agents are listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given.\n\nBuiltin agents\n- claude-code (builtin, external-cli:claude): Read-only Claude Code CLI analysis; requires local authentication and trusted user settings/hooks\n- claude-code-writer (builtin, external-cli:claude): Explicit file-writing Claude Code CLI mode; requires local authentication and trusted user settings/hooks\n- codex-exec (builtin, external-cli:codex): Read-only one-shot analysis through the installed Codex CLI\n- codex-exec-writer (builtin, external-cli:codex): Explicit workspace-writing one-shot execution through the installed Codex CLI\n- cursor-agent (builtin, external-cli:cursor-agent): Read-only one-shot analysis through the installed Cursor CLI\n- cursor-agent-writer (builtin, external-cli:cursor-agent): Explicit workspace-writing one-shot execution through the installed Cursor CLI\n- delegate (builtin): Lightweight subagent that inherits the parent model with no default reads\n- evidence-auditor (builtin): Independent evidence reviewer for checking whether important research claims are supported by their sources\n- oracle (builtin, context: fork, aliases: advisor): High-context decision-consistency oracle that protects inherited state and prevents drift\n- reviewer (builtin): Versatile review specialist for code diffs, plans, proposed solutions, codebase health, and PR/issue validation\n- scout (builtin): Fast codebase recon that returns compressed context for handoff\n- worker (builtin, context: fresh, aliases: developer, coder, implementer, develop): Implementation agent for normal tasks and approved oracle handoffs |
+      | call | role        | text                                                                                                                                          |
+      | 1    | user        | List the agents.                                                                                                                              |
+      | 2    | user        | List the agents.                                                                                                                              |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                          |
+      | 2    | tool result | subagent returned: agent demo:reviewer, aliases pi-claude-marketplace-demo-reviewer: Reviews the files it is given.\npi-subagents' own agents |
 
   Scenario: Agents without a description are listed with Claude Code's fallback
     Given pi runs with the scripted model and these companions:
@@ -85,11 +82,11 @@ Feature: Agent listing
       | The agents are listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                                                                                                                     |
-      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                         |
-      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                         |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                                                                                     |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:dashed (user, aliases: pi-claude-marketplace-demo-dashed): Use it for audits.\n- demo:noted (user, aliases: pi-claude-marketplace-demo-noted): Use it to review code.\n- demo:plain (user, aliases: pi-claude-marketplace-demo-plain): Agent from demo plugin |
+      | call | role        | text                                                                                                                                                                                                                                                                        |
+      | 1    | user        | List the agents.                                                                                                                                                                                                                                                            |
+      | 2    | user        | List the agents.                                                                                                                                                                                                                                                            |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                                        |
+      | 2    | tool result | subagent returned: agent demo:dashed, aliases pi-claude-marketplace-demo-dashed: Use it for audits.\nagent demo:noted, aliases pi-claude-marketplace-demo-noted: Use it to review code.\nagent demo:plain, aliases pi-claude-marketplace-demo-plain: Agent from demo plugin |
 
   Scenario: Agents of the same name in two plugins are listed under their own plugin names
     Given pi runs with the scripted model and these companions:
@@ -119,11 +116,11 @@ Feature: Agent listing
       | The agents are listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                                                             |
-      | 1    | user        | List the agents.                                                                                                                                                                                                                                                 |
-      | 2    | user        | List the agents.                                                                                                                                                                                                                                                 |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                             |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given.\n- tools:reviewer (user, aliases: pi-claude-marketplace-tools-reviewer): Reviews the tools it is given. |
+      | call | role        | text                                                                                                                                                                                                                    |
+      | 1    | user        | List the agents.                                                                                                                                                                                                        |
+      | 2    | user        | List the agents.                                                                                                                                                                                                        |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                    |
+      | 2    | tool result | subagent returned: agent demo:reviewer, aliases pi-claude-marketplace-demo-reviewer: Reviews the files it is given.\nagent tools:reviewer, aliases pi-claude-marketplace-tools-reviewer: Reviews the tools it is given. |
 
   Scenario: Agent files in subfolders are listed under their folder names
     Given pi runs with the scripted model and these companions:
@@ -148,11 +145,11 @@ Feature: Agent listing
       | The agents are listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                                                           |
-      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                               |
-      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                               |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                                                                                                                                                                           |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:review:deep:nested-x (user, aliases: pi-claude-marketplace-demo-review-deep-nested-x): Reviews the code in depth.\n- demo:review:security (user, aliases: pi-claude-marketplace-demo-review-security): Checks the code for security problems.\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given. |
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                              |
+      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                  |
+      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                  |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                                                                                                                              |
+      | 2    | tool result | subagent returned: agent demo:review:deep:nested-x, aliases pi-claude-marketplace-demo-review-deep-nested-x: Reviews the code in depth.\nagent demo:review:security, aliases pi-claude-marketplace-demo-review-security: Checks the code for security problems.\nagent demo:reviewer, aliases pi-claude-marketplace-demo-reviewer: Reviews the files it is given. |
 
   Scenario: Hidden and upper-case agent files are listed as Claude Code lists them
     Given pi runs with the scripted model and these companions:
@@ -177,11 +174,11 @@ Feature: Agent listing
       | The agents are listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                   |
-      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                       |
-      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                       |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                                                                                                                                   |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:.hidden (user, aliases: pi-claude-marketplace-demo-.hidden): Works in a hidden file.\n- demo:.hiddendir:inside (user, aliases: pi-claude-marketplace-demo-.hiddendir-inside): Works in a hidden folder.\n- demo:UPPER.MD (user, aliases: pi-claude-marketplace-demo-UPPER.MD): Works in an upper-case file. |
+      | call | role        | text                                                                                                                                                                                                                                                                                                                      |
+      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                          |
+      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                          |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                                                                                      |
+      | 2    | tool result | subagent returned: agent demo:.hidden, aliases pi-claude-marketplace-demo-.hidden: Works in a hidden file.\nagent demo:.hiddendir:inside, aliases pi-claude-marketplace-demo-.hiddendir-inside: Works in a hidden folder.\nagent demo:UPPER.MD, aliases pi-claude-marketplace-demo-UPPER.MD: Works in an upper-case file. |
 
   Scenario: A file without the markdown extension is not listed as an agent
     Given pi runs with the scripted model and these companions:
@@ -205,11 +202,11 @@ Feature: Agent listing
       | One agent is listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                     |
-      | 1    | user        | List the agents.                                                                                                                                         |
-      | 2    | user        | List the agents.                                                                                                                                         |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                     |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given. |
+      | call | role        | text                                                                                                                |
+      | 1    | user        | List the agents.                                                                                                    |
+      | 2    | user        | List the agents.                                                                                                    |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                |
+      | 2    | tool result | subagent returned: agent demo:reviewer, aliases pi-claude-marketplace-demo-reviewer: Reviews the files it is given. |
 
   Scenario: A declared agent file is listed under its own name
     Given pi runs with the scripted model and these companions:
@@ -241,11 +238,11 @@ Feature: Agent listing
       | One agent is listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                             |
-      | 1    | user        | List the agents.                                                                                                                                                 |
-      | 2    | user        | List the agents.                                                                                                                                                 |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                             |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:security (user, aliases: pi-claude-marketplace-demo-security): Checks the code for security problems. |
+      | call | role        | text                                                                                                                        |
+      | 1    | user        | List the agents.                                                                                                            |
+      | 2    | user        | List the agents.                                                                                                            |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                        |
+      | 2    | tool result | subagent returned: agent demo:security, aliases pi-claude-marketplace-demo-security: Checks the code for security problems. |
 
   Scenario: An agent whose folder name flattens onto another agent's file name is reported as skipped
     Given the marketplace "fixtures" is published as a dir source
@@ -287,19 +284,9 @@ Feature: Agent listing
       | I can use the auditor and the reviewer. |
     When the user prompts "Which agents can you use?"
     Then the model call 1 advertises these agents:
-      """
-      <advertised_subagents>
-      The following file-defined subagents opted into discovery. Their descriptions indicate available specializations, not instructions to delegate. Use subagent only when delegation is needed.
-        <subagent>
-          <name>demo:auditor</name>
-          <description>Audits the build.</description>
-        </subagent>
-        <subagent>
-          <name>demo:reviewer</name>
-          <description>Reviews the files it is given.</description>
-        </subagent>
-      </advertised_subagents>
-      """
+      | name          | description                    |
+      | demo:auditor  | Audits the build.              |
+      | demo:reviewer | Reviews the files it is given. |
     Then the model receives these calls:
       | call | role | text                      |
       | 1    | user | Which agents can you use? |

@@ -29,11 +29,11 @@ Feature: Agent lifecycle
       | No agent is listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                            |
-      | 1    | user        | List the agents.                                |
-      | 2    | user        | List the agents.                                |
-      | 2    | assistant   | tool call subagent {"action":"list"}            |
-      | 2    | tool result | subagent returned: Executable agents:\n- (none) |
+      | call | role        | text                                 |
+      | 1    | user        | List the agents.                     |
+      | 2    | user        | List the agents.                     |
+      | 2    | assistant   | tool call subagent {"action":"list"} |
+      | 2    | tool result | subagent returned: no agents         |
 
   Scenario: Enabling a disabled plugin lists its agent again
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
@@ -45,11 +45,11 @@ Feature: Agent lifecycle
       | One agent is listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                     |
-      | 1    | user        | List the agents.                                                                                                                                         |
-      | 2    | user        | List the agents.                                                                                                                                         |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                     |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given. |
+      | call | role        | text                                                                                                                |
+      | 1    | user        | List the agents.                                                                                                    |
+      | 2    | user        | List the agents.                                                                                                    |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                |
+      | 2    | tool result | subagent returned: agent demo:reviewer, aliases pi-claude-marketplace-demo-reviewer: Reviews the files it is given. |
 
   Scenario: Uninstalling a plugin removes its agent from the list
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope user"
@@ -60,11 +60,11 @@ Feature: Agent lifecycle
       | No agent is listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                            |
-      | 1    | user        | List the agents.                                |
-      | 2    | user        | List the agents.                                |
-      | 2    | assistant   | tool call subagent {"action":"list"}            |
-      | 2    | tool result | subagent returned: Executable agents:\n- (none) |
+      | call | role        | text                                 |
+      | 1    | user        | List the agents.                     |
+      | 2    | user        | List the agents.                     |
+      | 2    | assistant   | tool call subagent {"action":"list"} |
+      | 2    | tool result | subagent returned: no agents         |
 
   Scenario: Updating a plugin lists the new description of its agent
     Given the marketplace "fixtures" offers these plugins:
@@ -81,11 +81,11 @@ Feature: Agent lifecycle
       | One agent is listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                  |
-      | 1    | user        | List the agents.                                                                                                                                      |
-      | 2    | user        | List the agents.                                                                                                                                      |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                  |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews every changed file. |
+      | call | role        | text                                                                                                             |
+      | 1    | user        | List the agents.                                                                                                 |
+      | 2    | user        | List the agents.                                                                                                 |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                             |
+      | 2    | tool result | subagent returned: agent demo:reviewer, aliases pi-claude-marketplace-demo-reviewer: Reviews every changed file. |
 
   Scenario: Disabling one plugin keeps another plugin's agent in the list
     Given the marketplace "fixtures" offers these plugins:
@@ -105,11 +105,11 @@ Feature: Agent lifecycle
       | One agent is listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                        |
-      | 1    | user        | List the agents.                                                                                                                            |
-      | 2    | user        | List the agents.                                                                                                                            |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                        |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- tools:auditor (user, aliases: pi-claude-marketplace-tools-auditor): Audits the build. |
+      | call | role        | text                                                                                                   |
+      | 1    | user        | List the agents.                                                                                       |
+      | 2    | user        | List the agents.                                                                                       |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                   |
+      | 2    | tool result | subagent returned: agent tools:auditor, aliases pi-claude-marketplace-tools-auditor: Audits the build. |
 
   Scenario: An install that fails in its mcp phase leaves no agent of the plugin in the list
     Given the marketplace "fixtures" offers these plugins:
@@ -130,8 +130,8 @@ Feature: Agent lifecycle
       | One agent is listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                     |
-      | 1    | user        | List the agents.                                                                                                                                         |
-      | 2    | user        | List the agents.                                                                                                                                         |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                     |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given. |
+      | call | role        | text                                                                                                                |
+      | 1    | user        | List the agents.                                                                                                    |
+      | 2    | user        | List the agents.                                                                                                    |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                |
+      | 2    | tool result | subagent returned: agent demo:reviewer, aliases pi-claude-marketplace-demo-reviewer: Reviews the files it is given. |

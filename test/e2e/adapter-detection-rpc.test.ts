@@ -348,8 +348,10 @@ async function readPid(pidFile: string): Promise<number> {
  * reaped by its new parent shortly after, and until then it still answers
  * signal 0.
  */
+// A killed process stays visible to `kill(pid, 0)` until its parent reaps it,
+// which takes longer on a loaded machine, so this waits up to ten seconds.
 async function processGone(pid: number): Promise<boolean> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
     try {
       process.kill(pid, 0);
     } catch (error: unknown) {

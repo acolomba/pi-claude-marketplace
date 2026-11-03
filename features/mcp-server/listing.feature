@@ -22,15 +22,15 @@ Feature: MCP server listing
       | Done. |      |                    |
     When the user prompts "find the echo tool"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                     |
-      | 1    | user        | find the echo tool                                                                                                                                                                                       |
-      | 2    | user        | find the echo tool                                                                                                                                                                                       |
-      | 2    | assistant   | tool call mcp {"search":"echo"}                                                                                                                                                                          |
-      | 2    | tool result | mcp returned: Activated as direct tools: mcp__plugin_demo_stub__echo.\n\nFound 1 tool matching "echo":\n\nmcp__plugin_demo_stub__echo\n  Echoes the text it is given.\n\n  Shape:\n    { text: string; } |
-    Then the model calls are offered these tools:
-      | call | tools                                                                                                                    |
-      | 1    | read, bash, edit, write, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list, mcp                              |
-      | 2    | read, bash, edit, write, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list, mcp, mcp__plugin_demo_stub__echo |
+      | call | role        | text                                                                          |
+      | 1    | user        | find the echo tool                                                            |
+      | 2    | user        | find the echo tool                                                            |
+      | 2    | assistant   | tool call mcp {"search":"echo"}                                               |
+      | 2    | tool result | mcp returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given. |
+    Then the model calls are offered these marketplace tools:
+      | call | tools                                                                                      |
+      | 1    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list                              |
+      | 2    | mcp__plugin_demo_stub__echo, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
     Then the stub mcp server "stub" of the plugin "demo" receives these messages:
       | kind         | method                    | params                                                                                                                                                                                                                                                          |
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
@@ -57,23 +57,23 @@ Feature: MCP server listing
       | Done. |      |                                  |
     When the user prompts "list the mcp servers"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                       |
-      | 1    | user        | list the mcp servers                                                                                                                                                       |
-      | 2    | user        | list the mcp servers                                                                                                                                                       |
-      | 2    | assistant   | tool call mcp {}                                                                                                                                                           |
-      | 2    | tool result | mcp returned: MCP: 0/1 servers, 1 tools\n\n○ plugin_demo_stub_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 3    | user        | list the mcp servers                                                                                                                                                       |
-      | 3    | assistant   | tool call mcp {}                                                                                                                                                           |
-      | 3    | tool result | mcp returned: MCP: 0/1 servers, 1 tools\n\n○ plugin_demo_stub_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 3    | assistant   | tool call mcp {"connect":"plugin_demo_stub_"}                                                                                                                              |
-      | 3    | tool result | mcp returned: plugin_demo_stub_ (1 tools):\n\n- mcp__plugin_demo_stub__echo(text) - Echoes the text it is given.                                                           |
-      | 4    | user        | list the mcp servers                                                                                                                                                       |
-      | 4    | assistant   | tool call mcp {}                                                                                                                                                           |
-      | 4    | tool result | mcp returned: MCP: 0/1 servers, 1 tools\n\n○ plugin_demo_stub_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 4    | assistant   | tool call mcp {"connect":"plugin_demo_stub_"}                                                                                                                              |
-      | 4    | tool result | mcp returned: plugin_demo_stub_ (1 tools):\n\n- mcp__plugin_demo_stub__echo(text) - Echoes the text it is given.                                                           |
-      | 4    | assistant   | tool call mcp {"server":"plugin_demo_stub_"}                                                                                                                               |
-      | 4    | tool result | mcp returned: plugin_demo_stub_ (1 tools):\n\n- mcp__plugin_demo_stub__echo(text) - Echoes the text it is given.                                                           |
+      | call | role        | text                                                                                                  |
+      | 1    | user        | list the mcp servers                                                                                  |
+      | 2    | user        | list the mcp servers                                                                                  |
+      | 2    | assistant   | tool call mcp {}                                                                                      |
+      | 2    | tool result | mcp returned: server plugin_demo_stub_                                                                |
+      | 3    | user        | list the mcp servers                                                                                  |
+      | 3    | assistant   | tool call mcp {}                                                                                      |
+      | 3    | tool result | mcp returned: server plugin_demo_stub_                                                                |
+      | 3    | assistant   | tool call mcp {"connect":"plugin_demo_stub_"}                                                         |
+      | 3    | tool result | mcp returned: server plugin_demo_stub_ tool mcp__plugin_demo_stub__echo: Echoes the text it is given. |
+      | 4    | user        | list the mcp servers                                                                                  |
+      | 4    | assistant   | tool call mcp {}                                                                                      |
+      | 4    | tool result | mcp returned: server plugin_demo_stub_                                                                |
+      | 4    | assistant   | tool call mcp {"connect":"plugin_demo_stub_"}                                                         |
+      | 4    | tool result | mcp returned: server plugin_demo_stub_ tool mcp__plugin_demo_stub__echo: Echoes the text it is given. |
+      | 4    | assistant   | tool call mcp {"server":"plugin_demo_stub_"}                                                          |
+      | 4    | tool result | mcp returned: server plugin_demo_stub_ tool mcp__plugin_demo_stub__echo: Echoes the text it is given. |
 
   Scenario: Pi registers the plugin's tool under Claude Code's name, inactive until a search
     Given the marketplace "fixtures" is published as a dir source
@@ -88,9 +88,8 @@ Feature: MCP server listing
       | pi-mcp-adapter |
     Given pi-mcp-adapter has listed the tools of the stub mcp server "stub" of the plugin "demo"
     When the user lists the mcp tools pi offers
-    Then pi offers these mcp tools:
+    Then pi offers these plugin mcp tools:
       | tool                        | active |
-      | mcp                         | yes    |
       | mcp__plugin_demo_stub__echo | no     |
 
   Scenario: Each server of a plugin gets tools named after the plugin and the server
@@ -110,9 +109,8 @@ Feature: MCP server listing
     Given pi-mcp-adapter has listed the tools of the stub mcp server "api" of the plugin "demo"
     Given pi-mcp-adapter has listed the tools of the stub mcp server "my.db" of the plugin "demo"
     When the user lists the mcp tools pi offers
-    Then pi offers these mcp tools:
+    Then pi offers these plugin mcp tools:
       | tool                         | active |
-      | mcp                          | yes    |
       | mcp__plugin_demo_api__echo   | no     |
       | mcp__plugin_demo_my_db__echo | no     |
 
@@ -132,11 +130,11 @@ Feature: MCP server listing
       | Done. |      |           |
     When the user prompts "list the mcp servers"
     Then the model receives these calls:
-      | call | role        | text                                    |
-      | 1    | user        | list the mcp servers                    |
-      | 2    | user        | list the mcp servers                    |
-      | 2    | assistant   | tool call mcp {}                        |
-      | 2    | tool result | mcp returned: MCP: 0/0 servers, 0 tools |
+      | call | role        | text                     |
+      | 1    | user        | list the mcp servers     |
+      | 2    | user        | list the mcp servers     |
+      | 2    | assistant   | tool call mcp {}         |
+      | 2    | tool result | mcp returned: no servers |
     Then no stub mcp server receives a message
 
   Scenario: A search that matches no tool activates none
@@ -157,12 +155,12 @@ Feature: MCP server listing
       | Done. |      |                       |
     When the user prompts "find a tool"
     Then the model receives these calls:
-      | call | role        | text                                      |
-      | 1    | user        | find a tool                               |
-      | 2    | user        | find a tool                               |
-      | 2    | assistant   | tool call mcp {"search":"nothing"}        |
-      | 2    | tool result | mcp returned: No tools matching "nothing" |
-    Then the model calls are offered these tools:
-      | call | tools                                                                                       |
-      | 1    | read, bash, edit, write, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list, mcp |
-      | 2    | read, bash, edit, write, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list, mcp |
+      | call | role        | text                               |
+      | 1    | user        | find a tool                        |
+      | 2    | user        | find a tool                        |
+      | 2    | assistant   | tool call mcp {"search":"nothing"} |
+      | 2    | tool result | mcp returned: found no tools       |
+    Then the model calls are offered these marketplace tools:
+      | call | tools                                                         |
+      | 1    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
+      | 2    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |

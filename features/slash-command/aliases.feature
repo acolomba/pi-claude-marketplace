@@ -112,5 +112,5 @@ Feature: Slash command aliases
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user types the slash command prefix "/demo:fa" in pi's terminal
     Then pi's terminal menu offers these slash commands:
-      | command    | text |
-      | demo:fancy |      |
+      | command    | argument hint | description |
+      | demo:fancy |               |             |

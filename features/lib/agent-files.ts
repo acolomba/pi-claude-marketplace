@@ -6,6 +6,7 @@
  * nested, hidden, or frontmatter-less files (AGT-01, D-CF4-01).
  */
 
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { writePublishedPluginFile, writePublishedPluginFiles } from "./published-marketplace.ts";
@@ -107,4 +108,18 @@ export async function publishAgentFiles(
   );
   await writePublishedPluginFiles(published, plugin, files);
   return rows.map((row) => path.join(published.root, "plugins", plugin, "agents", row.file));
+}
+
+/**
+ * Returns the text of the agent file `fileName` that the agents bridge staged
+ * for pi-subagents in the agents folder of `scope`: the user scope's agent
+ * directory, or the project's `.pi` folder.
+ */
+export async function readStagedAgentFile(
+  tokens: { readonly agentDir: string; readonly projectDir: string },
+  scope: string,
+  fileName: string,
+): Promise<string> {
+  const root = scope === "user" ? tokens.agentDir : path.join(tokens.projectDir, ".pi");
+  return readFile(path.join(root, "agents", fileName), "utf8");
 }

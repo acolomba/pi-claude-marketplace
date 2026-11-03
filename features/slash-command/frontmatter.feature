@@ -190,7 +190,7 @@ Feature: Slash command frontmatter
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user types the slash command prefix "/demo:de" in pi's terminal
     Then pi's terminal menu offers these slash commands:
-      | command         | text                                     |
-      | demo:deploy     | <environment> -- [t] Deploys the branch. |
-      | demo:destroy    | [t] Destroys the branch.                 |
-      | demo:demo-skill |                                          |
+      | command         | argument hint | description          |
+      | demo:deploy     | <environment> | Deploys the branch.  |
+      | demo:destroy    |               | Destroys the branch. |
+      | demo:demo-skill |               |                      |

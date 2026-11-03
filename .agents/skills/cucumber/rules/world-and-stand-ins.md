@@ -51,7 +51,7 @@ Part of the `cucumber` skill: `.agents/skills/cucumber/SKILL.md`.
 - An agent scenario observes trust through a run with `agentScope: "project"`. pi-subagents 0.84.0 lists the agents of an untrusted project, but its runs refuse them, so the `list` action shows no difference.
 - An agent feature starts the profile Pi with pi-subagents before its install. Without the companion, the install warns (`requires pi-subagents`), and `Given the user has run` accepts only info results.
 - A hook scenario that needs a Pi in the terminal starts a profile Pi first and installs through it. A plugin installed through the run's shared Pi keeps its SessionEnd hook routed there until the next scenario's reset starts a new session (D-CF5-26).
-- `pi-subagents hides its builtin agents` and `pi-subagents hides the builtin agent {string}` each merge one key into `{agent dir}/settings.json` and restore the old bytes on release. So an agent scenario's expected list can hold only bridged agents (D-CF4-13).
+- `pi-subagents hides its builtin agents` merges one key into `{agent dir}/settings.json` and restores the old bytes on release, so an agent scenario's expected list can hold only bridged agents (D-CF4-13). Where builtins stay visible, the agent-list projection folds them into one `pi-subagents' own agents` line.
 - Approval of project MCP servers is a separate `Given`, `pi-mcp-adapter allows project mcp servers for the user`, that writes the user-level `projectServers` setting of pi-mcp-adapter to `<agent dir>/mcp-adapter.json`. It is never part of the default profile.
 
 ### The scripted model
@@ -61,7 +61,14 @@ Part of the `cucumber` skill: `.agents/skills/cucumber/SKILL.md`.
 - `the scripted model plays these steps:` writes the script. Each row is a reply (column `reply`), or a tool call (columns `tool` and `arguments`, whose arguments are a JSON object).
 - The scripted model records every call whole: the messages, the tools, and the system prompt.
 - The scripted model has no fallback reply. A call past the end of the script fails the turn, and a step that no call used fails the scenario.
-- A feature file writes the whole script as literals. A `Then` reads the call log, never the script, because a step that reads the script back proves nothing. `the model receives these calls:` lists one row per message of every call of the last turn, with the columns `call`, `role`, and `text`, and leaves out system messages. A tool call reads `tool call <name> <json>`, and a tool result has the role `tool result` and reads `<tool> returned: <text>` or `<tool> failed: <text>`. `the model call {int} receives this system prompt:` compares the whole system prompt of one call.
+- A feature file writes the whole script as literals. A `Then` reads the call log, never the script, because a step that reads the script back proves nothing. `the model receives these calls:` lists one row per message of every call of the last turn, with the columns `call`, `role`, and `text`, and leaves out system messages. A tool call reads `tool call <name> <json>`, and a tool result has the role `tool result` and reads `<tool> returned: <text>` or `<tool> failed: <text>`. Text that Pi or a companion writes itself (a pi-subagents agent list or run wrapper, a pi-mcp-adapter `mcp` result, Pi's read notices) reaches the row through `features/lib/upstream/`, which reduces it to the facts this extension owns in a fixed form of our own, so the row never states upstream wording.
+
+### Upstream text
+
+- A scenario pins what this extension does, never wording, layout, defaults, or order that Pi or a companion owns. An upstream release that rewords its own output must break no scenario. This covers Pi, pi-subagents, pi-mcp-adapter, and the workflow engine.
+- A step reduces upstream text to our facts through a projection in `features/lib/upstream/` (or the step's own parser), then compares the whole projection. A projection parses tolerantly, anchored on our values, and throws when it cannot read the text, so a real format break fails loudly instead of passing.
+- Where upstream composes our part into a larger whole (a child system prompt, Pi's offered tool list), the step checks only our part, and its name says so. It never states the upstream remainder.
+- A text this extension writes itself stays exact, even when it copies an upstream format, such as the skill block it builds as Pi does.
 
 ### The model turn
 
@@ -79,7 +86,7 @@ Part of the `cucumber` skill: `.agents/skills/cucumber/SKILL.md`.
 - The MCP stub, `features/lib/mcp-stub-server.ts`, is a stdio JSON-RPC server with no dependencies. It logs every message it receives, requests and notifications, with its plugin and server names, to `mcp-stub-requests.jsonl`. It keeps `mcp-stub-<pid>.pid`, and exits when its stdin closes. It finds the harness directory through `HOME`, which pi-mcp-adapter passes on from Pi.
 - A new RPC session binds the extension twice, and each binding starts pi-mcp-adapter's startup listing of a server. So an MCP scenario installs through the run's shared Pi before the profile Pi starts, and `pi-mcp-adapter has listed the tools of the stub mcp server {string} of the plugin {string}` waits for the startup listing to end before the turn.
 - These stand-ins are `.ts` files under `features/lib/`, never under `features/support/`, because cucumber imports `features/support/` into every worker (D-CF1-17). A Pi extension under `features/lib/` carries `// fallow-ignore-next-line unused-export -- Pi's --extension loader reads this default.` above its default export.
-- The `fix-unicode-dashes` and `fix-smartquotes` pre-commit hooks rewrite feature files. So a feature file cannot pin a companion text that holds an em dash or a smart quote literally, such as pi-subagents' `Available agents:` lines. Only a step that projects such a character to a token, as `{em dash}` does, can compare that text.
+- The `fix-unicode-dashes` and `fix-smartquotes` pre-commit hooks rewrite feature files. So a feature file cannot pin a companion text that holds an em dash or a smart quote literally, such as pi-subagents' `Available agents:` lines. Only a step that projects such a character to a token, or reduces the text to facts that hold none, can compare that text.
 - No step filters or deduplicates records. Since pi-mcp-adapter 6.0, a call through the `mcp` proxy runs the real tool as a nested Pi tool call. So a step lists both the `mcp` event and the event of the real tool, and the nested call's id is the `mcp` call's id followed by `/1`.
 
 ### Reset and CI

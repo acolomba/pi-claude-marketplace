@@ -34,6 +34,5 @@ Feature: Workflow storage
     When the user runs the workflow command "/demo:hello"
     Then the workflow run ends with the status "completed" and the result "Hello from demo."
     Then the workflow engine shows these notices:
-      | severity | message                                                                                                                                         |
-      | info     | /demo:hello running in the background ({run id}) -- check progress with /workflows status {run id}; the result is posted here when it finishes. |
-      | warning  | [workflow-delivery] delivery for {run id} deferred: endpoint for session {session id} has no thenable send function                             |
+      | notice              |
+      | started /demo:hello |

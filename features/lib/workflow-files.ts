@@ -45,7 +45,11 @@ export interface WorkflowCommandTurn {
   readonly logs: ReadonlyMap<string, readonly unknown[]>;
 }
 
-const PROGRESS_ENTRY = "pi-dynamic-workflows:progress";
+// The engine names its custom session entries after its package. Any of them
+// that carries a run id reports on that run; the rest of its name and the
+// other fields are the engine's own, so no step relies on them beyond the
+// run's id, status, result, and error.
+const ENGINE_ENTRY_PREFIX = "pi-dynamic-workflows";
 
 /** Returns the text of the script of `workflow`: its `meta`, then a `return` of its value. */
 export function workflowScriptText(workflow: PluginWorkflow): string {
@@ -76,7 +80,8 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 /**
  * Returns the data of the progress entry the workflow engine appended in
- * `record`, or undefined for any other record.
+ * `record`: an engine entry whose data names a run. Returns undefined for any
+ * other record.
  */
 export function progressOf(record: RpcRecord): Readonly<Record<string, unknown>> | undefined {
   const { entry } = record;
@@ -84,8 +89,10 @@ export function progressOf(record: RpcRecord): Readonly<Record<string, unknown>>
     record.type !== "entry_appended" ||
     !isRecord(entry) ||
     entry.type !== "custom" ||
-    entry.customType !== PROGRESS_ENTRY ||
-    !isRecord(entry.data)
+    typeof entry.customType !== "string" ||
+    !entry.customType.startsWith(ENGINE_ENTRY_PREFIX) ||
+    !isRecord(entry.data) ||
+    typeof entry.data.runId !== "string"
   ) {
     return undefined;
   }

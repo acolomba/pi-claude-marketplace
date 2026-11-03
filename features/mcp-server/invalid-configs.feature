@@ -28,16 +28,16 @@ Feature: MCP server invalid configs
       | Done. |      |                                                                 |
     When the user prompts "call the good server"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                     |
-      | 1    | user        | call the good server                                                                                                                                                     |
-      | 2    | user        | call the good server                                                                                                                                                     |
-      | 2    | assistant   | tool call mcp {}                                                                                                                                                         |
-      | 2    | tool result | mcp returned: MCP: 0/1 servers, 1 tools\n\n○ plugin_demo_ok_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 3    | user        | call the good server                                                                                                                                                     |
-      | 3    | assistant   | tool call mcp {}                                                                                                                                                         |
-      | 3    | tool result | mcp returned: MCP: 0/1 servers, 1 tools\n\n○ plugin_demo_ok_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_ok__echo","args":{"text":"ping"}}                                                                                                |
-      | 3    | tool result | mcp returned: echo:ping                                                                                                                                                  |
+      | call | role        | text                                                                      |
+      | 1    | user        | call the good server                                                      |
+      | 2    | user        | call the good server                                                      |
+      | 2    | assistant   | tool call mcp {}                                                          |
+      | 2    | tool result | mcp returned: server plugin_demo_ok_                                      |
+      | 3    | user        | call the good server                                                      |
+      | 3    | assistant   | tool call mcp {}                                                          |
+      | 3    | tool result | mcp returned: server plugin_demo_ok_                                      |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_ok__echo","args":{"text":"ping"}} |
+      | 3    | tool result | mcp returned: echo:ping                                                   |
 
   Scenario: A malformed server written in plugin.json makes the plugin unavailable
     Given the marketplace "fixtures" is published as a dir source
@@ -81,11 +81,11 @@ Feature: MCP server invalid configs
       | Done. |      |           |
     When the user prompts "list the plugin servers"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                       |
-      | 1    | user        | list the plugin servers                                                                                                                                                    |
-      | 2    | user        | list the plugin servers                                                                                                                                                    |
-      | 2    | assistant   | tool call mcp {}                                                                                                                                                           |
-      | 2    | tool result | mcp returned: MCP: 0/1 servers, 1 tools\n\n○ plugin_demo_good_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
+      | call | role        | text                                   |
+      | 1    | user        | list the plugin servers                |
+      | 2    | user        | list the plugin servers                |
+      | 2    | assistant   | tool call mcp {}                       |
+      | 2    | tool result | mcp returned: server plugin_demo_good_ |
 
     Examples:
       | declared servers                           | broken file  | file state         |

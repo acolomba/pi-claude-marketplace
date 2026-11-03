@@ -16,6 +16,8 @@ import path from "node:path";
 import { Type } from "typebox";
 import { Compile } from "typebox/compile";
 
+import { projectToolResult, projectUserText } from "../upstream/index.ts";
+
 /** One step of a model script: a reply text, or one tool call. */
 export type ScriptStep =
   | { readonly reply: string }
@@ -256,11 +258,15 @@ function messageRow(message: unknown): [string, string] {
       ? message.content
       : message.content.map((part) => partText(part)).join("\n");
   if (message.role === "toolResult") {
-    const verb = message.isError === true ? "failed" : "returned";
-    return ["tool result", `${message.toolName ?? ""} ${verb}: ${text}`];
+    const failed = message.isError === true;
+    const tool = message.toolName ?? "";
+    return [
+      "tool result",
+      `${tool} ${failed ? "failed" : "returned"}: ${projectToolResult(tool, failed, text)}`,
+    ];
   }
 
-  return [message.role, text];
+  return [message.role, message.role === "user" ? projectUserText(text) : text];
 }
 
 /**

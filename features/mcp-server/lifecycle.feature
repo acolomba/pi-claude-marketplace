@@ -26,16 +26,16 @@ Feature: MCP server lifecycle
       | Done. |      |                                                                    |
     When the user prompts "call the stub"
     Then the model receives these calls:
-      | call | role        | text                                                                                              |
-      | 1    | user        | call the stub                                                                                     |
-      | 2    | user        | call the stub                                                                                     |
-      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                       |
-      | 2    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search. |
-      | 3    | user        | call the stub                                                                                     |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                       |
-      | 3    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search. |
-      | 3    | assistant   | tool call mcp {}                                                                                  |
-      | 3    | tool result | mcp returned: MCP: 0/0 servers, 0 tools                                                           |
+      | call | role        | text                                                                        |
+      | 1    | user        | call the stub                                                               |
+      | 2    | user        | call the stub                                                               |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | user        | call the stub                                                               |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 3    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | assistant   | tool call mcp {}                                                            |
+      | 3    | tool result | mcp returned: no servers                                                    |
     Then no stub mcp server receives a message
 
   Scenario: Uninstalling a plugin removes its server from what pi-mcp-adapter offers
@@ -50,16 +50,16 @@ Feature: MCP server lifecycle
       | Done. |      |                                                                    |
     When the user prompts "call the stub"
     Then the model receives these calls:
-      | call | role        | text                                                                                              |
-      | 1    | user        | call the stub                                                                                     |
-      | 2    | user        | call the stub                                                                                     |
-      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                       |
-      | 2    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search. |
-      | 3    | user        | call the stub                                                                                     |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                       |
-      | 3    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search. |
-      | 3    | assistant   | tool call mcp {}                                                                                  |
-      | 3    | tool result | mcp returned: MCP: 0/0 servers, 0 tools                                                           |
+      | call | role        | text                                                                        |
+      | 1    | user        | call the stub                                                               |
+      | 2    | user        | call the stub                                                               |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | user        | call the stub                                                               |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 3    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | assistant   | tool call mcp {}                                                            |
+      | 3    | tool result | mcp returned: no servers                                                    |
     Then no stub mcp server receives a message
 
   Scenario: Enabling a disabled plugin offers its server again
@@ -177,16 +177,16 @@ Feature: MCP server lifecycle
       | Done. |      |                                                                    |
     When the user prompts "call the stub"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                              |
-      | 1    | user        | call the stub                                                                                                                                                     |
-      | 2    | user        | call the stub                                                                                                                                                     |
-      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                                                                                       |
-      | 2    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search.                                                                 |
-      | 3    | user        | call the stub                                                                                                                                                     |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                                                                                       |
-      | 3    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search.                                                                 |
-      | 3    | assistant   | tool call mcp {}                                                                                                                                                  |
-      | 3    | tool result | mcp returned: MCP: 0/0 servers, 0 tools (1 disabled)\n\n⊘ plugin_demo_stub_ (disabled)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
+      | call | role        | text                                                                        |
+      | 1    | user        | call the stub                                                               |
+      | 2    | user        | call the stub                                                               |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | user        | call the stub                                                               |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 3    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | assistant   | tool call mcp {}                                                            |
+      | 3    | tool result | mcp returned: server plugin_demo_stub_ disabled                             |
     Then no stub mcp server receives a message
 
   Scenario: A user's disabled choice for a plugin server survives a disable and enable
@@ -203,16 +203,16 @@ Feature: MCP server lifecycle
       | Done. |      |                                                                    |
     When the user prompts "call the stub"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                              |
-      | 1    | user        | call the stub                                                                                                                                                     |
-      | 2    | user        | call the stub                                                                                                                                                     |
-      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                                                                                       |
-      | 2    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search.                                                                 |
-      | 3    | user        | call the stub                                                                                                                                                     |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                                                                                       |
-      | 3    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search.                                                                 |
-      | 3    | assistant   | tool call mcp {}                                                                                                                                                  |
-      | 3    | tool result | mcp returned: MCP: 0/0 servers, 0 tools (1 disabled)\n\n⊘ plugin_demo_stub_ (disabled)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
+      | call | role        | text                                                                        |
+      | 1    | user        | call the stub                                                               |
+      | 2    | user        | call the stub                                                               |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | user        | call the stub                                                               |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 3    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | assistant   | tool call mcp {}                                                            |
+      | 3    | tool result | mcp returned: server plugin_demo_stub_ disabled                             |
     Then no stub mcp server receives a message
 
   Scenario: A user's disabled choice for a plugin server survives an uninstall and install
@@ -229,14 +229,14 @@ Feature: MCP server lifecycle
       | Done. |      |                                                                    |
     When the user prompts "call the stub"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                              |
-      | 1    | user        | call the stub                                                                                                                                                     |
-      | 2    | user        | call the stub                                                                                                                                                     |
-      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                                                                                       |
-      | 2    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search.                                                                 |
-      | 3    | user        | call the stub                                                                                                                                                     |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                                                                                       |
-      | 3    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search.                                                                 |
-      | 3    | assistant   | tool call mcp {}                                                                                                                                                  |
-      | 3    | tool result | mcp returned: MCP: 0/0 servers, 0 tools (1 disabled)\n\n⊘ plugin_demo_stub_ (disabled)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
+      | call | role        | text                                                                        |
+      | 1    | user        | call the stub                                                               |
+      | 2    | user        | call the stub                                                               |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | user        | call the stub                                                               |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 3    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | assistant   | tool call mcp {}                                                            |
+      | 3    | tool result | mcp returned: server plugin_demo_stub_ disabled                             |
     Then no stub mcp server receives a message

@@ -753,8 +753,8 @@ Feature: Slash command manifest forms
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user types the slash command prefix "/demo:al" in pi's terminal
     Then pi's terminal menu offers these slash commands:
-      | command    | text                        |
-      | demo:alpha | <target> -- [t] Runs alpha. |
+      | command    | argument hint | description |
+      | demo:alpha | <target>      | Runs alpha. |
 
   Scenario: A marketplace entry's inline command content is dropped with a warning
     Given the marketplace "fixtures" is published as a dir source

@@ -9,8 +9,13 @@
  * listing `When` keeps on the world. A command the engine refuses shows its
  * notice before Pi answers, so the no-run `When` waits for nothing more. A
  * command that starts a run shows its start notice before Pi answers, and the
- * engine reports a delivery problem before the progress entry that ends the
- * run, so the run `When` holds every notice of the run too.
+ * engine reports on handing back the result before the progress entry that
+ * ends the run, so the run `When` holds every notice of the run too.
+ *
+ * The engine words its notices itself, and a release can reword them. So the
+ * notices step reduces each one to the facts this extension owns: which
+ * bridged command it is about, and whether that command started a run, was
+ * refused, or is gone. It never compares the engine's sentence.
  */
 
 import assert from "node:assert/strict";
@@ -23,11 +28,6 @@ import { progressOf, sendWorkflowCommand } from "../../lib/workflow-files.ts";
 
 import type { RpcRecord } from "../../lib/pi-process.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
-
-// The commit hook's `fix-unicode-dashes` rewrites this character to `--` in
-// every committed `.feature` and `.ts` file, so no literal can hold it; the
-// notices step projects Pi's text the same way.
-const EM_DASH = "\u2014";
 
 // One `command | description` row per bridged workflow command of the last
 // listing, in Pi's order. A command with no description has an empty cell.
@@ -55,26 +55,41 @@ function runIdOf(record: RpcRecord): string | undefined {
   return typeof runId === "string" ? runId : undefined;
 }
 
-// `message` with each of `runIds` shown as `{run id}` and `sessionId` shown
-// as `{session id}`.
-function namedAsTokens(message: string, runIds: readonly string[], sessionId: string): string {
-  return runIds.reduce(
-    (text, runId) => text.replaceAll(runId, "{run id}"),
-    message.replaceAll(sessionId, "{session id}"),
-  );
+// The command a workflow command line runs: its first word, without its
+// slash, as the engine names it in its notices.
+function commandOf(line: string): string {
+  return (line.trim().split(/\s/u)[0] ?? "").replace(/^\//u, "");
 }
 
-// The id of Pi's current session, as its RPC state reports it.
-async function currentSessionId(world: ScenarioWorld): Promise<string> {
-  const { response } = await world.pi.request({ type: "get_state" });
-  const { data } = response;
-  const sessionId =
-    typeof data === "object" && data !== null && "sessionId" in data ? data.sessionId : undefined;
-  if (typeof sessionId !== "string" || sessionId === "") {
-    assert.fail(`pi reported no session id: ${JSON.stringify(response)}`);
+// The facts this extension owns in one engine notice about `command`, or
+// undefined for a notice that carries none. A notice that names the command
+// and a run of the turn says the run started. One that names the command and
+// no run says that the engine did not start it: an error notice refuses the
+// script (D-CF7-04), and any other says the command is gone. A notice that
+// names a run of the turn but not the command is the engine's report on
+// handing the run's result back to the session, such as a deferred delivery.
+// The run's outcome is read from its progress entries, so that report carries
+// no fact of this extension's and is left out. Any other notice is shown
+// whole, so a scenario fails on it.
+function noticeFact(
+  severity: string,
+  message: string,
+  command: string,
+  runIds: readonly string[],
+): string | undefined {
+  const namesRun = runIds.some((runId) => message.includes(runId));
+  const namesCommand = message
+    .split(/[^\w:.-]+/u)
+    .some((word) => word.replace(/[.:]+$/u, "") === command);
+  if (!namesCommand) {
+    return namesRun ? undefined : `${severity}: ${message}`;
   }
 
-  return sessionId;
+  if (namesRun) {
+    return `started /${command}`;
+  }
+
+  return severity === "error" ? `refused /${command}` : `unavailable /${command}`;
 }
 
 // A run appends its first progress entry before Pi answers the command, so a
@@ -126,30 +141,21 @@ Then(
   },
 );
 
-// Every notice of the last workflow command, in Pi's order. The engine names
-// the run a command started and Pi's session in its notices, and both change
-// every run, so the step shows them as `{run id}` and `{session id}`. The run
-// is the one the turn's progress entries name, and the session is the one
-// Pi's RPC state reports, so a notice that names another run or session
-// fails.
+// The facts of every notice of the last workflow command, in Pi's order. The
+// runs are the ones the turn's progress entries name.
 Then(
   "the workflow engine shows these notices:",
-  async function (this: ScenarioWorld, table: DataTable): Promise<void> {
-    const { records } = this.requireTurn();
+  function (this: ScenarioWorld, table: DataTable): void {
+    const { prompt, records } = this.requireTurn();
+    const command = commandOf(prompt);
     const runIds = [...new Set(records.flatMap((record) => runIdOf(record) ?? []))];
-    const sessionId = await currentSessionId(this);
-    const notices = records.filter(
-      (record) => record.type === "extension_ui_request" && record.method === "notify",
-    );
-    const rows = notices.map(({ notifyType, message }) => [
-      String(notifyType),
-      projectTokens(
-        "message",
-        namedAsTokens(String(message), runIds, sessionId).replaceAll(EM_DASH, "--"),
-        this.tokens,
-      ),
-    ]);
-    assert.deepStrictEqual([["severity", "message"], ...rows], table.raw());
+    const rows = records
+      .filter((record) => record.type === "extension_ui_request" && record.method === "notify")
+      .flatMap(({ notifyType, message }) => {
+        const fact = noticeFact(String(notifyType), String(message), command, runIds);
+        return fact === undefined ? [] : [[projectTokens("notice", fact, this.tokens)]];
+      });
+    assert.deepStrictEqual([["notice"], ...rows], table.raw());
     this.markTurnCompared();
   },
 );

@@ -252,21 +252,47 @@ Then(
   },
 );
 
-// D-CF6-05: one row per model call of the last turn, numbered from 1 as the
-// calls step numbers them, with the names of the tools Pi offered that call
-// in the order Pi sent them. A scenario that uses it also states the calls,
-// so this step leaves the turn for that step to mark compared.
-Then("the model calls are offered these tools:", function (this: ScenarioWorld, table: DataTable) {
-  const rows = modelCallsOf(this.requireTurn().logs).map((call) => [
-    String(call.index + 1),
-    call.tools.map((tool) => tool.name).join(", "),
-  ]);
-  assert.deepStrictEqual([["call", "tools"], ...rows], table.raw());
-});
+// pi-mcp-adapter names a tool of a server this extension bridged
+// `mcp__plugin_<plugin>_<server>__<tool>`, from the key and the `toolPrefix`
+// this extension writes.
+const PLUGIN_MCP_TOOL_PREFIX = "mcp__plugin_";
 
-// D-CF6-05: one row per tool Pi has that pi-mcp-adapter registered, the
-// `mcp` proxy and each `mcp__` tool, in Pi's order, with whether it is active.
-Then("pi offers these mcp tools:", function (this: ScenarioWorld, table: DataTable) {
+// The tools this extension registers, and the tools Pi has because of a
+// server it bridged. Pi's built-in tools,
+// the adapter's `mcp` proxy, and each other companion's tools are theirs, and
+// a release may add, drop, or rename them, so no scenario states them.
+function isMarketplaceTool(name: string): boolean {
+  return (
+    name.startsWith("pi_claude_marketplace_") ||
+    name === "run_plugin_command" ||
+    name.startsWith(PLUGIN_MCP_TOOL_PREFIX)
+  );
+}
+
+// D-CF6-05: one row per model call of the last turn, numbered from 1 as the
+// calls step numbers them, with the names of the marketplace tools Pi offered
+// that call, sorted by name, because the order is Pi's. A call offered none
+// has an empty cell. A scenario that uses it also states the calls, so this
+// step leaves the turn for that step to mark compared.
+Then(
+  "the model calls are offered these marketplace tools:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const rows = modelCallsOf(this.requireTurn().logs).map((call) => [
+      String(call.index + 1),
+      call.tools
+        .map((tool) => tool.name)
+        .filter((name) => isMarketplaceTool(name))
+        .sort((left, right) => left.localeCompare(right))
+        .join(", "),
+    ]);
+    assert.deepStrictEqual([["call", "tools"], ...rows], table.raw());
+  },
+);
+
+// D-CF6-05: one row per tool Pi has for a server this extension bridged,
+// sorted by name, with whether it is active, which the `directTools` this
+// extension writes decides. The adapter's own `mcp` proxy is not listed.
+Then("pi offers these plugin mcp tools:", function (this: ScenarioWorld, table: DataTable) {
   const snapshot = this.registrySnapshot;
   if (snapshot === undefined) {
     assert.fail("no step listed the mcp tools pi offers");
@@ -274,8 +300,10 @@ Then("pi offers these mcp tools:", function (this: ScenarioWorld, table: DataTab
 
   const active = new Set(snapshot.activeTools);
   const rows = snapshot.allTools
-    .filter(({ name }) => name === "mcp" || name.startsWith("mcp__"))
-    .map(({ name }) => [name, active.has(name) ? "yes" : "no"]);
+    .map(({ name }) => name)
+    .filter((name) => name.startsWith(PLUGIN_MCP_TOOL_PREFIX))
+    .sort((left, right) => left.localeCompare(right))
+    .map((name) => [name, active.has(name) ? "yes" : "no"]);
   assert.deepStrictEqual([["tool", "active"], ...rows], table.raw());
 });
 

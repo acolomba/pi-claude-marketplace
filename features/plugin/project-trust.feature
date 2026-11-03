@@ -71,6 +71,6 @@ Feature: Plugin project trust
     Then the model receives these calls:
       | call | role | text  |
       | 1    | user | hello |
-    Then the model calls are offered these tools:
-      | call | tools                                                                                  |
-      | 1    | read, bash, edit, write, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
+    Then the model calls are offered these marketplace tools:
+      | call | tools                                                         |
+      | 1    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |

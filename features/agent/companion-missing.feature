@@ -69,8 +69,8 @@ Feature: Agent companion missing
       | One agent is listed. |          |                   |
     When the user prompts "List the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                     |
-      | 1    | user        | List the agents.                                                                                                                                         |
-      | 2    | user        | List the agents.                                                                                                                                         |
-      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                     |
-      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given. |
+      | call | role        | text                                                                                                                |
+      | 1    | user        | List the agents.                                                                                                    |
+      | 2    | user        | List the agents.                                                                                                    |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                |
+      | 2    | tool result | subagent returned: agent demo:reviewer, aliases pi-claude-marketplace-demo-reviewer: Reviews the files it is given. |

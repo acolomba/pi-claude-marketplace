@@ -2,7 +2,7 @@ Feature: MCP server project scope
 
   A project-scope plugin server runs only when pi-mcp-adapter's project trust
   admits it, though Claude Code asks no approval for one (D-CF6-03). A stdio stub,
-  a scripted model, and a local marketplace stand in; `{em dash}` is an em dash.
+  a scripted model, and a local marketplace stand in.
 
   Scenario: An allowed project-scope plugin server connects and answers a scripted call
     Given pi-mcp-adapter allows project mcp servers for the user
@@ -57,17 +57,17 @@ Feature: MCP server project scope
       |       | mcp  | {}                                                                |
       | Done. |      |                                                                   |
     When the user prompts "call the stub"
-    Then the model receives these mcp calls:
-      | call | role        | text                                                                                                                                                                                                                                                                                                          |
-      | 1    | user        | call the stub                                                                                                                                                                                                                                                                                                 |
-      | 2    | user        | call the stub                                                                                                                                                                                                                                                                                                 |
-      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                                                                                                                                                                                                                                   |
-      | 2    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search.                                                                                                                                                                                                             |
-      | 3    | user        | call the stub                                                                                                                                                                                                                                                                                                 |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                                                                                                                                                                                                                                   |
-      | 3    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search.                                                                                                                                                                                                             |
-      | 3    | assistant   | tool call mcp {}                                                                                                                                                                                                                                                                                              |
-      | 3    | tool result | mcp returned: MCP: 0/0 servers, 0 tools (1 blocked)\n\n⊘ plugin_demo_stub_ (blocked: project server approval required {em dash} approve it in a trusted interactive session or set user-global settings.projectServers to "allow")\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
+    Then the model receives these calls:
+      | call | role        | text                                                                        |
+      | 1    | user        | call the stub                                                               |
+      | 2    | user        | call the stub                                                               |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | user        | call the stub                                                               |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 3    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | assistant   | tool call mcp {}                                                            |
+      | 3    | tool result | mcp returned: server plugin_demo_stub_ blocked                              |
     Then no stub mcp server receives a message
 
   Scenario: An untrusted project blocks a project-scope plugin server even when the user allows project servers
@@ -89,17 +89,17 @@ Feature: MCP server project scope
       |       | mcp  | {}                                                                |
       | Done. |      |                                                                   |
     When the user prompts "call the stub"
-    Then the model receives these mcp calls:
-      | call | role        | text                                                                                                                                                                                                                                           |
-      | 1    | user        | call the stub                                                                                                                                                                                                                                  |
-      | 2    | user        | call the stub                                                                                                                                                                                                                                  |
-      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                                                                                                                                                                    |
-      | 2    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search.                                                                                                                                              |
-      | 3    | user        | call the stub                                                                                                                                                                                                                                  |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}}                                                                                                                                                                    |
-      | 3    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__echo" not found. Use mcp({ search: "..." }) to search.                                                                                                                                              |
-      | 3    | assistant   | tool call mcp {}                                                                                                                                                                                                                               |
-      | 3    | tool result | mcp returned: MCP: 0/0 servers, 0 tools (1 blocked)\n\n⊘ plugin_demo_stub_ (blocked by project trust {em dash} trust the project to review and approve this server)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
+    Then the model receives these calls:
+      | call | role        | text                                                                        |
+      | 1    | user        | call the stub                                                               |
+      | 2    | user        | call the stub                                                               |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | user        | call the stub                                                               |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 3    | tool result | mcp returned: no tool mcp__plugin_demo_stub__echo                           |
+      | 3    | assistant   | tool call mcp {}                                                            |
+      | 3    | tool result | mcp returned: server plugin_demo_stub_ blocked                              |
     Then no stub mcp server receives a message
 
   Scenario: Plugin info shows a blocked project-scope server as pending approval

@@ -80,16 +80,16 @@ Feature: MCP server invocation
       | Done. |                             |                    |
     When the user prompts "call the echo tool directly"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                     |
-      | 1    | user        | call the echo tool directly                                                                                                                                                                              |
-      | 2    | user        | call the echo tool directly                                                                                                                                                                              |
-      | 2    | assistant   | tool call mcp {"search":"echo"}                                                                                                                                                                          |
-      | 2    | tool result | mcp returned: Activated as direct tools: mcp__plugin_demo_stub__echo.\n\nFound 1 tool matching "echo":\n\nmcp__plugin_demo_stub__echo\n  Echoes the text it is given.\n\n  Shape:\n    { text: string; } |
-      | 3    | user        | call the echo tool directly                                                                                                                                                                              |
-      | 3    | assistant   | tool call mcp {"search":"echo"}                                                                                                                                                                          |
-      | 3    | tool result | mcp returned: Activated as direct tools: mcp__plugin_demo_stub__echo.\n\nFound 1 tool matching "echo":\n\nmcp__plugin_demo_stub__echo\n  Echoes the text it is given.\n\n  Shape:\n    { text: string; } |
-      | 3    | assistant   | tool call mcp__plugin_demo_stub__echo {"text":"direct"}                                                                                                                                                  |
-      | 3    | tool result | mcp__plugin_demo_stub__echo returned: echo:direct                                                                                                                                                        |
+      | call | role        | text                                                                          |
+      | 1    | user        | call the echo tool directly                                                   |
+      | 2    | user        | call the echo tool directly                                                   |
+      | 2    | assistant   | tool call mcp {"search":"echo"}                                               |
+      | 2    | tool result | mcp returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given. |
+      | 3    | user        | call the echo tool directly                                                   |
+      | 3    | assistant   | tool call mcp {"search":"echo"}                                               |
+      | 3    | tool result | mcp returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given. |
+      | 3    | assistant   | tool call mcp__plugin_demo_stub__echo {"text":"direct"}                       |
+      | 3    | tool result | mcp__plugin_demo_stub__echo returned: echo:direct                             |
     Then the stub mcp server "stub" of the plugin "demo" receives these messages:
       | kind         | method                    | params                                                                                                                                                                                                                                                          |
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
@@ -118,11 +118,11 @@ Feature: MCP server invocation
       | Done. |      |                                                                      |
     When the user prompts "call the missing tool"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                       |
-      | 1    | user        | call the missing tool                                                                                                      |
-      | 2    | user        | call the missing tool                                                                                                      |
-      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__missing","args":{"text":"ping"}}                                             |
-      | 2    | tool result | mcp returned: Tool "mcp__plugin_demo_stub__missing" not found. Server "plugin_demo_stub_" has: mcp__plugin_demo_stub__echo |
+      | call | role        | text                                                                                                              |
+      | 1    | user        | call the missing tool                                                                                             |
+      | 2    | user        | call the missing tool                                                                                             |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__missing","args":{"text":"ping"}}                                    |
+      | 2    | tool result | mcp returned: no tool mcp__plugin_demo_stub__missing\nserver plugin_demo_stub_ tools: mcp__plugin_demo_stub__echo |
     Then the stub mcp server "stub" of the plugin "demo" receives these messages:
       | kind         | method                    | params                                                                                                                                                                                                                                                          |
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
@@ -152,11 +152,11 @@ Feature: MCP server invocation
       | Done. |          |                                                         |
     When the user prompts "ask the runner to say ping"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                                                 |
-      | 1    | user        | ask the runner to say ping                                                                                                                                                                                                                           |
-      | 2    | user        | ask the runner to say ping                                                                                                                                                                                                                           |
-      | 2    | assistant   | tool call subagent {"agent":"demo:runner","task":"say ping","async":false}                                                                                                                                                                           |
-      | 2    | tool result | subagent failed: Unresolved MCP direct-tool selectors: plugin_demo_stub_/echo. Direct MCP tools require a matching configured server and fresh metadata cache; runtime-registered servers require a host/pi-mcp-adapter handoff before child launch. |
+      | call | role        | text                                                                       |
+      | 1    | user        | ask the runner to say ping                                                 |
+      | 2    | user        | ask the runner to say ping                                                 |
+      | 2    | assistant   | tool call subagent {"agent":"demo:runner","task":"say ping","async":false} |
+      | 2    | tool result | subagent failed: error naming plugin_demo_stub_/echo                       |
     Then the stub mcp server "stub" of the plugin "demo" receives these messages:
       | kind         | method                    | params                                                                                                                                                                                                                                                          |
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
@@ -183,18 +183,18 @@ Feature: MCP server invocation
       | pong  |          |                                                         |
       | Done. |          |                                                         |
     When the user prompts "ask the helper to say ping"
-    Then the model calls are offered these tools:
-      | call | tools                                                                                                                                                   |
-      | 1    | read, bash, edit, write, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list, subagent, contact_supervisor, bg_wait, mcp, subagent_supervisor |
-      | 2    | read, bash, edit, write, bg_wait, contact_supervisor                                                                                                    |
-      | 3    | read, bash, edit, write, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list, subagent, contact_supervisor, bg_wait, mcp, subagent_supervisor |
+    Then the model calls are offered these marketplace tools:
+      | call | tools                                                         |
+      | 1    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
+      | 2    |                                                               |
+      | 3    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
     Then the model receives these calls:
-      | call | role        | text                                                                                       |
-      | 1    | user        | ask the helper to say ping                                                                 |
-      | 2    | user        | Task: say ping                                                                             |
-      | 3    | user        | ask the helper to say ping                                                                 |
-      | 3    | assistant   | tool call subagent {"agent":"demo:helper","task":"say ping","async":false}                 |
-      | 3    | tool result | subagent returned: Run fan-out: 1/64 used, 63 remaining\npong\nMission: {uuid} (completed) |
+      | call | role        | text                                                                       |
+      | 1    | user        | ask the helper to say ping                                                 |
+      | 2    | user        | task say ping                                                              |
+      | 3    | user        | ask the helper to say ping                                                 |
+      | 3    | assistant   | tool call subagent {"agent":"demo:helper","task":"say ping","async":false} |
+      | 3    | tool result | subagent returned: pong                                                    |
     Then the stub mcp server "stub" of the plugin "demo" receives these messages:
       | kind         | method                    | params                                                                                                                                                                                                                                                          |
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |

@@ -34,16 +34,16 @@ Feature: MCP server sources
       | Done. |      |                                                                 |
     When the user prompts "call the merged server"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                                                                          |
-      | 1    | user        | call the merged server                                                                                                                                                                                                                                                        |
-      | 2    | user        | call the merged server                                                                                                                                                                                                                                                        |
-      | 2    | assistant   | tool call mcp {}                                                                                                                                                                                                                                                              |
-      | 2    | tool result | mcp returned: MCP: 0/3 servers, 3 tools\n\n○ plugin_demo_a_ (1 tools, cached; not listening)\n○ plugin_demo_c_ (1 tools, cached; not listening)\n○ plugin_demo_b_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 3    | user        | call the merged server                                                                                                                                                                                                                                                        |
-      | 3    | assistant   | tool call mcp {}                                                                                                                                                                                                                                                              |
-      | 3    | tool result | mcp returned: MCP: 0/3 servers, 3 tools\n\n○ plugin_demo_a_ (1 tools, cached; not listening)\n○ plugin_demo_c_ (1 tools, cached; not listening)\n○ plugin_demo_b_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_a__echo","args":{"text":"ping"}}                                                                                                                                                                                                      |
-      | 3    | tool result | mcp returned: a-manifest:echo:ping                                                                                                                                                                                                                                            |
+      | call | role        | text                                                                              |
+      | 1    | user        | call the merged server                                                            |
+      | 2    | user        | call the merged server                                                            |
+      | 2    | assistant   | tool call mcp {}                                                                  |
+      | 2    | tool result | mcp returned: server plugin_demo_a_\nserver plugin_demo_c_\nserver plugin_demo_b_ |
+      | 3    | user        | call the merged server                                                            |
+      | 3    | assistant   | tool call mcp {}                                                                  |
+      | 3    | tool result | mcp returned: server plugin_demo_a_\nserver plugin_demo_c_\nserver plugin_demo_b_ |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_a__echo","args":{"text":"ping"}}          |
+      | 3    | tool result | mcp returned: a-manifest:echo:ping                                                |
 
   Scenario: An array of MCP sources is read in order, a later one replacing an earlier server
     Given the marketplace "fixtures" is published as a dir source
@@ -81,16 +81,16 @@ Feature: MCP server sources
       | Done. |      |                                                                 |
     When the user prompts "call the array server"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                                                                          |
-      | 1    | user        | call the array server                                                                                                                                                                                                                                                         |
-      | 2    | user        | call the array server                                                                                                                                                                                                                                                         |
-      | 2    | assistant   | tool call mcp {}                                                                                                                                                                                                                                                              |
-      | 2    | tool result | mcp returned: MCP: 0/3 servers, 3 tools\n\n○ plugin_demo_x_ (1 tools, cached; not listening)\n○ plugin_demo_z_ (1 tools, cached; not listening)\n○ plugin_demo_y_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 3    | user        | call the array server                                                                                                                                                                                                                                                         |
-      | 3    | assistant   | tool call mcp {}                                                                                                                                                                                                                                                              |
-      | 3    | tool result | mcp returned: MCP: 0/3 servers, 3 tools\n\n○ plugin_demo_x_ (1 tools, cached; not listening)\n○ plugin_demo_z_ (1 tools, cached; not listening)\n○ plugin_demo_y_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_x__echo","args":{"text":"ping"}}                                                                                                                                                                                                      |
-      | 3    | tool result | mcp returned: x-fileb:echo:ping                                                                                                                                                                                                                                               |
+      | call | role        | text                                                                              |
+      | 1    | user        | call the array server                                                             |
+      | 2    | user        | call the array server                                                             |
+      | 2    | assistant   | tool call mcp {}                                                                  |
+      | 2    | tool result | mcp returned: server plugin_demo_x_\nserver plugin_demo_z_\nserver plugin_demo_y_ |
+      | 3    | user        | call the array server                                                             |
+      | 3    | assistant   | tool call mcp {}                                                                  |
+      | 3    | tool result | mcp returned: server plugin_demo_x_\nserver plugin_demo_z_\nserver plugin_demo_y_ |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_x__echo","args":{"text":"ping"}}          |
+      | 3    | tool result | mcp returned: x-fileb:echo:ping                                                   |
 
   Scenario: Without a plugin.json, the marketplace entry declares the plugin's servers after its .mcp.json
     Given the marketplace "fixtures" is published as a dir source
@@ -120,16 +120,16 @@ Feature: MCP server sources
       | Done. |      |                                                                 |
     When the user prompts "call the entry server"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                       |
-      | 1    | user        | call the entry server                                                                                                                                                                                                      |
-      | 2    | user        | call the entry server                                                                                                                                                                                                      |
-      | 2    | assistant   | tool call mcp {}                                                                                                                                                                                                           |
-      | 2    | tool result | mcp returned: MCP: 0/2 servers, 2 tools\n\n○ plugin_demo_e_ (1 tools, cached; not listening)\n○ plugin_demo_f_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 3    | user        | call the entry server                                                                                                                                                                                                      |
-      | 3    | assistant   | tool call mcp {}                                                                                                                                                                                                           |
-      | 3    | tool result | mcp returned: MCP: 0/2 servers, 2 tools\n\n○ plugin_demo_e_ (1 tools, cached; not listening)\n○ plugin_demo_f_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
-      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_e__echo","args":{"text":"ping"}}                                                                                                                                                   |
-      | 3    | tool result | mcp returned: e-entry:echo:ping                                                                                                                                                                                            |
+      | call | role        | text                                                                     |
+      | 1    | user        | call the entry server                                                    |
+      | 2    | user        | call the entry server                                                    |
+      | 2    | assistant   | tool call mcp {}                                                         |
+      | 2    | tool result | mcp returned: server plugin_demo_e_\nserver plugin_demo_f_               |
+      | 3    | user        | call the entry server                                                    |
+      | 3    | assistant   | tool call mcp {}                                                         |
+      | 3    | tool result | mcp returned: server plugin_demo_e_\nserver plugin_demo_f_               |
+      | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_e__echo","args":{"text":"ping"}} |
+      | 3    | tool result | mcp returned: e-entry:echo:ping                                          |
 
   Scenario: With a plugin.json, the marketplace entry's servers are ignored
     Given the marketplace "fixtures" is published as a dir source
@@ -156,11 +156,11 @@ Feature: MCP server sources
       | Done. |      |           |
     When the user prompts "list the plugin servers"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                    |
-      | 1    | user        | list the plugin servers                                                                                                                                                 |
-      | 2    | user        | list the plugin servers                                                                                                                                                 |
-      | 2    | assistant   | tool call mcp {}                                                                                                                                                        |
-      | 2    | tool result | mcp returned: MCP: 0/1 servers, 1 tools\n\n○ plugin_demo_h_ (1 tools, cached; not listening)\n\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search |
+      | call | role        | text                                |
+      | 1    | user        | list the plugin servers             |
+      | 2    | user        | list the plugin servers             |
+      | 2    | assistant   | tool call mcp {}                    |
+      | 2    | tool result | mcp returned: server plugin_demo_h_ |
 
   Scenario: An .mcpb bundle source makes the plugin partially available
     Claude Code unpacks and runs an MCP bundle. pi-mcp-adapter has no bundle
@@ -209,9 +209,8 @@ Feature: MCP server sources
       | pi-mcp-adapter |
     Given pi-mcp-adapter has listed the tools of the stub mcp server "r" of the plugin "demo"
     When the user lists the mcp tools pi offers
-    Then pi offers these mcp tools:
+    Then pi offers these plugin mcp tools:
       | tool                     | active |
-      | mcp                      | yes    |
       | mcp__plugin_demo_r__echo | no     |
 
   Scenario: A server reference that is a symbolic link to a file inside the plugin loads its servers
@@ -235,7 +234,6 @@ Feature: MCP server sources
       | pi-mcp-adapter |
     Given pi-mcp-adapter has listed the tools of the stub mcp server "r" of the plugin "demo"
     When the user lists the mcp tools pi offers
-    Then pi offers these mcp tools:
+    Then pi offers these plugin mcp tools:
       | tool                     | active |
-      | mcp                      | yes    |
       | mcp__plugin_demo_r__echo | no     |

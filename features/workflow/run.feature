@@ -19,9 +19,8 @@ Feature: Workflow run
     When the user runs the workflow command "/demo:hello"
     Then the workflow run ends with the status "completed" and the result "Hello from demo."
     Then the workflow engine shows these notices:
-      | severity | message                                                                                                                                         |
-      | info     | /demo:hello running in the background ({run id}) -- check progress with /workflows status {run id}; the result is posted here when it finishes. |
-      | warning  | [workflow-delivery] delivery for {run id} deferred: endpoint for session {session id} has no thenable send function                             |
+      | notice              |
+      | started /demo:hello |
 
   Scenario Outline: Typed text reaches the workflow script as the engine's argument object, because the engine runs the command itself
     Given pi runs with the scripted model and these companions:
@@ -43,9 +42,8 @@ Feature: Workflow run
     When the user runs the workflow command "<typed command>"
     Then the workflow run ends with the status "completed" and the result '<returned text>'
     Then the workflow engine shows these notices:
-      | severity | message                                                                                                                                        |
-      | info     | /demo:echo running in the background ({run id}) -- check progress with /workflows status {run id}; the result is posted here when it finishes. |
-      | warning  | [workflow-delivery] delivery for {run id} deferred: endpoint for session {session id} has no thenable send function                            |
+      | notice             |
+      | started /demo:echo |
 
     Examples:
       | typed command                   | returned text                                                          |
@@ -72,8 +70,7 @@ Feature: Workflow run
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user has started a new pi session
     When the user runs the workflow command "/demo:nope"
-    Then the workflow run ends with the status "failed" and the error "Error: Nope."
+    Then the workflow run ends with the status "failed" and the error "Nope."
     Then the workflow engine shows these notices:
-      | severity | message                                                                                                                                        |
-      | info     | /demo:nope running in the background ({run id}) -- check progress with /workflows status {run id}; the result is posted here when it finishes. |
-      | warning  | [workflow-delivery] delivery for {run id} deferred: endpoint for session {session id} has no thenable send function                            |
+      | notice             |
+      | started /demo:nope |
