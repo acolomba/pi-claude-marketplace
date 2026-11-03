@@ -4829,3 +4829,23 @@ Added 2026-11-02 (component-features, user decision A.1 item 6). When the extens
 ## WFLOCAL-01: the workflow engine may stop reading a project's `.pi/workflows/saved/`
 
 Recorded by the project locality decision (DC-41, D-LOC-01, which reverses WPTH-02). A project install now saves its workflow envelopes in `<cwd>/.pi/workflows/saved/`. pi-dynamic-workflows 3.15.0 reads that directory as a full source, after `~/.pi/workflows/projects/<key>/saved/` and before the user's `saved/`, with no warning. But since engine PR #19 (June 2026) the engine writes its own saves and runtime state under `~/.pi/workflows/projects/<key>/`, and its module header says so that projects do not collect `.pi/workflows` directories. A later engine release that drops the in-project source would hide every project install's workflows with no error. No engine patch was made (user's choice). Watch each engine release: `src/workflow-saved.ts::createWorkflowStorage` must keep the `legacy` source, and `features/workflow/storage.feature` runs a project workflow against the declared engine floor. If the source is dropped, decide with the user between asking upstream to keep it and an opt-in move to the engine's project directory.
+
+## BEHAVGAP-01: behavioral test gaps after component-features
+
+Added 2026-11-03 (user request). Every `/claude:plugin` verb and every component kind has feature files, but these behaviors have no cucumber scenario or only a partial one. A regression in any of them passes every gate. Each item ships with a scenario that fails without the behavior.
+
+No scenario at all:
+
+1. GitHub sign-in (Device Flow) and credential prompts: the interactive sign-in that `install`, `apply` and `marketplace add` run for a private GitHub repo, and the rule that a load with `autoapply` on uses stored credentials only and never prompts (D-13). Unit tests only. Needs a stand-in for GitHub's device-code endpoints.
+2. A plugin's `bin/` on `PATH` (PENV-01): at load each enabled plugin's `bin/` is appended to `PATH` and recorded in `PI_CLAUDE_MARKETPLACE_PATH`, and Pi's bash tool inherits it. No scenario shows a bash call finding a plugin executable, or the entry leaving after uninstall and `/reload`.
+3. Background hooks (`asyncRewake`) and the `StopFailure` event: both are supported and appear in no feature file.
+4. Upgrades from old data: the first-load migration of old `state.json` and config formats is unit-tested only. Part of it needs a harness change first, because the harness cannot record an installed plugin without `install` writing the base config (LCTEST-01).
+5. Background agent runs: an `async: true` agent, including one that calls a plugin MCP tool, and with it the working end-to-end proof of MCP-07. Blocked on the pi-subagents fixes on the user's fork (`acolomba/pi-subagents`, `fix/mcp-direct-tools-adapter-7`); see AGTASYNC-01 and MCPBG-01.
+
+Partly covered:
+
+6. The scenario items of LCTEST-01: a `, `-joined range on an `update` cause line, a post-swap update failure, `enable` of an already-enabled plugin with a missing dependency, a `partially-upgradable` row in `list`, the prune keep-dependency declaration check, an `apply` edit that mixes a failed install with an uninstall and a disable, bare `fetch` continuing after one failure, the `rm` and `ls` alias rows in `features/marketplace/usage-errors.feature`, and the url-source invalid-JSON failed add's record check and retry.
+7. Hook edge cases deferred by the hooks phase: several JSON lines on stdout (HOOKJSONLINES-01), a Stop block with no reason (HOOKSTOPREASON-01), the per-tool-call reset of the Stop re-entry cap (HOOKSTOPCAP-01), prompt context on follow-up messages (HOOKFOLLOWUP-01), and Claude Code's non-blocking hook-error notice (HOOKERRNOTE-01). Most are also small behavior gaps, so each fix brings its scenario.
+8. `info` of an agent read from the plugin source (AGTINFO-01): nested agents, `.MD` agents, and declared agent files are left out. The fix and its scenario go together.
+
+Suggested order: 1-4 and 6 as one small milestone; 5 once the pi-subagents fixes merge upstream; 7 and 8 when the hooks and agents code next changes.
