@@ -56,15 +56,7 @@ export const REINSTALL_CONTEXT = {
   },
 } as const satisfies CommandContext<ReinstallStatus>;
 
-// ───────────────────────────────────────────────────────────────────────────
-// Outcome -> row projection.
-//
-// This family lived in reinstall.ts and was reached through two `__test_*`
-// re-exports. It is reinstall's message vocabulary rather than any part of its
-// transaction, which is what this module already owns, so it moved here and
-// the seams went with it (FLOW-09). The orchestrator now calls it across a
-// public interface, the same one the tests use.
-// ───────────────────────────────────────────────────────────────────────────
+// Outcome -> row projection: reinstall's message vocabulary (FLOW-09).
 /**
  * Render the bulk-reinstall outcome cascade as a single
  * `notify(ctx, run, NotificationMessage)` call per orchestration.
@@ -89,18 +81,9 @@ export const REINSTALL_CONTEXT = {
  * - Per-marketplace iteration order is honored end-to-end: the orchestrator
  *   pre-sorts via `compareByNameThenScope`; notify() does NOT sort
  *   marketplaces[] or plugins[].
+ * - Callers MUST NOT compose the "/reload to pick up changes" trailer
+ *   themselves; notify() aggregates it from the rows.
  */
-// NotificationMessage cascade recipe:
-// - One MarketplaceNotificationMessage per affected marketplace, emitted via
-//   a single notify(ctx, run, ...) call per orchestration.
-// - plugins: readonly PluginNotificationMessage[] in display order
-//   (orchestrator-controlled iteration; notify does not sort).
-// - Discriminators by status: "reinstalled" / "skipped" / "failed" /
-//   "manual recovery".
-// - Each row's severity + reload-hint are set explicitly by its producer;
-//   notify() aggregates them into the cascade's overall "/reload to pick up
-//   changes" trailer. Callers MUST NOT compose that trailer themselves.
-// - Reference: catalog UAT plugin-reinstall fixtures.
 export function renderReinstallPartitionAndNotify(
   ctx: NotificationContext,
   run: NotificationRun,
@@ -132,7 +115,7 @@ export function renderReinstallPartitionAndNotify(
 
   // Order marketplace blocks via compareByNameThenScope (name primary
   // case-insensitive, scope secondary project-before-user per MSG-GR-3).
-  // the orchestrator owns the sort; notify does not reorder.
+  // The orchestrator owns the sort; notify does not reorder.
   const sortedBlocks = [...byMp.values()].sort((a, b) =>
     compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
   );
@@ -141,7 +124,7 @@ export function renderReinstallPartitionAndNotify(
   // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
   // variable-length array, identical at runtime.
   // WR-01: the per-block plugin rows are built through the `outcomeToPluginMessage`
-  // helper, now typed to `ReinstallMsg`, so the `MarketplaceRows<ReinstallMsg>`
+  // helper, typed to `ReinstallMsg`, so the `MarketplaceRows<ReinstallMsg>`
   // annotation holds without a cast -- a status drift between the producer and
   // the policy map is a compile error here.
   const marketplaces: Plural<MarketplaceRows<ReinstallMsg>> = sortedBlocks.map((block) => {

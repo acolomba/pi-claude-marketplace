@@ -750,8 +750,11 @@ describe("SkillFrontmatterNodeError", () => {
     },
   ]) {
     test(`WR-05: names the key, its line, the node's keys${skill === undefined ? "" : " and the skill"}`, () => {
+      // arrange
+      const keys = ["name", "description"];
+
       // act
-      const error = new SkillFrontmatterNodeError("name", 2, ["name", "description"], skill);
+      const error = new SkillFrontmatterNodeError("name", 2, keys, skill);
 
       // assert
       assert.ok(error instanceof Error);

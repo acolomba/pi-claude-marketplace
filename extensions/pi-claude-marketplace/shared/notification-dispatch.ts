@@ -1,3 +1,31 @@
+/**
+ * shared/notification-dispatch.ts -- the sole site that calls the Pi notify
+ * API (IL-2) and appendEntry API (JOUT-01). Text reaches `deliver`, which makes
+ * exactly one notify call from the argument tuple the text strategy returns
+ * (D-02). The text strategy in notification-grammar.ts supplies both the text
+ * and the argument count (D-15).
+ *
+ * Two paths reach the sink:
+ *
+ *  - The structured path. Every structured emission (`notify` and the context
+ *    emitters) is first presented once (notification-present.ts, JOUT-02). The
+ *    text strategy composes the body from that presentation and hands it with
+ *    the envelope to `formatEnvelopeArguments`; the JSON strategy
+ *    (notification-json.ts) reads the same value. Severity is a caller-stamped
+ *    per-row field, reduced to the envelope's severity at resolve time
+ *    (SEV-02). The command's run supplies the soft-dep snapshot (D-05).
+ *  - The raw-surface path. Each helper builds one `RawSurface` kind, which
+ *    `resolveRawSurface` serializes before transport selection (D-13). The MCP
+ *    config notice helper builds one per non-empty notice section.
+ *    Usage helpers receive the command run for the entry sink (D-05-05).
+ *
+ * The fallow rule `architecture/notify-chokepoint` excludes this file, so it
+ * needs no inline suppression.
+ *
+ * Callers import vocabulary from `notification-types.ts` and rendering or
+ * dispatch behavior directly from this file. No barrel re-exports.
+ */
+
 import { hookDebugLog } from "./debug-log.ts";
 import { resolveCommandError } from "./notification-command-error.ts";
 import {
@@ -116,34 +144,6 @@ function commandStateFor(run: NotificationRun): CommandRunState | undefined {
       return undefined;
   }
 }
-
-/**
- * shared/notification-dispatch.ts -- the sole site that calls the Pi notify
- * API (IL-2) and appendEntry API (JOUT-01). Text reaches `deliver`, which makes
- * exactly one notify call from the argument tuple the text strategy returns
- * (D-02). The text strategy in notification-grammar.ts supplies both the text
- * and the argument count (D-15).
- *
- * Two paths reach the sink:
- *
- *  - The structured path. Every structured emission (`notify` and the context
- *    emitters) is first presented once (notification-present.ts, JOUT-02). The
- *    text strategy composes the body from that presentation and hands it with
- *    the envelope to `formatEnvelopeArguments`; the JSON strategy
- *    (notification-json.ts) reads the same value. Severity is a caller-stamped
- *    per-row field, reduced to the envelope's severity at resolve time
- *    (SEV-02). The command's run supplies the soft-dep snapshot (D-05).
- *  - The raw-surface path. Each helper builds one `RawSurface` kind, which
- *    `resolveRawSurface` serializes before transport selection (D-13). The MCP
- *    config notice helper builds one per non-empty notice section.
- *    Usage helpers receive the command run for the entry sink (D-05-05).
- *
- * The fallow rule `architecture/notify-chokepoint` excludes this file, so it
- * needs no inline suppression.
- *
- * Callers import vocabulary from `notification-types.ts` and rendering or
- * dispatch behavior directly from this file. No barrel re-exports.
- */
 
 /**
  * D-02 / D-15: makes exactly one notify call with the text strategy's arity.
@@ -285,8 +285,8 @@ export function notifyBackgroundUpdate(
 /**
  * Usage error notify (ES-3 primitive). Builds the `usage-error` kind from the
  * caller's message and usage block (RAWS-01, D-06). The text strategy joins
- * them with one blank line when usage is nonempty, at `error` severity (SNM-13); that blank
- * line is part of the user contract, and
+ * them with one blank line when usage is nonempty, at `error` severity
+ * (SNM-13). That blank line is part of the user contract, and
  * `test/shared/notification-dispatch.test.ts` asserts it byte-for-byte (the
  * SNM-13 case).
  */

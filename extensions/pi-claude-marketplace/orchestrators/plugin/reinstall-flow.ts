@@ -48,8 +48,8 @@ import {
   rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
 import {
+  type ContentReason,
   type PluginFailedMessage,
   type PluginReinstalledMessage,
 } from "../../shared/notification-types.ts";
@@ -520,6 +520,7 @@ async function reinstallPluginsWith(
     // Enumeration failures occur before the selector can return, so preserve
     // invocation-form cardinality at this error-projection boundary.
     const cardinality = opts.target.kind === "plugin" ? "single" : "plural";
+    // The target enumerators throw only `Error` instances, so the cast holds.
     await handleEnumerationFailure(owners, opts, err as Error, cardinality);
     return [];
   }
@@ -670,7 +671,7 @@ function reinstallStagingDiagnostic(outcome: ReinstallPluginOutcome): StagingDia
 }
 
 /**
- * Emit the single `notify()` call for a target-enumeration failure. Extracted
+ * Emits the single `notify()` call for a target-enumeration failure. Extracted
  * from `reinstallPlugins` to keep that function's cognitive complexity inside
  * the sonarjs ceiling.
  *
@@ -714,14 +715,13 @@ async function handleEnumerationFailure(
   const typedReasons = owners.reinstallReasonsFromError(err);
   const reasons: readonly ContentReason[] =
     typedReasons ?? narrowReasons([composeErrorWithCauseChain(err)]);
-  const causeErr = err;
   const targetingScope = opts.scope ?? "user";
   const targetingMp = opts.target.kind === "all" ? "(reinstall)" : opts.target.marketplace;
   const failedRow: PluginFailedMessage = {
     status: "failed",
     name: "(reinstall)",
     reasons,
-    cause: causeErr,
+    cause: err,
     // D-03/D-06: bare-form reinstall enumerate failure -> error, no reload.
     severity: "error",
     needsReload: false,

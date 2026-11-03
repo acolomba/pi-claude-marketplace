@@ -192,19 +192,17 @@ test("rethrows a non-ENOENT staging read failure without changing the path", asy
   const { locations } = await createStagingScope(t, "workflows-staging-gc-enotdir-");
   await mkdir(locations.workflowsHomeDir, { recursive: true });
   await writeFile(locations.workflowsStagingDir, "not a directory");
-  let caught: unknown;
 
-  // act
-  try {
-    await garbageCollectWorkflowsStaging(locations);
-  } catch (error) {
-    caught = error;
-  }
-
-  // assert
-  assert.ok(caught instanceof Error);
-  assert.strictEqual(caught.name, "Error");
-  assert.strictEqual((caught as NodeJS.ErrnoException).code, "ENOTDIR");
+  // act & assert
+  await assert.rejects(
+    () => garbageCollectWorkflowsStaging(locations),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.name, "Error");
+      assert.strictEqual((error as NodeJS.ErrnoException).code, "ENOTDIR");
+      return true;
+    },
+  );
 });
 
 test("skips an aged staging entry that is not a directory", async (t) => {
@@ -429,7 +427,6 @@ test("WR-02: sweeps an aged staging tree whose .previous is empty", async (t) =>
   assert.deepStrictEqual(await stagingEntries(locations), []);
 });
 
-// ---------------------------------------------------------------------------
 // WR-06: the read-only retained-tree scan.
 //
 // The sweep above declines to remove an aged tree whose `.previous/` still
@@ -438,7 +435,6 @@ test("WR-02: sweeps an aged staging tree whose .previous is empty", async (t) =>
 // names it. These cases pin the read-only sibling that names it, and pin that
 // it reports EXACTLY the set the sweep keeps for that reason -- same predicate,
 // same age bound -- so a live transaction mid-commit is never reported.
-// ---------------------------------------------------------------------------
 
 /** Give a staging tree a `.previous/` holding `count` displaced envelopes. */
 async function displace(root: string, count: number): Promise<string> {
@@ -627,7 +623,7 @@ test("WR-05: reports a retained tree whose .previous cannot be read, with no cou
 
 test("WR-02: the sweep's leak list and retention decisions survive the shared reader", async (t) => {
   // arrange
-  // The refactor's regression guard. One tree of each kind the sweep
+  // Regression guard for the shared reader. One tree of each kind the sweep
   // distinguishes -- retained for displaced envelopes, unremovable, ordinary
   // orphan -- swept in one pass, so a reader that answered any of the three
   // differently would move either the leak list or the surviving set.

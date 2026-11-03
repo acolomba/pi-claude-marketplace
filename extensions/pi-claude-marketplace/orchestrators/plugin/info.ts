@@ -310,26 +310,9 @@ async function derivePluginRootForInfo(
 }
 
 /**
- * Walk one or more component-kind DIRECTORIES (relative to the plugin
- * root) and accumulate the per-kind component NAMES.
- *
- * For each declared directory:
- *   - skills:   directory entries -> directory NAMES (each skill is a
- *               subdirectory; `isSkillDir` filtering is bridge-layer
- *               only -- info surfaces authoring intent).
- *   - commands: file entries -> basename minus `.md` suffix.
- *   - agents:   file entries -> basename minus `.md` suffix.
- *
- * Read failures of ENOENT/ENOTDIR yield an empty bucket (declared dir
- * doesn't exist yet -- legitimate "no components" state). Every other
- * failure propagates so the row builder can classify via
- * `narrowProbeError` and surface a `{permission denied}` / `{unreadable}`
- * reason rather than silently rendering as "no components". The
- * renderer requires PRE-SORTED arrays; this helper sorts before
- * returning.
+ * Extracts the displayable name from a single directory entry per `kind`, or
+ * `undefined` when the entry does not qualify.
  */
-/** Extract the displayable name from a single directory entry per `kind`,
- *  or `undefined` if the entry does not qualify. */
 function nameFromEntry(
   entry: { name: string; isDirectory(): boolean; isFile(): boolean },
   kind: "skills" | "commands" | "agents",
@@ -357,17 +340,33 @@ async function readEntriesOrEmpty(
   try {
     return await reader.listDirectory(abs);
   } catch (err) {
-    if (err instanceof Error) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOENT" || code === "ENOTDIR") {
-        return [];
-      }
+    if (isErrnoException(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) {
+      return [];
     }
 
     throw err;
   }
 }
 
+/**
+ * Walk one or more component-kind DIRECTORIES (relative to the plugin
+ * root) and accumulate the per-kind component NAMES.
+ *
+ * For each declared directory:
+ *   - skills:   directory entries -> directory NAMES (each skill is a
+ *               subdirectory; `isSkillDir` filtering is bridge-layer
+ *               only -- info surfaces authoring intent).
+ *   - commands: file entries -> basename minus `.md` suffix.
+ *   - agents:   file entries -> basename minus `.md` suffix.
+ *
+ * Read failures of ENOENT/ENOTDIR yield an empty bucket (declared dir
+ * doesn't exist yet -- legitimate "no components" state). Every other
+ * failure propagates so the row builder can classify via
+ * `narrowProbeError` and surface a `{permission denied}` / `{unreadable}`
+ * reason rather than silently rendering as "no components". The
+ * renderer requires PRE-SORTED arrays; this helper sorts before
+ * returning.
+ */
 async function discoverComponentNames(
   reader: PluginInfoReader,
   pluginRoot: string,
@@ -773,6 +772,12 @@ async function readHookSummaryEntries(
   return [...supported, ...dropped];
 }
 
+/** The outcome of `readStateOnlyHookEntries`, discriminated by `kind`. */
+type StateOnlyHookRead =
+  | { readonly kind: "none" }
+  | { readonly kind: "listed"; readonly entries: readonly HookSummaryEntry[] }
+  | { readonly kind: "degraded"; readonly reason: ContentReason };
+
 /**
  * INFO-11 / D-96-03 / D-57-03 / NFR-10: reconstruct the hook inventory for a
  * record whose manifest entry is gone. The installation record carries only the
@@ -789,7 +794,7 @@ async function readHookSummaryEntries(
  * D-96-03 truthful split, carried by the RESULT DISCRIMINANT rather than by the
  * presence of an `entries` field: `none` is a real negative (the record names no
  * hooks container), `listed` is a completed read, and `degraded` is a container
- * that exists but could not be listed. An optional-field shape let the caller
+ * that exists but could not be listed. An optional-field shape would let the caller
  * conflate the first and third, which is exactly the case where silence must
  * NOT read as verified absence. No failure shape fails the info block -- a throw
  * collapses through the shared `narrowProbeError` ladder and a `{ok:false}`
@@ -800,11 +805,6 @@ async function readHookSummaryEntries(
  * slugs: a half-listed hooks block claims a completeness it does not have,
  * which is a worse lie than omitting the block and naming the failure.
  */
-type StateOnlyHookRead =
-  | { readonly kind: "none" }
-  | { readonly kind: "listed"; readonly entries: readonly HookSummaryEntry[] }
-  | { readonly kind: "degraded"; readonly reason: ContentReason };
-
 async function readStateOnlyHookEntries(
   reader: PluginInfoReader,
   slugs: readonly string[],
@@ -895,8 +895,8 @@ async function readLenientHookSummary(
   reader: PluginInfoReader,
   pluginRoot: string,
 ): Promise<readonly HookSummaryEntry[] | undefined> {
-  const p = path.join(pluginRoot, "hooks", "hooks.json");
-  const raw = await readLenientHooksFile(reader, p);
+  const hooksJsonPath = path.join(pluginRoot, "hooks", "hooks.json");
+  const raw = await readLenientHooksFile(reader, hooksJsonPath);
   if (raw === undefined) {
     return undefined;
   }
@@ -1066,8 +1066,8 @@ async function composeResolvedComponents(
   // SURF-01 / D-63-07: hooks branch. Read-and-project happens ONCE at
   // message-construction time (no string re-derivation at render time).
   // I/O failures propagate to the row-builder catch where
-  // `narrowProbeError` classifies via the existing ladder (Open Question
-  // 3 in 63-RESEARCH.md: no new REASON, no new code path).
+  // `narrowProbeError` classifies via the existing ladder (no new REASON,
+  // no new code path).
   //
   // INFO-05: when the resolver did NOT record `hooksConfigPath` (the
   // strict parser bailed; row is a path-resolvable
@@ -1929,6 +1929,14 @@ async function buildNotInstallablePathRowFields(
   }
 }
 
+/** The per-kind component directories `deriveLenientComponentPaths` collects. */
+interface LenientComponentPaths {
+  skills: string[];
+  commands: string[];
+  agents: string[];
+  workflows: string[];
+}
+
 /**
  * D-64-05: re-derive the component-path map for the MINIMAL `unavailable`
  * arm, which (unlike `installable` / `partially-available`) does not carry
@@ -1946,18 +1954,10 @@ async function buildNotInstallablePathRowFields(
  * This keeps the `(unavailable)`/`(installed)` path-source rows enumerating
  * on-disk components without reading the arm's stripped fields (NFR-7).
  */
-function deriveLenientComponentPaths(entry: MarketplaceManifest["plugins"][number]): {
-  skills: string[];
-  commands: string[];
-  agents: string[];
-  workflows: string[];
-} {
-  const out = {
-    skills: [] as string[],
-    commands: [] as string[],
-    agents: [] as string[],
-    workflows: [] as string[],
-  };
+function deriveLenientComponentPaths(
+  entry: MarketplaceManifest["plugins"][number],
+): LenientComponentPaths {
+  const out: LenientComponentPaths = { skills: [], commands: [], agents: [], workflows: [] };
   for (const kind of ["skills", "commands", "agents", "workflows"] as const) {
     const declared = (entry as Record<string, unknown>)[kind];
     if (kind === "skills" || kind === "commands" || !declared) {
@@ -2074,9 +2074,9 @@ function buildNonPathInstalledRow(
  * FTCH-06 / D-81-05: the per-command auth + seam context for the `info --fetch`
  * hook. Built once in `getPluginInfoWithReader` when `opts.fetch === true`,
  * threaded down to the git-source row builders. `locations` are supplied
- * per-block by the caller. Mirrors the install clone-probe's auth bundle wiring; info reaches the
- * git surface ONLY through the `clone-cache.ts` seam + `auth-host.ts`
- * re-exports (BLOCK F in `eslint.config.js`, NFR-5).
+ * per-block by the caller. Mirrors the install clone-probe's auth bundle
+ * wiring; info reaches the git surface ONLY through the `clone-cache.ts` seam
+ * + `auth-host.ts` re-exports (BLOCK F in `eslint.config.js`, NFR-5).
  */
 interface InfoFetchContext {
   readonly ctx: NotificationContext;
@@ -2110,7 +2110,7 @@ type GitProbe = (source: GitBackedSource) => Promise<GitPluginRootResult>;
  * one locked body (`runFetchLocked`, GLK-05).
  */
 function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext): GitProbe {
-  const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
+  async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     const cloneUrl = canonicalCloneUrl(gitSource);
     const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx);
     const { pluginRoot: mirrorRoot, resolvedSha } =
@@ -2122,9 +2122,9 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
         auth: authBundle,
       });
     return resolveGitPluginRootWithSubdir(gitSource, mirrorRoot, resolvedSha);
-  };
+  }
 
-  const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
+  async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     const { cloneUrl, pin, ref } = await fetchCtx.seam.resolvePluginPin({ source: gitSource });
     const cloneRoot = await fetchCtx.seam.materializePluginClone({
       locations,
@@ -2135,7 +2135,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
       resolveAuth: () => buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx),
     });
     return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
-  };
+  }
 
   return (gitSource) =>
     gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
@@ -2160,7 +2160,10 @@ function runFetchLocked<T>(
 ): Promise<T> {
   const probe =
     fetchCtx !== undefined ? makeFetchProbe(locations, fetchCtx) : makePresenceProbe(locations);
-  const probeAndBuild = async (): Promise<T> => buildRow(await probe(gitSource));
+  async function probeAndBuild(): Promise<T> {
+    return buildRow(await probe(gitSource));
+  }
+
   return fetchCtx !== undefined && gitSource.sha === undefined
     ? withExistingScopeLock(locations, probeAndBuild)
     : probeAndBuild();
@@ -2758,10 +2761,19 @@ async function buildNotInstalledRow(opts: {
   locations: ScopedLocations;
   fetchCtx?: InfoFetchContext;
 }): Promise<PluginInfoRow> {
-  const { reader, pluginName, version, description, dependencies, entry, mpRecord, parsedSource } =
-    opts;
-  const { env } = opts;
-  const { locations, fetchCtx } = opts;
+  const {
+    reader,
+    env,
+    pluginName,
+    version,
+    description,
+    dependencies,
+    entry,
+    mpRecord,
+    parsedSource,
+    locations,
+    fetchCtx,
+  } = opts;
   // RSTA-01 / RSTA-05 / D-80-04: a NOT-installed git-source entry (url /
   // git-subdir / github) is classified from its clone/mirror presence. Bare info
   // reads it fs-only: a COLD clone renders `(remote)` + `components: not
@@ -2788,7 +2800,7 @@ async function buildNotInstalledRow(opts: {
     });
   }
 
-  let resolved;
+  let resolved: Awaited<ReturnType<typeof resolveStrict>>;
   try {
     resolved = await resolveStrict(entry, {
       marketplaceRoot: mpRecord.marketplaceRoot,
@@ -3059,9 +3071,9 @@ function emitFetchSkip(
     return;
   }
 
-  // D-100-08 / ENBL-17: ONE list, keyed by the producer's reason. The earlier
-  // form concatenated a per-cause list per arm, which emitted two rows for a
-  // scope that carried both causes; a single optional field per block cannot.
+  // D-100-08 / ENBL-17: ONE list, keyed by the producer's reason. A scope that
+  // carries both causes yields one row, because a block holds a single optional
+  // `skipReason`.
   const sources: readonly SkipSource[] = built.flatMap(({ block, skipReason }) =>
     skipReason === undefined
       ? []
@@ -3093,8 +3105,8 @@ function emitFetchSkip(
 /**
  * ADET-01: stamps the companions that the components the install writes need
  * onto the block's plugin row, each tagged missing per the command run's one
- * soft-dependency snapshot (D-05). A server that a partial install leaves out needs no adapter.
- * An unresolved row and a row that needs no companion keep their shape. A
+ * soft-dependency snapshot (D-05). A server that a partial install leaves out
+ * needs no adapter. An unresolved row and a row that needs no companion keep their shape. A
  * disabled row keeps its component inventory (ENBL-18), so it carries the line
  * too: the line states what the plugin needs, not what is running.
  */

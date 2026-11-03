@@ -2809,14 +2809,14 @@ for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
 }
 
 test("D-PL8-16: converts a background update row without a from version", () => {
+  // arrange
+  const surface = {
+    kind: "background-update",
+    plugins: [{ name: "alpha", marketplace: "tools", scope: "project", toVersion: "1.1.0" }],
+  } satisfies ResolvedRawSurface;
+
   // act
-  const payload = toWirePayload(
-    {
-      kind: "background-update",
-      plugins: [{ name: "alpha", marketplace: "tools", scope: "project", toVersion: "1.1.0" }],
-    },
-    { kind: "load" },
-  );
+  const payload = toWirePayload(surface, { kind: "load" });
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -2830,15 +2830,19 @@ test("D-PL8-16: converts a background update row without a from version", () => 
 });
 
 test("AAP-04: converts a default autoapply status without a source or a set", () => {
+  // arrange
+  const surface = {
+    kind: "autoapply-status",
+    enabled: false,
+    files: [{ scope: "project", file: "claude-plugins.json" }],
+  } satisfies ResolvedRawSurface;
+
   // act
-  const payload = toWirePayload(
-    {
-      kind: "autoapply-status",
-      enabled: false,
-      files: [{ scope: "project", file: "claude-plugins.json" }],
-    },
-    { kind: "command", commandId: "plugin autoapply", invocationId: "test-run" },
-  );
+  const payload = toWirePayload(surface, {
+    kind: "command",
+    commandId: "plugin autoapply",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {

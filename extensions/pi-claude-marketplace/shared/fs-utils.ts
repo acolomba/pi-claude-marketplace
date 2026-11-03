@@ -43,8 +43,7 @@ import type { Dirent } from "node:fs";
  * The removal port: the destructive filesystem verb behind one substitutable
  * object.
  *
- * The port stays narrow (D-08-13): `rm` is its one member since IN-06
- * dropped the unused `rename`. Widening this into a general filesystem
+ * The port stays narrow (D-08-13): `rm` is its one member. Widening this into a general filesystem
  * facade would put every verb in this module behind a seam nothing asked for;
  * `pathExists`, `readDirEntriesTolerant`, and `isPlainMarkdownFile` keep
  * calling `fs` directly.

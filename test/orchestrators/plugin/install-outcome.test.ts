@@ -462,9 +462,9 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
     get(target, property, receiver): unknown {
       if (property === "marketplace") {
         marketplaceReads += 1;
-        // The workflows phase's previous-names lookup adds one read ahead of
-        // the state commit's, so the marketplace must survive one read
-        // longer than it did with five phases.
+        // The workflows phase's previous-names lookup reads the marketplace
+        // ahead of the state commit, so the marketplace must survive three
+        // reads and vanish on the fourth.
         return marketplaceReads >= 4 ? undefined : marketplace;
       }
 
@@ -644,7 +644,7 @@ async function installWithFaultedStagingCleanup(
 }
 
 test("surfaces the skills staging cleanup leak and still lands the install", async (t) => {
-  // arrange + act
+  // act
   const installed = await installWithFaultedStagingCleanup(t, {
     prefix: "install-outcome-skills-leak-",
     components: { skills: ["alpha"] },
@@ -662,7 +662,7 @@ test("surfaces the skills staging cleanup leak and still lands the install", asy
 });
 
 test("surfaces the commands staging cleanup leak and still lands the install", async (t) => {
-  // arrange + act
+  // act
   const installed = await installWithFaultedStagingCleanup(t, {
     prefix: "install-outcome-commands-leak-",
     components: { commands: ["beta"] },
@@ -1089,7 +1089,7 @@ test("PI-14: a skills undo that meets a symlink rethrows the containment refusal
 });
 
 test("surfaces the agents staging cleanup leak and still lands the install", async (t) => {
-  // arrange + act
+  // act
   const installed = await installWithFaultedStagingCleanup(t, {
     prefix: "install-outcome-agents-leak-",
     components: { agents: ["gamma"] },
@@ -1882,7 +1882,7 @@ test("a hooks.json that turns malformed after resolution unwinds the ledger", as
 });
 
 /**
- * A bridge whose prepare throws never reaches its `c.<kind>Prep` assignment,
+ * A bridge whose prepare throws never reaches its `installCtx.<kind>Prep` assignment,
  * so the undo the ledger still invokes for the FAILING phase has nothing to
  * discard and returns immediately. A symlink occupying the generated target
  * name is what makes prepare refuse: `assertPathInside` walks the segment
@@ -2497,7 +2497,7 @@ test("AFILE-04 / NFR-3: an mcp restore that cannot write is reported as the mcp 
       ),
   };
 
-  // act
+  // act & assert
   try {
     await assert.rejects(
       runInstallLedger(
@@ -2904,9 +2904,9 @@ test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the 
 });
 
 test("an unpinned path-source install threads neither pathPluginPin nor resolvePathPluginRoot", async (t) => {
-  // arrange: no `sourcePinOverride`, so the unpinned path is byte-identical to
-  // today -- the ordinary marketplaceRoot-anchored resolution runs, and a
-  // `pathPinProbe` that would otherwise reveal itself must never be reached.
+  // arrange: no `sourcePinOverride`, so the ordinary marketplaceRoot-anchored
+  // resolution runs, and a `pathPinProbe` that would otherwise reveal itself
+  // must never be reached.
   const environment = await createHermeticEnvironment(t, "install-outcome-path-unpinned-");
   const seeded = await seedPlugin(environment.cwd);
   const locations = locationsFor("project", environment.cwd);
@@ -3372,7 +3372,7 @@ test("D-PL9-05: a state phase failure removes the node_modules the packages phas
       ),
   };
 
-  // act
+  // act & assert
   await assert.rejects(
     runInstallLedger(
       seeded.state,

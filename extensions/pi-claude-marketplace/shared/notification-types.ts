@@ -489,7 +489,7 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
    * registered stays live until a reload.
    *
    * That is the only fact a realized removal has left to state. Absent `reasons`
-   * renders the legacy brace-less row byte-for-byte: `composeReasons` returns
+   * renders the brace-less row byte-for-byte: `composeReasons` returns
    * `""` for an undefined list and `joinTokens` collapses the empty slot.
    *
    * MSG-SD-3: every marker policy maps `uninstalled` to off (D-12), so an

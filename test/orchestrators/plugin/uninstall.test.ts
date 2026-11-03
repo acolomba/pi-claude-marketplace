@@ -38,7 +38,13 @@ import {
   createUninstallPlugin,
   UninstallRefusedError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
+import {
+  loadConfig,
+  saveConfig,
+} from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -850,7 +856,6 @@ test("PU-2: pluginDataDir rm failure leaves state record removed; cleanup leak S
       // chmod-ing dataDir itself which only blocks the file unlink (rmdir
       // of an empty dir would still succeed once we chmod it back).
       const parent = await locations.marketplaceDataDir("mp");
-      const { chmod } = await import("node:fs/promises");
       await chmod(parent, 0o555);
 
       const { ctx, run, notifications } = makeCtx();
@@ -918,16 +923,13 @@ test("NFR-10: pluginDataDir containment failure PROPAGATES; it is not swallowed 
       await mkdir(parent, { recursive: true });
       const dataDir = path.join(parent, "hello");
       await rm(dataDir, { recursive: true, force: true });
-      const { symlink } = await import("node:fs/promises");
       await symlink(escape, dataDir);
 
       const { ctx, run } = makeCtx();
 
-      // Before the fix this rejected NOTHING: the getter sat inside the
-      // D-19-01 try, so a refused symlink was indistinguishable from an rm
-      // leak and uninstall reported plain success while the escape target
-      // survived. D-19-01 sanctions swallowing the cleanup, not the
-      // assertion guarding it.
+      // The getter sits outside the D-19-01 try, so a refused symlink is
+      // distinguishable from an rm leak. D-19-01 sanctions swallowing the
+      // cleanup, not the assertion guarding it.
       await assert.rejects(
         uninstallWithFreshOwner({
           ctx,
@@ -1092,7 +1094,7 @@ test("PU-5 / D-01: standalone uninstall of an already-gone plugin -> error row (
       });
 
       // D-01: the standalone command names an absent target it cannot operate
-      // on -> error row (was literal silence). The orchestrated reconcile
+      // on -> error row. The orchestrated reconcile
       // converge stays silent (covered separately).
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
@@ -1378,7 +1380,7 @@ test("PU-8 (b): V2 per-variant reload-hint -- emitted on uninstalled even with z
       // Inject a cascade stub that reports zero dropped across every bridge.
       // (The non-stubbed path would also do this since the plugin has no
       // resources, but the stub makes the intent unambiguous.)
-      const stubCascade: typeof cascadeUnstagePlugin = () =>
+      const cascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
           dropped: {
@@ -1399,7 +1401,7 @@ test("PU-8 (b): V2 per-variant reload-hint -- emitted on uninstalled even with z
         cwd,
         marketplace: "mp",
         plugin: "empty",
-        cascade: stubCascade,
+        cascade,
       });
 
       assert.equal(notifications.length, 1);
@@ -1519,11 +1521,10 @@ test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace"
   });
 });
 
-// Lines 264-270: silent catch after dropMarketplaceCache ---------------
-// Exercises the swallowed EISDIR when the plugin cache path is a
-// directory. The underlying unlink() throws (EISDIR != ENOENT so
-// dropMarketplaceCache re-throws), the catch at line 264 swallows it,
-// and the success notification is still emitted.
+// Silent catch after dropMarketplaceCache: exercises the swallowed EISDIR
+// when the plugin cache path is a directory. The underlying unlink() throws
+// (EISDIR != ENOENT so dropMarketplaceCache re-throws), the catch in
+// uninstall.ts swallows it, and the success notification is still emitted.
 
 test("cache-drop EISDIR swallowed: success notification still emitted, plugin record removed", async () => {
   await withHermeticHome(async () => {
@@ -1547,11 +1548,11 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
 
       // Pre-create the cache file path as a DIRECTORY so unlink() throws
       // EISDIR (not ENOENT), causing dropMarketplaceCache to re-throw and
-      // hit the catch at uninstall.ts:264 which swallows it silently.
+      // hit the catch in uninstall.ts which swallows it silently.
       const pluginCachePath = await locations.pluginCacheFile("mp");
       await mkdir(pluginCachePath, { recursive: true });
 
-      const stubCascade: typeof cascadeUnstagePlugin = () =>
+      const cascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
           dropped: {
@@ -1572,7 +1573,7 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
         cwd,
         marketplace: "mp",
         plugin: "hello",
-        cascade: stubCascade,
+        cascade,
       });
 
       // (1) Exactly one notification with undefined severity (success row).
@@ -1654,7 +1655,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
       // -- CRITICAL field-name mapping dropped.commands -> resources.prompts),
       // and leave resources.agents + resources.mcpServers untouched (the
       // cascade did not advance to them).
-      const stubCascade: typeof cascadeUnstagePlugin = () => {
+      const cascade: typeof cascadeUnstagePlugin = () => {
         const err = Object.assign(new Error("EACCES on agent unlink"), { code: "EACCES" });
         return Promise.resolve({
           ok: false,
@@ -1696,7 +1697,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
         cwd,
         marketplace: "mp",
         plugin: "hello",
-        cascade: stubCascade,
+        cascade,
       });
 
       // (1) Re-load state from disk. The shrunken-row contract requires
@@ -1780,7 +1781,7 @@ test("WLIF-06: a partial uninstall cascade that took an envelope off disk names 
         },
       });
 
-      const stubCascade: typeof cascadeUnstagePlugin = () => {
+      const cascade: typeof cascadeUnstagePlugin = () => {
         const err = Object.assign(new Error("EACCES on agent unlink"), { code: "EACCES" });
         return Promise.resolve({
           ok: false,
@@ -1806,7 +1807,7 @@ test("WLIF-06: a partial uninstall cascade that took an envelope off disk names 
         cwd,
         marketplace: "mp",
         plugin: "hello",
-        cascade: stubCascade,
+        cascade,
       });
 
       // assert -- the token joins the failure reason at the tail rather than
@@ -1869,7 +1870,7 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
       // MUST throw out of the guard (ST-7 abort-save) so the row stays
       // intact -- foreign content owned by another process must not cause
       // data loss.
-      const stubCascade: typeof cascadeUnstagePlugin = () => {
+      const cascade: typeof cascadeUnstagePlugin = () => {
         const err = new AgentsUnstageFailureError("foreign content at agent1", [
           { generatedName: "agent1", targetPath: "/agents/agent1.md", reason: "missing marker" },
         ]);
@@ -1906,7 +1907,7 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
         cwd,
         marketplace: "mp",
         plugin: "hello",
-        cascade: stubCascade,
+        cascade,
       });
 
       // (1) Re-load state from disk. AG-5 must preserve the FULL row.
@@ -2469,8 +2470,6 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
 
       // Pre-seed claude-plugins.json with the plugin entry so we can verify
       // the delete actually removes it.
-      const { saveConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
         locations.baseConfigJsonPath,
         {
@@ -2493,8 +2492,6 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
       });
 
       // assert
-      const { loadConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       const cfg = await loadConfig(locations.baseConfigJsonPath);
       assert.equal(cfg.status, "valid");
       if (cfg.status === "valid") {
@@ -2508,7 +2505,7 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
   });
 });
 
-test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config untouched", async () => {
+test("WR-09: orchestrated-mode uninstall SKIPS write-back; config untouched", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-orch-"));
@@ -2516,8 +2513,6 @@ test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config u
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
 
-      const { saveConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
         locations.baseConfigJsonPath,
         { schemaVersion: 1, plugins: { "hello@mp": {} } },
@@ -2556,8 +2551,6 @@ test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
       const locations = locationsFor("project", cwd);
       // Seed marketplace but NOT the plugin record -- triggers PU-5 silent converge.
       await mkdir(locations.extensionRoot, { recursive: true });
-      const { saveState } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/state-io.ts");
       await saveState(locations.extensionRoot, {
         schemaVersion: 1,
         marketplaces: {
@@ -2573,8 +2566,6 @@ test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
         },
       });
 
-      const { saveConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
         locations.baseConfigJsonPath,
         { schemaVersion: 1, plugins: { "hello@mp": {} } },
@@ -2604,7 +2595,7 @@ test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
   });
 });
 
-test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause; state untouched", async () => {
+test("CFG-03: invalid config aborts uninstall; basename-only cause; state untouched", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-cfg03-"));
@@ -3213,8 +3204,8 @@ test("WR-03: a post-save routing failure cannot roll back committed uninstall", 
 // discipline). A held lock skips the GC and leaves the clone. A git-source
 // clone is reclaimed once no surviving record references it; a shared
 // clone survives while another installed plugin still references it. The
-// GC runs strictly AFTER the state save (T-78-08) and a GC leak never
-// fails the user-visible uninstall (T-78-09).
+// GC runs strictly AFTER the state save and a GC leak never fails the
+// user-visible uninstall.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GIT_SHA_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -3525,7 +3516,6 @@ test("a GC rm leak does not fail the uninstall (leak swallowed per D-19-01)", as
       // fails with EACCES; the helper records a leak string and never throws,
       // and uninstall's belt-and-braces try/catch absorbs any throw. The
       // user-visible uninstall must still report success.
-      const { chmod } = await import("node:fs/promises");
       await chmod(locations.pluginClonesDir, 0o500);
 
       const { ctx, run, notifications } = makeCtx();
@@ -3562,7 +3552,6 @@ test("GC never rolls back the committed uninstall: the state record is deleted e
 
       // Force the GC rm to leak (read-only clones dir). The state commit runs
       // BEFORE GC, so the record must be gone from state.json regardless.
-      const { chmod } = await import("node:fs/promises");
       await chmod(locations.pluginClonesDir, 0o500);
 
       const { ctx, run } = makeCtx();
@@ -3614,8 +3603,6 @@ test("cross-layer cascade: a --local uninstall clears the key only the local lay
         },
       });
 
-      const { saveConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       // Base declares the marketplace but NOT the plugin key.
       await saveConfig(
         locations.baseConfigJsonPath,
@@ -3646,8 +3633,6 @@ test("cross-layer cascade: a --local uninstall clears the key only the local lay
       });
 
       // assert
-      const { loadConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
 
       // Neither physical file declares `p@m` afterward.
       const baseCfg = await loadConfig(locations.baseConfigJsonPath);
@@ -3663,10 +3648,6 @@ test("cross-layer cascade: a --local uninstall clears the key only the local lay
       }
 
       // Self-heal proof: merged planReconcile is clean.
-      const { loadMergedScopeConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
-      const { planReconcile } =
-        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
       const { merged } = await loadMergedScopeConfig(locations);
       const stateAfter = await loadState(locations.extensionRoot);
       const plan = planReconcile(merged, stateAfter, "project");
@@ -5774,9 +5755,9 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
 // Who counts as a declarer: a disabled declarer
 // still holds (D-05-04), only the target scope's own state is consulted
 // (D-05-05), and every declaration is read offline (D-05-06). The
-// fail-closed refusal survives too (D-05-07): a declarer whose declarations
-// cannot be established still REFUSES and still removes nothing. Only the
-// found-dependents outcome moved from refuse to proceed.
+// fail-closed refusal applies (D-05-07): a declarer whose declarations
+// cannot be established REFUSES and removes nothing. Found dependents
+// proceed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface DeclaringSeed {
@@ -7766,7 +7747,7 @@ test("AFILE-04: a partial uninstall shows the cascade's notice after the failed 
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       const cause = Object.assign(new Error("EACCES on workflow unlink"), { code: "EACCES" });
-      const stubCascade: typeof cascadeUnstagePlugin = () =>
+      const cascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: false,
           dropped: {
@@ -7792,7 +7773,7 @@ test("AFILE-04: a partial uninstall shows the cascade's notice after the failed 
         cwd,
         marketplace: "mp",
         plugin: "hello",
-        cascade: stubCascade,
+        cascade,
       });
 
       // assert
@@ -7818,7 +7799,7 @@ test("AFILE-04: an orchestrated partial uninstall returns the notice on its fail
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       const cause = Object.assign(new Error("EACCES on workflow unlink"), { code: "EACCES" });
-      const stubCascade: typeof cascadeUnstagePlugin = () =>
+      const cascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: false,
           dropped: {
@@ -7844,7 +7825,7 @@ test("AFILE-04: an orchestrated partial uninstall returns the notice on its fail
         cwd,
         marketplace: "mp",
         plugin: "hello",
-        cascade: stubCascade,
+        cascade,
         notifications: { mode: "orchestrated" },
       });
 

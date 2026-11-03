@@ -92,8 +92,11 @@ for (const { row, expected } of [
   },
 ]) {
   test(`formats the missing-policy diagnostic ${expected}`, () => {
+    // arrange
+    const unrenderableRow = row as never;
+
     // act
-    const lines = composePluginLines(row as never, "user");
+    const lines = composePluginLines(unrenderableRow, "user");
 
     // assert
     assert.deepStrictEqual(lines, [expected]);
@@ -594,8 +597,11 @@ for (const { plugin, expectedLines } of [
   },
 ] as const satisfies readonly { plugin: ResolvedRow; expectedLines: readonly string[] }[]) {
   test(`renders the ${plugin.hint} hint after the description and before any failure line`, () => {
+    // arrange
+    const marketplaceScope = "user";
+
     // act
-    const lines = composePluginLines(plugin, "user");
+    const lines = composePluginLines(plugin, marketplaceScope);
 
     // assert
     assert.deepStrictEqual(lines, expectedLines);
@@ -1067,7 +1073,7 @@ test("WR-09: renders one note line per entry, last, in composer order", () => {
   );
 });
 
-test("plugin info cascades preserve zero and repeated-render many shapes", () => {
+test("plugin info cascades render each block in order and join blocks with one blank line", () => {
   // arrange
   const block = {
     marketplaceName: "official",
@@ -1078,13 +1084,13 @@ test("plugin info cascades preserve zero and repeated-render many shapes", () =>
 
   // act
   const empty = renderPluginInfoCascade({ blocks: [] } as never);
-  const once = renderPluginInfoCascade({ blocks: [block, block] } as never);
-  const twice = renderPluginInfoCascade({ blocks: [block, block] } as never);
+  const many = renderPluginInfoCascade({ blocks: [block, block] } as never);
 
   // assert
+  const expectedBlock =
+    "● official [user] <no autoupdate>\n  ○ alpha (available)\n    components: not resolved";
   assert.equal(empty, "");
-  assert.equal(once, twice);
-  assert.equal(once.split("\n\n").length, 2);
+  assert.equal(many, `${expectedBlock}\n\n${expectedBlock}`);
 });
 
 for (const { message, reason, expected } of [
@@ -1109,11 +1115,14 @@ for (const { message, reason, expected } of [
   expected: string;
 }[]) {
   test(`renders marketplace-not-added as ${expected}`, () => {
+    // arrange
+    const expectedRow = expected;
+
     // act
     const rendered = renderMarketplaceNotAdded(message, reason);
 
     // assert
-    assert.equal(rendered, expected);
+    assert.equal(rendered, expectedRow);
   });
 }
 
@@ -1122,11 +1131,14 @@ for (const { command, expected } of [
   { command: "apply", expected: "Apply: nothing to change." },
 ] as const) {
   test(`D-08 / D-14: renders the reconcile-pending-empty body line for ${command}`, () => {
+    // arrange
+    const expectedLine = expected;
+
     // act
     const rendered = renderReconcilePendingEmpty(command);
 
     // assert
-    assert.equal(rendered, expected);
+    assert.equal(rendered, expectedLine);
   });
 }
 
@@ -1210,10 +1222,13 @@ test("a whitespace-only description renders no description line", () => {
   } as never);
 
   // assert
-  assert.equal(whitespace.includes("\n     "), false);
+  assert.equal(
+    whitespace,
+    "● official [user] <no autoupdate>\n  ○ alpha (available)\n    components: not resolved",
+  );
 });
 
-test("covers the unavailable install hint and long single-word wrap boundaries", () => {
+test("renders the install hint under an unavailable row and keeps a long single word unbroken", () => {
   // arrange
   const longWord = "x".repeat(70);
 
@@ -1245,20 +1260,20 @@ test("covers the unavailable install hint and long single-word wrap boundaries",
     "  ⊘ alpha (unavailable) {unsupported source}",
     "    Re-run with --partial to install the supported components.",
   ]);
-  assert.equal(info.endsWith(`\n    ${longWord}`), true);
+  assert.equal(info, `● official [user] <no autoupdate>\n  ○ alpha (available)\n    ${longWord}`);
 });
 
 test("optional dependency and empty cause branches collapse without extra tokens", () => {
-  // arrange / act
-  const partial = composePluginLines(
-    {
-      ...{ name: "alpha", reasons: [] },
-      status: "partially-installed",
-      severity: "warning",
-      needsReload: true,
-    },
-    "user",
-  )[0]!.slice(2);
+  // arrange
+  const partialRow = {
+    ...{ name: "alpha", reasons: [] },
+    status: "partially-installed",
+    severity: "warning",
+    needsReload: true,
+  } as const satisfies ResolvedRow;
+
+  // act
+  const partial = composePluginLines(partialRow, "user")[0]!.slice(2);
   const failed = composePluginLines(
     {
       status: "failed",
@@ -1517,22 +1532,31 @@ const MOVE_ROWS = [
 
 for (const { title, row, glyph, tail } of MOVE_ROWS) {
   test(`NREG-01: ${title} without from keeps its single version`, () => {
+    // arrange
+    const expectedLine = `  ${glyph} ghp v1.1.0 ${tail}`;
+
     // act
     const line = composePluginLines(row, "user")[0];
 
     // assert
-    assert.equal(line, `  ${glyph} ghp v1.1.0 ${tail}`);
+    assert.equal(line, expectedLine);
   });
 
   test(`UPR-03: ${title} with from draws the version arrow`, () => {
+    // arrange
+    const expectedLine = `  ${glyph} ghp v1.0.0 → v1.1.0 ${tail}`;
+
     // act
     const line = composePluginLines({ ...row, from: "1.0.0" }, "user")[0];
 
     // assert
-    assert.equal(line, `  ${glyph} ghp v1.0.0 → v1.1.0 ${tail}`);
+    assert.equal(line, expectedLine);
   });
 
   test(`UPR-02: ${title} with from and commits names each side's short commit`, () => {
+    // arrange
+    const expectedLine = `  ${glyph} ghp v1.1.0 (aaaaaaa) → v1.1.0 (bbbbbbb) ${tail}`;
+
     // act
     const line = composePluginLines(
       {
@@ -1544,7 +1568,7 @@ for (const { title, row, glyph, tail } of MOVE_ROWS) {
     )[0];
 
     // assert
-    assert.equal(line, `  ${glyph} ghp v1.1.0 (aaaaaaa) → v1.1.0 (bbbbbbb) ${tail}`);
+    assert.equal(line, expectedLine);
   });
 }
 
@@ -1850,11 +1874,14 @@ for (const { name, envelope, expectedText } of [
   readonly expectedText: string;
 }[]) {
   test(`formatEnvelopeArguments composes a tally sentence with ${name}`, () => {
+    // arrange
+    const expectedArguments = [expectedText];
+
     // act
     const notifyArguments = formatEnvelopeArguments(envelope, "body");
 
     // assert
-    assert.deepStrictEqual(notifyArguments, [expectedText]);
+    assert.deepStrictEqual(notifyArguments, expectedArguments);
   });
 }
 
@@ -1934,11 +1961,14 @@ for (const { name, envelope, body, expectedArguments } of [
   readonly expectedArguments: NotifyArguments;
 }[]) {
   test(`formatEnvelopeArguments ${name}`, () => {
+    // arrange
+    const expectedNotifyArguments = expectedArguments;
+
     // act
     const notifyArguments = formatEnvelopeArguments(envelope, body);
 
     // assert
-    assert.deepStrictEqual(notifyArguments, expectedArguments);
+    assert.deepStrictEqual(notifyArguments, expectedNotifyArguments);
   });
 }
 
@@ -2072,11 +2102,14 @@ const RAW_SURFACE_ROWS: {
 
 for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_ROWS)) {
   test(`formatRawSurface renders ${kind} with its explicit severity`, () => {
+    // arrange
+    const expectedNotifyArguments = expectedArguments;
+
     // act
     const notifyArguments = formatRawSurface(surface);
 
     // assert
-    assert.deepStrictEqual(notifyArguments, expectedArguments);
+    assert.deepStrictEqual(notifyArguments, expectedNotifyArguments);
   });
 }
 
@@ -2124,8 +2157,11 @@ for (const { title, plugins, text } of [
   },
 ] as const) {
   test(`D-PL8-10 / D-PL8-21: formatRawSurface background-update ${title}`, () => {
+    // arrange
+    const surface = { kind: "background-update", plugins } as const;
+
     // act
-    const notifyArguments = formatRawSurface({ kind: "background-update", plugins });
+    const notifyArguments = formatRawSurface(surface);
 
     // assert
     assert.deepStrictEqual(notifyArguments, [text, "info"]);
@@ -2133,8 +2169,8 @@ for (const { title, plugins, text } of [
 }
 
 test("AAP-04: formatRawSurface shows the default autoapply and every listed file's own value", () => {
-  // act
-  const notifyArguments = formatRawSurface({
+  // arrange
+  const surface = {
     kind: "autoapply-status",
     enabled: false,
     files: [
@@ -2142,7 +2178,10 @@ test("AAP-04: formatRawSurface shows the default autoapply and every listed file
       { scope: "user", file: "claude-plugins.local.json", value: false },
       { scope: "project", file: "claude-plugins.json", value: true },
     ],
-  });
+  } as const satisfies ResolvedRawSurface;
+
+  // act
+  const notifyArguments = formatRawSurface(surface);
 
   // assert
   assert.deepStrictEqual(notifyArguments, [
@@ -2288,11 +2327,14 @@ for (const { title, surface, expectedArguments } of [
   readonly expectedArguments: NotifyArguments | undefined;
 }[]) {
   test(`formatRawSurface ${title}`, () => {
+    // arrange
+    const expectedNotifyArguments = expectedArguments;
+
     // act
     const notifyArguments = formatRawSurface(surface);
 
     // assert
-    assert.deepStrictEqual(notifyArguments, expectedArguments);
+    assert.deepStrictEqual(notifyArguments, expectedNotifyArguments);
   });
 }
 

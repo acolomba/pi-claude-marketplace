@@ -1173,8 +1173,9 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
   // act
   const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
-  // assert -- the malformed kinds first, the stale-command token at the tail,
-  // the same order the enable and update rows use.
+  // assert
+  // The malformed kinds come first and the stale-command token last, the same
+  // order the enable and update rows use.
   assert.deepStrictEqual(row, {
     status: "reinstalled",
     name: "alpha",
@@ -1187,7 +1188,8 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
 });
 
 test("WLIF-06: the token raises a row that has no other reason of its own", () => {
-  // arrange -- nothing degraded, so the raise can only come from this axis.
+  // arrange
+  // Nothing is degraded, so the raise can only come from this axis.
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
     resourcesChanged: true,
@@ -1219,9 +1221,10 @@ test("WLIF-06: the token raises a row that has no other reason of its own", () =
   });
 });
 
-test("WLIF-06: a reinstall that retired nothing renders the row it always rendered", () => {
-  // arrange -- the same outcome with the axis absent. The key must be ABSENT
-  // rather than present-and-empty, which is what preserves the legacy bytes.
+test("WLIF-06: a reinstall that retired nothing renders no reasons key", () => {
+  // arrange
+  // The axis is absent. The `reasons` key must be ABSENT rather than
+  // present-and-empty, which keeps the row bytes unchanged.
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
     resourcesChanged: true,
@@ -1425,14 +1428,17 @@ test("D-10-13: a reinstall a dependent's range admitted names the range on its c
 });
 
 test("REINSTALL_CONTEXT declares complete row policies", () => {
-  // act
-  const policies = REINSTALL_CONTEXT.rowPolicies;
-
-  // assert
-  assert.deepStrictEqual(policies, {
+  // arrange
+  const expectedPolicies = {
     reinstalled: { markers: true, contentReasons: true },
     skipped: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
     "manual recovery": { markers: false, contentReasons: true },
-  });
+  };
+
+  // act
+  const policies = REINSTALL_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, expectedPolicies);
 });

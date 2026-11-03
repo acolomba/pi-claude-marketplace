@@ -31,12 +31,12 @@
 //   POST-state-commit (D-08 / AS-6):  mkdir(pluginDataDir), dropped per D-19-01
 //   Success notify via notify() with PluginInstalledMessage carrying
 //   dependencies: readonly Dependency[] derived from staged content; the
-//  renderer reads the run's one soft-dependency snapshot (D-05)
+//   renderer reads the run's one soft-dependency snapshot (D-05)
 //   and emits per-row soft-dep markers + the reload-hint trailer
-//  structurally.
+//   structurally.
 //   Failure routes through one notify() call with PluginFailedMessage
 //   carrying optional cause + optional rollbackPartial[]; the renderer
-//  composes the depth-5 cause-chain and per-phase rollback child
+//   composes the depth-5 cause-chain and per-phase rollback child
 //   rows automatically.
 //
 // Standalone-mode emission is a single notify(ctx, run, { marketplaces:
@@ -812,8 +812,7 @@ async function preflightInstallResolve(
     // D-07-06 / D-07-07: a `path`-source member whose constraint selected a
     // marketplace tag materializes that tag's tree the same way a git-backed
     // member materializes its pinned commit. Added ONLY when a pin is
-    // present, so an unpinned `path` source stays byte-identical to today
-    // (neither field is set at all).
+    // present, so an unpinned `path` source sets neither field.
     ...(opts.sourcePinOverride !== undefined && {
       pathPluginPin: opts.sourcePinOverride,
       resolvePathPluginRoot: async (pathSource: PathSource, pin: string) => {
@@ -1212,39 +1211,39 @@ async function runInstallLedgerBody(
   // value; the ledger sees an 8-element constant array.
   const skillsPhase: Phase<InstallLedgerContext> = {
     name: "skills",
-    do: async (c) => {
+    do: async (installCtx) => {
       const prep = await prepareStageSkills(opts.removalOps, {
-        locations: c.locations,
-        pluginName: c.plugin,
-        pluginRoot: c.resolved.pluginRoot,
-        pluginDataDir: c.pluginDataDir,
-        resolved: c.resolved,
+        locations: installCtx.locations,
+        pluginName: installCtx.plugin,
+        pluginRoot: installCtx.resolved.pluginRoot,
+        pluginDataDir: installCtx.pluginDataDir,
+        resolved: installCtx.resolved,
         // SKTK-01: the workflows phase runs after this one, so the names come
         // from the pre-ledger preview rather than from a staged result.
         referenceNames: generatedNames,
         knownWorkflowNames: generatedNames.workflows,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
-        cwd: c.cwd,
+        cwd: installCtx.cwd,
       });
-      c.skillsPrep = prep;
+      installCtx.skillsPrep = prep;
       // Set before commit so undo can remove any dirs that were placed if
       // commit fails mid-loop (partial rename success leaves K orphans).
-      c.stagedSkillNames = prep.result.recorded.map((r) => r.generatedName);
-      c.stagedSkillRecords = prep.result.recorded;
+      installCtx.stagedSkillNames = prep.result.recorded.map((r) => r.generatedName);
+      installCtx.stagedSkillRecords = prep.result.recorded;
       // SKILL-01 / WARN-01: collect per-skill frontmatter degrade records.
       for (const d of prep.result.degraded) {
-        c.frontmatterDegradations.push({ kind: "skill", ...d });
+        installCtx.frontmatterDegradations.push({ kind: "skill", ...d });
       }
 
-      collectStagingWarnings(c, prep.result.warnings);
+      collectStagingWarnings(installCtx, prep.result.warnings);
 
       const leak = await commitPreparedSkills(opts.removalOps, prep);
       if (leak !== undefined) {
-        c.bridgeWarnings.push(hygieneWarning(leak));
+        installCtx.bridgeWarnings.push(hygieneWarning(leak));
       }
     },
-    undo: async (c) => {
-      if (c.skillsPrep === undefined) {
+    undo: async (installCtx) => {
+      if (installCtx.skillsPrep === undefined) {
         return;
       }
 
@@ -1252,69 +1251,69 @@ async function runInstallLedgerBody(
       // unstage* by name removes them.
       try {
         await unstagePluginSkills({
-          locations: c.locations,
-          previousSkillNames: c.stagedSkillNames,
+          locations: installCtx.locations,
+          previousSkillNames: installCtx.stagedSkillNames,
         });
       } catch (err) {
-        throw await skillsUndoError(err, c.locations, c.stagedSkillNames);
+        throw await skillsUndoError(err, installCtx.locations, installCtx.stagedSkillNames);
       }
     },
   };
 
   const commandsPhase: Phase<InstallLedgerContext> = {
     name: "commands",
-    do: async (c) => {
+    do: async (installCtx) => {
       const prep = await prepareStageCommands(opts.removalOps, {
-        locations: c.locations,
-        pluginName: c.plugin,
-        pluginRoot: c.resolved.pluginRoot,
-        pluginDataDir: c.pluginDataDir,
-        resolved: c.resolved,
+        locations: installCtx.locations,
+        pluginName: installCtx.plugin,
+        pluginRoot: installCtx.resolved.pluginRoot,
+        pluginDataDir: installCtx.pluginDataDir,
+        resolved: installCtx.resolved,
         referenceNames: generatedNames,
         // A workflow keeps a name it shares with a command of its plugin.
         workflowNames: generatedNames.workflows,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
-        cwd: c.cwd,
+        cwd: installCtx.cwd,
       });
-      c.commandsPrep = prep;
+      installCtx.commandsPrep = prep;
       // Set before commit for the same reason as stagedSkillNames above.
-      c.stagedCommandNames = prep.result.recorded.map((r) => r.generatedName);
+      installCtx.stagedCommandNames = prep.result.recorded.map((r) => r.generatedName);
       // CMD-01 / WARN-01: collect per-command frontmatter degrade records.
       for (const d of prep.result.degraded) {
-        c.frontmatterDegradations.push({ kind: "command", ...d });
+        installCtx.frontmatterDegradations.push({ kind: "command", ...d });
       }
 
-      collectStagingWarnings(c, prep.result.warnings);
+      collectStagingWarnings(installCtx, prep.result.warnings);
 
       const leak = await commitPreparedCommands(opts.removalOps, prep);
       if (leak !== undefined) {
-        c.bridgeWarnings.push(hygieneWarning(leak));
+        installCtx.bridgeWarnings.push(hygieneWarning(leak));
       }
     },
-    undo: async (c) => {
-      if (c.commandsPrep === undefined) {
+    undo: async (installCtx) => {
+      if (installCtx.commandsPrep === undefined) {
         return;
       }
 
       await unstagePluginCommands({
-        locations: c.locations,
-        previousCommandNames: c.stagedCommandNames,
+        locations: installCtx.locations,
+        previousCommandNames: installCtx.stagedCommandNames,
       });
     },
   };
 
   const agentsPhase: Phase<InstallLedgerContext> = {
     name: "agents",
-    do: async (c) => {
+    do: async (installCtx) => {
       const prep = await prepareStagePluginAgents(opts.removalOps, {
-        locations: c.locations,
-        marketplaceName: c.marketplace,
-        pluginName: c.plugin,
-        pluginRoot: c.resolved.pluginRoot,
-        pluginDataDir: c.pluginDataDir,
-        agentsDirs: c.agentsDirs,
-        knownSkills: c.stagedSkillNames,
-        skillSources: c.stagedSkillRecords,
+        locations: installCtx.locations,
+        marketplaceName: installCtx.marketplace,
+        pluginName: installCtx.plugin,
+        pluginRoot: installCtx.resolved.pluginRoot,
+        pluginDataDir: installCtx.pluginDataDir,
+        agentsDirs: installCtx.agentsDirs,
+        knownSkills: installCtx.stagedSkillNames,
+        skillSources: installCtx.stagedSkillRecords,
         referenceNames: generatedNames,
         // AG-7 opt-in: `--map-model` on /claude:plugin install threads
         // the flag down to here. When the user did not pass the flag
@@ -1323,40 +1322,40 @@ async function runInstallLedgerBody(
         mapModel: opts.mapModel ?? false,
         // ANAME-02: the servers this install writes. The mcp phase runs
         // later, so the set comes from the resolver, not the mcp stage.
-        mcpServerNames: Object.keys(c.resolved.mcpServers),
+        mcpServerNames: Object.keys(installCtx.resolved.mcpServers),
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
-        cwd: c.cwd,
+        cwd: installCtx.cwd,
       });
-      c.agentsPrep = prep;
+      installCtx.agentsPrep = prep;
       // The agents bridge tags its D-07 duplicate-name skips discovery and
       // its index corruptions and conversion notes hygiene (D-PL1-02).
-      collectStagingWarnings(c, prep.result.warnings);
+      collectStagingWarnings(installCtx, prep.result.warnings);
       const leak = await commitPreparedAgents(opts.removalOps, prep);
       if (leak !== undefined) {
-        c.bridgeWarnings.push(hygieneWarning(leak));
+        installCtx.bridgeWarnings.push(hygieneWarning(leak));
       }
 
-      c.stagedAgentNames = prep.result.recorded.map((r) => r.generatedName);
+      installCtx.stagedAgentNames = prep.result.recorded.map((r) => r.generatedName);
       // AG-5 / W-08 / B-08: foreign-content rows are NOT thrown by the
       // bridge -- they surface via `failed[]`. AS-7: keep them out of
       // the rollback path (the install of new agents succeeded; the
       // foreign rows are a separate problem the user can address by
       // hand). Surfaced as a post-commit warning below.
       for (const f of prep.result.failed) {
-        c.agentForeignFailures.push({ generatedName: f.generatedName, reason: f.reason });
+        installCtx.agentForeignFailures.push({ generatedName: f.generatedName, reason: f.reason });
       }
     },
-    undo: async (c) => {
-      if (c.agentsPrep === undefined) {
+    undo: async (installCtx) => {
+      if (installCtx.agentsPrep === undefined) {
         return;
       }
 
       // unstagePluginAgents removes only OUR own (mp, plugin) rows --
       // foreign-preserved rows from prepare stay in the index.
       await unstagePluginAgents({
-        locations: c.locations,
-        marketplaceName: c.marketplace,
-        pluginName: c.plugin,
+        locations: installCtx.locations,
+        marketplaceName: installCtx.marketplace,
+        pluginName: installCtx.plugin,
       });
     },
   };
@@ -1365,7 +1364,7 @@ async function runInstallLedgerBody(
   // plugin (`<hooksDir>/<plugin>/hooks.json`) and has no staging dir per
   // D-63-02 -- `writeHookConfig` is the atomic write. The phase body
   // re-reads + re-parses the on-disk `hooks.json` because the resolver
-  // stores only `hooksConfigPath` (the relative path) on `c.resolved` and
+  // stores only `hooksConfigPath` (the relative path) on `installCtx.resolved` and
   // discards the parsed value after its own `parseHooksConfig` call
   // returns. The parse is unconditional (no executor judgement); a fresh
   // parse failure here is a defensive guard (the resolver already validated
@@ -1374,71 +1373,71 @@ async function runInstallLedgerBody(
   // `installPlugin`.
   const hooksPhase: Phase<InstallLedgerContext> = {
     name: "hooks",
-    do: async (c) => {
-      if (c.resolved.hooksConfigPath === undefined) {
+    do: async (installCtx) => {
+      if (installCtx.resolved.hooksConfigPath === undefined) {
         return;
       }
 
       const raw = await readFile(
-        path.join(c.resolved.pluginRoot, c.resolved.hooksConfigPath),
+        path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
         "utf8",
       );
       // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot.
-      const ifCtx = { homedir: homedir(), cwd: c.cwd, projectRoot: c.cwd };
+      const ifCtx = { homedir: homedir(), cwd: installCtx.cwd, projectRoot: installCtx.cwd };
       const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
       if (!parsed.ok) {
         throw new Error(`hooks.json re-parse failed: ${parsed.reason}`);
       }
 
       await writeHookConfig({
-        locations: c.locations,
-        pluginName: c.plugin,
-        pluginRoot: c.resolved.pluginRoot,
+        locations: installCtx.locations,
+        pluginName: installCtx.plugin,
+        pluginRoot: installCtx.resolved.pluginRoot,
         hooksValue: parsed.value,
       });
-      c.hooksFileWritten = true;
+      installCtx.hooksFileWritten = true;
       // D-100-01 / D-100-02 / ENBL-11: describe the hooks this install
       // materialized. `parsed.value` is already the supported subset, so the
       // projection is byte-parity with the hooks line `info` renders.
-      c.hookEntries = projectHookSummaryEntries(parsed.value);
+      installCtx.hookEntries = projectHookSummaryEntries(parsed.value);
     },
-    undo: async (c) => {
-      if (!c.hooksFileWritten) {
+    undo: async (installCtx) => {
+      if (!installCtx.hooksFileWritten) {
         return;
       }
 
-      await removeHookConfig({ locations: c.locations, pluginName: c.plugin });
+      await removeHookConfig({ locations: installCtx.locations, pluginName: installCtx.plugin });
     },
   };
 
   const mcpPhase: Phase<InstallLedgerContext> = {
     name: "mcp",
-    do: async (c) => {
+    do: async (installCtx) => {
       const prep = await prepareStageMcpServers({
-        locations: c.locations,
-        cwd: c.cwd,
-        marketplaceName: c.marketplace,
-        pluginName: c.plugin,
-        servers: c.resolved.mcpServers,
-        pluginRoot: c.resolved.pluginRoot,
-        pluginData: c.pluginDataDir,
-        sourcePath: `${c.resolved.pluginRoot}#mcpServers`,
-        description: c.resolved.description,
+        locations: installCtx.locations,
+        cwd: installCtx.cwd,
+        marketplaceName: installCtx.marketplace,
+        pluginName: installCtx.plugin,
+        servers: installCtx.resolved.mcpServers,
+        pluginRoot: installCtx.resolved.pluginRoot,
+        pluginData: installCtx.pluginDataDir,
+        sourcePath: `${installCtx.resolved.pluginRoot}#mcpServers`,
+        description: installCtx.resolved.description,
         env: opts.env,
       });
-      c.mcpReplacement = await replacePreparedMcp(prep);
+      installCtx.mcpReplacement = await replacePreparedMcp(prep);
       const result = prep.result;
-      c.stagedMcpServerNames = result.recorded.map((r) => r.generatedName);
+      installCtx.stagedMcpServerNames = result.recorded.map((r) => r.generatedName);
       // MCP staging soft warnings (malformed declared env, non-object entry)
       // are tagged hygiene, so they join the commit leaks (D-PL1-02).
-      collectStagingWarnings(c, result.warnings);
-      c.mcpConfigNotices.push(...result.notices);
+      collectStagingWarnings(installCtx, result.warnings);
+      installCtx.mcpConfigNotices.push(...result.notices);
       // AMIG-02: the replace removed the plugin's marked entries from the
       // scope's mcp.json after writing mcp-adapter.json; its notices describe
       // that later write. This phase serves install, enable, the install
       // cascade, the reconcile install and import.
-      if (c.mcpReplacement.kind === "replaced") {
-        c.mcpConfigNotices.push(...c.mcpReplacement.legacy.notices);
+      if (installCtx.mcpReplacement.kind === "replaced") {
+        installCtx.mcpConfigNotices.push(...installCtx.mcpReplacement.legacy.notices);
       }
     },
     // AFILE-04 / AMIG-02 / NFR-3: a failed install restores every file the mcp
@@ -1447,12 +1446,12 @@ async function runInstallLedgerBody(
     // write throws, so the ledger records the mcp rollback partial rather than
     // reporting a clean unwind over a changed file. The handle needs no
     // finalize on success; it is dropped with the context.
-    undo: async (c) => {
-      if (c.mcpReplacement === undefined) {
+    undo: async (installCtx) => {
+      if (installCtx.mcpReplacement === undefined) {
         return;
       }
 
-      const leaks = await rollbackMcpReplacement(c.mcpReplacement);
+      const leaks = await rollbackMcpReplacement(installCtx.mcpReplacement);
       if (leaks.length > 0) {
         throw new Error(leaks.join("; "));
       }
@@ -1463,7 +1462,7 @@ async function runInstallLedgerBody(
   // sibling that carries a real prepare / commit / unstage triplet.
   const workflowsPhase: Phase<InstallLedgerContext> = {
     name: "workflows",
-    do: async (c) => {
+    do: async (installCtx) => {
       // The names this plugin's PREVIOUS install recorded. A fresh install
       // finds no record and the bridge's re-stage branch stays inert; the
       // enable path reaches the deliberately-kept disabled record, which is
@@ -1471,13 +1470,13 @@ async function runInstallLedgerBody(
       // instead of hitting the occupancy refusal. Spread conditionally --
       // `exactOptionalPropertyTypes` rejects an explicit `undefined`.
       const previousWorkflowNames = ownValue(
-        ownValue(c.stateSnapshot.marketplaces, c.marketplace)?.plugins,
-        c.plugin,
+        ownValue(installCtx.stateSnapshot.marketplaces, installCtx.marketplace)?.plugins,
+        installCtx.plugin,
       )?.resources.workflows;
       const prep = await prepareStageWorkflows({
-        locations: c.locations,
-        pluginName: c.plugin,
-        resolved: c.resolved,
+        locations: installCtx.locations,
+        pluginName: installCtx.plugin,
+        resolved: installCtx.resolved,
         ...(previousWorkflowNames !== undefined && { previousWorkflowNames }),
       });
       // Set BEFORE the commit: this is the point after which envelopes can
@@ -1485,8 +1484,8 @@ async function runInstallLedgerBody(
       // throws inside the commit may have placed envelopes while the name
       // array was still empty, which is why the sentinel is the handle and
       // not the array.
-      c.workflowsPrep = prep;
-      c.stagedWorkflowNames = [];
+      installCtx.workflowsPrep = prep;
+      installCtx.stagedWorkflowNames = [];
       // D-141-03 / WGATE-01: the workflows bridge tags every warning
       // discovery (D-PL1-02). Each one describes the plugin's DECLARED
       // scripts -- which ones were not installed, which were installed but the
@@ -1501,21 +1500,21 @@ async function runInstallLedgerBody(
       // phase's throw comes from `captureStagingWarnings`, which copies every
       // warning collected so far onto the failure capture (D-PL1-13),
       // whichever phase collected it.
-      collectStagingWarnings(c, prep.result.warnings);
+      collectStagingWarnings(installCtx, prep.result.warnings);
       const leak = await commitPreparedWorkflows(prep, {
         // The whole body is one assignment that cannot throw. The commit
         // invokes this callback on the failure paths too, so anything that
         // could raise here would mask the real failure.
         onPlaced: (placedNames) => {
-          c.stagedWorkflowNames = placedNames;
+          installCtx.stagedWorkflowNames = placedNames;
         },
       });
       if (leak !== undefined) {
-        c.bridgeWarnings.push(hygieneWarning(leak));
+        installCtx.bridgeWarnings.push(hygieneWarning(leak));
       }
     },
-    undo: async (c) => {
-      if (c.workflowsPrep === undefined) {
+    undo: async (installCtx) => {
+      if (installCtx.workflowsPrep === undefined) {
         return;
       }
 
@@ -1524,8 +1523,8 @@ async function runInstallLedgerBody(
       // name, or a previous envelope the commit's own reversal restored, is
       // not this commit's to unlink.
       const result = await unstagePluginWorkflows({
-        locations: c.locations,
-        previousWorkflowNames: c.stagedWorkflowNames,
+        locations: installCtx.locations,
+        previousWorkflowNames: installCtx.stagedWorkflowNames,
       });
       // WLIF-03 / T-112-04: unlike the five sibling phases, the result is NOT
       // discarded. A leftover workflow envelope is executable code outside
@@ -1547,7 +1546,7 @@ async function runInstallLedgerBody(
     // we mark it async to satisfy the signature; the lint rule is
     // disabled because there is nothing to await here.
     // eslint-disable-next-line @typescript-eslint/require-await
-    do: async (c) => {
+    do: async (installCtx) => {
       // PI-15 layer (b) defensive re-assert: the early-sanity check at
       // top-of-closure caught the common path. This second check guards
       // against intra-process re-entry edge cases (e.g. an in-flight
@@ -1556,10 +1555,10 @@ async function runInstallLedgerBody(
       // so the ledger unwinds the staged bridges. D-54-01 / ENBL-02:
       // `allowExistingRecord` skips the throw -- the enable path
       // re-materializes the KEPT disabled record in place.
-      const mpInner = ownValue(c.stateSnapshot.marketplaces, c.marketplace);
-      const existing = ownValue(mpInner?.plugins, c.plugin);
+      const mpInner = ownValue(installCtx.stateSnapshot.marketplaces, installCtx.marketplace);
+      const existing = ownValue(mpInner?.plugins, installCtx.plugin);
       if (existing !== undefined && opts.allowExistingRecord !== true) {
-        throw new ConcurrentInstallError(c.plugin, c.marketplace);
+        throw new ConcurrentInstallError(installCtx.plugin, installCtx.marketplace);
       }
 
       if (mpInner === undefined) {
@@ -1567,14 +1566,14 @@ async function runInstallLedgerBody(
         // someone deleted it from the state snapshot mid-flight, fail
         // cleanly so the ledger rolls back the staged bridges.
         throw new Error(
-          `Marketplace "${c.marketplace}" disappeared from state during install of "${c.plugin}".`,
+          `Marketplace "${installCtx.marketplace}" disappeared from state during install of "${installCtx.plugin}".`,
         );
       }
 
       const nowIso = new Date().toISOString();
-      setOwn(mpInner.plugins, c.plugin, {
-        version: c.version,
-        resolvedSource: c.resolved.pluginRoot,
+      setOwn(mpInner.plugins, installCtx.plugin, {
+        version: installCtx.version,
+        resolvedSource: installCtx.resolved.pluginRoot,
         // D-77-02 / PURL-09: persist the full 40-hex resolved commit sha for
         // git-source installs (reinstall pins its re-clone checkout to this
         // full sha; clone GC presence-checks it to derive live clone keys).
@@ -1582,13 +1581,15 @@ async function runInstallLedgerBody(
         // when its constraint pinned a marketplace tag (`resolvePathPluginRoot`
         // above); an unconstrained `path` or a github-name install still omits
         // it.
-        ...(c.resolvedSha !== undefined && { resolvedSha: c.resolvedSha }),
+        ...(installCtx.resolvedSha !== undefined && { resolvedSha: installCtx.resolvedSha }),
         // GV-01: the tag's semver, which dependency ranges read.
-        ...(c.resolvedVersion !== undefined && { resolvedVersion: c.resolvedVersion }),
+        ...(installCtx.resolvedVersion !== undefined && {
+          resolvedVersion: installCtx.resolvedVersion,
+        }),
         // D-100-01 / ENBL-10: describe the hooks the install materialized, so
         // a later `info` need not read the config back off disk. Omitted when
         // the plugin declares no hooks config -- there is nothing to describe.
-        ...(c.hookEntries !== undefined && { hookEntries: [...c.hookEntries] }),
+        ...(installCtx.hookEntries !== undefined && { hookEntries: [...installCtx.hookEntries] }),
         compatibility: {
           // INV-1 / D-66-01 / BFILL-01: record the REAL compatibility from the
           // resolve, not a hardcoded `true`. A `--partial` install of an
@@ -1597,16 +1598,16 @@ async function runInstallLedgerBody(
           // partially-installed derivation stays truthful AND `apply`'s growth
           // move (which compares the recorded `supported` set) can later
           // promote it when its supported set grows. A clean install persists `true`.
-          installable: c.resolved.state === "installable",
-          notes: [...c.resolved.notes],
-          supported: [...c.resolved.supported],
-          unsupported: [...c.resolved.unsupported],
+          installable: installCtx.resolved.state === "installable",
+          notes: [...installCtx.resolved.notes],
+          supported: [...installCtx.resolved.supported],
+          unsupported: [...installCtx.resolved.unsupported],
         },
         resources: {
-          skills: [...c.stagedSkillNames],
-          prompts: [...c.stagedCommandNames],
-          agents: [...c.stagedAgentNames],
-          mcpServers: [...c.stagedMcpServerNames],
+          skills: [...installCtx.stagedSkillNames],
+          prompts: [...installCtx.stagedCommandNames],
+          agents: [...installCtx.stagedAgentNames],
+          mcpServers: [...installCtx.stagedMcpServerNames],
           // HOOK-02 / D-57-01: additive required field. When the resolver
           // advertises a hooks config (i.e. `<pluginRoot>/hooks/hooks.json`
           // exists and parses), record the plugin's id as the per-plugin
@@ -1616,11 +1617,11 @@ async function runInstallLedgerBody(
           // the on-disk config back into `parsedConfigCache` on `/reload`.
           // When the resolver did not surface a hooks config, the
           // inventory stays empty.
-          hooks: c.resolved.hooksConfigPath === undefined ? [] : [c.plugin],
+          hooks: installCtx.resolved.hooksConfigPath === undefined ? [] : [installCtx.plugin],
           // WLIF-01: the envelope names the workflows phase's commit
           // reported. The record is the only inventory of them that survives
           // the process.
-          workflows: [...c.stagedWorkflowNames],
+          workflows: [...installCtx.stagedWorkflowNames],
         },
         // ENBL-02: always set enabled: true on install and re-materialization.
         // The disable branch sets it to false; the enable branch re-runs
