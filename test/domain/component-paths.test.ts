@@ -6,7 +6,7 @@ import { describe, test } from "node:test";
 
 import {
   collectStrictComponentPaths,
-  shadowedFolderWarning,
+  shadowedFolderDiscoveryWarnings,
 } from "../../extensions/pi-claude-marketplace/domain/component-paths.ts";
 
 import type { ComponentPathResolution } from "../../extensions/pi-claude-marketplace/domain/component-paths.ts";
@@ -1030,15 +1030,52 @@ describe("collectStrictComponentPaths", () => {
   }
 });
 
-describe("shadowedFolderWarning", () => {
-  test("D-CF1-06 the shadowed-folder warning names the folder and the field that hides it", () => {
+describe("shadowedFolderDiscoveryWarnings", () => {
+  test("D-CF1-06 tags one discovery warning per shadowed folder in order", () => {
     // act
-    const warning = shadowedFolderWarning("commands");
+    const warnings = shadowedFolderDiscoveryWarnings(["commands", "agents"]);
 
     // assert
-    assert.strictEqual(
-      warning,
-      'Default commands/ folder is ignored because the manifest sets "commands"',
-    );
+    assert.deepStrictEqual(warnings, [
+      {
+        kind: "discovery",
+        message: 'Default commands/ folder is ignored because the manifest sets "commands"',
+      },
+      {
+        kind: "discovery",
+        message: 'Default agents/ folder is ignored because the manifest sets "agents"',
+      },
+    ]);
+  });
+
+  test("D-CF1-06 gives no warning when no folder is shadowed", () => {
+    // act
+    const warnings = shadowedFolderDiscoveryWarnings(undefined);
+
+    // assert
+    assert.deepStrictEqual(warnings, []);
+  });
+});
+
+describe("collectStrictComponentPaths shadowed folders", () => {
+  test("D-CF1-06 records a shadowed kind once when the same resolution is collected twice", async () => {
+    // arrange
+    const pluginRoot = "/plugins/alpha";
+    const resolution = emptyResolution();
+    const input = {
+      entry: { name: "alpha", source: "./alpha" },
+      manifest: { agents: "custom-agents" },
+      pluginRoot,
+      resolution,
+    };
+    const statKind = (candidate: string): Promise<"dir" | null> =>
+      Promise.resolve(candidate === path.join(pluginRoot, "agents") ? "dir" : null);
+
+    // act
+    await collectStrictComponentPaths(input, statKind);
+    await collectStrictComponentPaths(input, statKind);
+
+    // assert
+    assert.deepStrictEqual(resolution.shadowedFolders, ["agents"]);
   });
 });

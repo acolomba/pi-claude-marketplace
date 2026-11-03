@@ -17,9 +17,10 @@
 //
 // The structural `ChildLike` interface lets this module stay outside
 // the `node:child_process` import whitelist, which
-// `test/architecture/no-shell-out.test.ts` pins at exactly four sanctioned
+// `test/architecture/no-shell-out.test.ts` pins at exactly five sanctioned
 // sites -- `./dispatch-exec.ts`, `./async-rewake/registry.ts`,
-// `platform/git-credential.ts`, and `platform/package-manager.ts`. Both
+// `platform/git-credential.ts`, `platform/package-manager.ts`, and
+// `platform/prompt-shell.ts`. Both
 // hook-exec sites call into this module.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";

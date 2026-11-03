@@ -8,6 +8,7 @@ import {
   invokeBridgedSkill,
 } from "../../extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts";
 import { parseFrontmatter } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
@@ -707,6 +708,19 @@ describe("fillSkillRead", () => {
       filled: "Root /plugins/demo, data /data/demo.\nStatus: !`printf ran`",
     },
     {
+      part: "at a negative offset",
+      offset: -3,
+      limit: undefined,
+      read: VARIABLES_SKILL,
+      filled: [
+        ...VARIABLES_FRONTMATTER,
+        `Session session-1 at medium in ${PROJECT_SKILL_DIR} for /work.`,
+        "Args [] [] [$0] [$ARGUMENTS[0]].",
+        "Root /plugins/demo, data /data/demo.",
+        "Status: !`printf ran`",
+      ].join("\n"),
+    },
+    {
       part: "at offset 0",
       offset: 0,
       limit: undefined,
@@ -867,6 +881,45 @@ describe("fillSkillRead", () => {
 
       // assert
       assert.strictEqual(text, undefined);
+    });
+  }
+
+  for (const { title, overrides, files, expectedLog } of [
+    {
+      title: "a staged file that cannot be read",
+      overrides: { text: "Args [$ARGUMENTS]." },
+      files: {},
+      expectedLog: new RegExp(
+        String.raw`^\[skills\] a skill read fill could not read ${PROJECT_SKILL}: unexpected read of `,
+      ),
+    },
+    {
+      title: "a staged file whose frontmatter does not parse",
+      overrides: { text: "Args [$ARGUMENTS]." },
+      files: { [PROJECT_SKILL]: "---\nname: [unclosed\n---\n\nArgs [$ARGUMENTS]." },
+      expectedLog: new RegExp(
+        String.raw`^\[skills\] a skill read fill could not read ${PROJECT_SKILL}: `,
+      ),
+    },
+    {
+      title: "a fill past Claude Code's size limit",
+      overrides: { text: "${CLAUDE_SESSION_ID} [$ARGUMENTS]", sessionId: "s".repeat(4_000_001) },
+      files: { [PROJECT_SKILL]: "${CLAUDE_SESSION_ID} [$ARGUMENTS]" },
+      expectedLog: new RegExp(
+        String.raw`^\[skills\] a skill read fill could not substitute ${PROJECT_SKILL}: `,
+      ),
+    },
+  ]) {
+    test(`logs the error when it keeps the read text for ${title}`, async (t) => {
+      // arrange
+      const diagnostics = captureDebugLog(t);
+
+      // act
+      await fillSkillRead(readRequest(overrides), dependencies(files));
+
+      // assert
+      assert.strictEqual(diagnostics.length, 1);
+      assert.match(diagnostics[0] ?? "", expectedLog);
     });
   }
 });

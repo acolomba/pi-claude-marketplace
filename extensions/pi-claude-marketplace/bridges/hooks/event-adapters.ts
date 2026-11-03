@@ -4,7 +4,7 @@
 // (D-60-01) into the Pi-side handler return shape, as Claude Code 2.1.316
 // applies a hook decision (D-CF5-11).
 //
-// Four adapters cover the Bucket-A surface:
+// Five adapters cover the Bucket-A surface:
 //
 //   - adaptToolCallResult        -> Pi `tool_call` (PreToolUse).
 //     `block` -> `{ block: true, reason }`, the reason reading
@@ -33,10 +33,13 @@
 //     (`undefined`); the `before_agent_start` handler sends the context as a
 //     message after the prompt (D-CF5-13); `noop` returns `undefined`.
 //
+//   - adaptPreCompactResult      -> Pi `session_before_compact` (PreCompact).
+//     A `block` from any hook cancels the compaction (`{ cancel: true }`); a
+//     `stop` is debug-logged; every other outcome returns `undefined`.
+//
 //   - adaptObservationResultForEvent -> Pi `session_start` /
-//     `session_shutdown` / `session_before_compact` / `session_compact`
-//     (SessionStart / SessionEnd / PreCompact / PostCompact) with per-event
-//     narrowing for the SessionStart `additionalContext` bridge. The
+//     `session_shutdown` / `session_compact` (SessionStart / SessionEnd /
+//     PostCompact) with per-event narrowing for the SessionStart `additionalContext` bridge. The
 //     SessionStart mutate arm captures `additionalContext` into the
 //     routing-state.ts pending buffer (drained by the bridge's
 //     `before_agent_start` handler on the next agent turn). All other
@@ -46,7 +49,7 @@
 //     notify. NEVER throw.
 //
 // Exhaustiveness gate: each adapter switches on every `result.kind` with no
-// default arm (NFR-7). Adding a fifth `HookExecResult` arm fails `tsc` and
+// default arm (NFR-7). Adding a new `HookExecResult` arm fails `tsc` and
 // the `switch-exhaustiveness-check` lint rule at each switch.
 //
 // Mutation surface: tool_call replaces `event.input` (Record<string,
@@ -521,8 +524,8 @@ export function adaptInputResult(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// adaptObservationResultForEvent -- SessionStart / SessionEnd / PreCompact /
-//                                   PostCompact (per-event narrowing)
+// adaptObservationResultForEvent -- SessionStart / SessionEnd / PostCompact
+//                                   (per-event narrowing)
 // ──────────────────────────────────────────────────────────────────────────
 
 /**

@@ -2630,3 +2630,44 @@ describe("D-CF4-05 plugin-ignored fields", () => {
     });
   }
 });
+
+describe("convertAgent tool token edge cases", () => {
+  for (const { tools, mappedLine, droppedTools } of [
+    { tools: "Read), Bash, Edit", mappedLine: "tools: bash,edit", droppedTools: ["Read)"] },
+    { tools: "Read, (Bash)", mappedLine: "tools: read", droppedTools: ["(Bash)"] },
+    { tools: "Read, Bash(x", mappedLine: "tools: read", droppedTools: ["Bash(x"] },
+    { tools: "Read, 'Read\"", mappedLine: "tools: read", droppedTools: ["'Read\""] },
+    { tools: "Read, '", mappedLine: "tools: read", droppedTools: [] },
+    { tools: "Read, 'Bash'", mappedLine: "tools: read,bash", droppedTools: [] },
+    { tools: 'Read, "Bash"', mappedLine: "tools: read,bash", droppedTools: [] },
+    { tools: "Read, Bash(x) Edit", mappedLine: "tools: read,bash,edit", droppedTools: [] },
+  ]) {
+    test(`maps tools ${JSON.stringify(tools)} to "${mappedLine}" and drops ${JSON.stringify(droppedTools)}`, () => {
+      // arrange
+      const raw = { description: "d", tools } satisfies RawAgentFrontmatter;
+
+      // act
+      const agent = convertMcpAgent(raw, undefined);
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          toolsLines: agent.fileContent.split("\n").filter((line) => line.startsWith("tools:")),
+          droppedTools: agent.droppedTools,
+        },
+        { toolsLines: [mappedLine], droppedTools },
+      );
+    });
+  }
+
+  test("rejects an agent whose only tool is a parenthesized name", () => {
+    // arrange
+    const raw = { description: "d", tools: "(Bash)" } satisfies RawAgentFrontmatter;
+
+    // act & assert
+    assert.throws(
+      () => convertMcpAgent(raw, undefined),
+      /the mapped tool list is empty.*Source tools: \(Bash\)/,
+    );
+  });
+});

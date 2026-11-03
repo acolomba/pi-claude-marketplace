@@ -13,14 +13,13 @@
 // missing Bash aborts the invocation with Claude Code's message, and nothing
 // reaches the model.
 //
-// D-CF1-03 (amended by the 2026-11-02 user decision on the Pi gap report,
-// item 3): a skill the user types gets the whole invocation. When the model
+// D-CF1-03 (amended 2026-11-02): a skill the user types gets the whole invocation. When the model
 // reads a staged `SKILL.md` on its own with Pi's read tool, `fillSkillRead`
 // fills the same `${CLAUDE_*}` values and empties the arguments as for an
 // invocation with none, but runs no `!` command: the model's read is not an
 // invocation, and Claude Code's Skill tool path has no Pi equivalent. It
 // fills only a text that is still the skill's own, never one a PostToolUse
-// hook wrote (audit warning W6). A skill outside this extension's two staged
+// hook wrote (D-CF1-03). A skill outside this extension's two staged
 // skills directories, such as the user's own Pi skill, is `not-bridged` and
 // keeps Pi's expansion.
 
@@ -43,6 +42,7 @@ import {
   NODE_PROMPT_SHELL_SPAWN,
   selectPromptShell,
 } from "../platform/prompt-shell.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
 import type { ExtensionAPI } from "../platform/pi-api.ts";
@@ -336,13 +336,12 @@ function readStartLine(offset: number | undefined): number {
  * line and an empty argument appends nothing, so a read that starts at an
  * offset or stops at a limit gets exactly the lines a whole read would.
  *
- * The 2026-11-02 user decision on audit warning W6: the fill runs only while
- * the text is still the skill's own. Pi's read tool is run again on the
- * staged file's current text with the call's offset and limit, and the fill
- * runs only when that returns exactly `text`, continuation notice included.
- * A text that a PostToolUse hook replaced reaches the model as the hook wrote
- * it, as Claude Code 2.1.316 sends a hook-replaced Read and never fills text
- * a hook wrote.
+ * D-CF1-03: the fill runs only while the text is still the skill's own. Pi's
+ * read tool is run again on the staged file's current text with the call's
+ * offset and limit, and the fill runs only when that returns exactly `text`,
+ * continuation notice included. A text that a PostToolUse hook replaced
+ * reaches the model as the hook wrote it, as Claude Code 2.1.316 sends a
+ * hook-replaced Read and never fills text a hook wrote.
  *
  * Returns `undefined`, and the model keeps the text it read, for any other
  * file, a project skill in a project Pi does not trust, a file that cannot be
@@ -367,7 +366,11 @@ export async function fillSkillRead(
     if (!(await readToolReturns(call, content, request.text))) {
       return undefined;
     }
-  } catch {
+  } catch (err) {
+    hookDebugLog(
+      `a skill read fill could not read ${skill.location}: ${errorMessage(err)}`,
+      "skills",
+    );
     return undefined;
   }
 
@@ -386,7 +389,11 @@ export async function fillSkillRead(
       variables: invocationVariables(request, skill, parsed.frontmatter),
     });
     return [...lines.slice(0, bodyFrom), body].join("\n");
-  } catch {
+  } catch (err) {
+    hookDebugLog(
+      `a skill read fill could not substitute ${skill.location}: ${errorMessage(err)}`,
+      "skills",
+    );
     return undefined;
   }
 }

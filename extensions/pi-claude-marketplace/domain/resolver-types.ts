@@ -138,7 +138,18 @@ interface MaterializableFields {
   notes: Type.TArray<Type.TString>;
   componentPaths: ComponentPathsSchema;
   // D-CF1-06: kinds whose existing conventional folder a declaration leaves unread.
-  shadowedFolders: Type.TOptional<Type.TArray<Type.TString>>;
+  shadowedFolders: Type.TOptional<
+    Type.TArray<
+      Type.TUnion<
+        [
+          Type.TLiteral<"skills">,
+          Type.TLiteral<"commands">,
+          Type.TLiteral<"agents">,
+          Type.TLiteral<"workflows">,
+        ]
+      >
+    >
+  >;
   mcpServers: McpServersFieldSchema;
   hooksConfigPath: Type.TOptional<Type.TString>;
   orphanRewake: Type.TOptional<Type.TBoolean>;

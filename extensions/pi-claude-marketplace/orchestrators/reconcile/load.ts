@@ -7,16 +7,17 @@
 //
 // AAP-02 / AAP-D1: the one exception is the `autoapply` setting. When the
 // effective value (`config-merge.ts::effectiveAutoapply`, the most specific config
-// file that sets it) is true, the load runs the injected apply step for both
-// scopes instead of the read-only pass below, and returns. The apply step runs
-// the same read pass, MCP move, warnings and routing rebuild, and its report
-// replaces the pending block.
+// file that sets it) is true, the load runs the injected apply step instead of
+// the read-only pass below, and returns. The apply step runs the same read
+// pass, MCP move, warnings and routing rebuild, and its report replaces the
+// pending block. When the apply step throws (AAP-03), the read-only pass runs
+// for both scopes instead.
 //
 // D-LOC-01: the apply step covers the project scope only when Pi trusts the
 // project (`ctx.isProjectTrusted()`), as Claude Code loads no project-scope
 // plugin before the workspace is trusted. In a project Pi does not trust the
-// apply step covers the user scope, and the project scope gets the read-only
-// pass and its pending block.
+// apply step covers the user scope only (D-LOC-01), and the read-only pass
+// covers the project scope and its pending block.
 //
 // AAP-03 / NFR-2: an apply step that throws (GHB-03 ends its pass) is reported
 // as `reconcile-aborted`, and the read-only pass below then runs for both

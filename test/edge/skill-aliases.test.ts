@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { It, mock, verify, when } from "strong-mock";
 
 import { registerSkillAliases } from "../../extensions/pi-claude-marketplace/edge/skill-aliases.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 
 import type { PluginAliasTarget } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import type {
@@ -326,7 +327,7 @@ for (const { token, event, expected } of [
     },
   },
 ] satisfies { token: string; event: InputEvent; expected: InputEventResult }[]) {
-  test(`P3-DC-07: rewrites the command alias /${token} to the command's own name`, async () => {
+  test(`D-CF2-02: rewrites the command alias /${token} to the command's own name`, async () => {
     // arrange
     const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
@@ -1035,6 +1036,79 @@ test("DC-25: offers only plugin-qualified aliases in completion", async () => {
     prefix: "/demo:f",
   });
   assert.strictEqual(bare, null);
+  verify(pi);
+  verify(ctx);
+  verify(ui);
+});
+
+test("keeps Pi's suggestions and logs when the alias table fails, then loads it again", async (t) => {
+  // arrange
+  const diagnostics = captureDebugLog(t);
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "UI" });
+  const session = It.willCapture<SessionListener>("session");
+  const input = It.willCapture<InputListener>("input");
+  const factory = It.willCapture<ProviderFactory>("provider factory");
+  when(() => {
+    pi.on("session_start", session);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("input", input);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => {
+    ui.addAutocompleteProvider(factory);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.cwd)
+    .thenReturn("/workspace")
+    .times(2);
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
+    .times(2);
+  const base = {
+    getSuggestions: () =>
+      Promise.resolve({ items: [{ value: "foo:command", label: "foo:command" }], prefix: "/foo:" }),
+    applyCompletion: (lines: string[]) => ({ lines, cursorLine: 0, cursorCol: 0 }),
+  } satisfies AutocompleteProvider;
+  let loads = 0;
+  const loadAliases: AliasLoader = () => {
+    loads += 1;
+    return loads === 1
+      ? Promise.reject(new Error("state unreadable"))
+      : Promise.resolve(new Map([["foo:bar", skillAlias("foo-bar")]]));
+  };
+
+  registerSkillAliases(pi, loadAliases);
+  session.value?.({ type: "session_start", reason: "startup" }, ctx);
+  const provider = factory.value?.(base);
+  const options = { signal: new AbortController().signal };
+
+  // act
+  const failed = await provider?.getSuggestions(["/foo:"], 0, 5, options);
+  const retried = await provider?.getSuggestions(["/foo:"], 0, 5, options);
+
+  // assert
+  assert.deepStrictEqual(failed, {
+    items: [{ value: "foo:command", label: "foo:command" }],
+    prefix: "/foo:",
+  });
+  assert.deepStrictEqual(retried, {
+    items: [
+      { value: "foo:command", label: "foo:command" },
+      { value: "foo:bar", label: "foo:bar" },
+    ],
+    prefix: "/foo:",
+  });
+  assert.deepStrictEqual(diagnostics, ["[skills] alias completion skipped: state unreadable"]);
   verify(pi);
   verify(ctx);
   verify(ui);

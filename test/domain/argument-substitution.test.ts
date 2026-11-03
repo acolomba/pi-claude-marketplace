@@ -354,6 +354,63 @@ describe("substituteArguments", () => {
     assert.strictEqual(content, "Run ` \\!ls` and \\! `ls`");
   });
 
+  for (const { position, body, argumentNames } of [
+    { position: "raw", body: "Run !$ARGUMENTS", argumentNames: [] },
+    { position: "positional", body: "Run !$0", argumentNames: [] },
+    { position: "indexed", body: "Run !$ARGUMENTS[0]", argumentNames: [] },
+    { position: "named", body: "Run !$cmd", argumentNames: ["cmd"] },
+  ]) {
+    test(`D-CF1-01: separates a body ! from a backtick-leading ${position} value`, () => {
+      // arrange
+      const expectedContent = "Run ! `id`";
+
+      // act
+      const content = substituteArguments({ body, args: "`id`", argumentNames, variables: {} });
+
+      // assert
+      assert.strictEqual(content, expectedContent);
+    });
+  }
+
+  test("D-CF1-01: leaves a body ! before a value that does not start with a backtick", () => {
+    // arrange
+    const body = "Run !$0";
+
+    // act
+    const content = substituteArguments({ body, args: "id", argumentNames: [], variables: {} });
+
+    // assert
+    assert.strictEqual(content, "Run !id");
+  });
+
+  test("D-CF1-01: keeps a ! backtick command the body itself contains", () => {
+    // arrange
+    const body = "Run !`date` $0";
+
+    // act
+    const content = substituteArguments({ body, args: "x", argumentNames: [], variables: {} });
+
+    // assert
+    assert.strictEqual(content, "Run !`date` x");
+  });
+
+  test("D-CF1-01: keeps a 64-character name and its index", () => {
+    // arrange
+    const longName = "n".repeat(64);
+    const body = `$short $${longName}`;
+
+    // act
+    const content = substituteArguments({
+      body,
+      args: "x y",
+      argumentNames: [longName, "short"],
+      variables: {},
+    });
+
+    // assert
+    assert.strictEqual(content, "y x");
+  });
+
   test("D-CF1-01: expands the session and effort variables in the body", () => {
     // arrange
     const body = "Session ${CLAUDE_SESSION_ID} at ${CLAUDE_EFFORT}: $0";

@@ -102,7 +102,7 @@ import {
   prepareStageWorkflows,
   unstagePluginWorkflows,
 } from "../../bridges/workflows/index.ts";
-import { shadowedFolderWarning } from "../../domain/component-paths.ts";
+import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import {
   MAX_DIRECTORY_PIN_FIELD_CHARS,
@@ -133,11 +133,7 @@ import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
-import {
-  discoveryWarning,
-  hygieneWarning,
-  partitionStagingWarnings,
-} from "../../shared/staging-warnings.ts";
+import { hygieneWarning, partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import {
   runPhases,
   type Phase,
@@ -1198,9 +1194,7 @@ async function runInstallLedgerBody(
     bridgeWarnings: [],
     // D-CF1-06: every conventional folder a declaration leaves unread, so
     // each verb that runs this ledger names it, and a failed install keeps it.
-    discoveryWarnings: (installable.shadowedFolders ?? []).map((kind) =>
-      discoveryWarning(shadowedFolderWarning(kind)),
-    ),
+    discoveryWarnings: [...shadowedFolderDiscoveryWarnings(installable.shadowedFolders)],
     agentForeignFailures: [],
     mcpConfigNotices: [],
     frontmatterDegradations: [],

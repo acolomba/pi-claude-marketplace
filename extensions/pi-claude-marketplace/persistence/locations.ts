@@ -141,11 +141,14 @@ export interface ScopedLocations {
    */
   readonly formerWorkflowsSavedDir: string | undefined;
   /**
-   * The pre-rename staging tree for workflow envelopes, a sibling of the
-   * saved directory under `workflowsHomeDir`, so the commit `rename()` stays
-   * inside one filesystem (WPTH-05, NFR-1):
-   *   user    -> `<workflowsHomeDir>/.pi-claude-marketplace-staging/`
-   *   project -> `<extensionRoot>/workflows-staging/`
+   * The pre-rename staging tree for workflow envelopes, on the same filesystem
+   * as the saved directory so the commit `rename()` stays atomic (WPTH-05,
+   * NFR-1):
+   *   user    -> `<workflowsHomeDir>/.pi-claude-marketplace-staging/`, a
+   *              sibling of `<workflowsHomeDir>/saved/`
+   *   project -> `<extensionRoot>/workflows-staging/`, not a sibling of the
+   *              saved directory `<cwd>/.pi/workflows/saved/`, but both lie
+   *              inside the project's `.pi/`
    * Each scope's staging is its own, so a sweep after a project operation
    * reaches only that project's staging (D-LOC-01).
    *
@@ -268,9 +271,12 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     scope === "user"
       ? undefined
       : path.join(engineHomeDir, "projects", workflowProjectKey(cwd), "saved");
-  // WPTH-05: staging is a SIBLING of the saved directory under
-  // `workflowsHomeDir`, so the commit rename() stays within one filesystem
-  // (NFR-1). It sits outside every directory the engine scans, so staged
+  // WPTH-05: staging must share a filesystem with the saved directory so the
+  // commit rename() is atomic (NFR-1). User scope: a sibling of the saved
+  // directory under `workflowsHomeDir`. Project scope: under `extensionRoot`
+  // (`<cwd>/.pi/pi-claude-marketplace/`), beside but not under the saved
+  // directory `<cwd>/.pi/workflows/saved`; both sit inside the project's
+  // `.pi/`. Staging is outside every directory the engine scans, so staged
   // bytes are invisible to it.
   const workflowsStagingDir =
     scope === "user"

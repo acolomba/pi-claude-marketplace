@@ -43,6 +43,7 @@ import {
   NODE_PROMPT_SHELL_SPAWN,
   selectPromptShell,
 } from "../platform/prompt-shell.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
 import type { ShellRun } from "../domain/context-injection.ts";
@@ -342,7 +343,7 @@ function textValue(value: unknown): string | undefined {
 }
 
 /**
- * Claude Code 2.1.316's listing rule (03-UPSTREAM-EVIDENCE Q1): a command is
+ * Claude Code 2.1.316's listing rule (D-CF3-01): a command is
  * listed when its source set a `description` or a `when_to_use`, and not when
  * it sets `disable-model-invocation: true`. Install wrote Claude Code's
  * fallback into a staged file whose source set no description (D-CF3-08), so
@@ -384,7 +385,8 @@ async function modelListing(
   let file: CommandFile;
   try {
     file = parseFrontmatter(await dependencies.readFile(command.file));
-  } catch {
+  } catch (err) {
+    hookDebugLog(`a command listing skips ${command.file}: ${errorMessage(err)}`, "commands");
     return undefined;
   }
 

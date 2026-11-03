@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { It, mock, verify, when } from "strong-mock";
 
 import { registerCommandTool } from "../../extensions/pi-claude-marketplace/edge/command-tool.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 
 import type { CommandToolPorts } from "../../extensions/pi-claude-marketplace/edge/command-tool.ts";
 import type {
@@ -280,6 +281,25 @@ for (const { title, list } of [
     verify(pi);
   });
 }
+
+test("D-CF3-01: logs the message of a list that cannot be built", async (t) => {
+  // arrange
+  const diagnostics = captureDebugLog(t);
+  const { pi, start } = register({
+    list: () => Promise.reject(new Error("EACCES")),
+    expand: () => Promise.reject(new Error("no call")),
+  });
+  when(() => pi.getCommands())
+    .thenReturn([DEPLOY])
+    .times(1);
+
+  // act
+  await start(listContext(1));
+
+  // assert
+  assert.deepStrictEqual(diagnostics, ["[commands] run_plugin_command is not registered: EACCES"]);
+  verify(pi);
+});
 
 for (const { params, name, expandedArgs } of [
   {

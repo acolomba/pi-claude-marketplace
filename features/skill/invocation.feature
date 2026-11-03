@@ -246,3 +246,77 @@ Feature: Skill invocation
     Then the model receives these calls:
       | call | role | text                                                                                                                                                                                                                                                          |
       | 1    | user | <skill name="demo-release" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-release/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-release.\n\n/demo:deploy production\n</skill> |
+
+  Scenario: A fenced block in a skill runs as one script and its output replaces the block
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "fenced" described as "Reports." with this body:
+      """
+      Build:
+      ```!
+      echo one
+      echo two
+      ```
+      Done.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/skill:demo-fenced"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                                       |
+      | 1    | user | <skill name="demo-fenced" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-fenced/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-fenced.\n\nBuild:\none\ntwo\nDone.\n</skill> |
+
+  Scenario: A failing context command in a skill reports what it wrote to stderr
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "oops" described as "Reports." with this body:
+      """
+      Check: !`printf partial; printf bad >&2; exit 3`
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user runs "/skill:demo-oops"
+    Then the result has these fields:
+      | kind         | usage-error                                                                                          |
+      | severity     | error                                                                                                |
+      | needs reload | false                                                                                                |
+      | message      | Shell command failed for pattern "!`printf partial; printf bad >&2; exit 3`": partial\n[stderr]\nbad |
+      | usage        |                                                                                                      |
+
+  Scenario: A skill that declares shell powershell runs its context command through bash off Windows
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "pwsh" with this skill file:
+      """
+      ---
+      name: pwsh
+      description: Reports.
+      shell: powershell
+      ---
+
+      Shell: !`printf ran`
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/skill:demo-pwsh"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                    |
+      | 1    | user | <skill name="demo-pwsh" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-pwsh/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-pwsh.\n\nShell: ran\n</skill> |

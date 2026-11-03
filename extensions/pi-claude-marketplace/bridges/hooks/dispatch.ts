@@ -105,7 +105,7 @@ import type {
  * The type is bridge-internal and not re-exported via index.ts.
  *
  * D-59-04 signature evolution: the executor returns `Promise<HookExecResult>`
- * so the reducer below can fold outcomes across a bucket.
+ * so the fold below can combine outcomes across a bucket.
  */
 export type HookExecutor = (
   entry: RoutingEntry,
@@ -678,7 +678,7 @@ function dropStalePromptContext(runtime: HooksRuntime, event: InputEvent): void 
  * D-59-01 / D-60-03: six-uniform composite handler factory.
  *
  * `claudeEvent` constrains which bucket the closure reads and which
- * per-Pi-event adapter narrows the reducer's final result. The runtime
+ * per-Pi-event adapter narrows the fold's final result. The runtime
  * `event` is typed via `CompositeEventFor<E>` so each closure exposes
  * the Pi-shape its registration point expects; the per-event filter
  * narrows the matcher-fires path at access time.

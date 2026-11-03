@@ -40,17 +40,19 @@
 //      deny still wins over that block.
 //
 // Never-throws contract: every error path resolves to `{ kind: "noop" }` +
-// `hookDebugLog`, or to the onFailure block when the hook asks for one. The outer `try/catch` wraps spawn-time errors (ENOENT,
-// containment violation, etc.) so the composite handler reducer never
-// crashes against malformed configs.
+// `hookDebugLog`, or to the onFailure block when the hook asks for one. The
+// outer `try/catch` wraps setup and spawn-time errors (ENOENT, containment
+// violation, etc.) so the composite handler never crashes against malformed
+// configs; a hook that cannot start blocks under `onFailure: "block"`.
 //
-// Whitelist note: this is one of exactly FOUR sanctioned
+// Whitelist note: this is one of exactly FIVE sanctioned
 // `node:child_process` import sites in the extension tree (the others are
 // `platform/git-credential.ts`, the async-rewake registry at
-// `bridges/hooks/async-rewake/registry.ts`, and `platform/package-manager.ts`).
+// `bridges/hooks/async-rewake/registry.ts`, `platform/package-manager.ts`,
+// and `platform/prompt-shell.ts`).
 // The architecture-test gate at `test/architecture/no-shell-out.test.ts`
-// enforces the 4-element set; adding a fifth file requires an explicit edit
-// there + an update to the sibling "exactly four files" assertion, with
+// enforces the 5-element set; adding a sixth file requires an explicit edit
+// there + an update to the sibling "exactly five files" assertion, with
 // justification in the docstring header.
 
 import { spawn } from "node:child_process";
@@ -136,8 +138,9 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
  * `{ kind: "noop" }` + `hookDebugLog`, except that a hook with
  * `onFailure: "block"` turns a start failure, an unexpected exit, a timeout,
  * or broken JSON stdout into a block (D-CF5-18). The composite handler
- * reducer folds the returned arms across the bucket and dispatches to the
- * per-Pi-event adapter (D-60-03).
+ * composite handler runs the bucket in parallel, folds the returned arms in
+ * routing order (D-CF5-09), and dispatches to the per-Pi-event adapter
+ * (D-60-03).
  *
  * `deps` is the spawn injection point, shared verbatim with
  * `spawnAndRegister` (see `SpawnDeps` in `async-rewake/registry.ts`) and
@@ -158,10 +161,10 @@ export async function dispatchHookExec(
   const spawnImpl = deps.spawnImpl ?? spawn;
   // HOOK-06 / EXEC-05 / D-62-01: asyncRewake delegation. Strict `=== true`
   // discriminator (HOOK-03 lenient stance: any non-`true` value -- including
-  // a string `"yes"` -- flows to the sync EXEC-01..04 path). The reducer
+  // a string `"yes"` -- flows to the sync EXEC-01..04 path). The fold
   // cannot distinguish a sync `{kind:"noop"}` from this async-spawned
-  // `{kind:"noop"}`, so D-60-02 first-block-wins / mutate-compose / stop
-  // semantics are preserved across mixed declaration-order interleave
+  // `{kind:"noop"}`, so the D-CF5-09 fold (stop, then first block, then first
+  // ask, then mutation) is preserved across mixed declaration-order interleave
   // (D-62-02). `spawnAndRegister` is itself fire-and-forget -- the
   // spawn + register step is awaited; the child's exit is NOT.
   //
@@ -201,7 +204,15 @@ export async function dispatchHookExec(
     return await spawnAndCollect(entry, vars, env, stdinJson, spawnImpl);
   } catch (err) {
     hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
-    return { kind: "noop" };
+    // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
+    const noop: HookExecResult = { kind: "noop" };
+    return (
+      onFailureBlock(
+        entry,
+        { startFailed: true, timedOut: false, exitCode: null, stdout: "", stderr: "" },
+        noop,
+      ) ?? noop
+    );
   }
 }
 

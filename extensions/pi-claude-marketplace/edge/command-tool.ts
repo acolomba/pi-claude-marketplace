@@ -1,9 +1,8 @@
 // edge/command-tool.ts
 //
-// Closes the D-CF3-01 gap (the 2026-11-02 user decision on the Pi gap report,
-// item 4): Claude Code's model runs a plugin command through its Skill tool,
-// and Pi gives the model no way to run a prompt template. This module
-// registers `run_plugin_command`, the Pi tool that stands for that path.
+// Closes the D-CF3-01 gap (amended 2026-11-02): Claude Code's model runs a
+// plugin command through its Skill tool, and Pi gives the model no way to run
+// a prompt template. This module registers `run_plugin_command`, the Pi tool that stands for that path.
 //
 // Its description lists the staged commands Pi loaded that Claude Code lists
 // for the model (`listModelCommands`), under the names Pi shows. Pi loads the
@@ -22,6 +21,7 @@
 import Type from "typebox";
 
 import { expandStagedCommand, listModelCommands } from "../orchestrators/command-invocation.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
 import type {
@@ -150,7 +150,9 @@ export function registerCommandTool(
 
   // A list that cannot be built registers no tool for the session.
   pi.on("before_agent_start", async (_event, ctx) => {
-    listed ??= register(ctx).catch(() => undefined);
+    listed ??= register(ctx).catch((err: unknown) => {
+      hookDebugLog(`run_plugin_command is not registered: ${errorMessage(err)}`, "commands");
+    });
     await listed;
   });
 }

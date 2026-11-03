@@ -23,11 +23,13 @@
 // targeted, and the host engine's own saved-name rule forbids only "/", "\"
 // and NUL.
 //
-// WPTH-05: staging sits beside the target under the scope's
-// `workflowsHomeDir`, so the commit `rename()` stays inside one filesystem,
-// which is where NFR-1 atomicity comes from. A user-scope staging tree is not
-// a child of the extension's own writable root, which can live on a
-// different filesystem from the engine's root and make the rename fail EXDEV.
+// WPTH-05: staging lies on the same filesystem as the target, so the commit
+// `rename()` stays atomic (NFR-1). User scope: a sibling of the saved
+// directory under the engine's root (`workflowsHomeDir`), because the
+// extension's own writable root can live on a different filesystem and make
+// the rename fail EXDEV. Project scope: `<extensionRoot>/workflows-staging`,
+// while the saved directory is `<cwd>/.pi/workflows/saved`; both are inside
+// the project's `.pi/`.
 //
 // WBRG-04: the ONLY operation that touches a directory the engine scans is the
 // commit `rename`. Envelope bytes are written exclusively into the staging

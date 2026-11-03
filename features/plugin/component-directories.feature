@@ -81,3 +81,95 @@ Feature: Plugin component directories
       | plugin status                  | available         |
       | plugin version                 | 1.0.0             |
       | severity                       | info              |
+
+  Scenario: A declared agents path replaces the agents folder
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "agents": "./custom-agents" }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "custom-agents/new.md" with this text:
+      """
+      ---
+      name: new
+      description: The new agent.
+      ---
+
+      Do the new thing.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/old.md" with this text:
+      """
+      ---
+      name: old
+      description: The old agent.
+      ---
+
+      Do the old thing.
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the scripted model plays these steps:
+      | reply                | tool     | arguments         |
+      |                      | subagent | {"action":"list"} |
+      | One agent is listed. |          |                   |
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                           | lines                                                                |
+      | cascade    | info     | true         |                                                                  |                                                                      |
+      | diagnostic | warning  | false        | Plugin "demo" [user] installed; 1 declared component has a note. | Default agents/ folder is ignored because the manifest sets "agents" |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    When the user starts a new pi session
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                      |
+      | 1    | user        | List the agents.                                                                          |
+      | 2    | user        | List the agents.                                                                          |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                      |
+      | 2    | tool result | subagent returned: agent demo:new, aliases pi-claude-marketplace-demo-new: The new agent. |
+
+  Scenario: A declared workflows path replaces the workflows folder
+    Given pi runs with the scripted model and these companions:
+      | companion            |
+      | pi-dynamic-workflows |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "workflows": "./custom-workflows" }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "custom-workflows/new.js" with this text:
+      """
+      export const meta = {name:"new",description:"The new workflow."};
+
+      return "New.";
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/old.js" with this text:
+      """
+      export const meta = {name:"old",description:"The old workflow."};
+
+      return "Old.";
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                           | lines                                                                      |
+      | cascade    | info     | true         |                                                                  |                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [user] installed; 1 declared component has a note. | Default workflows/ folder is ignored because the manifest sets "workflows" |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    When the user starts a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these workflow commands:
+      | command   | description       |
+      | /demo:new | The new workflow. |

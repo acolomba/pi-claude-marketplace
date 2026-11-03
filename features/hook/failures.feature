@@ -20,12 +20,15 @@ Feature: Hook failures
     Then the hooks record these runs:
       | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | UserPromptSubmit | first   | say done | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hooks show the user these messages:
+      | severity | text     |
+      | info     | <notice> |
 
     Examples:
-      | exit code | stderr | output     | timeout | sleep |
-      | 1         | boom   |            |         |       |
-      |           |        | {not json} |         |       |
-      |           |        |            | 1       | 3     |
+      | exit code | stderr | output     | timeout | sleep | notice |
+      | 1         | boom   |            |         |       | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block"\nboom |
+      |           |        | {not json} |         |       | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block" |
+      |           |        |            | 1       | 3     | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: timed out; blocking because onFailure is "block" |
 
   Scenario: A failing prompt hook without onFailure lets the prompt through
     Given pi runs with the scripted model
@@ -49,6 +52,7 @@ Feature: Hook failures
     Then the model receives these calls:
       | call | role | text     |
       | 1    | user | say done |
+    Then the hooks show the user no messages
 
   Scenario: A succeeding prompt hook with onFailure block lets the prompt through
     Given pi runs with the scripted model
@@ -72,6 +76,7 @@ Feature: Hook failures
     Then the model receives these calls:
       | call | role | text     |
       | 1    | user | say done |
+    Then the hooks show the user no messages
 
   Scenario: A prompt hook that cannot start stops the prompt when onFailure is block
     Given pi runs with the scripted model
@@ -90,3 +95,6 @@ Feature: Hook failures
     Then the hooks record these runs:
       | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | UserPromptSubmit | first   | say done | {project dir} |                 | observer  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hooks show the user these messages:
+      | severity | text                                                                                                                                       |
+      | info     | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/missing-guard.sh]: failed; blocking because onFailure is "block" |

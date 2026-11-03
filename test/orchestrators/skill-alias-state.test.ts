@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import { loadPluginAliases } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
@@ -419,6 +420,43 @@ test("D-CF2-02: reads the project scope when the user scope state cannot be read
   verify(pi);
 });
 
+test("D-CF2-02: logs the scope root whose state cannot be read", async (t) => {
+  // arrange
+  const diagnostics = captureDebugLog(t);
+  const pi = piWith([]);
+
+  // act
+  await loadPluginAliases(pi, CWD, false, dependencies({}, {}));
+
+  // assert
+  assert.deepStrictEqual(diagnostics, [
+    `[skills] skill aliases skip the state under ${AGENT_DIR}: no state under ${path.join(AGENT_DIR, "pi-claude-marketplace")}`,
+  ]);
+  verify(pi);
+});
+
+test("D-CF2-02: logs the staged file that cannot be read", async (t) => {
+  // arrange
+  const diagnostics = captureDebugLog(t);
+  const file = stagedPath(PROJECT_ROOT, "demo-broken");
+  const pi = piWith([skillCommand("demo-broken", file)]);
+
+  // act
+  await loadPluginAliases(
+    pi,
+    CWD,
+    true,
+    dependencies({ [PROJECT_ROOT]: stateWith({ demo: ["demo-broken"] }) }, {}),
+  );
+
+  // assert
+  assert.deepStrictEqual(diagnostics, [
+    `[skills] skill aliases skip the state under ${AGENT_DIR}: no state under ${path.join(AGENT_DIR, "pi-claude-marketplace")}`,
+    `[skills] skill aliases skip ${file}: unreadable ${file}`,
+  ]);
+  verify(pi);
+});
+
 // The invariant: every stored name of every loaded skill maps to that skill
 // unless a command of another source or an earlier claim holds it.
 for (const { claimants, reservedNames, expectedAliases } of [
@@ -565,7 +603,7 @@ function stateWithCommands(
   };
 }
 
-test("P3-DC-07: maps a loaded command's frontmatter name aliases to the command's Pi name", async () => {
+test("D-CF2-02: maps a loaded command's frontmatter name aliases to the command's Pi name", async () => {
   // arrange
   const file = stagedCommandPath(AGENT_DIR, "demo:ship");
   const pi = piWith([stagedPromptCommand("demo:ship", file)]);
@@ -592,7 +630,7 @@ test("P3-DC-07: maps a loaded command's frontmatter name aliases to the command'
   verify(pi);
 });
 
-test("P3-DC-07: a command whose frontmatter name is its own file name answers to the bare name only", async () => {
+test("D-CF2-02: a command whose frontmatter name is its own file name answers to the bare name only", async () => {
   // arrange
   const file = stagedCommandPath(AGENT_DIR, "demo:ship");
   const pi = piWith([stagedPromptCommand("demo:ship", file)]);
@@ -646,7 +684,7 @@ for (const { title, projectTrusted, expectedAliases } of [
   });
 }
 
-test("P3-DC-07: the plugin table keeps every skill alias and gives a command the names no skill claimed", async () => {
+test("D-CF2-02: the plugin table keeps every skill alias and gives a command the names no skill claimed", async () => {
   // arrange
   const skillFile = stagedPath(AGENT_DIR, "demo-review");
   const shipFile = stagedCommandPath(AGENT_DIR, "demo:ship");

@@ -234,3 +234,76 @@ Feature: Slash command invocation
     Then the model receives these calls:
       | call | role | text                                      |
       | 1    | user | {zero width space}/demo:deploy production |
+
+  Scenario: A fenced block in a command runs as one script and its output replaces the block
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "fenced" described as "Reports." with this body:
+      """
+      Build:
+      ```!
+      echo one
+      echo two
+      ```
+      Done.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:fenced"
+    Then the model receives these calls:
+      | call | role | text                    |
+      | 1    | user | Build:\none\ntwo\nDone. |
+
+  Scenario: A failing context command in a command reports what it wrote to stderr
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "oops" described as "Reports." with this body:
+      """
+      Check: !`printf partial; printf bad >&2; exit 3`
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user runs "/demo:oops"
+    Then the result has these fields:
+      | kind         | usage-error                                                                                          |
+      | severity     | error                                                                                                |
+      | needs reload | false                                                                                                |
+      | message      | Shell command failed for pattern "!`printf partial; printf bad >&2; exit 3`": partial\n[stderr]\nbad |
+      | usage        |                                                                                                      |
+
+  Scenario: A command that declares shell powershell runs its context command through bash off Windows
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "pwsh" with this command file:
+      """
+      ---
+      description: Reports.
+      shell: powershell
+      ---
+
+      Shell: !`printf ran`
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:pwsh"
+    Then the model receives these calls:
+      | call | role | text       |
+      | 1    | user | Shell: ran |

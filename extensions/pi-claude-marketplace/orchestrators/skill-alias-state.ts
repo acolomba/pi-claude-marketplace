@@ -6,9 +6,9 @@
 // `SKILL.md` (`readSkillRecord`); this module reads them back at session time
 // and never reads the plugin source.
 //
-// P3-DC-07: a bridged command with a frontmatter `name` also answers to
-// `<plugin>:<name>` and, for a name with no `:`, the bare `<name>`, as Claude
-// Code 2.1.316 names it (03-UPSTREAM-EVIDENCE, supplementary observations).
+// D-CF2-02, extended to commands: a bridged command with a frontmatter `name`
+// also answers to `<plugin>:<name>` and, for a name with no `:`, the bare
+// `<name>`, as Claude Code 2.1.316 names it.
 // The staged command keeps its source frontmatter, so its names are read from
 // the staged file at session time with the skills' own rule
 // (`frontmatterNameAliases`).
@@ -26,6 +26,8 @@ import { frontmatterNameAliases, readSkillRecord } from "../bridges/skills/skill
 import { generatedSkillName } from "../domain/name.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
 
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 
@@ -109,7 +111,7 @@ function skillSuffix(pluginName: string, generatedName: string): string | undefi
 }
 
 /**
- * DC-25 item 1: the one alias of a skill staged before install stored its
+ * D-CF2-02 residual: the one alias of a skill staged before install stored its
  * names, derived from its generated name with the plugin prefix cut off. Claude
  * Code has no such name; the skill keeps it until its plugin is staged again.
  */
@@ -160,7 +162,8 @@ async function entryNames(
   let frontmatter: Record<string, unknown>;
   try {
     frontmatter = parseFrontmatter(await dependencies.readFile(entry.file)).frontmatter;
-  } catch {
+  } catch (err) {
+    hookDebugLog(`skill aliases skip ${entry.file}: ${errorMessage(err)}`, "skills");
     return [];
   }
 
@@ -209,7 +212,8 @@ async function readScopes(
     try {
       // eslint-disable-next-line no-await-in-loop -- two scope roots, one state read each
       state = await resolved.loadState(path.join(root, "pi-claude-marketplace"));
-    } catch {
+    } catch (err) {
+      hookDebugLog(`skill aliases skip the state under ${root}: ${errorMessage(err)}`, "skills");
       continue;
     }
 
@@ -220,7 +224,7 @@ async function readScopes(
 }
 
 /**
- * D-CF2-02 / P3-DC-07: maps each name that a loaded entry of `kind` claims to
+ * D-CF2-02: maps each name that a loaded entry of `kind` claims to
  * the entry's own name. The first claim wins, and a name that a Pi command of
  * another source has is never mapped (SK-6).
  */
@@ -260,7 +264,7 @@ async function kindAliases(
 }
 
 /**
- * D-CF2-02 / P3-DC-07: the plugin alias table under the rules of
+ * D-CF2-02: the plugin alias table under the rules of
  * `kindAliases`: every name a loaded bridged skill stored, mapped to its
  * generated name, then each name that the frontmatter `name` of a loaded
  * bridged command gives it and no skill claimed, mapped to the command's Pi

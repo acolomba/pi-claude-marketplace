@@ -2,6 +2,8 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import { fillSkillRead } from "../orchestrators/skill-invocation.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
 
 import type { SkillReadRequest } from "../orchestrators/skill-invocation.ts";
 import type {
@@ -37,13 +39,12 @@ function readText(event: ToolResultEvent): string | undefined {
 }
 
 /**
- * Amends D-CF1-03 (the 2026-11-02 user decision on the Pi gap report, item
- * 3): when the model's read tool returns a staged plugin `SKILL.md`, the text
- * it gets has the skill's `${CLAUDE_*}` values filled and its arguments
- * empty, as a typed invocation with no arguments has them. No `!` command
- * runs. Any other result keeps its content, and a failed fill keeps it too.
- * So does a read whose text a PostToolUse hook replaced: the fill runs only
- * on the text Pi's read tool returns for the staged file (audit warning W6).
+ * Amends D-CF1-03 (2026-11-02): when the model's read tool returns a staged
+ * plugin `SKILL.md`, the text it gets has the skill's `${CLAUDE_*}` values
+ * filled and its arguments empty, as a typed invocation with no arguments
+ * has them. No `!` command runs. Any other result keeps its content, and a
+ * failed fill keeps it too. So does a read whose text a PostToolUse hook replaced: the fill runs only
+ * on the text Pi's read tool returns for the staged file (D-CF1-03).
  */
 export function registerSkillReadFill(
   pi: ExtensionAPI,
@@ -71,7 +72,8 @@ export function registerSkillReadFill(
       return replaced === undefined || replaced === text
         ? undefined
         : { content: [{ type: "text", text: replaced }] };
-    } catch {
+    } catch (err) {
+      hookDebugLog(`a skill read fill failed: ${errorMessage(err)}`, "skills");
       return undefined;
     }
   };

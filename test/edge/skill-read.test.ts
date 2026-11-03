@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { It, mock, verify, when } from "strong-mock";
 
 import { registerSkillReadFill } from "../../extensions/pi-claude-marketplace/edge/skill-read.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 
 import type { SkillReadRequest } from "../../extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts";
 import type {
@@ -250,3 +251,17 @@ for (const { title, event } of [
     verify(fill);
   });
 }
+
+test("logs the message of a fill that fails", async (t) => {
+  // arrange
+  const diagnostics = captureDebugLog(t);
+  const ctx = fillContext();
+  const { pi, listener } = register(() => Promise.reject(new Error("EACCES")));
+  armFill(pi);
+
+  // act
+  await listener(readResult({ path: SKILL }, "Greet $ARGUMENTS."), ctx);
+
+  // assert
+  assert.deepStrictEqual(diagnostics, ["[skills] a skill read fill failed: EACCES"]);
+});

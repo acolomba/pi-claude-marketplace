@@ -47,3 +47,50 @@ Feature: Skill project trust
     Then the model receives these calls:
       | call | role | text       |
       | 1    | user | /fancy now |
+
+  Scenario: A new session in an untrusted project offers the skills of a user-scope plugin
+    Given the marketplace "mine" is published as a dir source
+    Given the marketplace "mine" offers these plugins:
+      | name     | version |
+      | personal | 1.0.0   |
+    Given the published plugin "personal" of the marketplace "mine" has the skill "status" with this skill file:
+      """
+      ---
+      name: mine
+      description: Reports my status.
+      ---
+
+      Status: !`printf ran`
+      """
+    Given the marketplace "mine" is added to the user scope
+    Given the user has run "/claude:plugin install personal@mine --scope user"
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command                | description                |
+      | /skill:personal-skill  | A skill of personal 1.0.0. |
+      | /skill:personal-status | Reports my status.         |
+
+  Scenario: A user-scope skill runs its context command in an untrusted project
+    Given the marketplace "mine" is published as a dir source
+    Given the marketplace "mine" offers these plugins:
+      | name     | version |
+      | personal | 1.0.0   |
+    Given the published plugin "personal" of the marketplace "mine" has the skill "status" with this skill file:
+      """
+      ---
+      name: mine
+      description: Reports my status.
+      ---
+
+      Status: !`printf ran`
+      """
+    Given the marketplace "mine" is added to the user scope
+    Given the user has run "/claude:plugin install personal@mine --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/skill:personal-status"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                           |
+      | 1    | user | <skill name="personal-status" location="{agent dir}/pi-claude-marketplace/resources/skills/personal-status/SKILL.md">\nReferences are relative to {agent dir}/pi-claude-marketplace/resources/skills/personal-status.\n\nStatus: ran\n</skill> |

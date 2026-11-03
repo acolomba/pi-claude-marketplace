@@ -296,9 +296,9 @@ export function compileIfPredicate(
 }
 
 /**
- * Per-prefix compile dispatch. Each arm wraps the underlying glob
- * compile so a malformed inner still collapses to MATCH_ALL_IF
- * (D-61-02). Unknown prefixes (`Grep`, `Glob`, `LS`, `Cd`, ...) fall open
+ * Per-prefix compile dispatch. Only the Read/Edit/Write path-glob arm wraps
+ * its compile, so a malformed path glob collapses to MATCH_ALL_IF
+ * (D-61-02); the Bash and PowerShell compilers do not throw. Unknown prefixes (`Grep`, `Glob`, `LS`, `Cd`, ...) fall open
  * silently.
  */
 function compileIfPrefixForm(

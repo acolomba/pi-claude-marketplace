@@ -138,6 +138,13 @@ function guardBangs(value: string): string {
     .replaceAll(/(^|\s)!/gm, String.raw`$1\!`);
 }
 
+// `xM` sees only the value, so a `!` in the body directly before a value that
+// starts with a backtick would form `!` + backtick. The separation `guardBangs`
+// uses goes after the value's wrap markers (T-01-22).
+function separateBangBeforeValue(body: string): string {
+  return body.replaceAll(new RegExp(`!(${WRAP}+)\``, "g"), "!$1 `");
+}
+
 function insertValue(state: SubstitutionState, raw = ""): string {
   const value = guardBangs(applyVariables(raw, state.variables, (variable) => variable));
   state.size += Math.max(raw.length, value.length);
@@ -243,7 +250,7 @@ export function substituteArguments(input: ArgumentSubstitution): string {
   body = replacePositionalArguments(body, state);
   body = replaceRawArguments(body, state);
   body = appendArguments(body, state, append);
-  return body.replaceAll(LITERAL_DOLLAR, "$").replaceAll(WRAP, "");
+  return separateBangBeforeValue(body).replaceAll(LITERAL_DOLLAR, "$").replaceAll(WRAP, "");
 }
 
 /**

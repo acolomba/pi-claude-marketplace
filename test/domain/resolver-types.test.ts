@@ -1,3 +1,4 @@
+import type { ComponentPathKind } from "../../extensions/pi-claude-marketplace/domain/component-paths.ts";
 import type {
   CommandMapEntry,
   GitPluginRootResult,
@@ -78,6 +79,15 @@ void (unavailableWithExtraField satisfies ResolvedPlugin);
 // D-CF1-06: a materializable arm may name the folders a declaration leaves unread.
 void ({ ...installableExample, shadowedFolders: ["commands"] } satisfies ResolvedPlugin);
 void ({ ...partialExample, shadowedFolders: ["agents", "workflows"] } satisfies ResolvedPlugin);
+// D-CF1-06: the schema's folder kinds are exactly the component path kinds.
+type ShadowedFolderKindsMatch = AssertTrue<
+  [NonNullable<MaterializablePlugin["shadowedFolders"]>[number]] extends [ComponentPathKind]
+    ? [ComponentPathKind] extends [NonNullable<MaterializablePlugin["shadowedFolders"]>[number]]
+      ? true
+      : false
+    : false
+>;
+void (true satisfies ShadowedFolderKindsMatch);
 // @ts-expect-error the shadowed folders are kind names.
 void ({ ...installableExample, shadowedFolders: [1] } satisfies ResolvedPlugin);
 // D-CF3-03: the command map holds source entries and inline entries, each with its origin.

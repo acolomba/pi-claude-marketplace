@@ -888,6 +888,9 @@ function sessionShutdownCallback(
   return (event, ctx) => {
     let mode: ExtensionMode;
     try {
+      // Without a notification mode the user-facing channel is unavailable, so
+      // the hook could not report its outcome. The callback is skipped and
+      // debug-logged instead; the same skip applies at the other mode checks.
       mode = requireNotificationMode(ctx.mode);
     } catch (error: unknown) {
       hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
@@ -980,9 +983,10 @@ function sessionCompactCallback(
  *   3. SIGKILL prior-cycle in-memory async-rewake children (HOOK-06).
  *   4. Hydrate the parsed-config cache from disk, then rebuild routing tables.
  *   5. Reap persisted orphans per scope (D-62-05).
- *   6. Register exactly 11 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *   6. Register exactly 12 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
- *      SessionStart `additionalContext` capture buffer) plus the two
+ *      SessionStart `additionalContext` capture buffer) plus `turn_end` (sends
+ *      the context of a queued follow-up, D-CF5-13) plus the two
  *      settle-time surfaces `agent_end` (caches the run's last-assistant
  *      message) and `agent_settled` (gates on stopReason to dispatch the
  *      Stop / StopFailure buckets; STOP-01) plus a SECOND `input`
@@ -992,8 +996,7 @@ function sessionCompactCallback(
  *      `tool_result` splits on `event.isError` between the PostToolUse and
  *      PostToolUseFailure buckets (D-59-01); the Stop / StopFailure buckets
  *      are driven off `agent_settled` rather than a per-Pi-event surface. The
- *      locked Pi event-name SET stays 10 (`input` appears twice) -- only the
- *      call COUNT grows to 11.
+ *      Pi event-name set has 11 names (`input` appears twice), so 12 calls.
  *
  * `opts.executor` is the hook-execution injection point, forwarded verbatim
  * to every `compositeHandlerFor` / `toolResultCompositeHandler` /

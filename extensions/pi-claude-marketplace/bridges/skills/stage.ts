@@ -455,6 +455,7 @@ export async function prepareStageSkills(
     pluginName,
     resolved.pluginRoot,
     resolved.componentPaths.commands,
+    resolved.componentPaths.commandMap,
   );
   const stagingRoot = path.join(locations.skillsStagingDir, randomUUID());
   await mkdir(stagingRoot, { recursive: true });
@@ -478,7 +479,7 @@ export async function prepareStageSkills(
       discovered.map((skill) => skill.generatedName),
       input.knownWorkflowNames,
     ),
-    // D-CF2-02 / DC-25 item 2: every skill's identity is claimed before any
+    // D-CF2-02: every skill's identity is claimed before any
     // frontmatter alias, and the loop below claims aliases in discovery order.
     claims: createSkillNameClaims(
       discovered.map((skill) => skillIdentityName(pluginName, skill.sourceName)),

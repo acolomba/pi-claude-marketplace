@@ -70,6 +70,7 @@ import { lstat, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { generatedCommandName } from "../../domain/name.ts";
+import { commandMapKeyRefusal } from "../../shared/command-map-key.ts";
 import { CommandNameError } from "../../shared/errors-bridges.ts";
 import { causeChainTrailer, errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
@@ -480,17 +481,6 @@ function mapEntryWarning(key: string, reason: string): string {
   return showHiddenCharacters(`command map entry "${key}" ${reason}; skipping entry.`);
 }
 
-// D-CF3-03: Claude Code 2.1.316 refuses a command name that ends in `:` or
-// holds `<`, `>`, a blank, or a hidden or direction-changing character
-// (03-UPSTREAM-EVIDENCE Q3.11). `\p{Cf}` is the Unicode class of those
-// format characters.
-const MAP_KEY_RULES: readonly { readonly pattern: RegExp; readonly reason: string }[] = [
-  { pattern: /:$/u, reason: 'ends with ":"' },
-  { pattern: /[<>]/u, reason: 'holds "<" or ">"' },
-  { pattern: /\s/u, reason: "holds whitespace" },
-  { pattern: /\p{Cf}/u, reason: "holds a hidden or direction-changing character" },
-];
-
 /**
  * D-CF3-03: the generated name of a map key, or why the key cannot name a
  * command. The key is a source name, so CM-2 elision applies and a `/` opens
@@ -500,9 +490,9 @@ function nameMapKey(
   pluginName: string,
   key: string,
 ): { readonly ok: true; readonly name: string } | { readonly ok: false; readonly reason: string } {
-  const rule = MAP_KEY_RULES.find(({ pattern }) => pattern.test(key));
-  if (rule !== undefined) {
-    return { ok: false, reason: rule.reason };
+  const refusal = commandMapKeyRefusal(key);
+  if (refusal !== undefined) {
+    return { ok: false, reason: refusal };
   }
 
   try {

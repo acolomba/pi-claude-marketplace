@@ -88,6 +88,17 @@ describe("onFailureBlock with onFailure block", () => {
     });
   }
 
+  test("says timed out for a hook that exits 0 after its timeout fired", () => {
+    // act
+    const block = onFailureBlock(entry, { ...CLEAN_EXIT, timedOut: true, exitCode: 0 }, NOOP);
+
+    // assert
+    assert.deepStrictEqual(block, {
+      kind: "block",
+      reason: `[${COMMAND}]: timed out; blocking because onFailure is "block"\nboom`,
+    });
+  });
+
   test("says timed out for a hook its timeout killed", () => {
     // act
     const block = onFailureBlock(entry, { ...CLEAN_EXIT, timedOut: true, exitCode: null }, NOOP);

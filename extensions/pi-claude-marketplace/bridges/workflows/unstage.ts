@@ -83,14 +83,21 @@ export async function unstagePluginWorkflows(
       // time.
       // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
       const target = await input.locations.workflowArtifactPath(name);
-      // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
-      const former = await input.locations.formerWorkflowArtifactPath(name);
-
+      // The current envelope is unlinked BEFORE the former path is composed.
+      // The former composer can refuse (a symlink or containment error in the
+      // legacy chain), and a refusal there must not leave the valid current
+      // envelope behind, still executable.
       // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
       const removedHere = await unlinkIfPresent(target);
+      if (removedHere) {
+        removed.push(name);
+      }
+
+      // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
+      const former = await input.locations.formerWorkflowArtifactPath(name);
       // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
       const removedThere = await unlinkIfPresent(former);
-      if (removedHere || removedThere) {
+      if (removedThere && !removedHere) {
         removed.push(name);
       }
     } catch (err) {

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { loadPluginAliases } from "../orchestrators/skill-alias-state.ts";
 import { invokeBridgedSkill } from "../orchestrators/skill-invocation.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
 import { openNotificationRun } from "../shared/notification-run.ts";
@@ -66,8 +67,14 @@ function aliasProvider(
         return suggestions;
       }
 
-      const aliases = await getQualifiedAliases(ctx.cwd, ctx.isProjectTrusted());
-      return appendAliasSuggestions(typed, suggestions, aliases.keys());
+      // A table that cannot be loaded adds no suggestion, so Pi's stay.
+      try {
+        const aliases = await getQualifiedAliases(ctx.cwd, ctx.isProjectTrusted());
+        return appendAliasSuggestions(typed, suggestions, aliases.keys());
+      } catch (err) {
+        hookDebugLog(`alias completion skipped: ${errorMessage(err)}`, "skills");
+        return suggestions;
+      }
     },
     applyCompletion: (lines, line, col, item, prefix) =>
       current.applyCompletion(lines, line, col, item, prefix),
@@ -98,7 +105,7 @@ function inputResult(
 }
 
 /**
- * P3-DC-07: the typed line with a command alias replaced by the command's Pi
+ * D-CF2-02: the typed line with a command alias replaced by the command's Pi
  * name. The command invocation handler, registered after this one, fills it.
  */
 function commandAliasResult(name: string, token: string, event: InputEvent): InputEventResult {
@@ -112,7 +119,7 @@ function commandAliasResult(name: string, token: string, event: InputEvent): Inp
 /**
  * D-CF2-05 / D-CF2-06: resolves a typed `/skill:` token or plugin-qualified
  * alias, from interactive or RPC input, and sends a bridged skill through the
- * invocation; `extension` input passes through unchanged. P3-DC-07: a command
+ * invocation; `extension` input passes through unchanged. D-CF2-02: a command
  * alias becomes the command's own name, for the command invocation handler.
  */
 export function registerSkillAliases(
@@ -145,8 +152,15 @@ export function registerSkillAliases(
     const key = `${projectTrusted ? "trusted" : "untrusted"}\0${cwd}`;
     let aliases = cache.get(key);
     if (aliases === undefined) {
-      aliases = loadAliases(pi, cwd, projectTrusted);
-      cache.set(key, aliases);
+      const loading = loadAliases(pi, cwd, projectTrusted);
+      aliases = loading;
+      cache.set(key, loading);
+      // A rejected load is not kept: the next lookup loads the table again.
+      loading.catch(() => {
+        if (cache.get(key) === loading) {
+          cache.delete(key);
+        }
+      });
     }
 
     return aliases;
@@ -209,7 +223,7 @@ export function registerSkillAliases(
       return invoke(token.slice("skill:".length), token, commands, event, ctx);
     }
 
-    // DC-25 item 3: a bare alias that equals a Pi built-in command name is
+    // D-CF2-02 residual: a bare alias that equals a Pi built-in command name is
     // not reserved here, because Pi does not export its built-in list.
     // A table that cannot be loaded holds no alias, so the token stays Pi's.
     return getQualifiedAliases(ctx.cwd, ctx.isProjectTrusted()).then(

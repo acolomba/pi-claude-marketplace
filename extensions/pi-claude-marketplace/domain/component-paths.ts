@@ -1,12 +1,14 @@
 import path from "node:path";
 
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
+import { discoveryWarning } from "../shared/staging-warnings.ts";
 
 import type { PluginEntry } from "./components/plugin.ts";
 import type { CommandMapEntry, StatKindReader } from "./resolver-types.ts";
+import type { DiscoveryWarning } from "../shared/staging-warnings.ts";
 
 const COMPONENT_PATH_KINDS = ["skills", "commands", "agents", "workflows"] as const;
-type ComponentPathKind = (typeof COMPONENT_PATH_KINDS)[number];
+export type ComponentPathKind = (typeof COMPONENT_PATH_KINDS)[number];
 
 /** Resolves a relative component path after enforcing root containment. */
 export async function resolveContainedComponentPath(
@@ -49,15 +51,25 @@ export interface ComponentPathResolution {
     commandMap?: CommandMapEntry[];
   };
   /** D-CF1-06: kinds whose existing conventional folder a declaration leaves unread. */
-  shadowedFolders?: string[];
+  shadowedFolders?: ComponentPathKind[];
 }
 
 /**
  * D-CF1-06: the warning for a conventional folder a declaration leaves
  * unread, in Claude Code's user-facing wording.
  */
-export function shadowedFolderWarning(kind: string): string {
+function shadowedFolderWarning(kind: ComponentPathKind): string {
   return `Default ${kind}/ folder is ignored because the manifest sets "${kind}"`;
+}
+
+/**
+ * D-CF1-06: one discovery warning for each conventional folder a declaration
+ * leaves unread, so install, update, and reinstall name it.
+ */
+export function shadowedFolderDiscoveryWarnings(
+  shadowedFolders: readonly ComponentPathKind[] | undefined,
+): readonly DiscoveryWarning[] {
+  return (shadowedFolders ?? []).map((kind) => discoveryWarning(shadowedFolderWarning(kind)));
 }
 
 // An empty string declares nothing, as `null` does: Claude Code 2.1.316 loads
@@ -182,8 +194,9 @@ function recordShadowedFolder(
   kind: ComponentPathKind,
   declared: readonly string[] = resolution.componentPaths[kind],
 ): void {
-  if (!declaredPathReachesFolder(declared, kind)) {
-    resolution.shadowedFolders = [...(resolution.shadowedFolders ?? []), kind];
+  const recorded = resolution.shadowedFolders ?? [];
+  if (!declaredPathReachesFolder(declared, kind) && !recorded.includes(kind)) {
+    resolution.shadowedFolders = [...recorded, kind];
   }
 }
 

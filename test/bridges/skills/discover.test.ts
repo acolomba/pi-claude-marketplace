@@ -6,7 +6,10 @@ import test, { type TestContext } from "node:test";
 
 import { discoverPluginSkills } from "../../../extensions/pi-claude-marketplace/bridges/skills/discover.ts";
 
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
+import type {
+  CommandMapEntry,
+  ResolvedPluginInstallable,
+} from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 async function createPluginRoot(t: TestContext, prefix: string): Promise<string> {
   const pluginRoot = await mkdtemp(path.join(tmpdir(), prefix));
@@ -18,6 +21,7 @@ function resolvedPlugin(
   pluginRoot: string,
   skills: readonly string[],
   commands: readonly string[] = [],
+  commandMap?: CommandMapEntry[],
 ): ResolvedPluginInstallable {
   return {
     installable: true,
@@ -27,7 +31,13 @@ function resolvedPlugin(
     supported: ["skills"],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [...skills], commands: [...commands], agents: [], workflows: [] },
+    componentPaths: {
+      skills: [...skills],
+      commands: [...commands],
+      agents: [],
+      workflows: [],
+      ...(commandMap !== undefined && { commandMap }),
+    },
     mcpServers: {},
     defaultEnabled: true,
   };
@@ -585,6 +595,54 @@ test("D-CF2-03: skips a skill that a command of its plugin is named, with a warn
   await writeSkill(reviewDirectory, "review");
   await writeCommand(path.join(pluginRoot, "commands", "clash.md"));
   const resolved = resolvedPlugin(pluginRoot, ["skills"], ["commands"]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "demo", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "review", generatedName: "demo-review", skillDir: reviewDirectory }],
+    warnings: [
+      'skill source "clash" has the same name "demo:clash" as a command of the plugin; ' +
+        "ignoring the skill.",
+    ],
+  });
+});
+
+test("D-CF3-05: skips a skill that a declared single command file is named", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-shadow-file-");
+  const reviewDirectory = path.join(pluginRoot, "skills", "review");
+  await writeSkill(path.join(pluginRoot, "skills", "clash"), "clash");
+  await writeSkill(reviewDirectory, "review");
+  await writeCommand(path.join(pluginRoot, "cmds", "clash.md"));
+  const resolved = resolvedPlugin(pluginRoot, ["skills"], [path.join("cmds", "clash.md")]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "demo", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "review", generatedName: "demo-review", skillDir: reviewDirectory }],
+    warnings: [
+      'skill source "clash" has the same name "demo:clash" as a command of the plugin; ' +
+        "ignoring the skill.",
+    ],
+  });
+});
+
+test("D-CF3-03: skips a skill that a command map key is named", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-shadow-map-");
+  const reviewDirectory = path.join(pluginRoot, "skills", "review");
+  await writeSkill(path.join(pluginRoot, "skills", "clash"), "clash");
+  await writeSkill(reviewDirectory, "review");
+  const resolved = resolvedPlugin(
+    pluginRoot,
+    ["skills"],
+    [],
+    [{ key: "clash", content: "Inline.", origin: "manifest" }],
+  );
 
   // act
   const discovery = await discoverPluginSkills({ pluginName: "demo", resolved });

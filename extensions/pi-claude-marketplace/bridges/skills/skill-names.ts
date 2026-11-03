@@ -17,17 +17,21 @@
 // YAML flow syntax, so an author value with quotes, colons, or newlines stays
 // inside one JSON string and cannot form a new key (T-02-01).
 
+import { lstat } from "node:fs/promises";
 import path from "node:path";
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";
 
+import { generatedCommandName } from "../../domain/name.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
+import { commandMapKeyRefusal } from "../../shared/command-map-key.ts";
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import { frontmatterBlockEnd, keyValueEnd, topLevelNodeIndex } from "./frontmatter-scan.ts";
 
-import type { Dirent } from "node:fs";
+import type { CommandMapEntry } from "../../domain/resolver-types.ts";
+import type { Dirent, Stats } from "node:fs";
 
 /** The longest frontmatter `name` Claude Code reads (`RI` in `SAt`). */
 const NAME_LIMIT = 256;
@@ -104,7 +108,7 @@ export function frontmatterNameAliases(
 }
 
 /**
- * D-CF2-02 / DC-25 item 2: every identity in `identities` is claimed before
+ * D-CF2-02: every identity in `identities` is claimed before
  * any frontmatter alias, so a frontmatter alias never takes another skill's
  * directory name. D-CF2-03: an alias equal to one of `commandNames` is never
  * claimed, because the command keeps that name.
@@ -142,26 +146,122 @@ async function isCommandFile(directory: string, entry: Dirent): Promise<boolean>
 }
 
 /** The `.md` basenames directly inside `directory`, without their extension. */
-async function commandBasenames(directory: string): Promise<readonly string[]> {
+async function directoryBasenames(directory: string): Promise<readonly string[]> {
   const entries = await readDirEntriesTolerant(directory);
   const verdicts = await Promise.all(entries.map((entry) => isCommandFile(directory, entry)));
   return entries.filter((_, index) => verdicts[index]).map((entry) => entry.name.slice(0, -3));
 }
 
 /**
- * D-CF2-03: the upstream names `<plugin>:<file basename>` of the top-level
- * command files of `commandPaths`, each resolved against `pluginRoot` unless
- * absolute. A nested command's name holds a `:` that no skill identity can
- * hold, so only the top level is read. A missing directory names none.
+ * `lstat` of `target`, or `undefined` when it cannot be inspected. A path the
+ * bridge cannot inspect names no installed command, as a missing one names none.
+ */
+async function lstatTolerant(target: string): Promise<Stats | undefined> {
+  try {
+    return await lstat(target);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether `stats` describes a regular, non-dot `.md` file at `target` (D-CF3-05). */
+function isDeclaredCommandFile(target: string, stats: Stats): boolean {
+  const name = path.basename(target);
+  return stats.isFile() && !name.startsWith(".") && name.endsWith(".md");
+}
+
+/**
+ * D-CF3-05: the basenames one declared `commands` path holds. A directory
+ * holds its top-level `.md` files, a regular `.md` file holds itself, and any
+ * other path, a symlink included, holds none.
+ */
+async function declaredBasenames(declared: string): Promise<readonly string[]> {
+  const stats = await lstatTolerant(declared);
+  if (stats === undefined) {
+    return [];
+  }
+
+  if (stats.isDirectory()) {
+    return directoryBasenames(declared);
+  }
+
+  return isDeclaredCommandFile(declared, stats) ? [path.basename(declared).slice(0, -3)] : [];
+}
+
+/**
+ * Whether `key` can name a command of `pluginName`: the commands bridge
+ * refuses the same keys (D-CF3-03).
+ */
+function isNameableMapKey(pluginName: string, key: string): boolean {
+  if (commandMapKeyRefusal(key) !== undefined) {
+    return false;
+  }
+
+  try {
+    generatedCommandName(pluginName, key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * D-CF3-03: the names one command map entry holds. A `source` that is a
+ * directory is a declared directory and its key is ignored; a `source` that
+ * is a command file, or a `content` entry of `plugin.json` (a marketplace
+ * entry's is dropped, D-CF3-04), is named after its key when the key is valid.
+ */
+async function mapEntryNames(
+  pluginName: string,
+  pluginRoot: string,
+  mapEntry: CommandMapEntry,
+): Promise<readonly string[]> {
+  if ("content" in mapEntry) {
+    return mapEntry.origin === "manifest" && isNameableMapKey(pluginName, mapEntry.key)
+      ? [`${pluginName}:${mapEntry.key}`]
+      : [];
+  }
+
+  const sourceFile = path.resolve(pluginRoot, mapEntry.source);
+  const stats = await lstatTolerant(sourceFile);
+  if (stats === undefined) {
+    return [];
+  }
+
+  if (stats.isDirectory()) {
+    return (await directoryBasenames(sourceFile)).map((basename) => `${pluginName}:${basename}`);
+  }
+
+  return isDeclaredCommandFile(sourceFile, stats) && isNameableMapKey(pluginName, mapEntry.key)
+    ? [`${pluginName}:${mapEntry.key}`]
+    : [];
+}
+
+/**
+ * D-CF2-03: the upstream names of the commands of a plugin. A declared
+ * `commandPaths` entry, resolved against `pluginRoot` unless absolute, gives
+ * `<plugin>:<file basename>` for itself when it is a command file and for
+ * each top-level command file when it is a directory (D-CF3-05). Each valid
+ * `commandMap` key gives `<plugin>:<key>` (D-CF3-03). A nested command's name
+ * holds a `:` that no skill identity can hold, so only the top level is read.
+ * A missing path names none.
  */
 export async function commandUpstreamNames(
   pluginName: string,
   pluginRoot: string,
   commandPaths: readonly string[],
+  commandMap: readonly CommandMapEntry[] = [],
 ): Promise<ReadonlySet<string>> {
-  const directories = commandPaths.map((commandPath) => path.resolve(pluginRoot, commandPath));
-  const basenames = await Promise.all(directories.map(commandBasenames));
-  return new Set(basenames.flat().map((basename) => `${pluginName}:${basename}`));
+  const declared = await Promise.all(
+    commandPaths.map((commandPath) => declaredBasenames(path.resolve(pluginRoot, commandPath))),
+  );
+  const mapped = await Promise.all(
+    commandMap.map((mapEntry) => mapEntryNames(pluginName, pluginRoot, mapEntry)),
+  );
+  return new Set([
+    ...declared.flat().map((basename) => `${pluginName}:${basename}`),
+    ...mapped.flat(),
+  ]);
 }
 
 /** `lines` without the node of the record key inside the block that ends at `blockEnd`. */

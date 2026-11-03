@@ -244,6 +244,7 @@ export async function discoverPluginSkills(input: {
       pluginName,
       resolved.pluginRoot,
       resolved.componentPaths.commands,
+      resolved.componentPaths.commandMap,
     ),
     seenByGenerated: new Map<string, DiscoveredSkill>(),
     seenByDir: new Set<string>(),

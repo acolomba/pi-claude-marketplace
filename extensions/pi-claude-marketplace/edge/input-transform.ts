@@ -9,8 +9,7 @@ const NO_EXPANSION_PREFIX = "\u200B";
  * text an input handler returns, so a finished text that starts with `/`
  * would be expanded a second time. One zero-width space before it keeps the
  * slash line literal, as Claude Code sends a command body that starts with
- * `/` (03-UPSTREAM-EVIDENCE E8; the 2026-11-02 user decision on the Pi gap
- * report, item 6).
+ * `/` (D-CF2-10 item 6).
  */
 export function finishedTransform(text: string, event: InputEvent): InputEventResult {
   const literal = text.startsWith("/") ? `${NO_EXPANSION_PREFIX}${text}` : text;

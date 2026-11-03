@@ -285,3 +285,30 @@ test("removes a user name from the user saved directory alone", async (t) => {
   });
   assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), []);
 });
+
+test("removes the current envelope and still raises a refusal on the former path", async (t) => {
+  // arrange
+  const { savedDirectory, locations } = await createWorkflowScope(t, "workflows-unstage-former-r-");
+  const formerDirectory = locations.formerWorkflowsSavedDir ?? "";
+  await mkdir(formerDirectory, { recursive: true });
+  const outsideEnvelopePath = path.join(formerDirectory, "..", "outside.json");
+  await writeFile(outsideEnvelopePath, "outside bytes\n");
+  const linkedFormerTarget = path.join(formerDirectory, "acme:deploy.json");
+  await symlink(outsideEnvelopePath, linkedFormerTarget, "file");
+  await writeFile(path.join(savedDirectory, "acme:deploy.json"), '{"name":"acme:deploy"}\n');
+
+  // act
+  const error = await unstagePluginWorkflows({
+    locations,
+    previousWorkflowNames: ["acme:deploy"],
+  }).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+
+  // assert
+  assert.ok(error instanceof SymlinkRefusedError);
+  assert.strictEqual(error.linkPath, linkedFormerTarget);
+  assert.deepStrictEqual(await readdir(savedDirectory), []);
+  assert.strictEqual(await readFile(outsideEnvelopePath, "utf8"), "outside bytes\n");
+});

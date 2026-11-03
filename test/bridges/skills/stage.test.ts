@@ -374,6 +374,44 @@ describe("prepareStageSkills", () => {
     );
   });
 
+  test("leaves a non-Markdown supporting file byte for byte, though it holds a skill reference", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-text-file-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const alphaDirectory = path.join(skillsDirectory, "alpha");
+    await mkdir(alphaDirectory, { recursive: true });
+    await writeFile(
+      path.join(alphaDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\n\nSee acme:acme-tool.\n",
+    );
+    await writeFile(path.join(alphaDirectory, "notes.txt"), "Run acme:acme-tool next.\n");
+    await mkdir(path.join(skillsDirectory, "tool"), { recursive: true });
+    await writeFile(
+      path.join(skillsDirectory, "tool", "SKILL.md"),
+      "---\nname: tool\ndescription: Tool\n---\n",
+    );
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      knownWorkflowNames: [],
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const noteBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "notes.txt"));
+
+    // assert
+    assert.deepStrictEqual(noteBytes, Buffer.from("Run acme:acme-tool next.\n"));
+  });
+
   test("SKTK-01: rewrites a sibling-workflow reference onto the name the caller says will be staged", async (t) => {
     // arrange -- the skill names a workflow by its upstream spelling. The
     // workflows bridge has not run yet, so the installed name is whatever the

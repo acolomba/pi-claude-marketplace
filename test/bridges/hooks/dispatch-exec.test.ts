@@ -1767,6 +1767,53 @@ test("blocks a hook its timeout killed with the timed out message", async (t) =>
   });
 });
 
+/** A spawn port that throws before any child exists, as a NUL byte in the command does. */
+function throwingSpawn(t: import("node:test").TestContext): typeof spawn {
+  return t.mock.fn(
+    new Proxy(spawn, {
+      apply(): ChildProcess {
+        throw new TypeError("The argument 'file' must be a string without null bytes");
+      },
+    }),
+  );
+}
+
+test("blocks a hook whose spawn throws when onFailure is block", async (t) => {
+  // arrange
+  const caseRoot = await makeCaseRoot(t, "dispatch-start-throw-");
+
+  // act
+  const hookOutcome = await dispatchHookExec(
+    makeEntry(caseRoot, { command: "guard", onFailure: "block" }),
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    createHooksRuntime(),
+    { spawnImpl: throwingSpawn(t) },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+});
+
+test("keeps a hook whose spawn throws a noop without onFailure", async (t) => {
+  // arrange
+  const caseRoot = await makeCaseRoot(t, "dispatch-start-throw-");
+
+  // act
+  const hookOutcome = await dispatchHookExec(
+    makeEntry(caseRoot, { command: "guard" }),
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    createHooksRuntime(),
+    { spawnImpl: throwingSpawn(t) },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+});
+
 test("keeps a failing hook without onFailure a noop", async (t) => {
   // act
   const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {

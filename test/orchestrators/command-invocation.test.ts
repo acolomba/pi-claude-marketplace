@@ -8,6 +8,7 @@ import {
   invokeStagedCommand,
   listModelCommands,
 } from "../../extensions/pi-claude-marketplace/orchestrators/command-invocation.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
@@ -762,4 +763,21 @@ describe("listModelCommands", () => {
       assert.deepStrictEqual(reads, projectTrusted ? [PROJECT_COMMAND, other] : []);
     });
   }
+
+  test("D-CF3-01: logs the staged command file that cannot be read", async (t) => {
+    // arrange
+    const diagnostics = captureDebugLog(t);
+    const file = userCommand("demo:missing");
+
+    // act
+    await listModelCommands(
+      { commands: [piCommand("demo:missing", "prompt", file)], cwd: CWD, projectTrusted: true },
+      dependencies({}),
+    );
+
+    // assert
+    assert.deepStrictEqual(diagnostics, [
+      `[commands] a command listing skips ${file}: unexpected read of ${file}`,
+    ]);
+  });
 });

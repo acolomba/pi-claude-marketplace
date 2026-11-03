@@ -145,6 +145,58 @@ describe("commandUpstreamNames", () => {
     assert.deepStrictEqual(names, new Set(["demo:deploy", "demo:review"]));
   });
 
+  test("D-CF3-05: names a declared single Markdown file, and no other declared file", async (t) => {
+    // arrange
+    const root = await allocateRoot(t);
+    await mkdir(path.join(root, "cmds"), { recursive: true });
+    await writeFile(path.join(root, "cmds", "solo.md"), "Solo.\n");
+    await writeFile(path.join(root, "cmds", ".hidden.md"), "Hidden.\n");
+    await writeFile(path.join(root, "cmds", "notes.txt"), "Notes.\n");
+    await symlink(path.join(root, "cmds", "solo.md"), path.join(root, "cmds", "linked.md"));
+
+    // act
+    const names = await commandUpstreamNames("demo", root, [
+      path.join("cmds", "solo.md"),
+      path.join("cmds", ".hidden.md"),
+      path.join("cmds", "notes.txt"),
+      path.join("cmds", "linked.md"),
+    ]);
+
+    // assert
+    assert.deepStrictEqual(names, new Set(["demo:solo"]));
+  });
+
+  test("D-CF3-03: names each valid command map key, whatever its source", async (t) => {
+    // arrange
+    const root = await allocateRoot(t);
+    await mkdir(path.join(root, "dir"), { recursive: true });
+    await writeFile(path.join(root, "dir", "walked.md"), "Walked.\n");
+    await writeFile(path.join(root, "file.md"), "File.\n");
+    await writeFile(path.join(root, "plain.txt"), "Plain.\n");
+
+    // act
+    const names = await commandUpstreamNames(
+      "demo",
+      root,
+      [],
+      [
+        { key: "inline", content: "Inline.", origin: "manifest" },
+        { key: "dropped", content: "Dropped.", origin: "entry" },
+        { key: "bad key", content: "Bad.", origin: "manifest" },
+        { key: "ends:", content: "Bad.", origin: "manifest" },
+        { key: "..", content: "Bad.", origin: "manifest" },
+        { key: "..", source: "file.md", origin: "manifest" },
+        { key: "mapped", source: "file.md", origin: "manifest" },
+        { key: "ignored", source: "dir", origin: "manifest" },
+        { key: "text", source: "plain.txt", origin: "manifest" },
+        { key: "absent", source: "absent.md", origin: "manifest" },
+      ],
+    );
+
+    // assert
+    assert.deepStrictEqual(names, new Set(["demo:inline", "demo:mapped", "demo:walked"]));
+  });
+
   test("names no file it cannot inspect", async (t) => {
     // arrange
     const root = await mkdtemp(path.join(tmpdir(), "skill-names-"));
