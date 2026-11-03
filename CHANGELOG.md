@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- The extension now needs Pi 1.4.0 or newer, and each companion extension now needs its latest release.
+- Plugin skills, commands, agents, hooks, MCP servers, and workflows now behave more like Claude Code, project plugins follow Pi's project trust, and Pi 1.4.0 is now required. (#PR)
+
+  - The extension now needs Pi 1.4.0 or newer, and each companion extension now needs its latest release.
   - Plugin MCP servers now need pi-mcp-adapter 7.0.0 or a later 7.x release. Literal text in a plugin's MCP settings still reaches the server unchanged.
   - Plugin agents now need pi-subagents 0.84.0 or newer.
   - Plugin workflows now need `@quintinshaw/pi-dynamic-workflows` 3.15.0 or a later 3.x release, which the package now declares as an optional peer.
@@ -47,6 +49,7 @@
   - Exec-form hooks now fill in `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and `${CLAUDE_PROJECT_DIR}` in `command` and in each `args` element.
   - A hook with `onFailure: "block"` now blocks when it cannot start, exits with a code other than 0 and 2, times out, or prints a broken JSON object. A JSON deny it prints keeps its own reason.
   - Hooks now read all of their output, as in Claude Code, so a JSON deny larger than 1 MB blocks the tool call.
+  - Hooks now get the plugin's one data folder, `data/<marketplace>/<plugin>`, the same folder as its other components, which uninstall removes. Data in the old `data/<plugin>` folder stays there.
   - A plugin whose `plugin.json` names hooks other than `hooks/hooks.json`, or whose marketplace entry declares `hooks`, is now partially available with `{unsupported hooks}`.
   - A hook whose `if` is set on a session, prompt, compaction, or stop event no longer runs, as in Claude Code.
   - A PostToolUse hook's `updatedToolOutput` now reaches the model.
@@ -54,6 +57,7 @@
   - Hook notices now drop terminal control characters and stop at 2,000 characters.
   - SessionStart context now survives another hook's block, and prompt context stays with its own prompt, also for steers and follow-ups.
   - A load with `autoapply` on now applies the project scope only when Pi trusts the project, and shows the project's pending changes otherwise.
+  - A project that Pi does not trust can no longer turn on `autoapply`, and `/claude:plugin autoapply` shows the value in effect there.
   - The background autoupdate now updates the project scope only when Pi trusts the project.
   - Agents in subfolders now install under their folder names, such as `demo:review:security`, and hidden agent files, `.MD` files, and declared agent files install too.
   - An agent with no description now gets Claude Code's text: its `when_to_use` text, or `Agent from <plugin> plugin`.
@@ -65,11 +69,14 @@
   - Agent tool lists now split on spaces as well as commas, accept `Tool(spec)` entries, and treat `*` as every tool.
   - Install now warns that Claude Code also ignores `initialPrompt`, `observer`, `observerMessage`, and `observeSubagents` in plugin agents.
   - An agent now gets the content of each plugin skill it preloads, except a skill that the model cannot invoke, which install skips with a warning.
+  - `reinstall` now warns about a missing companion extension, as `install` and `update` do.
   - Agents installed before this release keep their old files until their plugin is installed, updated, reinstalled, or enabled again. Run `/claude:plugin reinstall <plugin>@<marketplace>` to update them now.
   - A workflow now keeps a name that a command of its plugin also has, as in Claude Code, and install skips that command with a warning.
   - A project install now saves its plugin's workflows in the project's `.pi/workflows/saved/`, not under `~/.pi/workflows/`. Uninstall and update also remove the copies that an earlier install saved there.
   - Internal: behavioral tests now cover plugin workflows, from the command list and runs to refused scripts, a missing engine, and uninstall.
+
 - A plugin's `SessionStart` hook now runs once when an RPC client starts, switches, forks, or clones a session, as in Claude Code. (#294)
+
 - Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)
 
 ## [0.21.0] - 2026-10-31
