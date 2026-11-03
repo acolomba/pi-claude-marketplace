@@ -338,7 +338,7 @@ async function readAdapterConfig(file: string): Promise<Readonly<Record<string, 
   let text: string;
   try {
     text = await readFile(file, "utf8");
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return {};
     }

@@ -202,19 +202,6 @@ Given(
   },
 );
 
-// A new session's payloads become the last results, as the frozen session
-// `When` keeps them, so a payload no step states still fails the scenario.
-When(
-  "the user starts a new pi session with the hooks recording",
-  async function (this: ScenarioWorld) {
-    await recordSessionAction(this, "new_session", async () => {
-      const report = await startSession(this.pi);
-      this.recordResults(report.payloads, "session");
-      this.skills = report.skills;
-    });
-  },
-);
-
 // The terminal Pi starts beside the profile Pi in the same sandbox, so it
 // loads the plugin's user-scope hooks. The step waits for the startup
 // SessionStart run, so that run never lands in a later turn.
@@ -225,6 +212,19 @@ Given(
     const harness = this.profileHarness();
     await this.startTuiSession();
     await waitForStartupRun(harness);
+  },
+);
+
+// A new session's payloads become the last results, as the frozen session
+// `When` keeps them, so a payload no step states still fails the scenario.
+When(
+  "the user starts a new pi session with the hooks recording",
+  async function (this: ScenarioWorld) {
+    await recordSessionAction(this, "new_session", async () => {
+      const report = await startSession(this.pi);
+      this.recordResults(report.payloads, "session");
+      this.skills = report.skills;
+    });
   },
 );
 

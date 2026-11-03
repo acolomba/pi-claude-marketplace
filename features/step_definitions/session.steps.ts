@@ -6,7 +6,7 @@
  * where the user looks: the `/skill:` commands of the next session. A new
  * session also reports its own payloads, such as its reconcile report. They
  * become the last results, so the row steps compare them and a scenario
- * fails when their rows go uncompared. A new session can also be setup, so a
+ * fails when their rows go uncompared. A new session can also be set up, so a
  * scenario shows that what it set up survives the session. A session in
  * another project runs in a project directory of its own, so it shows what
  * the user scope alone offers. A plain message is sent in the current

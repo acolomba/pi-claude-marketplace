@@ -13,10 +13,10 @@
  *
  * A scenario that needs a model starts a profile Pi of its own (D-CF1-15):
  * the real extension plus the scripted model and the registry probe, in the
- * run's sandbox. It takes
- * the place of the run's Pi until the scenario's release stops it, so the
- * run's shared Pi never gets a model. The world keeps the last model turn,
- * and a second turn fails when no step compared the first.
+ * run's sandbox. It takes the place of the run's Pi until the scenario's
+ * release stops it, so the run's shared Pi never gets a model. The world keeps
+ * the last model turn, and a second turn fails when no step compared the
+ * first.
  */
 
 import assert from "node:assert/strict";
@@ -87,8 +87,7 @@ export interface ScopeBytes {
 /**
  * What a scenario's profile Pi loads and trusts (D-CF1-15). It always loads
  * the real extension, the scripted model, and the registry probe, then
- * `companions` in the fixed
- * order pi-subagents, pi-mcp-adapter, pi-dynamic-workflows (HAR-01), then
+ * `companions` in the fixed order pi-subagents, pi-mcp-adapter, pi-dynamic-workflows (HAR-01), then
  * `extraExtensions` in order. It trusts the sandbox project unless `trust` is
  * `untrusted` (D-CF1-07).
  */
@@ -527,10 +526,8 @@ export class ScenarioWorld extends World {
    * which every other scenario reuses, so it gets a Pi of its own in the
    * run's sandbox, with the run's git environment. The profile Pi loads the
    * real extension, the scripted model, the registry probe (HAR-01), the
-   * companions the profile names,
-   * each from its `pi.extensions` entry in the optional peer cache, and then
-   * `profile.extraExtensions`.
-   * Its `TMPDIR` and its harness directory lie inside the sandbox home, which
+   * companions the profile names, each from its `pi.extensions` entry in the
+   * optional peer cache, and then `profile.extraExtensions`. Its `TMPDIR` and its harness directory lie inside the sandbox home, which
    * the next scenario's `Before()` empties (HAR-05). It trusts the sandbox
    * project through a `trust.json` entry, as Pi records a user's answer to
    * its trust prompt, unless the profile is untrusted (D-CF1-07). It runs the

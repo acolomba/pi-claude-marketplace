@@ -59,9 +59,9 @@ Feature: Hook additional context
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has started a new pi session
     Given the scripted model plays these steps:
-      | reply | tool | arguments                                  |
+      | reply | tool | arguments                                 |
       |       | bash | {"command": "sleep 3 && echo from-model"} |
-      | Done. |      |                                            |
+      | Done. |      |                                           |
     When the user prompts "run the echo" and steers with "also say hi" while the tool runs
     Then the model receives these calls:
       | call | role        | text                                                    |
@@ -87,11 +87,11 @@ Feature: Hook additional context
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has started a new pi session
     Given the scripted model plays these steps:
-      | reply | tool | arguments                                  |
+      | reply | tool | arguments                                 |
       |       | bash | {"command": "sleep 3 && echo from-model"} |
       |       | bash | {"command": "echo again"}                 |
-      | Done. |      |                                            |
-      | Hi.   |      |                                            |
+      | Done. |      |                                           |
+      | Hi.   |      |                                           |
     When the user prompts "run the echo" and follows up with "also say hi" while the tool runs
     Then the model receives these calls:
       | call | role        | text                                                    |
@@ -178,8 +178,8 @@ Feature: Hook additional context
       | Done. |      |           |
     When the user prompts "hello there"
     Then the model receives these calls:
-      | call | role | text                                                                                                 |
-      | 1    | user | hello there                                                                                          |
+      | call | role | text                                                                                                  |
+      | 1    | user | hello there                                                                                           |
       | 1    | user | SessionStart hook additional context: ss-ctx\nUserPromptSubmit hook additional context: ctx-from-hook |
 
   Scenario: A session start hook's additional context stays in the history of the next turn

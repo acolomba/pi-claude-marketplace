@@ -134,7 +134,7 @@ function projectFound(text: string): string {
 }
 
 /** An `mcp` proxy result, reduced to the facts this extension owns. */
-export function projectMcpResult(text: string, _failed: boolean): string {
+export function projectMcpResult(text: string): string {
   if (STATUS_HEADER_PATTERN.test(text)) {
     return projectStatus(text);
   }

@@ -67,6 +67,8 @@ function controlSequenceEnd(text: string, start: number): number {
   return text.length;
 }
 
+// An operating system command ends with BEL (U+0007) or with ESC (U+001B)
+// followed by a backslash.
 function operatingSystemCommandEnd(text: string, start: number): number {
   for (let index = start; index < text.length; index += 1) {
     if (text[index] === "\u0007") {
@@ -203,7 +205,7 @@ export class PiTuiSession {
   }
 
   /** Waits for an interactive slave and the first rendered TUI screen. */
-  async waitUntilReady(readyMs: number = DEFAULT_READY_MS): Promise<PiTuiReadiness> {
+  async waitUntilReady(readyMs = DEFAULT_READY_MS): Promise<PiTuiReadiness> {
     await this.waitFor(() => this.bridgeReady && this.tuiRendered(), readyMs, "Pi TUI readiness");
     return this.readiness;
   }
@@ -299,6 +301,7 @@ export class PiTuiSession {
 
     this.released = true;
     if (!this.exited) {
+      // Two Ctrl-C (U+0003) keystrokes are Pi's quit key.
       this.child.stdin.write("\u0003\u0003");
       try {
         await this.waitFor(() => this.exited, this.stopMs, "Pi TUI shutdown");

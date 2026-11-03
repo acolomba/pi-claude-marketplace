@@ -37,7 +37,7 @@ Feature: Hook messages
       | name | version |
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
-      | name   | event            | matcher | form   | output                                                                    |
+      | name   | event            | matcher | form   | output                                                                     |
       | notice | UserPromptSubmit |         | script | {"systemMessage":"\u001b]0;title\u0007remember\u001b[31m the\u0000 tests"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -156,5 +156,5 @@ Feature: Hook messages
       | event        | session | source | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | SessionStart | first   | clear  | {project dir} |                 | check     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
     Then the session reports these results:
-      | kind        | severity | needs reload | text                                                                                     |
+      | kind        | severity | needs reload | text                                                                                        |
       | hook-notice | info     | false        | SessionStart:clear hook error: [${CLAUDE_PLUGIN_ROOT}/hooks/check.sh]: startup check failed |

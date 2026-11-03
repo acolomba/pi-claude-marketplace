@@ -1,9 +1,8 @@
 Feature: Hook prompt commands
 
-  A UserPromptSubmit hook sees the slash command or skill the user typed, as Claude Code
-  passes the typed text, and a hook that blocks the prompt stops the command before it
-  expands. A scripted model stands in for a real one, and a script hook that records each
-  run stands in for a plugin's hook.
+  A UserPromptSubmit hook sees the slash command or skill the user typed, as Claude Code passes the typed
+  text, and a hook that blocks the prompt stops the command before it expands. A scripted model stands in
+  for a real one, and a script hook that records each run stands in for a plugin's hook.
 
   Scenario Outline: A prompt hook sees the typed text of a plugin <typed kind>, and the model gets the expanded text
     Given pi runs with the scripted model
@@ -41,8 +40,8 @@ Feature: Hook prompt commands
       | event            | session | prompt       | cwd           | transcript path | arguments  | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | UserPromptSubmit | first   | <typed text> | {project dir} |                 | prompt-log | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
-      | call | role | text            |
-      | 1    | user | <model text>    |
+      | call | role | text         |
+      | 1    | user | <model text> |
 
     Examples:
       | typed kind  | typed text                      | model text                                                                                                                                                                                                                                                  |

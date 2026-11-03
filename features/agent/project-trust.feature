@@ -1,9 +1,8 @@
 Feature: Agent project trust
 
-  pi-subagents runs the agents of a project only when Pi trusts the project.
-  The profile trusts its project through Pi's trust store, and every scenario
-  holds a pi settings file, so the trust entry decides. Claude Code runs plugin
-  agents in an untrusted folder; refusing a project-scope one is a Pi gap.
+  pi-subagents runs a project's agents only when Pi trusts the project. Every
+  scenario holds a pi settings file, so the profile's trust entry decides. Claude
+  Code runs plugin agents in an untrusted folder; refusing one is a Pi gap.
 
   Scenario: A trusted project runs its plugin agent
     Given the project holds a pi settings file

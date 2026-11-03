@@ -1,9 +1,8 @@
 Feature: Agent frontmatter
 
   A bridged agent's frontmatter converts to the fields pi-subagents reads, as
-  Claude Code reads a plugin agent's frontmatter. pi-subagents' own list and
-  get results show the converted fields; a scripted model and a local
-  marketplace stand in for a real model and a published marketplace.
+  Claude Code reads it. pi-subagents' own list and get results show them; a
+  scripted model and a local marketplace stand in for real ones.
 
   Scenario: An agent runs in the foreground unless its source asks for the background
     Given pi runs with the scripted model and these companions:

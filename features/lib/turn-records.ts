@@ -66,7 +66,7 @@ function isRunning(pid: number): boolean {
     return true;
   } catch (error: unknown) {
     // EPERM means the process exists but belongs to another user.
-    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+    return !(error instanceof Error && "code" in error && error.code === "ESRCH");
   }
 }
 

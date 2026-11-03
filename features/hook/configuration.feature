@@ -88,20 +88,20 @@ Feature: Hook configuration
     Given the marketplace "fixtures" is added to the project scope
     When the user runs "/claude:plugin info demo@fixtures"
     Then the result has these fields:
-      | kind                           | plugin-info                                |
-      | marketplace details autoupdate | false                                      |
-      | marketplace name               | fixtures                                   |
-      | marketplace scope              | project                                    |
-      | needs reload                   | false                                      |
+      | kind                           | plugin-info                               |
+      | marketplace details autoupdate | false                                     |
+      | marketplace name               | fixtures                                  |
+      | marketplace scope              | project                                   |
+      | needs reload                   | false                                     |
       | plugin components hooks        | [{"event":"PreToolUse","matcher":"Bash"}] |
-      | plugin components resolved     | true                                       |
-      | plugin components skills       | demo-skill                                 |
-      | plugin id                      | demo@fixtures                              |
-      | plugin name                    | demo                                       |
-      | plugin reasons                 |                                            |
-      | plugin status                  | available                                  |
-      | plugin version                 | 1.0.0                                      |
-      | severity                       | info                                       |
+      | plugin components resolved     | true                                      |
+      | plugin components skills       | demo-skill                                |
+      | plugin id                      | demo@fixtures                             |
+      | plugin name                    | demo                                      |
+      | plugin reasons                 |                                           |
+      | plugin status                  | available                                 |
+      | plugin version                 | 1.0.0                                     |
+      | severity                       | info                                      |
 
   Scenario: Installing a plugin whose manifest declares hooks needs --partial
     Given the marketplace "fixtures" is published as a dir source

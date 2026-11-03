@@ -86,6 +86,7 @@ function parseArguments(text: string, row: number): Readonly<Record<string, unkn
     throw new Error(`model script row ${row}: the arguments are not a JSON object`);
   }
 
+  // The checks above prove a plain JSON object.
   return parsed as Readonly<Record<string, unknown>>;
 }
 
@@ -144,7 +145,7 @@ async function readOptional(file: string): Promise<string | undefined> {
   try {
     return await readFile(file, "utf8");
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return undefined;
     }
 
