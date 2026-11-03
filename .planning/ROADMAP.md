@@ -502,13 +502,13 @@ Plans:
 
 ### Phase 8: Locality and Upstream Alignment
 
-**Goal:** A project-scope operation reads and writes only inside its project, trusting the project through Pi alone; hook output reaches the model as Claude Code delivers it; a skill file the model reads is filled only while it is the skill's own text; and the audit warnings W2 and W4 are pinned by scenarios.
+**Goal:** A project-scope operation keeps its effects in its project scope, trusting the project through Pi alone; hook output reaches the model as Claude Code delivers it; a skill file the model reads is filled only while it is the skill's own text; and the audit warnings W2 and W4 are pinned by scenarios.
 **Depends on:** Phase 7
 **Requirements:** LOC-01, LOC-02, LOC-03, LOC-04
 **Origin:** The user's decisions of 2026-11-02 and 2026-11-03 after the milestone audit (DC-41..DC-44). The milestone was reopened for them (2a20d2f). The work was done and merged before this phase was added, so its plans are retroactive records, not plans that were executed from.
 **Success Criteria** (what must be TRUE):
 
-1. Project skills, commands, aliases, the model command tool, the skill-read fill, and hooks are gated on Pi's project trust alone; no provenance ledger is written to the user folder; project workflows are saved and staged inside the project; the only writes outside the project are the git credential helper and the confirmed cleanup of a plugin's own old workflow copies (D-LOC-01) (LOC-01).
+1. Project skills, commands, aliases, the model command tool, the skill-read fill, and hooks are gated on Pi's project trust alone; no provenance ledger is written to the user folder; project workflows are saved and staged inside the project; an untrusted project's configs cannot turn autoapply on; the only writes outside the project are the git credential helper and the confirmed cleanup of a plugin's own old workflow copies (D-LOC-01) (LOC-01).
 2. A hook's whole output is read with no size cut, and `onFailure: "block"` keeps a printed deny as Claude Code 2.1.316 does (T-05-33) (LOC-02).
 3. A skill file the model reads with Pi's read tool is filled only while the result equals Pi's own read of the staged file; a hook-replaced result reaches the model as written (W6) (LOC-03).
 4. A scenario shows that an install whose mcp phase fails leaves no agent of the plugin, and one shows that a new session after the plugin's commands are gone offers no `run_plugin_command` (W2, W4) (LOC-04).

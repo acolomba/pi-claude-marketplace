@@ -128,7 +128,7 @@ the parent applies them at merge.
 
 Added 2026-11-03 for Phase 8, which records work the user asked for after the milestone audit (DC-41..DC-44).
 
-- [x] **LOC-01**: A project-scope operation reads and writes only inside its project: project skills, commands, aliases, the model command tool, the skill-read fill, and hooks are gated on Pi's project trust alone with no user-folder ledger, and project workflows are saved and staged inside the project; the git credential helper and the confirmed cleanup of a plugin's own old workflow copies are the only outside writes (D-LOC-01, T-05-34)
+- [x] **LOC-01**: A project-scope operation keeps its effects in its project scope, using only what the project inherits from the user scope (a user-scope marketplace is first brought into the project): project skills, commands, aliases, the model command tool, the skill-read fill, and hooks are gated on Pi's project trust alone with no user-folder ledger, project workflows are saved and staged inside the project, and an untrusted project's configs cannot turn autoapply on; the git credential helper and the confirmed cleanup of a plugin's own old workflow copies are the only outside writes (D-LOC-01, T-05-34)
 - [x] **LOC-02**: A hook's whole output is read, and `onFailure: "block"` keeps a printed deny as Claude Code does (T-05-33)
 - [x] **LOC-03**: A skill file the model reads is filled only while the read result equals Pi's own read of the staged file, and a hook-replaced result reaches the model as the hook wrote it (W6)
 - [x] **LOC-04**: Scenarios pin that an install whose mcp phase fails leaves no agent of the plugin, and that a new session after the plugin's commands are gone offers no `run_plugin_command` (W2, W4)
