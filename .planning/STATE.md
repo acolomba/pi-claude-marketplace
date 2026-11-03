@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: component-features
-milestone_name: Component Behavioral Tests
 status: Awaiting next milestone
 stopped_at: Milestone component-features completed and archived 2026-11-03 (8 phases, 65 plans, 62/62 requirements)
-last_updated: "2026-11-03T02:57:05.624Z"
+last_updated: "2026-11-03T11:38:09.234Z"
 last_activity: 2026-11-03
 last_activity_desc: Milestone component-features completed and archived
-state_head: 84ebb3ba6dc2b47c692b755b13e507b20753e91e
+state_head: 5de5e65a9b1bf1fb1e73040eadf49278601f6051
 progress:
   total_phases: 8
   completed_phases: 8
   total_plans: 65
   completed_plans: 65
   percent: 100
+milestone_name: Component Behavioral Tests
 ---
 
 # Project State
@@ -187,6 +187,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
 | 261030-ogp | bootstrap runs only marketplace add | 2026-10-30 | 841e3dc2 | complete | [261030-ogp-bootstrap-runs-only-marketplace-add](./quick/261030-ogp-bootstrap-runs-only-marketplace-add/) |
 | 12 | Fix STATE.md health warnings: archived 03.x phase tokens, milestone-complete status, PR #290 merged | 2026-10-31 | 9847e01b | — | — |
+| 261103-eqa | Make tests robust to Pi upgrades: stop pinning upstream text | 2026-11-03 | 5de5e65 | — | [261103-eqa-make-tests-robust-to-pi-upgrades](./quick/261103-eqa-make-tests-robust-to-pi-upgrades/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
