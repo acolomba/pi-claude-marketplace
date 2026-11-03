@@ -22,15 +22,16 @@ tech_debt:
       - "RESOLVED 2026-11-02 (a7fb423): SCENARIO ADDED 2026-11-02 (9789ef5): W6 (HOOK/SKL): no scenario combines a PostToolUse hook with the model-read skill fill"
   - phase: 05-hooks
     items:
-      - "T-05-33 (medium, open, no disposition): a hook's stdout cut at 1 MB under onFailure: block reads as no decision (HOOKBIGJSON-01)"
-      - "T-05-34 (medium, open, no disposition): project CLAUDE_PLUGIN_DATA sits inside the repository (HOOKDATA-01)"
+      - "RESOLVED 2026-11-02 (ed29766, DC-42, Phase 8 plan 2): T-05-33 (medium): a hook's stdout cut at 1 MB under onFailure: block reads as no decision (HOOKBIGJSON-01)"
+      - "ACCEPTED 2026-11-02 (D-LOC-01, DC-41, Phase 8 plan 1): T-05-34 (medium), intended under the locality principle: project CLAUDE_PLUGIN_DATA sits inside the repository (HOOKDATA-01)"
       - "Two follow-up prompt-context edge cases left at the review cap (P5-DC-24, HOOKFOLLOWUP-01)"
   - phase: 06-mcp-servers
     items:
       - "MCP-07 accepted deviation: a working agent MCP call waits on pi-subagents fixes (patches on acolomba/pi-subagents, branch fix/mcp-direct-tools-adapter-7) and a background-child harness (MCPBG-01)"
   - phase: milestone
     items:
-      - "Pending user review: D-CF2-13, D-CF2-14, D-CF2-15, D-CF2-16, D-CF3-07 (PROJECT.md Key Decisions)"
+      - "REVIEWED 2026-11-02 (DC-41): D-CF2-13..16 and D-CF3-07 reversed by the user in favor of D-LOC-01"
+      - "D-CF7-05 rests on a static read of the Claude Code 2.1.316 binary; confirm with a live probe when the host token folder is not readable"
       - "Upstream PRs to open after review: acolomba/pi fix/input-transform-expand-opt-out; acolomba/pi-subagents fix/mcp-direct-tools-adapter-7 (full suites not run in the sandbox)"
       - "Live adapter canary re-run on pi-mcp-adapter 7.0.0 (MCPCANARY-01)"
 nyquist:
@@ -55,7 +56,7 @@ The items under `tech_debt` are warnings and recorded follow-ups, not blockers.
 | 2. Skills | passed 5/5 (criterion 5 by user override) | compliant | 0 open |
 | 3. Slash Commands | passed 5/5 | compliant | 0 open |
 | 4. Agents | passed 5/5 | compliant | 0 open |
-| 5. Hooks | passed 5/5 | compliant | 0 blocking; T-05-33, T-05-34 medium, open |
+| 5. Hooks | passed 5/5 | compliant | 0 open (T-05-33 fixed, T-05-34 accepted under D-LOC-01) |
 | 6. MCP Servers | passed 5/5 (SC4 by user override) | compliant | 0 open |
 | 7. Workflows | passed 5/5 | compliant | 0 open |
 
