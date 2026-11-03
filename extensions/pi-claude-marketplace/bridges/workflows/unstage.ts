@@ -31,7 +31,12 @@
 // and the former copy then failed to unlink, the former copy is still
 // executable code, so the name is reported as failed alone. Callers treat
 // `removedNames` as "gone everywhere" (the cascade's `dropped` list) and
-// `failed` as "something is left behind", and a name cannot be both.
+// `failed` as "something is left behind", and a name cannot be both. One
+// exception: when the current envelope was removed and the former path is
+// then refused, the name is in `removedNames` although the refused former
+// copy is left in place. A retry would refuse the same path again, so the
+// refusal itself is the failure the user sees, and the record stops naming
+// an envelope this extension can no longer reach.
 
 import { unlink } from "node:fs/promises";
 

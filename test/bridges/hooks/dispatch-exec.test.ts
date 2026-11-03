@@ -1768,11 +1768,14 @@ test("blocks a hook its timeout killed with the timed out message", async (t) =>
 });
 
 /** A spawn port that throws before any child exists, as a NUL byte in the command does. */
-function throwingSpawn(t: import("node:test").TestContext): typeof spawn {
+function throwingSpawn(
+  t: import("node:test").TestContext,
+  message = "The argument 'file' must be a string without null bytes",
+): typeof spawn {
   return t.mock.fn(
     new Proxy(spawn, {
       apply(): ChildProcess {
-        throw new TypeError("The argument 'file' must be a string without null bytes");
+        throw new TypeError(message);
       },
     }),
   );
@@ -1796,6 +1799,28 @@ test("blocks a hook whose spawn throws when onFailure is block", async (t) => {
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: `${ON_FAILURE_HEAD}\nThe argument 'file' must be a string without null bytes`,
+  });
+});
+
+test("redacts absolute paths from the cause of a hook that cannot start", async (t) => {
+  // arrange
+  const caseRoot = await makeCaseRoot(t, "dispatch-start-throw-");
+  const spawnImpl = throwingSpawn(t, "refusing /home/alice/.pi/agent/data/acme");
+
+  // act
+  const hookOutcome = await dispatchHookExec(
+    makeEntry(caseRoot, { command: "guard", onFailure: "block" }),
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    createHooksRuntime(),
+    { spawnImpl },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: `${ON_FAILURE_HEAD}\nrefusing acme`,
   });
 });
 

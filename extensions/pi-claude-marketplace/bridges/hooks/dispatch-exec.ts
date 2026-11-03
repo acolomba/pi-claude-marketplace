@@ -60,6 +60,7 @@ import { spawn } from "node:child_process";
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 
 import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
@@ -215,7 +216,7 @@ export async function dispatchHookExec(
           timedOut: false,
           exitCode: null,
           stdout: "",
-          stderr: errorMessage(err),
+          stderr: redactAbsolutePaths(errorMessage(err)),
         },
         noop,
       ) ?? noop
