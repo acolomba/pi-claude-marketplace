@@ -3,9 +3,9 @@
 // install, the value this extension writes, the environment when the server
 // connects, and Claude Code's output for that field, derived by hand from
 // Claude's rule. `substitute.test.ts` checks `written`, `missing` and
-// `blanked`. The adapter conformance
-// test feeds `written` through pi-mcp-adapter's real call chain for `field`
-// with `PI_CLAUDE_MARKETPLACE_EMPTY=""` and `runtimeEnv`, and expects
+// `blanked`. The adapter conformance test feeds `written` through
+// pi-mcp-adapter's real call chain for `field` with
+// `PI_CLAUDE_MARKETPLACE_EMPTY=""` and `runtimeEnv`, and expects
 // `claudeOutput`. Every reference a row keeps without a default is set in
 // `runtimeEnv`; a reference with a default may be unset there (D-CF1-13).
 
@@ -133,12 +133,12 @@ export const EXPANSION_CASES: readonly ExpansionCase[] = [
   {
     title: "VER-05: args ${VAR:-default} keeps a non-ASCII default unchanged",
     field: "args",
-    raw: "${PI_CM_NAME:-caf\u00e9 \u{1F600}}",
+    raw: "${PI_CM_NAME:-café 😀}",
     installEnv: {},
-    written: "${PI_CM_NAME:-caf\u00e9 \u{1F600}}",
+    written: "${PI_CM_NAME:-café 😀}",
     missing: [],
     runtimeEnv: {},
-    claudeOutput: "caf\u00e9 \u{1F600}",
+    claudeOutput: "café 😀",
   },
   {
     title: "D-CF1-13: args a default holding $env: is resolved at install and split",

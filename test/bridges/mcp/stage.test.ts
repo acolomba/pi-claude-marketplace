@@ -507,7 +507,8 @@ describe("prepareStageMcpServers", () => {
     await writeFile(
       locations.mcpAdapterJsonPath,
       [
-        "﻿// user config",
+        // A leading byte order mark, an invisible character, so it is escaped.
+        "\uFEFF// user config",
         "{",
         '  "settings": { "toolPrefix": "short" },',
         '  "mcpServers": {',
@@ -2863,6 +2864,7 @@ describe("prepareStageMcpServers", () => {
     // assert
     assert.strictEqual(storedBytes, expectedBytes);
   });
+
   test("AMIG-01: drops a same-scope leftover from the next doc and reports it after the tool-rules notices", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-leftover-");
@@ -3195,6 +3197,7 @@ describe("commitPreparedMcp", () => {
     assert.deepStrictEqual(commit, { stagedNames: [], recorded: [], warnings: [], notices: [] });
     assert.strictEqual(await pathExists(locations.mcpAdapterJsonPath), false);
   });
+
   test("AMIG-01: skips a rewrite whose bytes equal the file's, so the file keeps its inode and mtime", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-commit-same-bytes-");
@@ -3389,6 +3392,7 @@ describe("replacePreparedMcp", () => {
       },
     );
   });
+
   test("AMIG-02: writes the target, then removes the legacy entries, and leaves the project file", async (t) => {
     // arrange
     const { cwd } = await createHermeticEnvironment(t, "mcp-replace-legacy-");
@@ -3628,6 +3632,7 @@ describe("rollbackMcpReplacement", () => {
     assert.strictEqual(Object.isFrozen(leaks), true);
     assert.strictEqual(await readFile(parentDirectory, "utf8"), "blocks-directory-creation");
   });
+
   test("AMIG-02: restores mcp.json and the target to their exact prior bytes", async (t) => {
     // arrange
     const { cwd } = await createHermeticEnvironment(t, "mcp-rollback-legacy-");

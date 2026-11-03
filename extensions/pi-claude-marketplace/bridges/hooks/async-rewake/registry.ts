@@ -12,18 +12,19 @@
 // amending the whitelist set AND the sibling assertion in the SAME commit
 // (D-58-01 atomic-supersession). The other sites are
 // platform/git-credential.ts (AUTH-08), bridges/hooks/dispatch-exec.ts
-// (EXEC-01..04 sync path), and platform/package-manager.ts (D-PL9-11). This site (HOOK-06 / EXEC-05 / D-62-01) diverges
-// from the sync site: `detached: false` + the parent does NOT await child
-// exit; a per-child handler watches for code 2 and triggers the HOOK-06
-// injection contract via `pi.sendMessage({ customType: "claude-hook-rewake",
-// display: false, ... }, { deliverAs })`.
+// (EXEC-01..04 sync path), and platform/package-manager.ts (D-PL9-11). This
+// site (HOOK-06 / EXEC-05 / D-62-01) diverges from the sync site:
+// `detached: false` + the parent does NOT await child exit; a per-child
+// handler watches for code 2 and triggers the HOOK-06 injection contract via
+// `pi.sendMessage({ customType: "claude-hook-rewake", display: false, ... },
+// { deliverAs })`.
 //
 // Responsibility boundary: this module owns the synchronous spawn +
 // register step, the per-child exit handler (HOOK-06 inject + IL-2
 // EXEMPTION notify), the `/reload` SIGKILL walk, and the orphan-reap
 // pass that drains the persisted PID table at factory entry (D-62-05).
 // It does NOT own the dispatcher decision to take the async branch -- the
-// composite handler in `dispatch.ts` (wired in a follow-up plan) calls
+// composite handler in `dispatch.ts` calls
 // `spawnAndRegister` once per `asyncRewake: true` routing entry and
 // folds `{ kind: "noop" }` into its reducer.
 //
@@ -563,11 +564,9 @@ export async function reapOrphans(
 
 /**
  * HOOK-05 env construction with the asyncRewake marker added on top.
- * Copy of `dispatch-exec.ts:prepareEnv` plus the
+ * Delegates to the shared `prepareHookEnv` and adds the
  * `PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=<dispatchId>` entry the
- * orphan-reap probe matches against. A v1.14+ lockstep-helper
- * extraction may consolidate the two if duplication becomes
- * load-bearing.
+ * orphan-reap probe matches against.
  *
  * Per-scope `loc` is supplied by the caller rather than derived from
  * `locationsFor(entry.scope, transCtx.cwd)` so user-scope (where `cwd`

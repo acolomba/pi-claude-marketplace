@@ -664,6 +664,7 @@ test(
   "keeps same-shaped child persistence and stale completion isolated by runtime",
   { concurrency: false },
   async (t) => {
+    // arrange
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-runtime-isolation-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T11:10:00.000Z"));
     const locations = locationsFor("project", root);
@@ -681,6 +682,7 @@ test(
     const secondWrites: Array<readonly PidTableEntry[]> = [];
 
     try {
+      // act
       await spawnAndRegister(
         firstRuntime,
         createEntry(root, {
@@ -743,6 +745,7 @@ test(
         setImmediate(resolve);
       });
 
+      // assert
       assert.deepStrictEqual(firstPi.messages, []);
       assert.deepStrictEqual(firstContext.notifications, []);
       assert.deepStrictEqual(secondPi.messages, [
@@ -1462,7 +1465,9 @@ test("contains a synchronous stdin end failure and cleans the registered child",
   const context = createContext(root, "session-stdin-end", true);
   const pi = createPi();
   const child = createChild(24_684);
-  t.mock.method(child.stdin!, "end", () => {
+  const stdin = child.stdin;
+  assert.ok(stdin !== null);
+  t.mock.method(stdin, "end", () => {
     throw new Error("synchronous stdin end failure");
   });
 

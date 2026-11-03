@@ -21,6 +21,7 @@ export interface ClaudeSessionStartEvent {
   readonly source: SessionStartSource;
 }
 
+/** The JSON a SessionStart hook reads on stdin. */
 export interface SessionStartStdin {
   readonly session_id: string;
   readonly transcript_path: string;
@@ -45,6 +46,7 @@ export function claudeSessionStartSource(
   }
 }
 
+/** Builds the SessionStart stdin payload from the Claude-side event. */
 export function translateSessionStart(
   event: ClaudeSessionStartEvent,
   ctx: TranslationContext,

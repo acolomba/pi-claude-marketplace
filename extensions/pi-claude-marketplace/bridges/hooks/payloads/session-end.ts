@@ -24,6 +24,7 @@ export interface ClaudeSessionEndEvent {
   readonly reason: SessionEndReason;
 }
 
+/** The JSON a SessionEnd hook reads on stdin. */
 export interface SessionEndStdin {
   readonly session_id: string;
   readonly transcript_path: string;
@@ -60,6 +61,7 @@ export function claudeSessionEndReason(
   }
 }
 
+/** Builds the SessionEnd stdin payload from the Claude-side event. */
 export function translateSessionEnd(
   event: ClaudeSessionEndEvent,
   ctx: TranslationContext,

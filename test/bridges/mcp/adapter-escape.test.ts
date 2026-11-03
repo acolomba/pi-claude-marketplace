@@ -152,9 +152,9 @@ const ROWS: readonly SerializeRow[] = [
   },
   {
     title: "VER-05: writes a non-ASCII default as the same code units",
-    segments: [refWithDefault("PI_CM_V", "caf\u00e9 \u{1F600}")],
+    segments: [refWithDefault("PI_CM_V", "café 😀")],
     secret: false,
-    written: "${PI_CM_V:-caf\u00e9 \u{1F600}}",
+    written: "${PI_CM_V:-café 😀}",
   },
   {
     title: "D-CF1-13: keeps text beside a reference with a default out of its run",

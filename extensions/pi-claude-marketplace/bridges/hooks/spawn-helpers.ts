@@ -21,6 +21,7 @@ const STDIN_TRUNCATION_BYTES = 256 * 1024;
 
 const TRUNCATION_MARKER_JSON = '"_truncated":true';
 
+/** The `child_process.spawn` invocation a routing entry resolves to. */
 export interface SpawnPlan {
   readonly command: string;
   readonly args: readonly string[];
@@ -73,7 +74,7 @@ export function planSpawn(entry: RoutingEntry, vars: ClaudePluginVars): SpawnPla
  * documented 256 KB stdin cap.
  *
  * WR-02: the `_truncated: true` marker is serialized LAST so a payload key
- * named `_truncated` cannot override it (defense in depth; no v1.13
+ * named `_truncated` cannot override it (defense in depth; no
  * translator emits this key today).
  */
 export function serializeWithTruncation(payload: unknown): string {
@@ -91,8 +92,8 @@ export function serializeWithTruncation(payload: unknown): string {
     return serializeBoundedObject(parsed as Record<string, unknown>);
   }
 
-  // An oversized JSON primitive can only be a string. Keep the defensive
-  // envelope used by the prior implementation, but bound its string value.
+  // An oversized JSON primitive can only be a string. Wrap it in a defensive
+  // envelope and bound its string value.
   return serializeBoundedPrimitive(parsed as string);
 }
 
