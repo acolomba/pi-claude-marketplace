@@ -1,7 +1,8 @@
 Feature: Plugin autoapply
 
   When autoapply is on, a new session applies its configs and marketplaces, and the project's only when
-  Pi trusts the project. /claude:plugin autoapply shows or changes that setting.
+  Pi trusts the project. /claude:plugin autoapply shows or changes that setting. A local marketplace
+  and a git host on this machine stand in for published ones.
 
   Scenario: A new session installs the plugins a project config declares when the config turns autoapply on
     Given the marketplace "fixtures" is published as a dir source

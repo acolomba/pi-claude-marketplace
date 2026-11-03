@@ -1,9 +1,8 @@
 Feature: Plugin project trust
 
   A plugin installed into a project Pi does not trust runs none of its commands or hooks there, as
-  Claude Code loads no project-scope plugin before the workspace is trusted. The project holds a pi
-  settings file, so Pi's trust store alone decides. A local marketplace, a scripted model, and a hook
-  that records each run stand in for published and real ones.
+  Claude Code loads no project-scope plugin before the workspace is trusted. Pi's trust store alone
+  decides. A local marketplace, a scripted model, and a recording hook stand in for real ones.
 
   Background:
     Given the project holds a pi settings file

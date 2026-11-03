@@ -3,11 +3,13 @@ Feature: Skill frontmatter
   Each frontmatter field of a bridged skill either behaves in Pi as in Claude Code or is reported
   as a recorded divergence. A local marketplace and a scripted model stand in for published and real ones.
 
-  Scenario: Installing a skill that sets fields pi cannot honor reports them
+  Background:
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
+
+  Scenario: Installing a skill that sets fields pi cannot honor reports them
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
       """
       ---
@@ -30,10 +32,6 @@ Feature: Skill frontmatter
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
   Scenario: A skill that sets every field pi cannot honor reports them in its frontmatter order
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "audit" with this skill file:
       """
       ---
@@ -62,10 +60,6 @@ Feature: Skill frontmatter
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
   Scenario: A skill that sets only fields pi honors or that have their own decision reports no dropped field
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "tidy" with this skill file:
       """
       ---
@@ -89,10 +83,6 @@ Feature: Skill frontmatter
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
   Scenario: Installing a skill whose block-scalar description holds an indented rule line installs it
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
       """
       ---
@@ -115,10 +105,6 @@ Feature: Skill frontmatter
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
   Scenario Outline: Installing a skill whose block-scalar description holds an indented rule line before another key installs it
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
       """
       ---
@@ -148,10 +134,6 @@ Feature: Skill frontmatter
       | name: review | audience: Use this: carefully    |
 
   Scenario Outline: Installing a skill whose frontmatter spells this extension's own key differently installs it
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
       """
       ---
@@ -178,10 +160,6 @@ Feature: Skill frontmatter
       | pi-claude-marketplace :  |
 
   Scenario Outline: Installing a skill whose frontmatter spells its name or description key differently installs it
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
       """
       ---
@@ -209,10 +187,6 @@ Feature: Skill frontmatter
       | name: review   | description : Reviews a change.  |
 
   Scenario: Installing a skill whose frontmatter holds its name in one flow mapping with other keys fails and names the skill
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
       """
       ---
@@ -234,10 +208,6 @@ Feature: Skill frontmatter
     Then the project scope has no installed plugins
 
   Scenario: A skill that disables model invocation stays listed
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "hidden" with this skill file:
       """
       ---
@@ -263,10 +233,6 @@ Feature: Skill frontmatter
 
   Scenario: A skill that disables model invocation runs on its slash command and is left out of the model's skill list
     Given pi runs with the scripted model
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "hidden" with this skill file:
       """
       ---
@@ -297,10 +263,6 @@ Feature: Skill frontmatter
       | demo-skill | A skill of demo 1.0.0.   | {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-skill/SKILL.md |
 
   Scenario: A skill that is not user-invocable stays listed, because pi cannot hide a skill's slash command
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "quiet" with this skill file:
       """
       ---
@@ -321,10 +283,6 @@ Feature: Skill frontmatter
 
   Scenario: A skill that is not user-invocable runs on its slash command, because pi cannot hide a skill's slash command
     Given pi runs with the scripted model
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "quiet" with this skill file:
       """
       ---
@@ -347,10 +305,6 @@ Feature: Skill frontmatter
       | 1    | user | <skill name="demo-quiet" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-quiet/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-quiet.\n\nDo the quiet work.\n</skill> |
 
   Scenario: A skill is listed under its directory name when its frontmatter names it otherwise
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
       """
       ---

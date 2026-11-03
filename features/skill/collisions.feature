@@ -4,11 +4,13 @@ Feature: Skill collisions
   scenarios protect which of them keeps it. A local marketplace stands in for a
   published one, and a scripted model for a real one.
 
-  Scenario: A skill that shares its name with a command of its plugin is skipped with a warning
+  Background:
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
+
+  Scenario: A skill that shares its name with a command of its plugin is skipped with a warning
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "clash" described as "Clash skill" with this body:
       """
       SKILL CLASH BODY
@@ -32,10 +34,6 @@ Feature: Skill collisions
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
   Scenario: A new session offers no skill that shares its name with a command of its plugin
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "clash" described as "Clash skill" with this body:
       """
       SKILL CLASH BODY
@@ -57,10 +55,6 @@ Feature: Skill collisions
 
   Scenario: Prompting /demo:clash sends the model the command's body
     Given pi runs with the scripted model
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "clash" described as "Clash skill" with this body:
       """
       SKILL CLASH BODY
@@ -85,10 +79,6 @@ Feature: Skill collisions
       | 1    | user | COMMAND CLASH BODY |
 
   Scenario: A command with another name leaves the skill of its plugin listed
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "clash" described as "Clash skill" with this body:
       """
       SKILL CLASH BODY
@@ -110,10 +100,6 @@ Feature: Skill collisions
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
   Scenario: The skills folder's copy wins over a declared path's copy of the same skill
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
       """
       { "name": "demo", "version": "1.0.0", "skills": ["./extra"] }
@@ -140,10 +126,6 @@ Feature: Skill collisions
       | /skill:demo-twin  | Twin in skills.        |
 
   Scenario: Installing a plugin whose declared skills path repeats a skill reports the skipped copy
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
       """
       { "name": "demo", "version": "1.0.0", "skills": ["./extra"] }
@@ -172,10 +154,6 @@ Feature: Skill collisions
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
   Scenario: Two skill directories that elide to one pi name keep the first
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "demo-tool" described as "Tool in demo-tool." with this body:
       """
       TOOL IN DEMO-TOOL

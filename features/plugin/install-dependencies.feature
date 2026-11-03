@@ -20,6 +20,15 @@ Feature: Plugin install dependencies
       | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version |
       | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |
       | tools            | project           | lib@tools | lib@tools | installed | dependency current copy | project | 1.2.0   |
+
+  Scenario: A new session offers the skills of a plugin and its dependency that carries a version constraint
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
     When the user starts a new pi session
     Then the session offers these skills:
       | command          | description           |
@@ -85,7 +94,7 @@ Feature: Plugin install dependencies
       | tools            | project           | app@tools | app       | installed           |                       | project | 1.0.0   |
       | tools            | project           | lib@tools | lib@tools | partially-installed | unsupported component | project | 1.0.0   |
 
-  Scenario: A partially installed dependency leaves its dependent installed on install, list, and info
+  Scenario: A partially installed dependency leaves its dependent installed on install
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -99,11 +108,33 @@ Feature: Plugin install dependencies
       | marketplace name | marketplace scope | id        | name      | status    | reasons           | scope   | version |
       | tools            | project           | app@tools | app       | installed |                   | project | 1.0.0   |
       | tools            | project           | lib@tools | lib@tools | skipped   | already installed | project | 1.0.0   |
+
+  Scenario: The plugin list shows a partially installed dependency beside its installed dependent
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" has an output style
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project --partial"
+    Given the user has run "/claude:plugin install app@tools --scope project"
     When the user runs "/claude:plugin list --scope project"
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id        | name | status              | reasons               | scope   | version |
       | tools            | project           | app@tools | app  | installed           |                       | project | 1.0.0   |
       | tools            | project           | lib@tools | lib  | partially-installed | unsupported component | project | 1.0.0   |
+
+  Scenario: The plugin info of a dependent installed beside a partially installed dependency lists the dependency
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" has an output style
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project --partial"
+    Given the user has run "/claude:plugin install app@tools --scope project"
     When the user runs "/claude:plugin info app@tools"
     Then the result has these fields:
       | kind                           | plugin-info   |
@@ -335,6 +366,19 @@ Feature: Plugin install dependencies
       | id        | version | enabled |
       | app@tools | 1.0.0   | true    |
       | lib@tools | 2.0.0   | true    |
+
+  Scenario: A new session offers the skills of a dependency that an install moved into its version constraint
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+      | lib  | 2.0.0   |              |
+    Given the user has run "/claude:plugin install app@tools --scope project"
     When the user starts a new pi session
     Then the session offers these skills:
       | command          | description           |

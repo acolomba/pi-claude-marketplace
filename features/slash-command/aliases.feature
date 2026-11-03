@@ -5,13 +5,13 @@ Feature: Slash command aliases
   stands in for a published one, and a scripted model for a real one.
 
   Background:
-    Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
 
   Scenario Outline: Each name Claude Code gives a command sends its body to the model
+    Given pi runs with the scripted model
     Given the published plugin "demo" of the marketplace "fixtures" has the slash command "ship" with this command file:
       """
       ---
@@ -39,6 +39,7 @@ Feature: Slash command aliases
       | /fancy      |
 
   Scenario: A bare frontmatter name two commands share goes to the first command
+    Given pi runs with the scripted model
     Given the published plugin "demo" of the marketplace "fixtures" has the slash command "alpha" with this command file:
       """
       ---
@@ -69,6 +70,7 @@ Feature: Slash command aliases
       | 1    | user | First command body. |
 
   Scenario: A frontmatter name a skill of the plugin already answers to stays with the skill
+    Given pi runs with the scripted model
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
       """
       ---
