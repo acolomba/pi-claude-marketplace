@@ -157,11 +157,10 @@ export const CREDENTIAL_LEAK_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
-  // AUTH-09: buildAuthCallbacks and its three hookDebugLog calls moved out of
-  // platform/git.ts into this module. The scan aimed at git.ts kept passing
-  // over a file with nothing left to catch, so the credential-adjacent logging
-  // was covered by nothing. Appended last so no existing positional binding in
-  // no-credential-leak.test.ts is re-aimed.
+  // AUTH-09: buildAuthCallbacks and its three hookDebugLog calls live in this
+  // module, not in platform/git.ts, so a scan aimed only at git.ts would pass
+  // over the credential-adjacent logging. Appended last so no existing
+  // positional binding in no-credential-leak.test.ts is re-aimed.
   "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts",
   // D-PL5-07: the hosted catalog download, which must send no header,
   // credential, or cookie. Appended last for the reason given above.

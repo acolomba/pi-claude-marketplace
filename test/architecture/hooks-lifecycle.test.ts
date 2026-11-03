@@ -86,21 +86,18 @@ async function readTargetSource(rel: string, expectedBasename: string): Promise<
  */
 async function readNonCommentLines(rel: string, expectedBasename: string): Promise<string[]> {
   const raw = await readTargetSource(rel, expectedBasename);
-  return raw
-    .split("\n")
-    .map((line) => line)
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (trimmed.length === 0) {
-        return false;
-      }
+  return raw.split("\n").filter((line) => {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) {
+      return false;
+    }
 
-      if (trimmed.startsWith("//")) {
-        return false;
-      }
+    if (trimmed.startsWith("//")) {
+      return false;
+    }
 
-      return true;
-    });
+    return true;
+  });
 }
 
 /**
@@ -152,6 +149,7 @@ function assertMutatorFollowedByRebuilder(
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block A: install flow pairs the cache-mutation site with rebuildRoutingTables in lockstep", async () => {
+  // arrange
   const lines = await readNonCommentLines(INSTALL_REL, "install-flow-ledger.ts");
 
   // install-flow-ledger.ts wraps the cache-add in the bridge helper
@@ -160,17 +158,16 @@ test("WR-03 Block A: install flow pairs the cache-mutation site with rebuildRout
   // orchestrator invocation site is the helper call
   // (`await readAndCachePluginHooks({...})`), and the rebuild must follow
   // IT -- not the inner `addPluginConfigToCache(...)` line buried in the
-  // helper body. Pin whichever form the source uses (helper, helper's
-  // predecessor `addInstalledPluginHooksToCache`, or the bare cache
-  // mutator) so a future refactor that inlines or renames stays gated.
-  const HELPER_FORMS = [
-    "readAndCachePluginHooks(",
-    "addInstalledPluginHooksToCache(",
-    "addPluginConfigToCache(",
-  ];
+  // helper body. Pin whichever form the source uses (the helper or the bare
+  // cache mutator) so a future refactor that inlines it stays gated.
+  const HELPER_FORMS = ["readAndCachePluginHooks(", "addPluginConfigToCache("];
+
+  // act
   const mutator = HELPER_FORMS.find((form) =>
     lines.some((l) => l.includes(form) && !/\bimport\b/.test(l)),
   );
+
+  // assert
   assert.ok(
     mutator,
     `install-flow-ledger.ts: no cache-mutation call site found (tried ${HELPER_FORMS.join(", ")})`,
@@ -189,7 +186,10 @@ test("WR-03 Block A: install flow pairs the cache-mutation site with rebuildRout
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block B: uninstall.ts pairs removePluginConfigFromCache with rebuildRoutingTables in lockstep", async () => {
+  // arrange
   const lines = await readNonCommentLines(UNINSTALL_REL, "uninstall.ts");
+
+  // act & assert
   assertMutatorFollowedByRebuilder(
     lines,
     "removePluginConfigFromCache(",
@@ -207,8 +207,10 @@ test("WR-03 Block B: uninstall.ts pairs removePluginConfigFromCache with rebuild
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block D: update-swap.ts wires remove + add + rebuildRoutingTables in its per-plugin lock", async () => {
+  // arrange
   const lines = await readNonCommentLines(UPDATE_REL, "update-swap.ts");
 
+  // act
   const hasRemove = lines.some(
     (l) => l.includes("removePluginConfigFromCache(") && !/\bimport\b/.test(l),
   );
@@ -220,6 +222,8 @@ test("WR-03 Block D: update-swap.ts wires remove + add + rebuildRoutingTables in
   const hasRebuild = lines.some(
     (l) => l.includes("rebuildRoutingTables(") && !/\bimport\b/.test(l),
   );
+
+  // assert
   assert.ok(hasRemove, "update-swap.ts: missing removePluginConfigFromCache call site");
   assert.ok(
     hasAdd,
@@ -244,8 +248,10 @@ test("WR-03 Block D: update-swap.ts wires remove + add + rebuildRoutingTables in
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwdWith opens with a deleteParsedConfig prefix", async () => {
+  // arrange
   const raw = await readTargetSource(EVENT_ROUTER_REL, "event-router.ts");
 
+  // act
   // Locate the function body. The function is declared as
   // `async function hydrateProjectScopeForCwdWith(...) { ... }`.
   // Grab everything between the opening brace and the matching closing
@@ -260,6 +266,7 @@ test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwdWith opens with a
   );
   const body = match[1] ?? "";
 
+  // assert
   // The WR-01 prefix must contain a delete-from-the-cache call.
   assert.match(
     body,
@@ -289,6 +296,7 @@ test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwdWith opens with a
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block F: every orchestrators/plugin/*.ts that mutates the cache also calls rebuildRoutingTables", async () => {
+  // arrange
   const orchestratorDir = path.join(REPO_ROOT, PLUGIN_ORCHESTRATORS_REL);
   const entries = await readdir(orchestratorDir);
   const tsFiles = entries.filter((e) => e.endsWith(".ts") && !e.endsWith(".test.ts"));
@@ -302,6 +310,7 @@ test("WR-03 Block F: every orchestrators/plugin/*.ts that mutates the cache also
     `D-07-03: walked ${PLUGIN_ORCHESTRATORS_REL} and found no .ts files, so this block inspected nothing`,
   );
 
+  // act
   const scanned: string[] = [];
   const missingRebuild: string[] = [];
   for (const file of tsFiles) {
@@ -329,6 +338,7 @@ test("WR-03 Block F: every orchestrators/plugin/*.ts that mutates the cache also
     }
   }
 
+  // assert
   assert.deepStrictEqual(
     missingRebuild,
     [],

@@ -157,7 +157,7 @@ void ({
 } satisfies PiBoundary.PiInventory);
 void ({
   mode: "tui",
-  ui: { notify: (_message: string): void => undefined },
+  ui: { notify: (): void => undefined },
 } satisfies PiBoundary.NotificationContext);
 
 // @ts-expect-error a text content block requires text

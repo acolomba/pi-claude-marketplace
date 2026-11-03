@@ -140,7 +140,7 @@ test("D-CF2-02: maps each name a loaded skill stored to its generated name", asy
   verify(pi);
 });
 
-test("D-CF2-02: a skill with a record no longer answers to the name its plugin prefix was cut from", async () => {
+test("D-CF2-02: a skill with a record answers only to its stored names, not to the name its plugin prefix was cut from", async () => {
   // arrange
   const file = stagedPath(PROJECT_ROOT, "demo-tool");
   const pi = piWith([skillCommand("demo-tool", file)]);

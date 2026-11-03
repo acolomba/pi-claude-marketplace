@@ -20,9 +20,9 @@
 // invocation with none, but runs no `!` command: the model's read is not an
 // invocation, and Claude Code's Skill tool path has no Pi equivalent. It
 // fills only a text that is still the skill's own, never one a PostToolUse
-// hook wrote (audit warning W6). A skill
-// outside this extension's two staged skills directories, such as the user's
-// own Pi skill, is `not-bridged` and keeps Pi's expansion.
+// hook wrote (audit warning W6). A skill outside this extension's two staged
+// skills directories, such as the user's own Pi skill, is `not-bridged` and
+// keeps Pi's expansion.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";

@@ -161,11 +161,13 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
 ];
 
 test("no child_process imports outside the platform/git-credential whitelist (D-21)", async () => {
+  // arrange
   assert.ok(
     SHELL_OUT_EXEMPT_TARGETS.length > 0,
     "D-07-03: an empty SHELL_OUT_EXEMPT_TARGETS empties the whitelist, so this walk would flag the five sanctioned sites and prove nothing about the rest of the tree.",
   );
 
+  // act
   const offenders: string[] = [];
   let walked = 0;
   for await (const file of walkTsFiles(EXTENSION_ROOT)) {
@@ -183,6 +185,7 @@ test("no child_process imports outside the platform/git-credential whitelist (D-
     }
   }
 
+  // assert
   assert.ok(
     walked > 0,
     `D-07-03: walked ${EXTENSION_ROOT_REL} and found no .ts files -- a walk over zero files is a gate reporting success over nothing.`,
@@ -203,14 +206,20 @@ test("no child_process imports outside the platform/git-credential whitelist (D-
 // root because the full paths are owned by the registry (D-07-05); comparing
 // the whitelist against the same group it was built from would pin nothing.
 test("whitelist: exactly five files may import node:child_process", () => {
-  assert.deepEqual(
-    [...ALLOWED_CHILD_PROCESS_FILES].map((rel) => path.relative(EXTENSION_ROOT_REL, rel)).sort(),
-    [
-      "bridges/hooks/async-rewake/registry.ts",
-      "bridges/hooks/dispatch-exec.ts",
-      "platform/git-credential.ts",
-      "platform/package-manager.ts",
-      "platform/prompt-shell.ts",
-    ],
-  );
+  // arrange
+  const expectedFiles = [
+    "bridges/hooks/async-rewake/registry.ts",
+    "bridges/hooks/dispatch-exec.ts",
+    "platform/git-credential.ts",
+    "platform/package-manager.ts",
+    "platform/prompt-shell.ts",
+  ];
+
+  // act
+  const allowedFiles = [...ALLOWED_CHILD_PROCESS_FILES]
+    .map((rel) => path.relative(EXTENSION_ROOT_REL, rel))
+    .sort();
+
+  // assert
+  assert.deepEqual(allowedFiles, expectedFiles);
 });

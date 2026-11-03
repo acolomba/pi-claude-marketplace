@@ -288,12 +288,12 @@ function writeRecordingOperations(
     }
 
     const before = await fileIdentity(filePath);
-    const result = await run();
+    const outcome = await run();
     if ((await fileIdentity(filePath)) !== before) {
       log.push(path.basename(filePath));
     }
 
-    return result;
+    return outcome;
   }
 
   return {

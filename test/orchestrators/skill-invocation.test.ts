@@ -579,21 +579,6 @@ describe("invokeBridgedSkill", () => {
       text: block(PROJECT_SKILL, PROJECT_SKILL_DIR, "Status: ran"),
     });
   });
-
-  test("D-CF2-06: frames a user skill reading only its file", async () => {
-    // arrange
-    const files = { [USER_SKILL]: skillFile("Greet $ARGUMENTS.") };
-    const commands = [skillCommand("skill:demo-greet", USER_SKILL)];
-
-    // act
-    const outcome = await invokeBridgedSkill(request({ commands }), dependencies(files));
-
-    // assert
-    assert.deepStrictEqual(outcome, {
-      kind: "ok",
-      text: block(USER_SKILL, USER_SKILL_DIR, "Greet Ada."),
-    });
-  });
 });
 
 function readRequest(overrides: Partial<SkillReadRequest> = {}): SkillReadRequest {

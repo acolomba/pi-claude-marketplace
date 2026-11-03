@@ -1577,7 +1577,7 @@ Body content.
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
-  test("preserves dropped allowed-tools and mcpServers guidance bytes (#179)", () => {
+  test("preserves dropped allowed-tools and mcpServers guidance bytes", () => {
     // arrange
     const expectedFileContent = `---
 name: acme:bot

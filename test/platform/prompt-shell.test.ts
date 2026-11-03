@@ -29,14 +29,14 @@ const GIT_BASH = String.raw`C:\Program Files\Git\bin\bash.exe`;
 
 // An output stream the case writes to by hand.
 class ShellStream {
-  readonly #listeners: Array<(chunk: Buffer) => void> = [];
+  private readonly listeners: Array<(chunk: Buffer) => void> = [];
 
   on(_event: "data", listener: (chunk: Buffer) => void): void {
-    this.#listeners.push(listener);
+    this.listeners.push(listener);
   }
 
   write(bytes: Buffer): void {
-    for (const listener of this.#listeners) {
+    for (const listener of this.listeners) {
       listener(bytes);
     }
   }
@@ -49,8 +49,8 @@ class ShellProcess implements PromptShellProcess {
   readonly stderr = new ShellStream();
   readonly pid: number | undefined;
   readonly kills: NodeJS.Signals[] = [];
-  readonly #closes: Array<(code: number | null) => void> = [];
-  readonly #errors: Array<(error: Error) => void> = [];
+  private readonly closes: Array<(code: number | null) => void> = [];
+  private readonly errors: Array<(error: Error) => void> = [];
 
   constructor(pid?: number) {
     this.pid = pid;
@@ -63,9 +63,9 @@ class ShellProcess implements PromptShellProcess {
     listener: ((code: number | null) => void) | ((error: Error) => void),
   ): this {
     if (event === "close") {
-      this.#closes.push(listener as (code: number | null) => void);
+      this.closes.push(listener as (code: number | null) => void);
     } else {
-      this.#errors.push(listener as (error: Error) => void);
+      this.errors.push(listener as (error: Error) => void);
     }
 
     return this;
@@ -77,18 +77,18 @@ class ShellProcess implements PromptShellProcess {
   }
 
   close(code: number | null): void {
-    for (const listener of this.#closes) {
+    for (const listener of this.closes) {
       listener(code);
     }
   }
 
   // Like Node's EventEmitter, an error nothing listens for throws.
   fail(error: Error): void {
-    if (this.#errors.length === 0) {
+    if (this.errors.length === 0) {
       throw error;
     }
 
-    for (const listener of this.#errors) {
+    for (const listener of this.errors) {
       listener(error);
     }
   }

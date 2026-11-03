@@ -228,7 +228,7 @@ function fixtureAt(fixtures: FixtureMap, section: string, state: string): Catalo
   return fixture;
 }
 
-test("catalog contract rejects duplicate fixture tuples and empty sections", () => {
+test("catalog contract rejects duplicate fixture tuples", () => {
   // arrange
   const fixture = fixtureAt(PLUGIN_FETCH_FIXTURES, "/claude:plugin fetch", "single-available");
   const one: FixtureMap = { section: { state: fixture } };
@@ -238,6 +238,10 @@ test("catalog contract rejects duplicate fixture tuples and empty sections", () 
     () => mergeFixtureMaps([one, one]),
     new Error("Duplicate catalog fixture tuple: section::state"),
   );
+});
+
+test("catalog contract rejects empty sections", () => {
+  // act & assert
   assert.throws(
     () => mergeFixtureMaps([{ section: {} }]),
     new Error("Catalog fixture section must not be empty: section"),
@@ -252,8 +256,11 @@ test("catalog contract rejects missing and extra fixture tuples", () => {
     { section: "section", state: "missing", expected: "independent bytes" },
   ];
 
-  // act & assert
-  assert.deepStrictEqual(completenessFailures(examples, fixtures), [
+  // act
+  const failures = completenessFailures(examples, fixtures);
+
+  // assert
+  assert.deepStrictEqual(failures, [
     { section: "section", state: "missing", kind: "missing-fixture" },
     { section: "section", state: "extra", kind: "extra-fixture" },
   ]);

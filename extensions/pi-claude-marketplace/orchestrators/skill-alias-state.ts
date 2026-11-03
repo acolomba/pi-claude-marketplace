@@ -264,8 +264,7 @@ async function kindAliases(
  * `kindAliases`: every name a loaded bridged skill stored, mapped to its
  * generated name, then each name that the frontmatter `name` of a loaded
  * bridged command gives it and no skill claimed, mapped to the command's Pi
- * name. A skill keeps every name it already answers to, as before commands
- * had aliases.
+ * name. A command alias never displaces a name a skill answers to.
  */
 export async function loadPluginAliases(
   pi: ExtensionAPI,
