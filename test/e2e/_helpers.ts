@@ -101,6 +101,9 @@ export function makeCtx(cwd: string): { ctx: ExtensionContext; notifications: No
   const ctx = {
     mode: "tui",
     cwd,
+    // D-LOC-01: project plugins load only in a project Pi trusts, and these
+    // cases install at project scope into a project the user trusts.
+    isProjectTrusted: (): boolean => true,
     ui: {
       notify: (message: string, severity?: string): void => {
         notifications.push(severity === undefined ? { message } : { message, severity });
