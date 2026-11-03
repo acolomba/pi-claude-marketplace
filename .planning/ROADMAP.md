@@ -204,6 +204,7 @@ pairs `test/domain/workflow-script.test.ts`,
 - [x] **Phase 5: Hooks** - Hooks fire on Pi's session, tool, prompt, and stop events with Claude's stdin and environment, including the `clear`, `compact`, and `fork` parity fixes (completed 2026-11-01)
 - [x] **Phase 6: MCP Servers** - pi-mcp-adapter 7.x connects bridged servers under Claude's tool names, with configuration variants, project scope, and companion-missing recovery (completed 2026-11-02)
 - [x] **Phase 7: Workflows** - The workflow engine registers and runs bridged workflows, reports refused scripts, and recovers when the engine is loaded later (completed 2026-11-01)
+- [ ] **Phase 8: Locality and Upstream Alignment** - Project-scope work stays inside the project, hook output and the model-read skill fill match upstream, and two audit warnings are guarded by scenarios (retroactive record of work merged after the milestone first closed)
 
 ## Phase Details
 
@@ -499,6 +500,27 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 - [x] 07-06-PLAN.md — Wave 3: D-CF7-01..04 in the compatibility doc, the parent lines, and the phase gate (WFL-01..05)
 
+### Phase 8: Locality and Upstream Alignment
+
+**Goal:** A project-scope operation reads and writes only inside its project, trusting the project through Pi alone; hook output reaches the model as Claude Code delivers it; a skill file the model reads is filled only while it is the skill's own text; and the audit warnings W2 and W4 are pinned by scenarios.
+**Depends on:** Phase 7
+**Requirements:** LOC-01, LOC-02, LOC-03, LOC-04
+**Origin:** The user's decisions of 2026-11-02 and 2026-11-03 after the milestone audit (DC-41..DC-44). The milestone was reopened for them (2a20d2f). The work was done and merged before this phase was added, so its plans are retroactive records, not plans that were executed from.
+**Success Criteria** (what must be TRUE):
+
+1. Project skills, commands, aliases, the model command tool, the skill-read fill, and hooks are gated on Pi's project trust alone; no provenance ledger is written to the user folder; project workflows are saved and staged inside the project; the only writes outside the project are the git credential helper and the confirmed cleanup of a plugin's own old workflow copies (D-LOC-01) (LOC-01).
+2. A hook's whole output is read with no size cut, and `onFailure: "block"` keeps a printed deny as Claude Code 2.1.316 does (T-05-33) (LOC-02).
+3. A skill file the model reads with Pi's read tool is filled only while the result equals Pi's own read of the staged file; a hook-replaced result reaches the model as written (W6) (LOC-03).
+4. A scenario shows that an install whose mcp phase fails leaves no agent of the plugin, and one shows that a new session after the plugin's commands are gone offers no `run_plugin_command` (W2, W4) (LOC-04).
+
+**Plans:** 4/4 plans complete (retroactive records of merged work)
+
+Plans:
+- [x] 08-01-PLAN.md — Locality redesign: trust through Pi alone, in-project workflows, the credential exception (LOC-01; D-LOC-01, DC-41, DC-42 items 1-5)
+- [x] 08-02-PLAN.md — Hook output read in full and `onFailure: "block"` aligned with upstream (LOC-02; T-05-33, DC-42 items 6-10)
+- [x] 08-03-PLAN.md — Model-read skill fill only for the skill's own text (LOC-03; W6, DC-43)
+- [x] 08-04-PLAN.md — Guard scenarios for the W2 and W4 audit warnings (LOC-04; DC-44)
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -510,6 +532,7 @@ Plans:
 | 5. Hooks | 9/9 | Complete    | 2026-11-01 |
 | 6. MCP Servers | 9/9 | Complete    | 2026-11-02 |
 | 7. Workflows | 6/6 | Complete    | 2026-11-01 |
+| 8. Locality and Upstream Alignment | 4/4 | In Progress | - |
 
 ## Carried Forward
 

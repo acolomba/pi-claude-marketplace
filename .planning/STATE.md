@@ -2,18 +2,19 @@
 gsd_state_version: "1.0"
 milestone: component-features
 milestone_name: Component Behavioral Tests
+current_phase_name: Locality and Upstream Alignment
 status: executing
-stopped_at: Milestone reopened 2026-11-02; Phases 1-7 complete; locality redesign and hook output parity merged
-last_updated: "2026-11-02T12:28:16.488Z"
-last_activity: 2026-11-02
-last_activity_desc: Milestone component-features reopened for further work
-state_head: c78ec90bc4d4bb6d0d30704094e7af2b23dd2791
+stopped_at: Phase 8 added as a retroactive record (4/4 plans complete); verification pending
+last_updated: "2026-11-03T01:53:24.048Z"
+last_activity: 2026-11-03
+state_head: b9f40ad1132e9a5a85a2fbd74120d81c753d5260
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 7
-  total_plans: 61
-  completed_plans: 61
-  percent: 100
+  total_plans: 65
+  completed_plans: 65
+  percent: 88
+last_activity_desc: Phase 8 records the locality and upstream alignment work
 ---
 
 # Project State
@@ -25,14 +26,14 @@ See: `.planning/PROJECT.md` (updated 2026-11-02 after the component-features mil
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** component-features reopened 2026-11-02: user review of the remaining decisions, possible new phases. Open for the user: review D-CF2-13..16 and D-CF3-07, review the upstream branches on `acolomba/pi` and `acolomba/pi-subagents`, and decide T-05-33 and T-05-34.
+**Current focus:** component-features reopened 2026-11-02. Phase 8 (Locality and Upstream Alignment) was added 2026-11-03 as a retroactive record of the work merged since (D-LOC-01, T-05-33, W6, W2/W4 guards); its 4 plans are complete and its verification is pending. Next: verify Phase 8, re-verify Phases 2, 3, 5 and 7, re-audit, and re-close the milestone. Open for the user: review the upstream branches on `acolomba/pi` and `acolomba/pi-subagents`.
 
 ## Current Position
 
-Phase: Milestone component-features reopened (Phases 1-7 complete)
-Plan: —
-Status: Reopened for further work
-Last activity: 2026-11-02 — Milestone component-features reopened
+Phase: 8 of 8 (Locality and Upstream Alignment)
+Plan: 4 of 4 complete (retroactive records)
+Status: Verification pending
+Last activity: 2026-11-03 — Phase 8 added and recorded
 
 ### mcp-4 closeout
 
