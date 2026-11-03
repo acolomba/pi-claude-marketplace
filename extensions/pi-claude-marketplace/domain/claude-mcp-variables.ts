@@ -213,8 +213,8 @@ function segmentFor(inner: string, state: ScanState): Segment {
  * not, for the adapter to use when the variable is unset at connect time
  * (D-CF1-13). A default holding `$env:` or `{env:` text, and a base-URL name
  * in a remote field, keep the install-time rule instead: an unset variable
- * becomes the default text, which is never scanned again. An unset variable with no default stays a reference and is
- * reported missing. At user scope
+ * becomes the default text, which is never scanned again. An unset variable
+ * with no default stays a reference and is reported missing. At user scope
  * `${CLAUDE_PROJECT_DIR}` stays a reference and is never reported missing. A
  * deny-listed reference follows Claude's deny arm for `fieldClass` (AVAR-05)
  * and is listed in `withheld` whenever it is written as `""`.

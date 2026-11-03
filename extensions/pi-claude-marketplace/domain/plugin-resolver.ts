@@ -73,15 +73,15 @@ import type {
   StatKindReader,
 } from "./resolver-types.ts";
 
-async function defaultStatKind(p: string): Promise<StatKind> {
+async function defaultStatKind(statPath: string): Promise<StatKind> {
   try {
-    const s = await stat(p);
+    const stats = await stat(statPath);
 
-    if (s.isDirectory()) {
+    if (stats.isDirectory()) {
       return "dir";
     }
 
-    if (s.isFile()) {
+    if (stats.isFile()) {
       return "file";
     }
 
@@ -508,8 +508,8 @@ async function deriveSourcePluginRoot(
     }
 
     if (ctx.resolvePathPluginRoot !== undefined && ctx.pathPluginPin !== undefined) {
-      const r = await ctx.resolvePathPluginRoot(parsedSource, ctx.pathPluginPin);
-      return pluginRootFromResult(entry, partial, r);
+      const pinnedRoot = await ctx.resolvePathPluginRoot(parsedSource, ctx.pathPluginPin);
+      return pluginRootFromResult(entry, partial, pinnedRoot);
     }
 
     const pluginRoot = path.resolve(ctx.marketplaceRoot, parsedSource.raw);
@@ -536,8 +536,8 @@ async function deriveSourcePluginRoot(
     };
   }
 
-  const r = await ctx.resolveGitPluginRoot(parsedSource);
-  return pluginRootFromResult(entry, partial, r);
+  const gitRoot = await ctx.resolveGitPluginRoot(parsedSource);
+  return pluginRootFromResult(entry, partial, gitRoot);
 }
 
 /**
@@ -548,16 +548,16 @@ async function deriveSourcePluginRoot(
 function pluginRootFromResult(
   entry: PluginEntry,
   partial: PartialResolution,
-  r: GitPluginRootResult,
+  rootResult: GitPluginRootResult,
 ): SourcePluginRoot {
-  switch (r.kind) {
+  switch (rootResult.kind) {
     case "materialized":
-      return { kind: "ok", boundary: copyManifestBoundary(r.pluginRoot) };
+      return { kind: "ok", boundary: copyManifestBoundary(rootResult.pluginRoot) };
     case "escapes":
     case "missing-subdir":
       return {
         kind: "unavailable",
-        result: unavailable(entry.name, [...partial.notes, r.detail]),
+        result: unavailable(entry.name, [...partial.notes, rootResult.detail]),
       };
     case "not-cached":
       return {
@@ -636,7 +636,7 @@ async function preflightStages(
   }
 
   // PR-2 case 2 / PURL-01 / PURL-03: derive the pluginRoot. Path sources resolve
-  // it under marketplaceRoot with the NFR-10 escape check (unchanged); git
+  // it under marketplaceRoot with the NFR-10 escape check; git
   // sources delegate to the injected `resolveGitPluginRoot` callback, whose
   // discriminated result already carries the clone-root-anchored containment
   // outcome (D-77-03: git-subdir containment is the callback's responsibility,
@@ -741,8 +741,7 @@ export async function resolveStrict(
  * D-64-07: the STRUCTURAL accumulator (component-path / mcp / hooks defects).
  * The unsupported-component signal lives separately in `partial.unsupported`.
  * Every stage runs -- the flags are collected and folded at the end rather than
- * short-circuited, which is what the original `(await stage()) || dirty` chain
- * did too.
+ * short-circuited.
  *
  * Component-path collection owns the closed skills/commands/agents/workflows
  * subset; hooks-config discovery remains the separate shared stage below.
@@ -809,32 +808,32 @@ function decideResolution(
  *
  * Throws `PluginShapeError` (typed discriminated carrier) so catch sites
  * dispatch on `instanceof PluginShapeError` + `.kind` rather than
- * substring-matching `.message`. `r.notes` is passed through as the
+ * substring-matching `.message`. `resolved.notes` is passed through as the
  * `reasons` array (free-form strings; closed `Reason` narrowing happens
  * at the renderer boundary in `classifyEntityShapeError`).
  */
 export function requireInstallable(
-  r: ResolvedPlugin,
+  resolved: ResolvedPlugin,
   op: "install" | "update" = "install",
-): asserts r is ResolvedPluginInstallable {
-  if (!r.installable) {
+): asserts resolved is ResolvedPluginInstallable {
+  if (!resolved.installable) {
     throw new PluginShapeError({
       kind: op === "update" ? "no-longer-installable" : "not-installable",
-      plugin: r.name,
-      reasons: r.notes,
+      plugin: resolved.name,
+      reasons: resolved.notes,
       partialable: false,
       unsupportedKinds: [],
     });
   }
 
-  if (r.state === "installable") {
+  if (resolved.state === "installable") {
     return;
   }
 
   throw new PluginShapeError({
     kind: op === "update" ? "no-longer-installable" : "not-installable",
-    plugin: r.name,
-    reasons: r.notes,
+    plugin: resolved.name,
+    reasons: resolved.notes,
     // SEV-02 / D-69-03: `partially-available` is partially-available; `unavailable` is
     // a structural defect `--partial` cannot help -- carry the distinction the
     // render row uses to condition the `--partial` hint.
@@ -843,8 +842,8 @@ export function requireInstallable(
     // failure-row composer renders per-kind markers (e.g. `unsupported hooks`)
     // via the same `narrowUnsupportedKinds` path `list`/`info` use. Only the
     // `partially-available` arm carries the field; `unavailable` keeps an empty list so
-    // its structural reasons stay sourced from `notes` (unchanged).
-    unsupportedKinds: r.unsupported,
+    // its structural reasons stay sourced from `notes`.
+    unsupportedKinds: resolved.unsupported,
   });
 }
 
@@ -853,7 +852,7 @@ export function requireInstallable(
  * `installable` and `partially-available` (`--partial` can degrade past the
  * unsupported parts)
  * but still rejects `unavailable` (structural defect -- `--partial` cannot help,
- * NFR-7). Throw shape mirrors `requireInstallable`; `r.notes` exists on all
+ * NFR-7). Throw shape mirrors `requireInstallable`; `resolved.notes` exists on all
  * three arms so `reasons` compiles.
  *
  * BFILL-01 / D-18-06: reinstall resolves through this gate (the shared
@@ -862,17 +861,17 @@ export function requireInstallable(
  * --partial` and `update --partial` resolve through it too.
  */
 export function requirePartialInstallable(
-  r: ResolvedPlugin,
+  resolved: ResolvedPlugin,
   op: "install" | "update" = "install",
-): asserts r is ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable {
-  if (r.installable) {
+): asserts resolved is ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable {
+  if (resolved.installable) {
     return;
   }
 
   throw new PluginShapeError({
     kind: op === "update" ? "no-longer-installable" : "not-installable",
-    plugin: r.name,
-    reasons: r.notes,
+    plugin: resolved.name,
+    reasons: resolved.notes,
     // SEV-02 / D-69-03: this gate only ever throws for `unavailable`
     // (`installable`/`partially-available` return above), which `--partial` cannot help --
     // never partialable.

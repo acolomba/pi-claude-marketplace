@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 
-import type * as HooksResolutionOwner from "../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts";
-
-type OwnerShape = typeof HooksResolutionOwner;
+import { resolveHooks } from "../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts";
 
 function emptyResolution() {
   return {
@@ -72,15 +70,10 @@ function dependencies(
 
 test("resolves no hooks when the convention file is absent", async () => {
   // arrange
-  let owner: OwnerShape | undefined;
   const resolution = emptyResolution();
 
-  // act & assert
-  await assert.doesNotReject(async () => {
-    owner = await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
-  }, "hooks-resolution.ts is absent");
-  assert.ok(owner !== undefined);
-  const dirty = await owner.resolveHooks(
+  // act
+  const dirty = await resolveHooks(
     { pluginRoot: "/plugins/alpha", entry: {}, manifest: null, resolution },
     dependencies(undefined),
   );
@@ -92,8 +85,6 @@ test("resolves no hooks when the convention file is absent", async () => {
 
 test("records a supported hooks configuration and its relative path", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const contents = JSON.stringify({
     PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo ready" }] }],
@@ -117,8 +108,6 @@ test("records a supported hooks configuration and its relative path", async () =
 
 test("records a module declared by a modules-only convention file", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const contents = JSON.stringify({ modules: ["./register.ts"] });
 
@@ -140,8 +129,6 @@ test("records a module declared by a modules-only convention file", async () => 
 
 test("keeps command hooks supported beside a declared module", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const contents = JSON.stringify({
     hooks: {
@@ -169,8 +156,6 @@ test("keeps command hooks supported beside a declared module", async () => {
 
 test("classifies malformed hooks as a structural failure", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
 
   // act
@@ -192,8 +177,6 @@ test("classifies malformed hooks as a structural failure", async () => {
 
 test("propagates convention-file read failures unchanged", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const readError = Object.assign(new Error("denied"), { code: "EACCES" });
 
@@ -210,8 +193,6 @@ test("propagates convention-file read failures unchanged", async () => {
 
 test("keeps supported handlers and reports dropped groups in source order", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const contents = JSON.stringify({
     PreToolUse: [
@@ -243,8 +224,6 @@ test("keeps supported handlers and reports dropped groups in source order", asyn
 
 test("omits materialization when every hook is dropped", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const contents = JSON.stringify({
     Notification: [{ hooks: [{ type: "command", command: "echo ignored" }] }],
@@ -268,8 +247,6 @@ test("omits materialization when every hook is dropped", async () => {
 
 test("flags orphan rewake fields only in the retained hook subset", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const contents = JSON.stringify({
     PreToolUse: [
@@ -307,8 +284,6 @@ test("flags orphan rewake fields only in the retained hook subset", async () => 
 
 test("repeated resolutions are observationally identical", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const contents = JSON.stringify({
     PostToolUse: [
       { matcher: "Edit", hooks: [{ type: "command", command: "echo once" }] },
@@ -336,8 +311,6 @@ test("repeated resolutions are observationally identical", async () => {
 
 test("parallel resolutions keep independent deterministic state", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const supportedResolution = emptyResolution();
   const droppedResolution = emptyResolution();
   const supportedContents = JSON.stringify({
@@ -382,8 +355,6 @@ test("parallel resolutions keep independent deterministic state", async () => {
 
 test("records a module declared by a hooks file the manifest names", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const extraPath = path.join("/plugins/alpha", "hooks", "extra.json");
   const files = fileTree({ [extraPath]: MODULE_HOOKS });
@@ -412,8 +383,6 @@ test("records a module declared by a hooks file the manifest names", async () =>
 
 test("adopts no command hooks from a hooks file the entry names", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const extraPath = path.join("/plugins/alpha", "extra.json");
   const files = fileTree({
@@ -445,8 +414,6 @@ for (const { description, reference } of [
 ]) {
   test(`never reads ${description} hooks reference`, async () => {
     // arrange
-    const { resolveHooks } =
-      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
     const resolution = emptyResolution();
     const files = fileTree({ "/plugins/outside.json": MODULE_HOOKS });
 
@@ -465,8 +432,6 @@ for (const { description, reference } of [
 
 test("reads every file of a manifest hooks array until one declares a module", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const firstPath = path.join("/plugins/alpha", "hooks", "first.json");
   const secondPath = path.join("/plugins/alpha", "hooks", "second.json");
@@ -501,8 +466,6 @@ test("reads every file of a manifest hooks array until one declares a module", a
 
 test("reads the convention file once when the manifest names it", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const files = fileTree({
     [DEFAULT_HOOKS_PATH]: JSON.stringify({
@@ -534,8 +497,6 @@ test("reads the convention file once when the manifest names it", async () => {
 
 test("reads a hooks file once when the entry and the manifest both name it", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const extraPath = path.join("/plugins/alpha", "extra.json");
   const files = fileTree({ [extraPath]: JSON.stringify({ hooks: {} }) });
@@ -570,8 +531,6 @@ for (const { description, nodes, expectedReads } of [
 ]) {
   test(`ignores ${description} hooks reference`, async () => {
     // arrange
-    const { resolveHooks } =
-      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
     const resolution = emptyResolution();
     const files = fileTree(nodes);
 
@@ -595,8 +554,6 @@ for (const { description, nodes, expectedReads } of [
 
 test("reads no referenced hooks file when the convention file declares a module", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const files = fileTree({
     [DEFAULT_HOOKS_PATH]: MODULE_HOOKS,
@@ -622,8 +579,6 @@ test("reads no referenced hooks file when the convention file declares a module"
 
 test("propagates a referenced hooks file read failure unchanged", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const readError = Object.assign(new Error("denied"), { code: "EACCES" });
   const files = fileTree({ [path.join("/plugins/alpha", "extra.json")]: readError });
@@ -660,8 +615,6 @@ for (const { form, hooks } of [
 ]) {
   test(`reports unsupported hooks beside the convention hooks for a manifest hooks field of ${form}`, async () => {
     // arrange
-    const { resolveHooks } =
-      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
     const resolution = emptyResolution();
     const files = fileTree({ [DEFAULT_HOOKS_PATH]: CONVENTION_PRE_TOOL_USE });
 
@@ -685,8 +638,6 @@ for (const { form, hooks } of [
 for (const hooks of ["./hooks/hooks.json", "hooks/hooks.json", ["./hooks/hooks.json"]]) {
   test(`keeps the plugin fully supported for a manifest hooks field of ${JSON.stringify(hooks)}`, async () => {
     // arrange
-    const { resolveHooks } =
-      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
     const resolution = emptyResolution();
     const files = fileTree({ [DEFAULT_HOOKS_PATH]: CONVENTION_PRE_TOOL_USE });
 
@@ -710,8 +661,6 @@ for (const hooks of ["./hooks/hooks.json", "hooks/hooks.json", ["./hooks/hooks.j
 for (const hooks of ["", null, [], [""]]) {
   test(`declares no hooks for a manifest hooks field of ${JSON.stringify(hooks)}`, async () => {
     // arrange
-    const { resolveHooks } =
-      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
     const resolution = emptyResolution();
 
     // act
@@ -732,8 +681,6 @@ for (const { form, hooks } of [
 ]) {
   test(`reports unsupported hooks for a marketplace entry hooks field of ${form}`, async () => {
     // arrange
-    const { resolveHooks } =
-      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
     const resolution = emptyResolution();
     const files = fileTree({ [DEFAULT_HOOKS_PATH]: CONVENTION_PRE_TOOL_USE });
 
@@ -756,8 +703,6 @@ for (const { form, hooks } of [
 
 test("reports unsupported hooks once when the convention file drops an event and the manifest declares hooks", async () => {
   // arrange
-  const { resolveHooks } =
-    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
   const resolution = emptyResolution();
   const files = fileTree({
     [DEFAULT_HOOKS_PATH]: JSON.stringify({

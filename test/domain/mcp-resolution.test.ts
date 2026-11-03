@@ -4,15 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import type * as McpResolutionOwner from "../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts";
+import { resolveStrictMcp } from "../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts";
+
 import type { StatKindReader } from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
-type OwnerShape = typeof McpResolutionOwner;
 type FileValue = "dir" | { readonly contents: string };
-
-function preserveDirectOwnerType(owner: OwnerShape): void {
-  void owner;
-}
 
 function emptyResolution() {
   return {
@@ -64,15 +60,8 @@ function recordedMcpFiles(files: Readonly<Record<string, FileValue>>): {
   };
 }
 
-void preserveDirectOwnerType;
-
 test("resolves a strict string reference at inline parity", async () => {
   // arrange
-  let owner: OwnerShape | undefined;
-  await assert.doesNotReject(async () => {
-    owner = await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
-  }, "mcp-resolution.ts is absent");
-  assert.ok(owner !== undefined);
   const pluginRoot = "/plugins/alpha";
   const referencePath = path.join(pluginRoot, "servers.json");
   const referencedResolution = emptyResolution();
@@ -84,7 +73,7 @@ test("resolves a strict string reference at inline parity", async () => {
   });
 
   // act
-  const referencedDirty = await owner.resolveStrictMcp(
+  const referencedDirty = await resolveStrictMcp(
     {
       entry: { mcpServers: "servers.json" },
       manifest: null,
@@ -93,7 +82,7 @@ test("resolves a strict string reference at inline parity", async () => {
     },
     deps,
   );
-  const inlineDirty = await owner.resolveStrictMcp(
+  const inlineDirty = await resolveStrictMcp(
     {
       entry: { mcpServers: { alpha: { command: "node" } } },
       manifest: null,
@@ -121,8 +110,6 @@ test("resolves a strict string reference at inline parity", async () => {
 
 test("D-CF6-01: reads the manifest MCP and ignores the entry MCP when a plugin.json exists", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const objectEntryResolution = emptyResolution();
   const stringEntryResolution = emptyResolution();
   const deps = recordedMcpFiles({
@@ -180,8 +167,6 @@ test("D-CF6-01: reads the manifest MCP and ignores the entry MCP when a plugin.j
 
 test("D-CF6-01: reads the entry MCP after .mcp.json when the plugin has no plugin.json", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const deps = mcpFiles({
     "/plugins/alpha/.mcp.json": {
@@ -217,8 +202,6 @@ test("D-CF6-01: reads the entry MCP after .mcp.json when the plugin has no plugi
 
 test("D-CF6-01: merges .mcp.json and the manifest, a later server replacing an earlier one in place", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const deps = mcpFiles({
     "/plugins/alpha/.mcp.json": {
@@ -260,8 +243,6 @@ test("D-CF6-01: merges .mcp.json and the manifest, a later server replacing an e
 
 test("D-CF6-01: reads an array of references and maps in order", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const deps = mcpFiles({
     "/plugins/alpha/.mcp.json": {
@@ -305,8 +286,6 @@ test("D-CF6-01: reads an array of references and maps in order", async () => {
 
 test("D-CF6-01: refuses an array holding an element that is neither a reference nor a map, with one note", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const deps = recordedMcpFiles({});
 
@@ -339,8 +318,6 @@ test("D-CF6-01: refuses an array holding an element that is neither a reference 
 for (const bundle of ["server.mcpb", "./server.dxt"] as const) {
   test(`D-CF6-01: marks the bundle reference ${bundle} unsupported without reading it`, async () => {
     // arrange
-    const { resolveStrictMcp } =
-      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
     const resolution = emptyResolution();
     const deps = recordedMcpFiles({
       "/plugins/alpha/.mcp.json": { contents: JSON.stringify({ local: { command: "node" } }) },
@@ -371,8 +348,6 @@ for (const bundle of ["server.mcpb", "./server.dxt"] as const) {
 
 test("D-CF6-01: records the mcpServers kind once for a bundle and a blocked server", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
@@ -405,8 +380,6 @@ test("D-CF6-01: records the mcpServers kind once for a bundle and a blocked serv
 
 test("D-CF6-01: a later supported server replaces an earlier blocked one of the same name", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const deps = mcpFiles({
     "/plugins/alpha/.mcp.json": {
@@ -437,8 +410,6 @@ test("D-CF6-01: a later supported server replaces an earlier blocked one of the 
 
 test("D-CF6-01: a later blocked server replaces an earlier supported one and is left out", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const deps = mcpFiles({
     "/plugins/alpha/.mcp.json": { contents: JSON.stringify({ live: { command: "node" } }) },
@@ -472,8 +443,6 @@ test("D-CF6-01: a later blocked server replaces an earlier supported one and is 
 
 test("accepts wrapped and unwrapped standalone documents", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const wrappedRoot = "/plugins/wrapped";
   const unwrappedRoot = "/plugins/unwrapped";
   const wrappedResolution = emptyResolution();
@@ -519,8 +488,6 @@ test("accepts wrapped and unwrapped standalone documents", async () => {
 
 test("treats a missing standalone document as empty", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
@@ -548,8 +515,6 @@ for (const { title, reference, expectedNote } of [
 ] as const) {
   test(`D-CF6-02: ${title} without reading it`, async () => {
     // arrange
-    const { resolveStrictMcp } =
-      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
     const resolution = emptyResolution();
     const deps = recordedMcpFiles({});
 
@@ -602,8 +567,6 @@ for (const { title, referenceFiles } of [
 }[]) {
   test(`D-CF6-02: skips ${title} silently and keeps the .mcp.json servers`, async () => {
     // arrange
-    const { resolveStrictMcp } =
-      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
     const resolution = emptyResolution();
     const deps = mcpFiles({
       "/plugins/alpha/.mcp.json": { contents: JSON.stringify({ local: { command: "node" } }) },
@@ -634,8 +597,6 @@ for (const { title, referenceFiles } of [
 
 test("D-CF6-01: reads an unwrapped string reference", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const pluginRoot = "/plugins/alpha";
   const resolution = emptyResolution();
 
@@ -709,8 +670,6 @@ const LINKED_SERVERS = JSON.stringify({ mcpServers: { linked: { command: "node" 
 
 test("MCPR-04: refuses a string reference whose link resolves outside the plugin root without reading it", async (testContext) => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const tree = await linkedPluginTree(testContext, async ({ pluginRoot, outsideRoot }) => {
     await writeFile(path.join(outsideRoot, "servers.json"), LINKED_SERVERS);
     await symlink(outsideRoot, path.join(pluginRoot, "linked"));
@@ -761,8 +720,6 @@ for (const { title, reference, makeLink } of [
 ] as const) {
   test(`MCPR-04: reads a string reference through ${title} at its target inside the plugin root`, async (testContext) => {
     // arrange
-    const { resolveStrictMcp } =
-      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
     const tree = await linkedPluginTree(testContext, async ({ pluginRoot }) => {
       await mkdir(path.join(pluginRoot, "config"));
       await writeFile(path.join(pluginRoot, "config", "real.json"), LINKED_SERVERS);
@@ -804,8 +761,6 @@ for (const { title, makeLink } of [
 ] as const) {
   test(`D-CF6-02: skips a string reference through ${title} silently`, async (testContext) => {
     // arrange
-    const { resolveStrictMcp } =
-      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
     const tree = await linkedPluginTree(testContext, ({ pluginRoot }) => makeLink(pluginRoot));
     const resolution = emptyResolution();
 
@@ -844,8 +799,6 @@ for (const { title, readFailure } of [
 ] as const) {
   test(`D-CF6-02: skips a string reference whose read rejects with ${title}`, async () => {
     // arrange
-    const { resolveStrictMcp } =
-      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
     const resolution = emptyResolution();
 
     // act
@@ -878,8 +831,6 @@ for (const { title, readFailure } of [
 
   test(`D-CF6-02: skips a .mcp.json whose read rejects with ${title} and keeps the manifest servers`, async () => {
     // arrange
-    const { resolveStrictMcp } =
-      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
     const resolution = emptyResolution();
 
     // act
@@ -918,8 +869,6 @@ for (const { title, failure } of [
 ] as const) {
   test(`D-CF6-02: rethrows ${title} from a string reference read`, async () => {
     // arrange
-    const { resolveStrictMcp } =
-      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
 
     // act
     const resolved = resolveStrictMcp(
@@ -948,8 +897,6 @@ for (const { title, failure } of [
 
   test(`D-CF6-02: rethrows ${title} from the .mcp.json stat`, async () => {
     // arrange
-    const { resolveStrictMcp } =
-      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
     const reads: string[] = [];
 
     // act
@@ -983,8 +930,6 @@ for (const { title, failure } of [
 
 test("D-CF6-02: skips a .mcp.json whose stat fails and keeps the manifest servers", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const reads: string[] = [];
 
@@ -1019,8 +964,6 @@ test("D-CF6-02: skips a .mcp.json whose stat fails and keeps the manifest server
 for (const documentText of ["{ not json", "5", "null", "[1]", '{"mcpServers": 5}'] as const) {
   test(`D-CF6-02: skips a .mcp.json holding ${documentText} and keeps the manifest servers`, async () => {
     // arrange
-    const { resolveStrictMcp } =
-      await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
     const resolution = emptyResolution();
 
     // act
@@ -1047,8 +990,6 @@ for (const documentText of ["{ not json", "5", "null", "[1]", '{"mcpServers": 5}
 
 test("D-CF6-02: drops a malformed server in .mcp.json and keeps its other server, with no note", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const deps = mcpFiles({
     "/plugins/alpha/.mcp.json": {
@@ -1074,8 +1015,6 @@ test("D-CF6-02: drops a malformed server in .mcp.json and keeps its other server
 
 test("D-CF6-02: a malformed server in a later file never replaces an earlier server of its name", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const deps = mcpFiles({
     "/plugins/alpha/.mcp.json": { contents: JSON.stringify({ x: { command: "mcpjson-x" } }) },
@@ -1107,8 +1046,6 @@ test("D-CF6-02: a malformed server in a later file never replaces an earlier ser
 
 test("D-CF6-02: skips a string reference whose path walk fails with ENOTDIR, without reading it", async (testContext) => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "mcp-resolution-notdir-"));
   testContext.after(() => rm(temporaryRoot, { recursive: true, force: true }));
   const pluginRoot = path.join(temporaryRoot, "plugin");
@@ -1140,8 +1077,6 @@ test("D-CF6-02: skips a string reference whose path walk fails with ENOTDIR, wit
 
 test("D-CF6-02: refuses a value written inline that is not a server map", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
@@ -1166,8 +1101,6 @@ test("D-CF6-02: refuses a value written inline that is not a server map", async 
 
 test("D-CF6-02: refuses a malformed server in a map that an array holds inline", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
@@ -1199,8 +1132,6 @@ test("D-CF6-02: refuses a malformed server in a map that an array holds inline",
 
 test("D-CF6-02: logs each file skip on the mcp debug channel", async (testContext) => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
   testContext.after(() => {
     if (previousDebug === undefined) {
@@ -1248,8 +1179,6 @@ test("D-CF6-02: logs each file skip on the mcp debug channel", async (testContex
 
 test("resolves valid inline entry MCP after only a stat of the absent .mcp.json", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const deps = recordedMcpFiles({});
 
@@ -1278,8 +1207,6 @@ test("resolves valid inline entry MCP after only a stat of the absent .mcp.json"
 
 test("treats fully absent strict MCP as empty", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
@@ -1294,8 +1221,6 @@ test("treats fully absent strict MCP as empty", async () => {
 
 test("ANAME-07: leaves a blocked server out and records it with its feature", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
@@ -1331,8 +1256,6 @@ test("ANAME-07: leaves a blocked server out and records it with its feature", as
 
 test("ANAME-07: records the mcpServers kind once for several blocked servers", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
@@ -1371,8 +1294,6 @@ test("ANAME-07: records the mcpServers kind once for several blocked servers", a
 
 test("ANAME-07: a malformed server adds a note and reports a structural defect", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
@@ -1407,8 +1328,6 @@ test("ANAME-07: a malformed server adds a note and reports a structural defect",
 
 test("ANAME-07: keeps a server named __proto__ as an own server", async () => {
   // arrange
-  const { resolveStrictMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
   const servers: unknown = JSON.parse('{"__proto__":{"command":"node"}}');
 

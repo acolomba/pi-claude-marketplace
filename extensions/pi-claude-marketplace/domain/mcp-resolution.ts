@@ -362,10 +362,9 @@ function recordMergedServers(merge: McpMerge): void {
  * Resolves a plugin's MCP servers as the ordered union of its sources
  * (D-CF6-01), and reports whether an inline declaration or a reference path
  * has a structural defect; a file source's defect is no such defect
- * (D-CF6-02). The
- * entry's `mcpServers` counts only when the plugin has no `plugin.json`
- * (`manifest` is `null`), because Claude Code then reads the entry as the
- * manifest.
+ * (D-CF6-02). The entry's `mcpServers` counts only when the plugin has no
+ * `plugin.json` (`manifest` is `null`), because Claude Code then reads the
+ * entry as the manifest.
  */
 export async function resolveStrictMcp(
   input: {
@@ -383,7 +382,7 @@ export async function resolveStrictMcp(
     pluginRoot: input.pluginRoot,
     resolution: input.resolution,
     dependencies,
-    servers: new Map(),
+    servers: new Map<string, MergedServer>(),
     bundle: false,
     dirty: false,
   };

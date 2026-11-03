@@ -63,6 +63,7 @@ const EFFORT_BY_THINKING_LEVEL = new Map<string, ClaudeEffort>([
 export class InvocationTooLargeError extends Error {
   readonly size: number;
   readonly limit: number;
+
   constructor(size: number) {
     super(
       "This skill, command or hook and the arguments filled into it add up to more than 4,000,000 characters. Use shorter arguments or fewer placeholders such as $ARGUMENTS.",
@@ -186,14 +187,14 @@ function replaceNamedArguments(
 
 function replaceIndexedArguments(body: string, state: SubstitutionState): string {
   return body.replaceAll(/\$ARGUMENTS\[(\d+)\]/g, (matched, index: string) => {
-    const word = state.words[Number.parseInt(index, 10)];
+    const word = state.words[Number(index)];
     return word === undefined ? LITERAL_DOLLAR + matched.slice(1) : substitute(state, word);
   });
 }
 
 function replacePositionalArguments(body: string, state: SubstitutionState): string {
   return body.replaceAll(/\$(\d+)(?!\w)/g, (matched, index: string) => {
-    const word = state.words[Number.parseInt(index, 10)];
+    const word = state.words[Number(index)];
     return word === undefined ? matched : substitute(state, word);
   });
 }

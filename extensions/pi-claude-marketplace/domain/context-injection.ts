@@ -43,6 +43,7 @@ export class ContextInjectionError extends Error {
   /** The pattern as written, such as `` !`git status` ``. */
   readonly pattern: string;
   readonly reason: ContextInjectionFailure;
+
   constructor(pattern: string, reason: ContextInjectionFailure, message: string) {
     super(message);
     this.name = "ContextInjectionError";

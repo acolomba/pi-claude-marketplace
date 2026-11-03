@@ -1,8 +1,7 @@
 // domain/components/hook-events.ts
 //
 // TOOL-02 bucket-A event closed-set + non-tool-event matcher target tables.
-
-import type { ClaudeHookEvent } from "../../shared/concerns/hooks.ts";
+//
 // This module is the source of truth `checkMatcherSupportability` reads at
 // parse time to trip TOOL-02 when a plugin's `hooks.json` declares hooks
 // under any non-bucket-A event key, or carries a non-tool matcher value
@@ -26,6 +25,8 @@ import type { ClaudeHookEvent } from "../../shared/concerns/hooks.ts";
 // name (`source` / `reason` / `trigger`) or a `null` sentinel for events
 // with no upstream matcher support, and (b) the closed set of Claude-side
 // matcher values that have a Pi peer-dep analog.
+
+import type { ClaudeHookEvent } from "../../shared/concerns/hooks.ts";
 
 /**
  * The supported Claude hook events (bucket A). A plugin declaring hooks

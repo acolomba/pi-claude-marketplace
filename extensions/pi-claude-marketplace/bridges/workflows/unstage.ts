@@ -58,6 +58,11 @@ async function unlinkIfPresent(target: string | undefined): Promise<boolean> {
   }
 }
 
+/**
+ * Removes the recorded workflow envelopes by name and reports which names were
+ * removed and which failed. Raises the first containment refusal after the
+ * loop has run to completion.
+ */
 export async function unstagePluginWorkflows(
   input: UnstageWorkflowsInput,
 ): Promise<UnstageWorkflowsResult> {

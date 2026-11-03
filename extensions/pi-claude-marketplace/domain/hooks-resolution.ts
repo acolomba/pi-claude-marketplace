@@ -163,9 +163,9 @@ async function elementDeclaresOtherHooks(
 /**
  * D-CF5-20: reports whether the marketplace entry or the manifest declares
  * hooks that only the merge Claude Code makes would load. That merge is
- * deferred, because it changes the install, enable, and cascade flows, which
- * another parallel phase owns. So the plugin reads as partially available
- * with `unsupported hooks` rather than drop those hooks silently. A
+ * deferred, because it changes the install, enable, and cascade flows. So
+ * the plugin reads as partially available with `unsupported hooks` rather
+ * than drop those hooks silently. A
  * marketplace entry `hooks` counts in any form. A manifest `hooks` counts
  * unless every path it names is the convention file (D-CF5-27).
  */

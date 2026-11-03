@@ -143,7 +143,7 @@ function augmentSkillDescription(
   // scalar, forming an invalid `\U...`-class escape that fails the PARSE-02
   // backstop; substituting first lets `emitSafeDoubleQuotedScalar` escape those
   // backslashes. The cap is applied pre-substitution (the WTU-02 listing budget
-  // measures the authored text), matching the prior whole-file ordering.
+  // measures the authored text).
   const effective = substituteClaudeVars(truncate1536(folded), vars);
 
   // NREG-01: a present, in-cap `description` with no `when_to_use` and no path
@@ -331,7 +331,7 @@ async function stageSkill(
   let content = source.content;
   const { parsed } = source;
 
-  // The parseable (gate-1 RETURN) arm keeps today's SK-3 name rewrite, then
+  // The parseable (gate-1 RETURN) arm applies the SK-3 name rewrite, then
   // layers the SKILL-02 / WTU-01 / WTU-02 augment arm on the parsed values;
   // the synthesized arm already emits the generated `name` + a placeholder
   // `description`, so it skips both. SK-4 substitution runs on both arms.

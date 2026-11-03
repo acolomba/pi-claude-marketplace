@@ -2,8 +2,7 @@
 //
 // Pure name validation (RN-2) and generated-name helpers (RN-1) per PRD
 // §6.5. THREE different rules per resource type, split into three explicit
-// functions (one shared helper that handled all three was a recurring bug
-// surface).
+// functions; a shared helper for all three would blur their differences.
 
 import { createHash } from "node:crypto";
 
@@ -512,6 +511,7 @@ function normalizePiSkillPart(value: string): string {
 export function generatedCommandName(plugin: string, source: string): string {
   assertSafeName(plugin);
 
+  // `split` always returns at least one element, so the tuple type holds.
   const segments = source.split("/") as [string, ...string[]];
 
   for (const seg of segments) {
@@ -580,7 +580,7 @@ export function generatedAgentName(
  * `commandNamespaceSeparator()`. That helper exists because command and skill
  * names BECOME filenames, and Windows cannot spell `:` in one. This name never
  * reaches the filesystem, so the colon is safe everywhere -- and a Windows dot
- * here would miss the agentType the script names just as the old flat form did.
+ * here would miss the agentType the script names.
  *
  * The complete source name is preserved without elision, exactly as
  * `generatedAgentName` preserves it, so bot and acme-bot stay distinct
