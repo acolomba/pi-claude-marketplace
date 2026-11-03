@@ -1,11 +1,12 @@
 ---
 milestone: component-features
-audited: 2026-11-02T11:55:00Z
+audited: 2026-11-03T06:00:00Z
+re_audit: "2026-11-03 after Phase 8; prior audit 2026-11-02"
 status: tech_debt
 scores:
-  requirements: 58/58
-  phases: 7/7
-  integration: 7/7
+  requirements: 62/62
+  phases: 8/8
+  integration: 6/6
   flows: 5/5
 gaps:
   requirements: []
@@ -37,15 +38,18 @@ tech_debt:
 nyquist:
   compliant_phases: [01, 02, 03, 04, 05, 06, 07]
   partial_phases: []
-  not_validated_phases: []
+  not_validated_phases: [08]
   missing_phases: []
   overall: compliant
 ---
 
 # Milestone component-features: Audit
 
-**Status: tech_debt.** All 58 requirements are satisfied, all 7 phases pass
+**Status: tech_debt.** All 62 requirements are satisfied, all 8 phases pass
 verification, cross-phase wiring is complete, and no end-to-end flow is broken.
+Phase 8 is a retroactive record of work merged after the first close; it has
+no separate validation or security file, and each of its items carries a
+scenario that fails without the change (DC-42..DC-45).
 The items under `tech_debt` are warnings and recorded follow-ups, not blockers.
 
 ## Phases
@@ -59,6 +63,7 @@ The items under `tech_debt` are warnings and recorded follow-ups, not blockers.
 | 5. Hooks | passed 5/5 | compliant | 0 open (T-05-33 fixed, T-05-34 accepted under D-LOC-01) |
 | 6. MCP Servers | passed 5/5 (SC4 by user override) | compliant | 0 open |
 | 7. Workflows | passed 5/5 | compliant | 0 open |
+| 8. Locality and Upstream Alignment | passed 4/4 | not run (retroactive) | not run (retroactive; locality reviewed in DC-41) |
 
 Phase 2's `02-VALIDATION.md` frontmatter said `nyquist_compliant: false`
 while its body recorded approval (6/6 covered, 0 gaps); the flag was corrected
@@ -75,31 +80,52 @@ in this audit.
 | HOOK-01..09 | 5 | passed | Complete, checked | satisfied |
 | MCP-01..08 | 6 | passed (MCP-07 by override) | Complete, checked | satisfied (MCP-07 accepted deviation) |
 | WFL-01..05 | 7 | passed | Complete, checked | satisfied |
+| LOC-01..04 | 8 | passed | Complete, checked | satisfied |
 
 No orphaned requirements.
 
 ## Integration
 
-The integration checker (2026-11-02, head 8cfb2b2) traced the seams no phase
-owned: the input and `tool_result` handler order in `index.ts`, every reader
-and writer of the project-install ledger (keys, `create`/`refresh` admission,
-fail-closed reads), agents with MCP and skill preloads, hooks with the MCP
-proxy, workflows with commands, and the shared cucumber harness. A cucumber dry
-run over all 1554 scenarios reported 0 undefined and 0 ambiguous steps. All
-seams are wired. Warnings W1-W6 are listed in the frontmatter.
+Re-checked 2026-11-03 at ab28834 by the integration checker, after the
+locality redesign removed the project-install ledger. Every seam no phase owns
+is wired:
+
+1. The `input` and `tool_result` handler order in `index.ts`: hooks first,
+   then the background autoupdate, skill aliases, command invocation (after the
+   alias rewrite), the skill-read fill (after PostToolUse hooks) and the command
+   tool.
+2. Project trust: every gate reads Pi's `ctx.isProjectTrusted()` (discovery,
+   hooks, skills, commands, aliases, `run_plugin_command`, skill-read fill,
+   autoapply on load and its command, background autoupdate). No code reads or
+   writes a ledger.
+3. Agents with MCP grants and skill preloads, on install and update.
+4. Hooks with the MCP proxy: the outer call fires no hooks, the nested call
+   fires them under the real tool name.
+5. Workflows with commands (D-CF7-05), and project workflows in
+   `.pi/workflows/saved/`.
+6. The shared cucumber harness: a dry run over 1539 scenarios reports 0
+   undefined and 0 ambiguous steps.
+
+Points to watch, not defects: hook trust refreshes at session start and
+resource discovery, so a mid-session trust change applies after a reload, as
+in Pi; whether the workflow engine reads an untrusted project's
+`.pi/workflows/saved/` is the engine's behavior, not this extension's.
 
 ## E2E flows
 
-All traced and covered by scenarios: typed alias to a filled command; the
-model running a command through `run_plugin_command`; a project install that
-records the ledger and routes hooks; an unnamed update that stays refused
-(D-CF2-16); an MCP tool call through the adapter with nested hooks.
+All traced and covered by passing scenarios (43/43 in the six feature files
+run, seed 34012): a typed alias to a filled command; the model running a
+command through `run_plugin_command`; a project install that routes hooks in a
+trusted project and stays inert in an untrusted one; a project install from a
+user-scope marketplace, which brings the marketplace into the project scope;
+an MCP tool call through the adapter with nested hooks.
 
 ## Gate
 
-Full `npm run check` at 2ba505a: exit 0, cucumber 1554/1554 (seed 82800),
-direct coverage 330 records. Later commits changed only docs and planning
-files.
+Full `npm run check` at ab28834: exit 0, cucumber 1539/1539 (seed 516814),
+direct coverage 327 records. The earlier gate at 2ba505a (1554 scenarios, 330
+records) predates the locality redesign, which removed the ledger scenarios and
+code.
 
 ## Follow-up (2026-11-02, user request)
 
@@ -123,3 +149,11 @@ written every server its agents are granted. W4: Pi builds a new extension
 runtime, and with it a new tool registry, for every `session_start` (new,
 resume, fork, reload), so no tool from an earlier session survives into the
 next.
+
+## Re-audit (2026-11-03)
+
+After the first close the milestone was reopened for the user's decisions
+(DC-41..DC-45), recorded as Phase 8. Phases 2, 3, 5 and 7 were re-verified
+against the changed code and still pass; Phase 3 carries three overrides for
+the ledger plans that D-LOC-01 reversed. Phase 8 passes 4/4. A typed-skill
+path-variable scenario replaced the one removed with the ledger.
