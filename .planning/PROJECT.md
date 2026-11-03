@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Previous Milestone: component-features -- Component Behavioral Tests (branch: claude/quirky-planck-hhm592, started 2026-10-31, first closed 2026-11-02, reopened, completed 2026-11-03, not yet merged, no npm release)
+## Previous Milestone: component-features -- Component Behavioral Tests (branch: claude/quirky-planck-hhm592, started 2026-10-31, first closed 2026-11-02, reopened, completed 2026-11-03, PR [#295](https://github.com/acolomba/pi-claude-marketplace/pull/295), not yet merged, no npm release yet)
 
 **Goal:** The cucumber suite checks every bridged component kind -- skills,
 commands, agents, hooks, MCP servers, workflows -- as Pi and its companion

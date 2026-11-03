@@ -4,7 +4,7 @@
 
 ## Milestone: component-features -- Component Behavioral Tests
 
-**Completed:** 2026-11-03 on `claude/quirky-planck-hhm592` (first closed 2026-11-02, reopened the same day; no PR yet, no npm release)
+**Completed:** 2026-11-03 on `claude/quirky-planck-hhm592` (first closed 2026-11-02, reopened the same day; PR [#295](https://github.com/acolomba/pi-claude-marketplace/pull/295), no npm release yet)
 **Phases:** 8 | **Plans:** 65 | **Tasks:** 137 | **Requirements:** 62/62 | **Audit:** `tech_debt`, no blockers (integration 6/6, flows 5/5)
 
 ### What Was Built

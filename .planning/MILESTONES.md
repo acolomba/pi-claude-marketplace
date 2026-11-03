@@ -2,7 +2,7 @@
 
 ## component-features Component Behavioral Tests (Shipped: 2026-11-03)
 
-**Branch:** `claude/quirky-planck-hhm592` (no PR yet, no npm release). First closed 2026-11-02, reopened the same day for the user's decisions, closed again 2026-11-03.
+**Branch:** `claude/quirky-planck-hhm592` (PR [#295](https://github.com/acolomba/pi-claude-marketplace/pull/295), no npm release yet). First closed 2026-11-02, reopened the same day for the user's decisions, closed again 2026-11-03.
 
 **Phases completed:** 8 phases, 65 plans, 137 tasks
 
