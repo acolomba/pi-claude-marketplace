@@ -15,6 +15,7 @@ Before editing any file, read it first. Before modifying a function, trace its c
 - NEVER rebase, never rewrite history. Update branches by merging.
 - When writing PR descriptions, use the `simple-english` skill in Plain mode and the `humanizer` skill, if available.
 - Always use `--squash` when merging PRs (`gh pr merge --squash`). The repository does not allow merge commits or rebase merges.
+- Before merging a PR, SonarCloud must report zero new issues on it. A passed quality gate is not enough: fix or resolve every new issue first.
 - Before merging a PR that ships a GSD milestone, audit and close the milestone (`/gsd-audit-milestone`, then `/gsd-complete-milestone`) on the PR branch, so the archive lands in the same squash.
 
 ### GSD records
