@@ -229,6 +229,7 @@ function readBack(text: string): { frontmatter: unknown; body: string } | undefi
   try {
     return parseFrontmatter(text);
   } catch {
+    // Pi's parser refusing the text is the answer: the caller reports it as a mismatch.
     return undefined;
   }
 }

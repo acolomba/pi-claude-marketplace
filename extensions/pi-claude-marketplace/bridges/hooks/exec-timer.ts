@@ -34,9 +34,9 @@ const SIGKILL_GRACE_SECONDS = 5;
  * the later `+ SIGKILL_GRACE_SECONDS` leg representable too, so neither timer
  * can overflow.
  *
- * Reachable from ordinary config: a handler written against the bridge's old
- * millisecond reading (`timeout: 3600000` for an hour) lands far above this
- * once the value is read as seconds.
+ * Reachable from ordinary config: a handler that declares milliseconds
+ * (`timeout: 3600000` for an hour) lands far above this once the value is read
+ * as seconds.
  */
 const MAX_TIMEOUT_SECONDS = Math.floor(2_147_483_647 / MS_PER_SECOND) - SIGKILL_GRACE_SECONDS;
 
@@ -60,7 +60,7 @@ export interface ChildLike {
  *
  * NOT `child.killed`, which Node sets when a signal is successfully SENT and
  * never clears -- a child that traps SIGTERM and keeps running still reports
- * `killed === true`. Guarding the escalation on it made the SIGKILL leg
+ * `killed === true`. Guarding the escalation on it would make the SIGKILL leg
  * unreachable, because the SIGTERM leg sets it first.
  *
  * Absent fields read as "still alive" so a structural caller that supplies
@@ -135,7 +135,7 @@ function normalizeSeconds(timeoutSeconds: number, label: string): number {
  * Either leg firing emits a `hookDebugLog` line carrying `label` and the
  * elapsed budget. Without it a timed-out hook reaches the wire protocol as a
  * bare signal-kill, indistinguishable from an OOM kill or a Ctrl-C -- and the
- * per-event defaults mean the ladder now fires on handlers that declared no
+ * per-event defaults mean the ladder fires on handlers that declared no
  * timeout at all.
  */
 export function installTimerLadder(

@@ -32,6 +32,11 @@ async function unlinkIfPresent(target: string): Promise<boolean> {
   }
 }
 
+/**
+ * Removes each previously staged command file from the prompts target dir and
+ * returns the names whose file was present. A name that escapes the dir throws
+ * before anything later in the list is removed.
+ */
 export async function unstagePluginCommands(
   input: UnstageCommandsInput,
 ): Promise<UnstageCommandsResult> {

@@ -9,6 +9,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { discoverPluginCommands } from "../../../extensions/pi-claude-marketplace/bridges/commands/discover.ts";
+import { isErrnoException } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type {
   CommandMapEntry,
@@ -331,14 +332,14 @@ test("D-CF3-05 propagates a non-tolerated error when a declared path cannot be c
   await assert.rejects(
     () => discoverPluginCommands({ pluginName: "acme", resolved }),
     (error: unknown) => {
-      assert.ok(error instanceof Error);
+      assert.ok(isErrnoException(error));
       assert.deepStrictEqual(
         {
           name: error.name,
           message: error.message,
-          code: (error as NodeJS.ErrnoException).code,
-          path: (error as NodeJS.ErrnoException).path,
-          syscall: (error as NodeJS.ErrnoException).syscall,
+          code: error.code,
+          path: error.path,
+          syscall: error.syscall,
         },
         {
           name: "Error",
@@ -672,14 +673,14 @@ test("rejects an unreadable declared command root", async (t) => {
   await assert.rejects(
     () => discoverPluginCommands({ pluginName: "acme", resolved }),
     (error: unknown) => {
-      assert.ok(error instanceof Error);
+      assert.ok(isErrnoException(error));
       assert.deepStrictEqual(
         {
           name: error.name,
           message: error.message,
-          code: (error as NodeJS.ErrnoException).code,
-          path: (error as NodeJS.ErrnoException).path,
-          syscall: (error as NodeJS.ErrnoException).syscall,
+          code: error.code,
+          path: error.path,
+          syscall: error.syscall,
         },
         {
           name: "Error",
@@ -732,14 +733,14 @@ test("propagates a non-tolerated error when a discovered subdirectory becomes a 
   await assert.rejects(
     () => discoverPluginCommands({ pluginName: "acme", resolved }),
     (error: unknown) => {
-      assert.ok(error instanceof Error);
+      assert.ok(isErrnoException(error));
       assert.deepStrictEqual(
         {
           name: error.name,
           message: error.message,
-          code: (error as NodeJS.ErrnoException).code,
-          path: (error as NodeJS.ErrnoException).path,
-          syscall: (error as NodeJS.ErrnoException).syscall,
+          code: error.code,
+          path: error.path,
+          syscall: error.syscall,
         },
         {
           name: "Error",
@@ -793,14 +794,14 @@ test("propagates a non-tolerated error when a discovered file gains a looping pa
   await assert.rejects(
     () => discoverPluginCommands({ pluginName: "acme", resolved }),
     (error: unknown) => {
-      assert.ok(error instanceof Error);
+      assert.ok(isErrnoException(error));
       assert.deepStrictEqual(
         {
           name: error.name,
           message: error.message,
-          code: (error as NodeJS.ErrnoException).code,
-          path: (error as NodeJS.ErrnoException).path,
-          syscall: (error as NodeJS.ErrnoException).syscall,
+          code: error.code,
+          path: error.path,
+          syscall: error.syscall,
         },
         {
           name: "Error",

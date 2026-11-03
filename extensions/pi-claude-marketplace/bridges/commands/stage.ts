@@ -125,8 +125,8 @@ function dropWorkflowNamedCommands(
  * Stage commands into a fresh `<commandsStagingDir>/<uuid>/` tree. Builds
  * each source `.md` into its staged text through `buildStagedCommand`
  * (substitution, reference rewrite, rebuilt frontmatter with the D-CF3-08
- * description) and writes it to a staging file. Per-file rename to the target dir is deferred to
- * `commitPreparedCommands`.
+ * description) and writes it to a staging file. Per-file rename to the target
+ * dir is deferred to `commitPreparedCommands`.
  *
  * The result's warnings are the discover warnings, then one discovery warning
  * per command a workflow's name displaced, then one per command whose source
@@ -296,7 +296,7 @@ export async function commitPreparedCommands(
       // eslint-disable-next-line no-await-in-loop -- the first containment or unlink failure stops later unlinks
       await unlink(target);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      if (!isErrnoException(err) || err.code !== "ENOENT") {
         throw err;
       }
     }

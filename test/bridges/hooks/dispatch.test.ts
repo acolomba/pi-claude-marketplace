@@ -1171,7 +1171,7 @@ describe("composite dispatch closure partitions", () => {
     { toolName: "bash", fires: false },
     { toolName: "apply_patch", fires: false },
   ]) {
-    test(`${fires ? "dispatches" : "does not dispatch"} toolName "${toolName}" for the pipe-OR matcher "Write|Edit|apply_patch" (#217)`, async () => {
+    test(`${fires ? "dispatches" : "does not dispatch"} toolName "${toolName}" for the pipe-OR matcher "Write|Edit|apply_patch"`, async () => {
       // arrange
       const runtime = createHooksRuntime();
       runtime.advanceGeneration();
@@ -1271,7 +1271,7 @@ describe("composite dispatch closure partitions", () => {
     });
   }
 
-  test("does not dispatch any tool_call when every pipe-OR alternative is discarded (#217)", async () => {
+  test("does not dispatch any tool_call when every pipe-OR alternative is discarded", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();

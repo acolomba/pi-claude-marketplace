@@ -81,19 +81,19 @@ describe("onFailureBlock with onFailure block", () => {
   ] as const) {
     test(`blocks with upstream's failed message for ${name}`, () => {
       // act
-      const result = onFailureBlock(entry, facts, NOOP);
+      const block = onFailureBlock(entry, facts, NOOP);
 
       // assert
-      assert.deepStrictEqual(result, { kind: "block", reason: FAILED_REASON });
+      assert.deepStrictEqual(block, { kind: "block", reason: FAILED_REASON });
     });
   }
 
   test("says timed out for a hook its timeout killed", () => {
     // act
-    const result = onFailureBlock(entry, { ...CLEAN_EXIT, timedOut: true, exitCode: null }, NOOP);
+    const block = onFailureBlock(entry, { ...CLEAN_EXIT, timedOut: true, exitCode: null }, NOOP);
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: timed out; blocking because onFailure is "block"\nboom`,
     });
@@ -101,10 +101,10 @@ describe("onFailureBlock with onFailure block", () => {
 
   test("ends the message at the reason when the hook printed no stderr", () => {
     // act
-    const result = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1, stderr: " \n" }, NOOP);
+    const block = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1, stderr: " \n" }, NOOP);
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: failed; blocking because onFailure is "block"`,
     });
@@ -115,10 +115,10 @@ describe("onFailureBlock with onFailure block", () => {
     const commandless = { ...entry, handlerDecl: { type: "command", onFailure: "block" } };
 
     // act
-    const result = onFailureBlock(commandless, { ...CLEAN_EXIT, exitCode: 1, stderr: "" }, NOOP);
+    const block = onFailureBlock(commandless, { ...CLEAN_EXIT, exitCode: 1, stderr: "" }, NOOP);
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(block, {
       kind: "block",
       reason: '[]: failed; blocking because onFailure is "block"',
     });
@@ -139,10 +139,10 @@ describe("onFailureBlock with onFailure block", () => {
   ] as const) {
     test(`leaves ${name} to the wire protocol`, () => {
       // act
-      const result = onFailureBlock(entry, facts, NOOP);
+      const block = onFailureBlock(entry, facts, NOOP);
 
       // assert
-      assert.strictEqual(result, undefined);
+      assert.strictEqual(block, undefined);
     });
   }
 
@@ -152,10 +152,10 @@ describe("onFailureBlock with onFailure block", () => {
     const deny = { kind: "block", reason: "no echo" } satisfies HookExecResult;
 
     // act
-    const result = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, deny);
+    const block = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, deny);
 
     // assert
-    assert.strictEqual(result, undefined);
+    assert.strictEqual(block, undefined);
     assert.deepStrictEqual(lines, [
       "[hooks] on-failure: the JSON block of a failed hook applies (guard-plugin/UserPromptSubmit)",
     ]);
@@ -166,10 +166,10 @@ describe("onFailureBlock with onFailure block", () => {
     const deny = { kind: "block", reason: "no echo" } satisfies HookExecResult;
 
     // act
-    const result = onFailureBlock(entry, { ...CLEAN_EXIT, timedOut: true, exitCode: 1 }, deny);
+    const block = onFailureBlock(entry, { ...CLEAN_EXIT, timedOut: true, exitCode: 1 }, deny);
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: timed out; blocking because onFailure is "block"\nboom`,
     });
@@ -180,10 +180,10 @@ describe("onFailureBlock with onFailure block", () => {
     const allow = { kind: "mutate", permissionDecision: "allow" } satisfies HookExecResult;
 
     // act
-    const result = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, allow);
+    const block = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, allow);
 
     // assert
-    assert.deepStrictEqual(result, { kind: "block", reason: FAILED_REASON });
+    assert.deepStrictEqual(block, { kind: "block", reason: FAILED_REASON });
   });
 });
 
@@ -195,10 +195,10 @@ describe("onFailureBlock without onFailure block", () => {
   ] as const) {
     test(`changes nothing for a failing hook with ${name}`, () => {
       // act
-      const result = onFailureBlock(guardEntry(handler), { ...CLEAN_EXIT, exitCode: 1 }, NOOP);
+      const block = onFailureBlock(guardEntry(handler), { ...CLEAN_EXIT, exitCode: 1 }, NOOP);
 
       // assert
-      assert.strictEqual(result, undefined);
+      assert.strictEqual(block, undefined);
     });
   }
 
@@ -226,10 +226,10 @@ describe("onFailureBlock without onFailure block", () => {
       const lines = observeDebug(t);
 
       // act
-      const result = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, NOOP);
+      const block = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, NOOP);
 
       // assert
-      assert.strictEqual(result, undefined);
+      assert.strictEqual(block, undefined);
       assert.deepStrictEqual(lines, [debugLine]);
     });
   }
