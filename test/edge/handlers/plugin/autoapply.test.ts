@@ -9,6 +9,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
+import { when } from "strong-mock";
+
 import { makeAutoapplyHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/autoapply.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
@@ -24,6 +26,9 @@ test("AAP-04: the bare form shows the effective value and every config file", as
     value: cwd,
     reads: 1,
   });
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
+    .times(1);
 
   // act
   await makeAutoapplyHandler()("", ctx, runWithNothingLoaded());
@@ -50,6 +55,9 @@ test("AAP-04: a scope and layer filter narrow the bare form", async (t) => {
     value: cwd,
     reads: 1,
   });
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
+    .times(1);
 
   // act
   await makeAutoapplyHandler()("--local --scope project", ctx, runWithNothingLoaded());
@@ -78,6 +86,9 @@ for (const { args, scope, local, value } of [
       value: cwd,
       reads: 1,
     });
+    when(() => ctx.isProjectTrusted())
+      .thenReturn(true)
+      .times(1);
 
     // act
     await makeAutoapplyHandler()(args, ctx, runWithNothingLoaded());

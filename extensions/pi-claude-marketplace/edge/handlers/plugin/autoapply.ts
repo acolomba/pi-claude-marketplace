@@ -54,6 +54,7 @@ export function makeAutoapplyHandler(): SubcommandHandler {
         ctx,
         run,
         cwd: ctx.cwd,
+        projectTrusted: ctx.isProjectTrusted(),
         ...(parsed.scope !== undefined && { scope: parsed.scope }),
         ...(localFlag.local && { local: true }),
       };

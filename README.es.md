@@ -195,7 +195,7 @@ Esto pone la clave de primer nivel `autoapply` de una configuración en `true`. 
 }
 ```
 
-El valor predeterminado es `false`. Cuando `autoapply` está activada, la carga ejecuta `/claude:plugin apply` en los dos ámbitos antes de que Pi busque habilidades y prompts. Aplica el ámbito del proyecto solo cuando Pi confía en el proyecto. Así, los complementos que instala están listos en la misma sesión. La carga puede clonar repositorios desde la red, como hace `apply`. Un cambio que falla aparece como una fila fallida y sigue en `pending`. La carga siguiente lo intenta otra vez.
+El valor predeterminado es `false`. Cuando `autoapply` está activada, la carga ejecuta `/claude:plugin apply` en los dos ámbitos antes de que Pi busque habilidades y prompts. Aplica el ámbito del proyecto solo cuando Pi confía en el proyecto, e ignora la clave `autoapply` de un proyecto en el que Pi no confía. Así, los complementos que instala están listos en la misma sesión. La carga puede clonar repositorios desde la red, como hace `apply`. Un cambio que falla aparece como una fila fallida y sigue en `pending`. La carga siguiente lo intenta otra vez.
 
 Cualquier configuración puede fijar `autoapply`. Gana la configuración más específica que la fija, en este orden: la configuración local del proyecto, la configuración base del proyecto, la configuración local del usuario y la configuración base del usuario. Si una configuración no es válida, por ejemplo porque `autoapply` no es `true` ni `false`, la carga no aplica nada e informa de esa configuración.
 

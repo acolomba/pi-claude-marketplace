@@ -55,7 +55,7 @@ test("AAP-04: show with no config that sets autoapply shows the default and the 
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await showAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd });
+  await showAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd, projectTrusted: true });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -74,7 +74,7 @@ test("AAP-04: show names the most specific file that sets autoapply and every fi
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await showAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd });
+  await showAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd, projectTrusted: true });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -85,6 +85,31 @@ test("AAP-04: show names the most specific file that sets autoapply and every fi
         "claude-plugins.local.json [user]: off\n" +
         "claude-plugins.json [project]: not set\n" +
         "claude-plugins.local.json [project]: on",
+      severity: "info",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("D-LOC-01: in a project Pi does not trust, show leaves the project's configs out of the value in effect", async (t) => {
+  // arrange
+  const tree = await createTree(t, "untrusted");
+  await writeUnder(tree.user.baseConfigJsonPath, JSON.stringify({ autoapply: false }));
+  await writeUnder(tree.project.baseConfigJsonPath, JSON.stringify({ autoapply: true }));
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await showAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd, projectTrusted: false });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Autoapply: off (claude-plugins.json [user])\n\n" +
+        "claude-plugins.json [user]: off\n" +
+        "claude-plugins.local.json [user]: not set\n" +
+        "claude-plugins.json [project]: on\n" +
+        "claude-plugins.local.json [project]: not set",
       severity: "info",
     },
   ]);
@@ -116,7 +141,13 @@ for (const { name, filter, lines } of [
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    await showAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd, ...filter });
+    await showAutoapply({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd: tree.cwd,
+      projectTrusted: true,
+      ...filter,
+    });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -144,7 +175,13 @@ test("AAP-04 / D-03: show with an invalid config reports it as the load does and
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await showAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd, scope: "project" });
+  await showAutoapply({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: tree.cwd,
+    projectTrusted: true,
+    scope: "project",
+  });
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: INVALID_USER_BASE, severity: "error" }]);
@@ -157,7 +194,13 @@ test("AAP-04: set with no scope or layer writes the user base config and shows i
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await setAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd, enabled: true });
+  await setAutoapply({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: tree.cwd,
+    projectTrusted: true,
+    enabled: true,
+  });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -190,6 +233,7 @@ test("AAP-04: set into the project local config shows the value a more specific 
     ctx,
     run: runWithNothingLoaded(),
     cwd: tree.cwd,
+    projectTrusted: true,
     scope: "project",
     local: true,
     enabled: false,
@@ -240,6 +284,7 @@ test("AAP-04 / MIG-01: set into an absent base config first captures the scope's
     ctx,
     run: runWithNothingLoaded(),
     cwd: tree.cwd,
+    projectTrusted: true,
     scope: "project",
     enabled: true,
   });
@@ -262,7 +307,13 @@ test("AAP-04 / D-03: set refuses to write an invalid target config and reports i
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await setAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd, enabled: true });
+  await setAutoapply({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: tree.cwd,
+    projectTrusted: true,
+    enabled: true,
+  });
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: INVALID_USER_BASE, severity: "error" }]);
@@ -281,6 +332,7 @@ test("AAP-04 / D-03: set writes nothing when another config is invalid and repor
     ctx,
     run: runWithNothingLoaded(),
     cwd: tree.cwd,
+    projectTrusted: true,
     scope: "project",
     enabled: true,
   });
@@ -302,6 +354,7 @@ test("AAP-04 / MIG-01: set into an absent base config beside an invalid local co
     ctx,
     run: runWithNothingLoaded(),
     cwd: tree.cwd,
+    projectTrusted: true,
     scope: "project",
     enabled: true,
   });
@@ -344,7 +397,13 @@ for (const { name, bytes, reason, cause } of [
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    await setAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd, enabled: true });
+    await setAutoapply({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd: tree.cwd,
+      projectTrusted: true,
+      enabled: true,
+    });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -373,6 +432,7 @@ test("AAP-04: set into a local config reads no state, so an unreadable state.jso
     ctx,
     run: runWithNothingLoaded(),
     cwd: tree.cwd,
+    projectTrusted: true,
     local: true,
     enabled: true,
   });
@@ -402,7 +462,13 @@ test("AAP-04: set while another process holds the scope's state lock fails as lo
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await setAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd, enabled: true });
+  await setAutoapply({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: tree.cwd,
+    projectTrusted: true,
+    enabled: true,
+  });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -435,6 +501,7 @@ test("AAP-04: set whose scope root cannot be created fails with its closed-set r
     ctx,
     run: runWithNothingLoaded(),
     cwd: tree.cwd,
+    projectTrusted: true,
     scope: "project",
     enabled: true,
   });

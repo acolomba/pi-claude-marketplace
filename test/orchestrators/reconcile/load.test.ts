@@ -631,9 +631,47 @@ test("AAP-02 / D-05: a project config that turns autoapply on hands the load to 
   verifyBoundary();
 });
 
-test("D-LOC-01: in a project Pi does not trust, an autoapply load applies the user scope and prints the project's pending block", async (t) => {
+test("D-LOC-01: in a project Pi does not trust, a user config's autoapply applies the user scope and prints the project's pending block", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "autoapply-untrusted");
+  await seedInstalled(scope, scope.project, {}, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaringAutoapply(scope.marketplaceRoot, { "hello@mp": {} }, false),
+  );
+  await writeUnder(scope.user.baseConfigJsonPath, JSON.stringify({ autoapply: true }));
+  const before = await scopeFiles(scope.project);
+  const { loadReconcile: autoLoad, applied } = recordingLoad();
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await autoLoad({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: scope.cwd,
+    projectTrusted: false,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    applied.map((opts) => opts.scope),
+    ["user"],
+  );
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project]\n  ● hello (will install)\n\nReconcile pending: 1 success" + APPLY_TRAILER,
+    },
+  ]);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  verifyBoundary();
+});
+
+test("D-LOC-01: in a project Pi does not trust, the project config's autoapply applies nothing", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "autoapply-untrusted-project");
   await seedInstalled(scope, scope.project, {}, ["hello"]);
   await writeUnder(
     scope.project.baseConfigJsonPath,
@@ -654,10 +692,7 @@ test("D-LOC-01: in a project Pi does not trust, an autoapply load applies the us
   });
 
   // assert
-  assert.deepStrictEqual(
-    applied.map((opts) => opts.scope),
-    ["user"],
-  );
+  assert.deepStrictEqual(applied, []);
   assert.deepStrictEqual(notifications, [
     {
       message:

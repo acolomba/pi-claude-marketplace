@@ -197,7 +197,7 @@ This sets the top-level `autoapply` key of a config to `true`. Like `enable`, it
 }
 ```
 
-The default is `false`. When `autoapply` is on, the load runs `/claude:plugin apply` for both scopes before Pi looks for skills and prompts. It applies the project scope only when Pi trusts the project. So the plugins that it installs are ready in the same session. The load can clone repositories from the network, as `apply` does. A failed change shows as a failed row and stays in `pending`. The next load tries it again.
+The default is `false`. When `autoapply` is on, the load runs `/claude:plugin apply` for both scopes before Pi looks for skills and prompts. It applies the project scope only when Pi trusts the project, and it ignores the `autoapply` key of a project that Pi does not trust. So the plugins that it installs are ready in the same session. The load can clone repositories from the network, as `apply` does. A failed change shows as a failed row and stays in `pending`. The next load tries it again.
 
 Any config can set `autoapply`. The most specific config that sets it wins, in this order: the project local config, the project base config, the user local config, and the user base config. If a config is not valid, for example because `autoapply` is not `true` or `false`, the load does not apply anything and reports the config.
 

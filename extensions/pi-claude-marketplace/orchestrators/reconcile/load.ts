@@ -92,17 +92,23 @@ const SCOPES: readonly Scope[] = ["project", "user"];
 
 /**
  * AAP-02 / D-LOC-01: runs the apply step when the configs turn autoapply on,
- * for both scopes in a project Pi trusts and for the user scope otherwise, and
- * returns the scopes the read-only pass still covers: none after an apply step
- * of both scopes, the project scope after one of the user scope, and both
- * scopes when autoapply is off or the apply step threw (AAP-03).
+ * for both scopes in a project Pi trusts and for the user scope otherwise.
+ * Only a trusted project's own configs count, so an untrusted project cannot
+ * turn on an apply of the user scope. Returns the scopes the read-only pass
+ * still covers: none after an apply step of both scopes, the project scope
+ * after one of the user scope, and both scopes when autoapply is off or the
+ * apply step threw (AAP-03).
  */
 async function autoapplyScopes(
   applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
   opts: LoadReconcileOptions,
 ): Promise<readonly Scope[]> {
+  const files = await loadAutoapplyFiles(
+    locationsFor("project", opts.cwd),
+    locationsFor("user", opts.cwd),
+  );
   const autoapply = effectiveAutoapply(
-    await loadAutoapplyFiles(locationsFor("project", opts.cwd), locationsFor("user", opts.cwd)),
+    opts.projectTrusted ? files : files.filter((file) => file.scope === "user"),
   );
   const enabled = autoapply.status === "valid" && autoapply.enabled;
   if (enabled) {
