@@ -484,7 +484,8 @@ export interface GeneratedProvenanceFields {
  * (only when tools is absent and disallowed names mapped, #179), thinking,
  * skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
- * advertise, async (only when set, D-CF4-05), then the `provenance` mapping (generatedBy, sourcePlugin, sourceAgent,
+ * advertise, async (only when set; the converter always sets it, D-CF4-05,
+ * D-CF6-10), then the `provenance` mapping (generatedBy, sourcePlugin, sourceAgent,
  * sourcePath, originalModel [only when defined], droppedFields,
  * droppedTools, warnings -- each list field inline `[]` when empty or a
  * `    - item` block when non-empty).
