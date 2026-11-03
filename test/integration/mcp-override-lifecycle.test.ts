@@ -1,3 +1,10 @@
+// The user override under a plugin server's key survives install and
+// uninstall through the real operations: install keeps it in the plugin
+// entry's marker, and uninstall writes it back with each of its carried fields
+// taking the value the entry holds at that time (AFILE-06, AFILE-01). A user
+// who disables the server in the adapter writes its key,
+// `plugin_hello_srv_` (ANAME-01).
+
 import assert from "node:assert/strict";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -22,13 +29,6 @@ import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { makeCtx, seedMcpPlugin, type NotifyRecord } from "./mcp-plugin-seed.ts";
 
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
-
-// The user override under a plugin server's key survives install and
-// uninstall through the real operations: install keeps it in the plugin
-// entry's marker, and uninstall writes it back with each of its carried fields
-// taking the value the entry holds at that time (AFILE-06, AFILE-01). A user
-// who disables the server in the adapter writes its key,
-// `plugin_hello_srv_` (ANAME-01).
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
@@ -81,6 +81,7 @@ test("AFILE-06: a project install keeps the user's override in its entry and uni
       completionCache,
     )({ ...uninstalled.session, ...request });
     const uninstalledBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+    const legacyMcpJsonExists = await pathExists(path.join(cwd, ".pi", "mcp.json"));
 
     // assert
     assert.deepStrictEqual(JSON.parse(installedText), {
@@ -106,7 +107,7 @@ test("AFILE-06: a project install keeps the user's override in its entry and uni
     });
     assert.strictEqual(installedText.split("stub-secret").length - 1, 1);
     assert.strictEqual(uninstalledBytes, overrideBytes);
-    assert.strictEqual(await pathExists(path.join(cwd, ".pi", "mcp.json")), false);
+    assert.strictEqual(legacyMcpJsonExists, false);
   });
 });
 
@@ -185,6 +186,10 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
     await uninstall({ ...userUninstall.session, ...atUser });
     await install({ ...userInstallAgain.session, ...atUser });
     const userFinal: unknown = JSON.parse(await readFile(user.mcpAdapterJsonPath, "utf8"));
+    const legacyMcpJsonExists = [
+      await pathExists(path.join(cwd, ".pi", "mcp.json")),
+      await pathExists(path.join(agentDir, "mcp.json")),
+    ];
 
     // assert
     const projectEnv = {
@@ -303,13 +308,7 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
         },
       },
     });
-    assert.deepStrictEqual(
-      [
-        await pathExists(path.join(cwd, ".pi", "mcp.json")),
-        await pathExists(path.join(agentDir, "mcp.json")),
-      ],
-      [false, false],
-    );
+    assert.deepStrictEqual(legacyMcpJsonExists, [false, false]);
   });
 });
 

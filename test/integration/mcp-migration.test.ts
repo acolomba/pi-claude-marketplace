@@ -522,6 +522,15 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
 
     // act
     const notifications = await reload(cwd);
+    const info = makeCtx();
+    await getPluginInfo({
+      ...info.session,
+      mcpStatus: noStatusSnapshot(),
+      marketplace: "mp",
+      plugin: "hello",
+      scope: "project",
+      cwd,
+    });
 
     // assert
     assert.deepStrictEqual(await adapterKeys(cwd), ["plugin_hello_srv_"]);
@@ -551,15 +560,6 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
       },
       APPLY_EMPTY_NOTICE,
     ]);
-    const info = makeCtx();
-    await getPluginInfo({
-      ...info.session,
-      mcpStatus: noStatusSnapshot(),
-      marketplace: "mp",
-      plugin: "hello",
-      scope: "project",
-      cwd,
-    });
     assert.ok(
       info.notifications.some((entry) =>
         entry.message.includes("plugin:hello:live (unsupported ws)"),
@@ -590,6 +590,11 @@ test("AMIG-01: a plugin whose MCP config is malformed has all its old entries re
 
     // act
     const notifications = await reload(cwd);
+    const fresh = makeCtx();
+    await createInstallOperation(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    )({ ...fresh.session, scope: "user", cwd, marketplace: "mp", plugin: "hello" });
 
     // assert
     assert.deepStrictEqual(
@@ -615,11 +620,6 @@ test("AMIG-01: a plugin whose MCP config is malformed has all its old entries re
       },
       APPLY_EMPTY_NOTICE,
     ]);
-    const fresh = makeCtx();
-    await createInstallOperation(
-      createHooksRouting(createHooksRuntime(), { readHooksJson }),
-      createCompletionCache(),
-    )({ ...fresh.session, scope: "user", cwd, marketplace: "mp", plugin: "hello" });
     assert.ok(fresh.notifications.some((entry) => entry.message.includes("{malformed mcp}")));
     assert.strictEqual(
       (await loadState(locationsFor("user", cwd).extensionRoot)).marketplaces.mp?.plugins.hello,

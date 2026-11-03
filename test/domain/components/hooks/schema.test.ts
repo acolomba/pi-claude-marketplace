@@ -167,12 +167,12 @@ function walkSchemaForStrictAdditionalProperties(schema: unknown, path: string[]
     return offenders;
   }
 
-  const obj = schema as Record<string, unknown>;
-  if (obj.additionalProperties === false) {
+  const properties = schema as Record<string, unknown>;
+  if (properties.additionalProperties === false) {
     offenders.push(path.length === 0 ? "<root>" : path.join("."));
   }
 
-  for (const [key, child] of Object.entries(obj)) {
+  for (const [key, child] of Object.entries(properties)) {
     if (child === null || typeof child !== "object") {
       continue;
     }
@@ -184,7 +184,13 @@ function walkSchemaForStrictAdditionalProperties(schema: unknown, path: string[]
 }
 
 test("HOOK-03: the live hook validator schema carries NO `additionalProperties: false` at any nesting level", () => {
-  const offenders = walkSchemaForStrictAdditionalProperties(HOOKS_VALIDATOR.Type(), []);
+  // arrange
+  const schema = HOOKS_VALIDATOR.Type();
+
+  // act
+  const offenders = walkSchemaForStrictAdditionalProperties(schema, []);
+
+  // assert
   assert.deepStrictEqual(
     offenders,
     [],

@@ -15,10 +15,9 @@
 // bridge's stdout parser fold lands in the pending buffer, and the
 // before_agent_start handler then drains it into a context message.
 //
-// Pins the cross-event plumbing the hooks bridge was missing:
-// without the fix, the bridge silently dropped the additionalContext at
-// `adaptObservationResult`'s mutate arm and Pi's first agent turn never
-// saw the injected text.
+// Pins the cross-event plumbing of the hooks bridge: the additionalContext
+// survives `adaptObservationResult`'s mutate arm, so Pi's first agent turn
+// sees the injected text.
 
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -124,111 +123,120 @@ function makeBeforeAgentStartEvent(systemPrompt: string): BeforeAgentStartEvent 
   } as unknown as BeforeAgentStartEvent;
 }
 
-test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches the before_agent_start message end-to-end", async () => {
-  const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
-
-  await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot }) => {
-    // Lay out the source plugin tree the way the install pipeline would
-    // (sources/<marketplace>/plugins/<pluginId>/hooks-handlers/<script>).
-    const handlersDir = path.join(sourcesPluginRoot, "hooks-handlers");
-    await mkdir(handlersDir, { recursive: true });
-    // Handler emits the Claude-style additionalContext envelope on
-    // stdout. The bridge's wire-protocol parser maps the
-    // hookSpecificOutput.additionalContext arm onto a HookExecResult of
-    // kind "mutate" with the additionalContext field populated.
-    const handlerScript = `#!/usr/bin/env bash
+/**
+ * Lays out a source plugin whose SessionStart handler prints an
+ * additionalContext envelope carrying `marker`, seeds state.json and the
+ * installed hooks.json, and returns the context the handlers run with.
+ */
+async function installSessionStartHook(
+  { extensionRoot, sourcesPluginRoot }: { extensionRoot: string; sourcesPluginRoot: string },
+  marker: string,
+  sessionId: string,
+): Promise<ExtensionContext> {
+  // sources/<marketplace>/plugins/<pluginId>/hooks-handlers/<script>
+  const handlersDir = path.join(sourcesPluginRoot, "hooks-handlers");
+  await mkdir(handlersDir, { recursive: true });
+  const handlerScript = `#!/usr/bin/env bash
 set -euo pipefail
 cat <<'JSON'
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "LEARN-MODE-MARK"
+    "additionalContext": "${marker}"
   }
 }
 JSON
 `;
-    const handlerPath = path.join(handlersDir, "session-start.sh");
-    await writeFile(handlerPath, handlerScript, { mode: 0o755 });
+  await writeFile(path.join(handlersDir, "session-start.sh"), handlerScript, { mode: 0o755 });
 
-    // Seed state.json + on-disk hooks.json (the bridge's read side).
-    const installedHooksDir = path.join(extensionRoot, "hooks", "test-plugin");
-    await mkdir(installedHooksDir, { recursive: true });
-    await saveState(extensionRoot, buildStateWithHooksPlugin(sourcesPluginRoot));
-
-    // hooks.json -- bare-event-key form the parser ingests directly.
-    const hooksJson = {
-      SessionStart: [
-        {
-          hooks: [
-            {
-              type: "command",
-              command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session-start.sh"',
-            },
-          ],
-        },
-      ],
-    };
-    await writeFile(
-      path.join(installedHooksDir, "hooks.json"),
-      JSON.stringify(hooksJson, null, 2),
-      "utf8",
-    );
-
-    // Boot the bridge against the production dispatch path. No executor
-    // seam: registerHooksBridge wires up the real composite handlers and
-    // the new before_agent_start drain handler.
-    const { pi, registrations } = makeMockPi();
-    const placeholderCtx = {
-      mode: "tui",
-      cwd: extensionRoot,
-      ui: { notify: () => {} },
-      sessionManager: {
-        getSessionId: () => "hooks-addctx-e2e-session",
-        getSessionFile: () => undefined,
+  const installedHooksDir = path.join(extensionRoot, "hooks", "test-plugin");
+  await mkdir(installedHooksDir, { recursive: true });
+  await saveState(extensionRoot, buildStateWithHooksPlugin(sourcesPluginRoot));
+  // Bare-event-key form the parser ingests directly.
+  const hooksJson = {
+    SessionStart: [
+      {
+        hooks: [
+          {
+            type: "command",
+            command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session-start.sh"',
+          },
+        ],
       },
-    } as unknown as ExtensionContext;
-    await hooksHydration.registerHooksBridge(pi, { cwd: extensionRoot });
+    ],
+  };
+  await writeFile(
+    path.join(installedHooksDir, "hooks.json"),
+    JSON.stringify(hooksJson, null, 2),
+    "utf8",
+  );
 
-    const sessionStartReg = registrations.find((r) => r.event === "session_start");
-    assert.ok(sessionStartReg, "bridge must register session_start handler");
-    const beforeAgentStartReg = registrations.find((r) => r.event === "before_agent_start");
-    assert.ok(beforeAgentStartReg, "bridge must register before_agent_start handler (drain point)");
+  return {
+    mode: "tui",
+    cwd: extensionRoot,
+    ui: { notify: () => {} },
+    sessionManager: {
+      getSessionId: () => sessionId,
+      getSessionFile: () => undefined,
+    },
+  } as unknown as ExtensionContext;
+}
 
-    // Pre-flight: pending buffer empty after a fresh registerHooksBridge.
-    assert.deepStrictEqual(
-      runtime.pendingSessionStartContextEntries(),
-      [],
-      "registerHooksBridge must clear the pending buffer so /reload cannot leak stale context",
+function findHandler(
+  registrations: readonly CapturedRegistration[],
+  event: string,
+): CapturedRegistration["handler"] {
+  const registration = registrations.find((candidate) => candidate.event === event);
+  assert.ok(registration, `bridge must register a ${event} handler`);
+  return registration.handler;
+}
+
+test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches the before_agent_start message end-to-end", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const sessionStartEvent: SessionStartEvent = { type: "session_start", reason: "startup" };
+
+  await withHermeticPiHome(async (env) => {
+    const placeholderCtx = await installSessionStartHook(
+      env,
+      "LEARN-MODE-MARK",
+      "hooks-addctx-e2e-session",
     );
+    const { pi, registrations } = makeMockPi();
+    await hooksHydration.registerHooksBridge(pi, { cwd: env.extensionRoot });
+    const sessionStart = findHandler(registrations, "session_start");
+    const beforeAgentStart = findHandler(registrations, "before_agent_start");
 
-    // Fire session_start. The bridge spawns the handler via bash, the
-    // handler's stdout JSON is parsed by wire-protocol.ts into a
-    // HookExecResult mutate arm carrying additionalContext, and
-    // adaptObservationResultForEvent appends "LEARN-MODE-MARK" into the
-    // pending buffer.
-    const sessionStartEvent: SessionStartEvent = {
-      type: "session_start",
-      reason: "startup",
-    };
-    await sessionStartReg.handler(sessionStartEvent, placeholderCtx);
-
-    assert.deepStrictEqual(
-      runtime.pendingSessionStartContextEntries().map((entry) => entry.context),
-      ["LEARN-MODE-MARK"],
-      "wire-protocol.ts must parse the additionalContext envelope and adaptObservationResultForEvent must append into the buffer",
-    );
-
-    // Fire before_agent_start. The bridge's drain handler returns the
-    // buffered text as one context message, leaves the system prompt
-    // alone, and clears the buffer (D-CF5-13).
-    const beforeAgentResult = await beforeAgentStartReg.handler(
+    // act
+    const pendingAfterRegistration = runtime.pendingSessionStartContextEntries();
+    await sessionStart(sessionStartEvent, placeholderCtx);
+    const pendingAfterSessionStart = runtime
+      .pendingSessionStartContextEntries()
+      .map((entry) => entry.context);
+    const firstTurnResult = await beforeAgentStart(
       makeBeforeAgentStartEvent("BASE-SYSTEM-PROMPT"),
       placeholderCtx,
     );
+    const pendingAfterFirstTurn = runtime.pendingSessionStartContextEntries();
+    const secondTurnResult = await beforeAgentStart(
+      makeBeforeAgentStartEvent("BASE-SYSTEM-PROMPT-NEXT"),
+      placeholderCtx,
+    );
 
+    // assert
     assert.deepStrictEqual(
-      beforeAgentResult,
+      pendingAfterRegistration,
+      [],
+      "registerHooksBridge must clear the pending buffer so /reload cannot leak stale context",
+    );
+    assert.deepStrictEqual(
+      pendingAfterSessionStart,
+      ["LEARN-MODE-MARK"],
+      "wire-protocol.ts must parse the additionalContext envelope and adaptObservationResultForEvent must append into the buffer",
+    );
+    assert.deepStrictEqual(
+      firstTurnResult,
       {
         message: {
           customType: "claude-hook-additional-context",
@@ -241,19 +249,13 @@ JSON
       "before_agent_start handler must return the context message to Pi's chain",
     );
     assert.deepStrictEqual(
-      runtime.pendingSessionStartContextEntries(),
+      pendingAfterFirstTurn,
       [],
       "drain semantics: pending buffer cleared after the first before_agent_start",
     );
-
-    // Second before_agent_start (subsequent agent turn) returns undefined:
-    // the message sent on the first turn stays in the session history, so
-    // no later turn sends it again.
-    const secondTurnResult = await beforeAgentStartReg.handler(
-      makeBeforeAgentStartEvent("BASE-SYSTEM-PROMPT-NEXT"),
-      placeholderCtx,
-    );
-    assert.equal(
+    // The message sent on the first turn stays in the session history, so no
+    // later turn sends it again.
+    assert.strictEqual(
       secondTurnResult,
       undefined,
       "second before_agent_start must return undefined (buffer was drained)",
@@ -262,96 +264,46 @@ JSON
 });
 
 test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async () => {
+  // arrange
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const sessionStartEvent: SessionStartEvent = { type: "session_start", reason: "startup" };
 
-  await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot }) => {
-    const handlersDir = path.join(sourcesPluginRoot, "hooks-handlers");
-    await mkdir(handlersDir, { recursive: true });
-    const handlerScript = `#!/usr/bin/env bash
-set -euo pipefail
-cat <<'JSON'
-{
-  "hookSpecificOutput": {
-    "hookEventName": "SessionStart",
-    "additionalContext": "FIRST-LOAD-MARK"
-  }
-}
-JSON
-`;
-    await writeFile(path.join(handlersDir, "session-start.sh"), handlerScript, { mode: 0o755 });
-
-    const installedHooksDir = path.join(extensionRoot, "hooks", "test-plugin");
-    await mkdir(installedHooksDir, { recursive: true });
-    await saveState(extensionRoot, buildStateWithHooksPlugin(sourcesPluginRoot));
-    const hooksJson = {
-      SessionStart: [
-        {
-          hooks: [
-            {
-              type: "command",
-              command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session-start.sh"',
-            },
-          ],
-        },
-      ],
-    };
-    await writeFile(
-      path.join(installedHooksDir, "hooks.json"),
-      JSON.stringify(hooksJson, null, 2),
-      "utf8",
+  await withHermeticPiHome(async (env) => {
+    const placeholderCtx = await installSessionStartHook(
+      env,
+      "FIRST-LOAD-MARK",
+      "hooks-addctx-reload-e2e-session",
     );
-
-    const placeholderCtx = {
-      mode: "tui",
-      cwd: extensionRoot,
-      ui: { notify: () => {} },
-      sessionManager: {
-        getSessionId: () => "hooks-addctx-reload-e2e-session",
-        getSessionFile: () => undefined,
-      },
-    } as unknown as ExtensionContext;
-
-    // First load: fire session_start to populate the buffer, but do NOT
-    // drain it. This simulates the pathological case where the user
-    // /reload's before submitting a prompt, leaving a stale buffer.
+    // First load: fire session_start to populate the buffer, but do not drain
+    // it. This is the case where the user reloads before submitting a prompt.
     const firstLoad = makeMockPi();
-    await hooksHydration.registerHooksBridge(firstLoad.pi, {
-      cwd: extensionRoot,
-    });
-    const firstSessionStartReg = firstLoad.registrations.find((r) => r.event === "session_start");
-    assert.ok(firstSessionStartReg);
-    const firstReloadEvent: SessionStartEvent = { type: "session_start", reason: "startup" };
-    await firstSessionStartReg.handler(firstReloadEvent, placeholderCtx);
-    assert.deepStrictEqual(
-      runtime.pendingSessionStartContextEntries().map((entry) => entry.context),
-      ["FIRST-LOAD-MARK"],
-    );
+    await hooksHydration.registerHooksBridge(firstLoad.pi, { cwd: env.extensionRoot });
+    await findHandler(firstLoad.registrations, "session_start")(sessionStartEvent, placeholderCtx);
+    const pendingAfterFirstLoad = runtime
+      .pendingSessionStartContextEntries()
+      .map((entry) => entry.context);
 
-    // Second load (mirrors /reload re-emitting session_start with
-    // reason="reload"): the buffer must be cleared by
-    // registerHooksBridge entry so the prior session's stale entry does
-    // not contaminate the new session's drain.
+    // act
     const secondLoad = makeMockPi();
-    await hooksHydration.registerHooksBridge(secondLoad.pi, {
-      cwd: extensionRoot,
-    });
-    assert.deepStrictEqual(
-      runtime.pendingSessionStartContextEntries(),
-      [],
-      "registerHooksBridge re-entry must clear the pending buffer (no stale-context leak across /reload)",
-    );
-
-    // Sanity check: the new session's drain handler returns undefined
-    // (empty buffer).
-    const drainRegistration = secondLoad.registrations.find(
-      (registration) => registration.event === "before_agent_start",
-    );
-    assert.ok(drainRegistration);
-    const result = await drainRegistration.handler(
+    await hooksHydration.registerHooksBridge(secondLoad.pi, { cwd: env.extensionRoot });
+    const pendingAfterSecondLoad = runtime.pendingSessionStartContextEntries();
+    const drainResult = await findHandler(secondLoad.registrations, "before_agent_start")(
       makeBeforeAgentStartEvent("BASE"),
       placeholderCtx,
     );
-    assert.equal(result, undefined, "empty buffer after /reload must drain to undefined");
+
+    // assert
+    assert.deepStrictEqual(pendingAfterFirstLoad, ["FIRST-LOAD-MARK"]);
+    assert.deepStrictEqual(
+      pendingAfterSecondLoad,
+      [],
+      "registerHooksBridge re-entry must clear the pending buffer (no stale-context leak across /reload)",
+    );
+    assert.strictEqual(
+      drainResult,
+      undefined,
+      "empty buffer after /reload must drain to undefined",
+    );
   });
 });

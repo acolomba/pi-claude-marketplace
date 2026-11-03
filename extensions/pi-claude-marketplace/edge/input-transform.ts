@@ -1,7 +1,7 @@
 import type { InputEvent, InputEventResult } from "../platform/pi-api.ts";
 
 /** U+200B ZERO WIDTH SPACE: Pi matches a slash command only at the start of the text. */
-const NO_EXPANSION_PREFIX = "​";
+const NO_EXPANSION_PREFIX = "\u200B";
 
 /**
  * The `transform` result that sends `text` to the model as it is, with the

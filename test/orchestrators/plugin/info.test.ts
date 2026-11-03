@@ -166,9 +166,11 @@ test("constructs the info command without using its reader capability or startin
 });
 
 test("exposes a required plugin info reader factory", async () => {
+  // act
   const infoModule: Record<string, unknown> =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
 
+  // assert
   assert.equal(Object.keys(infoModule).includes("createGetPluginInfo"), true);
 });
 
@@ -1967,6 +1969,7 @@ test("OPIC-F27: required reader preserves an available-row directory failure and
     const before = await readdir(mpRoot, { recursive: true });
     const { ctx, run, notifications } = makeCtx();
 
+    // act
     await withDefaultMcpStatus(createGetPluginInfo(reader))({
       ctx,
       run,
@@ -1976,6 +1979,7 @@ test("OPIC-F27: required reader preserves an available-row directory failure and
       cwd,
     });
 
+    // assert
     assert.equal(raised, permissionError);
     assert.deepEqual(calls, [skillsDir]);
     assert.deepEqual(await readdir(mpRoot, { recursive: true }), before);
@@ -3110,6 +3114,7 @@ test("OPIC-F27: required reader preserves a state-only file failure and reason o
     const before = await readdir(mpRoot, { recursive: true });
     const { ctx, run, notifications } = makeCtx();
 
+    // act
     await withDefaultMcpStatus(createGetPluginInfo(reader))({
       ctx,
       run,
@@ -3119,6 +3124,7 @@ test("OPIC-F27: required reader preserves a state-only file failure and reason o
       cwd,
     });
 
+    // assert
     assert.equal(raised, permissionError);
     assert.deepEqual(reads, [file]);
     assert.deepEqual(lists, []);

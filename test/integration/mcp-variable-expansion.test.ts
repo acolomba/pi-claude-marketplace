@@ -1,3 +1,10 @@
+// A real install writes Claude Code's variable rule into the plugin's
+// pi-mcp-adapter entry (AVAR-01..03), leaves a `${NAME:-default}` for the
+// adapter to expand at connect time (D-CF1-13), and warns about the variables
+// the server needs that are not set (AVAR-04). The install reads Pi's process
+// environment, so the case sets and deletes its own `PI_CM_AVAR_*` variables
+// and restores each one afterwards.
+
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -19,13 +26,6 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { makeCtx, seedMcpPlugin, type NotifyRecord } from "./mcp-plugin-seed.ts";
-
-// A real install writes Claude Code's variable rule into the plugin's
-// pi-mcp-adapter entry (AVAR-01..03), leaves a `${NAME:-default}` for the
-// adapter to expand at connect time (D-CF1-13), and warns about the variables
-// the server needs that are not set (AVAR-04). The install reads Pi's process
-// environment, so the case sets and deletes its own `PI_CM_AVAR_*` variables
-// and restores each one afterwards.
 
 const AVAR_VARIABLES = ["PI_CM_AVAR_SITE", "PI_CM_AVAR_LEVEL", "PI_CM_AVAR_TOKEN"] as const;
 

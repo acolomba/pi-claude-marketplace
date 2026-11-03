@@ -157,6 +157,7 @@ for (const row of EXPANSION_CASES) {
   test(`AVAR-03: ${row.title} comes out of pi-mcp-adapter as Claude Code's value`, async () => {
     // arrange
     const adapter = await loadAdapter();
+
     // act
     const output = adapterOutput(adapter, row.field, row.written, row.runtimeEnv);
 
@@ -793,6 +794,7 @@ test("AVAR-03: pi-mcp-adapter's call sites and interpolation passes are the ones
 test("AVAR-03: pi-mcp-adapter home-expands a leading ~/ after interpolation, so no split token protects it", async () => {
   // arrange
   const adapter = await loadAdapter();
+
   // act
   const output = adapter.utils.expandHomePath(
     adapter.utils.interpolateEnvVars("{env:PI_CLAUDE_MARKETPLACE_EMPTY}~/x", {
