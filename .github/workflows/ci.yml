@@ -46,17 +46,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# D-01: single-Node-version matrix. Node 24 only -- the latest stable LTS line
-# at the time of Phase 1 planning. Justification (per CONTEXT.md):
-#   - Node 24 satisfies write-file-atomic@^8's `^22.22.2 || ^24.15.0 || >=26.0.0`
-#     engine floor.
-#   - Node 24 supports native TS strip (no `tsx`, no `--experimental-strip-types`).
-#   - Multi-version matrix maintenance overhead is not justified for V1.
-#
-# Note: ROADMAP.md Phase 1 success criterion 5 originally specified Node
-# 22/24/26. D-01 supersedes that with single-version Node 24. If a future
-# audit reopens this, add `node-version: [22, 24, 26]` and a `strategy.matrix`
-# block; the rest of the workflow is matrix-ready.
+# D-01: every job runs on Node 24 only. Node 24 meets the engine range of
+# write-file-atomic@^8 (`^22.22.2 || ^24.15.0 || >=26.0.0`) and runs
+# TypeScript without `tsx` or `--experimental-strip-types`. To test more
+# versions, add a `strategy.matrix` with `node-version`.
 
 jobs:
   static:
@@ -127,20 +120,9 @@ jobs:
   # components, so the component scenarios that start a profile Pi do not
   # lengthen the lifecycle run. fail-fast is off, so one shard's failure does
   # not hide the other's result. Each timeout is at least 1.5 times the
-  # shard's measured run and never below 15 minutes.
+  # shard's run on a hosted runner and never below 15 minutes.
   # test/architecture/behavioral-shard-coverage.test.ts fails when a feature
   # file is in no shard or in two, so a new directory cannot drop out of CI.
-  #
-  # Measured 2026-11-01 on a hosted ubuntu-latest runner (workflow_dispatch
-  # run 41283935457): lifecycle job 3 min 21 s (cucumber step 2 min 11 s,
-  # 1158 scenarios), components job 1 min 34 s (cucumber step 52 s, 11
-  # scenarios). Both shards take the 15-minute floor.
-  # After the workflow, MCP server, and agent merges, a local run (4 CPUs,
-  # not a hosted runner, 2026-11-01, seed 520794) took 2 min 26 s for the
-  # components shard's 215 scenarios, still far under the floor. The hosted
-  # re-measure is still to do.
-  # Re-measure after each component merge, and raise a timeout that no
-  # longer holds 1.5 times its shard's run.
   behavioral:
     name: behavioral tests, ${{ matrix.shard }} (Node 24)
     runs-on: ubuntu-latest
@@ -217,13 +199,12 @@ jobs:
       - name: Run pinned e2e tests
         run: npm run test:e2e
 
-  # RCOV-03 asks for a dedicated authoritative job rather than a step folded
-  # into another job (D-08-16), so a coverage shortfall shows as its own red
-  # signal. Every event measures every source-test pair over the whole tree,
-  # one focused test run per pair. A change to shared test support can lower
-  # the direct coverage of a pair that it never names, and only a whole-tree
-  # run sees that before merge. The run takes about two minutes on a hosted
-  # runner. The ceiling is sized for a slower runner.
+  # RCOV-03, D-08-16: direct coverage has a job of its own, so a coverage
+  # shortfall shows as its own failure. Every event measures every
+  # source-test pair over the whole tree, one focused test run per pair. A
+  # change to shared test support can lower the direct coverage of a pair
+  # that it never names, and only a whole-tree run sees that before merge.
+  # The timeout leaves room for a slower runner.
   #
   # The run also writes coverage/direct.lcov, which merges the record of each
   # pair for its own source. The sonarcloud job reads it.
