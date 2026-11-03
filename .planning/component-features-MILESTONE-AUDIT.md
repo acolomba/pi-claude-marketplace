@@ -19,7 +19,7 @@ tech_debt:
       - "SCENARIO ADDED 2026-11-02 (19ff1af): W3 (SKL/CMD/HOOK): project installs made before the provenance ledger stop working until reinstalled; hooks skip with only a debug line; no upgrade scenario"
       - "W4 (CMD-*): run_plugin_command keeps a stale description after a second session_start in the same runtime if the new list is empty (Pi has no unregister); calls stay safe"
       - "SCENARIO ADDED 2026-11-02 (92cd7b3): W5 (HOOK/CMD/SKL): no scenario pins that UserPromptSubmit hooks see the raw slash text before expansion"
-      - "SCENARIO ADDED 2026-11-02 (9789ef5): W6 (HOOK/SKL): no scenario combines a PostToolUse hook with the model-read skill fill"
+      - "RESOLVED 2026-11-02 (a7fb423): SCENARIO ADDED 2026-11-02 (9789ef5): W6 (HOOK/SKL): no scenario combines a PostToolUse hook with the model-read skill fill"
   - phase: 05-hooks
     items:
       - "T-05-33 (medium, open, no disposition): a hook's stdout cut at 1 MB under onFailure: block reads as no decision (HOOKBIGJSON-01)"
