@@ -4656,7 +4656,10 @@ Deferred by component-features Phase 4 (D-CF4-02 residual). pi-subagents allows 
 
 Deferred by component-features Phase 4 (D-CF4-09, D-CF4-10). The report is drafted in `.planning/phases/04-agents/04-06-SUMMARY.md` ("pi-subagents report"): `list`, the doctor, and `/run` completions ignore project trust, and the background runner's `JITI_ALIAS` breaks deep `@earendil-works/pi-ai` imports. It was not filed, because a public post is the user's call. Trigger: the user decides to file it.
 
-## COMPSEV-01: install and reinstall disagree on a missing companion's severity
+## ~~COMPSEV-01: install and reinstall disagree on a missing companion's severity~~ -- CLOSED
+
+Closed 2026-11-03 (user decision): reinstall now raises a row with an unloaded declared companion to `warning`, as install, update and enable do (SEV-01), pinned by `features/plugin/reinstall.feature`.
+
 
 Noted by component-features Phase 4 (D-CF4-11). Install reports a missing pi-subagents as `warning` (SEV-01 `companionSeverity`), and reinstall reports the same companion at `info` (`features/plugin/reinstall.feature`). Decide whether reinstall also warns.
 

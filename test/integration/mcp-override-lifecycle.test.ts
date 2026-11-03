@@ -238,8 +238,8 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
         projectReinstall: [
           {
             message:
-              "● mp [project]\n  ● hello v1.1.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
-            severity: undefined,
+              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.1.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            severity: "warning",
           },
         ],
         projectUninstall: [uninstalledRow("project", "1.1.0")],

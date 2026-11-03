@@ -184,16 +184,32 @@ Feature: Plugin reinstall
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
 
+  Scenario: Reinstalling a plugin with agents without pi-subagents names the missing companion
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "reviewer" described as "Reviews the files it is given." with this body:
+      """
+      Review the files named in the task and report every problem you find.
+      """
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | true                                |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons               | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled | requires pi-subagents | project | 1.0.0   |
+
   Scenario: Forced reinstall preserves a foreign agent index row
     Given the published plugin "demo" of the marketplace "fixtures" has an agent "helper" that sets a color
     Given the agents index of the project scope records generated name "pi-claude-marketplace-demo-helper" for "demo@fixtures" at "my-notes.md"
     When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
     Then the result has these fields:
-      | kind         | cascade |
-      | severity     | info    |
-      | needs reload | true    |
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | true                                |
+      | summary      | A plugin operation needs attention. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status      | reasons              | scope   | version |
+      | marketplace name | marketplace scope | id            | name | status      | reasons               | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | reinstalled | requires pi-subagents | project | 1.0.0   |
     Then the agents index of the project scope holds these rows:
       | generated name                            | target file                              |

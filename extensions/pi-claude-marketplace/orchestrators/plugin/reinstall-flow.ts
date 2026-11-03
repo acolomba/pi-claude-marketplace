@@ -340,8 +340,13 @@ async function reinstallPluginWith(
   // WR-09: the ONE row composer, shared with the bulk cascade mapper, so the
   // two surfaces cannot report the same reinstall differently. `undefined` is
   // the orphan-fold scope decision this branch always makes: the row's scope
-  // matches its marketplace block.
-  const reinstalledRow: PluginReinstalledMessage = reinstalledRowFromOutcome(outcome, undefined);
+  // matches its marketplace block. D-05: `run.softDeps` is the snapshot the
+  // `{requires pi-...}` markers read, so the severity and the markers agree.
+  const reinstalledRow: PluginReinstalledMessage = reinstalledRowFromOutcome(
+    outcome,
+    undefined,
+    run.softDeps,
+  );
   notifyWithContext(
     ctx,
     run,

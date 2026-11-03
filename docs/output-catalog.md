@@ -1718,15 +1718,17 @@ Bare marketplace header (no status, no details). Plugin status `reinstalled` tri
 <!-- catalog-state: success-with-soft-dep -->
 
 ```text
+A plugin operation needs attention.
+
 ● official [user]
   ● alpha v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}
 
-Plugin reinstall: 1 success
+Plugin reinstall: 1 warning
 
 /reload to pick up changes
 ```
 
-The `reinstalled` variant carries `dependencies` (D-15-02); both markers fire because both companions are unloaded. OUT-03/D-04: the single `reinstalled` row is the one success in the plural-operation tally.
+The `reinstalled` variant carries `dependencies` (D-15-02); both markers fire because both companions are unloaded. SEV-01 / COMPSEV-01: a declared companion that is unloaded leaves an otherwise-clean reinstall short of working, so the success row stamps `warning` and the cascade carries the `needs attention` summary line, as on install, update and enable. Both reinstall row composers (the standalone verb and the bulk cascade mapper) read the command's one soft-dep snapshot (D-05), the same one the markers read, so the severity and the markers agree. The per-row bytes are unchanged from the info form -- only the severity moves, and with it the summary line and the tally. OUT-03/D-04: the tally counts by stamped severity, so the raised row lands in `1 warning` rather than `1 success`. With every declared companion loaded, the row carries no marker and stays `info`.
 
 ### Reinstall with a degraded component (WARN-01 / D-86-03 / WR-09)
 

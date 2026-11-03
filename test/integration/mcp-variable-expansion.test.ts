@@ -304,8 +304,8 @@ test("AVAR-04: a reinstall reports the unset variable and the withheld credentia
       assertVariableWarningsAfter(reinstalled.notifications, [
         {
           message:
-            "● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
-          severity: undefined,
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+          severity: "warning",
         },
       ]);
     });
