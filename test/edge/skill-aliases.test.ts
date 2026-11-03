@@ -627,8 +627,9 @@ test("reports an invocation that fails unexpectedly as a usage error and handles
   verify(invokeSkill);
 });
 
-test("leaves a token to Pi when the alias table cannot be loaded", async () => {
+test("leaves a token to Pi when the alias table cannot be loaded", async (t) => {
   // arrange
+  const diagnostics = captureDebugLog(t);
   const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
   when(() => ctx.cwd)
@@ -652,6 +653,7 @@ test("leaves a token to Pi when the alias table cannot be loaded", async () => {
 
   // assert
   assert.deepStrictEqual(sent, { action: "continue" });
+  assert.deepStrictEqual(diagnostics, ["[skills] alias input skipped: commands unavailable"]);
   verify(pi);
   verify(ctx);
   verify(invokeSkill);

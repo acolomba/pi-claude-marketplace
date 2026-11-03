@@ -210,6 +210,12 @@ function isNameableMapKey(pluginName: string, key: string): boolean {
  * directory is a declared directory and its key is ignored; a `source` that
  * is a command file, or a `content` entry of `plugin.json` (a marketplace
  * entry's is dropped, D-CF3-04), is named after its key when the key is valid.
+ *
+ * This names `<plugin>:<key>` for every valid key. `bridges/commands/discover.ts`
+ * skips a key whose file an earlier command already loaded, or whose generated
+ * name repeats, so here a skill alias can be suppressed that no command
+ * replaces. That over-suppression is accepted: it can only hide a skill alias,
+ * never expose a skill that a command should hide.
  */
 async function mapEntryNames(
   pluginName: string,

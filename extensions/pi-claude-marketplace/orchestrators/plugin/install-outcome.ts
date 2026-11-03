@@ -118,6 +118,7 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
+import { WorkflowsUnstageRefusedError } from "../../shared/errors-bridges.ts";
 import {
   ConcurrentInstallError,
   DirectoryPinUnsatisfiedError,
@@ -1516,10 +1517,24 @@ async function runInstallLedgerBody(
       // never `prep.result.stagedNames`. A foreign envelope at a colliding
       // name, or a previous envelope the commit's own reversal restored, is
       // not this commit's to unlink.
-      const result = await unstagePluginWorkflows({
-        locations: installCtx.locations,
-        previousWorkflowNames: installCtx.stagedWorkflowNames,
-      });
+      let result: Awaited<ReturnType<typeof unstagePluginWorkflows>>;
+      try {
+        result = await unstagePluginWorkflows({
+          locations: installCtx.locations,
+          previousWorkflowNames: installCtx.stagedWorkflowNames,
+        });
+      } catch (err) {
+        // PI-14: the ledger narrows on `PathContainmentError` for a THROWN
+        // undo, so the refusal is rethrown bare. A rollback keeps no dropped
+        // list: the removed names only say which staged envelopes are gone,
+        // and the failed install writes no record naming them.
+        if (err instanceof WorkflowsUnstageRefusedError) {
+          throw err.refusal;
+        }
+
+        throw err;
+      }
+
       // WLIF-03 / T-112-04: unlike the five sibling phases, the result is NOT
       // discarded. A leftover workflow envelope is executable code outside
       // every scope root, so a silent swallow would report a clean rollback

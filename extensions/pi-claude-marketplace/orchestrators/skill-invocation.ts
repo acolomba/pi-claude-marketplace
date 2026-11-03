@@ -14,14 +14,12 @@
 // reaches the model.
 //
 // D-CF1-03 (amended 2026-11-02): a skill the user types gets the whole invocation. When the model
-// reads a staged `SKILL.md` on its own with Pi's read tool, `fillSkillRead`
-// fills the same `${CLAUDE_*}` values and empties the arguments as for an
-// invocation with none, but runs no `!` command: the model's read is not an
-// invocation, and Claude Code's Skill tool path has no Pi equivalent. It
-// fills only a text that is still the skill's own, never one a PostToolUse
-// hook wrote (D-CF1-03). A skill outside this extension's two staged
-// skills directories, such as the user's own Pi skill, is `not-bridged` and
-// keeps Pi's expansion.
+// reads a staged `SKILL.md` on its own with Pi's read tool, `fillSkillRead` fills the same
+// `${CLAUDE_*}` values and empties the arguments as for an invocation with none, but runs no `!`
+// command: the model's read is not an invocation, and Claude Code's Skill tool path has no Pi
+// equivalent. It fills only a text that is still the skill's own, never one a PostToolUse hook
+// wrote (D-CF1-03). A skill outside this extension's two staged skills directories, such as the
+// user's own Pi skill, is `not-bridged` and keeps Pi's expansion.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";

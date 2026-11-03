@@ -8,6 +8,7 @@
 import { redactAbsolutePaths } from "./redact-absolute-paths.ts";
 
 import type { McpConfigNotice } from "./notification-types.ts";
+import type { PathContainmentError } from "./path-containment.ts";
 
 /**
  * The (marketplace, plugin) tuple an agent name belongs to. Declared once so
@@ -189,6 +190,27 @@ export class McpUnstagePartialError extends Error {
     this.removedNames = Object.freeze([...removedNames]);
     this.notices = Object.freeze([...notices]);
     this.written = Object.freeze([...written]);
+  }
+}
+
+/**
+ * PI-14: a workflows unstage that met a containment refusal (a symlink or an
+ * escaping path at a recorded name). The refusal rides `refusal` (and
+ * `Error.cause`) and is
+ * the failure the user sees; a caller that must keep the class (the phase
+ * ledger narrows on `PathContainmentError`) rethrows `refusal` bare.
+ * `removedNames` lists the names whose envelope the loop had already removed
+ * and that no failure holds back, so a caller can record them as dropped
+ * before it surfaces the refusal.
+ */
+export class WorkflowsUnstageRefusedError extends Error {
+  readonly removedNames: readonly string[];
+  readonly refusal: PathContainmentError;
+  constructor(removedNames: readonly string[], refusal: PathContainmentError) {
+    super("Workflows unstage stopped on a containment refusal.", { cause: refusal });
+    this.name = "WorkflowsUnstageRefusedError";
+    this.removedNames = Object.freeze([...removedNames]);
+    this.refusal = refusal;
   }
 }
 

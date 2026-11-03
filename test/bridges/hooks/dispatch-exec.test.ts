@@ -1793,7 +1793,10 @@ test("blocks a hook whose spawn throws when onFailure is block", async (t) => {
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: `${ON_FAILURE_HEAD}\nThe argument 'file' must be a string without null bytes`,
+  });
 });
 
 test("keeps a hook whose spawn throws a noop without onFailure", async (t) => {

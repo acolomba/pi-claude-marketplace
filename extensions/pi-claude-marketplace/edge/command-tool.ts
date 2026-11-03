@@ -2,7 +2,8 @@
 //
 // Closes the D-CF3-01 gap (amended 2026-11-02): Claude Code's model runs a
 // plugin command through its Skill tool, and Pi gives the model no way to run
-// a prompt template. This module registers `run_plugin_command`, the Pi tool that stands for that path.
+// a prompt template. This module registers `run_plugin_command`, the Pi tool
+// that stands for that path.
 //
 // Its description lists the staged commands Pi loaded that Claude Code lists
 // for the model (`listModelCommands`), under the names Pi shows. Pi loads the

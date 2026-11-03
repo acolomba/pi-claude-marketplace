@@ -22,10 +22,20 @@
 // per-name failure accumulates into `failed[]` and the loop carries on
 // (WLIF-03), while a containment refusal is raised to the caller (PI-14). The
 // loop runs to completion either way, so choosing the second policy costs the
-// envelopes recorded after a refused name nothing.
+// envelopes recorded after a refused name nothing. The refusal is raised
+// wrapped in `WorkflowsUnstageRefusedError`, which carries the names already
+// removed so the caller can record them as dropped.
+//
+// `removedNames` and `failed[]` are disjoint. A name is in `removedNames` only
+// when no copy of it is known to remain: if the current envelope was unlinked
+// and the former copy then failed to unlink, the former copy is still
+// executable code, so the name is reported as failed alone. Callers treat
+// `removedNames` as "gone everywhere" (the cascade's `dropped` list) and
+// `failed` as "something is left behind", and a name cannot be both.
 
 import { unlink } from "node:fs/promises";
 
+import { WorkflowsUnstageRefusedError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 
@@ -60,8 +70,8 @@ async function unlinkIfPresent(target: string | undefined): Promise<boolean> {
 
 /**
  * Removes the recorded workflow envelopes by name and reports which names were
- * removed and which failed. Raises the first containment refusal after the
- * loop has run to completion.
+ * removed and which failed. Raises the first containment refusal, wrapped with the
+ * names already removed, after the loop has run to completion.
  */
 export async function unstagePluginWorkflows(
   input: UnstageWorkflowsInput,
@@ -73,6 +83,9 @@ export async function unstagePluginWorkflows(
   let refusal: PathContainmentError | undefined;
 
   for (const name of input.previousWorkflowNames) {
+    // Set once the current envelope is gone, so the catch below can tell a
+    // name that lost its current copy from one that lost nothing.
+    let removedCurrent = false;
     try {
       // The bundle's composer runs assertSafeName + assertPathInside itself, so
       // there is no second containment check at this call site. It sits inside
@@ -88,16 +101,13 @@ export async function unstagePluginWorkflows(
       // legacy chain), and a refusal there must not leave the valid current
       // envelope behind, still executable.
       // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
-      const removedHere = await unlinkIfPresent(target);
-      if (removedHere) {
-        removed.push(name);
-      }
+      removedCurrent = await unlinkIfPresent(target);
 
       // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
       const former = await input.locations.formerWorkflowArtifactPath(name);
       // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
       const removedThere = await unlinkIfPresent(former);
-      if (removedThere && !removedHere) {
+      if (removedCurrent || removedThere) {
         removed.push(name);
       }
     } catch (err) {
@@ -117,22 +127,30 @@ export async function unstagePluginWorkflows(
         // The FIRST refusal is the one raised -- every later one is reached
         // only by continuing past it.
         refusal ??= err;
+        // The refusal ends this name's work, but the current envelope is
+        // already gone and the former path was never reached to hold it back.
+        if (removedCurrent) {
+          removed.push(name);
+        }
+
         continue;
       }
 
       // WLIF-03: accumulate rather than throw. A throw at the first bad name
       // would abandon every later envelope -- executable files left behind,
       // and the caller told nothing about them. The loop continues so the
-      // caller learns the full picture in one pass.
+      // caller learns the full picture in one pass. `removed` is pushed only
+      // at the end of the try, so a name that reaches here is in `failed`
+      // alone even when its current envelope was already removed.
       failed.push({ name, reason: errorMessage(err) });
     }
   }
 
   if (refusal !== undefined) {
-    // Raised bare. Wrapping it -- `appendLeaks` and friends return a plain
-    // `Error` -- would carry the text and destroy the class, which is the one
-    // thing the caller narrows on.
-    throw refusal;
+    // The refusal rides `refusal` unchanged, so the class survives for the
+    // caller to narrow on after it unwraps; `appendLeaks` and friends return a
+    // plain `Error`, which would carry the text and destroy it.
+    throw new WorkflowsUnstageRefusedError(removed, refusal);
   }
 
   return {

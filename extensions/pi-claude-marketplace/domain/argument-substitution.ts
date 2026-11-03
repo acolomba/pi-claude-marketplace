@@ -138,9 +138,14 @@ function guardBangs(value: string): string {
     .replaceAll(/(^|\s)!/gm, String.raw`$1\!`);
 }
 
-// `xM` sees only the value, so a `!` in the body directly before a value that
-// starts with a backtick would form `!` + backtick. The separation `guardBangs`
-// uses goes after the value's wrap markers (T-01-22).
+// `xM` sees only the value, so it cannot see a `!` on either side of it. This
+// separates the pair in both directions: a `!` in the body directly before a
+// value that starts with a backtick, and a `!` that ends a value when the body
+// has a backtick right after it. The second case matters when the body holds
+// two values, as in ``Run `$0` and `$1` `` with args `x! y`: without it the
+// `!` that ends `x!` and the opening backtick of the next span would pair into
+// a `!` backtick command. The separation `guardBangs` uses goes after the
+// value's wrap markers (T-01-22).
 function separateBangBeforeValue(body: string): string {
   return body.replaceAll(new RegExp(`!(${WRAP}+)\``, "g"), "!$1 `");
 }

@@ -372,6 +372,33 @@ describe("substituteArguments", () => {
     });
   }
 
+  test("D-CF1-01: separates a ! that ends a value from a backtick right after it", () => {
+    // arrange
+    const body = "Run `$ARGUMENTS` now";
+
+    // act
+    const content = substituteArguments({ body, args: "ls!", argumentNames: [], variables: {} });
+
+    // assert
+    assert.strictEqual(content, "Run `ls! ` now");
+  });
+
+  test("D-CF1-01: keeps two values from pairing into a ! backtick command", () => {
+    // arrange
+    const body = "Run `$0` and `$1`";
+
+    // act
+    const content = substituteArguments({
+      body,
+      args: "x! y",
+      argumentNames: [],
+      variables: {},
+    });
+
+    // assert
+    assert.strictEqual(content, "Run `x! ` and `y`");
+  });
+
   test("D-CF1-01: leaves a body ! before a value that does not start with a backtick", () => {
     // arrange
     const body = "Run !$0";

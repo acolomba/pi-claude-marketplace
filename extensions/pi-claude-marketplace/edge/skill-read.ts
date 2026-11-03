@@ -43,8 +43,9 @@ function readText(event: ToolResultEvent): string | undefined {
  * plugin `SKILL.md`, the text it gets has the skill's `${CLAUDE_*}` values
  * filled and its arguments empty, as a typed invocation with no arguments
  * has them. No `!` command runs. Any other result keeps its content, and a
- * failed fill keeps it too. So does a read whose text a PostToolUse hook replaced: the fill runs only
- * on the text Pi's read tool returns for the staged file (D-CF1-03).
+ * failed fill keeps it too. So does a read whose text a PostToolUse hook
+ * replaced: the fill runs only on the text Pi's read tool returns for the
+ * staged file (D-CF1-03).
  */
 export function registerSkillReadFill(
   pi: ExtensionAPI,

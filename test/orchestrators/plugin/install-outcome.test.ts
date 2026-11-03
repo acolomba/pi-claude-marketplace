@@ -37,7 +37,10 @@ import {
   UnsupportedSourceError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import {
+  PathContainmentError,
+  SymlinkRefusedError,
+} from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -818,6 +821,108 @@ test("a failed workflows removal during rollback surfaces as its own partial rat
   assert.strictEqual(partial?.phase, "workflows");
   assert.strictEqual(partial.cause?.name, "WorkflowsUnstageFailureError");
   assert.match(partial.cause.message, /^empty:delta: /);
+});
+
+test("PI-14: a workflows undo that meets a symlink on the former path rethrows the containment refusal unwrapped", async (t) => {
+  // arrange -- the state commit fails after the workflows phase placed its
+  // envelope, and a symlink then appears at the envelope's former path.
+  const environment = await createHermeticEnvironment(t, "install-outcome-workflows-undo-link-");
+  const seeded = await seedPlugin(environment.cwd, { components: { workflows: ["delta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const formerDirectory = locations.formerWorkflowsSavedDir ?? "";
+  const linkedFormerPath = path.join(formerDirectory, "empty:delta.json");
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction: InstallLedgerTransaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> => {
+          if (phase.name === "workflows") {
+            return {
+              ...phase,
+              do: async (c) => {
+                await phase.do(c);
+                await mkdir(formerDirectory, { recursive: true });
+                await symlink("/nonexistent-decoy", linkedFormerPath);
+              },
+            };
+          }
+
+          return phase.name === "state"
+            ? { ...phase, do: () => Promise.reject(new Error("state phase failed")) }
+            : phase;
+        }),
+        ctx,
+      ),
+  };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert -- bare class, not the wrapper, and the current envelope is gone
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof SymlinkRefusedError);
+    assert.strictEqual(error.linkPath, linkedFormerPath);
+    return true;
+  });
+  assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), []);
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+test("a workflows undo that fails without a refusal is kept as a rollback partial", async (t) => {
+  // arrange -- the recorded names cannot even be iterated, so the unstage
+  // throws something that is not the containment wrapper.
+  const environment = await createHermeticEnvironment(t, "install-outcome-workflows-undo-other-");
+  const seeded = await seedPlugin(environment.cwd, { components: { workflows: ["delta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction: InstallLedgerTransaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> => {
+          if (phase.name === "workflows") {
+            return {
+              ...phase,
+              do: async (c) => {
+                await phase.do(c);
+                (c as { stagedWorkflowNames: readonly string[] }).stagedWorkflowNames =
+                  Object.assign(["empty:delta"], {
+                    [Symbol.iterator]: (): never => {
+                      throw new Error("names unreadable");
+                    },
+                  });
+              },
+            };
+          }
+
+          return phase.name === "state"
+            ? { ...phase, do: () => Promise.reject(new Error("state phase failed")) }
+            : phase;
+        }),
+        ctx,
+      ),
+  };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, /state phase failed/);
+  assert.deepStrictEqual(
+    capture.rollbackPartials.map((partial) => [partial.phase, partial.msg]),
+    [["workflows", "names unreadable"]],
+  );
 });
 
 /**

@@ -6,6 +6,7 @@ import test, { type TestContext } from "node:test";
 
 import { unstagePluginWorkflows } from "../../../extensions/pi-claude-marketplace/bridges/workflows/unstage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { WorkflowsUnstageRefusedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type {
@@ -224,11 +225,14 @@ test("raises the first symlinked target after removing the names after it", asyn
   const savedEntries = (await readdir(savedDirectory)).sort();
 
   // assert
-  assert.ok(error instanceof SymlinkRefusedError);
+  assert.ok(error instanceof WorkflowsUnstageRefusedError);
+  assert.ok(error.cause instanceof SymlinkRefusedError);
   // The FIRST refusal, not the last: every later one is reached only by
   // continuing past this one, so raising a later one would report a refusal
   // caused by the decision to keep going.
-  assert.strictEqual(error.linkPath, firstLinkedTarget);
+  assert.strictEqual(error.cause.linkPath, firstLinkedTarget);
+  // Only the envelope removed after both refusals is reported as removed.
+  assert.deepStrictEqual(error.removedNames, ["acme:later"]);
   // The envelope recorded after both refusals is still removed. It is
   // executable code left outside every scope root, so abandoning it is the
   // outcome the loop continues to avoid.
@@ -307,8 +311,35 @@ test("removes the current envelope and still raises a refusal on the former path
   );
 
   // assert
-  assert.ok(error instanceof SymlinkRefusedError);
-  assert.strictEqual(error.linkPath, linkedFormerTarget);
+  assert.ok(error instanceof WorkflowsUnstageRefusedError);
+  assert.ok(error.cause instanceof SymlinkRefusedError);
+  assert.strictEqual(error.cause.linkPath, linkedFormerTarget);
+  // The current envelope is gone, so the refusal carries its name.
+  assert.deepStrictEqual(error.removedNames, ["acme:deploy"]);
   assert.deepStrictEqual(await readdir(savedDirectory), []);
   assert.strictEqual(await readFile(outsideEnvelopePath, "utf8"), "outside bytes\n");
+});
+
+test("reports a name whose former copy cannot be unlinked as failed alone", async (t) => {
+  // arrange -- a directory at the former path makes its unlink fail with a
+  // non-ENOENT error after the current envelope was removed.
+  const { savedDirectory, locations } = await createWorkflowScope(t, "workflows-unstage-split-");
+  const formerDirectory = locations.formerWorkflowsSavedDir ?? "";
+  await mkdir(path.join(formerDirectory, "acme:deploy.json"), { recursive: true });
+  await writeFile(path.join(savedDirectory, "acme:deploy.json"), '{"name":"acme:deploy"}\n');
+  await writeFile(path.join(savedDirectory, "acme:status.json"), '{"name":"acme:status"}\n');
+
+  // act
+  const unstagedWorkflows = await unstagePluginWorkflows({
+    locations,
+    previousWorkflowNames: ["acme:deploy", "acme:status"],
+  });
+
+  // assert
+  assert.deepStrictEqual(await readdir(savedDirectory), []);
+  assert.deepStrictEqual(unstagedWorkflows.removedNames, ["acme:status"]);
+  assert.deepStrictEqual(
+    unstagedWorkflows.failed.map((failure) => failure.name),
+    ["acme:deploy"],
+  );
 });

@@ -237,7 +237,10 @@ export function registerSkillAliases(
           ? invoke(target.generatedName, token, commands, event, ctx)
           : commandAliasResult(target.name, token, event);
       },
-      (): InputEventResult => ({ action: "continue" }),
+      (err: unknown): InputEventResult => {
+        hookDebugLog(`alias input skipped: ${errorMessage(err)}`, "skills");
+        return { action: "continue" };
+      },
     );
   });
 }

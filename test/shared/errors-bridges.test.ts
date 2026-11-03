@@ -11,8 +11,10 @@ import {
   McpServerKeyCollisionError,
   McpUnstagePartialError,
   SkillFrontmatterNodeError,
+  WorkflowsUnstageRefusedError,
   WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import { PathContainmentError } from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { AgentOwnershipConflict } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
@@ -533,6 +535,38 @@ describe("McpUnstagePartialError", () => {
         notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
         written: [{ path: "/scope/mcp-adapter.json", bytes: Buffer.from("{}\n") }],
         cause,
+        frozen: true,
+      },
+    );
+  });
+});
+
+describe("WorkflowsUnstageRefusedError", () => {
+  test("PI-14: carries a frozen copy of the removed names and the refusal as its cause", () => {
+    // arrange
+    const cause = new PathContainmentError("/saved", "/outside", "workflow envelope");
+    const removedNames = ["acme:deploy"];
+
+    // act
+    const error = new WorkflowsUnstageRefusedError(removedNames, cause);
+    removedNames.push("acme:later");
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        removedNames: error.removedNames,
+        cause: error.cause,
+        refusal: error.refusal,
+        frozen: Object.isFrozen(error.removedNames),
+      },
+      {
+        name: "WorkflowsUnstageRefusedError",
+        message: "Workflows unstage stopped on a containment refusal.",
+        removedNames: ["acme:deploy"],
+        cause,
+        refusal: cause,
         frozen: true,
       },
     );

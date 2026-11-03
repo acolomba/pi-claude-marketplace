@@ -138,7 +138,7 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
  * `{ kind: "noop" }` + `hookDebugLog`, except that a hook with
  * `onFailure: "block"` turns a start failure, an unexpected exit, a timeout,
  * or broken JSON stdout into a block (D-CF5-18). The composite handler
- * composite handler runs the bucket in parallel, folds the returned arms in
+ * runs the bucket in parallel, folds the returned arms in
  * routing order (D-CF5-09), and dispatches to the per-Pi-event adapter
  * (D-60-03).
  *
@@ -205,11 +205,18 @@ export async function dispatchHookExec(
   } catch (err) {
     hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
     // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
+    // The cause goes in as stderr, so the block reason ends with it.
     const noop: HookExecResult = { kind: "noop" };
     return (
       onFailureBlock(
         entry,
-        { startFailed: true, timedOut: false, exitCode: null, stdout: "", stderr: "" },
+        {
+          startFailed: true,
+          timedOut: false,
+          exitCode: null,
+          stdout: "",
+          stderr: errorMessage(err),
+        },
         noop,
       ) ?? noop
     );
