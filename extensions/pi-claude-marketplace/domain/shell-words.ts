@@ -335,7 +335,7 @@ function skipBareDollar(cursor: Cursor, word: Word): void {
     last !== undefined &&
     last.kind !== "word" &&
     last.text !== "$" &&
-    cursor.text.startsWith("\\$", cursor.pos) &&
+    cursor.text.startsWith(String.raw`\$`, cursor.pos) &&
     BARE_DOLLAR_ENDS.has(charAt(cursor, 2))
   ) {
     cursor.pos += 2;
@@ -406,7 +406,7 @@ function skipArrayValue(cursor: Cursor, word: Word): void {
 // Where the command name would be a lone `$` before `\$`, tree-sitter-bash
 // drops the `$` as an error, and the `\$` word names the command.
 function isDroppedDollar(cursor: Cursor, word: Word): boolean {
-  return word.raw === "$" && cursor.text.startsWith("\\$", cursor.pos);
+  return word.raw === "$" && cursor.text.startsWith(String.raw`\$`, cursor.pos);
 }
 
 function addWord(cursor: Cursor, command: Command, word: Word): void {

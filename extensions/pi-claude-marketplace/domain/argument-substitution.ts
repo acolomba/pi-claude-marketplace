@@ -134,11 +134,10 @@ function guardBangs(value: string): string {
   return value
     .replaceAll("`!", "` !")
     .replaceAll("!`", "! `")
-    .replaceAll(/(^|\s)!/gm, "$1\\!");
+    .replaceAll(/(^|\s)!/gm, String.raw`$1\!`);
 }
 
-function insertValue(state: SubstitutionState, typed: string | undefined): string {
-  const raw = typed ?? "";
+function insertValue(state: SubstitutionState, raw = ""): string {
   const value = guardBangs(applyVariables(raw, state.variables, (variable) => variable));
   state.size += Math.max(raw.length, value.length);
   if (state.size > MAX_CHARACTERS) {

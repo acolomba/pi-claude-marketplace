@@ -466,7 +466,7 @@ async function discoverDeclaredPath(
 function showHiddenCharacters(text: string): string {
   return text.replace(
     /[\p{Cc}\p{Cf}]/gu,
-    (character) => `\\u{${Number(character.codePointAt(0)).toString(16).toUpperCase()}}`,
+    (character) => String.raw`\u{${Number(character.codePointAt(0)).toString(16).toUpperCase()}}`,
   );
 }
 
