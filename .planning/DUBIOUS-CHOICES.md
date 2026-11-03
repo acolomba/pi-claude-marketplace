@@ -27,10 +27,12 @@ The short list. Each item names the entry that holds the details. The per-phase
 logs (P3-DC, P4-DC, P5-DC, P6-DC, P7-DC) are copied in full in the
 [appendix](#appendix-per-phase-logs-in-full).
 
-### A. What blocks the milestone close
+### A. What blocked the milestone close (resolved 2026-11-02)
 
-The milestone audit, complete, and cleanup steps wait on these three.
-Afterwards, run `/gsd-verify-work 02` and `/gsd-verify-work 06`.
+All three were settled by the user on 2026-11-02 (see "User decisions" below),
+and the milestone closed on 2026-11-03 after Phase 8. Nothing in this file
+waits on the user now except the review of the two upstream fork branches.
+The items are kept as they were asked.
 
 1. **Phase 2: the Pi gap report.** File the draft in
    `.planning/phases/02-skills/02-07-SUMMARY.md`, or decide not to. It lists
@@ -98,9 +100,10 @@ link whose real target resolves inside the plugin folder, as Claude Code
 message for a link stops saying "escapes plugin root" when the link stays
 inside. MCPR-04 is amended for in-plugin links.
 
-### B. Security decisions taken without you
+### B. Security decisions taken without you (reversed 2026-11-02, DC-41)
 
-These four are marked "Pending (user review)" in `.planning/PROJECT.md`.
+The user reversed all four in favor of the locality principle (D-LOC-01). They
+were marked "Pending (user review)" in `.planning/PROJECT.md`.
 Together, they make a project's skills, commands, and hooks run only when this
 user installed that plugin into that project, as Claude Code does.
 
@@ -122,7 +125,10 @@ user installed that plugin into that project, as Claude Code does.
    the staged skill folder or `hooks.json`, not other plugin files (DC-30
    item 6, DC-36 item 4).
 
-### C. High-severity choices that change what a user sees
+### C. High-severity choices that change what a user sees (optional review)
+
+Offered to the user as an optional walkthrough; some items were later changed
+by DC-39 (commands for the model, command aliases).
 
 - **Skills (DC-24):** the frontmatter-name aliases follow Claude Code, and the
   old elided alias is gone. A command now wins over a skill of the same name.
