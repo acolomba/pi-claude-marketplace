@@ -1,6 +1,6 @@
 ---
 phase: 06-mcp-servers
-verified: 2026-11-02T11:40:00Z
+verified: 2026-11-03T15:00:00Z
 status: passed
 score: 5/5 roadmap truths verified (4 VERIFIED, 1 PASSED (override) on SC4/MCP-07)
 covered_files:
@@ -55,7 +55,7 @@ covered_files:
   - "test/integration/mcp-migration.test.ts"
   - "test/orchestrators/plugin/install-flow-ledger.test.ts"
   - "test/orchestrators/reconcile/mcp-migration.test.ts"
-covered_digest: "v4:sha256:5ca1a4da51cf22818cee24fdca0c0df98597661acae0fa356f5647de089e7447"
+covered_digest: "v4:sha256:0fb716341f622f75e1474f3cb337c4e5f1919a287626b73c7b21882529ae10b0"
 behavior_unverified: 0
 overrides_applied: 1
 overrides:
@@ -66,21 +66,17 @@ overrides:
 re_verification:
   previous_status: passed
   previous_score: 5/5
-  previous_verified: 2026-11-02T11:15:31Z
-  previous_commit: 2ba505a
+  previous_verified: 2026-11-02T11:40:00Z
+  previous_commit: fce8276
   gaps_closed: []
   gaps_remaining: []
   regressions: []
-  warnings_resolved:
-    - "Warning 2 (stale tracking): BACKLOG MCPBG-01 now names the pi-subagents bug A/B fixes as its trigger, MCPSUB-01 is closed per A.2, and REQUIREMENTS MCP-07 and ROADMAP SC4 carry the accepted-deviation note"
-  warnings_reduced:
-    - "Warning 1 (wording): docs/mcp-compatibility.md l.277 and l.474 now name bugs A and B; the install warning MCP_ASYNC_WARNING (convert.ts l.119-122) and the invocation.feature scenario title are unchanged, because no source or feature changed"
 ---
 
 # Phase 6: MCP Servers Verification Report
 
 **Phase Goal:** With pi-mcp-adapter 7.x loaded, a bridged MCP server connects under Claude's tool names, receives its configuration as upstream, answers calls from the model and from agents, starts in a project as decided, recovers when the adapter is loaded later, and follows the plugin lifecycle.
-**Verified:** 2026-11-02T11:21:00Z at `fd485a5` (refresh). The findings below were made at `2ba505a` (working tree clean) on 2026-11-02T11:15:31Z and carry over, because no source, test, or feature file changed since.
+**Verified:** 2026-11-03 at `fb79c80` (re-verification; see "Re-verification 2026-11-03" at the end). Before that: 2026-11-02T11:21:00Z at `fd485a5` (refresh). The findings below were made at `2ba505a` (working tree clean) on 2026-11-02T11:15:31Z and carry over, because no source, test, or feature file changed since.
 **Status:** passed
 **Re-verification:** Yes. This is a refresh of the `passed` report written at `2ba505a`. The report before that (2026-11-01) was `human_needed` at 4/5 and asked a human to decide SC4/MCP-07. The user decided on 2026-11-02 (A.2 and A.3 in `.planning/DUBIOUS-CHOICES.md`). The `2ba505a` round re-verified the whole tree, recorded SC4 as an override, and confirmed the A.3 link rule.
 
@@ -213,3 +209,28 @@ _Verifier: Claude (gsd-verifier)_
 ## Refresh after the doc wording fix (parent, 2026-11-02T11:40Z)
 
 The parent corrected two lines of `docs/mcp-compatibility.md` per this report's Info points: the bugs "can" keep a background child from the tools (a server with `alwaysLoad: true` is not hit by bug A), and the fixes are "drafted for upstream" (pushed to the user's forks, no PR). No source, test, or feature changed. The covered-file list is unchanged; only the digest was regenerated with `verification.fingerprint`.
+
+## Re-verification 2026-11-03
+
+**Why stale:** one covered file changed after the 2026-11-02 report, `test/orchestrators/plugin/install-flow-ledger.test.ts` (5ecd962, D-LOC-01). The test no longer expects a project install to write `project-installs/<key>/skills.json` under the user scope; it now asserts the user scope tree is unchanged, and two hook-routing tests record the project as trusted (`recordProjectTrust(cwd, true)`) before they install. No MCP case changed. The file passes.
+
+**No MCP product, feature or step file changed** since `fce8276`: `git diff --stat fce8276 HEAD` lists nothing under `bridges/mcp/`, `domain/mcp-resolution.ts`, `domain/mcp-server-features.ts`, `domain/manifest-containment.ts`, `domain/components/mcp.ts`, `docs/mcp-compatibility.md`, `features/mcp-server/`, `features/step_definitions/mcp-server/` or `features/lib/mcp-server-*.ts`. `bridges/agents/convert.ts` is unchanged since this report too.
+
+**The locality redesign does not change MCP servers.** D-LOC-01 gates project skills, commands, aliases, the command tool, skill-read fill and hooks on `ctx.isProjectTrusted()`. Project MCP servers stay gated by pi-mcp-adapter's own project trust and its `projectServers` setting (D-CF6-03), and they are written to `<cwd>/.pi/mcp-adapter.json`, inside the project. `features/mcp-server/project-scope.feature` is unchanged and passes.
+
+**What I rechecked at `fb79c80`:**
+
+| Check | Result |
+| --- | --- |
+| All MCP scenarios, `npx cucumber-js features/mcp-server` (SC1, SC2, SC3, SC5, the D-CF6-10 pins of SC4) | 55 scenarios, 704 steps passed |
+| `node --test test/domain/mcp-resolution.test.ts test/domain/components/mcp.test.ts test/domain/components/plugin.test.ts test/domain/plugin-resolver.test.ts test/integration/mcp-migration.test.ts test/orchestrators/plugin/install-flow-ledger.test.ts test/orchestrators/reconcile/mcp-migration.test.ts` | 713 pass, 0 fail |
+| `node --test test/bridges/agents/*.test.ts` (with the Phase 4 suites; holds the D-CF6-10 cases, now `convert.test.ts:2198` and `:2218`) | 1212 pass, 0 fail |
+| Full gate | reused, not re-run: `npm run check` exit 0 at `ab28834` (cucumber 1539/1539, seed 516814); `fb79c80` changed only the audit |
+
+Line references that moved: `MCP_ASYNC_WARNING` is now `convert.ts:120-123` (the D-CF6-10 doc comment above it is l.116-119); `convert.ts:899-901`, `:961` and `:1011` are unchanged; the `convert.test.ts` D-CF6-10 cases are l.2198 and l.2218. The SC4/MCP-07 override (user decision A.2, accepted by acolomba 2026-11-02T11:15:00Z) is kept unchanged. Phase 4's re-verification carries the same A.2 decision as an override of its "no background run unless asked" prohibition.
+
+**Earlier warnings, re-read.** Warning 1 (wording) stands as reduced: the install warning (`convert.ts:120-123`) still names the background launch as the way to reach MCP tools, and the scenario title at `features/mcp-server/invocation.feature:135` still gives the foreground launch as the cause, where bug A is the cause in that scenario. Info for the parent: `.planning/PROJECT.md:1807` (D-CF6-10) still says "Phase verification is `human_needed` on this pin".
+
+**Covered files.** None was deleted, none added. The digest is recomputed.
+
+**Verdict:** still passed, 5/5 (4 VERIFIED, 1 PASSED (override) on SC4/MCP-07). No gap.

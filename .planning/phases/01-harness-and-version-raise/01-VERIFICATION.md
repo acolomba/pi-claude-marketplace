@@ -1,6 +1,6 @@
 ---
 phase: 01-harness-and-version-raise
-verified: 2026-11-01T07:20:00Z
+verified: 2026-11-03T14:00:00Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
@@ -37,32 +37,37 @@ covered_files:
   - ".planning/phases/01-harness-and-version-raise/01-15-SUMMARY.md"
   - "extensions/pi-claude-marketplace/bridges/mcp/adapter-escape.ts"
   - "extensions/pi-claude-marketplace/domain/shell-words.ts"
+  - "features/agent/project-trust.feature"
   - "features/lib/hook-recorder.ts"
   - "features/lib/mcp-stub-server.ts"
   - "features/lib/pi-process.ts"
   - "features/lib/pi-registry-probe/extension.ts"
   - "features/lib/scripted-model/extension.ts"
   - "features/lib/scripted-model/script.ts"
+  - "features/step_definitions/companion.steps.ts"
+  - "features/step_definitions/model.steps.ts"
+  - "features/step_definitions/session.steps.ts"
   - "features/support/world.ts"
   - "package.json"
-covered_digest: "v4:sha256:48559d15971680112b8e844c416f013fba81c771def5343b2ad81b50372b5687"
+  - "test/architecture/behavioral-shard-coverage.test.ts"
+covered_digest: "v4:sha256:e0b6a433ad466e23cdf7a8084323068918303a437e36a7c4d920600c4e634bd9"
 behavior_unverified: 0
 overrides_applied: 0
-human_verification:
-  - test: "Dispatch ci.yml on GitHub (or push the branch) and read the wall time of the `behavioral tests, lifecycle` and `behavioral tests, components` jobs"
-    expected: "Each job finishes in well under 10 minutes, so the 15-minute timeout holds the run with at least 1.5x margin"
-    why_human: "The branch is not on origin. The shard times in ci.yml are local runs (lifecycle 94 s and 102 s, components 35 s twice) doubled by estimate for a hosted runner. CI-01 asks for timeouts that hold the measured run. The local measurement is real, the hosted-runner figure is an assumption that only a CI run can settle."
-  - test: "Accept or reject the HAR-06 observation change recorded in 01-07-SUMMARY (coverage D2, human_judgment: true)"
-    expected: "A decision on whether the trusted and untrusted scenarios may observe a project-scope agent run (`agentScope: project` refused for want of trust) instead of the agent list"
-    why_human: "The plan's truth named the agent list. pi-subagents 0.84 lists project agents whatever the trust, so the list cannot show the difference. The verifier judges the replacement a faithful pair (see Truth 4), but the executor flagged it as a judgment call and the project's parity rule says the user decides."
+re_verification:
+  previous_status: passed
+  previous_score: 5/5
+  previous_verified: 2026-11-01T07:20:00Z
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 1: Harness and Version Raise Verification Report
 
 **Phase Goal:** A component phase can write its scenarios by adding only its own files: Pi and its three companions run at their latest releases with the declared floors raised, a scenario can start a profile Pi with a scripted model and the stand-ins that observe each kind, every kind has a seed scenario, and the decisions that span more than one component phase are recorded.
-**Verified:** 2026-11-01T07:20:00Z
-**Status:** passed (both human-verification items resolved 2026-11-01, see "Human Verification Resolution")
-**Re-verification:** No, initial verification
+**Verified:** 2026-11-03 at `fb79c80` (first verified 2026-11-01T07:20:00Z)
+**Status:** passed (both human-verification items of 2026-11-01 resolved the same day, see "Human Verification Resolution")
+**Re-verification:** Yes. This run rechecks every criterion and requirement at `fb79c80` after the locality redesign (D-LOC-01) and the later harness edits. See "Re-verification 2026-11-03" below. The truth table below keeps the 2026-11-01 evidence; where it moved, the re-verification section gives the current place.
 
 The tree is branch `claude/quirky-planck-hhm592` at `5dbc77a`. Every claim below comes from reading the code and running targeted tests in this session. The long suites were not re-run (`npm run check`, full cucumber, e2e). The orchestrator measured them, see "Gate results reused".
 
@@ -82,7 +87,7 @@ Both items in `human_verification` were resolved by the orchestrator on 2026-11-
 | 1 | `package.json` declares the raised floors and the new optional peer, with no companion in the lockfile, the peer installer installs all three at their floors, the floor tests prove them, and the docs name the versions (VER-01, 02, 03, 06) | VERIFIED | `package.json`: peer `pi-coding-agent >=1.4.0`, dev `^1.4.0`, `pi-tui` dev `^1.4.0`, `pi-ai` dev exactly `1.4.0`, `pi-mcp-adapter >=7.0.0 <8`, `pi-subagents >=0.84.0`, `@quintinshaw/pi-dynamic-workflows >=3.15.0 <4`, all three `optional: true`. `grep` of `package-lock.json` finds no `node_modules/` entry for any companion; the lock root mirrors the peer ranges. `scripts/install-test-peers.mjs` lists all three peer names and reads each floor with `minVersion`; the cache holds `pi-mcp-adapter 7.0.0`, `pi-subagents 0.84.0`, `pi-dynamic-workflows 3.15.0`. Installed Pi, pi-tui, and pi-ai are all 1.4.0. `test/e2e/pi-peer-floor/package.json` pins 1.4.0 and `pi-json-output.test.ts` asserts 1.4.0. `node --test` on `peer-floor`, `adapter-escape`, `adapter-entry`, `adapter-expansion-conformance`, `claude-mcp-variables`, and `pi-api`: 320 pass, 0 fail. README, `README.es.md`, `AGENTS.md`, `STACK.md`, and `docs/{mcp,workflows}-compatibility.md` name 1.4.0, 0.84.0, 7.0.0, and 3.15.0. |
 | 2 | Under pi-mcp-adapter 7.x a literal the bridge writes, including `${NAME:-default}`, reaches the server unexpanded, the conformance property is re-proved on 7.x, and the `:-` and new-key decision carries an ID (VER-04, VER-05) | VERIFIED | `bridges/mcp/adapter-escape.ts` has a `TRIGGER` regex that also matches `$` before `{NAME:-`, and `escapeTrigger` inserts the split token. `test/integration/adapter-expansion-conformance.test.ts` runs rows through the real adapter 7.0.0 functions (`interpolateEnvVars`) and includes a nested `:-` generator "literal `${NAME:-default}` text which pi-mcp-adapter 7.x expands (VER-04)", the unset, empty, and set precondition for the delegation, and marker-default and adversarial property tests. The suite passes. PROJECT.md carries D-CF1-13 (`:-` delegation, hybrid with install-time resolution for marker defaults, deny-listed names, base-URL names) and D-CF1-14 (`appendStructuredContent` and `roots` join `CARRIED_FIELDS`). |
 | 3 | A seed scenario starts a profile Pi with the real extension, scripted model, probe, and the three companions; the model-turn `When` waits for the settled turn and keeps every record; the scripted model fails on overrun or unused steps; probe, recorder, and stub report; the shared Pi keeps no model and no companions; every existing scenario passes (HAR-01..04) | VERIFIED | `world.ts` `usePiWithProfile` starts a separate `PiProcess` loading `SCRIPTED_MODEL_EXTENSION`, `REGISTRY_PROBE_EXTENSION`, then the named companions from their `pi.extensions` entries; `support/pi-process.ts` `BeforeAll` starts the shared Pi with no extra extensions, so it keeps no model. `scripted-model/extension.ts` logs `overflow: true` past the script and has no fallback reply; the `After` hook fails a passing scenario on `unusedScriptSteps` and on an uncompared turn. `session.steps.ts` waits for `agent_settled` and asserts `aborted === false`; no `setTimeout` sleeps in the turn path. `hook-recorder.ts`, `mcp-stub-server.ts`, and `pi-registry-probe/*` exist and are exercised. I ran `npx cucumber-js features/{skill,slash-command,agent,hook,mcp-server,workflow}`: 11 scenarios, 137 steps, all pass. The orchestrator's 1169/1169 covers the pre-existing scenarios. |
-| 4 | Profile Pis keep `TMPDIR` and companion writes in the sandbox and reset to an asserted clean baseline; a trusted and an untrusted scenario both pass; each of the six directories has a seed using its kind's writer and step module; `check:features` is green; the cucumber skill describes the profile Pi, scripted model, stand-ins, and ownership table (HAR-05..08) | VERIFIED | `usePiWithProfile` sets `TMPDIR` to `{home}/tmp` inside the sandbox, links only the jiti compile cache to the run root, and registers a release that stops the Pi and then asserts every stand-in pid is dead (`assertStandInsStopped`). The shared `Before` hook empties every sandbox directory and asserts no skills, payloads, marketplaces, or git host state. `After` asserts no unused script steps. `features/agent/project-trust.feature`: the trusted scenario runs `demo:reviewer` as a project-scope agent; the untrusted scenario (`in an untrusted project`, no `trust.json` entry) gets pi-subagents' own "requires project trust" refusal. Both pass, and both hold the same settings file, so only trust differs. The step `pi-mcp-adapter allows project mcp servers for the user` is a separate `Given` and is used by `mcp-server/invocation.feature`. Directories `features/{skill,slash-command,agent,hook,mcp-server,workflow}/` each hold a seed; each kind has `lib/<kind>-files.ts` and `step_definitions/<kind>/*.steps.ts`. `npm run check:features` exits 0 (no unused or ambiguous step). `.agents/skills/cucumber/rules/layout.md` carries the ownership table and frozen-file list; `world-and-stand-ins.md` has the sections "Profile Pis and the scripted model", "The scripted model", and "Stand-ins of the profile Pi". See human item 2 for the HAR-06 observation change. |
+| 4 | Profile Pis keep `TMPDIR` and companion writes in the sandbox and reset to an asserted clean baseline; a trusted and an untrusted scenario both pass; each of the six directories has a seed using its kind's writer and step module; `check:features` is green; the cucumber skill describes the profile Pi, scripted model, stand-ins, and ownership table (HAR-05..08) | VERIFIED | `usePiWithProfile` sets `TMPDIR` to `{home}/tmp` inside the sandbox, links only the jiti compile cache to the run root, and registers a release that stops the Pi and then asserts every stand-in pid is dead (`assertStandInsStopped`). The shared `Before` hook empties every sandbox directory and asserts no skills, payloads, marketplaces, or git host state. `After` asserts no unused script steps. `features/agent/project-trust.feature`: the trusted scenario runs `demo:reviewer` as a project-scope agent; the untrusted scenario (`in an untrusted project`, no `trust.json` entry) gets pi-subagents' own "requires project trust" refusal. Both pass, and both hold the same settings file, so only trust differs. The step `pi-mcp-adapter allows project mcp servers for the user` is a separate `Given` (`features/step_definitions/mcp-configuration.steps.ts:49`); since 06-01 it is used by `mcp-server/project-scope.feature` (l.8, l.74), not `invocation.feature`. Directories `features/{skill,slash-command,agent,hook,mcp-server,workflow}/` each hold a seed; each kind has `lib/<kind>-files.ts` and `step_definitions/<kind>/*.steps.ts`. `npm run check:features` exits 0 (no unused or ambiguous step). `.agents/skills/cucumber/rules/layout.md` carries the ownership table and frozen-file list; `world-and-stand-ins.md` has the sections "Profile Pis and the scripted model", "The scripted model", and "Stand-ins of the profile Pi". See human item 2 for the HAR-06 observation change. |
 | 5 | Pre-fan-out decisions and the four 2026-10-31 decisions carry IDs, the PROJECT.md bullet that contradicts D-07 is corrected, the CI behavioral job installs the companions and runs lifecycle and component path shards whose timeouts hold the measured run with margin, and `npm run check` passes (DEC-01, DEC-02, CI-01) | VERIFIED (timing assumption routed to human) | PROJECT.md holds D-CF1-01..17. Mapping: D-CF1-01 (FG-01..04 argument rules, append, forms, skill args), -02 (FG-05 injection), -03, -04 (FG-06 description fallback), -05 (FG-10 dropped fields), -06 (FG-14 custom directories), -07 (project trust), -08 (directory names), -09..12 (`user-invocable: false`, `new` as `clear`, `compact`, `fork`). The Out of Scope bullet now reads "Supplemental component paths ... a declared path replaces the conventional folder ... (D-CF1-06)", replacing the line that contradicted D-07. `ci.yml` `behavioral` is a two-entry matrix (`lifecycle`: `features/marketplace features/plugin`; `components`: the six kind directories), `fail-fast: false`, runs `npm run test:cucumber -- $SHARD_PATHS` (which first runs `install-test-peers.mjs`), with the paths passed through `env:`. `test/architecture/behavioral-shard-coverage.test.ts` fails when a feature file is in zero or two shards; it passes. Timeouts are 15 minutes against local runs of about 100 s and 35 s. `npm run check` exit 0 is from the orchestrator (see below). |
 
 **Score:** 5/5 truths verified (0 present, behavior-unverified)
@@ -190,7 +195,7 @@ No stubs found. The pass-through `registerCommandInvocation` and the unwired cor
 
 ### Gaps Summary
 
-No blocking gaps. All five roadmap criteria and all 17 requirement IDs have code evidence, and the targeted tests I ran pass. Status is `human_needed` only because of the two items above.
+No blocking gaps. All five roadmap criteria and all 17 requirement IDs have code evidence, and the targeted tests I ran pass. The 2026-11-01 report was `human_needed` only because of the two items above; both were resolved that day (see "Human Verification Resolution").
 
 Non-blocking findings:
 
@@ -199,7 +204,38 @@ Non-blocking findings:
 - **Info 2:** `.github/workflows/ci.yml` line 188 reads `uses: $/.github/workflows/sonarcloud.yml`. It is identical in the phase base commit (`002cb84`), so this phase did not introduce it. It looks like a mangled `./`. Check it independent of this phase.
 - **Info 3:** An empty directory `/root/.pi/agent/pi-claude-marketplace` dates from 02:10, before my runs. My runs wrote nothing under `/root/.pi`. I cannot attribute the earlier one. It is empty, so no data reached the real home, but an earlier run did create a path there.
 
+
+## Re-verification 2026-11-03
+
+**Why stale:** three covered files changed after the 2026-11-01 report. None changes behavior a criterion depends on.
+
+- `.github/workflows/ci.yml` (4b29a69): a comment only. It adds a local timing of the components shard after the workflow, MCP and agent merges (215 scenarios, 2 min 26 s, 4 CPUs) and says the hosted re-measure is still to do. The `behavioral` job (two path shards, `fail-fast: false`, 15-minute timeout, `npm run test:cucumber -- $SHARD_PATHS`) is unchanged.
+- `features/lib/pi-process.ts` (0b23370): `DIALOG_METHODS` is now exported and imported by `features/step_definitions/session.steps.ts`, so the set is defined once. The settled-turn wait (`session.steps.ts:100-103`, `agent_settled` with `aborted === false`) is unchanged.
+- `features/lib/scripted-model/script.ts` (cd3b5b1): adds `numberedModelCall`, which `model.steps.ts` now uses for "the model call {int} receives this system prompt". The overflow marker (`scripted-model/extension.ts:88`) and the `After` checks (`world.ts:786-817`, unused steps and uncompared turn) are unchanged.
+
+**The locality redesign (D-LOC-01, 5ecd962..64c2c9d) does not touch the harness.** D-CF1-07 still holds: a trusted profile Pi gets a `trust.json` entry (`world.ts:756-761`), an untrusted one has none and the steps assert `ENOENT` (`model.steps.ts:73-80`, `companion.steps.ts:78-84`). The trust pair in `features/agent/project-trust.feature` (4 scenarios) is unchanged and passes. The redesign's new scenarios (`features/plugin/project-trust.feature`, `project-locality.feature`) are built on this same harness trust entry.
+
+**What I rechecked at `fb79c80`:**
+
+| Check | Result |
+| --- | --- |
+| SC1: `package.json` peer/dev ranges, `optional: true` for the three companions, no companion in `package-lock.json` (0 `node_modules/` entries), peer cache at 7.0.0 / 0.84.0 / 3.15.0, docs name 1.4.0, 0.84.0, 7.0.0, 3.15.0 (README, README.es, STACK.md, compat docs; AGENTS.md names 1.4.0) | holds |
+| SC1, SC2: `node --test` on `peer-floor`, `behavioral-shard-coverage`, `hermetic-git-environment`, `adapter-escape`, `adapter-entry`, `adapter-expansion-conformance` (integration, real adapter 7.0.0), `claude-mcp-variables`, `pi-api`, `shell-words` | 471 pass, 0 fail |
+| SC3, SC4: seeds and D-CF1-06 scenarios, `npx cucumber-js features/skill/invocation.feature features/slash-command/listing.feature features/hook/tool-use.feature features/workflow/run.feature features/plugin/component-directories.feature features/plugin/staging-warnings.feature` | 75 scenarios, 911 steps passed (seed 555353) |
+| SC3, SC4: agent and MCP seeds and the trust pair, `npx cucumber-js features/agent` and `features/mcp-server` | 41/41 (seed 120952) and 55/55 passed |
+| SC4: `npm run check:features` | exit 0 |
+| SC4: cucumber skill rules (`world-and-stand-ins.md` sections "Profile Pis and the scripted model", "The scripted model", "Stand-ins of the profile Pi", "Reset and CI"; `layout.md` ownership table and "Frozen after Phase 1") | present |
+| SC5: D-CF1-01..17 in PROJECT.md (l.1759-1775); the Out of Scope bullet "Supplemental component paths ... a declared path replaces the conventional folder" (l.1406) | present |
+| SC5: full gate | reused, not re-run: `npm run check` exit 0 at `ab28834` (cucumber 1539/1539, seed 516814); `fb79c80` changed only the audit |
+| Real home | my runs wrote nothing under `/root/.pi` |
+
+**CI-01 timing (Info, not a gap).** The components shard now holds 372 scenarios (`cucumber-js --dry-run` on its six paths), against 11 at the hosted measurement and 215 at the local one. Extrapolating the local rate gives about 4 to 5 minutes, and the 2026-11-01 hosted runner was about 1.3 times slower than local on the lifecycle shard, so the estimate stays under 10 minutes, the most a 15-minute timeout allows at 1.5 times margin. This is an estimate. `ci.yml` itself says the hosted re-measure is still to do. The parent should dispatch `ci.yml` before the milestone PR and read the components job time.
+
+**Covered files.** None was deleted. I added `features/step_definitions/{session,model,companion}.steps.ts` (HAR-03 settle wait, HAR-06 trust Givens), `features/agent/project-trust.feature` (the HAR-06 pair), and `test/architecture/behavioral-shard-coverage.test.ts` (CI-01). The resolved `human_verification` items left the frontmatter; their resolution stays in "Human Verification Resolution". The digest is recomputed.
+
+**Verdict:** still passed, 5/5 roadmap criteria, all 17 requirements satisfied. No gap. One Info item for the parent: the hosted CI shard time.
+
 ---
 
-_Verified: 2026-11-01T07:20:00Z_
+_Verified: 2026-11-03 (re-verification at `fb79c80`; first verified 2026-11-01T07:20:00Z)_
 _Verifier: Claude (gsd-verifier)_
