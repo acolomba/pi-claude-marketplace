@@ -42,6 +42,8 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 
 ## Uso
 
+Para scripts, consulta [Salida JSON](docs/json-output.md).
+
 Instala la extensión de Pi:
 
 ```bash
@@ -253,6 +255,15 @@ Fija un mercado de GitHub a una rama, etiqueta o confirmación con un sufijo `#r
 /claude:plugin marketplace add https://github.com/upstash/context7-marketplace#v1.0.30
 ```
 
+Agrega un mercado desde otro host git `https://`, como GitLab.
+
+```text
+/claude:plugin marketplace add https://gitlab.com/my-group/my-marketplace
+```
+
+> [!NOTE]
+> La autenticación Device Flow también cubre `gitlab.com`. Los hosts que no son GitHub necesitan la URL `https://` completa; la forma abreviada `owner/repo` solo apunta a GitHub.
+
 Agrega un mercado desde el sistema de archivos local. La ruta puede ser un directorio con `.claude-plugin/marketplace.json`, o una ruta directa a un archivo `marketplace.json`.
 
 ```text
@@ -389,7 +400,37 @@ Desinstala un complemento.
 /claude:plugin uninstall context7-plugin@context7-marketplace
 ```
 
-Recarga Pi después de los cambios.
+Conserva la carpeta de datos del complemento con `--keep-data`.
+
+```text
+/claude:plugin uninstall context7-plugin@context7-marketplace --keep-data
+```
+
+Elimina también las dependencias que ya no necesita ningún complemento restante con `--prune`.
+
+```text
+/claude:plugin uninstall context7-plugin@context7-marketplace --prune
+```
+
+Puedes desinstalar un complemento que otro complemento instalado necesita. Su fila nombra a los dependientes activados como `{dependents unsatisfied}`. El siguiente `/claude:plugin apply` vuelve a instalar el complemento como dependencia, porque los dependientes todavía lo declaran. Si esa instalación falla, `apply` desactiva esos dependientes. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
+
+Para eliminar las instalaciones de dependencias huérfanas sin nombrar un complemento que desinstalar, ejecuta `prune`. Selecciona el ámbito del usuario de forma predeterminada. Usa `--scope project` para seleccionar el ámbito del proyecto.
+
+```text
+/claude:plugin prune
+/claude:plugin prune --scope project
+```
+
+Previsualiza el mismo ámbito con `--dry-run`. La vista previa lee el estado actual y no escribe nada. Un `prune` posterior vuelve a comprobar el estado, así que su resultado puede cambiar.
+
+```text
+/claude:plugin prune --dry-run
+/claude:plugin prune --scope project --dry-run
+```
+
+Solo cuentan los complementos instalados como dependencia que ningún complemento instalado del mismo ámbito declara. Incluso los complementos desactivados conservan sus dependencias. Los complementos que instalaste por su nombre siguen instalados. La limpieza se repite hasta que ningún complemento cumple la condición. Las filas reales dicen `(uninstalled) {dependency pruned}`; las filas de la vista previa dicen `(will uninstall) {dependency pruned}`. Si ninguno cumple la condición, los dos comandos informan `Nothing to prune in user scope: no orphaned dependency installs were found.` para el ámbito predeterminado.
+
+Recarga Pi después de los cambios. Ni `/reload` ni `/claude:plugin apply` eliminan las dependencias huérfanas. Ejecuta `prune` o `uninstall <plugin> --prune` para eliminarlas.
 
 ```text
 /reload
