@@ -2,19 +2,18 @@
 gsd_state_version: "1.0"
 milestone: component-features
 milestone_name: Component Behavioral Tests
-current_phase_name: Locality and Upstream Alignment
-status: executing
-stopped_at: Phase 8 added as a retroactive record (4/4 plans complete); verification pending
-last_updated: "2026-11-03T01:53:24.048Z"
+status: Awaiting next milestone
+stopped_at: Milestone component-features completed and archived 2026-11-03 (8 phases, 65 plans, 62/62 requirements)
+last_updated: "2026-11-03T02:57:05.624Z"
 last_activity: 2026-11-03
-state_head: b9f40ad1132e9a5a85a2fbd74120d81c753d5260
+last_activity_desc: Milestone component-features completed and archived
+state_head: 84ebb3ba6dc2b47c692b755b13e507b20753e91e
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 65
   completed_plans: 65
-  percent: 88
-last_activity_desc: Phase 8 records the locality and upstream alignment work
+  percent: 100
 ---
 
 # Project State
@@ -26,14 +25,14 @@ See: `.planning/PROJECT.md` (updated 2026-11-02 after the component-features mil
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** component-features reopened 2026-11-02. Phase 8 (Locality and Upstream Alignment) was added 2026-11-03 as a retroactive record of the work merged since (D-LOC-01, T-05-33, W6, W2/W4 guards); its 4 plans are complete and its verification is pending. Next: verify Phase 8, re-verify Phases 2, 3, 5 and 7, re-audit, and re-close the milestone. Open for the user: review the upstream branches on `acolomba/pi` and `acolomba/pi-subagents`.
+**Current focus:** component-features closed again 2026-11-03 after Phase 8 and the re-verification of every phase. Next: version bump, CHANGELOG entry and the PR for `claude/quirky-planck-hhm592` (dispatch `ci.yml` first to re-measure the components shard). Open for the user: review the upstream branches on `acolomba/pi` and `acolomba/pi-subagents`.
 
 ## Current Position
 
-Phase: 8 of 8 (Locality and Upstream Alignment)
-Plan: 4 of 4 complete (retroactive records)
-Status: Verification pending
-Last activity: 2026-11-03 — Phase 8 added and recorded
+Phase: Milestone component-features complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-03 — Milestone component-features completed and archived
 
 ### mcp-4 closeout
 

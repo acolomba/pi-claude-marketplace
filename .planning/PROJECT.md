@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Current Milestone: component-features -- Component Behavioral Tests (branch: claude/quirky-planck-hhm592, started 2026-10-31, closed and reopened 2026-11-02 for further work)
+## Previous Milestone: component-features -- Component Behavioral Tests (branch: claude/quirky-planck-hhm592, started 2026-10-31, first closed 2026-11-02, reopened, completed 2026-11-03, not yet merged, no npm release)
 
 **Goal:** The cucumber suite checks every bridged component kind -- skills,
 commands, agents, hooks, MCP servers, workflows -- as Pi and its companion
@@ -703,12 +703,22 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**In progress on branch `claude/quirky-planck-hhm592`:** milestone
-`component-features`, reopened 2026-11-02 after its first close (7 phases,
-61 plans, 58/58 requirements at that close). Since the reopen: the locality
-principle (D-LOC-01) replaced the user-folder provenance ledger with Pi's
-project trust, project workflows are stored in the project, and hook output
-is read in full as upstream (T-05-33). More phases may follow.
+**Completed on branch `claude/quirky-planck-hhm592`, no PR yet:** milestone
+`component-features` (2026-11-03, Phases 1-8, 65 plans, 62/62 requirements;
+archived to `.planning/milestones/component-features-*`; first closed
+2026-11-02 and reopened for the user's decisions). The cucumber suite checks
+every bridged component kind as Pi and its companions see it after a real
+install, with a scripted model and no authenticated LLM: 1539 scenarios.
+Shipped behavior changes: Claude Code's argument substitution and `!` commands
+for typed skills and commands, skill and command name aliases, a
+`run_plugin_command` tool for the model, variable fill on a model's skill read
+(only of Pi's own read text), merged MCP sources and in-plugin reference links,
+background launch for MCP agents, hook parity fixes with whole hook output,
+and the workflow-wins name rule (D-CF7-05). The locality principle (D-LOC-01)
+keeps a project's effects in the project: trust comes from Pi alone, project
+workflows live in `.pi/`, and an untrusted project cannot turn on autoapply.
+Upstream fixes for Pi and pi-subagents wait on the user's forks for review.
+Audit `tech_debt`, no blockers.
 
 **Completed on PR branch; PR #290 open:** milestone `plugin-lifecycle`
 (2026-10-29, Phases 1-11, 80 plans, 64/64 requirements; archived to
@@ -858,8 +868,10 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-Milestone `component-features` is active (reopened 2026-11-02); its requirements are in
-[REQUIREMENTS.md](REQUIREMENTS.md). The 64
+No milestone is active. The 62 component-features requirements are validated
+and archived in
+[milestones/component-features-REQUIREMENTS.md](milestones/component-features-REQUIREMENTS.md);
+the 64
 plugin-lifecycle requirements are validated and archived in
 [milestones/plugin-lifecycle-REQUIREMENTS.md](milestones/plugin-lifecycle-REQUIREMENTS.md);
 the 104 lifecycle-coverage requirements are validated and archived in
@@ -876,7 +888,7 @@ the 36 json-output requirements in
   cannot honor, sends a typed skill with Claude Code's argument substitution,
   variables and `!` commands, fills the variables when the model reads a skill
   file, resolves name clashes as upstream, and follows the plugin lifecycle;
-  project skills need this user's install record (D-CF2-13..16); the gap
+  project skills run only in a project Pi trusts (D-LOC-01); the gap
   report was resolved by the user (D-CF2-10) -- component-features Phase 2,
   2026-11-02 (SKL-01..06).
 
@@ -922,6 +934,13 @@ the 36 json-output requirements in
   and loading it later needs no reinstall, and disable, uninstall, and update
   remove or replace the command; the divergences are D-CF7-01..04 --
   component-features Phase 7, 2026-11-01 (WFL-01..05).
+
+- ✓ A project-scope operation keeps its effects in its project scope, trusting
+  the project through Pi alone, with an untrusted project unable to turn on
+  autoapply (D-LOC-01); hook output reaches the model whole, as Claude Code
+  delivers it (T-05-33); a skill file the model reads is filled only while it
+  is the skill's own text (W6); and the audit warnings W2 and W4 are pinned by
+  scenarios (DC-44) -- component-features Phase 8, 2026-11-03 (LOC-01..04).
 
 - ✓ The behavioral harness and the version raise are in place: Pi 1.4.0 and
   the three companions at their latest releases with the declared floors
@@ -2134,3 +2153,5 @@ _Last updated: 2026-11-02 after the component-features milestone closed. SKL-01.
 _Last updated: 2026-11-02 after the project locality decision (DC-41). D-LOC-01 added; D-CF2-13, D-CF2-14, D-CF2-15, D-CF2-16, and D-CF3-07 reversed; project workflows moved into the project (amends WPTH-02)._
 
 _Last updated: 2026-11-02 after the component-features milestone was reopened for further work (locality redesign, hook output parity, possible new phases)._
+
+_Last updated: 2026-11-03 after the component-features milestone closed again. 62/62 requirements validated (LOC-01..04 added by Phase 8); D-LOC-01 reworded as scope locality and extended to autoapply (DC-45); all requirements archived._
