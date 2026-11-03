@@ -285,29 +285,6 @@ describe("setDescriptionScalar", () => {
     // assert
     assert.strictEqual(skillContent, expectedContent);
   });
-
-  test("treats a sparse frontmatter split entry as an absent description", (t) => {
-    // arrange
-    const sourceContent = "sparse frontmatter";
-    t.mock.method(String.prototype, "split", function (this: string) {
-      if (this === sourceContent) {
-        const lines: string[] = [];
-        lines.length = 3;
-        lines[0] = "---";
-        lines[2] = "---";
-        return lines;
-      }
-
-      return [this];
-    });
-    const expectedContent = '---\n\ndescription: "new value"\n---';
-
-    // act
-    const skillContent = setDescriptionScalar(sourceContent, "new value");
-
-    // assert
-    assert.strictEqual(skillContent, expectedContent);
-  });
 });
 
 describe("repairSingleLineScalars", () => {

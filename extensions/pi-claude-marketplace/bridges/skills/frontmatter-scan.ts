@@ -21,9 +21,9 @@ import { SkillFrontmatterNodeError } from "../../shared/errors-bridges.ts";
  * and a `----` line closes the block as it does for Pi.
  */
 export function frontmatterBlockEnd(lines: readonly string[]): number {
-  for (let i = 1; i < lines.length; i++) {
-    if ((lines[i] ?? "").startsWith("---")) {
-      return i;
+  for (const [offset, line] of lines.slice(1).entries()) {
+    if (line.startsWith("---")) {
+      return offset + 1;
     }
   }
 
@@ -61,18 +61,22 @@ const EXPLICIT_VALUE = /^:(\s|$)/;
  */
 export function keyValueEnd(lines: readonly string[], keyIndex: number, blockEnd: number): number {
   let lastReplaced = keyIndex;
-  // IN-01: an explicit key (`? name`) takes its value from the next column-0
-  // `:` line, so that line belongs to the same node.
-  let awaitingValue = EXPLICIT_KEY.test(lines[keyIndex] ?? "");
-  for (let i = keyIndex + 1; i < blockEnd; i++) {
-    const line = lines[i] ?? "";
+  let awaitingValue = false;
+  for (const [offset, line] of lines.slice(keyIndex, blockEnd).entries()) {
+    if (offset === 0) {
+      // IN-01: an explicit key (`? name`) takes its value from the next column-0
+      // `:` line, so that line belongs to the same node.
+      awaitingValue = EXPLICIT_KEY.test(line);
+      continue;
+    }
+
     if (line.trim() === "") {
       continue;
     }
 
     if (/^\s/.test(line) || (awaitingValue && EXPLICIT_VALUE.test(line))) {
       awaitingValue &&= !EXPLICIT_VALUE.test(line);
-      lastReplaced = i;
+      lastReplaced = keyIndex + offset;
       continue;
     }
 
@@ -110,8 +114,8 @@ function nodeKeys(nodeLines: readonly string[]): readonly string[] | undefined {
  * make the frontmatter invalid.
  */
 export function topLevelNodeIndex(lines: readonly string[], blockEnd: number, key: string): number {
-  for (let i = 1; i < blockEnd; i++) {
-    const line = lines[i] ?? "";
+  for (const [offset, line] of lines.slice(1, blockEnd).entries()) {
+    const i = offset + 1;
     if (!/^\S/.test(line)) {
       continue;
     }

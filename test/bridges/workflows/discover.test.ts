@@ -809,16 +809,7 @@ test("folds case when deduping declared paths on a case-insensitive platform", a
   await mkdir(upperDir, { recursive: true });
   await writeFile(scriptFile, NAMED_GREET);
   await writeFile(path.join(upperDir, "greet.js"), NAMED_GREET);
-  const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
-
-  if (platformDescriptor === undefined) {
-    throw new Error("process.platform descriptor is unavailable");
-  }
-
-  t.after(() => {
-    Object.defineProperty(process, "platform", platformDescriptor);
-  });
-  Object.defineProperty(process, "platform", { ...platformDescriptor, value: "darwin" });
+  t.mock.property(process, "platform", "darwin");
 
   const resolved = resolvedPlugin(pluginRoot, ["workflows", "WORKFLOWS"]);
 
@@ -850,16 +841,7 @@ test("keeps case-distinct declared paths apart on a case-sensitive platform", as
   await mkdir(upperDir, { recursive: true });
   await writeFile(path.join(lowerDir, "greet.js"), NAMED_GREET);
   await writeFile(path.join(upperDir, "greet.js"), NAMED_GREET);
-  const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
-
-  if (platformDescriptor === undefined) {
-    throw new Error("process.platform descriptor is unavailable");
-  }
-
-  t.after(() => {
-    Object.defineProperty(process, "platform", platformDescriptor);
-  });
-  Object.defineProperty(process, "platform", { ...platformDescriptor, value: "linux" });
+  t.mock.property(process, "platform", "linux");
 
   const resolved = resolvedPlugin(pluginRoot, ["workflows", "WORKFLOWS"]);
 

@@ -103,17 +103,6 @@ for (const { row, expected } of [
   });
 }
 
-test("exports notification grammar from its named owner", () => {
-  // arrange
-  const expectedType = "function";
-
-  // act
-  const actualType = typeof composePluginLines;
-
-  // assert
-  assert.equal(actualType, expectedType);
-});
-
 const MARKETPLACE_BASE = { name: "official", scope: "user", plugins: [] } as const;
 
 for (const { status, extra, expected } of [

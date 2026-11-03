@@ -871,23 +871,26 @@ test("reports a commit rollback leak without promoting it to manual recovery", a
   const rollbackBlocker = path.join(prepared.stagingRoot, "rollback-blocker.md");
   await mkdir(rollbackBlocker, { recursive: true });
   await writeFile(path.join(rollbackBlocker, "child.txt"), "keep child\n");
-  const alphaPair = prepared._renamePairs.find((pair) => pair.to.endsWith("acme:alpha.md")) as
-    { from: string; to: string } | undefined;
+  const alphaPair = prepared._renamePairs.find((pair) => pair.to.endsWith("acme:alpha.md"));
   assert.ok(alphaPair);
   const actualFrom = alphaPair.from;
   let fromReads = 0;
-  delete (alphaPair as Partial<typeof alphaPair>).from;
-  Object.defineProperty(alphaPair, "from", {
-    configurable: true,
-    enumerable: true,
-    get() {
+  const shiftingAlphaPair = {
+    get from(): string {
       fromReads += 1;
       return fromReads === 1 ? actualFrom : rollbackBlocker;
     },
-  });
+    to: alphaPair.to,
+  };
+  const shiftingPrepared = {
+    ...prepared,
+    _renamePairs: prepared._renamePairs.map((pair) =>
+      pair === alphaPair ? shiftingAlphaPair : pair,
+    ),
+  };
 
   // act
-  const error = await commitPreparedCommands(createRemovalOps(), prepared).then(
+  const error = await commitPreparedCommands(createRemovalOps(), shiftingPrepared).then(
     () => undefined,
     (reason: unknown) => reason,
   );

@@ -31,7 +31,7 @@ function rewriteNameNode(content: string, newName: string): string {
   const keyIndex = topLevelNodeIndex(lines, blockEnd, "name");
   const replacement = `name: ${newName}`;
   if (keyIndex === -1) {
-    return [lines[0], replacement, ...lines.slice(1)].join("\n");
+    return [...lines.slice(0, 1), replacement, ...lines.slice(1)].join("\n");
   }
 
   const lastReplaced = keyValueEnd(lines, keyIndex, blockEnd);

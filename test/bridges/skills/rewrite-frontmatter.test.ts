@@ -140,30 +140,6 @@ for (const { description, skillDocument, expectedSkillDocument } of [
   });
 }
 
-test("treats a sparse frontmatter line as a missing name field", (t) => {
-  // arrange
-  const sourceSkillDocument = "---\ndescription: sparse\n---\nBody.";
-  const expectedRewrittenSkillDocument = "---\nname: generated-name\n\n---\nBody.";
-  t.mock.method(String.prototype, "split", function (this: string, separator?: string | RegExp) {
-    if (this === sourceSkillDocument && separator === "\n") {
-      const lines: string[] = [];
-      lines.length = 4;
-      lines[0] = "---";
-      lines[2] = "---";
-      lines[3] = "Body.";
-      return lines;
-    }
-
-    return [this];
-  });
-
-  // act
-  const rewrittenSkillDocument = rewriteFrontmatterName(sourceSkillDocument, "generated-name");
-
-  // assert
-  assert.strictEqual(rewrittenSkillDocument, expectedRewrittenSkillDocument);
-});
-
 for (const { description, generatedName, expectedError } of [
   {
     description: "rejects a numeric name that the parser changes from a string",

@@ -122,7 +122,7 @@ function redactQuotedAbsolutePaths(text: string): string {
 /** Takes the last path segment for either filesystem convention. */
 function pathBasename(filePath: string): string {
   const lastSeparator = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
-  return lastSeparator < 0 ? filePath : filePath.slice(lastSeparator + 1);
+  return filePath.slice(lastSeparator + 1);
 }
 
 /** Redacts a structured leak without guessing where spaces end its path. */

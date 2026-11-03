@@ -1721,15 +1721,16 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const zuluTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-zulu.md");
     const alphaStaged = path.join(prepared.stagingDir, path.basename(alphaTarget));
     const zuluStaged = path.join(prepared.stagingDir, path.basename(zuluTarget));
-    const stagedFilePaths = [...prepared.stagedFilePaths];
-    const zuluPair = stagedFilePaths[1];
+    const zuluPair = prepared.stagedFilePaths[1];
     assert.ok(zuluPair);
-    Object.defineProperty(stagedFilePaths, 1, {
-      configurable: true,
-      enumerable: true,
-      get() {
-        rmSync(prepared.stagingDir, { recursive: true, force: true });
-        return zuluPair;
+    const stagedFilePaths = new Proxy([...prepared.stagedFilePaths], {
+      get(target, property, receiver): unknown {
+        if (property === "1") {
+          rmSync(prepared.stagingDir, { recursive: true, force: true });
+          return zuluPair;
+        }
+
+        return Reflect.get(target, property, receiver) as unknown;
       },
     });
     const vanishingPrepared = { ...prepared, stagedFilePaths: stagedFilePaths };

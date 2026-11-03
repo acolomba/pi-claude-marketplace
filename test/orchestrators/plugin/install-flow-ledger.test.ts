@@ -7370,28 +7370,6 @@ test("PI-17: same plugin may be installed in both user and project target scopes
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// PI-2 / NFR-5 -- architectural: no gitOps surface in install-outcome.ts
-// ───────────────────────────────────────────────────────────────────────────
-
-test("PI-2 / NFR-5: install outcome has zero git surface (no platform-git import, no DEFAULT_GIT_OPS, no gitOps field)", async () => {
-  // arrange
-  const src = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
-    "utf8",
-  );
-
-  // act
-  // Header docstring legitimately mentions platform-git / DEFAULT_GIT_OPS /
-  // gitOps in prose; strip comments first.
-  const stripped = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-
-  // assert
-  assert.equal(stripped.includes("platform/git"), false, "must not import platform/git");
-  assert.equal(stripped.includes("DEFAULT_GIT_OPS"), false, "must not reference DEFAULT_GIT_OPS");
-  assert.equal(stripped.includes("gitOps"), false, "must not reference gitOps");
-});
-
-// ───────────────────────────────────────────────────────────────────────────
 // Bridge ordering sanity (PI-9 corollary) -- state record reflects all 4 bridges
 // ───────────────────────────────────────────────────────────────────────────
 

@@ -383,39 +383,22 @@ function makeInjectedChild(
     });
   }
 
-  Object.defineProperties(child, {
-    stdin: { configurable: true, enumerable: true, value: stdin },
-    stdout: { configurable: true, enumerable: true, value: stdout },
-    stderr: { configurable: true, enumerable: true, value: stderr },
-    stdio: {
-      configurable: true,
-      enumerable: true,
-      value: [stdin, stdout, stderr, null, null],
-    },
-    pid: { configurable: true, enumerable: true, value: options.pid ?? 41_204 },
-    killed: {
-      configurable: true,
-      enumerable: true,
-      value: options.initiallyKilled ?? false,
-      writable: true,
-    },
-    kill: {
-      configurable: true,
-      enumerable: true,
-      value: (signal: NodeJS.Signals = "SIGTERM"): boolean => {
-        killSignals.push(signal);
-        if (options.killReturnsFalse === true) {
-          return false;
-        }
+  Object.assign(child, {
+    stdin,
+    stdout,
+    stderr,
+    stdio: [stdin, stdout, stderr, null, null],
+    pid: options.pid ?? 41_204,
+    killed: options.initiallyKilled ?? false,
+    kill: (signal: NodeJS.Signals = "SIGTERM"): boolean => {
+      killSignals.push(signal);
+      if (options.killReturnsFalse === true) {
+        return false;
+      }
 
-        Object.defineProperty(child, "killed", {
-          configurable: true,
-          enumerable: true,
-          value: true,
-          writable: true,
-        });
-        return true;
-      },
+      Object.assign(child, { killed: true });
+
+      return true;
     },
   });
 
@@ -2034,11 +2017,8 @@ test("contains a synchronous stdin end failure and cancels on child error", asyn
   const errorSpy = observeDebug(t);
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const stdin = new PassThrough();
-  Object.defineProperty(stdin, "end", {
-    configurable: true,
-    value: (): never => {
-      throw new Error("synchronous stdin end failure");
-    },
+  t.mock.method(stdin, "end", (): never => {
+    throw new Error("synchronous stdin end failure");
   });
   const processChild = makeInjectedChild(t, { stdin });
   const processBoundary = observeSpawn(t, processChild);

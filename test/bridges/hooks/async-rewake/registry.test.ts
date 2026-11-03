@@ -2659,15 +2659,7 @@ test("uses the real spawn and generated dispatch ID at the default boundary", as
 });
 
 function setCasePlatform(t: TestContext, platform: NodeJS.Platform): void {
-  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
-  if (descriptor === undefined) {
-    throw new Error("process.platform descriptor is unavailable");
-  }
-
-  t.after(() => {
-    Object.defineProperty(process, "platform", descriptor);
-  });
-  Object.defineProperty(process, "platform", { ...descriptor, value: platform });
+  t.mock.property(process, "platform", platform);
 }
 
 test(

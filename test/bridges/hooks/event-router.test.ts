@@ -3273,7 +3273,17 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   const runtime = createHooksRuntime();
   const { root } = await createHermeticEnvironment(t, "hooks-router-lazy-failure-");
   const projectRoot = path.join(root, "project");
-  const context = makeContext(projectRoot, root);
+  let lazyCwdFails = false;
+  const baseContext = makeContext(projectRoot, root);
+  const context = new Proxy(baseContext, {
+    get(target, property, receiver): unknown {
+      if (property === "cwd" && lazyCwdFails) {
+        throw new Error("project cwd unavailable");
+      }
+
+      return Reflect.get(target, property, receiver) as unknown;
+    },
+  });
   const { pi, registrations, messages } = makeRecordingPi();
   const dispatches: string[] = [];
   const executor: HookExecutor = (entry) => {
@@ -3286,13 +3296,8 @@ test("session_start contains a lazy project cwd failure and still delegates safe
     executor,
   });
   const sessionStart = registeredHandler(registrations, "session_start");
-  // A throwing getter is the only way to make a later read of `ctx.cwd` fail.
-  Object.defineProperty(context, "cwd", {
-    configurable: true,
-    get(): string {
-      throw new Error("project cwd unavailable");
-    },
-  });
+  // The proxy makes every later read of `ctx.cwd` fail.
+  lazyCwdFails = true;
 
   // act
   const sessionStartUpdate = await sessionStart(

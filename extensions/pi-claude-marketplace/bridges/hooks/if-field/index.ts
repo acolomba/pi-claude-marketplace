@@ -174,11 +174,11 @@ export type CompileIfPredicateContext = ResolveHookIfContext;
 /**
  * MATCH-03 permission-rule prefix shape:
  *   `<Prefix>(<inner>)`  e.g.  `Bash(git push *)` / `Read(src/**)`
- * Captures the prefix (group 1) and the inner pattern (group 2). Inner
- * may be empty -- `compileIfPredicate` rejects empty-inner forms via
- * the per-prefix compile attempt.
+ * The prefix is the text before the first `(` and the inner pattern is the
+ * text between it and the closing `)`. Inner may be empty; the per-prefix
+ * compile decides what an empty inner means.
  */
-const IF_PREFIX_REGEX = /^([A-Za-z_]\w*)\((.*)\)$/;
+const IF_PREFIX_REGEX = /^[A-Za-z_]\w*\(.*\)$/;
 
 /**
  * MCP segment shape: a single non-empty character class run. Anchored
@@ -275,9 +275,11 @@ export function compileIfPredicate(
     return TOOL_LESS_EVENT_IF;
   }
 
-  const prefixMatch = IF_PREFIX_REGEX.exec(trimmed);
-  if (prefixMatch !== null) {
-    return compileIfPrefixForm(trimmed, prefixMatch[1] ?? "", prefixMatch[2] ?? "", ctx);
+  if (IF_PREFIX_REGEX.test(trimmed)) {
+    // The regex's prefix class holds no `(` and its form ends in `)`, so the
+    // first `(` opens the inner pattern and the last character closes it.
+    const open = trimmed.indexOf("(");
+    return compileIfPrefixForm(trimmed, trimmed.slice(0, open), trimmed.slice(open + 1, -1), ctx);
   }
 
   if (matchMcpLiteral(trimmed)) {
@@ -306,27 +308,19 @@ function compileIfPrefixForm(
   ctx: CompileIfPredicateContext,
 ): IfPredicate {
   if (prefix === "Bash") {
-    try {
-      const bashGlob = compileBashGlob(inner);
-      return { kind: "bash", piEvents: IF_PREFIX_TARGETS.Bash.piEvents, bashGlob };
-    } catch (err) {
-      hookDebugLog(
-        `compileIfPredicate: Bash glob compile failed for "${raw}": ${errorMessage(err)}; falling open`,
-      );
-      return MATCH_ALL_IF;
-    }
+    return {
+      kind: "bash",
+      piEvents: IF_PREFIX_TARGETS.Bash.piEvents,
+      bashGlob: compileBashGlob(inner),
+    };
   }
 
   if (prefix === "PowerShell") {
-    try {
-      const psGlob = compilePowerShellRule(inner);
-      return { kind: "powershell", piEvents: IF_PREFIX_TARGETS.PowerShell.piEvents, psGlob };
-    } catch (err) {
-      hookDebugLog(
-        `compileIfPredicate: PowerShell glob compile failed for "${raw}": ${errorMessage(err)}; falling open`,
-      );
-      return MATCH_ALL_IF;
-    }
+    return {
+      kind: "powershell",
+      piEvents: IF_PREFIX_TARGETS.PowerShell.piEvents,
+      psGlob: compilePowerShellRule(inner),
+    };
   }
 
   if (prefix === "Read" || prefix === "Edit" || prefix === "Write") {

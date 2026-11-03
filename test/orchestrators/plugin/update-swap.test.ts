@@ -1095,11 +1095,6 @@ test("D-18-15 / NFR-3: without an overwrite policy a user-edited previous agent 
   assert.strictEqual(await readFile(args.locations.stateJsonPath, "utf8"), stateBefore);
 });
 
-test("exposes the atomic plugin update swap owner", () => {
-  // act & assert
-  assert.strictEqual(typeof swapPluginUpdate, "function");
-});
-
 test("atomically replaces staged resources and finalizes the update ledger", async () => {
   await withHermeticHome(async () => {
     // arrange

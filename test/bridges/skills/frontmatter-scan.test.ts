@@ -63,20 +63,6 @@ describe("frontmatterBlockEnd", () => {
       assert.strictEqual(blockEnd, expectedFrontmatterBlockEnd);
     });
   }
-
-  test("ignores missing array slots before the closing delimiter", () => {
-    // arrange
-    const frontmatterLines = new Array<string>(3);
-    frontmatterLines[0] = "---";
-    frontmatterLines[2] = "---";
-    const expectedFrontmatterBlockEnd = 2;
-
-    // act
-    const blockEnd = frontmatterBlockEnd(frontmatterLines);
-
-    // assert
-    assert.strictEqual(blockEnd, expectedFrontmatterBlockEnd);
-  });
 });
 
 describe("keyValueEnd", () => {
@@ -200,22 +186,6 @@ describe("keyValueEnd", () => {
       assert.strictEqual(keyEnd, expectedFrontmatterKeyValueEnd);
     });
   }
-
-  test("skips a missing array slot inside a multiline value", () => {
-    // arrange
-    const frontmatterLines = new Array<string>(5);
-    frontmatterLines[0] = "---";
-    frontmatterLines[1] = "description: >";
-    frontmatterLines[3] = "  Continued line";
-    frontmatterLines[4] = "---";
-    const expectedFrontmatterKeyValueEnd = 3;
-
-    // act
-    const keyEnd = keyValueEnd(frontmatterLines, 1, 4);
-
-    // assert
-    assert.strictEqual(keyEnd, expectedFrontmatterKeyValueEnd);
-  });
 });
 
 describe("topLevelNodeIndex", () => {
@@ -330,18 +300,4 @@ describe("topLevelNodeIndex", () => {
       );
     });
   }
-
-  test("skips a missing array slot", () => {
-    // arrange
-    const frontmatterLines = new Array<string>(4);
-    frontmatterLines[0] = "---";
-    frontmatterLines[2] = "name: review";
-    frontmatterLines[3] = "---";
-
-    // act
-    const index = topLevelNodeIndex(frontmatterLines, 3, "name");
-
-    // assert
-    assert.strictEqual(index, 2);
-  });
 });

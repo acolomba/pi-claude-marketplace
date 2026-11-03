@@ -621,17 +621,12 @@ test("an unknown ending is dropped without throwing", async () => {
   const { pi, sent } = makePi();
   const epoch = runtime.currentGeneration();
   agentEndCacheHandler(runtime, epoch)(agentEnd("future" as never));
-  let settleError: unknown;
 
   // act
-  try {
-    await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
-  } catch (error) {
-    settleError = error;
-  }
+  const settling = settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
   // assert
-  assert.strictEqual(settleError, undefined);
+  await assert.doesNotReject(settling);
   assert.deepStrictEqual(fired, []);
   assert.deepStrictEqual(sent, []);
 });
@@ -1230,21 +1225,14 @@ test("a send failure is contained and a later input starts a clean run", async (
   const failingPi = makePi(new Error("host refused")).pi;
   const healthy = makePi();
   const epoch = runtime.currentGeneration();
-  let settleError: unknown;
 
   // act
-  try {
-    await runStop(runtime, failingPi, emptyContext, executor);
-  } catch (error) {
-    settleError = error;
-  }
-
+  await assert.doesNotReject(runStop(runtime, failingPi, emptyContext, executor));
   await settleHandlerFor(runtime, epoch, healthy.pi, executor)(settledEvent, emptyContext);
   inputResetHandlerFor(runtime, epoch)();
   await runStop(runtime, healthy.pi, emptyContext, executor);
 
   // assert
-  assert.strictEqual(settleError, undefined);
   assert.deepStrictEqual(
     healthy.sent.map((call) => call.message["content"]),
     [feedbackContent("continue")],
@@ -1267,21 +1255,21 @@ test("an executor rejection consumes its ending and permits a fresh ending", asy
   const { pi, sent } = makePi();
   const epoch = runtime.currentGeneration();
   agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
-  let rejectedWith: unknown;
 
   // act
-  try {
-    await settleHandlerFor(runtime, epoch, pi, rejecting)(settledEvent, emptyContext);
-  } catch (error) {
-    rejectedWith = error;
-  }
+  await assert.rejects(
+    settleHandlerFor(runtime, epoch, pi, rejecting)(settledEvent, emptyContext),
+    (rejectedWith: unknown) => {
+      assert.strictEqual(rejectedWith, executorError);
 
+      return true;
+    },
+  );
   await settleHandlerFor(runtime, epoch, pi, healthy)(settledEvent, emptyContext);
   agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
   await settleHandlerFor(runtime, epoch, pi, healthy)(settledEvent, emptyContext);
 
   // assert
-  assert.strictEqual(rejectedWith, executorError);
   assert.deepStrictEqual(events, [{ last_assistant_message: "done", stop_hook_active: false }]);
   assert.deepStrictEqual(sent, []);
 });

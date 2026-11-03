@@ -92,6 +92,9 @@ function emitSafeDoubleQuotedScalar(value: string): string {
   return `"${escaped}"`;
 }
 
+/** A first line that is `---` once surrounding whitespace is trimmed. */
+const FIRST_LINE_FENCE = /^[^\S\n]*---[^\S\n]*(?:\n|$)/;
+
 /** The top-level frontmatter `description` key token (including its colon) that the writer emits. */
 const DESCRIPTION_KEY = "description:";
 
@@ -113,11 +116,11 @@ const DESCRIPTION_KEY = "description:";
  * without an opening `---` fence is returned unchanged.
  */
 export function setDescriptionScalar(content: string, value: string): string {
-  const lines = content.split("\n");
-  if (lines[0]?.trim() !== "---") {
+  if (!FIRST_LINE_FENCE.test(content)) {
     return content;
   }
 
+  const lines = content.split("\n");
   const blockEnd = frontmatterBlockEnd(lines);
   const keyIndex = topLevelNodeIndex(lines, blockEnd, "description");
   const replacement = `${DESCRIPTION_KEY} ${emitSafeDoubleQuotedScalar(value)}`;

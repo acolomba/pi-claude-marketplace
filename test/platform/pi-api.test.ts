@@ -757,11 +757,11 @@ describe("softDepStatus", () => {
 
   test("degrades to unloaded when a tool name accessor fails", () => {
     // arrange
-    const inaccessibleTool = Object.defineProperty({}, "name", {
-      get: () => {
+    const inaccessibleTool = {
+      get name(): string {
         throw new Error("inaccessible");
       },
-    });
+    };
     const extensionApi = toolInventory([inaccessibleTool]);
 
     // act

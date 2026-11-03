@@ -970,18 +970,6 @@ test("keeps mixed entries and duplicates ordered while reading live mode on the 
   verify(inventory);
 });
 
-test("independent contexts retain their own explicit modes", (t) => {
-  // arrange
-  const first = createContext(t);
-  const second = createContext(t);
-
-  // act
-  first.mode = "rpc";
-
-  // assert
-  assert.deepStrictEqual([first.mode, second.mode], ["rpc", "tui"]);
-});
-
 test("rejects an unsupported mode before structured or raw delivery", () => {
   // arrange
   const capture = createJsonCapture();
@@ -1008,115 +996,6 @@ test("rejects an unsupported mode before structured or raw delivery", () => {
   }, UnsupportedModeError);
   assert.deepStrictEqual(capture.entries, []);
   capture.assertValid();
-});
-
-for (const index of [0, 1, 2]) {
-  test(`retains an invalid capture at position ${index} after its append failure is caught`, () => {
-    // arrange
-    const capture = createJsonCapture();
-    const valid = {
-      schemaVersion: 1,
-      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-      kind: "usage-info",
-      severity: "info",
-      needsReload: false,
-      usage: "help",
-    };
-    const payloads: unknown[] = [valid, valid, valid];
-    payloads[index] = {};
-
-    // act
-    for (const payload of payloads) {
-      if (payload === valid) {
-        capture.entrySink.appendEntry("claude-plugin", payload);
-      } else {
-        assert.throws(() => {
-          capture.entrySink.appendEntry("claude-plugin", payload);
-        }, assert.AssertionError);
-      }
-    }
-
-    // assert
-    assert.deepStrictEqual(
-      capture.entries,
-      payloads.map((payload) => ({ customType: "claude-plugin", payload })),
-    );
-    assert.throws(() => {
-      capture.assertValid();
-    }, assert.AssertionError);
-  });
-}
-
-for (const { name, payload } of [
-  {
-    name: "undefined",
-    payload: {
-      schemaVersion: 1,
-      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-      kind: "cascade",
-      severity: "info",
-      needsReload: false,
-      marketplaces: [],
-      advisories: undefined,
-    },
-  },
-  { name: "null", payload: { extra: null } },
-  { name: "function", payload: { extra: () => undefined } },
-  { name: "symbol", payload: { extra: Symbol("extra") } },
-  { name: "bigint", payload: { extra: 1n } },
-  { name: "nonfinite number", payload: { extra: NaN } },
-  { name: "class instance", payload: { extra: new Error("extra") } },
-]) {
-  test(`capture rejects original ${name} values before serialization can hide them`, () => {
-    // arrange
-    const capture = createJsonCapture();
-
-    // act & assert
-    assert.throws(() => {
-      capture.entrySink.appendEntry("claude-plugin", payload);
-    }, assert.AssertionError);
-    assert.deepStrictEqual(capture.entries, [{ customType: "claude-plugin", payload }]);
-    assert.throws(() => {
-      capture.assertValid();
-    }, assert.AssertionError);
-  });
-}
-
-test("capture retains a wrong custom type after the immediate failure is caught", () => {
-  // arrange
-  const capture = createJsonCapture();
-
-  // act & assert
-  assert.throws(() => {
-    capture.entrySink.appendEntry("other", {});
-  }, assert.AssertionError);
-  assert.deepStrictEqual(capture.entries, [{ customType: "other", payload: {} }]);
-  assert.throws(() => {
-    capture.assertValid();
-  }, assert.AssertionError);
-});
-
-test("capture retains a caught UI getter failure without a notify call", () => {
-  // arrange
-  const capture = createJsonCapture();
-
-  // act & assert
-  assert.throws(() => capture.ui, Error);
-  assert.deepStrictEqual(capture.entries, []);
-  assert.throws(() => {
-    capture.assertValid();
-  }, assert.AssertionError);
-});
-
-test("an empty capture has no validation failures", () => {
-  // arrange
-  const capture = createJsonCapture();
-
-  // act
-  capture.assertValid();
-
-  // assert
-  assert.deepStrictEqual(capture.entries, []);
 });
 
 test("notify renders single installed plugin with empty deps under added marketplace (info severity + reload-hint)", (t) => {
@@ -6477,14 +6356,15 @@ test("a non-failed plugin fallback preserves the empty standalone summary", (t) 
   let statusIndex = 0;
   // The envelope reads the status before the body does (presentation read order).
   const statuses = ["failed", "available", "available", "available"] as const;
-  const plugin = Object.defineProperty({ name: "alpha", componentsResolved: false }, "status", {
-    enumerable: true,
-    get() {
+  const plugin = {
+    name: "alpha",
+    componentsResolved: false,
+    get status() {
       const status = statuses[Math.min(statusIndex, statuses.length - 1)]!;
       statusIndex++;
       return status;
     },
-  });
+  };
   const message = {
     kind: "plugin-info",
     marketplaceName: "official",

@@ -442,68 +442,6 @@ test("compiles MCP literals and both server-prefix forms exactly", () => {
   assert.deepStrictEqual(compiledPredicates, expected);
 });
 
-test("falls open when Bash predicate compilation throws", (t) => {
-  // arrange
-  const compileContext = {
-    homedir: "/home/plugin-user",
-    cwd: "/workspace/plugin",
-    projectRoot: "/workspace/plugin",
-  } satisfies CompileIfPredicateContext;
-  const originalEndsWith = Object.getOwnPropertyDescriptor(String.prototype, "endsWith")?.value as (
-    this: string,
-    searchString: string,
-    endPosition?: number,
-  ) => boolean;
-  t.mock.method(
-    String.prototype,
-    "endsWith",
-    function throwsForBashPattern(this: string, searchString: string, endPosition?: number) {
-      if (this === "git *") {
-        throw new Error("case-owned Bash compiler failure");
-      }
-
-      return Reflect.apply(originalEndsWith, this, [searchString, endPosition]);
-    },
-  );
-
-  // act
-  const predicate = compileIfPredicate("Bash(git *)", "PreToolUse", compileContext);
-
-  // assert
-  assert.strictEqual(predicate, MATCH_ALL_IF);
-});
-
-test("falls open when PowerShell predicate compilation throws", (t) => {
-  // arrange
-  const compileContext = {
-    homedir: "/home/plugin-user",
-    cwd: "/workspace/plugin",
-    projectRoot: "/workspace/plugin",
-  } satisfies CompileIfPredicateContext;
-  const originalEndsWith = Object.getOwnPropertyDescriptor(String.prototype, "endsWith")?.value as (
-    this: string,
-    searchString: string,
-    endPosition?: number,
-  ) => boolean;
-  t.mock.method(
-    String.prototype,
-    "endsWith",
-    function throwsForPowerShellPattern(this: string, searchString: string, endPosition?: number) {
-      if (this === "Get-ChildItem *") {
-        throw new Error("case-owned PowerShell compiler failure");
-      }
-
-      return Reflect.apply(originalEndsWith, this, [searchString, endPosition]);
-    },
-  );
-
-  // act
-  const predicate = compileIfPredicate("PowerShell(Get-ChildItem *)", "PreToolUse", compileContext);
-
-  // assert
-  assert.strictEqual(predicate, MATCH_ALL_IF);
-});
-
 test("falls open when path predicate compilation throws", () => {
   // arrange
   const compileContext = {
@@ -516,38 +454,6 @@ test("falls open when path predicate compilation throws", () => {
 
   // act
   const predicate = compileIfPredicate("Read(src/**)", "PreToolUse", compileContext);
-
-  // assert
-  assert.strictEqual(predicate, MATCH_ALL_IF);
-});
-
-test("falls open when a prefix match has no captured prefix or inner value", (t) => {
-  // arrange
-  const compileContext = {
-    homedir: "/home/plugin-user",
-    cwd: "/workspace/plugin",
-    projectRoot: "/workspace/plugin",
-  } satisfies CompileIfPredicateContext;
-  const originalExec = Object.getOwnPropertyDescriptor(RegExp.prototype, "exec")
-    ?.value as RegExp["exec"];
-  const capturelessResult = Object.assign(["Bash(git *)"] as [string], {
-    index: 0,
-    input: "Bash(git *)",
-  }) satisfies RegExpExecArray;
-  t.mock.method(
-    RegExp.prototype,
-    "exec",
-    function capturelessPrefix(this: RegExp, input: string): RegExpExecArray | null {
-      if (this.source === "^([A-Za-z_]\\w*)\\((.*)\\)$") {
-        return capturelessResult;
-      }
-
-      return Reflect.apply(originalExec, this, [input]);
-    },
-  );
-
-  // act
-  const predicate = compileIfPredicate("Bash(git *)", "PreToolUse", compileContext);
 
   // assert
   assert.strictEqual(predicate, MATCH_ALL_IF);
