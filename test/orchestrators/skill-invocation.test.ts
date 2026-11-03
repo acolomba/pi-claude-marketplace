@@ -601,7 +601,8 @@ function readRequest(overrides: Partial<SkillReadRequest> = {}): SkillReadReques
     commands: [skillCommand("skill:demo-greet", PROJECT_SKILL)],
     file: PROJECT_SKILL,
     text: "",
-    startLine: 0,
+    offset: undefined,
+    limit: undefined,
     cwd: CWD,
     projectTrusted: true,
     sessionId: "session-1",
@@ -681,18 +682,57 @@ describe("fillSkillRead", () => {
     );
   });
 
-  for (const { part, startLine, read, filled } of [
+  for (const { part, offset, limit, read, filled } of [
     {
       part: "from inside its frontmatter",
-      startLine: 3,
-      read: `arguments: [who]\n${RECORD}\n---\n\nArgs [$who].\n\n[3 more lines in file. Use offset=10 to continue.]`,
-      filled: `arguments: [who]\n${RECORD}\n---\n\nArgs [].\n\n[3 more lines in file. Use offset=10 to continue.]`,
+      offset: 4,
+      limit: 5,
+      read: [
+        "arguments: [who]",
+        RECORD,
+        "---",
+        "",
+        "Session ${CLAUDE_SESSION_ID} at ${CLAUDE_EFFORT} in ${CLAUDE_SKILL_DIR} for ${CLAUDE_PROJECT_DIR}.",
+        "",
+        "[3 more lines in file. Use offset=9 to continue.]",
+      ].join("\n"),
+      filled: [
+        "arguments: [who]",
+        RECORD,
+        "---",
+        "",
+        `Session session-1 at medium in ${PROJECT_SKILL_DIR} for /work.`,
+        "",
+        "[3 more lines in file. Use offset=9 to continue.]",
+      ].join("\n"),
     },
     {
       part: "from inside its body",
-      startLine: 8,
-      read: "Args [$ARGUMENTS] [$who].",
-      filled: "Args [] [].",
+      offset: 9,
+      limit: 1,
+      read: "Args [$ARGUMENTS] [$who] [$0] [$ARGUMENTS[0]].\n\n[2 more lines in file. Use offset=10 to continue.]",
+      filled:
+        "Args [] [] [$0] [$ARGUMENTS[0]].\n\n[2 more lines in file. Use offset=10 to continue.]",
+    },
+    {
+      part: "inside its body and runs to its end",
+      offset: 10,
+      limit: undefined,
+      read: "Root ${CLAUDE_PLUGIN_ROOT}, data ${CLAUDE_PLUGIN_DATA}.\nStatus: !`printf ran`",
+      filled: "Root /plugins/demo, data /data/demo.\nStatus: !`printf ran`",
+    },
+    {
+      part: "at offset 0",
+      offset: 0,
+      limit: undefined,
+      read: VARIABLES_SKILL,
+      filled: [
+        ...VARIABLES_FRONTMATTER,
+        `Session session-1 at medium in ${PROJECT_SKILL_DIR} for /work.`,
+        "Args [] [] [$0] [$ARGUMENTS[0]].",
+        "Root /plugins/demo, data /data/demo.",
+        "Status: !`printf ran`",
+      ].join("\n"),
     },
   ]) {
     test(`D-CF1-03: fills only the body lines of a read that starts ${part}`, async () => {
@@ -700,12 +740,36 @@ describe("fillSkillRead", () => {
       const files = { [PROJECT_SKILL]: VARIABLES_SKILL };
 
       // act
-      const text = await fillSkillRead(readRequest({ text: read, startLine }), dependencies(files));
+      const text = await fillSkillRead(
+        readRequest({ text: read, offset, limit }),
+        dependencies(files),
+      );
 
       // assert
       assert.strictEqual(text, filled);
     });
   }
+
+  test("D-CF1-03: fills a whole read that Pi's read tool cut at 2000 lines, keeping its notice", async () => {
+    // arrange
+    const content = ["Greet $ARGUMENTS.", ...Array.from({ length: 2001 }, () => "line")].join("\n");
+    const kept = Array.from({ length: 1999 }, () => "line");
+    const notice = "[Showing lines 1-2000 of 2002. Use offset=2001 to continue.]";
+    const files = { [USER_SKILL]: content };
+
+    // act
+    const text = await fillSkillRead(
+      readRequest({
+        commands: [skillCommand("skill:demo-greet", USER_SKILL)],
+        file: USER_SKILL,
+        text: ["Greet $ARGUMENTS.", ...kept, "", notice].join("\n"),
+      }),
+      dependencies(files),
+    );
+
+    // assert
+    assert.strictEqual(text, ["Greet .", ...kept, "", notice].join("\n"));
+  });
 
   for (const { form, content, filled } of [
     { form: "no frontmatter", content: "Greet $ARGUMENTS.", filled: "Greet ." },
@@ -737,7 +801,40 @@ describe("fillSkillRead", () => {
   for (const { title, overrides, files } of [
     {
       title: "a read of its frontmatter lines alone",
-      overrides: { text: "---\nname: demo-greet" },
+      overrides: {
+        text: "---\nname: demo-greet\n\n[9 more lines in file. Use offset=3 to continue.]",
+        offset: 1,
+        limit: 2,
+      },
+      files: { [PROJECT_SKILL]: VARIABLES_SKILL },
+    },
+    {
+      title: "a whole read whose text a hook replaced",
+      overrides: { text: "Hook: ${CLAUDE_EFFORT} [$ARGUMENTS]" },
+      files: { [PROJECT_SKILL]: VARIABLES_SKILL },
+    },
+    {
+      title: "a hook text that starts with the staged text and adds a line",
+      overrides: { text: `${VARIABLES_SKILL}\nHook: \${CLAUDE_EFFORT} [$ARGUMENTS]` },
+      files: { [PROJECT_SKILL]: VARIABLES_SKILL },
+    },
+    {
+      title: "a partial read whose hook text drops the continuation notice",
+      overrides: { text: "Args [$ARGUMENTS] [$who] [$0] [$ARGUMENTS[0]].", offset: 9, limit: 1 },
+      files: { [PROJECT_SKILL]: VARIABLES_SKILL },
+    },
+    {
+      title: "a read text that matches the staged file at another offset",
+      overrides: {
+        text: "Root ${CLAUDE_PLUGIN_ROOT}, data ${CLAUDE_PLUGIN_DATA}.\n\n[1 more lines in file. Use offset=11 to continue.]",
+        offset: 9,
+        limit: 1,
+      },
+      files: { [PROJECT_SKILL]: VARIABLES_SKILL },
+    },
+    {
+      title: "a read whose offset is past the end of the staged file",
+      overrides: { text: "Args [$ARGUMENTS].", offset: 50 },
       files: { [PROJECT_SKILL]: VARIABLES_SKILL },
     },
     {
@@ -772,8 +869,8 @@ describe("fillSkillRead", () => {
     },
     {
       title: "a fill past Claude Code's size limit",
-      overrides: { text: `$ARGUMENTS${"x".repeat(4_000_001)}` },
-      files: { [PROJECT_SKILL]: "Body." },
+      overrides: { text: "${CLAUDE_SESSION_ID} [$ARGUMENTS]", sessionId: "s".repeat(4_000_001) },
+      files: { [PROJECT_SKILL]: "${CLAUDE_SESSION_ID} [$ARGUMENTS]" },
     },
   ]) {
     test(`D-CF1-03: keeps the read text for ${title}`, async () => {

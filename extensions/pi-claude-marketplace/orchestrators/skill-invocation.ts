@@ -18,7 +18,9 @@
 // reads a staged `SKILL.md` on its own with Pi's read tool, `fillSkillRead`
 // fills the same `${CLAUDE_*}` values and empties the arguments as for an
 // invocation with none, but runs no `!` command: the model's read is not an
-// invocation, and Claude Code's Skill tool path has no Pi equivalent. A skill
+// invocation, and Claude Code's Skill tool path has no Pi equivalent. It
+// fills only a text that is still the skill's own, never one a PostToolUse
+// hook wrote (audit warning W6). A skill
 // outside this extension's two staged skills directories, such as the user's
 // own Pi skill, is `not-bridged` and keeps Pi's expansion.
 
@@ -33,7 +35,7 @@ import {
   substituteArguments,
 } from "../domain/argument-substitution.ts";
 import { ContextInjectionError, expandContextInjections } from "../domain/context-injection.ts";
-import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
+import { getAgentDir, parseFrontmatter, readToolReturns } from "../platform/pi-api.ts";
 import {
   bashMissingMessage,
   createPromptShellRunner,
@@ -266,10 +268,12 @@ export interface SkillReadRequest {
   readonly commands: ReturnType<ExtensionAPI["getCommands"]>;
   /** The absolute path the read tool read. */
   readonly file: string;
-  /** The text the read tool returned. */
+  /** The text the model is to get, as the read tool's result holds it. */
   readonly text: string;
-  /** The 0-based index of the file line the returned text starts with. */
-  readonly startLine: number;
+  /** The read tool call's `offset`, the 1-based first line, when it is a number. */
+  readonly offset: number | undefined;
+  /** The read tool call's `limit`, the most lines to read, when it is a number. */
+  readonly limit: number | undefined;
   readonly cwd: string;
   /** Whether Pi trusts the project at `cwd` (`ctx.isProjectTrusted()`). */
   readonly projectTrusted: boolean;
@@ -315,6 +319,15 @@ function readSkill(request: SkillReadRequest, agentDir: string): BridgedSkill | 
 }
 
 /**
+ * The 0-based index of the first file line a read returned. Pi's read tool
+ * starts at line `offset`, counted from 1, and at the first line when the
+ * offset is absent or not positive.
+ */
+function readStartLine(offset: number | undefined): number {
+  return offset !== undefined && offset > 0 ? offset - 1 : 0;
+}
+
+/**
  * Amends D-CF1-03: the text the model gets when its read tool returns a
  * staged `SKILL.md`. Each returned line of the skill's body is filled as a
  * typed invocation with no arguments fills it: the `${CLAUDE_*}` values, and
@@ -323,9 +336,18 @@ function readSkill(request: SkillReadRequest, agentDir: string): BridgedSkill | 
  * line and an empty argument appends nothing, so a read that starts at an
  * offset or stops at a limit gets exactly the lines a whole read would.
  *
+ * The 2026-11-02 user decision on audit warning W6: the fill runs only while
+ * the text is still the skill's own. Pi's read tool is run again on the
+ * staged file's current text with the call's offset and limit, and the fill
+ * runs only when that returns exactly `text`, continuation notice included.
+ * A text that a PostToolUse hook replaced reaches the model as the hook wrote
+ * it, as Claude Code 2.1.316 sends a hook-replaced Read and never fills text
+ * a hook wrote.
+ *
  * Returns `undefined`, and the model keeps the text it read, for any other
  * file, a project skill in a project Pi does not trust, a file that cannot be
- * read or parsed, and a fill past Claude Code's size limit.
+ * read or parsed, a text that is not what Pi's read tool returns for the
+ * file, and a fill past Claude Code's size limit.
  */
 export async function fillSkillRead(
   request: SkillReadRequest,
@@ -341,12 +363,16 @@ export async function fillSkillRead(
   try {
     content = await dependencies.readFile(skill.location);
     parsed = parseFrontmatter(content);
+    const call = { file: request.file, offset: request.offset, limit: request.limit };
+    if (!(await readToolReturns(call, content, request.text))) {
+      return undefined;
+    }
   } catch {
     return undefined;
   }
 
   const lines = request.text.split("\n");
-  const bodyFrom = Math.max(0, bodyStartLine(content) - request.startLine);
+  const bodyFrom = Math.max(0, bodyStartLine(content) - readStartLine(request.offset));
   if (bodyFrom >= lines.length) {
     return undefined;
   }

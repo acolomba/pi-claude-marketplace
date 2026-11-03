@@ -103,7 +103,8 @@ function fillRequest(overrides: Partial<SkillReadRequest>): SkillReadRequest {
     commands: [GREET_SKILL],
     file: SKILL,
     text: "Greet $ARGUMENTS.",
-    startLine: 0,
+    offset: undefined,
+    limit: undefined,
     cwd: "/workspace",
     projectTrusted: true,
     sessionId: "session-1",
@@ -140,16 +141,14 @@ for (const { requested, file } of [
   });
 }
 
-for (const { offset, startLine } of [
-  { offset: 3, startLine: 2 },
-  { offset: 1, startLine: 0 },
-  { offset: 0, startLine: 0 },
-  { offset: "3", startLine: 0 },
+for (const { input, offset, limit } of [
+  { input: { offset: 3, limit: 2 }, offset: 3, limit: 2 },
+  { input: { offset: "3", limit: "2" }, offset: undefined, limit: undefined },
 ]) {
-  test(`D-CF1-03: reads the offset ${JSON.stringify(offset)} as the file line index ${startLine}`, async () => {
+  test(`D-CF1-03: passes the read call's offset ${JSON.stringify(input.offset)} and limit ${JSON.stringify(input.limit)} to the fill as ${String(offset)} and ${String(limit)}`, async () => {
     // arrange
     const fill = mock<ReadFill>({ exactParams: true, name: "read fill" });
-    when(() => fill(fillRequest({ startLine })))
+    when(() => fill(fillRequest({ offset, limit })))
       .thenResolve("Greet .")
       .times(1);
     const ctx = fillContext();
@@ -158,7 +157,7 @@ for (const { offset, startLine } of [
 
     // act
     const replaced = await listener(
-      readResult({ path: SKILL, offset, limit: 2 }, "Greet $ARGUMENTS."),
+      readResult({ path: SKILL, ...input }, "Greet $ARGUMENTS."),
       ctx,
     );
 

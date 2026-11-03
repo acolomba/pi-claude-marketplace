@@ -12,6 +12,7 @@ import {
   DynamicBorder,
   getAgentDir,
   parseFrontmatter,
+  readToolReturns,
   softDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -295,6 +296,63 @@ describe("DynamicBorder", () => {
 
     // assert
     assert.strictEqual(boundaryDynamicBorder, expectedDynamicBorder);
+  });
+});
+
+describe("readToolReturns", () => {
+  const file = "/work/skills/demo/SKILL.md";
+  const content = "one\ntwo\nthree";
+
+  for (const { range, offset, limit, text } of [
+    { range: "the whole file", offset: undefined, limit: undefined, text: content },
+    {
+      range: "a limit, with Pi's continuation notice",
+      offset: 2,
+      limit: 1,
+      text: "two\n\n[1 more lines in file. Use offset=3 to continue.]",
+    },
+  ]) {
+    test(`matches the text Pi's read tool returns for ${range}`, async () => {
+      // arrange
+      const call = { file, offset, limit };
+
+      // act
+      const matches = await readToolReturns(call, content, text);
+
+      // assert
+      assert.strictEqual(matches, true);
+    });
+  }
+
+  for (const { title, offset, text } of [
+    { title: "a text that differs from the file", offset: undefined, text: "one\ntwo\nfour" },
+    { title: "the lines of another offset", offset: 2, text: "three" },
+  ]) {
+    test(`does not match ${title}`, async () => {
+      // arrange
+      const call = { file, offset, limit: undefined };
+
+      // act
+      const matches = await readToolReturns(call, content, text);
+
+      // assert
+      assert.strictEqual(matches, false);
+    });
+  }
+
+  test("rejects with Pi's error for an offset past the end of the file", async () => {
+    // arrange
+    const call = { file, offset: 9, limit: undefined };
+
+    // act & assert
+    await assert.rejects(
+      () => readToolReturns(call, content, ""),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.message, "Offset 9 is beyond end of file (3 lines total)");
+        return true;
+      },
+    );
   });
 });
 

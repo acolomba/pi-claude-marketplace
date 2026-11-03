@@ -23,13 +23,9 @@ function readPath(requested: string, cwd: string, home: string): string {
   return path.resolve(cwd, expanded);
 }
 
-/**
- * The 0-based index of the first file line a read returned. Pi's read tool
- * starts at line `offset`, counted from 1, and at the first line when the
- * offset is absent or 0.
- */
-function startLine(offset: unknown): number {
-  return typeof offset === "number" && offset > 0 ? offset - 1 : 0;
+/** A read tool call's `offset` or `limit`, when it is a number. */
+function numberInput(input: unknown): number | undefined {
+  return typeof input === "number" ? input : undefined;
 }
 
 /** The one text a successful read of a text file returned, or `undefined`. */
@@ -46,6 +42,8 @@ function readText(event: ToolResultEvent): string | undefined {
  * it gets has the skill's `${CLAUDE_*}` values filled and its arguments
  * empty, as a typed invocation with no arguments has them. No `!` command
  * runs. Any other result keeps its content, and a failed fill keeps it too.
+ * So does a read whose text a PostToolUse hook replaced: the fill runs only
+ * on the text Pi's read tool returns for the staged file (audit warning W6).
  */
 export function registerSkillReadFill(
   pi: ExtensionAPI,
@@ -63,7 +61,8 @@ export function registerSkillReadFill(
         commands: pi.getCommands(),
         file: readPath(requested, ctx.cwd, home()),
         text,
-        startLine: startLine(event.input.offset),
+        offset: numberInput(event.input.offset),
+        limit: numberInput(event.input.limit),
         cwd: ctx.cwd,
         projectTrusted: ctx.isProjectTrusted(),
         sessionId: ctx.sessionManager.getSessionId(),
