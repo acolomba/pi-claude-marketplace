@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Plugin skills, commands, agents, hooks, MCP servers, and workflows now behave more like Claude Code, project plugins follow Pi's project trust, and Pi 1.4.0 is now required. (#PR)
+- Plugin skills, commands, agents, hooks, MCP servers, and workflows now behave more like Claude Code, project plugins follow Pi's project trust, and Pi 1.4.0 is now required. (#295)
 
   - The extension now needs Pi 1.4.0 or newer, and each companion extension now needs its latest release.
   - Plugin MCP servers now need pi-mcp-adapter 7.0.0 or a later 7.x release. Literal text in a plugin's MCP settings still reaches the server unchanged.
