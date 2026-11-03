@@ -8,7 +8,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { TranslationContext } from "../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
@@ -90,6 +89,7 @@ test("applies every SessionStart environment precedence layer", async (t) => {
       ".pi",
       "pi-claude-marketplace",
       "data",
+      "catalog",
       "plugin-alpha",
     ),
     PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH: "extra-marker",
@@ -192,6 +192,7 @@ test("omits event-specific keys while preserving a user-scope inherited key", as
       "/scope/user-agent",
       "pi-claude-marketplace",
       "data",
+      "catalog",
       "plugin-beta",
     ),
     CLAUDECODE: "1",
@@ -218,7 +219,7 @@ test("omits event-specific keys while preserving a user-scope inherited key", as
   );
 });
 
-test("restores exact process properties after containment failure", async (t) => {
+test("restores exact process properties after an unsafe plugin name is refused", async (t) => {
   // arrange
   const mutatedKeys = ["CLAUDE_CODE_REMOTE", "P112_HOOK_ENV_FAILURE"] as const;
   const priorEnvironment = mutatedKeys.map((key) => ({
@@ -258,18 +259,6 @@ test("restores exact process properties after containment failure", async (t) =>
     cwd: "/work/project-failure",
   } satisfies TranslationContext;
   const locations = locationsFor("project", "/scope/project-failure");
-  const expectedParent = path.join(
-    "/scope/project-failure",
-    ".pi",
-    "pi-claude-marketplace",
-    "data",
-  );
-  const expectedChild = path.join(
-    "/scope/project-failure",
-    ".pi",
-    "pi-claude-marketplace",
-    "escape",
-  );
   let environmentError: unknown;
 
   // act
@@ -284,20 +273,10 @@ test("restores exact process properties after containment failure", async (t) =>
   restoreEnvironment();
 
   // assert
-  assert.ok(environmentError instanceof PathContainmentError);
-  assert.deepStrictEqual(
-    {
-      name: environmentError.name,
-      message: environmentError.message,
-      parent: environmentError.parent,
-      child: environmentError.child,
-    },
-    {
-      name: "PathContainmentError",
-      message: `CLAUDE_PLUGIN_DATA escapes ${expectedParent} (resolved: ${expectedChild}).`,
-      parent: expectedParent,
-      child: expectedChild,
-    },
+  assert.ok(environmentError instanceof Error);
+  assert.strictEqual(
+    environmentError.message,
+    'pluginDataDir plugin name "../escape" "../escape" must not contain path separators.',
   );
   assert.deepStrictEqual(
     mutatedKeys.map((key) => ({
@@ -338,6 +317,7 @@ test("gives the three path values that the hook environment exports", async () =
       ".pi",
       "pi-claude-marketplace",
       "data",
+      "catalog",
       "plugin-paths",
     ),
     projectDir: "/work/project-paths",

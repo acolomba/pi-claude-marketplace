@@ -21,8 +21,8 @@ Feature: Hook process
       | Done. |
     When the user prompts "say done"
     Then the hooks record these runs:
-      | event            | session | prompt   | cwd           | transcript path | arguments                                                                                                                                                        | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | UserPromptSubmit | first   | say done | {project dir} |                 | exec-hook {home}/marketplaces/fixtures/plugins/demo/bin/tool --data={project dir}/.pi/pi-claude-marketplace/data/demo {project dir} ${user_config.token} ${HOME} | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+      | event            | session | prompt   | cwd           | transcript path | arguments                                                                                                                                                                 | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | say done | {project dir} |                 | exec-hook {home}/marketplaces/fixtures/plugins/demo/bin/tool --data={project dir}/.pi/pi-claude-marketplace/data/fixtures/demo {project dir} ${user_config.token} ${HOME} | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role | text     |
       | 1    | user | say done |
@@ -44,8 +44,8 @@ Feature: Hook process
       | Done. |
     When the user prompts "say done"
     Then the hooks record these runs:
-      | event            | session | prompt   | cwd           | transcript path | arguments   | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | UserPromptSubmit | first   | say done | {project dir} |                 | script-hook | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+      | event            | session | prompt   | cwd           | transcript path | arguments   | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | say done | {project dir} |                 | script-hook | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role | text     |
       | 1    | user | say done |
@@ -67,8 +67,8 @@ Feature: Hook process
       | Done. |
     When the user prompts "say done"
     Then the hooks record these runs:
-      | event            | session | prompt   | cwd           | transcript path | arguments                          | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | UserPromptSubmit | first   | say done | {project dir} |                 | shell-hook ${CLAUDE_PLUGIN_ROOT}/x | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+      | event            | session | prompt   | cwd           | transcript path | arguments                          | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | say done | {project dir} |                 | shell-hook ${CLAUDE_PLUGIN_ROOT}/x | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role | text     |
       | 1    | user | say done |

@@ -30,6 +30,9 @@ export interface HookEnvContext {
  * them, and an exec-form handler gets them substituted into its `command` and
  * `args` (D-CF5-15, FG-19), so the environment and the arguments always agree.
  * It leaves `skillDir` unset, so `${CLAUDE_SKILL_DIR}` stays literal.
+ * `CLAUDE_PLUGIN_DATA` is the plugin's one data folder,
+ * `<dataRoot>/<marketplace>/<plugin>`, the folder its skills, commands,
+ * agents and MCP servers get and uninstall removes (HOOKDATA-01).
  */
 export function hookPathVars(
   entry: RoutingEntry,
@@ -38,7 +41,7 @@ export function hookPathVars(
 ): ClaudePluginVars {
   return {
     pluginRoot: entry.resolvedSource,
-    pluginData: path.join(loc.dataRoot, entry.pluginId),
+    pluginData: path.join(loc.dataRoot, entry.marketplace, entry.pluginId),
     projectDir: transCtx.cwd,
   };
 }
@@ -76,7 +79,9 @@ export async function prepareHookEnv(
   extra?: NodeJS.ProcessEnv,
 ): Promise<NodeJS.ProcessEnv> {
   const vars = hookPathVars(entry, transCtx, loc);
-  await assertPathInside(loc.dataRoot, vars.pluginData, "CLAUDE_PLUGIN_DATA");
+  // The shared builder's name checks and containment guard this path, so a
+  // hook can never name a folder outside the scope's data root.
+  await loc.pluginDataDir(entry.marketplace, entry.pluginId);
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,

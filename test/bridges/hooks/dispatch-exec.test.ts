@@ -231,7 +231,13 @@ test("executes a blocking hook through the portable process boundary", async (t)
   Object.assign(expectedEnvironment, {
     CLAUDE_PROJECT_DIR: cwd,
     CLAUDE_PLUGIN_ROOT: pluginRoot,
-    CLAUDE_PLUGIN_DATA: path.join(agentDir, "pi-claude-marketplace", "data", "portable-plugin"),
+    CLAUDE_PLUGIN_DATA: path.join(
+      agentDir,
+      "pi-claude-marketplace",
+      "data",
+      "portable-marketplace",
+      "portable-plugin",
+    ),
     CLAUDECODE: "1",
     CLAUDE_CODE_SESSION_ID: "portable-session",
     CLAUDE_SESSION_ID: "portable-session",
@@ -1623,7 +1629,7 @@ test("spawns an exec-form hook with Claude's path variables filled in", async (t
     {
       command: path.join(caseRoot, "plugin", "bin", "hook"),
       args: [
-        `--data=${path.join(caseRoot, ".pi", "pi-claude-marketplace", "data", "dispatch-plugin")}`,
+        `--data=${path.join(caseRoot, ".pi", "pi-claude-marketplace", "data", "dispatch-marketplace", "dispatch-plugin")}`,
         caseRoot,
         "${user_config.token}",
       ],

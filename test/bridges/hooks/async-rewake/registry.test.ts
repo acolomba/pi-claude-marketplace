@@ -823,6 +823,7 @@ test(
         ".pi",
         "pi-claude-marketplace",
         "data",
+        "catalog-lifecycle",
         "plugin-lifecycle",
       ),
       ["PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH"]: "dispatch-lifecycle",
@@ -1056,7 +1057,7 @@ test("spawns an async-rewake hook with Claude's path variables filled in", async
       {
         command: path.join(root, "plugin-source", "bin", "scan"),
         args: [
-          `--data=${path.join(root, ".pi", "pi-claude-marketplace", "data", "plugin-lifecycle")}`,
+          `--data=${path.join(root, ".pi", "pi-claude-marketplace", "data", "catalog-lifecycle", "plugin-lifecycle")}`,
           root,
           "${HOME}",
         ],

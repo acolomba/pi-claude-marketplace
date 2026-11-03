@@ -4720,7 +4720,10 @@ Noted by component-features Phase 3 (D-CF3-04). The Claude Code 2.1.316 binary r
 
 Noted by component-features Phase 3 (03-08). When quoted text follows a quoted absolute path on one line, `shared/redact-absolute-paths.ts` replaces the rest of the line with `[redacted path]`. That cuts the commands walk's duplicate and subdirectory warnings short. The command map warnings avoid it by leaving out the plugin root.
 
-## HOOKDATA-01: the hook `CLAUDE_PLUGIN_DATA` differs from the skills and commands one
+## ~~HOOKDATA-01: the hook `CLAUDE_PLUGIN_DATA` differs from the skills and commands one~~ -- CLOSED
+
+Closed 2026-11-03 (user decision): hooks now get the plugin's one data folder, `data/<marketplace>/<plugin>`, the folder the other components get and uninstall removes. Pinned by the hook features and `features/skill/model-reads.feature`, where a hook and a skill of the same plugin see the same path.
+
 
 Noted by component-features Phase 3 (03-03). Hooks set `CLAUDE_PLUGIN_DATA` to `<dataRoot>/<pluginId>` (`bridges/hooks/hook-env.ts`; `features/hook/tool-use.feature` expects `{project dir}/.pi/pi-claude-marketplace/data/demo`). Skills and commands record `pluginDataDir(marketplace, plugin)`, which is `data/<marketplace>/<plugin>`. Claude Code gives a plugin one data folder. Decide which root is right and align the other.
 
