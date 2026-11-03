@@ -224,7 +224,9 @@ test("REI-01: a policy that does not skip the recorded revision restores its del
   });
   assert.strictEqual(
     await readFile(path.join(base.locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"),
-    '---\nname: hello-tool\ndescription: "No description provided."\n---\n',
+    '---\nname: hello-tool\ndescription: "Plugin skill"\n' +
+      `pi-claude-marketplace: {"names":["hello:tool","tool"],"pluginRoot":"${pluginRoot}","pluginData":"${path.join(base.locations.extensionRoot, "data", "mp", "hello")}"}\n` +
+      "---\n",
   );
   const state = await loadState(base.locations.extensionRoot);
   assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello, {
@@ -347,11 +349,13 @@ test("D-PL1-14: reported warnings preserve the absent and present outcome shapes
   // arrange
   const warning = discoveryWarning("duplicate skill");
 
-  // act & assert
-  assert.deepStrictEqual(reportedStagingWarnings({}), {});
-  assert.deepStrictEqual(reportedStagingWarnings({ stagingWarnings: [warning] }), {
-    stagingWarnings: [warning],
-  });
+  // act
+  const absentOutcome = reportedStagingWarnings({});
+  const presentOutcome = reportedStagingWarnings({ stagingWarnings: [warning] });
+
+  // assert
+  assert.deepStrictEqual(absentOutcome, {});
+  assert.deepStrictEqual(presentOutcome, { stagingWarnings: [warning] });
 });
 
 const ZCORE_ROW = {

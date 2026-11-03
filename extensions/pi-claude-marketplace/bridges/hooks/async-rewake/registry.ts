@@ -6,24 +6,26 @@
 // (`rewakeMessage` + body) into Pi's model context via pi.sendMessage with
 // `display: false` matching Claude Code's <system-reminder> semantic.
 //
-// This is one of exactly FOUR sanctioned `node:child_process` import
+// This is one of exactly FIVE sanctioned `node:child_process` import
 // sites in the extension tree (closed-set whitelist at
-// test/architecture/no-shell-out.test.ts). Adding a FIFTH site requires
+// test/architecture/no-shell-out.test.ts). Adding a SIXTH site requires
 // amending the whitelist set AND the sibling assertion in the SAME commit
 // (D-58-01 atomic-supersession). The other sites are
 // platform/git-credential.ts (AUTH-08), bridges/hooks/dispatch-exec.ts
-// (EXEC-01..04 sync path), and platform/package-manager.ts (D-PL9-11). This site (HOOK-06 / EXEC-05 / D-62-01) diverges
-// from the sync site: `detached: false` + the parent does NOT await child
-// exit; a per-child handler watches for code 2 and triggers the HOOK-06
-// injection contract via `pi.sendMessage({ customType: "claude-hook-rewake",
-// display: false, ... }, { deliverAs })`.
+// (EXEC-01..04 sync path), platform/package-manager.ts (D-PL9-11), and
+// platform/prompt-shell.ts. This
+// site (HOOK-06 / EXEC-05 / D-62-01) diverges from the sync site:
+// `detached: false` + the parent does NOT await child exit; a per-child
+// handler watches for code 2 and triggers the HOOK-06 injection contract via
+// `pi.sendMessage({ customType: "claude-hook-rewake", display: false, ... },
+// { deliverAs })`.
 //
 // Responsibility boundary: this module owns the synchronous spawn +
 // register step, the per-child exit handler (HOOK-06 inject + IL-2
 // EXEMPTION notify), the `/reload` SIGKILL walk, and the orphan-reap
 // pass that drains the persisted PID table at factory entry (D-62-05).
 // It does NOT own the dispatcher decision to take the async branch -- the
-// composite handler in `dispatch.ts` (wired in a follow-up plan) calls
+// composite handler in `dispatch.ts` calls
 // `spawnAndRegister` once per `asyncRewake: true` routing entry and
 // folds `{ kind: "noop" }` into its reducer.
 //
@@ -46,7 +48,7 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
 import { openNotificationRun, requireNotificationMode } from "../../../shared/notification-run.ts";
 import { installTimerLadder } from "../exec-timer.ts";
-import { prepareHookEnv } from "../hook-env.ts";
+import { hookPathVars, prepareHookEnv } from "../hook-env.ts";
 import { translatePostCompact } from "../payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "../payloads/post-tool-use.ts";
@@ -58,6 +60,7 @@ import { translateStopFailure } from "../payloads/stop-failure.ts";
 import { translateStop } from "../payloads/stop.ts";
 import { translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
+import { collectStreamText } from "../stream-text.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 
@@ -68,7 +71,6 @@ import {
   writePidTable,
   type PidTableEntry,
 } from "./pid-table.ts";
-import { RingBuffer, STDERR_CAP_BYTES, STDOUT_CAP_BYTES } from "./ring-buffer.ts";
 
 import type { DispatchableEvent } from "../../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../../persistence/locations.ts";
@@ -89,9 +91,6 @@ const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
 
 /** HOOK-06: separator between `rewakeMessage` and the captured body. */
 const BODY_SEPARATOR = "\n\n";
-
-/** D-62-04: prefix prepended when the ring buffer dropped bytes. */
-const TRUNCATED_PREFIX = "[…truncated]\n";
 
 /** HOOK-06: custom-message type for the exit-2 injection. */
 const REWAKE_CUSTOM_TYPE = "claude-hook-rewake" as const;
@@ -205,7 +204,7 @@ export async function spawnAndRegister(
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareAsyncEnv(entry, transCtx, loc, dispatchId);
-    const planValue = planSpawn(entry);
+    const planValue = planSpawn(entry, hookPathVars(entry, transCtx, loc));
     const timeoutSeconds = resolveTimeoutSeconds({
       raw: entry.handlerDecl.timeout,
       event: entry.claudeEvent,
@@ -258,32 +257,23 @@ export async function spawnAndRegister(
       return;
     }
 
-    const stderrBuffer = new RingBuffer(STDERR_CAP_BYTES);
-    const stdoutBuffer = new RingBuffer(STDOUT_CAP_BYTES);
     // Each `ChildProcess` is its own EventEmitter; its lifecycle listeners and
     // the owned-stream listeners live on their respective emitters. Node's default
     // `defaultMaxListeners = 10` applies per-instance, not across the
     // bridge, so no `setMaxListeners` adjustment is needed even for
     // large fan-ins.
-    // EPIPE/ECONNRESET defense: attach the error listeners before "data" so a
-    // stream error during the SIGTERM/SIGKILL teardown races this registry
-    // runs cannot surface as an unhandled exception. Mirrors the child.stdin
-    // error defense below.
-    child.stderr?.on("error", (err) => {
+    // EXEC-02: the whole of each stream is kept, as Claude Code keeps every
+    // byte a hook prints. The collectors attach their `end` listeners before
+    // the finalize listeners below, so the decoder tail is in the text first.
+    const stderr = collectStreamText(child.stderr, (err) => {
       hookDebugLog(
         `async-rewake: stderr error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
       );
     });
-    child.stderr?.on("data", (buf: Buffer) => {
-      stderrBuffer.write(buf);
-    });
-    child.stdout?.on("error", (err) => {
+    const stdout = collectStreamText(child.stdout, (err) => {
       hookDebugLog(
         `async-rewake: stdout error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
       );
-    });
-    child.stdout?.on("data", (buf: Buffer) => {
-      stdoutBuffer.write(buf);
     });
 
     const ladder = installTimerLadder(
@@ -306,8 +296,8 @@ export async function spawnAndRegister(
       rewakeSummary: typeof rewakeSummaryField === "string" ? rewakeSummaryField : undefined,
       child,
       ladder,
-      stdoutBuffer,
-      stderrBuffer,
+      stdout,
+      stderr,
       capturedGeneration,
       loc,
     };
@@ -455,16 +445,14 @@ function finalizeChild(
     return;
   }
 
-  const { text: stderrText, truncated: stderrTrunc } = entry.stderrBuffer.read();
-  const { text: stdoutText, truncated: stdoutTrunc } = entry.stdoutBuffer.read();
-  const body = stderrText.length > 0 ? stderrText : stdoutText;
+  const stderrText = entry.stderr.text();
+  const body = stderrText.length > 0 ? stderrText : entry.stdout.text();
   if (body.length === 0) {
     hookDebugLog(`async-rewake: exit 2 with empty body -- no injection (${entry.pluginId})`);
     return;
   }
 
-  const truncated = stderrText.length > 0 ? stderrTrunc : stdoutTrunc;
-  const content = buildInjectionContent(entry.rewakeMessage, body, truncated);
+  const content = buildInjectionContent(entry.rewakeMessage, body);
   try {
     const lane: "nextTurn" | "followUp" = ctx.isIdle() ? "nextTurn" : "followUp";
     pi.sendMessage(
@@ -485,22 +473,15 @@ function finalizeChild(
 }
 
 /**
- * Compose the model-visible injection content. The truncated prefix is
- * prepended to the body BEFORE the rewakeMessage join so the marker
- * appears immediately before the surviving (oldest-tail) bytes -- the
- * correct framing for a "we lost some history" disclosure.
+ * Compose the model-visible injection content: the `rewakeMessage`, when the
+ * hook declares one, then the hook's whole output.
  */
-function buildInjectionContent(
-  rewakeMessage: string | undefined,
-  body: string,
-  truncated: boolean,
-): string {
-  const bodyWithMarker = truncated ? `${TRUNCATED_PREFIX}${body}` : body;
+function buildInjectionContent(rewakeMessage: string | undefined, body: string): string {
   if (rewakeMessage !== undefined && rewakeMessage.length > 0) {
-    return `${rewakeMessage}${BODY_SEPARATOR}${bodyWithMarker}`;
+    return `${rewakeMessage}${BODY_SEPARATOR}${body}`;
   }
 
-  return bodyWithMarker;
+  return body;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -584,11 +565,9 @@ export async function reapOrphans(
 
 /**
  * HOOK-05 env construction with the asyncRewake marker added on top.
- * Copy of `dispatch-exec.ts:prepareEnv` plus the
+ * Delegates to the shared `prepareHookEnv` and adds the
  * `PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=<dispatchId>` entry the
- * orphan-reap probe matches against. A v1.14+ lockstep-helper
- * extraction may consolidate the two if duplication becomes
- * load-bearing.
+ * orphan-reap probe matches against.
  *
  * Per-scope `loc` is supplied by the caller rather than derived from
  * `locationsFor(entry.scope, transCtx.cwd)` so user-scope (where `cwd`

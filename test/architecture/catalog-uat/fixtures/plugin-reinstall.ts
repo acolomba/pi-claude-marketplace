@@ -38,8 +38,12 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // SEV-01 / COMPSEV-01: both declared companions are unloaded, so the
+    // reinstall row stamps `warning` and the cascade carries the `needs
+    // attention` summary line, as on install. The row bytes match the info form.
     "success-with-soft-dep": {
       pi: piWithNothingLoaded(),
+      expectedSeverity: "warning",
       message: {
         label: "Plugin reinstall",
         cardinality: "plural",
@@ -50,7 +54,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
-                severity: "info",
+                severity: "warning",
                 needsReload: true,
                 name: "alpha",
                 version: "1.0.0",

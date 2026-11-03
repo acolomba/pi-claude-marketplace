@@ -166,9 +166,11 @@ test("constructs the info command without using its reader capability or startin
 });
 
 test("exposes a required plugin info reader factory", async () => {
+  // act
   const infoModule: Record<string, unknown> =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
 
+  // assert
   assert.equal(Object.keys(infoModule).includes("createGetPluginInfo"), true);
 });
 
@@ -206,9 +208,9 @@ async function withFsPromiseFault<T>(
     },
   };
 
-  const result = await action(withDefaultMcpStatus(createGetPluginInfo(reader)));
+  const actionOutcome = await action(withDefaultMcpStatus(createGetPluginInfo(reader)));
   assert.equal(faultRaised, true, `expected ${method} fault for ${targetPath}`);
-  return result;
+  return actionOutcome;
 }
 
 function createCredentialOps() {
@@ -678,9 +680,7 @@ test("INFO-02: single-scope installed (path source) renders header + plugin row 
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(notifications[0]!.message, EXPECTED_FOO_INSTALLED_INFO);
+    assert.deepStrictEqual(notifications, [{ message: EXPECTED_FOO_INSTALLED_INFO }]);
   });
 });
 
@@ -699,9 +699,7 @@ test("DFEN-01: an entry declaring defaultEnabled renders the same info message a
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(notifications[0]!.message, EXPECTED_FOO_INSTALLED_INFO);
+    assert.deepStrictEqual(notifications, [{ message: EXPECTED_FOO_INSTALLED_INFO }]);
   });
 });
 
@@ -739,17 +737,16 @@ test("INFO-02: single-scope available (path source) renders `○ ... (available)
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "bar", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ○ bar v0.5.0 (available)",
-        "    Bar plugin; not installed.",
-        "    skills: s1",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ bar v0.5.0 (available)",
+          "    Bar plugin; not installed.",
+          "    skills: s1",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -1046,17 +1043,16 @@ test("INFO-05: external source (npm) emits `    components: not resolved` marker
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● remote v1.0.0 (installed)",
-        "    Remote plugin sourced from an external npm package.",
-        "    components: not resolved",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● remote v1.0.0 (installed)",
+          "    Remote plugin sourced from an external npm package.",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -1143,21 +1139,20 @@ test("INFO-03: both-scopes fan-out emits ONE notify call; project block FIRST, u
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", cwd });
     // assert
-    assert.equal(notifications.length, 1, "IL-2: exactly one ctx.ui.notify call");
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [project] <autoupdate>",
-        "  ● foo v1.0.0 (installed)",
-        "    skills: s1",
-        "",
-        "● mp [user] <no autoupdate>",
-        "  ● foo v2.0.0 (installed)",
-        "    agents: a1",
-        "    requires: pi-subagents (missing)",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [project] <autoupdate>",
+          "  ● foo v1.0.0 (installed)",
+          "    skills: s1",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ● foo v2.0.0 (installed)",
+          "    agents: a1",
+          "    requires: pi-subagents (missing)",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -1188,12 +1183,13 @@ test("INFO-04: --scope user mismatch (mp only in project) emits `⊘ <mp> [user]
       cwd,
     });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ p-only [user] (failed) {marketplace not added to user scope}",
-    );
-    assert.equal(notifications[0]!.severity, "error");
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ p-only [user] (failed) {marketplace not added to user scope}",
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -1208,12 +1204,13 @@ test("D-03: absent from BOTH scopes with no --scope renders `(failed) {marketpla
     // act
     await getPluginInfo({ ctx, run, marketplace: "ghost-mp", plugin: "ghost", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {marketplace not added}",
-    );
-    assert.equal(notifications[0]!.severity, "error");
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {marketplace not added}",
+        severity: "error",
+      },
+    ]);
     assert.ok(
       !notifications[0]!.message.includes("[user]") &&
         !notifications[0]!.message.includes("[project]"),
@@ -1243,17 +1240,17 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ghost", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, "error");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "A plugin operation has failed.",
-        "",
-        "● mp [user] <no autoupdate>",
-        "  ⊘ ghost (failed) {not in manifest}",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ⊘ ghost (failed) {not in manifest}",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -1389,27 +1386,26 @@ test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT
     // Two failed scopes -> two standalone error notifications (project-first),
     // NOT one info-severity cascade. The failure can never be summary-less.
     // assert
-    assert.equal(notifications.length, 2, "each failed scope surfaces its own notify");
-    assert.equal(notifications[0]!.severity, "error");
-    assert.equal(notifications[1]!.severity, "error");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "A plugin operation has failed.",
-        "",
-        "● mp [project] <no autoupdate>",
-        "  ⊘ ghost (failed) {not in manifest}",
-      ].join("\n"),
-    );
-    assert.equal(
-      notifications[1]!.message,
-      [
-        "A plugin operation has failed.",
-        "",
-        "● mp [user] <no autoupdate>",
-        "  ⊘ ghost (failed) {not in manifest}",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [project] <no autoupdate>",
+          "  ⊘ ghost (failed) {not in manifest}",
+        ].join("\n"),
+        severity: "error",
+      },
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ⊘ ghost (failed) {not in manifest}",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
     assert.doesNotMatch(notifications[1]!.message, /\n\nPlugin info:/u);
   });
 });
@@ -1531,16 +1527,15 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "partially-installed is info, not error");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◉ degraded v1.0.0 (partially-installed) {lsp}",
-        "    Degraded plugin.",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◉ degraded v1.0.0 (partially-installed) {lsp}",
+          "    Degraded plugin.",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -1584,18 +1579,17 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "partially-installed is info, not error");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        // ◉ (partially-installed), NOT ● (installed) -- the WR-02 regression.
-        "  ◉ remote v1.0.0 (partially-installed) {lsp}",
-        // NFR-5: the external plugin.json is still not fetched.
-        "    components: not resolved",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          // ◉ (partially-installed), NOT ● (installed) -- the WR-02 regression.
+          "  ◉ remote v1.0.0 (partially-installed) {lsp}",
+          // NFR-5: the external plugin.json is still not fetched.
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -1821,17 +1815,17 @@ test("BOUND-01: a manifest READ FAILURE with an installed record present still r
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, "error");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "A plugin operation has failed.",
-        "",
-        "● mp [user] <no autoupdate>",
-        "  ⊘ alpha (failed) {source missing}",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ⊘ alpha (failed) {source missing}",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -1967,6 +1961,7 @@ test("OPIC-F27: required reader preserves an available-row directory failure and
     const before = await readdir(mpRoot, { recursive: true });
     const { ctx, run, notifications } = makeCtx();
 
+    // act
     await withDefaultMcpStatus(createGetPluginInfo(reader))({
       ctx,
       run,
@@ -1976,19 +1971,19 @@ test("OPIC-F27: required reader preserves an available-row directory failure and
       cwd,
     });
 
+    // assert
     assert.equal(raised, permissionError);
     assert.deepEqual(calls, [skillsDir]);
     assert.deepEqual(await readdir(mpRoot, { recursive: true }), before);
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ○ p v1.0.0 (available) {permission denied}",
-        "    components: not resolved",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ p v1.0.0 (available) {permission denied}",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2027,11 +2022,12 @@ test("object-shaped dependencies reject an installed marketplace entry", async (
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "● mp [user] <no autoupdate>\n  ● p v1.0.0 (installed) {unsupported source}\n    components: not resolved",
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n  ● p v1.0.0 (installed) {unsupported source}\n    components: not resolved",
+      },
+    ]);
   });
 });
 
@@ -2243,15 +2239,15 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
       cwd,
     });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● gh-mp [user] <no autoupdate>",
-        "  ● local-plug v1.0.0 (installed)",
-        "    skills: s1",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● gh-mp [user] <no autoupdate>",
+          "  ● local-plug v1.0.0 (installed)",
+          "    skills: s1",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2300,17 +2296,16 @@ test("D-100-08 / ENBL-17: info on a recorded-but-disabled plugin reports its des
     // or displaced by the lines below it. Severity info: a disabled record is
     // steady state, not a failure.
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◍ foo v1.2.3 (disabled)",
-        "    Foo plugin",
-        "    skills: s1",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ foo v1.2.3 (disabled)",
+          "    Foo plugin",
+          "    skills: s1",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 test("plugin info manifest absent: INFO-09: a manifest-absent enabled record renders `(installed) {not in manifest}` at the recorded version", async () => {
@@ -2331,16 +2326,15 @@ test("plugin info manifest absent: INFO-09: a manifest-absent enabled record ren
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "an installed record is not a failure");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2368,16 +2362,15 @@ test("plugin info manifest absent: INFO-10: a manifest-absent record with persis
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◉ alpha v1.0.0 (partially-installed) {not in manifest, lsp}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◉ alpha v1.0.0 (partially-installed) {not in manifest, lsp}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2450,20 +2443,19 @@ test("plugin info manifest absent: INFO-11: the four name-list kinds render from
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "    agents: pi-claude-marketplace-alpha-review",
-        "    commands: alpha:build",
-        "    mcp: plugin:alpha:alpha-srv (status unknown), plugin:alpha:zeta-srv (status unknown)",
-        "    skills: Alpha-other, alpha-skill",
-        "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    agents: pi-claude-marketplace-alpha-review",
+          "    commands: alpha:build",
+          "    mcp: plugin:alpha:alpha-srv (status unknown), plugin:alpha:zeta-srv (status unknown)",
+          "    skills: Alpha-other, alpha-skill",
+          "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2497,12 +2489,14 @@ test("plugin info manifest absent: INFO-11: a manifest-absent record with all-em
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      ["● mp [user] <no autoupdate>", "  ● alpha v1.0.0 (installed) {not in manifest}"].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2541,19 +2535,18 @@ test("plugin info manifest absent: INFO-11: a recorded hooks slug renders the ma
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "    hooks:",
-        "      Stop",
-        "      PreToolUse(Bash)",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    hooks:",
+          "      Stop",
+          "      PreToolUse(Bash)",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2590,18 +2583,18 @@ test("plugin info manifest absent: INFO-11: hook entries follow the materialized
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "    hooks:",
-        "      PreToolUse(Bash)",
-        "      Stop",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    hooks:",
+          "      PreToolUse(Bash)",
+          "      Stop",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2651,19 +2644,18 @@ test("plugin info manifest absent: D-100-03 / ENBL-12: a record carrying hookEnt
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "    hooks:",
-        "      SessionStart",
-        "      PostToolUse(Read)",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    hooks:",
+          "      SessionStart",
+          "      PostToolUse(Read)",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2697,19 +2689,18 @@ test("plugin info manifest absent: D-100-03 / ENBL-12: a legacy record with no h
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "    hooks:",
-        "      Stop",
-        "      PreToolUse(Bash)",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    hooks:",
+          "      Stop",
+          "      PreToolUse(Bash)",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2744,16 +2735,15 @@ test("plugin info manifest absent: D-100-03 / ENBL-12: a present-but-empty hookE
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2780,16 +2770,15 @@ test("plugin info manifest absent: D-96-03: a record with no recorded hooks omit
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2819,16 +2808,15 @@ test("plugin info manifest absent: INFO-11: a materialized hooks config that par
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2865,16 +2853,15 @@ test("plugin info manifest absent: D-96-03: a recorded hooks slug with no materi
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest, source missing}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, source missing}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2901,16 +2888,15 @@ test("plugin info manifest absent: D-96-03: a malformed materialized hooks confi
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest, unparseable}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, unparseable}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2948,20 +2934,19 @@ test("plugin info manifest absent: NFR-10: a traversal hooks slug is refused bef
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest, unreadable}",
-        "    agents: pi-claude-marketplace-alpha-review",
-        "    commands: alpha:build",
-        "    mcp: plugin:alpha:alpha-srv (status unknown)",
-        "    skills: alpha-skill",
-        "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, unreadable}",
+          "    agents: pi-claude-marketplace-alpha-review",
+          "    commands: alpha:build",
+          "    mcp: plugin:alpha:alpha-srv (status unknown)",
+          "    skills: alpha-skill",
+          "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -2970,7 +2955,7 @@ test("plugin info manifest absent: NFR-10: a traversal hooks slug is refused bef
 // in the debug log -- otherwise a tampering attempt is indistinguishable from an
 // EIO in both the UI and the log. Mirrors the hooks hydrate read site, which
 // logs its containment violation before returning.
-test("plugin info manifest absent: NFR-10: a refused traversal hooks slug is named in the debug log, not just folded to `{unreadable}`", async () => {
+test("plugin info manifest absent: NFR-10: a refused traversal hooks slug is named in the debug log, not just folded to `{unreadable}`", async (t) => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -2984,38 +2969,35 @@ test("plugin info manifest absent: NFR-10: a refused traversal hooks slug is nam
     });
 
     const originalDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-    const originalError = console.error;
-    const logged: string[] = [];
-    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
-    console.error = (...args: unknown[]): void => {
-      logged.push(args.map((a) => String(a)).join(" "));
-    };
-
-    try {
-      const { ctx, run, notifications } = makeCtx();
-      // act
-      await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
-
-      // The rendered outcome is unchanged -- the token stays the closed-set
-      // `{unreadable}` the catalog pins.
-      // assert
-      assert.equal(
-        notifications[0]!.message,
-        [
-          "● mp [user] <no autoupdate>",
-          "  ● alpha v1.0.0 (installed) {not in manifest, unreadable}",
-          "    skills: alpha-skill",
-        ].join("\n"),
-      );
-    } finally {
-      console.error = originalError;
+    t.after(() => {
       if (originalDebug === undefined) {
         delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
       } else {
         process.env.PI_CLAUDE_MARKETPLACE_DEBUG = originalDebug;
       }
-    }
+    });
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+    const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
+    const { ctx, run, notifications } = makeCtx();
 
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // The rendered outcome is unchanged -- the token stays the closed-set
+    // `{unreadable}` the catalog pins.
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, unreadable}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
+    const logged = consoleErrorSpy.mock.calls.map((call) =>
+      call.arguments.map((argument) => String(argument)).join(" "),
+    );
     const violation = logged.find((l) => l.includes("containment violation"));
     assert.ok(
       violation !== undefined,
@@ -3055,16 +3037,15 @@ test("plugin info manifest absent: D-96-03: an unreadable materialized hooks con
     });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest, permission denied}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, permission denied}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -3110,6 +3091,7 @@ test("OPIC-F27: required reader preserves a state-only file failure and reason o
     const before = await readdir(mpRoot, { recursive: true });
     const { ctx, run, notifications } = makeCtx();
 
+    // act
     await withDefaultMcpStatus(createGetPluginInfo(reader))({
       ctx,
       run,
@@ -3119,20 +3101,20 @@ test("OPIC-F27: required reader preserves a state-only file failure and reason o
       cwd,
     });
 
+    // assert
     assert.equal(raised, permissionError);
     assert.deepEqual(reads, [file]);
     assert.deepEqual(lists, []);
     assert.deepEqual(await readdir(mpRoot, { recursive: true }), before);
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest, permission denied}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, permission denied}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -3163,16 +3145,15 @@ test("plugin info manifest absent: INFO-10 / D-96-03: a partial record with an u
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◉ alpha v1.0.0 (partially-installed) {not in manifest, lsp, source missing}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◉ alpha v1.0.0 (partially-installed) {not in manifest, lsp, source missing}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -3208,16 +3189,15 @@ test("plugin info manifest absent: INFO-09 boundary: a DECLARED plugin keeps the
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed)",
-        "    skills: alpha-src-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed)",
+          "    skills: alpha-src-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -3249,16 +3229,15 @@ test("plugin info manifest absent: D-100-08 / ENBL-17: a manifest-absent DISABLE
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -3291,16 +3270,15 @@ test("plugin info manifest absent: D-100-08 / ENBL-16 / ENBL-17: a manifest-abse
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
     // Row-scoped: the token is absent from the ROW, not merely absent from a
     // brace an equality could also lose by moving the line.
     assert.equal(notifications[0]!.message.split("\n")[1]!.includes("lsp"), false);
@@ -3347,22 +3325,21 @@ test("plugin info manifest absent: ENBL-16 / ENBL-17: a disabled, manifest-absen
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
-        "    agents: pi-claude-marketplace-alpha-bot",
-        "    hooks:",
-        "      SessionStart",
-        "      PostToolUse(Read)",
-        "    mcp: plugin:alpha:alpha-mcp",
-        "    skills: alpha-skill",
-        "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+          "    agents: pi-claude-marketplace-alpha-bot",
+          "    hooks:",
+          "      SessionStart",
+          "      PostToolUse(Read)",
+          "    mcp: plugin:alpha:alpha-mcp",
+          "    skills: alpha-skill",
+          "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
+        ].join("\n"),
+      },
+    ]);
 
     // Row-scoped negatives. An equality failure reports a diff; these name the
     // regression. The row is line 1 -- the component lines below it legitimately
@@ -3402,16 +3379,15 @@ test("plugin info manifest absent: ENBL-16 / D-96-03: a DISABLED record whose re
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◍ alpha v1.0.0 (disabled) {not in manifest, source missing}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled) {not in manifest, source missing}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -3444,16 +3420,15 @@ test("plugin info manifest absent: ENBL-16 / ENBL-17: a DECLARED disabled record
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◍ alpha v1.0.0 (disabled)",
-        "    skills: alpha-src-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled)",
+          "    skills: alpha-src-skill",
+        ].join("\n"),
+      },
+    ]);
     const row = notifications[0]!.message.split("\n")[1]!;
     assert.ok(row.includes("(disabled)"), row);
     assert.equal(row.includes("not in manifest"), false, row);
@@ -3501,26 +3476,24 @@ test("plugin info manifest absent: D-96-04 / ENBL-17: `info --fetch` on a disabl
     });
 
     // assert
-    assert.equal(notifications.length, 2);
-    assert.equal(notifications[0]!.severity, undefined, "the inventory block keeps info severity");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
-    assert.equal(notifications[1]!.severity, "warning");
-    assert.equal(
-      notifications[1]!.message,
-      [
-        "A plugin operation needs attention.",
-        "",
-        "● mp [user]",
-        "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+      {
+        message: [
+          "A plugin operation needs attention.",
+          "",
+          "● mp [user]",
+          "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
+        ].join("\n"),
+        severity: "warning",
+      },
+    ]);
     assert.doesNotMatch(notifications[1]!.message, /\n\nPlugin info:/u);
     // ONE row, not one per cause: a `(skipped)` row for the manifest-absence
     // cause beside the disabled one would be the concatenation regression the
@@ -3564,26 +3537,24 @@ test("plugin info manifest absent: ENBL-06 / D-96-04: `info --fetch` on a DISABL
     });
 
     // assert
-    assert.equal(notifications.length, 2);
-    assert.equal(notifications[0]!.severity, undefined, "the inventory block keeps info severity");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
-    assert.equal(notifications[1]!.severity, "warning");
-    assert.equal(
-      notifications[1]!.message,
-      [
-        "A plugin operation needs attention.",
-        "",
-        "● mp [user]",
-        "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+      {
+        message: [
+          "A plugin operation needs attention.",
+          "",
+          "● mp [user]",
+          "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
+        ].join("\n"),
+        severity: "warning",
+      },
+    ]);
     // The specific regression: the state-only arm's reason token on a record
     // that never belongs there. The SKIP note names the disabled cause; the
     // inventory row above is where manifest absence is reported.
@@ -4018,26 +3989,24 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: `info --fetch` on a DISABLED
     // The rendered pair, so a guard that reached zero by dropping the block
     // would not pass. The row carries no absence brace (the manifest declares
     // it) and no components (the clone is cold and nothing fetched it warm).
-    assert.equal(notifications.length, 2);
-    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◍ alpha v1.0.0 (disabled)",
-        "    components: not resolved",
-      ].join("\n"),
-    );
-    assert.equal(notifications[1]!.severity, "warning");
-    assert.equal(
-      notifications[1]!.message,
-      [
-        "A plugin operation needs attention.",
-        "",
-        "● mp [user]",
-        "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled)",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+      {
+        message: [
+          "A plugin operation needs attention.",
+          "",
+          "● mp [user]",
+          "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
+        ].join("\n"),
+        severity: "warning",
+      },
+    ]);
   });
 });
 
@@ -4086,11 +4055,10 @@ test("plugin info manifest absent: D-96-04: `info --fetch` on a manifest-absent 
     });
 
     // assert
-    assert.equal(notifications.length, 2);
-    assert.equal(notifications[0]!.severity, undefined, "the info block keeps info severity");
-    assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
-    assert.equal(notifications[1]!.severity, "warning");
-    assert.equal(notifications[1]!.message, SKIP_NOTE);
+    assert.deepStrictEqual(notifications, [
+      { message: STATE_ONLY_BLOCK },
+      { message: SKIP_NOTE, severity: "warning" },
+    ]);
   });
 });
 
@@ -4130,25 +4098,24 @@ test("plugin info manifest absent: D-96-04: with autoupdate ON the skip-note hea
     });
 
     // assert
-    assert.equal(notifications.length, 2);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
-    assert.equal(notifications[1]!.severity, "warning");
-    assert.equal(
-      notifications[1]!.message,
-      [
-        "A plugin operation needs attention.",
-        "",
-        "● mp [user] <autoupdate>",
-        "  ⊘ alpha v1.0.0 (skipped) {not in manifest}",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+      {
+        message: [
+          "A plugin operation needs attention.",
+          "",
+          "● mp [user] <autoupdate>",
+          "  ⊘ alpha v1.0.0 (skipped) {not in manifest}",
+        ].join("\n"),
+        severity: "warning",
+      },
+    ]);
   });
 });
 
@@ -4206,8 +4173,7 @@ test("plugin info manifest absent: D-96-04: bare `info` on the same record emits
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.equal(notifications.length, 1, "no flag was typed, so there is nothing to account for");
-    assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
+    assert.deepStrictEqual(notifications, [{ message: STATE_ONLY_BLOCK }]);
   });
 });
 
@@ -4322,17 +4288,16 @@ test("plugin info manifest absent: D-96-04: a hooks-degraded state-only record u
     });
 
     // assert
-    assert.equal(notifications.length, 2);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● alpha v1.0.0 (installed) {not in manifest, source missing}",
-        "    skills: alpha-skill",
-      ].join("\n"),
-    );
-    assert.equal(notifications[1]!.severity, "warning");
-    assert.equal(notifications[1]!.message, SKIP_NOTE);
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, source missing}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+      { message: SKIP_NOTE, severity: "warning" },
+    ]);
   });
 });
 
@@ -4524,23 +4489,22 @@ test("SURF-01 / D-63-04: installed plugin with hooks/hooks.json renders multi-li
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "h", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● h v1.0.0 (installed)",
-        "    commands: c1",
-        "    hooks:",
-        "      PreToolUse(Bash)",
-        "      PreToolUse(Edit|Write)",
-        "      PostToolUse(Edit)",
-        "      SessionStart",
-        "    mcp: plugin:h:my-mcp",
-        "    requires: pi-mcp-adapter (missing)",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● h v1.0.0 (installed)",
+          "    commands: c1",
+          "    hooks:",
+          "      PreToolUse(Bash)",
+          "      PreToolUse(Edit|Write)",
+          "      PostToolUse(Edit)",
+          "      SessionStart",
+          "    mcp: plugin:h:my-mcp",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -4619,13 +4583,15 @@ test("SURF-01 / D-63-04: installable plugin with NO hooks/hooks.json renders NO 
       cwd,
     });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      ["● mp [user] <no autoupdate>", "  ● no-hooks v1.0.0 (installed)", "    skills: s1"].join(
-        "\n",
-      ),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● no-hooks v1.0.0 (installed)",
+          "    skills: s1",
+        ].join("\n"),
+      },
+    ]);
     assert.doesNotMatch(notifications[0]!.message, /hooks:/);
   });
 });
@@ -4661,16 +4627,16 @@ test("SURF-01 / D-63-04: available plugin (not-installed) with hooks/hooks.json 
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ah", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ○ ah v0.2.0 (available)",
-        "    hooks:",
-        "      UserPromptSubmit",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ ah v0.2.0 (available)",
+          "    hooks:",
+          "      UserPromptSubmit",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -4710,16 +4676,16 @@ test("ADMIT-02: ralph-wiggum fixture (Stop-only) lists Stop as a bare supported 
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ralph", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ○ ralph v1.0.0 (available)",
-        "    hooks:",
-        "      Stop",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ ralph v1.0.0 (available)",
+          "    hooks:",
+          "      Stop",
+        ].join("\n"),
+      },
+    ]);
     assert.doesNotMatch(notifications[0]!.message, /Stop \(unsupported\)/);
   });
 });
@@ -4806,17 +4772,17 @@ test("ADMIT-02: a config declaring Stop + StopFailure lists both bare-supported 
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "sf", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ○ sf v1.0.0 (available)",
-        "    hooks:",
-        "      Stop",
-        "      StopFailure",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ sf v1.0.0 (available)",
+          "    hooks:",
+          "      Stop",
+          "      StopFailure",
+        ].join("\n"),
+      },
+    ]);
     assert.doesNotMatch(notifications[0]!.message, /\(unsupported\)/);
   });
 });
@@ -4916,16 +4882,16 @@ test("INFO-05: (installed) {unsupported hooks} path-source plugin enumerates on-
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● legacy v0.1.0 (installed) {unsupported hooks}",
-        "    commands: c1",
-        "    skills: s1",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● legacy v0.1.0 (installed) {unsupported hooks}",
+          "    commands: c1",
+          "    skills: s1",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -4956,16 +4922,16 @@ test("INFO-05: not-installed npm-source plugin still emits `components: not reso
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ⊘ remote v1.0.0 (unavailable) {unsupported source}",
-        "    Remote plugin sourced from an external npm package.",
-        "    components: not resolved",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ remote v1.0.0 (unavailable) {unsupported source}",
+          "    Remote plugin sourced from an external npm package.",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -5807,6 +5773,7 @@ test("info flags binaries on an uninstalled warm git plugin of an official marke
     await seedWarmMirror({ scope: "user", cwd, cloneUrl, pluginJson: { name: "bin" } });
 
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -5853,6 +5820,7 @@ test("info keeps an installed warm git plugin with binaries unresolved for an of
     await seedWarmMirror({ scope: "user", cwd, cloneUrl, pluginJson: { name: "bin" } });
 
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -5888,31 +5856,23 @@ test("NFR-5: info renders an uninstalled git plugin `(remote)` with no plugin-cl
     // No plugin-clones/ directory exists; its continued absence after the
     // render proves the surface neither cloned nor fetched.
     const clonesDir = path.join(userRoot, "pi-claude-marketplace", "plugin-clones");
-    let clonesExisted = true;
-    try {
-      await readFile(clonesDir);
-    } catch {
-      clonesExisted = false;
-    }
-
-    assert.equal(clonesExisted, false);
-
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
-    const msg = notifications[0]!.message;
+    const clonesEntries = await readdir(clonesDir).catch(() => undefined);
+
     // assert
-    assert.match(msg, /◌ gplug v1\.0\.0 \(remote\)/, msg);
-
-    // The clones dir must STILL be absent -- the render neither cloned nor fetched.
-    let clonesAfter = true;
-    try {
-      await readFile(clonesDir);
-    } catch {
-      clonesAfter = false;
-    }
-
-    assert.equal(clonesAfter, false, "info must not create plugin-clones/ (NFR-5)");
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◌ gplug v1.0.0 (remote)",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
+    assert.equal(clonesEntries, undefined, "info must not create plugin-clones/ (NFR-5)");
   });
 });
 
@@ -5976,6 +5936,7 @@ test("FTCH-03: info --fetch on a COLD pinned git plugin materializes the clone t
     const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -6069,6 +6030,7 @@ test("NFR-5: bare info (no --fetch) on a COLD git plugin makes ZERO git-seam cal
     const { gitOps, state: gitState } = createGitOps({});
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -6112,6 +6074,7 @@ test("OUT-05 / NFR-5 / OUT-03: a COLD git plugin whose entry declares `defaultEn
     const { gitOps, state: gitState } = createGitOps({});
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -6132,18 +6095,15 @@ test("OUT-05 / NFR-5 / OUT-03: a COLD git plugin whose entry declares `defaultEn
     // assert
     assert.equal(gitState.cloneCalls.length, 0, "the claim must cost no clone");
     assert.equal(gitState.fetchCalls.length, 0, "the claim must cost no fetch");
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    const msg = notifications[0]!.message;
-    assert.ok(msg.includes("(remote) {installs disabled}"), msg);
-    assert.equal(
-      msg,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◌ gplug v1.0.0 (remote) {installs disabled}",
-        "    components: not resolved",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◌ gplug v1.0.0 (remote) {installs disabled}",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -6178,6 +6138,7 @@ test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing 
     const { gitOps } = createGitOps({ cloneThrows: netErr });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -6461,6 +6422,7 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
     const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -6529,6 +6491,7 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source clones
     });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -6583,6 +6546,7 @@ test("FTCH-06: info --fetch folds an HttpError 401 seam throw to `{authenticatio
     const { gitOps } = createGitOps({ cloneThrows: authErr });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -6627,6 +6591,7 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
     const { gitOps } = createGitOps({ cloneThrows: canceledErr });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -6767,6 +6732,8 @@ test("OUT-03: an entry declaring `defaultEnabled: false` puts `{installs disable
     });
 
     const declaring = makeCtx();
+    const declaredTrue = makeCtx();
+
     // act
     await getPluginInfo({
       ctx: declaring.ctx,
@@ -6776,20 +6743,6 @@ test("OUT-03: an entry declaring `defaultEnabled: false` puts `{installs disable
       scope: "user",
       cwd,
     });
-    // assert
-    assert.equal(declaring.notifications.length, 1);
-    assert.equal(declaring.notifications[0]!.severity, undefined);
-    assert.equal(
-      declaring.notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ○ dis v1.0.0 (available) {installs disabled}",
-        "    Candidate plugin.",
-        "    skills: s1",
-      ].join("\n"),
-    );
-
-    const declaredTrue = makeCtx();
     await getPluginInfo({
       ctx: declaredTrue.ctx,
       run: declaredTrue.run,
@@ -6798,17 +6751,28 @@ test("OUT-03: an entry declaring `defaultEnabled: false` puts `{installs disable
       scope: "user",
       cwd,
     });
-    assert.equal(declaredTrue.notifications.length, 1);
-    assert.equal(declaredTrue.notifications[0]!.severity, undefined);
-    assert.equal(
-      declaredTrue.notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ○ ena v1.0.0 (available)",
-        "    Candidate plugin.",
-        "    skills: s1",
-      ].join("\n"),
-    );
+
+    // assert
+    assert.deepStrictEqual(declaring.notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ dis v1.0.0 (available) {installs disabled}",
+          "    Candidate plugin.",
+          "    skills: s1",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(declaredTrue.notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ ena v1.0.0 (available)",
+          "    Candidate plugin.",
+          "    skills: s1",
+        ].join("\n"),
+      },
+    ]);
 
     // OUT-03: the fact is stated through the brace the row ALREADY has, never
     // through a new body line. Asserting the two renders line-by-line is what
@@ -6817,7 +6781,7 @@ test("OUT-03: an entry declaring `defaultEnabled: false` puts `{installs disable
     const declaringLines = declaring.notifications[0]!.message.split("\n");
     const declaredTrueLines = declaredTrue.notifications[0]!.message.split("\n");
     assert.equal(declaringLines.length, declaredTrueLines.length);
-    assert.deepEqual(
+    assert.deepStrictEqual(
       declaringLines.filter((_, i) => i !== 1),
       declaredTrueLines.filter((_, i) => i !== 1),
     );
@@ -6830,6 +6794,7 @@ test("OUT-03: an entry declaring `defaultEnabled: false` puts `{installs disable
 
 test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs disabled}` in EITHER direction, because install checks it first", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
       scope: "user",
@@ -6862,15 +6827,16 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
       locations.scopeRoot,
     );
 
-    const rowFor = async (plugin: string): Promise<string> => {
-      // arrange
+    const rowsFor = async (plugin: string): Promise<(string | undefined)[]> => {
       const { ctx, run, notifications } = makeCtx();
-      // act
       await getPluginInfo({ ctx, run, marketplace: "mp", plugin, scope: "user", cwd });
-      // assert
-      assert.equal(notifications.length, 1);
-      return notifications[0]!.message.split("\n")[1]!;
+      return notifications.map((notification) => notification.message.split("\n")[1]);
     };
+
+    // act
+    const yesRows = await rowsFor("yes");
+    const noRows = await rowsFor("no");
+    const muteRows = await rowsFor("mute");
 
     // The row states what an install WOULD do, so it must model the same
     // precedence `install` applies (install-declared-enabled.ts), not a
@@ -6890,9 +6856,10 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
     // `mute` -- no config opinion, so the entry answers and the row claims.
     //   This is the control: it proves the suppression above comes from the
     //   config read and not from the entry read having broken.
-    assert.equal(await rowFor("yes"), "  ○ yes v1.0.0 (available)");
-    assert.equal(await rowFor("no"), "  ○ no v1.0.0 (available)");
-    assert.equal(await rowFor("mute"), "  ○ mute v1.0.0 (available) {installs disabled}");
+    // assert
+    assert.deepStrictEqual(yesRows, ["  ○ yes v1.0.0 (available)"]);
+    assert.deepStrictEqual(noRows, ["  ○ no v1.0.0 (available)"]);
+    assert.deepStrictEqual(muteRows, ["  ○ mute v1.0.0 (available) {installs disabled}"]);
   });
 });
 
@@ -6923,19 +6890,20 @@ test("OUT-03 / OUT-05 / RSTA-01: a COLD `(remote)` row whose entry declares `def
     // marketplace entry -- which is exactly why the entry is the single source
     // (OUT-05 / DOC-02): it reads the same warm and cold.
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◌ gplug v1.0.0 (remote) {installs disabled}",
-        "    components: not resolved",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◌ gplug v1.0.0 (remote) {installs disabled}",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -6969,6 +6937,7 @@ test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEn
     });
 
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "warmdecl", scope: "user", cwd });
     // Three things this pins, in the order they matter (OUT-05 / DOC-02):
@@ -6990,17 +6959,16 @@ test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEn
     //    network-free requirement forbids. OUT-05 / DOC-02 own the rule; do
     //    not "fix" this toward what install reads.
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ○ warmdecl v1.0.0 (available)",
-        "    commands: warm-cmd",
-        "    skills: warm-skill",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ warmdecl v1.0.0 (available)",
+          "    commands: warm-cmd",
+          "    skills: warm-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -7034,18 +7002,19 @@ test("OUT-03: a `(partially-available)` row appends `installs disabled` at the t
     });
 
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "lspplug", scope: "user", cwd });
+
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ⊖ lspplug v1.0.0 (partially-available) {lsp, installs disabled}",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊖ lspplug v1.0.0 (partially-available) {lsp, installs disabled}",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -7071,6 +7040,7 @@ test("OUT-05 / OUT-03: a degraded `(remote)` row reporting a read failure carrie
     const { gitOps } = createGitOps({ cloneThrows: netErr });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({
       ctx,
@@ -7090,16 +7060,15 @@ test("OUT-05 / OUT-03: a degraded `(remote)` row reporting a read failure carrie
     // tree could be read -- and the tail position is observable, since the
     // brace composer joins in array order with no per-row sort.
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◌ gplug v1.0.0 (remote) {network unreachable, installs disabled}",
-        "    components: not resolved",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◌ gplug v1.0.0 (remote) {network unreachable, installs disabled}",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -7140,20 +7109,21 @@ test("OUT-03: an `(unavailable)` row never acquires `installs disabled`, however
     // cannot happen -- and the brace already carries the blocker that stops it.
     // Adding a second token here would answer a question the user cannot act on.
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ⊘ remote v1.0.0 (unavailable) {unsupported source}",
-        "    Remote plugin sourced from an external npm package.",
-        "    components: not resolved",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ remote v1.0.0 (unavailable) {unsupported source}",
+          "    Remote plugin sourced from an external npm package.",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -7191,20 +7161,21 @@ test("OUT-03: an `(installed)` row never acquires `installs disabled`, however t
     // token is also a claim about a FUTURE install, and on a record the action
     // is already taken -- the row reports what exists, not what would happen.
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● foo v1.2.3 (installed)",
-        "    Foo plugin",
-        "    skills: s1",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● foo v1.2.3 (installed)",
+          "    Foo plugin",
+          "    skills: s1",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -7235,15 +7206,19 @@ test("OUT-03: a `(partially-installed)` row never acquires `installs disabled`, 
 
     // Clean for the reason given on the `(installed)` case above.
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
+
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      ["● mp [user] <no autoupdate>", "  ◉ degraded v1.0.0 (partially-installed) {lsp}"].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◉ degraded v1.0.0 (partially-installed) {lsp}",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
@@ -7281,26 +7256,27 @@ test("OUT-03: a `(disabled)` row never acquires `installs disabled`, however the
     // that, here, already happened. Clean for the structural reason given on the
     // `(installed)` case above.
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ◍ foo v1.2.3 (disabled)",
-        "    Foo plugin",
-        "    skills: s1",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ foo v1.2.3 (disabled)",
+          "    Foo plugin",
+          "    skills: s1",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
 test("lenient hook inventory ignores a nonobject root exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -7320,7 +7296,7 @@ test("lenient hook inventory ignores a nonobject root exactly", async () => {
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -7332,8 +7308,8 @@ test("lenient hook inventory ignores a nonobject root exactly", async () => {
 });
 
 test("lenient hook inventory ignores an array hooks value exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -7357,7 +7333,7 @@ test("lenient hook inventory ignores an array hooks value exactly", async () => 
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -7369,8 +7345,8 @@ test("lenient hook inventory ignores an array hooks value exactly", async () => 
 });
 
 test("lenient hook inventory ignores blank events exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -7394,7 +7370,7 @@ test("lenient hook inventory ignores blank events exactly", async () => {
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -7406,8 +7382,8 @@ test("lenient hook inventory ignores blank events exactly", async () => {
 });
 
 test("lenient hook inventory ignores empty event groups exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -7436,7 +7412,7 @@ test("lenient hook inventory ignores empty event groups exactly", async () => {
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -7450,8 +7426,8 @@ test("lenient hook inventory ignores empty event groups exactly", async () => {
 });
 
 test("resolved MCP inventory sorts two server names exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -7478,7 +7454,7 @@ test("resolved MCP inventory sorts two server names exactly", async () => {
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -7523,7 +7499,7 @@ test("ANAME-07: info names each left-out MCP server with the feature that blocks
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "db-tools", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -7580,7 +7556,7 @@ test("AVAR-03: info names a server left out for a leading ~ with its field", asy
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -7606,7 +7582,7 @@ test("ADET-01: info names no pi-mcp-adapter when the install leaves out every MC
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
@@ -7633,7 +7609,7 @@ test("ADET-01: info still names pi-mcp-adapter when the install writes one of th
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
@@ -7705,7 +7681,7 @@ test("AVAR-04: info lists an MCP server's unset variables and withheld credentia
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -7715,7 +7691,7 @@ test("AVAR-04: info lists an MCP server's unset variables and withheld credentia
         ].join("\n"),
       },
     ]);
-    assert.deepEqual(
+    assert.deepStrictEqual(
       notifications.filter(({ message }) => message.includes("avar-sentinel-04-07")),
       [],
     );
@@ -7766,7 +7742,7 @@ for (const { label, mcpServers, env, pluginLine, mcpLine } of [
       });
 
       // assert
-      assert.deepEqual(notifications, [
+      assert.deepStrictEqual(notifications, [
         {
           message: [
             "● mp [user] <no autoupdate>",
@@ -7816,7 +7792,7 @@ test("AVAR-04: the installation-record arm shows no variable lists", async () =>
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -7881,7 +7857,7 @@ test("ASTAT-01: an installed plugin's written servers show the adapter's state f
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -7927,7 +7903,7 @@ test("ASTAT-01: in a both-scopes fan-out each row's servers are stamped from its
     await getPluginInfo({ ctx, run, mcpStatus, marketplace: "mp", plugin: "alpha", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [project] <no autoupdate>",
@@ -7980,7 +7956,7 @@ test("ASTAT-01: with the plugin in both scopes, the project row shows the adapte
     await getPluginInfo({ ctx, run, mcpStatus, marketplace: "mp", plugin: "alpha", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [project] <no autoupdate>",
@@ -8018,7 +7994,7 @@ test("ASTAT-01: under --scope user the user row reads overridden by project scop
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8053,7 +8029,7 @@ test("ASTAT-01: under --scope user an unparseable project state.json leaves the 
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8063,7 +8039,7 @@ test("ASTAT-01: under --scope user an unparseable project state.json leaves the 
         ].join("\n"),
       },
     ]);
-    assert.deepEqual(await readdir(path.dirname(projectStateJson)), ["state.json"]);
+    assert.deepStrictEqual(await readdir(path.dirname(projectStateJson)), ["state.json"]);
     assert.equal(await readFile(projectStateJson, "utf8"), "{");
   });
 });
@@ -8083,7 +8059,7 @@ test("ENBL-08 / ASTAT-01: a disabled project record shows (disabled) with no sta
     await getPluginInfo({ ctx, run, mcpStatus, marketplace: "mp", plugin: "alpha", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [project] <no autoupdate>",
@@ -8119,7 +8095,7 @@ test("ASTAT-02: with no snapshot both rows of the fan-out read status unknown", 
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [project] <no autoupdate>",
@@ -8152,7 +8128,7 @@ test("ASTAT-01: a project record that lists a different server leaves the user r
     await getPluginInfo({ ctx, run, mcpStatus, marketplace: "mp", plugin: "alpha", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [project] <no autoupdate>",
@@ -8181,7 +8157,7 @@ test("ASTAT-01: without --scope and with the marketplace in the user scope only,
     await getPluginInfo({ ctx, run, mcpStatus, marketplace: "mp", plugin: "alpha", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8224,7 +8200,7 @@ test("ASTAT-02: a snapshot status holding an escape sequence reads status unknow
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8262,7 +8238,7 @@ for (const { inventory, label, requiresLine } of [
       await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
       // assert
-      assert.deepEqual(notifications, [
+      assert.deepStrictEqual(notifications, [
         {
           message: [
             "● mp [user] <no autoupdate>",
@@ -8286,7 +8262,7 @@ test("ADET-01: a plugin whose components need no companion gets no requires line
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       { message: "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)" },
     ]);
   });
@@ -8320,7 +8296,7 @@ test("ADET-01: a components-not-resolved row gets no requires line although its 
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n  ● remote v1.0.0 (installed)\n    components: not resolved",
@@ -8330,8 +8306,8 @@ test("ADET-01: a components-not-resolved row gets no requires line although its 
 });
 
 test("two-scope fan-out emits one info block before one exact failed block", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     await seedPathMarketplace({
       scope: "project",
       scopeRoot: cwd,
@@ -8356,7 +8332,7 @@ test("two-scope fan-out emits one info block before one exact failed block", asy
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: ["● mp [project] <no autoupdate>", "  ○ alpha v1.0.0 (available)"].join("\n"),
       },
@@ -8374,8 +8350,8 @@ test("two-scope fan-out emits one info block before one exact failed block", asy
 });
 
 test("state-only fetch safely constructs default ports without invoking them", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8398,7 +8374,7 @@ test("state-only fetch safely constructs default ports without invoking them", a
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8420,8 +8396,8 @@ test("state-only fetch safely constructs default ports without invoking them", a
 });
 
 test("component discovery ignores wrong entry kinds and accepts an absolute in-root directory", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8462,7 +8438,7 @@ test("component discovery ignores wrong entry kinds and accepts an absolute in-r
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8475,8 +8451,8 @@ test("component discovery ignores wrong entry kinds and accepts an absolute in-r
 });
 
 test("strict hook inventory deduplicates two dropped matcher groups exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8508,7 +8484,7 @@ test("strict hook inventory deduplicates two dropped matcher groups exactly", as
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8523,8 +8499,8 @@ test("strict hook inventory deduplicates two dropped matcher groups exactly", as
 });
 
 test("a nonarray lenient event group is ignored beside an unsupported event", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8553,7 +8529,7 @@ test("a nonarray lenient event group is ignored beside an unsupported event", as
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8567,8 +8543,8 @@ test("a nonarray lenient event group is ignored beside an unsupported event", as
 });
 
 test("a path source escaping the marketplace becomes an exact unavailable row", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8592,7 +8568,7 @@ test("a path source escaping the marketplace becomes an exact unavailable row", 
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8606,8 +8582,8 @@ test("a path source escaping the marketplace becomes an exact unavailable row", 
 });
 
 test("a generic explicit-fetch failure uses the probe fallback exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8643,7 +8619,7 @@ test("a generic explicit-fetch failure uses the probe fallback exactly", async (
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8657,8 +8633,8 @@ test("a generic explicit-fetch failure uses the probe fallback exactly", async (
 });
 
 test("a warm unavailable git plugin lists conventional component directories exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const cloneUrl = "https://example.com/unavailable";
     await seedPathMarketplace({
       scope: "user",
@@ -8693,7 +8669,7 @@ test("a warm unavailable git plugin lists conventional component directories exa
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -8707,8 +8683,8 @@ test("a warm unavailable git plugin lists conventional component directories exa
 });
 
 test("a warm partially available git plugin folds a component read failure exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const cloneUrl = "https://example.com/partial-unreadable";
     await seedPathMarketplace({
       scope: "user",
@@ -8747,7 +8723,7 @@ test("a warm partially available git plugin folds a component read failure exact
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
@@ -8760,8 +8736,8 @@ test("a warm partially available git plugin folds a component read failure exact
 });
 
 test("a warm installable git plugin folds a component read failure to remote exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const cloneUrl = "https://example.com/available-unreadable";
     await seedPathMarketplace({
       scope: "user",
@@ -8800,7 +8776,7 @@ test("a warm installable git plugin folds a component read failure to remote exa
     });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
@@ -8813,8 +8789,8 @@ test("a warm installable git plugin folds a component read failure to remote exa
 });
 
 test("an explicit fetch whose fetched tree cannot be read folds the warm resolver error", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const cloneUrl = "https://example.com/fetched-tree-unreadable";
     await seedPathMarketplace({
       scope: "user",
@@ -8871,7 +8847,7 @@ test("an explicit fetch whose fetched tree cannot be read folds the warm resolve
 
     // assert
     assert.equal(materializations, 1);
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
@@ -8884,8 +8860,8 @@ test("an explicit fetch whose fetched tree cannot be read folds the warm resolve
 });
 
 test("a path source containing a NUL byte folds the resolver failure exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8909,7 +8885,7 @@ test("a path source containing a NUL byte folds the resolver failure exactly", a
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
@@ -8922,8 +8898,8 @@ test("a path source containing a NUL byte folds the resolver failure exactly", a
 });
 
 test("a lenient hooks path targeting a directory folds the read failure exactly", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8946,7 +8922,7 @@ test("a lenient hooks path targeting a directory folds the read failure exactly"
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
@@ -8958,8 +8934,8 @@ test("a lenient hooks path targeting a directory folds the read failure exactly"
 });
 
 test("an available path plugin renders sorted dependencies after its inventory", async () => {
-  // arrange
   await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
     await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8984,7 +8960,7 @@ test("an available path plugin renders sorted dependencies after its inventory",
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
@@ -9002,9 +8978,9 @@ test("an available path plugin renders sorted dependencies after its inventory",
 
 /**
  * Seed one available path plugin in marketplace `mp` carrying `dependencies`,
- * render its info block, and return the single notification message.
+ * render its info block, and return the recorded notifications.
  */
-async function renderDependencyLine(dependencies: unknown): Promise<string> {
+async function renderDependencyLine(dependencies: unknown): Promise<NotifyRecord[]> {
   return withHermeticHome(async ({ home, cwd }) => {
     await seedPathMarketplace({
       scope: "user",
@@ -9021,8 +8997,7 @@ async function renderDependencyLine(dependencies: unknown): Promise<string> {
 
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "host", scope: "user", cwd });
 
-    assert.equal(notifications.length, 1);
-    return notifications[0]!.message;
+    return notifications;
   });
 }
 
@@ -9049,12 +9024,12 @@ test("rejects a declaration when its substituted marketplace name is not rendera
     await getPluginInfo({ ctx, run, marketplace, plugin: "host", scope: "user", cwd });
 
     // assert
-    assert.deepStrictEqual(
-      notifications.map(({ message }) => message),
-      [
-        "● mp+invalid [user] <no autoupdate>\n  ⊘ host (unavailable) {invalid manifest}\n    components: not resolved",
-      ],
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp+invalid [user] <no autoupdate>\n  ⊘ host (unavailable) {invalid manifest}\n    components: not resolved",
+      },
+    ]);
   });
 });
 
@@ -9063,10 +9038,12 @@ test("DEPS-02: a mixed array of strings and objects lists every usable element",
   const dependencies = ["zulu@mp", { name: "alfa", version: "^1.0.0" }];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.0.0), zulu@mp`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.0.0), zulu@mp` },
+  ]);
 });
 
 test("DEPS-01: an object dependency renders its own marketplace, not the declaring one", async () => {
@@ -9074,10 +9051,12 @@ test("DEPS-01: an object dependency renders its own marketplace, not the declari
   const dependencies = [{ name: "alfa", version: "^2.0.0", marketplace: "other-mp" }];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@other-mp (^2.0.0)`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@other-mp (^2.0.0)` },
+  ]);
 });
 
 test("D-01-02: an element declaring no marketplace takes the declaring plugin's", async () => {
@@ -9085,10 +9064,12 @@ test("D-01-02: an element declaring no marketplace takes the declaring plugin's"
   const dependencies = [{ name: "alfa", version: "^2.0.0" }];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^2.0.0)`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^2.0.0)` },
+  ]);
 });
 
 test("D-01-27: a bare string's trailing range renders as a constraint", async () => {
@@ -9096,10 +9077,12 @@ test("D-01-27: a bare string's trailing range renders as a constraint", async ()
   const dependencies = ["alfa@^1.2.3"];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.2.3)`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.2.3)` },
+  ]);
 });
 
 test("D-01-30: a sha alone renders labelled and short-formed to seven characters", async () => {
@@ -9107,10 +9090,12 @@ test("D-01-30: a sha alone renders labelled and short-formed to seven characters
   const dependencies = [{ name: "alfa", sha: "abc1234def5678abc1234def5678abc1234def56" }];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (sha abc1234)`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (sha abc1234)` },
+  ]);
 });
 
 test("D-01-30: a version and a sha share one parenthetical, version first", async () => {
@@ -9120,10 +9105,12 @@ test("D-01-30: a version and a sha share one parenthetical, version first", asyn
   ];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.0.0, sha def5678)`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.0.0, sha def5678)` },
+  ]);
 });
 
 test("D-01-30: an element declaring no constraint renders the bare address", async () => {
@@ -9131,10 +9118,12 @@ test("D-01-30: an element declaring no constraint renders the bare address", asy
   const dependencies = [{ name: "alfa" }];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp` },
+  ]);
 });
 
 test("D-01-31: two elements resolving to one address collapse, the last winning", async () => {
@@ -9145,10 +9134,12 @@ test("D-01-31: two elements resolving to one address collapse, the last winning"
   ];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^2.0.0)`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^2.0.0)` },
+  ]);
 });
 
 test("D-01-04: the list orders by dependency name, not by the rendered string", async () => {
@@ -9156,10 +9147,12 @@ test("D-01-04: the list orders by dependency name, not by the rendered string", 
   const dependencies = [{ name: "bravo", version: "^9.0.0" }, { name: "alfa" }];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp, bravo@mp (^9.0.0)`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp, bravo@mp (^9.0.0)` },
+  ]);
 });
 
 test("D-01-04: two entries sharing a name keep their declaration order", async () => {
@@ -9170,10 +9163,12 @@ test("D-01-04: two entries sharing a name keep their declaration order", async (
   ];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@zulu-mp, alfa@bravo-mp`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@zulu-mp, alfa@bravo-mp` },
+  ]);
 });
 
 test("invalid marketplace dependencies make the plugin unavailable", async () => {
@@ -9181,13 +9176,15 @@ test("invalid marketplace dependencies make the plugin unavailable", async () =>
   const dependencies = [{ version: "^1.0.0" }, 42, { name: "bad name" }, { name: "a", sha: "zz" }];
 
   // act
-  const message = await renderDependencyLine(dependencies);
+  const notifications = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(
-    message,
-    "● mp [user] <no autoupdate>\n  ⊘ host (unavailable) {unsupported source}\n    components: not resolved",
-  );
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [user] <no autoupdate>\n  ⊘ host (unavailable) {unsupported source}\n    components: not resolved",
+    },
+  ]);
 });
 
 test("invalid own dependencies are reported without the entry or bare fallback", async () => {
@@ -9199,13 +9196,15 @@ test("invalid own dependencies are reported without the entry or bare fallback",
   };
 
   // act
-  const message = await renderOwnManifestCase(manifests);
+  const notifications = await renderOwnManifestCase(manifests);
 
   // assert
-  assert.equal(
-    message,
-    "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {invalid manifest}\n    components: not resolved",
-  );
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {invalid manifest}\n    components: not resolved",
+    },
+  ]);
 });
 
 for (const { label, installed, entryVersion, description, dependencies, expected } of [
@@ -9269,10 +9268,9 @@ for (const { label, installed, entryVersion, description, dependencies, expected
       await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "host", scope: "user", cwd });
 
       // assert
-      assert.deepStrictEqual(
-        notifications.map(({ message }) => message),
-        [`● mp [user] <no autoupdate>\n${expected}`],
-      );
+      assert.deepStrictEqual(notifications, [
+        { message: `● mp [user] <no autoupdate>\n${expected}` },
+      ]);
       assert.equal(await readFile(statePath, "utf8"), stateBefore);
     });
   });
@@ -9311,13 +9309,13 @@ async function plantOwnManifest(
 /**
  * Seed one path-source plugin whose marketplace ENTRY declares
  * `entryDependencies`, plant whichever own-manifest locations the case names,
- * and return the single rendered notification message.
+ * and return the recorded notifications.
  */
 async function renderOwnManifestCase(opts: {
   readonly entryDependencies?: unknown;
   readonly wrapped?: string;
   readonly bare?: string;
-}): Promise<string> {
+}): Promise<NotifyRecord[]> {
   return withHermeticHome(async ({ home, cwd }) => {
     const mpRoot = await seedPathMarketplace({
       scope: "user",
@@ -9342,8 +9340,7 @@ async function renderOwnManifestCase(opts: {
 
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "host", scope: "user", cwd });
 
-    assert.equal(notifications.length, 1);
-    return notifications[0]!.message;
+    return notifications;
   });
 }
 
@@ -9355,10 +9352,12 @@ test("D-01-32: a bare plugin.json outranks the marketplace entry's dependency li
   };
 
   // act
-  const message = await renderOwnManifestCase(manifests);
+  const notifications = await renderOwnManifestCase(manifests);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: fresh@mp`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: fresh@mp` },
+  ]);
 });
 
 test("D-01-32: the wrapped manifest outranks a bare sibling, matching the shared ordering", async () => {
@@ -9370,10 +9369,12 @@ test("D-01-32: the wrapped manifest outranks a bare sibling, matching the shared
   };
 
   // act
-  const message = await renderOwnManifestCase(manifests);
+  const notifications = await renderOwnManifestCase(manifests);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: wrapped-dep@mp`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: wrapped-dep@mp` },
+  ]);
 });
 
 test("D-01-32: a readable manifest declaring nothing omits the line; the entry does not reappear", async () => {
@@ -9381,10 +9382,10 @@ test("D-01-32: a readable manifest declaring nothing omits the line; the entry d
   const manifests = { entryDependencies: ["stale@mp"], bare: JSON.stringify({ name: "host" }) };
 
   // act
-  const message = await renderOwnManifestCase(manifests);
+  const notifications = await renderOwnManifestCase(manifests);
 
   // assert
-  assert.equal(message, DEPENDENCY_BLOCK_HEAD.trimEnd());
+  assert.deepStrictEqual(notifications, [{ message: DEPENDENCY_BLOCK_HEAD.trimEnd() }]);
 });
 
 test("D-01-32: a plugin with no manifest at either candidate falls back to the entry", async () => {
@@ -9392,10 +9393,12 @@ test("D-01-32: a plugin with no manifest at either candidate falls back to the e
   const manifests = { entryDependencies: ["from-entry@mp"] };
 
   // act
-  const message = await renderOwnManifestCase(manifests);
+  const notifications = await renderOwnManifestCase(manifests);
 
   // assert
-  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: from-entry@mp`);
+  assert.deepStrictEqual(notifications, [
+    { message: `${DEPENDENCY_BLOCK_HEAD}    dependencies: from-entry@mp` },
+  ]);
 });
 
 test("D-01-07: an unparseable first candidate ends the walk; the bare sibling never rescues it", async () => {
@@ -9407,13 +9410,12 @@ test("D-01-07: an unparseable first candidate ends the walk; the bare sibling ne
   };
 
   // act
-  const message = await renderOwnManifestCase(manifests);
+  const notifications = await renderOwnManifestCase(manifests);
 
   // assert
-  assert.equal(
-    message,
-    "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {unsupported source}",
-  );
+  assert.deepStrictEqual(notifications, [
+    { message: "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {unsupported source}" },
+  ]);
 });
 
 test("a non-object own manifest stops before the bare sibling", async () => {
@@ -9421,13 +9423,12 @@ test("a non-object own manifest stops before the bare sibling", async () => {
   const manifests = { wrapped: "[]", bare: '{"dependencies":[42]}' };
 
   // act
-  const message = await renderOwnManifestCase(manifests);
+  const notifications = await renderOwnManifestCase(manifests);
 
   // assert
-  assert.equal(
-    message,
-    "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {unsupported source}",
-  );
+  assert.deepStrictEqual(notifications, [
+    { message: "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {unsupported source}" },
+  ]);
 });
 
 // The read failure propagates out of the resolver with its identity intact, so
@@ -9472,12 +9473,11 @@ for (const { label, error, reason } of [
       });
 
       // assert
-      assert.deepEqual(
-        notifications.map(({ message }) => message),
-        [
-          `● mp [user] <no autoupdate>\n  ⊘ host (unavailable) {${reason}}\n    components: not resolved`,
-        ],
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `● mp [user] <no autoupdate>\n  ⊘ host (unavailable) {${reason}}\n    components: not resolved`,
+        },
+      ]);
     });
   });
 }
@@ -9574,10 +9574,9 @@ for (const { label, createObstacle, expected } of [
       await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "host", scope: "user", cwd });
 
       // assert
-      assert.deepEqual(
-        notifications.map(({ message }) => message),
-        [`● mp [user] <no autoupdate>\n${expected}`],
-      );
+      assert.deepStrictEqual(notifications, [
+        { message: `● mp [user] <no autoupdate>\n${expected}` },
+      ]);
     });
   });
 }
@@ -9606,10 +9605,12 @@ test("info reports a warm installed plugin's own dependencies", async () => {
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(
-      notifications.map(({ message }) => message),
-      ["● mp [user] <no autoupdate>\n  ● gplug v2.0.0 (installed)\n    dependencies: fresh@mp"],
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n  ● gplug v2.0.0 (installed)\n    dependencies: fresh@mp",
+      },
+    ]);
   });
 });
 
@@ -9633,12 +9634,12 @@ test("info tolerates a corrupt cached mirror without fetching", async () => {
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(
-      notifications.map(({ message }) => message),
-      [
-        "● mp [user] <no autoupdate>\n  ◌ gplug (remote) {source missing}\n    components: not resolved",
-      ],
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n  ◌ gplug (remote) {source missing}\n    components: not resolved",
+      },
+    ]);
   });
 });
 
@@ -9672,7 +9673,7 @@ test("D-01-32: a path source whose root fails containment falls back to the entr
     // throw still lands on the pre-existing `{unreadable}` arm. What is new is
     // that the BLOCK-level read refused the same path quietly instead of
     // throwing past every catch in the file.
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "\u25cf mp [user] <no autoupdate>\n" +
@@ -9712,15 +9713,15 @@ test("D-01-32: a WARM git clone's plugin.json supplies the dependency list, not 
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(
-      notifications.map(({ message }) => message),
-      [
-        "● mp [user] <no autoupdate>\n" +
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
           "  ○ gplug v1.0.0 (available)\n" +
           "    skills: warm-skill\n" +
           "    dependencies: fresh@mp",
-      ],
-    );
+      },
+    ]);
   });
 });
 
@@ -9750,14 +9751,14 @@ test("D-77-01: a WARM git clone whose entry declares no version shows the clone'
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(
-      notifications.map(({ message }) => message),
-      [
-        "● mp [user] <no autoupdate>\n" +
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
           `  ○ gplug v#${head.slice(0, 7)} (available)\n` +
           "    skills: warm-skill",
-      ],
-    );
+      },
+    ]);
   });
 });
 
@@ -9795,7 +9796,7 @@ test("D-01-32 / NFR-5: a COLD git source renders the entry's list and creates no
     // line renders after the `components: not resolved` marker. The
     // load-bearing half is still that nothing was cloned to make the manifest
     // readable (NFR-5).
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
@@ -9849,7 +9850,7 @@ test("WFLW-04: an installed plugin lists its admitted workflows, sorted, after i
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
@@ -9879,7 +9880,7 @@ test("WFLW-04: a plugin whose workflow scripts are all unadmitted renders no wor
 
     // assert -- no `workflows:` line, because nothing was admitted. The script
     // is not silently dropped: its own advisory line reports it.
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           EXPECTED_FOO_INSTALLED_INFO +
@@ -9924,13 +9925,14 @@ test("NFR-10: a declared workflows path escaping the plugin root folds to the no
 
     // assert -- the command reports the refusal on the row; it does not throw,
     // and it lists nothing from outside the plugin root.
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "● mp [user] <no autoupdate>\n" +
-        "  ⊘ alpha v1.0.0 (unavailable) {unsupported source, unreadable}\n" +
-        "    components: not resolved",
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
+          "  ⊘ alpha v1.0.0 (unavailable) {unsupported source, unreadable}\n" +
+          "    components: not resolved",
+      },
+    ]);
   });
 });
 
@@ -9954,7 +9956,7 @@ test("WFLW-04: a manifest-absent record renders its persisted workflow inventory
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -9985,7 +9987,7 @@ test("WFLW-04: a manifest-absent record with an empty workflow inventory renders
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -9997,13 +9999,13 @@ test("WFLW-04: a manifest-absent record with an empty workflow inventory renders
   });
 });
 
-test("WFLW-04: the lenient component map carries the conventional workflows directory beside a declared one", async () => {
+test("WFLW-04 / D-CF1-06: the lenient component map lists only a declared workflows directory, not the conventional one beside it", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange -- a malformed hooks file makes the plugin structurally
     // unavailable, which is the arm that carries no `componentPaths` and so
     // re-derives them from the raw manifest strings. The declared `extra-flows`
-    // and the conventional `workflows` must BOTH be walked, so the row lists a
-    // script from each.
+    // replaces the conventional `workflows` (D-CF1-06), so the row lists the
+    // declared folder's script alone.
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = await seedPathMarketplace({
       scope: "user",
@@ -10032,13 +10034,72 @@ test("WFLW-04: the lenient component map carries the conventional workflows dire
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
           "  ⊘ alpha v1.0.0 (unavailable) {unsupported hooks}",
-          "    workflows: alpha:extra, alpha:zeta",
+          "    workflows: alpha:extra",
           "    requires: pi-dynamic-workflows (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-CF3-04: the lenient component map lists the commands folder beside an entry-declared commands path", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- a malformed hooks file makes the plugin structurally
+    // unavailable. The entry's `commands` adds to `commands/`, while its
+    // `agents` still replaces `agents/`, so the row lists both command
+    // folders and the declared agents folder alone.
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "alpha",
+            source: "./alpha",
+            version: "1.0.0",
+            commands: "./more",
+            agents: "./crew",
+          },
+        ],
+      },
+      installablePluginDirs: ["alpha"],
+    });
+    const pluginDir = path.join(mpRoot, "alpha");
+    for (const [relative, text] of [
+      ["commands/a.md", "Run a.\n"],
+      ["more/b.md", "Run b.\n"],
+      ["agents/old.md", "Old agent.\n"],
+      ["crew/new.md", "New agent.\n"],
+    ] as const) {
+      await mkdir(path.dirname(path.join(pluginDir, relative)), { recursive: true });
+      await writeFile(path.join(pluginDir, relative), text, "utf8");
+    }
+
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ alpha v1.0.0 (unavailable) {unsupported hooks}",
+          "    agents: new",
+          "    commands: a, b",
+          "    requires: pi-subagents (missing)",
         ].join("\n"),
       },
     ]);
@@ -10071,7 +10132,7 @@ test("WR-09: a refused workflow script renders one preview-tense advisory line l
 
     // assert -- the advisory follows the `dependencies:` line, and it says what
     // WOULD happen: this plugin is installed, but that script is not.
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -10103,7 +10164,7 @@ test("WR-09: a plugin whose workflow scripts are all admitted renders no advisor
 
     // assert -- byte-identical to the same row before the channel existed,
     // plus the `workflows:` line the admitted script earns.
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: `${EXPECTED_FOO_COMPONENT_LINES}\n    workflows: foo:zeta\n${FOO_WORKFLOWS_REQUIRES_LINE}`,
       },
@@ -10206,7 +10267,7 @@ test("WFLW-04: the state-only arm carries no advisory line, because it runs no d
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           "● mp [user] <no autoupdate>",
@@ -10281,7 +10342,7 @@ test("WGATE-01: info names the engine check that will refuse an admitted script,
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message:
           EXPECTED_FOO_COMPONENT_LINES +
@@ -10294,7 +10355,7 @@ test("WGATE-01: info names the engine check that will refuse an admitted script,
 });
 
 test("WGATE-03: the gate note is the only byte an info row gains, at the same severity", async () => {
-  // arrange + act -- two runs over one manifest shape, differing only in
+  // act -- two runs over one manifest shape, differing only in
   // whether the script on disk declares a description. Both scripts are
   // admitted under the same generated name, so the `workflows:` line is equal
   // and the note is the only byte the gate can move.
@@ -10303,24 +10364,20 @@ test("WGATE-03: the gate note is the only byte an info row gains, at the same se
 
   // assert -- the gate-free row first, so the comparison below is against a
   // stated baseline rather than against whatever the other run produced.
-  assert.deepEqual(ungated, [
+  assert.deepStrictEqual(ungated, [
     {
       message: `${EXPECTED_FOO_COMPONENT_LINES}\n    workflows: foo:greet\n${FOO_WORKFLOWS_REQUIRES_LINE}`,
     },
   ]);
   // One record with no `severity` key is how this harness records an `info`
   // notification: `ctx.ui.notify` was called with no second argument.
-  assert.equal(gated.length, 1);
-  assert.deepEqual(Object.keys(gated[0]!), ["message"]);
-  const gatedLines = gated[0]!.message.split("\n");
-  assert.deepEqual(
-    gatedLines.filter((line) => line.startsWith("    note: ")),
-    [`    note: ${EXPECTED_GATE_NOTE_CHECK_9}`],
-  );
-  assert.deepEqual(
-    gatedLines.filter((line) => !line.startsWith("    note: ")).join("\n"),
-    ungated[0]!.message,
-  );
+  assert.deepStrictEqual(gated, [
+    {
+      message:
+        `${EXPECTED_FOO_COMPONENT_LINES}\n    workflows: foo:greet\n${FOO_WORKFLOWS_REQUIRES_LINE}` +
+        `\n    note: ${EXPECTED_GATE_NOTE_CHECK_9}`,
+    },
+  ]);
 });
 
 test("NFR-9: the gate note names the workflows directory by name and discloses no home path", async () => {
@@ -10367,7 +10424,7 @@ test("WGATE-01: a gate note takes its place among the other advisories, in direc
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert
-    assert.deepEqual(notifications, [
+    assert.deepStrictEqual(notifications, [
       {
         message: [
           EXPECTED_FOO_COMPONENT_LINES,
@@ -10421,16 +10478,17 @@ test("GIT-03: `info --fetch` of a not-installed git plugin under a held state lo
     });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "A plugin operation has failed.",
-        "",
-        "● mp [user] <no autoupdate>",
-        "  ⊘ gplug v1.0.0 (failed) {lock held}",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ⊘ gplug v1.0.0 (failed) {lock held}",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -10472,16 +10530,17 @@ test("GIT-03: `info --fetch` of an installed git plugin under a held state lock 
     });
 
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "A plugin operation has failed.",
-        "",
-        "● mp [user] <no autoupdate>",
-        "  ⊘ gplug v1.0.0 (failed) {lock held}",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ⊘ gplug v1.0.0 (failed) {lock held}",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -10534,16 +10593,17 @@ for (const { title, installed } of [
       });
 
       // assert
-      assert.equal(notifications.length, 1);
-      assert.equal(
-        notifications[0]!.message,
-        [
-          "A plugin operation has failed.",
-          "",
-          "● mp [user] <no autoupdate>",
-          "  ⊘ gplug v1.0.0 (failed) {lock held}",
-        ].join("\n"),
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [user] <no autoupdate>",
+            "  ⊘ gplug v1.0.0 (failed) {lock held}",
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
     });
   });
 }

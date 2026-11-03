@@ -55,6 +55,12 @@ export interface AutoapplySettingOptions {
   readonly ctx: NotificationContext;
   readonly run: NotificationRun;
   readonly cwd: string;
+  /**
+   * D-LOC-01: whether Pi trusts the project. The value in effect leaves out
+   * the configs of a project Pi does not trust, as the load does; the listed
+   * files still show their own values.
+   */
+  readonly projectTrusted: boolean;
   /** Show: keep only this scope's files. Set: the scope to write (default user). */
   readonly scope?: Scope;
   /** Show: keep only the local layer's files. Set: write the local config. */
@@ -83,7 +89,9 @@ function statusOrReport(
   files: readonly AutoapplyFile[],
   keep: (file: AutoapplyFile) => boolean,
 ): AutoapplyStatusSurface | undefined {
-  const effective = effectiveAutoapply(files);
+  const effective = effectiveAutoapply(
+    opts.projectTrusted ? files : files.filter((file) => file.scope === "user"),
+  );
   if (effective.status === "invalid") {
     notifyInvalidConfigs(
       opts.ctx,

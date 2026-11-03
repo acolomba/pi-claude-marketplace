@@ -188,32 +188,39 @@ function stagedPreparation(prepared: PreparedWorkflowsStaging): PreparedWorkflow
 }
 
 /**
- * Redefine one rename pair's path property as a getter.
+ * Copy a staged preparation with some rename pairs' `from` path replaced by a getter.
  *
- * `_renamePairs` is a frozen array whose elements are plain mutable objects, so
- * redefining a property on one element is the only lever into the commit's
- * rollback branches. The resolver is handed the real path, which lets a case
- * return it on the first read and something unusable on every read after that.
+ * `_renamePairs` is frozen, so the copy carries fresh pairs for the named
+ * entries. Each resolver is handed the real path, which lets a case return it
+ * on the first read and something unusable on every read after that. This is
+ * the only lever into the commit's rollback branches.
  */
-function redefineRenamePairPath(
+function withRedefinedFromPaths(
   prepared: PreparedWorkflowsStaged,
-  name: string,
-  property: "from" | "to",
-  resolve: (realPath: string) => string,
-): void {
-  const pair = prepared._renamePairs.find((candidate) => candidate.name === name);
-
-  if (pair === undefined) {
-    throw new Error(`no rename pair is named "${name}"`);
+  resolvers: Readonly<Record<string, (realPath: string) => string>>,
+): PreparedWorkflowsStaged {
+  for (const name of Object.keys(resolvers)) {
+    if (!prepared._renamePairs.some((candidate) => candidate.name === name)) {
+      throw new Error(`no rename pair is named "${name}"`);
+    }
   }
 
-  const realPath = pair[property];
+  return {
+    ...prepared,
+    _renamePairs: prepared._renamePairs.map((pair) => {
+      const resolve = resolvers[pair.name];
 
-  Object.defineProperty(pair, property, {
-    configurable: true,
-    enumerable: true,
-    get: () => resolve(realPath),
-  });
+      return resolve === undefined
+        ? pair
+        : {
+            name: pair.name,
+            get from(): string {
+              return resolve(pair.from);
+            },
+            to: pair.to,
+          };
+    }),
+  };
 }
 
 describe("prepareStageWorkflows", () => {
@@ -416,7 +423,7 @@ describe("prepareStageWorkflows", () => {
     const outsideDir = await createPluginRoot(t, "workflows-symlink-outside-");
     const workflowsDir = await createWorkflowsDir(pluginRoot);
     await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
-    await mkdir(locations.workflowsHomeDir, { recursive: true });
+    await mkdir(path.dirname(locations.workflowsStagingDir), { recursive: true });
     await symlink(outsideDir, locations.workflowsStagingDir);
 
     // act
@@ -758,12 +765,12 @@ describe("commitPreparedWorkflows", () => {
         previousWorkflowNames: ["acme:greet", "acme:shout"],
       }),
     );
-    redefineRenamePairPath(prepared, "acme:shout", "from", () =>
-      path.join(prepared.stagingRoot, "absent.json"),
-    );
+    const failingPrepared = withRedefinedFromPaths(prepared, {
+      "acme:shout": () => path.join(prepared.stagingRoot, "absent.json"),
+    });
 
     // act
-    const error = await commitPreparedWorkflows(prepared, {
+    const error = await commitPreparedWorkflows(failingPrepared, {
       onPlaced: (names) => placed.push(names),
     }).then(
       () => undefined,
@@ -808,6 +815,99 @@ describe("commitPreparedWorkflows", () => {
     assert.strictEqual(commitLeak, undefined);
     assert.deepStrictEqual(savedEntries, ["acme:greet.json"]);
     assert.deepStrictEqual(placed, [["acme:greet"]]);
+  });
+
+  test("D-LOC-01: a project re-stage places the envelope in the project and removes the earlier copy under the workflow home", async (t) => {
+    // arrange
+    const { locations } = await createWorkflowScope(t, "workflows-commit-former-");
+    const pluginRoot = await createPluginRoot(t, "workflows-commit-former-source-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    const formerDirectory = locations.formerWorkflowsSavedDir ?? "";
+    await mkdir(formerDirectory, { recursive: true });
+    await writeFile(path.join(formerDirectory, "acme:greet.json"), "earlier envelope\n");
+    await writeFile(path.join(formerDirectory, "other:keep.json"), "foreign envelope\n");
+    const prepared = await prepareStageWorkflows({
+      locations,
+      pluginName: PLUGIN_NAME,
+      resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+      previousWorkflowNames: ["acme:greet"],
+    });
+
+    // act
+    const commitLeak = await commitPreparedWorkflows(prepared);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        commitLeak,
+        saved: await readdir(locations.workflowsSavedDir),
+        former: await readdir(formerDirectory),
+        savedUnderProject: locations.workflowsSavedDir.startsWith(locations.scopeRoot),
+      },
+      {
+        commitLeak: undefined,
+        saved: ["acme:greet.json"],
+        former: ["other:keep.json"],
+        savedUnderProject: true,
+      },
+    );
+  });
+
+  test("D-LOC-01: a project re-stage reports an earlier copy it cannot remove as a leak", async (t) => {
+    // arrange
+    const { locations } = await createWorkflowScope(t, "workflows-commit-former-stuck-");
+    const pluginRoot = await createPluginRoot(t, "workflows-commit-former-stuck-source-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    const stuck = path.join(locations.formerWorkflowsSavedDir ?? "", "acme:greet.json");
+    await mkdir(stuck, { recursive: true });
+    const prepared = await prepareStageWorkflows({
+      locations,
+      pluginName: PLUGIN_NAME,
+      resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+      previousWorkflowNames: ["acme:greet"],
+    });
+    // unlink(2) on a directory fails with EPERM on macOS and EISDIR on Linux.
+    const unlinkDirectoryFailure =
+      process.platform === "darwin"
+        ? "EPERM: operation not permitted"
+        : "EISDIR: illegal operation on a directory";
+
+    // act
+    const commitLeak = await commitPreparedWorkflows(prepared);
+
+    // assert
+    assert.strictEqual(
+      commitLeak,
+      `failed to remove earlier workflow envelope of acme:greet: ${unlinkDirectoryFailure}, unlink '${stuck}'`,
+    );
+    assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), ["acme:greet.json"]);
+  });
+
+  test("a user re-stage has no earlier directory to clean", async (t) => {
+    // arrange
+    const { locations: projectLocations } = await createWorkflowScope(
+      t,
+      "workflows-commit-user-previous-",
+    );
+    const locations = locationsFor("user", path.dirname(projectLocations.scopeRoot));
+    const pluginRoot = await createPluginRoot(t, "workflows-commit-user-previous-source-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    const prepared = await prepareStageWorkflows({
+      locations,
+      pluginName: PLUGIN_NAME,
+      resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+      previousWorkflowNames: ["acme:greet"],
+    });
+
+    // act
+    const commitLeak = await commitPreparedWorkflows(prepared);
+
+    // assert
+    assert.strictEqual(commitLeak, undefined);
+    assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), ["acme:greet.json"]);
   });
 
   test("propagates a displacement failure that is not a missing previous file", async (t) => {
@@ -930,12 +1030,12 @@ describe("commitPreparedWorkflows", () => {
     // Only the forward rename of the second pair has to fail here, so the getter
     // is constant: the first pair keeps its real staged path and its reversal
     // therefore succeeds, which is the branch this case is about.
-    redefineRenamePairPath(prepared, "acme:shout", "from", () =>
-      path.join(prepared.stagingRoot, "absent.json"),
-    );
+    const failingPrepared = withRedefinedFromPaths(prepared, {
+      "acme:shout": () => path.join(prepared.stagingRoot, "absent.json"),
+    });
 
     // act
-    const error = await commitPreparedWorkflows(prepared, {
+    const error = await commitPreparedWorkflows(failingPrepared, {
       onPlaced: (names) => placed.push(names),
     }).then(
       () => undefined,
@@ -977,21 +1077,23 @@ describe("commitPreparedWorkflows", () => {
     // The first two pairs rename forward from their real staged path and then
     // reverse onto a non-empty directory, so both stay placed; the third never
     // renames at all, which is what drives the commit into its rollback.
+    const resolvers: Record<string, (realPath: string) => string> = {
+      "acme:wave": () => path.join(prepared.stagingRoot, "absent.json"),
+    };
+
     for (const stillPlacedName of ["acme:greet", "acme:shout"]) {
       let reads = 0;
 
-      redefineRenamePairPath(prepared, stillPlacedName, "from", (realPath) => {
+      resolvers[stillPlacedName] = (realPath) => {
         reads += 1;
         return reads === 1 ? realPath : rollbackBlocker;
-      });
+      };
     }
 
-    redefineRenamePairPath(prepared, "acme:wave", "from", () =>
-      path.join(prepared.stagingRoot, "absent.json"),
-    );
+    const failingPrepared = withRedefinedFromPaths(prepared, resolvers);
 
     // act
-    const error = await commitPreparedWorkflows(prepared, {
+    const error = await commitPreparedWorkflows(failingPrepared, {
       onPlaced: (names) => placed.push(names),
     }).then(
       () => undefined,
@@ -1036,16 +1138,16 @@ describe("commitPreparedWorkflows", () => {
     // what drives the commit into its rollback.
     let greetReads = 0;
 
-    redefineRenamePairPath(prepared, "acme:greet", "from", (realPath) => {
-      greetReads += 1;
-      return greetReads === 1 ? realPath : rollbackBlocker;
+    const failingPrepared = withRedefinedFromPaths(prepared, {
+      "acme:greet": (realPath) => {
+        greetReads += 1;
+        return greetReads === 1 ? realPath : rollbackBlocker;
+      },
+      "acme:shout": () => path.join(prepared.stagingRoot, "absent.json"),
     });
-    redefineRenamePairPath(prepared, "acme:shout", "from", () =>
-      path.join(prepared.stagingRoot, "absent.json"),
-    );
 
     // act
-    const error = await commitPreparedWorkflows(prepared, {
+    const error = await commitPreparedWorkflows(failingPrepared, {
       onPlaced: (names) => placed.push(names),
     }).then(
       () => undefined,

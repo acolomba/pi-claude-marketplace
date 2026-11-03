@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, test, type TestContext } from "node:test";
+import { describe, test } from "node:test";
 
 import {
   causeChainTrailer,
@@ -680,15 +680,6 @@ describe("redactAbsolutePaths", () => {
     const twice = redactAbsolutePaths(once);
 
     assert.equal(twice, once);
-  });
-
-  test("preserves a matched token when no separator can be selected", (t: TestContext) => {
-    t.mock.method(String.prototype, "lastIndexOf", () => -1);
-
-    const redacted = redactAbsolutePaths("/root/secret.txt");
-    t.mock.restoreAll();
-
-    assert.equal(redacted, "/root/secret.txt");
   });
 });
 

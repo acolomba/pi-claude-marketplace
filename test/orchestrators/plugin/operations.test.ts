@@ -320,18 +320,6 @@ test("constructs the install operation without using its owners or starting asyn
   verify(completionCache);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// WR-03 / D-60-05: after a successful installPlugin for a plugin declaring a
-// hooks.json, the hooks-bridge routing table reflects the new entry. Without
-// the rebuildRoutingTables call inside the per-plugin lock, the routing table
-// would stay pinned to whatever the last reconcile produced and the new
-// plugin would not receive dispatch until `/reload` (NFR-2 violation).
-//
-// This case owns the CONCRETE transaction wrapper: it runs the composed
-// operation against the real phase ledger and the real state lock, so the
-// production bindings this module holds are the ones under test.
-// ─────────────────────────────────────────────────────────────────────────────
-
 test("constructs the dependency-install operation without using its owners or starting asynchronous work", (t) => {
   // arrange
   const hooksRouting = mock<InstallHooksRouting>({ exactParams: true, name: "hooks routing" });
@@ -409,12 +397,25 @@ test("a missing-dependency install refused by a held scope lock succeeds after r
   assert.deepStrictEqual(notifications, []);
 });
 
+// WR-03 / D-60-05: after a successful installPlugin for a plugin declaring a
+// hooks.json, the hooks-bridge routing table reflects the new entry. Without
+// the rebuildRoutingTables call inside the per-plugin lock, the routing table
+// would stay pinned to whatever the last reconcile produced and the new
+// plugin would not receive dispatch until `/reload` (NFR-2 violation).
+//
+// This case owns the CONCRETE transaction wrapper: it runs the composed
+// operation against the real phase ledger and the real state lock, so the
+// production bindings this module holds are the ones under test.
+
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1) });
   const { cwd } = await createHermeticEnvironment(t, "install-operation-wr03-");
   const ownerRuntime = createHooksRuntime();
+  // D-LOC-01: the session hydrate found the project trusted.
+  ownerRuntime.recordProjectTrust(cwd, true);
   const peerRuntime = createHooksRuntime();
+  peerRuntime.recordProjectTrust(cwd, true);
   const installPlugin = createInstallOperation(
     createHooksRouting(ownerRuntime, { readHooksJson }),
     createCompletionCache(),
@@ -645,8 +646,9 @@ test("the composed prune operation removes only the selected project orphan", as
   const userBefore = await readFile(user.stateJsonPath, "utf8");
   const installed = await loadState(project.extensionRoot);
   const record = installed.marketplaces["mp"]?.plugins["p1"];
-  assert.ok(record);
-  installed.marketplaces["mp"]!.plugins["p1"] = { ...record, provenance: "dependency" };
+  const installedMarketplace = installed.marketplaces["mp"];
+  assert.ok(record !== undefined && installedMarketplace !== undefined);
+  installedMarketplace.plugins["p1"] = { ...record, provenance: "dependency" };
   await saveState(project.extensionRoot, installed);
   const completionCache = createCompletionCache();
   const cacheDropSpy = t.mock.method(completionCache, "dropMarketplaceCache");
@@ -753,6 +755,8 @@ async function installHooksDeclaringPlugin(
 }> {
   const { cwd } = await createHermeticEnvironment(t, prefix);
   const runtime = createHooksRuntime();
+  // D-LOC-01: the session hydrate found the project trusted.
+  runtime.recordProjectTrust(cwd, true);
   const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await seedHooksDeclaringPlugin({
     cwd,
@@ -778,14 +782,12 @@ async function installHooksDeclaringPlugin(
   return { cwd, runtime, hooksRouting, locations: locationsFor("project", cwd) };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // ENBL-18 / D-100-10: the composed enable operation runs against the real
 // `cascadeUnstagePlugin`, `runInstallLedger`, config-write and state-lock
 // bindings this module holds. A disable must unstage the artifacts, flip the
 // record to its disabled form with the inventory intact, and drop the plugin's
 // routes -- all of which are effects of those concrete bindings, so replacing
 // any of them with a no-op is visible here.
-// ─────────────────────────────────────────────────────────────────────────────
 
 test("setPluginEnabled(false) unstages the artifacts, flips durable state and drops the routes", async (t) => {
   // arrange
@@ -844,12 +846,10 @@ test("setPluginEnabled(false) unstages the artifacts, flips durable state and dr
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // PU-1..8: the composed uninstall operation runs against the real cascade,
 // removal-commit, config-sweep, post-commit-cleanup and state-lock bindings.
 // Removing the record, the artifacts and the routes together is what proves
 // the bound transaction -- not a stand-in -- executed.
-// ─────────────────────────────────────────────────────────────────────────────
 
 test("uninstallPlugin removes the record, the staged artifacts and the routes", async (t) => {
   // arrange
@@ -886,14 +886,12 @@ test("uninstallPlugin removes the record, the staged artifacts and the routes", 
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // PRL-02: the composed reinstall operation runs the shared runner that update
 // uses, with the real bridge and state-lock bindings. Re-materializing an
 // edited source in place -- the replaced bytes on disk and the replaced handler
 // in the routing table -- is an effect of those concrete bindings, so replacing
 // any one of them with a no-op is visible here. The version stays 0.0.1
 // because the marketplace still offers 0.0.1 (D-18-08).
-// ─────────────────────────────────────────────────────────────────────────────
 
 test("reinstallPlugin replaces the staged artifacts in place and re-routes the plugin", async (t) => {
   // arrange
@@ -1096,14 +1094,12 @@ test("UPD-DEP-D1: the composed update refuses a new version whose dependency no 
   assert.strictEqual(record?.version, "0.0.1");
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // FTCH-01 / D-81-02: the composed fetch command runs against the real
 // `git-source-probe` status capability this module binds. A pinned url source
 // whose clone is already warm is answered entirely by that fs-only probe: the
 // row is the no-op `(skipped) {up-to-date}`, nothing is written, and no clone
 // seam override is supplied -- so a composition that failed to see the warm
 // clone would fall through to the real git backend rather than pass quietly.
-// ─────────────────────────────────────────────────────────────────────────────
 
 test("fetchPlugins answers a warm pinned source from the bound status capability", async (t) => {
   // arrange
@@ -1135,14 +1131,12 @@ test("fetchPlugins answers a warm pinned source from the bound status capability
   boundary.verifyBoundary();
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // INFO-02 / D-100-01: the composed info command runs against the real
 // read-only filesystem capability this module binds. BOTH members are
 // exercised by one installed plugin that declares a command and a hooks
 // config: the hook summary comes from `readTextFile` over `hooks.json`, and
 // the command inventory from `listDirectory` over the plugin's `commands/`
 // directory, which is why the fixture declares one.
-// ─────────────────────────────────────────────────────────────────────────────
 
 test("getPluginInfo reports the installed plugin through the bound reader capability", async (t) => {
   // arrange

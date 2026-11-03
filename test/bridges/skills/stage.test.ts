@@ -11,11 +11,13 @@ import {
   prepareStageSkills,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { SkillFrontmatterNodeError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 
+import type { StageSkillsCommitResult } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 // Builtin-module patching that remains in this file, and why. The removal port
@@ -55,6 +57,104 @@ async function allocateCasePaths(
   };
 }
 
+/**
+ * The installable plugin `acme` at `pluginRoot` whose skills live in
+ * `skillsDirectories`, with no other component.
+ */
+function installableSkillsPlugin(
+  pluginRoot: string,
+  skillsDirectories: readonly string[],
+): ResolvedPluginInstallable {
+  return {
+    installable: true,
+    state: "installable",
+    name: "acme",
+    pluginRoot,
+    supported: skillsDirectories.length === 0 ? [] : ["skills"],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [...skillsDirectories], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  };
+}
+
+/**
+ * The D-CF2-02 record line a staged `SKILL.md` carries as its last
+ * frontmatter line, with its trailing newline.
+ */
+function recordLine(names: readonly string[], pluginRoot: string, pluginData: string): string {
+  return `pi-claude-marketplace: ${JSON.stringify({ names, pluginRoot, pluginData })}\n`;
+}
+
+/**
+ * Stages the one skill directory `directory` of the plugin `acme`, whose
+ * `SKILL.md` holds `source`, and returns the staged `SKILL.md` bytes with the
+ * plugin root and data directory the stage was given.
+ */
+async function stageSingleSkill(
+  t: TestContext,
+  directory: string,
+  source: string,
+): Promise<{ stagedBytes: string; pluginRoot: string; pluginDataDir: string }> {
+  const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+    t,
+    "skills-stage-single-",
+  );
+  const skillsDirectory = path.join(pluginRoot, "skills");
+  await mkdir(path.join(skillsDirectory, directory), { recursive: true });
+  await writeFile(path.join(skillsDirectory, directory, "SKILL.md"), source);
+  const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
+  const prepared = await prepareStageSkills(createRemovalOps(), {
+    locations,
+    cwd: scopeRoot,
+    knownWorkflowNames: [],
+    pluginName: "acme",
+    pluginRoot,
+    pluginDataDir,
+    resolved,
+  });
+  assert.strictEqual(prepared.kind, "staged");
+  const stagedBytes = await readFile(
+    path.join(prepared.stagingRoot, `acme-${directory}`, "SKILL.md"),
+    "utf8",
+  );
+  return { stagedBytes, pluginRoot, pluginDataDir };
+}
+
+/**
+ * Stages every skill directory of `sources` (directory name to `SKILL.md`
+ * text) of the plugin `acme` and returns the warnings of the staged result
+ * with the plugin's skills directory.
+ */
+async function stagedSkillWarnings(
+  t: TestContext,
+  sources: Readonly<Record<string, string>>,
+): Promise<{ warnings: StageSkillsCommitResult["warnings"]; skillsDirectory: string }> {
+  const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+    t,
+    "skills-stage-warnings-",
+  );
+  const skillsDirectory = path.join(pluginRoot, "skills");
+  for (const [directory, source] of Object.entries(sources)) {
+    await mkdir(path.join(skillsDirectory, directory), { recursive: true });
+    await writeFile(path.join(skillsDirectory, directory, "SKILL.md"), source);
+  }
+
+  const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
+  const prepared = await prepareStageSkills(createRemovalOps(), {
+    locations,
+    cwd: scopeRoot,
+    knownWorkflowNames: [],
+    pluginName: "acme",
+    pluginRoot,
+    pluginDataDir,
+    resolved,
+  });
+  assert.strictEqual(prepared.kind, "staged");
+  return { warnings: prepared.result.warnings, skillsDirectory };
+}
+
 describe("prepareStageSkills", () => {
   test("returns a complete no-op without materializing bridge directories", async (t) => {
     // arrange
@@ -63,18 +163,7 @@ describe("prepareStageSkills", () => {
       "skills-stage-noop-",
     );
     await mkdir(pluginRoot, { recursive: true });
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: [],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, []);
 
     // act
     const prepared = await prepareStageSkills(createRemovalOps(), {
@@ -120,22 +209,13 @@ describe("prepareStageSkills", () => {
       "---\nname: beta\ndescription: Beta skill\n---\n\nUnchanged beta body.\n",
     );
     await writeFile(path.join(alphaDirectory, "resources", "lookup.json"), '{"keys":["a","b"]}\n');
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
     const betaTarget = path.join(locations.skillsTargetDir, "acme-beta");
     const expectedAlphaBytes =
-      "---\nname: acme-alpha\ndescription: Alpha skill\nlicense: MIT\n---\n\nRoot: " +
+      "---\nname: acme-alpha\ndescription: Alpha skill\nlicense: MIT\n" +
+      recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+      "---\n\nRoot: " +
       pluginRoot +
       "\nData: " +
       pluginDataDir +
@@ -178,7 +258,11 @@ describe("prepareStageSkills", () => {
     assert.deepStrictEqual(alphaBytes, Buffer.from(expectedAlphaBytes));
     assert.deepStrictEqual(
       betaBytes,
-      Buffer.from("---\nname: acme-beta\ndescription: Beta skill\n---\n\nUnchanged beta body.\n"),
+      Buffer.from(
+        "---\nname: acme-beta\ndescription: Beta skill\n" +
+          recordLine(["acme:beta", "beta"], pluginRoot, pluginDataDir) +
+          "---\n\nUnchanged beta body.\n",
+      ),
     );
     assert.deepStrictEqual(resourceBytes, Buffer.from('{"keys":["a","b"]}\n'));
   });
@@ -202,18 +286,7 @@ describe("prepareStageSkills", () => {
       path.join(losingDirectory, "SKILL.md"),
       "---\nname: tool\ndescription: Losing skill\n---\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const expectedWarning =
       'skill source "tool" in "' +
       skillsDirectory +
@@ -247,7 +320,9 @@ describe("prepareStageSkills", () => {
     });
     assert.strictEqual(
       await readFile(path.join(prepared.stagingRoot, "acme-tool", "SKILL.md"), "utf8"),
-      "---\nname: acme-tool\ndescription: Winning skill\n---\n",
+      "---\nname: acme-tool\ndescription: Winning skill\n" +
+        recordLine(["acme:acme-tool", "acme-tool"], pluginRoot, pluginDataDir) +
+        "---\n",
     );
   });
 
@@ -271,18 +346,7 @@ describe("prepareStageSkills", () => {
       path.join(toolDirectory, "SKILL.md"),
       "---\nname: tool\ndescription: Cleanup tool\n---\n\nTool body.\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
 
     // act
     const prepared = await prepareStageSkills(createRemovalOps(), {
@@ -302,10 +366,50 @@ describe("prepareStageSkills", () => {
     assert.deepStrictEqual(
       alphaBytes,
       Buffer.from(
-        '---\nname: acme-alpha\ndescription: "Wraps /skill:acme-tool for cleanup"\n---\n\n' +
+        '---\nname: acme-alpha\ndescription: "Wraps /skill:acme-tool for cleanup"\n' +
+          recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+          "---\n\n" +
           "Run /skill:acme-tool before acme:ghost.\n\n```text\n/skill:acme-tool stays verbatim\n```\n",
       ),
     );
+  });
+
+  test("leaves a non-Markdown supporting file byte for byte, though it holds a skill reference", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-text-file-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const alphaDirectory = path.join(skillsDirectory, "alpha");
+    await mkdir(alphaDirectory, { recursive: true });
+    await writeFile(
+      path.join(alphaDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Alpha\n---\n\nSee acme:acme-tool.\n",
+    );
+    await writeFile(path.join(alphaDirectory, "notes.txt"), "Run acme:acme-tool next.\n");
+    await mkdir(path.join(skillsDirectory, "tool"), { recursive: true });
+    await writeFile(
+      path.join(skillsDirectory, "tool", "SKILL.md"),
+      "---\nname: tool\ndescription: Tool\n---\n",
+    );
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      knownWorkflowNames: [],
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const noteBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "notes.txt"));
+
+    // assert
+    assert.deepStrictEqual(noteBytes, Buffer.from("Run acme:acme-tool next.\n"));
   });
 
   test("SKTK-01: rewrites a sibling-workflow reference onto the name the caller says will be staged", async (t) => {
@@ -324,18 +428,7 @@ describe("prepareStageSkills", () => {
       "---\nname: alpha\ndescription: Runs the audit\n---\n\n" +
         "Run /acme:acme-audit, then /acme:acme-release.\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
 
     // act
     const prepared = await prepareStageSkills(createRemovalOps(), {
@@ -354,8 +447,9 @@ describe("prepareStageSkills", () => {
     assert.deepStrictEqual(
       alphaBytes,
       Buffer.from(
-        "---\nname: acme-alpha\ndescription: Runs the audit\n---\n\n" +
-          "Run /acme:audit, then /acme:acme-release.\n",
+        "---\nname: acme-alpha\ndescription: Runs the audit\n" +
+          recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+          "---\n\nRun /acme:audit, then /acme:acme-release.\n",
       ),
     );
   });
@@ -377,18 +471,7 @@ describe("prepareStageSkills", () => {
     const outsideFile = path.join(pluginRoot, "outside.md");
     await writeFile(outsideFile, "Run acme:review.\n");
     await symlink(outsideFile, path.join(helperDirectory, "linked.md"));
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
 
     // act
     const prepared = await prepareStageSkills(createRemovalOps(), {
@@ -414,7 +497,9 @@ describe("prepareStageSkills", () => {
     // assert
     assert.strictEqual(
       skill,
-      "---\nname: acme-helper\ndescription: Helper\n---\nRun /acme:review.\n",
+      "---\nname: acme-helper\ndescription: Helper\n" +
+        recordLine(["acme:helper", "helper"], pluginRoot, pluginDataDir) +
+        "---\nRun /acme:review.\n",
     );
     assert.strictEqual(notes, "Then use /acme:review.\n");
     assert.strictEqual(await readFile(outsideFile, "utf8"), "Run acme:review.\n");
@@ -439,18 +524,7 @@ describe("prepareStageSkills", () => {
       path.join(toolDirectory, "SKILL.md"),
       "---\nname: tool\ndescription: Cleanup tool\n---\n\nTool body.\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
 
     // act
     const prepared = await prepareStageSkills(createRemovalOps(), {
@@ -476,7 +550,9 @@ describe("prepareStageSkills", () => {
       Buffer.from(
         "---\nname: acme-broken\n" +
           "description: Source frontmatter could not be parsed.\n" +
-          "disable-model-invocation: true\n---\n\nRun /skill:acme-tool after the break.",
+          "disable-model-invocation: true\n" +
+          recordLine(["acme:broken"], pluginRoot, pluginDataDir) +
+          "---\n\nRun /skill:acme-tool after the break.",
       ),
     );
   });
@@ -495,22 +571,13 @@ describe("prepareStageSkills", () => {
       "---\rname: [unterminated\rdescription: discarded\r---\r\r" +
         "# Broken\r\rBody bytes survive.\r",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const expectedBytes =
       "---\nname: acme-broken\n" +
       "description: Source frontmatter could not be parsed.\n" +
-      "disable-model-invocation: true\n---\n\n# Broken\n\nBody bytes survive.";
+      "disable-model-invocation: true\n" +
+      recordLine(["acme:broken"], pluginRoot, pluginDataDir) +
+      "---\n\n# Broken\n\nBody bytes survive.";
     const expectedResult = {
       stagedNames: ["acme-broken"],
       recorded: [
@@ -565,21 +632,11 @@ describe("prepareStageSkills", () => {
       path.join(skillDirectory, "SKILL.md"),
       "---\nname: helper\ndescription: Use this: when reviewing pull requests\n---\n\nBody prose.\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const expectedBytes =
       "---\nname: acme-helper\n" +
       'description: "Use this: when reviewing pull requests"\n' +
+      recordLine(["acme:helper", "helper"], pluginRoot, pluginDataDir) +
       "---\n\nBody prose.\n";
     const expectedResult = {
       stagedNames: ["acme-helper"],
@@ -629,22 +686,13 @@ describe("prepareStageSkills", () => {
       "---\nname: [unterminated\ndescription: Use this: when reviewing\n---\n\n" +
         "# Broken\n\nBody bytes survive.\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const expectedBytes =
       "---\nname: acme-broken\n" +
       "description: Source frontmatter could not be parsed.\n" +
-      "disable-model-invocation: true\n---\n\n# Broken\n\nBody bytes survive.";
+      "disable-model-invocation: true\n" +
+      recordLine(["acme:broken"], pluginRoot, pluginDataDir) +
+      "---\n\n# Broken\n\nBody bytes survive.";
     const expectedResult = {
       stagedNames: ["acme-broken"],
       recorded: [
@@ -700,22 +748,13 @@ describe("prepareStageSkills", () => {
       "---\nname: helper\ndescription: Use this: when reviewing\n" +
         "when_to_use: For pull requests\n---\n\nBody.\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const expectedBytes =
       "---\nname: acme-helper\n" +
       'description: "Use this: when reviewing For pull requests"\n' +
-      "when_to_use: For pull requests\n---\n\nBody.\n";
+      "when_to_use: For pull requests\n" +
+      recordLine(["acme:helper", "helper"], pluginRoot, pluginDataDir) +
+      "---\n\nBody.\n";
 
     // act
     const prepared = await prepareStageSkills(createRemovalOps(), {
@@ -767,22 +806,14 @@ describe("prepareStageSkills", () => {
         whenToUse +
         "\n---\n\nBody.\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const expectedEmpty =
-      '---\nname: acme-empty\nversion: 1\ndescription: "No description provided."\n---\n';
+      '---\nname: acme-empty\nversion: 1\ndescription: "Plugin skill"\n' +
+      recordLine(["acme:empty", "empty"], pluginRoot, pluginDataDir) +
+      "---\n";
     const expectedProse =
-      '---\nname: acme-prose\nversion: 2\ndescription: "First prose line. Second prose line."\n' +
+      '---\nname: acme-prose\nversion: 2\ndescription: "Heading"\n' +
+      recordLine(["acme:prose", "prose"], pluginRoot, pluginDataDir) +
       "---\n\n# Heading\n\nFirst prose line.\nSecond prose line.\n\nLater.\n";
     const expectedFoldedDescription = description + " " + "b".repeat(535);
     const expectedFolded =
@@ -791,7 +822,9 @@ describe("prepareStageSkills", () => {
       expectedFoldedDescription +
       '"\nversion: 3\nwhen_to_use: ' +
       whenToUse +
-      "\n---\n\nBody.\n";
+      "\n" +
+      recordLine(["acme:folded", "folded"], pluginRoot, pluginDataDir) +
+      "---\n\nBody.\n";
 
     // act
     const prepared = await prepareStageSkills(createRemovalOps(), {
@@ -824,6 +857,338 @@ describe("prepareStageSkills", () => {
     assert.deepStrictEqual(prepared.result.degraded, []);
   });
 
+  for (const { behavior, source, expectedFrontmatter, expectedBody } of [
+    {
+      behavior: "the first line of the body, without the rest of its paragraph",
+      source:
+        "---\nname: brief\n---\n\nFirst line of the brief.\nSecond line of the same paragraph.\n",
+      expectedFrontmatter: '---\nname: acme-brief\ndescription: "First line of the brief."\n',
+      expectedBody: "\nFirst line of the brief.\nSecond line of the same paragraph.\n",
+    },
+    {
+      behavior: "the text of a leading heading without its marks",
+      source: "---\nname: brief\n---\n\n# Review a change\n\nRead the diff.\n",
+      expectedFrontmatter: '---\nname: acme-brief\ndescription: "Review a change"\n',
+      expectedBody: "\n# Review a change\n\nRead the diff.\n",
+    },
+    {
+      behavior: "Plugin skill for an empty body",
+      source: "---\nname: brief\n---\n",
+      expectedFrontmatter: '---\nname: acme-brief\ndescription: "Plugin skill"\n',
+      expectedBody: "",
+    },
+  ]) {
+    test(`D-CF2-07: fills a missing description with ${behavior}`, async (t) => {
+      // act
+      const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(t, "brief", source);
+
+      // assert
+      assert.strictEqual(
+        stagedBytes,
+        expectedFrontmatter +
+          recordLine(["acme:brief", "brief"], pluginRoot, pluginDataDir) +
+          "---\n" +
+          expectedBody,
+      );
+    });
+  }
+
+  test("NREG-01: keeps a present description byte for byte", async (t) => {
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "brief",
+      "---\nname: brief\ndescription:   Kept as written  \n---\n\nFirst line.\n",
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-brief\ndescription:   Kept as written  \n" +
+        recordLine(["acme:brief", "brief"], pluginRoot, pluginDataDir) +
+        "---\n\nFirst line.\n",
+    );
+  });
+
+  test("WTU-01: stages when_to_use after the fallback as one double-quoted scalar", async (t) => {
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "greet",
+      "---\nname: greet\nwhen_to_use: Use it when greeting.\n---\n\nGreets.\n",
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-greet\nwhen_to_use: Use it when greeting.\n" +
+        'description: "Greets. Use it when greeting."\n' +
+        recordLine(["acme:greet", "greet"], pluginRoot, pluginDataDir) +
+        "---\n\nGreets.\n",
+    );
+  });
+
+  test("WTU-01: folds when_to_use onto the fallback and cuts the result at 1,536", async (t) => {
+    // arrange
+    const whenToUse = "w".repeat(1600);
+    const expectedDescription = "First line. " + "w".repeat(1536 - "First line.\n".length);
+
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "brief",
+      "---\nname: brief\nwhen_to_use: " + whenToUse + "\n---\n\nFirst line.\n",
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-brief\nwhen_to_use: " +
+        whenToUse +
+        '\ndescription: "' +
+        expectedDescription +
+        '"\n' +
+        recordLine(["acme:brief", "brief"], pluginRoot, pluginDataDir) +
+        "---\n\nFirst line.\n",
+    );
+  });
+
+  test("D-CF2-02: stores each skill's names, a shared alias going to the first claimant", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-names-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const sources = {
+      "dupe-a": "---\nname: same\ndescription: First\n---\n",
+      "dupe-b": "---\nname: same\ndescription: Second\n---\n",
+      helper: "---\nname: acme:dupe-b\ndescription: Helper\n---\n\nRun acme:review first.\n",
+      review: "---\nname: fancy\ndescription: Review\n---\n",
+    };
+    for (const [directory, source] of Object.entries(sources)) {
+      await mkdir(path.join(skillsDirectory, directory), { recursive: true });
+      await writeFile(path.join(skillsDirectory, directory, "SKILL.md"), source);
+    }
+
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
+    const expectedFiles = {
+      "acme-dupe-a":
+        "---\nname: acme-dupe-a\ndescription: First\n" +
+        recordLine(["acme:dupe-a", "acme:same", "same"], pluginRoot, pluginDataDir) +
+        "---\n",
+      "acme-dupe-b":
+        "---\nname: acme-dupe-b\ndescription: Second\n" +
+        recordLine(["acme:dupe-b"], pluginRoot, pluginDataDir) +
+        "---\n",
+      "acme-helper":
+        "---\nname: acme-helper\ndescription: Helper\n" +
+        recordLine(["acme:helper"], pluginRoot, pluginDataDir) +
+        "---\n\nRun /skill:acme-review first.\n",
+      "acme-review":
+        "---\nname: acme-review\ndescription: Review\n" +
+        recordLine(["acme:review", "acme:fancy", "fancy"], pluginRoot, pluginDataDir) +
+        "---\n",
+    };
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      knownWorkflowNames: [],
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const stagedFiles = Object.fromEntries(
+      await Promise.all(
+        prepared.result.stagedNames.map(
+          async (name) =>
+            [
+              name,
+              await readFile(path.join(prepared.stagingRoot, name, "SKILL.md"), "utf8"),
+            ] as const,
+        ),
+      ),
+    );
+
+    // assert
+    assert.deepStrictEqual(stagedFiles, expectedFiles);
+  });
+
+  test("D-CF2-03: stores no qualified alias that a command of the plugin is named", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-command-names-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    await mkdir(path.join(skillsDirectory, "review"), { recursive: true });
+    await writeFile(
+      path.join(skillsDirectory, "review", "SKILL.md"),
+      "---\nname: clash\ndescription: Review\n---\n",
+    );
+    await mkdir(path.join(pluginRoot, "commands"), { recursive: true });
+    await writeFile(path.join(pluginRoot, "commands", "clash.md"), "Clash command.\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills", "commands"],
+      unsupported: [],
+      notes: [],
+      componentPaths: {
+        skills: [skillsDirectory],
+        commands: ["commands"],
+        agents: [],
+        workflows: [],
+      },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      knownWorkflowNames: [],
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const stagedBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-review", "SKILL.md"),
+      "utf8",
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-review\ndescription: Review\n" +
+        recordLine(["acme:review", "clash"], pluginRoot, pluginDataDir) +
+        "---\n",
+    );
+  });
+
+  test("D-CF2-08: follows the discovery warnings with each skill's dropped fields in skill order", async (t) => {
+    // arrange
+    const sources = {
+      "acme-tool": "---\nname: acme-tool\ndescription: Winning\nagent: helper\n---\n",
+      review: "---\nname: review\nmodel: opus\ndescription: Reviews\neffort: high\n---\n",
+      tool: "---\nname: tool\ndescription: Losing\nhooks: {}\n---\n",
+    };
+
+    // act
+    const { warnings, skillsDirectory } = await stagedSkillWarnings(t, sources);
+
+    // assert
+    assert.deepStrictEqual(warnings, [
+      {
+        kind: "discovery",
+        message:
+          'skill source "tool" in "' +
+          skillsDirectory +
+          '" elides to generated name "acme-tool", already produced by skill source ' +
+          '"acme-tool"; ignoring duplicate.',
+      },
+      { kind: "discovery", message: "[acme-tool] dropped fields: agent" },
+      { kind: "discovery", message: "[review] dropped fields: model, effort" },
+    ]);
+  });
+
+  test("D-CF2-08: reports the dropped fields of a skill whose frontmatter was repaired", async (t) => {
+    // act
+    const { warnings } = await stagedSkillWarnings(t, {
+      helper: "---\nname: helper\ndescription: Use this: when reviewing\nmodel: opus\n---\n",
+    });
+
+    // assert
+    assert.deepStrictEqual(warnings, [
+      { kind: "discovery", message: "[helper] dropped fields: model" },
+    ]);
+  });
+
+  test("D-CF2-08: reports no dropped fields for a skill whose frontmatter does not parse", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-degraded-dropped-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "broken");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: [unterminated\nmodel: opus\n---\n\nBody.\n",
+    );
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      knownWorkflowNames: [],
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["acme-broken"],
+      recorded: [
+        {
+          generatedName: "acme-broken",
+          sourcePath: skillDirectory,
+          targetPath: path.join(locations.skillsTargetDir, "acme-broken"),
+        },
+      ],
+      warnings: [],
+      degraded: [
+        {
+          generatedName: "acme-broken",
+          parseError:
+            "Flow sequence in block collection must be sufficiently indented and end with a ] at line 2, column 1:\n\n" +
+            "name: [unterminated\nmodel: opus\n^\n",
+        },
+      ],
+    });
+  });
+
+  test("D-CF2-08: reports nothing for a skill that sets none of the dropped fields", async (t) => {
+    // act
+    const { warnings } = await stagedSkillWarnings(t, {
+      plain: "---\nname: plain\ndescription: Plain\nallowed-tools: Read\n---\n",
+    });
+
+    // assert
+    assert.deepStrictEqual(warnings, []);
+  });
+
+  test("D-CF2-02: replaces an author's own record key with the stored record", async (t) => {
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "brief",
+      "---\nname: brief\npi-claude-marketplace:\n  names: [forged]\ndescription: Brief\n---\n",
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-brief\ndescription: Brief\n" +
+        recordLine(["acme:brief", "brief"], pluginRoot, pluginDataDir) +
+        "---\n",
+    );
+  });
+
   test("escapes substituted backslashes in an authored description", async (t) => {
     // arrange
     const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
@@ -837,21 +1202,11 @@ describe("prepareStageSkills", () => {
       path.join(skillDirectory, "SKILL.md"),
       "---\nname: windows\n---\nUses ${CLAUDE_PLUGIN_ROOT}.\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const windowsRoot = "C:\\Users\\case\\plugin";
     const expectedBytes =
       '---\nname: acme-windows\ndescription: "Uses C:\\\\Users\\\\case\\\\plugin."\n' +
+      recordLine(["acme:windows", "windows"], windowsRoot, pluginDataDir) +
       "---\nUses C:\\Users\\case\\plugin.\n";
 
     // act
@@ -890,21 +1245,12 @@ describe("prepareStageSkills", () => {
         "Root: ${CLAUDE_PLUGIN_ROOT}\nData: ${CLAUDE_PLUGIN_DATA}\n" +
         "Skill: ${CLAUDE_SKILL_DIR}\nProject: ${CLAUDE_PROJECT_DIR}\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const targetDirectory = path.join(locations.skillsTargetDir, "acme-vars");
     const expectedBytes =
-      "---\nname: acme-vars\ndescription: Variables\n---\nRoot: " +
+      "---\nname: acme-vars\ndescription: Variables\n" +
+      recordLine(["acme:vars", "vars"], pluginRoot, pluginDataDir) +
+      "---\nRoot: " +
       pluginRoot +
       "\nData: " +
       pluginDataDir +
@@ -945,23 +1291,13 @@ describe("prepareStageSkills", () => {
       path.join(skillDirectory, "SKILL.md"),
       "---\nname: invalid\ndescription: static\nlicense: ${CLAUDE_PLUGIN_DATA}\n---\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const expectedPrepareError = {
       name: "YAMLParseError",
       message:
-        "Flow sequence in block collection must be sufficiently indented and end with a ] at line 3, column 23:\n\n" +
-        "license: [unterminated\n                      ^\n",
+        "Flow sequence in block collection must be sufficiently indented and end with a ] at line 4, column 1:\n\n" +
+        "license: [unterminated\n" +
+        'pi-claude-marketplace: {"names":["acme:invalid","invalid"],"pluginRoot":"/plugi…\n^\n',
       cause: undefined,
     };
 
@@ -973,7 +1309,7 @@ describe("prepareStageSkills", () => {
         cwd: scopeRoot,
         knownWorkflowNames: [],
         pluginName: "acme",
-        pluginRoot,
+        pluginRoot: "/plugin",
         pluginDataDir: "[unterminated",
         resolved,
       });
@@ -1007,18 +1343,7 @@ describe("prepareStageSkills", () => {
       path.join(skillDirectory, "SKILL.md"),
       "---\nname: alpha\ndescription: Alpha\n---\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const copyError = Object.assign(new Error("skill copy denied"), { code: "EACCES" });
     const copy = t.mock.method(filesystemPromises, "cp", (): Promise<never> =>
       Promise.reject(copyError),
@@ -1072,18 +1397,7 @@ describe("prepareStageSkills", () => {
       path.join(skillDirectory, "SKILL.md"),
       "---\nname: safe\ndescription: Safe skill\n---\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
 
     // act
     let prepareError: unknown;
@@ -1108,6 +1422,22 @@ describe("prepareStageSkills", () => {
     assert.deepStrictEqual(await readdir(locations.skillsStagingDir), []);
     assert.deepStrictEqual(await readdir(outsideDirectory), []);
   });
+
+  test("WR-05: refuses a skill whose frontmatter holds its name in a flow mapping with other keys, and names the skill", async (t) => {
+    // arrange
+    const source =
+      "---\n{name: review, description: Reviews a change., disable-model-invocation: true}\n---\n\nReview.\n";
+
+    // act & assert
+    await assert.rejects(stageSingleSkill(t, "review", source), (error: unknown) => {
+      assert.ok(error instanceof SkillFrontmatterNodeError);
+      assert.deepStrictEqual(
+        [error.skill, error.key, error.line, error.keys],
+        ["review", "name", 2, ["name", "description", "disable-model-invocation"]],
+      );
+      return true;
+    });
+  });
 });
 
 describe("commitPreparedSkills", () => {
@@ -1118,18 +1448,7 @@ describe("commitPreparedSkills", () => {
       "skills-commit-noop-",
     );
     await mkdir(pluginRoot, { recursive: true });
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: [],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, []);
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
@@ -1167,21 +1486,16 @@ describe("commitPreparedSkills", () => {
       path.join(skillDirectory, "SKILL.md"),
       "\uFEFF---\nname: source-reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const targetFile = path.join(locations.skillsTargetDir, "acme-reviewer", "SKILL.md");
     const expectedBytes = Buffer.from(
-      "---\nname: acme-reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n",
+      "---\nname: acme-reviewer\ndescription: Reviews changes\n" +
+        recordLine(
+          ["acme:reviewer", "acme:source-reviewer", "source-reviewer"],
+          pluginRoot,
+          pluginDataDir,
+        ) +
+        "---\n\nReview carefully.\n",
     );
 
     // act
@@ -1222,18 +1536,7 @@ describe("commitPreparedSkills", () => {
     await writeFile(path.join(skillDirectory, "resources", "a.txt"), "new resource\n");
     await writeFile(path.join(previousDirectory, "SKILL.md"), "previous bytes\n");
     await writeFile(path.join(staleDirectory, "leftover.txt"), "stale bytes\n");
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
@@ -1264,7 +1567,12 @@ describe("commitPreparedSkills", () => {
 
     // assert
     assert.strictEqual(leak, undefined);
-    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: Alpha\n---\nBody.\n");
+    assert.strictEqual(
+      targetBytes,
+      "---\nname: acme-alpha\ndescription: Alpha\n" +
+        recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+        "---\nBody.\n",
+    );
     assert.strictEqual(resourceBytes, "new resource\n");
     assert.strictEqual(previousState, undefined);
     assert.strictEqual(staleState, undefined);
@@ -1287,18 +1595,7 @@ describe("commitPreparedSkills", () => {
       "---\nname: alpha\ndescription: Alpha\n---\n",
     );
     await writeFile(path.join(previousDirectory, "SKILL.md"), "previous bytes\n");
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
@@ -1362,18 +1659,7 @@ describe("commitPreparedSkills", () => {
       path.join(skillDirectory, "SKILL.md"),
       "---\nname: alpha\ndescription: Alpha\n---\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
@@ -1436,18 +1722,7 @@ describe("commitPreparedSkills", () => {
       path.join(skillDirectory, "SKILL.md"),
       "---\nname: alpha\ndescription: Alpha\n---\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
@@ -1480,7 +1755,9 @@ describe("commitPreparedSkills", () => {
     assert.strictEqual(commitError, renameError);
     assert.strictEqual(
       await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"), "utf8"),
-      "---\nname: acme-alpha\ndescription: Alpha\n---\n",
+      "---\nname: acme-alpha\ndescription: Alpha\n" +
+        recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+        "---\n",
     );
   });
 
@@ -1497,18 +1774,7 @@ describe("commitPreparedSkills", () => {
       path.join(skillDirectory, "SKILL.md"),
       "---\nname: alpha\ndescription: Alpha\n---\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
@@ -1541,7 +1807,12 @@ describe("commitPreparedSkills", () => {
 
     // assert
     assert.strictEqual(leak, expectedLeak);
-    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: Alpha\n---\n");
+    assert.strictEqual(
+      targetBytes,
+      "---\nname: acme-alpha\ndescription: Alpha\n" +
+        recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+        "---\n",
+    );
     assert.strictEqual((await stat(prepared.stagingRoot)).isDirectory(), true);
   });
 });
@@ -1554,18 +1825,7 @@ describe("abortPreparedSkills", () => {
       "skills-abort-noop-",
     );
     await mkdir(pluginRoot, { recursive: true });
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: [],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, []);
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
@@ -1597,18 +1857,7 @@ describe("abortPreparedSkills", () => {
       path.join(skillDirectory, "SKILL.md"),
       "---\nname: alpha\ndescription: Alpha\n---\n",
     );
-    const resolved = {
-      installable: true,
-      state: "installable",
-      name: "acme",
-      pluginRoot,
-      supported: ["skills"],
-      unsupported: [],
-      notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      defaultEnabled: true,
-    } satisfies ResolvedPluginInstallable;
+    const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,

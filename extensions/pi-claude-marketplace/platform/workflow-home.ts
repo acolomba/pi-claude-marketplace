@@ -4,7 +4,8 @@
 // the engine's own rule, so the bridge writes envelopes where the engine reads
 // them. The rule, transcribed from `src/workflow-paths.ts` in
 // `@quintinshaw/pi-dynamic-workflows@3.14.0`
-// (QuintinShaw/pi-dynamic-workflows#238): when `PI_CODING_AGENT_DIR` is
+// (QuintinShaw/pi-dynamic-workflows#238) and unchanged in 3.15.0, the
+// declared optional-peer floor: when `PI_CODING_AGENT_DIR` is
 // truthy, the root is `join(getAgentDir(), "workflows")`. Otherwise it is
 // `WORKFLOW_HOME_RELATIVE_DIR = ".pi/workflows"` joined onto `homedir()`.
 //

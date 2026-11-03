@@ -157,11 +157,10 @@ export const CREDENTIAL_LEAK_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
-  // AUTH-09: buildAuthCallbacks and its three hookDebugLog calls moved out of
-  // platform/git.ts into this module. The scan aimed at git.ts kept passing
-  // over a file with nothing left to catch, so the credential-adjacent logging
-  // was covered by nothing. Appended last so no existing positional binding in
-  // no-credential-leak.test.ts is re-aimed.
+  // AUTH-09: buildAuthCallbacks and its three hookDebugLog calls live in this
+  // module, not in platform/git.ts, so a scan aimed only at git.ts would pass
+  // over the credential-adjacent logging. Appended last so no existing
+  // positional binding in no-credential-leak.test.ts is re-aimed.
   "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts",
   // D-PL5-07: the hosted catalog download, which must send no header,
   // credential, or cookie. Appended last for the reason given above.
@@ -205,21 +204,23 @@ export const LIFECYCLE_ENABLED_READ_TARGETS = [
 ] as const;
 
 /**
- * AUTH-06 / AUTH-08 / D-21 / D-PL9-11: the complete set of modules allowed to
- * spawn a subprocess.
+ * AUTH-06 / AUTH-08 / D-21 / D-PL9-11 / D-CF1-02: the complete set of modules
+ * allowed to spawn a subprocess.
  *
- * Closed, like the console exemption: the claim is that these four and no others
+ * Closed, like the console exemption: the claim is that these five and no others
  * shell out, so the value of a sweep depends on the set being exhaustive.
  * `git-credential.ts` runs the credential helper; the two hooks modules execute
  * user-declared hook commands, which is their entire purpose; `package-manager.ts`
  * runs a plugin's own package manager for the package install Claude Code runs
- * (D-PL9-11, PKD-03).
+ * (D-PL9-11, PKD-03); `prompt-shell.ts` runs the `!` commands of a user-invoked
+ * skill or command (D-CF1-02).
  */
 export const SHELL_OUT_EXEMPT_TARGETS = [
   "extensions/pi-claude-marketplace/platform/git-credential.ts",
   "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
   "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
   "extensions/pi-claude-marketplace/platform/package-manager.ts",
+  "extensions/pi-claude-marketplace/platform/prompt-shell.ts",
 ] as const;
 
 /**

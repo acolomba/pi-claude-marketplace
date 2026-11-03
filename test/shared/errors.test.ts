@@ -197,6 +197,32 @@ describe("errorMessage", () => {
     // assert
     assert.strictEqual(message, "42");
   });
+
+  test("falls back to a placeholder for a null-prototype object", () => {
+    // arrange
+    const thrownValue = Object.create(null) as unknown;
+
+    // act
+    const message = errorMessage(thrownValue);
+
+    // assert
+    assert.strictEqual(message, "unknown error");
+  });
+
+  test("falls back to a placeholder when toString throws", () => {
+    // arrange
+    const thrownValue = {
+      toString(): string {
+        throw new Error("no string form");
+      },
+    };
+
+    // act
+    const message = errorMessage(thrownValue);
+
+    // assert
+    assert.strictEqual(message, "unknown error");
+  });
 });
 
 describe("isErrnoException", () => {

@@ -522,6 +522,15 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
 
     // act
     const notifications = await reload(cwd);
+    const info = makeCtx();
+    await getPluginInfo({
+      ...info.session,
+      mcpStatus: noStatusSnapshot(),
+      marketplace: "mp",
+      plugin: "hello",
+      scope: "project",
+      cwd,
+    });
 
     // assert
     assert.deepStrictEqual(await adapterKeys(cwd), ["plugin_hello_srv_"]);
@@ -551,15 +560,6 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
       },
       APPLY_EMPTY_NOTICE,
     ]);
-    const info = makeCtx();
-    await getPluginInfo({
-      ...info.session,
-      mcpStatus: noStatusSnapshot(),
-      marketplace: "mp",
-      plugin: "hello",
-      scope: "project",
-      cwd,
-    });
     assert.ok(
       info.notifications.some((entry) =>
         entry.message.includes("plugin:hello:live (unsupported ws)"),
@@ -576,14 +576,25 @@ test("AMIG-01: a plugin whose MCP config is malformed has all its old entries re
       args: ["v1.js"],
     });
     await seedMcpPlugin(cwd, ["user"]);
-    await declareServers(pluginRoot, {
-      srv: { command: "node", args: ["v1.js"], timeout: "soon" },
-    });
+    // D-CF6-02: only a server written inline in plugin.json refuses the plugin.
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "hello",
+        version: "1.0.0",
+        mcpServers: { srv: { command: "node", args: ["v1.js"], timeout: "soon" } },
+      }),
+    );
     await seedLegacyNames(cwd, ["srv", "old"]);
     const locations = locationsFor("project", cwd);
 
     // act
     const notifications = await reload(cwd);
+    const fresh = makeCtx();
+    await createInstallOperation(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    )({ ...fresh.session, scope: "user", cwd, marketplace: "mp", plugin: "hello" });
 
     // assert
     assert.deepStrictEqual(
@@ -609,16 +620,53 @@ test("AMIG-01: a plugin whose MCP config is malformed has all its old entries re
       },
       APPLY_EMPTY_NOTICE,
     ]);
-    const fresh = makeCtx();
-    await createInstallOperation(
-      createHooksRouting(createHooksRuntime(), { readHooksJson }),
-      createCompletionCache(),
-    )({ ...fresh.session, scope: "user", cwd, marketplace: "mp", plugin: "hello" });
     assert.ok(fresh.notifications.some((entry) => entry.message.includes("{malformed mcp}")));
     assert.strictEqual(
       (await loadState(locationsFor("user", cwd).extensionRoot)).marketplaces.mp?.plugins.hello,
       undefined,
     );
+  });
+});
+
+test("AMIG-01: /reload skips a malformed server in .mcp.json, moves its valid sibling, and removes the skipped one's old entry (D-CF6-02)", async () => {
+  await withHermeticEnvironment("mcp-migration-skipped-", async ({ cwd }) => {
+    // arrange
+    const { pluginRoot, freshAdapterBytes } = await seedLegacyMcpInstall(cwd, "project", {
+      command: "node",
+      args: ["v1.js"],
+    });
+    await declareServers(pluginRoot, {
+      srv: { command: "node", args: ["v1.js"] },
+      broken: { type: "bogus" },
+    });
+    await seedLegacyNames(cwd, ["srv", "broken"]);
+    const locations = locationsFor("project", cwd);
+
+    // act
+    const notifications = await reload(cwd);
+
+    // assert
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), freshAdapterBytes);
+    assert.deepStrictEqual(await markedLegacyNames(cwd), []);
+    const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+    assert.deepStrictEqual(record?.resources.mcpServers, ["srv"]);
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+          "",
+          "Moved to mcp-adapter.json:",
+          "  srv -> plugin_hello_srv_ (hello) [project]",
+          "Removed from mcp.json:",
+          // Imprecise reconcile wording: `hello` still declares `broken`, skipped as malformed.
+          "  broken (hello) [project] hello no longer declares it.",
+          COST_LINE,
+          "/reload to pick up changes",
+        ].join("\n"),
+        severity: "info",
+      },
+      APPLY_EMPTY_NOTICE,
+    ]);
   });
 });
 

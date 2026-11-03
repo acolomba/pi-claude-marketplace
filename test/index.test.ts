@@ -74,6 +74,7 @@ import type {
   ExtensionCommandContext,
   ExtensionContext,
   InputEvent,
+  InputEventResult,
   ResourcesDiscoverEvent,
   ResourcesDiscoverResult,
   SessionBeforeCompactEvent,
@@ -84,6 +85,7 @@ import type {
   ToolCallEventResult,
   ToolResultEvent,
 } from "../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { TurnEndEvent } from "@earendil-works/pi-coding-agent";
 
 /**
  * The listener shape every `on` overload accepts. Each overload declares
@@ -117,6 +119,12 @@ type BackgroundInputListener = (
   ctx: Pick<ExtensionContext, "mode" | "cwd" | "ui">,
 ) => void;
 
+/** The bridged-command input listener, which answers with an input result. */
+type CommandInvocationListener = (
+  event: InputEvent,
+  ctx: ExtensionContext,
+) => InputEventResult | Promise<InputEventResult>;
+
 /** The background update's shutdown listener, which may wait for a step in flight. */
 type BackgroundShutdownListener = (event: SessionShutdownEvent) => Promise<void>;
 
@@ -133,6 +141,7 @@ interface HermeticScope {
 }
 
 interface LoadedExtension {
+  readonly pi: ExtensionAPI;
   readonly bridgeSessionStart: BridgeSessionStartListener;
   readonly discover: DiscoverListener;
   readonly sessionEnv: EventListener<SessionStartEvent>;
@@ -140,6 +149,7 @@ interface LoadedExtension {
   readonly backgroundShutdown: BackgroundShutdownListener;
   readonly toolCall: ToolCallListener;
   readonly command: CommandRegistration;
+  readonly commandInvocation: CommandInvocationListener;
   readonly tools: readonly (ToolRegistration | undefined)[];
   readonly ctx: ExtensionCommandContext;
   readonly notifications: readonly Notification[];
@@ -182,6 +192,9 @@ const PROBES_PER_DISCOVER = 1;
 
 /** `ctx.mode` reads per `resources_discover` pass: one before each load stage. */
 const MODE_READS_PER_DISCOVER = 3;
+
+/** Trust reads per `resources_discover` pass: the load preparation reads once, the discovery once (D-LOC-01). */
+const TRUST_READS_PER_DISCOVER = 2;
 
 /** The cascade the reconcile renders for a project scope whose state is unreadable. */
 const RECONCILE_CASCADE_FOR_UNREADABLE_STATE =
@@ -302,6 +315,15 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
  * rather than `times(0)`, so the first unwanted read fails where it happens.
  * `modeReads` defaults to a case whose probes are all discover passes; a case
  * that dispatches a command states it.
+ *
+ * `trustReads` counts the `ctx.isProjectTrusted()` calls the case promises. A
+ * trust read is one question to Pi whether it trusts the project: each
+ * `resources_discover` pass asks twice (the load preparation, then the
+ * discovery, D-LOC-01), and each project-scope gate that asks Pi adds one. It
+ * defaults to a case whose probes are all discover passes that use this
+ * context. A case that hands the extension its own context, or wraps this one
+ * to answer the trust reads itself, states 0, which states no expectation, so
+ * the first unwanted read fails where it happens.
  */
 async function loadExtension(
   emissions: number,
@@ -313,8 +335,16 @@ async function loadExtension(
     readonly attempts: number;
     readonly inventoryError?: Error;
   },
+  trustReads = TRUST_READS_PER_DISCOVER * probes,
 ): Promise<LoadedExtension> {
   const boundary = createNotificationBoundary(emissions, cwd, modeReads);
+  // T-02-17: the untrusted case states its own expectation.
+  if (trustReads > 0) {
+    when(() => boundary.ctx.isProjectTrusted())
+      .thenReturn(true)
+      .times(trustReads);
+  }
+
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   if (output?.inventoryError === undefined) {
     expectSoftDepProbes(pi, probes);
@@ -397,6 +427,11 @@ async function loadExtension(
     .thenReturn()
     .times(1);
   when(() => {
+    pi.on("turn_end", It.willCapture<EventListener<TurnEndEvent>>("turn end"));
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
     pi.on("agent_end", It.willCapture<EventListener<AgentEndEvent>>("agent end"));
   })
     .thenReturn()
@@ -474,6 +509,32 @@ async function loadExtension(
   })
     .thenReturn()
     .times(1);
+  const commandInvocationListener = It.willCapture<CommandInvocationListener>(
+    "command invocation input",
+  );
+  when(() => {
+    pi.on("input", commandInvocationListener);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("tool_result", It.willCapture<EventListener<ToolResultEvent>>("skill read fill"));
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("session_start", It.willCapture<EventListener<SessionStartEvent>>("command tool"));
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on(
+      "before_agent_start",
+      It.willCapture<EventListener<BeforeAgentStartEvent>>("command tool start"),
+    );
+  })
+    .thenReturn()
+    .times(1);
 
   await claudeMarketplaceExtension(pi);
 
@@ -484,6 +545,7 @@ async function loadExtension(
   const backgroundShutdown = backgroundShutdownListener.value;
   const toolCall = toolCallListener.value;
   const command = commandRegistration.value;
+  const commandInvocation = commandInvocationListener.value;
   const publishStatus = statusListener.value;
   if (
     publishStatus === undefined ||
@@ -493,12 +555,14 @@ async function loadExtension(
     backgroundInput === undefined ||
     backgroundShutdown === undefined ||
     toolCall === undefined ||
-    command === undefined
+    command === undefined ||
+    commandInvocation === undefined
   ) {
     throw new Error("the extension factory installed an incomplete callback surface");
   }
 
   return {
+    pi,
     bridgeSessionStart,
     discover,
     sessionEnv,
@@ -506,6 +570,7 @@ async function loadExtension(
     backgroundShutdown,
     toolCall,
     command,
+    commandInvocation,
     tools: [firstTool.value, secondTool.value],
     ctx: boundary.ctx,
     notifications: boundary.notifications,
@@ -690,9 +755,9 @@ function hookContext(cwd: string, sessionId: string): ExtensionContext {
     isIdle(): never {
       throw new Error("the synchronous hook path must not inspect idle state");
     },
-    isProjectTrusted(): never {
-      throw new Error("the synchronous hook path must not inspect trust");
-    },
+    // D-LOC-01: the session_start hydrate routes project hooks only in a
+    // project Pi trusts.
+    isProjectTrusted: () => true,
     signal: undefined,
     abort(): never {
       throw new Error("the synchronous hook path must not abort Pi");
@@ -864,13 +929,17 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
 }
 
 /**
- * MISS-01: record project-scope plugin "plug" (enabled), whose manifest
- * declares a dependency on "helper" -- also declared and on disk in the same
- * marketplace, but never recorded. Config declares "plug@mp" (kept out of
- * the uninstall bucket) and says nothing about "helper" (D-04-02).
+ * MISS-01: record plugin "plug" (enabled) in the scope rooted at `scopeRoot`,
+ * the project scope unless a case names the user's agent directory. Its
+ * manifest declares a dependency on "helper" -- also declared and on disk in
+ * the same marketplace, but never recorded. Config declares "plug@mp" (kept
+ * out of the uninstall bucket) and says nothing about "helper" (D-04-02).
  */
-async function seedEnabledPluginWithMissingDependency(cwd: string): Promise<void> {
-  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+async function seedEnabledPluginWithMissingDependency(
+  cwd: string,
+  scopeRoot: string = path.join(cwd, ".pi"),
+): Promise<void> {
+  const extensionRoot = path.join(scopeRoot, "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   await mkdir(path.dirname(manifestPath), { recursive: true });
@@ -907,7 +976,7 @@ async function seedEnabledPluginWithMissingDependency(cwd: string): Promise<void
       marketplaces: {
         mp: {
           name: "mp",
-          scope: "project",
+          scope: scopeRoot === path.join(cwd, ".pi") ? "project" : "user",
           source: { kind: "path", raw: marketplaceRoot },
           addedFromCwd: cwd,
           manifestPath,
@@ -929,9 +998,9 @@ async function seedEnabledPluginWithMissingDependency(cwd: string): Promise<void
     }),
     "utf8",
   );
-  await mkdir(path.join(cwd, ".pi"), { recursive: true });
+  await mkdir(scopeRoot, { recursive: true });
   await writeFile(
-    path.join(cwd, ".pi", "claude-plugins.json"),
+    path.join(scopeRoot, "claude-plugins.json"),
     JSON.stringify({
       schemaVersion: 1,
       marketplaces: { mp: { source: marketplaceRoot } },
@@ -999,6 +1068,7 @@ test("unsupported loading preserves disk and environment while discovering exist
   const capture = createJsonCapture();
   const loaded = await loadExtension(0, 0);
   const ctx = {
+    isProjectTrusted: () => true,
     mode: "unknown",
     get ui() {
       return capture.ui;
@@ -1038,17 +1108,25 @@ for (const mode of ["json", "rpc"]) {
       );
       const promptPath = await seedPrompt(scope.cwd, "kept.md");
       const capture = createJsonCapture();
-      const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0, {
-        attempts: 3,
-        appendEntry(customType, payload) {
-          capture.entrySink.appendEntry(customType, payload);
-          if (refusesAppend) {
-            throw new Error("entry refused");
-          }
+      const loaded = await loadExtension(
+        0,
+        PROBES_PER_DISCOVER,
+        undefined,
+        0,
+        {
+          attempts: 3,
+          appendEntry(customType, payload) {
+            capture.entrySink.appendEntry(customType, payload);
+            if (refusesAppend) {
+              throw new Error("entry refused");
+            }
+          },
         },
-      });
+        0,
+      );
       const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_RECONCILE);
       const ctx = {
+        isProjectTrusted: () => true,
         mode,
         get ui() {
           return capture.ui;
@@ -1129,8 +1207,10 @@ for (const failure of ["mode", "inventory"] as const) {
         appendEntry: capture.entrySink.appendEntry,
         inventoryError: new Error("stale pi"),
       },
+      0,
     );
     const ctx = {
+      isProjectTrusted: () => true,
       get mode(): string {
         if (failure === "mode") {
           throw new Error("stale mode");
@@ -1167,9 +1247,10 @@ for (const unsupportedRead of [2, 3]) {
     await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "plugin"));
     const promptPath = await seedPrompt(scope.cwd, "kept.md");
     const capture = createJsonCapture();
-    const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0);
+    const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0, undefined, 0);
     let reads = 0;
     const ctx = {
+      isProjectTrusted: () => true,
       get mode(): string {
         reads += 1;
         return reads === unsupportedRead ? "unknown" : "json";
@@ -1209,14 +1290,22 @@ test("a refused load append leaves install state untouched and still runs the in
   const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
   const stateBytes = await readFile(statePath, "utf8");
   const capture = createJsonCapture();
-  const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0, {
-    attempts: 2,
-    appendEntry(customType, payload) {
-      capture.entrySink.appendEntry(customType, payload);
-      throw new Error("entry refused");
+  const loaded = await loadExtension(
+    0,
+    PROBES_PER_DISCOVER,
+    undefined,
+    0,
+    {
+      attempts: 2,
+      appendEntry(customType, payload) {
+        capture.entrySink.appendEntry(customType, payload);
+        throw new Error("entry refused");
+      },
     },
-  });
+    0,
+  );
   const ctx = {
+    isProjectTrusted: () => true,
     mode: "json",
     get ui() {
       return capture.ui;
@@ -1251,6 +1340,7 @@ for (const failure of ["unknown-mode", "mode", "sessionManager"] as const) {
     const loaded = await loadExtension(0, 0);
     const reads: string[] = [];
     const ctx = {
+      isProjectTrusted: () => true,
       get mode(): string {
         if (failure === "mode") {
           throw new Error("stale mode");
@@ -1346,7 +1436,7 @@ test("APL-03: the discover handler hands the load reconcile the event's cwd and 
   // act
   const loadCalls =
     source.match(
-      /loadReconcile\(\{\s*ctx,\s*run,\s*cwd:\s*event\.cwd,\s*hooksRouting,\s*completionCache,?\s*\}\)/g,
+      /loadReconcile\(\{\s*ctx,\s*run,\s*cwd:\s*event\.cwd,\s*projectTrusted,\s*hooksRouting,\s*completionCache,?\s*\}\)/g,
     ) ?? [];
 
   // assert
@@ -1381,14 +1471,14 @@ test("APL-03 / D-05 / D-21: a reload event lists the missing dependency's instal
   verifyBoundary();
 });
 
-/** AAP-02: turn autoapply on in the project base config that a seed wrote. */
-async function turnAutoapplyOn(cwd: string): Promise<void> {
-  const configPath = path.join(cwd, ".pi", "claude-plugins.json");
+/** AAP-02: turn autoapply on in the base config that a seed wrote under `scopeRoot`. */
+async function turnAutoapplyOn(scopeRoot: string): Promise<void> {
+  const configPath = path.join(scopeRoot, "claude-plugins.json");
   const config = JSON.parse(await readFile(configPath, "utf8")) as object;
   await writeFile(configPath, JSON.stringify({ ...config, autoapply: true }), "utf8");
 }
 
-test("AAP-02 / D-06: an autoapply reload installs the missing dependency and the same discover returns its skill", async (t) => {
+test("AAP-02 / D-06 / D-LOC-01: an autoapply reload installs a trusted project plugin's missing dependency and the same discover returns its skill", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "autoapply-reload");
   await seedEnabledPluginWithMissingDependency(scope.cwd);
@@ -1399,7 +1489,7 @@ test("AAP-02 / D-06: an autoapply reload installs the missing dependency and the
     "---\nname: assist\ndescription: Assists.\n---\n# assist\n",
     "utf8",
   );
-  await turnAutoapplyOn(scope.cwd);
+  await turnAutoapplyOn(path.join(scope.cwd, ".pi"));
   const extensionRoot = path.join(scope.cwd, ".pi", "pi-claude-marketplace");
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     1,
@@ -1434,9 +1524,9 @@ test("AAP-03 / NFR-2: an autoapply load whose apply throws reports the abort and
     restoreEnv("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", previousBase);
   });
   process.env.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = "not a url";
-  await mkdir(path.join(scope.cwd, ".pi"), { recursive: true });
+  await mkdir(scope.agentDir, { recursive: true });
   await writeFile(
-    path.join(scope.cwd, ".pi", "claude-plugins.json"),
+    path.join(scope.agentDir, "claude-plugins.json"),
     JSON.stringify({ marketplaces: { tools: { source: "acme/tools" } }, autoapply: true }),
     "utf8",
   );
@@ -1491,7 +1581,7 @@ test("ASTAT-01: /claude:plugin info shows the status pi-mcp-adapter last publish
   // arrange
   const scope = await createHermeticScope(t, "mcp-status");
   await seedRecordedMcpPlugin(scope.cwd);
-  const first = await loadExtension(2, 2, { value: scope.cwd, reads: 2 }, 6);
+  const first = await loadExtension(2, 2, { value: scope.cwd, reads: 2 }, 6, undefined, 0);
 
   // act
   await first.command.handler("info hello@mp --scope project", first.ctx);
@@ -1500,7 +1590,7 @@ test("ASTAT-01: /claude:plugin info shows the status pi-mcp-adapter last publish
     servers: [{ name: "plugin_hello_srv_", status: "connected" }],
   });
   await first.command.handler("info hello@mp --scope project", first.ctx);
-  const reloaded = await loadExtension(1, 1, { value: scope.cwd, reads: 1 }, 3);
+  const reloaded = await loadExtension(1, 1, { value: scope.cwd, reads: 1 }, 3, undefined, 0);
   await reloaded.command.handler("info hello@mp --scope project", reloaded.ctx);
 
   // assert
@@ -1544,7 +1634,7 @@ test("keeps hook routing and command completion state inside each extension-load
   process.chdir(ownerCwd);
   // One probe: the command's notification run is the only one, and the add
   // notification renders from its snapshot (D-05).
-  const owner = await loadExtension(1, 1, { value: ownerCwd, reads: 1 }, 3);
+  const owner = await loadExtension(1, 1, { value: ownerCwd, reads: 1 }, 3, undefined, 0);
   const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
   await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
   const toolEvent: ToolCallEvent = {
@@ -1571,7 +1661,10 @@ test("keeps hook routing and command completion state inside each extension-load
   const ownerHookAfterPeerLoad = await owner.toolCall(structuredClone(toolEvent), ownerHookContext);
 
   // assert
-  assert.deepStrictEqual(ownerHookBeforeMutation, { block: true, reason: "owned hook" });
+  assert.deepStrictEqual(ownerHookBeforeMutation, {
+    block: true,
+    reason: "PreToolUse:Bash hook error: owned hook",
+  });
   assert.strictEqual(peerHookResult, undefined);
   assert.deepStrictEqual(ownerCandidates, [
     {
@@ -1580,7 +1673,10 @@ test("keeps hook routing and command completion state inside each extension-load
     },
   ]);
   assert.deepStrictEqual(peerCandidates, []);
-  assert.deepStrictEqual(ownerHookAfterPeerLoad, { block: true, reason: "owned hook" });
+  assert.deepStrictEqual(ownerHookAfterPeerLoad, {
+    block: true,
+    reason: "PreToolUse:Bash hook error: owned hook",
+  });
   assert.deepStrictEqual(owner.notifications, [{ message: "● owned-rows [project] (added)" }]);
   owner.verifyBoundary();
   peer.verifyBoundary();
@@ -1603,6 +1699,40 @@ test("discovers prompts under the working directory the event names, not the one
   // assert
   assert.deepStrictEqual(discovered, expectedDiscovery);
   verifyBoundary();
+});
+
+test("T-02-17: discovers the user scope's prompts and not the project's when Pi does not trust the project", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "untrusted-project");
+  await seedPrompt(scope.cwd, "project.md");
+  const userPromptsDir = path.join(scope.agentDir, "pi-claude-marketplace", "resources", "prompts");
+  await mkdir(userPromptsDir, { recursive: true });
+  const userPromptPath = path.join(userPromptsDir, "user.md");
+  await writeFile(userPromptPath, "# prompt\n", "utf8");
+  // The case's own proxy answers the trust reads, so the mock promises none.
+  const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, undefined, undefined, 0);
+  let trustReads = 0;
+  const untrusted = new Proxy(loaded.ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "isProjectTrusted") {
+        return () => {
+          trustReads += 1;
+          return false;
+        };
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  // act
+  const discovered = await loaded.discover(discoverEvent(scope.cwd), untrusted);
+
+  // assert
+  assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [userPromptPath] });
+  // D-LOC-01: the load preparation reads trust once, and the discovery once.
+  assert.strictEqual(trustReads, 2);
+  loaded.verifyBoundary();
 });
 
 test("leaves both scope roots untouched and emits nothing when a pristine workspace reconciles (WR-05)", async (t) => {
@@ -2294,6 +2424,25 @@ function backgroundContext(
     },
   };
 }
+
+test("D-CF1-01: the command invocation handler registered after the skill aliases passes a bridged command through", async (t) => {
+  // arrange
+  await createHermeticScope(t, "command-invocation");
+  const { pi, commandInvocation, ctx, verifyBoundary } = await loadExtension(0, 0);
+  when(() => pi.getCommands())
+    .thenReturn([])
+    .times(1);
+
+  // act
+  const outcome = commandInvocation(
+    { type: "input", text: "/demo:greet Ada", source: "interactive" },
+    ctx,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, { action: "continue" });
+  verifyBoundary();
+});
 
 test("AUP-01: the first plain message in a tui session arms one unref'd background update that quitting cancels", async (t) => {
   // arrange

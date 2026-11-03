@@ -19,7 +19,7 @@ const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
 const EXPECTED_MODULE_COUNT = 22;
 const EXPECTED_SECTION_COUNT = 22;
 const EXPECTED_STATE_COUNT = 324;
-const EXPECTED_UTF8_BYTES = 54_615;
+const EXPECTED_UTF8_BYTES = 54_652;
 
 const FIXTURE_SECTION_ORDER = [
   "/claude:plugin list",
@@ -228,7 +228,7 @@ function fixtureAt(fixtures: FixtureMap, section: string, state: string): Catalo
   return fixture;
 }
 
-test("catalog contract rejects duplicate fixture tuples and empty sections", () => {
+test("catalog contract rejects duplicate fixture tuples", () => {
   // arrange
   const fixture = fixtureAt(PLUGIN_FETCH_FIXTURES, "/claude:plugin fetch", "single-available");
   const one: FixtureMap = { section: { state: fixture } };
@@ -238,6 +238,10 @@ test("catalog contract rejects duplicate fixture tuples and empty sections", () 
     () => mergeFixtureMaps([one, one]),
     new Error("Duplicate catalog fixture tuple: section::state"),
   );
+});
+
+test("catalog contract rejects empty sections", () => {
+  // act & assert
   assert.throws(
     () => mergeFixtureMaps([{ section: {} }]),
     new Error("Catalog fixture section must not be empty: section"),
@@ -252,8 +256,11 @@ test("catalog contract rejects missing and extra fixture tuples", () => {
     { section: "section", state: "missing", expected: "independent bytes" },
   ];
 
-  // act & assert
-  assert.deepStrictEqual(completenessFailures(examples, fixtures), [
+  // act
+  const failures = completenessFailures(examples, fixtures);
+
+  // assert
+  assert.deepStrictEqual(failures, [
     { section: "section", state: "missing", kind: "missing-fixture" },
     { section: "section", state: "extra", kind: "extra-fixture" },
   ]);

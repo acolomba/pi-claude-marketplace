@@ -128,3 +128,67 @@ test("parseHooksConfig side-map flows into RoutingEntry predicates in declaratio
   assert.strictEqual(rows[2]?.ifPredicate, parsed.ifPredicates.get("PreToolUse|1|0"));
   assert.strictEqual(rows[3]?.ifPredicate, parsed.ifPredicates.get("PreToolUse|1|1"));
 });
+
+test("D-CF5-23: an if condition on a session event reaches its routing entry as a never-firing predicate", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const routingState = createRoutingStateOperations(runtime);
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
+  const compileContext = {
+    homedir: "/home/plugin-user",
+    cwd: "/workspace/plugin",
+    projectRoot: "/workspace/plugin",
+  } as const;
+  const raw = JSON.stringify({
+    SessionStart: [
+      {
+        matcher: "*",
+        hooks: [
+          {
+            type: "command",
+            command: "echo gated",
+            if: "Bash(echo *)",
+            once: true,
+            onFailure: "block",
+          },
+        ],
+      },
+    ],
+  });
+
+  // act
+  const parsed = parseHooksConfig(raw, compileContext, compileIfPredicate);
+  if (!parsed.ok) {
+    throw new Error(`fixture did not parse: ${parsed.reason}`);
+  }
+
+  routingState.setParsedConfig("project\u0000verified-marketplace\u0000verified-plugin", {
+    scope: "project",
+    marketplace: "verified-marketplace",
+    pluginId: "verified-plugin",
+    resolvedSource: asAbsolutePluginRoot("/workspace/plugin"),
+    config: parsed.value,
+    ifPredicates: parsed.ifPredicates,
+  });
+  hooksRouting.rebuildRoutingTables();
+  const rows = runtime.getRoutingBucket("SessionStart").map((row) => ({
+    claudeEvent: row.claudeEvent,
+    handlerDecl: row.handlerDecl,
+    predicate: row.ifPredicate,
+  }));
+
+  // assert
+  assert.deepStrictEqual(rows, [
+    {
+      claudeEvent: "SessionStart",
+      handlerDecl: {
+        type: "command",
+        command: "echo gated",
+        if: "Bash(echo *)",
+        once: true,
+        onFailure: "block",
+      },
+      predicate: { kind: "tool-less-event" },
+    },
+  ]);
+});

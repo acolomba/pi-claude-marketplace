@@ -16,7 +16,7 @@
 // the ~99% happy path. `setDescriptionScalar` instead replaces exactly the
 // `description` node span and leaves every sibling key byte-identical.
 
-import { frontmatterBlockEnd, keyValueEnd } from "./frontmatter-scan.ts";
+import { frontmatterBlockEnd, keyValueEnd, topLevelNodeIndex } from "./frontmatter-scan.ts";
 
 /**
  * SKILL-01 / D-86-02 / A4: the fixed placeholder description synthesized onto an
@@ -56,65 +56,6 @@ export function synthesizeUnparseableSkill(body: string, generatedName: string):
   );
 }
 
-/** A fenced-code-block delimiter line (```` ``` ```` or `~~~`), leading-trimmed. */
-const FENCE = /^(```|~~~)/;
-
-/**
- * Advance past a fenced code block whose opener is at `start`, returning the
- * index just after the closing fence (or the end of input if unterminated).
- */
-function skipFencedBlock(lines: readonly string[], start: number): number {
-  let i = start + 1;
-  while (i < lines.length && !FENCE.test((lines[i] ?? "").trim())) {
-    i++;
-  }
-
-  return i < lines.length ? i + 1 : i;
-}
-
-/** Collect the contiguous non-blank paragraph starting at `start` (joined by `\n`). */
-function collectParagraph(lines: readonly string[], start: number): string {
-  const paragraph: string[] = [];
-  for (let i = start; i < lines.length && (lines[i] ?? "").trim() !== ""; i++) {
-    paragraph.push(lines[i] ?? "");
-  }
-
-  return paragraph.join("\n");
-}
-
-/**
- * SKILL-02 / D-86-06: derive a `description` from the first GENUINE body line.
- * Skips blank lines, ATX `#` heading lines, and fenced code blocks (```` ``` ````
- * / `~~~` and their contents), lands on the first plain body line, and returns
- * the contiguous paragraph up to the next blank line (verbatim, joined by
- * `\n`). Returns `""` when the body has no prose (all blank / heading / fence).
- * Mirrors Claude Code's "first paragraph of markdown content" fallback.
- */
-export function firstBodyParagraph(body: string): string {
-  const lines = body.split("\n");
-  let i = 0;
-  while (i < lines.length) {
-    const trimmed = (lines[i] ?? "").trim();
-
-    // Blank line or ATX heading (`#` .. `######`, optionally bare): skip.
-    if (trimmed === "" || /^#{1,6}(\s|$)/.test(trimmed)) {
-      i++;
-      continue;
-    }
-
-    // Fenced code block: skip the opener, its contents, and the closing fence.
-    if (FENCE.test(trimmed)) {
-      i = skipFencedBlock(lines, i);
-      continue;
-    }
-
-    // First prose line: return the contiguous paragraph to the next blank line.
-    return collectParagraph(lines, i);
-  }
-
-  return "";
-}
-
 /**
  * WTU-01 / A1: fold `when_to_use` into the Pi `description`. An empty or absent
  * `whenToUse` returns `description` unchanged (no trailing separator); a
@@ -151,7 +92,10 @@ function emitSafeDoubleQuotedScalar(value: string): string {
   return `"${escaped}"`;
 }
 
-/** The top-level frontmatter `description` key token (including its colon). */
+/** A first line that is `---` once surrounding whitespace is trimmed. */
+const FIRST_LINE_FENCE = /^[^\S\n]*---[^\S\n]*(?:\n|$)/;
+
+/** The top-level frontmatter `description` key token (including its colon) that the writer emits. */
 const DESCRIPTION_KEY = "description:";
 
 /**
@@ -165,26 +109,20 @@ const DESCRIPTION_KEY = "description:";
  * fences); the returned string is the same file with the description node
  * rewritten. When no top-level `description:` key is present the scalar is
  * INSERTED as the last frontmatter line (SKILL-02 fill for a description-less
- * source). Only the frontmatter block (opening `---` through the next `---`) is
- * scanned, so a body line starting with `description:` is never matched. Content
+ * source). Only the frontmatter block (opening `---` through Pi's closing fence)
+ * is scanned, so a body line starting with `description:` is never matched. The
+ * node is found in any YAML spelling of its key (`"description":`,
+ * `description :`), as Pi reads it. Content
  * without an opening `---` fence is returned unchanged.
  */
 export function setDescriptionScalar(content: string, value: string): string {
-  const lines = content.split("\n");
-  if (lines[0]?.trim() !== "---") {
+  if (!FIRST_LINE_FENCE.test(content)) {
     return content;
   }
 
+  const lines = content.split("\n");
   const blockEnd = frontmatterBlockEnd(lines);
-
-  let keyIndex = -1;
-  for (let i = 1; i < blockEnd; i++) {
-    if ((lines[i] ?? "").startsWith(DESCRIPTION_KEY)) {
-      keyIndex = i;
-      break;
-    }
-  }
-
+  const keyIndex = topLevelNodeIndex(lines, blockEnd, "description");
   const replacement = `${DESCRIPTION_KEY} ${emitSafeDoubleQuotedScalar(value)}`;
 
   // SKILL-02: a description-less source has no `description:` key to replace.

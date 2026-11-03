@@ -1,0 +1,17 @@
+import path from "node:path";
+import { outputs, startPi } from "./driver.ts";
+const HERE = path.dirname(new URL(import.meta.url).pathname);
+const base = process.argv[2];
+const sandbox = { home: path.join(base, "home"), agentDir: path.join(base, "home/.pi/agent"), cwd: path.join(base, "project") };
+const PEERS = path.resolve(HERE, "../../../node_modules/.cache/optional-peers/node_modules");
+const extras = [path.join(HERE, "late-ext.ts"), path.join(HERE, "probe-extension.ts"), ...(process.env.SPIKE_ALL ? [path.join(PEERS, "pi-subagents/index.js"), path.join(PEERS, "pi-mcp-adapter/index.ts"), path.join(HERE, "faux-extension.ts")] : [])];
+if (process.env.SPIKE_ENGINE) extras.push(process.env.SPIKE_ENGINE);
+const pi = startPi(sandbox, extras);
+await new Promise((r) => setTimeout(r, 2000));
+const names = (await pi.request({ type: "get_commands" })).response.data.commands.map((c: any) => c.name);
+console.log("late:", names.includes("spike-late"), "demo:", names.includes("kit:demo"), outputs(pi.records));
+const p = await pi.request({ type: "prompt", message: "/spike-probe" });
+const cmds = outputs(p.between).entries[0]?.data.commands.map((c: any) => c.name);
+console.log("probe sees late:", cmds?.includes("spike-late"), "demo:", cmds?.includes("kit:demo"));
+console.log(pi.stderr().slice(-1500));
+await pi.stop();

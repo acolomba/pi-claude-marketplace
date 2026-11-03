@@ -12,6 +12,7 @@ import {
   resolveRawSurface,
   resolveRows,
   resolveUpdateNoOpEnvelope,
+  terminalSafeHookNotice,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -51,39 +52,6 @@ void ({
   // @ts-expect-error a resolved failed row carries no live Error
   cause: new Error("x"),
 } satisfies ResolvedRow<PluginFailedMessage>);
-
-test("resolves absent policies as explicit diagnostic facts", () => {
-  // arrange
-  const row = { status: "available", name: "alpha" } satisfies PluginNotificationMessage;
-
-  // act
-  const marketplaces = resolveRows(marketplaceWith([row]), allLoaded(), {});
-
-  // assert
-  assert.deepStrictEqual(marketplaces[0]!.plugins, [
-    { status: "available", name: "alpha", severity: "error", reasons: [], missingPolicy: true },
-  ]);
-});
-
-test("a present all-false policy suppresses content without marking a diagnostic", () => {
-  // arrange
-  const row = { status: "available", name: "alpha", reasons: ["installs disabled"] } as const;
-
-  // act
-  const marketplaces = resolveRows(marketplaceWith([row]), noneLoaded(), {
-    available: { markers: false, contentReasons: false },
-  });
-
-  // assert
-  assert.deepStrictEqual(marketplaces[0]!.plugins, [
-    { status: "available", name: "alpha", reasons: [] },
-  ]);
-  assert.deepStrictEqual(row, {
-    status: "available",
-    name: "alpha",
-    reasons: ["installs disabled"],
-  });
-});
 
 describe("resolveEnvelope", () => {
   for (const { name, message, expectedEnvelope } of [
@@ -634,6 +602,39 @@ function noneLoaded(): SoftDepStatus {
 }
 
 describe("resolveRows", () => {
+  test("resolves absent policies as explicit diagnostic facts", () => {
+    // arrange
+    const row = { status: "available", name: "alpha" } satisfies PluginNotificationMessage;
+
+    // act
+    const marketplaces = resolveRows(marketplaceWith([row]), allLoaded(), {});
+
+    // assert
+    assert.deepStrictEqual(marketplaces[0]!.plugins, [
+      { status: "available", name: "alpha", severity: "error", reasons: [], missingPolicy: true },
+    ]);
+  });
+
+  test("a present all-false policy suppresses content without marking a diagnostic", () => {
+    // arrange
+    const row = { status: "available", name: "alpha", reasons: ["installs disabled"] } as const;
+
+    // act
+    const marketplaces = resolveRows(marketplaceWith([row]), noneLoaded(), {
+      available: { markers: false, contentReasons: false },
+    });
+
+    // assert
+    assert.deepStrictEqual(marketplaces[0]!.plugins, [
+      { status: "available", name: "alpha", reasons: [] },
+    ]);
+    assert.deepStrictEqual(row, {
+      status: "available",
+      name: "alpha",
+      reasons: ["installs disabled"],
+    });
+  });
+
   test("serializes a failed row's cause chain and rollback phases", () => {
     // arrange
     const marketplaces = marketplaceWith([
@@ -1623,6 +1624,124 @@ describe("resolveRows", () => {
       assert.deepStrictEqual(resolved[0]!.plugins, [expectedRow]);
     });
   }
+
+  test("an inherited prototype-name policy cannot authorize a malformed row", () => {
+    // arrange
+    const row = { status: "toString", name: "orphan", severity: "warning" };
+
+    // act
+    const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), {});
+    const text = composeReconcileAppliedBody([resolved[0]!]);
+
+    // assert
+    assert.deepStrictEqual(row, { status: "toString", name: "orphan", severity: "error" });
+    assert.deepStrictEqual(resolved, [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "toString",
+            name: "orphan",
+            severity: "error",
+            reasons: [],
+            missingPolicy: true,
+          },
+        ],
+      },
+    ]);
+    assert.equal(
+      text,
+      '● official [user]\n  orphan (failed) {internal: no render arm for "toString"}',
+    );
+  });
+
+  test("equal neighboring rows and same-name scopes retain order and duplicate reasons", () => {
+    // arrange
+    const row = {
+      status: "partially-installed",
+      name: "same",
+      scope: "project",
+      reasons: ["lsp", "lsp"],
+      dependencies: ["workflows", "mcp", "agents"],
+    } as const;
+    const marketplaces = [
+      { name: "z-last", scope: "user", plugins: [row, row, { ...row, scope: "user" }] },
+      { name: "a-first", scope: "project", plugins: [] },
+    ] as const;
+
+    const reasons = [
+      "lsp",
+      "lsp",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+      "requires pi-dynamic-workflows",
+    ];
+
+    // act
+    const resolved = resolveRows(marketplaces, noneLoaded(), CENTRAL_ROW_POLICY);
+    const text = resolved.map((mp) => composeReconcileAppliedBody([mp]));
+
+    // assert
+    assert.deepStrictEqual(resolved, [
+      {
+        name: "z-last",
+        scope: "user",
+        plugins: [
+          { status: "partially-installed", name: "same", scope: "project", reasons },
+          { status: "partially-installed", name: "same", scope: "project", reasons },
+          { status: "partially-installed", name: "same", scope: "user", reasons },
+        ],
+      },
+      { name: "a-first", scope: "project", plugins: [] },
+    ]);
+    assert.deepStrictEqual(text, [
+      "● z-last [user]\n  ◉ same [project] (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}\n  ◉ same [project] (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}\n  ◉ same (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}",
+      "● a-first [project]",
+    ]);
+  });
+
+  test("pending policies produce identical complete rows under opposite snapshots", () => {
+    // arrange
+    const rows = [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          { status: "will install", name: "alpha", scope: "project", partial: true },
+          { status: "will uninstall", name: "beta" },
+          { status: "will enable", name: "gamma" },
+          { status: "will disable", name: "delta" },
+          { status: "will update", name: "epsilon", from: "1.0.0", to: "1.1.0" },
+        ],
+      },
+    ] as const;
+    const expected = [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          { status: "will install", name: "alpha", scope: "project", partial: true, reasons: [] },
+          { status: "will uninstall", name: "beta", reasons: [] },
+          { status: "will enable", name: "gamma", reasons: [] },
+          { status: "will disable", name: "delta", reasons: [] },
+          { status: "will update", name: "epsilon", from: "1.0.0", to: "1.1.0", reasons: [] },
+        ],
+      },
+    ];
+    const expectedText =
+      "● official [user]\n  ● alpha [project] (will partially install)\n  ○ beta (will uninstall)\n  ● gamma (will enable)\n  ◍ delta (will disable)\n  ● epsilon v1.0.0 → v1.1.0 (will update)";
+
+    // act
+    const loaded = resolveRows(rows, allLoaded(), PENDING_CONTEXT.rowPolicies);
+    const absent = resolveRows(rows, noneLoaded(), PENDING_CONTEXT.rowPolicies);
+
+    // assert
+    assert.deepStrictEqual(loaded, expected);
+    assert.deepStrictEqual(absent, expected);
+    assert.equal(composeReconcileAppliedBody([loaded[0]!]), expectedText);
+    assert.equal(composeReconcileAppliedBody([absent[0]!]), expectedText);
+  });
 });
 
 describe("resolveNotAddedReason", () => {
@@ -1853,6 +1972,7 @@ describe("resolveRawSurface", () => {
     },
     { kind: "async-rewake-summary", summary: "rewake with Bearer abc" },
     { kind: "stop-override-cap", pluginId: "alpha@official", cap: 8 },
+    { kind: "hook-notice", text: "UserPromptSubmit says: token Bearer abc" },
   ] as const) {
     test(`returns a ${surface.kind} surface as the same object`, () => {
       // arrange
@@ -3021,119 +3141,43 @@ describe("mcpConfigNoticeSurfaces", () => {
   });
 });
 
-test("an inherited prototype-name policy cannot authorize a malformed row", () => {
-  // arrange
-  const row = { status: "toString", name: "orphan", severity: "warning" };
+describe("terminalSafeHookNotice", () => {
+  test("strips escape sequences and turns other control characters into spaces", () => {
+    // act
+    const notice = terminalSafeHookNotice(
+      "Stop says: \u001b[31mred\u001b[0m\u001b]8;;https://x\u0007link\u001b]8;;\u0007 a\rb\u0000c\u007fd",
+    );
 
-  // act
-  const resolved = resolveRows(marketplaceWith([row as never]), allLoaded(), {});
-  const text = composeReconcileAppliedBody([resolved[0]!]);
+    // assert
+    assert.strictEqual(notice, "Stop says: redlink a b c d");
+  });
 
-  // assert
-  assert.deepStrictEqual(row, { status: "toString", name: "orphan", severity: "error" });
-  assert.deepStrictEqual(resolved, [
-    {
-      name: "official",
-      scope: "user",
-      plugins: [
-        {
-          status: "toString",
-          name: "orphan",
-          severity: "error",
-          reasons: [],
-          missingPolicy: true,
-        },
-      ],
-    },
-  ]);
-  assert.equal(
-    text,
-    '● official [user]\n  orphan (failed) {internal: no render arm for "toString"}',
-  );
-});
+  test("keeps line breaks and tabs", () => {
+    // act
+    const notice = terminalSafeHookNotice("SessionStart:clear hook error:\n\tboom");
 
-test("equal neighboring rows and same-name scopes retain order and duplicate reasons", () => {
-  // arrange
-  const row = {
-    status: "partially-installed",
-    name: "same",
-    scope: "project",
-    reasons: ["lsp", "lsp"],
-    dependencies: ["workflows", "mcp", "agents"],
-  } as const;
-  const marketplaces = [
-    { name: "z-last", scope: "user", plugins: [row, row, { ...row, scope: "user" }] },
-    { name: "a-first", scope: "project", plugins: [] },
-  ] as const;
+    // assert
+    assert.strictEqual(notice, "SessionStart:clear hook error:\n\tboom");
+  });
 
-  // act
-  const resolved = resolveRows(marketplaces, noneLoaded(), CENTRAL_ROW_POLICY);
-  const text = resolved.map((mp) => composeReconcileAppliedBody([mp]));
+  test("keeps a notice of exactly 2000 characters whole", () => {
+    // arrange
+    const text = `${"a".repeat(1_999)}\u{1F44D}\u{1F3FD}`;
 
-  // assert
-  const reasons = [
-    "lsp",
-    "lsp",
-    "requires pi-subagents",
-    "requires pi-mcp-adapter",
-    "requires pi-dynamic-workflows",
-  ];
-  assert.deepStrictEqual(resolved, [
-    {
-      name: "z-last",
-      scope: "user",
-      plugins: [
-        { status: "partially-installed", name: "same", scope: "project", reasons },
-        { status: "partially-installed", name: "same", scope: "project", reasons },
-        { status: "partially-installed", name: "same", scope: "user", reasons },
-      ],
-    },
-    { name: "a-first", scope: "project", plugins: [] },
-  ]);
-  assert.deepStrictEqual(text, [
-    "● z-last [user]\n  ◉ same [project] (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}\n  ◉ same [project] (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}\n  ◉ same (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}",
-    "● a-first [project]",
-  ]);
-});
+    // act
+    const notice = terminalSafeHookNotice(text);
 
-test("pending policies produce identical complete rows under opposite snapshots", () => {
-  // arrange
-  const rows = [
-    {
-      name: "official",
-      scope: "user",
-      plugins: [
-        { status: "will install", name: "alpha", scope: "project", partial: true },
-        { status: "will uninstall", name: "beta" },
-        { status: "will enable", name: "gamma" },
-        { status: "will disable", name: "delta" },
-        { status: "will update", name: "epsilon", from: "1.0.0", to: "1.1.0" },
-      ],
-    },
-  ] as const;
+    // assert
+    assert.strictEqual(notice, text);
+  });
 
-  // act
-  const loaded = resolveRows(rows, allLoaded(), PENDING_CONTEXT.rowPolicies);
-  const absent = resolveRows(rows, noneLoaded(), PENDING_CONTEXT.rowPolicies);
+  test("cuts a notice past 2000 characters without splitting a character and counts what it dropped", () => {
+    // act
+    const notice = terminalSafeHookNotice(
+      `${"a".repeat(1_999)}\u{1F44D}\u{1F3FD}${"b".repeat(10)}`,
+    );
 
-  // assert
-  const expected = [
-    {
-      name: "official",
-      scope: "user",
-      plugins: [
-        { status: "will install", name: "alpha", scope: "project", partial: true, reasons: [] },
-        { status: "will uninstall", name: "beta", reasons: [] },
-        { status: "will enable", name: "gamma", reasons: [] },
-        { status: "will disable", name: "delta", reasons: [] },
-        { status: "will update", name: "epsilon", from: "1.0.0", to: "1.1.0", reasons: [] },
-      ],
-    },
-  ];
-  assert.deepStrictEqual(loaded, expected);
-  assert.deepStrictEqual(absent, expected);
-  const expectedText =
-    "● official [user]\n  ● alpha [project] (will partially install)\n  ○ beta (will uninstall)\n  ● gamma (will enable)\n  ◍ delta (will disable)\n  ● epsilon v1.0.0 → v1.1.0 (will update)";
-  assert.equal(composeReconcileAppliedBody([loaded[0]!]), expectedText);
-  assert.equal(composeReconcileAppliedBody([absent[0]!]), expectedText);
+    // assert
+    assert.strictEqual(notice, `${"a".repeat(1_999)}\u{1F44D}\u{1F3FD}… (+10 chars)`);
+  });
 });

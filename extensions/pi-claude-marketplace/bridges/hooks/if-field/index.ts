@@ -14,8 +14,14 @@
 // time. The always-present-with-sentinel stance keeps the dispatch
 // switch total without an `undefined` arm (NFR-7).
 //
-// NFR-7: the `IfPredicate` union has six arms; the dispatch switch over
-// `predicate.kind` lists every arm and carries no default. Adding a seventh
+// D-CF5-23: an `if` set on an event that has no tool (SessionStart,
+// SessionEnd, UserPromptSubmit, PreCompact, PostCompact, Stop,
+// StopFailure) compiles to `{ kind: "tool-less-event" }`, which never
+// fires, so the hook never runs, as in Claude Code. A blank `if` still
+// compiles to `MATCH_ALL_IF`.
+//
+// NFR-7: the `IfPredicate` union has seven arms; the dispatch switch over
+// `predicate.kind` lists every arm and carries no default. Adding an eighth
 // arm without updating the switch red-fails `npm run typecheck` and
 // `npm run lint`.
 //
@@ -24,6 +30,7 @@
 //   - Malformed permission-rule syntax (`Bash(`)            -> MATCH_ALL_IF
 //   - Runtime shell command unparseable                     -> dispatch fires
 //   - Missing path target on optional-path Pi tools         -> substitute cwd
+// An `if` on a tool-less event does not fall open (D-CF5-23).
 //
 // Plugins that work in upstream Claude Code install in Pi-Claude
 // unchanged; the `if` field is documented as best-effort and never
@@ -69,12 +76,14 @@ import type { ExtensionContext } from "../../../platform/pi-api.ts";
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Six-arm discriminated union representing a parsed `if` field. Stored
+ * Seven-arm discriminated union representing a parsed `if` field. Stored
  * on the `RoutingEntry` (always present after compile; fall-open sentinel
  * for absent or malformed `if` strings). The dispatch consult switches
  * on `predicate.kind`:
  *
  *   - `match-all`         -- fire unconditionally.
+ *   - `tool-less-event`   -- never fire: the `if` is set on an event that
+ *                            has no tool (D-CF5-23).
  *   - `bash`              -- check whether `event.toolName` is in the
  *                            `piEvents` set, then consult
  *                            `bashGlob.test(subcmd)` against every parsed
@@ -96,6 +105,7 @@ import type { ExtensionContext } from "../../../platform/pi-api.ts";
  */
 export type IfPredicate =
   | { readonly kind: "match-all" }
+  | { readonly kind: "tool-less-event" }
   | {
       readonly kind: "bash";
       readonly piEvents: ReadonlySet<PiToolName>;
@@ -126,6 +136,9 @@ export type IfPredicate =
  * `if` field at all in upstream Claude Code.
  */
 export const MATCH_ALL_IF: IfPredicate = { kind: "match-all" };
+
+// D-CF5-23: the predicate of an `if` set on an event that has no tool.
+const TOOL_LESS_EVENT_IF: IfPredicate = { kind: "tool-less-event" };
 
 // ──────────────────────────────────────────────────────────────────────────
 // CompileIfPredicateContext (parse-time anchor triple)
@@ -161,11 +174,11 @@ export type CompileIfPredicateContext = ResolveHookIfContext;
 /**
  * MATCH-03 permission-rule prefix shape:
  *   `<Prefix>(<inner>)`  e.g.  `Bash(git push *)` / `Read(src/**)`
- * Captures the prefix (group 1) and the inner pattern (group 2). Inner
- * may be empty -- `compileIfPredicate` rejects empty-inner forms via
- * the per-prefix compile attempt.
+ * The prefix is the text before the first `(` and the inner pattern is the
+ * text between it and the closing `)`. Inner may be empty; the per-prefix
+ * compile decides what an empty inner means.
  */
-const IF_PREFIX_REGEX = /^([A-Za-z_]\w*)\((.*)\)$/;
+const IF_PREFIX_REGEX = /^[A-Za-z_]\w*\(.*\)$/;
 
 /**
  * MCP segment shape: a single non-empty character class run. Anchored
@@ -229,7 +242,7 @@ const TOOL_EVENT_MEMBERS_FOR_IF = new Set<string>(TOOL_EVENTS);
  * (broken glob, malformed command syntax) still falls open:
  *
  *   - empty after trim                       -> MATCH_ALL_IF
- *   - non-tool event (A5 disposition)        -> MATCH_ALL_IF
+ *   - non-tool event (D-CF5-23)              -> tool-less-event predicate
  *   - `mcp__<server>__<tool>` literal         -> mcp-literal predicate
  *   - `mcp__<server>` or `mcp__<server>__*`   -> mcp-server-prefix
  *   - `<Prefix>(<inner>)` with known Prefix  -> bash / powershell /
@@ -257,14 +270,16 @@ export function compileIfPredicate(
 
   if (!TOOL_EVENT_MEMBERS_FOR_IF.has(claudeEvent)) {
     hookDebugLog(
-      `compileIfPredicate: if value "${trimmed}" on non-tool event ${claudeEvent} is ignored; falling open`,
+      `compileIfPredicate: if value "${trimmed}" on non-tool event ${claudeEvent}; the hook never runs`,
     );
-    return MATCH_ALL_IF;
+    return TOOL_LESS_EVENT_IF;
   }
 
-  const prefixMatch = IF_PREFIX_REGEX.exec(trimmed);
-  if (prefixMatch !== null) {
-    return compileIfPrefixForm(trimmed, prefixMatch[1] ?? "", prefixMatch[2] ?? "", ctx);
+  if (IF_PREFIX_REGEX.test(trimmed)) {
+    // The regex's prefix class holds no `(` and its form ends in `)`, so the
+    // first `(` opens the inner pattern and the last character closes it.
+    const open = trimmed.indexOf("(");
+    return compileIfPrefixForm(trimmed, trimmed.slice(0, open), trimmed.slice(open + 1, -1), ctx);
   }
 
   if (matchMcpLiteral(trimmed)) {
@@ -281,9 +296,9 @@ export function compileIfPredicate(
 }
 
 /**
- * Per-prefix compile dispatch. Each arm wraps the underlying glob
- * compile so a malformed inner still collapses to MATCH_ALL_IF
- * (D-61-02). Unknown prefixes (`Grep`, `Glob`, `LS`, `Cd`, ...) fall open
+ * Per-prefix compile dispatch. Only the Read/Edit/Write path-glob arm wraps
+ * its compile, so a malformed path glob collapses to MATCH_ALL_IF
+ * (D-61-02); the Bash and PowerShell compilers do not throw. Unknown prefixes (`Grep`, `Glob`, `LS`, `Cd`, ...) fall open
  * silently.
  */
 function compileIfPrefixForm(
@@ -293,27 +308,19 @@ function compileIfPrefixForm(
   ctx: CompileIfPredicateContext,
 ): IfPredicate {
   if (prefix === "Bash") {
-    try {
-      const bashGlob = compileBashGlob(inner);
-      return { kind: "bash", piEvents: IF_PREFIX_TARGETS.Bash.piEvents, bashGlob };
-    } catch (err) {
-      hookDebugLog(
-        `compileIfPredicate: Bash glob compile failed for "${raw}": ${errorMessage(err)}; falling open`,
-      );
-      return MATCH_ALL_IF;
-    }
+    return {
+      kind: "bash",
+      piEvents: IF_PREFIX_TARGETS.Bash.piEvents,
+      bashGlob: compileBashGlob(inner),
+    };
   }
 
   if (prefix === "PowerShell") {
-    try {
-      const psGlob = compilePowerShellRule(inner);
-      return { kind: "powershell", piEvents: IF_PREFIX_TARGETS.PowerShell.piEvents, psGlob };
-    } catch (err) {
-      hookDebugLog(
-        `compileIfPredicate: PowerShell glob compile failed for "${raw}": ${errorMessage(err)}; falling open`,
-      );
-      return MATCH_ALL_IF;
-    }
+    return {
+      kind: "powershell",
+      piEvents: IF_PREFIX_TARGETS.PowerShell.piEvents,
+      psGlob: compilePowerShellRule(inner),
+    };
   }
 
   if (prefix === "Read" || prefix === "Edit" || prefix === "Write") {
@@ -443,6 +450,7 @@ function resolveTarget(p: string, ctx: ExtensionContext): string {
  * Per-arm contract:
  *
  *   - `match-all` -- always fires (fall-open sentinel).
+ *   - `tool-less-event` -- never fires (D-CF5-23).
  *   - `bash` -- guard `event.toolName` against the predicate's `piEvents`
  *     set and return false on a miss; extract `event.input.command`; if
  *     absent return false (no command to match); parse subcommands; on
@@ -466,10 +474,10 @@ function resolveTarget(p: string, ctx: ExtensionContext): string {
  *   - `mcp-server-prefix` -- prefix probe via `startsWith`.
  *
  * `claudeEvent` is accepted for symmetry with `compileIfPredicate` (the
- * parse-time entry rejects `if` on non-tool events by compiling them to
- * `MATCH_ALL_IF`, so a non-tool entry reaching this consult is already
- * the fall-open sentinel). Reserved for forward-compat against future
- * per-event nuance.
+ * parse-time entry compiles an `if` on a non-tool event to the
+ * `tool-less-event` predicate, so a non-tool entry reaching this consult
+ * never fires, or carries `MATCH_ALL_IF` when it has no `if`). Reserved
+ * for forward-compat against future per-event nuance.
  */
 export function ifFires(
   predicate: IfPredicate,
@@ -480,6 +488,9 @@ export function ifFires(
   switch (predicate.kind) {
     case "match-all":
       return true;
+
+    case "tool-less-event":
+      return false;
 
     case "bash":
       return commandArmFires(

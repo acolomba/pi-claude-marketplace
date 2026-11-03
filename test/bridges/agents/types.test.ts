@@ -1,10 +1,12 @@
 import type {
+  AgentSkillSource,
   ConvertedAgent,
   DiscoveredAgent,
   PreparedAgentsNoop,
   PreparedAgentsStaging,
   PreparedAgentsStaged,
   RawAgentFrontmatter,
+  SkillPreload,
   StageAgentsCommitResult,
   StageAgentsInput,
   StagedAgentRecord,
@@ -36,6 +38,17 @@ const discoveredAgent: DiscoveredAgent = {
 } satisfies DiscoveredAgent;
 void discoveredAgent;
 
+const nestedDiscoveredAgent: DiscoveredAgent = {
+  sourceName: "security",
+  generatedName: "pi-claude-marketplace-acme-review-security",
+  sourcePath: "/plugin/agents/review/security.md",
+  namespace: ["review"],
+  sourceHash: "source-hash",
+  raw: { description: "Checks security." },
+  body: "Check the change.\n",
+} satisfies DiscoveredAgent;
+void nestedDiscoveredAgent;
+
 const convertedAgent: ConvertedAgent = {
   generatedName: "pi-claude-marketplace-acme-reviewer",
   sourceName: "reviewer",
@@ -61,6 +74,29 @@ const stageAgentsInput: StageAgentsInput = {
   cwd: "/project",
 } satisfies StageAgentsInput;
 void stageAgentsInput;
+
+const agentSkillSource: AgentSkillSource = {
+  generatedName: "acme-testing",
+  sourcePath: "/plugin/skills/testing",
+  targetPath: "/scope/pi-claude-marketplace/resources/skills/acme-testing",
+} satisfies AgentSkillSource;
+void agentSkillSource;
+
+const stageAgentsInputWithSkillSources: StageAgentsInput = {
+  ...stageAgentsInput,
+  skillSources: [agentSkillSource],
+} satisfies StageAgentsInput;
+void stageAgentsInputWithSkillSources;
+
+const inlineSkillPreload: SkillPreload = {
+  kind: "inline",
+  text: "Base directory for this skill: /scope/skills/acme-testing\n\nTest the change.",
+} satisfies SkillPreload;
+void inlineSkillPreload;
+
+for (const reason of ["disable-model-invocation", "no-description", "unparseable"] as const) {
+  void ({ kind: "skip", reason } satisfies SkillPreload);
+}
 
 const stagedAgentRecord: StagedAgentRecord = {
   generatedName: "pi-claude-marketplace-acme-reviewer",
@@ -164,6 +200,16 @@ const stageAgentsCommitResultWithoutFailures: StageAgentsCommitResult = {
   warnings: [],
 };
 void stageAgentsCommitResultWithoutFailures;
+// @ts-expect-error a skipped preload names one of the closed skip reasons
+void ({ kind: "skip", reason: "missing" } satisfies SkillPreload);
+// @ts-expect-error an inline preload always carries its text
+void ({ kind: "inline" } satisfies SkillPreload);
+// @ts-expect-error a skill source always identifies its staged folder
+const agentSkillSourceWithoutTargetPath: AgentSkillSource = {
+  generatedName: "acme-testing",
+  sourcePath: "/plugin/skills/testing",
+};
+void agentSkillSourceWithoutTargetPath;
 // @ts-expect-error a preparation handle has a closed discriminant set
 void ({ kind: "prepared", result: stageAgentsCommitResult } satisfies PreparedAgentsNoop);
 

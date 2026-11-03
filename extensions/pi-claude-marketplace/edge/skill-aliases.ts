@@ -1,8 +1,31 @@
-import { loadQualifiedSkillAliases } from "../orchestrators/skill-alias-state.ts";
+import { randomUUID } from "node:crypto";
 
-import type { AutocompleteProvider, ExtensionAPI, ExtensionContext } from "../platform/pi-api.ts";
+import { loadPluginAliases } from "../orchestrators/skill-alias-state.ts";
+import { invokeBridgedSkill } from "../orchestrators/skill-invocation.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
+import { notifyUsageError } from "../shared/notification-dispatch.ts";
+import { openNotificationRun } from "../shared/notification-run.ts";
+
+import { finishedTransform } from "./input-transform.ts";
+
+import type { PluginAliasTarget } from "../orchestrators/skill-alias-state.ts";
+import type {
+  SkillInvocationOutcome,
+  SkillInvocationRequest,
+} from "../orchestrators/skill-invocation.ts";
+import type {
+  AutocompleteProvider,
+  ExtensionAPI,
+  ExtensionContext,
+  InputEvent,
+  InputEventResult,
+} from "../platform/pi-api.ts";
 
 type Suggestions = Awaited<ReturnType<AutocompleteProvider["getSuggestions"]>>;
+
+/** The plugin alias table of one directory and trust state. */
+type PluginAliases = ReadonlyMap<string, PluginAliasTarget>;
 
 /** Adds unclaimed skill aliases alongside Pi's native suggestions. */
 function appendAliasSuggestions(
@@ -25,11 +48,11 @@ function appendAliasSuggestions(
       };
 }
 
-/** Wraps Pi's suggestions with plugin-qualified skill aliases. */
+/** Wraps Pi's suggestions with plugin-qualified skill and command aliases. */
 function aliasProvider(
   ctx: ExtensionContext,
   current: AutocompleteProvider,
-  getQualifiedAliases: (cwd: string) => Promise<ReadonlyMap<string, string>>,
+  getQualifiedAliases: (cwd: string, projectTrusted: boolean) => Promise<PluginAliases>,
 ): AutocompleteProvider {
   return {
     getSuggestions: async (lines, line, col, options) => {
@@ -44,8 +67,14 @@ function aliasProvider(
         return suggestions;
       }
 
-      const aliases = await getQualifiedAliases(ctx.cwd);
-      return appendAliasSuggestions(typed, suggestions, aliases.keys());
+      // A table that cannot be loaded adds no suggestion, so Pi's stay.
+      try {
+        const aliases = await getQualifiedAliases(ctx.cwd, ctx.isProjectTrusted());
+        return appendAliasSuggestions(typed, suggestions, aliases.keys());
+      } catch (err) {
+        hookDebugLog(`alias completion skipped: ${errorMessage(err)}`, "skills");
+        return suggestions;
+      }
     },
     applyCompletion: (lines, line, col, item, prefix) =>
       current.applyCompletion(lines, line, col, item, prefix),
@@ -54,20 +83,84 @@ function aliasProvider(
   };
 }
 
-/** Adds interactive plugin-qualified aliases for loaded skills. */
+/**
+ * D-CF2-06: maps an invocation outcome onto Pi's input result. T-01-24: an
+ * aborted invocation is reported to the user and handled, so nothing of it
+ * reaches the model.
+ */
+function inputResult(
+  outcome: SkillInvocationOutcome,
+  event: InputEvent,
+  reportAbort: (message: string) => void,
+): InputEventResult {
+  switch (outcome.kind) {
+    case "ok":
+      return finishedTransform(outcome.text, event);
+    case "abort":
+      reportAbort(outcome.message);
+      return { action: "handled" };
+    case "not-bridged":
+      return { action: "continue" };
+  }
+}
+
+/**
+ * D-CF2-02: the typed line with a command alias replaced by the command's Pi
+ * name. The command invocation handler, registered after this one, fills it.
+ */
+function commandAliasResult(name: string, token: string, event: InputEvent): InputEventResult {
+  return {
+    action: "transform",
+    text: `/${name}${event.text.slice(token.length + 1)}`,
+    ...(event.images !== undefined && { images: event.images }),
+  };
+}
+
+/**
+ * D-CF2-05 / D-CF2-06: resolves a typed `/skill:` token or plugin-qualified
+ * alias, from interactive or RPC input, and sends a bridged skill through the
+ * invocation; `extension` input passes through unchanged. D-CF2-02: a command
+ * alias becomes the command's own name, for the command invocation handler.
+ */
 export function registerSkillAliases(
   pi: ExtensionAPI,
   loadAliases: (
     pi: ExtensionAPI,
     cwd: string,
-  ) => Promise<ReadonlyMap<string, string>> = loadQualifiedSkillAliases,
+    projectTrusted: boolean,
+  ) => Promise<ReadonlyMap<string, PluginAliasTarget>> = loadPluginAliases,
+  invokeSkill: (
+    request: SkillInvocationRequest,
+  ) => Promise<SkillInvocationOutcome> = invokeBridgedSkill,
+  createInvocationId: () => string = randomUUID,
 ): void {
-  const cache = new Map<string, Promise<ReadonlyMap<string, string>>>();
-  const getQualifiedAliases = (cwd: string): Promise<ReadonlyMap<string, string>> => {
-    let aliases = cache.get(cwd);
+  // A skill abort is a `usage-error` of the command `skill`, so RPC and JSON
+  // clients receive it as a `claude-plugin` entry with that origin.
+  const reportAbort = (ctx: ExtensionContext, message: string): void => {
+    const run = openNotificationRun(pi, {
+      kind: "command",
+      commandId: "skill",
+      invocationId: createInvocationId(),
+    });
+    notifyUsageError(ctx, run, { message, usage: "" });
+  };
+
+  // T-02-17: the table of an untrusted project leaves out its project skills,
+  // so it is kept apart from the table of the same directory once trusted.
+  const cache = new Map<string, Promise<PluginAliases>>();
+  const getQualifiedAliases = (cwd: string, projectTrusted: boolean): Promise<PluginAliases> => {
+    const key = `${projectTrusted ? "trusted" : "untrusted"}\0${cwd}`;
+    let aliases = cache.get(key);
     if (aliases === undefined) {
-      aliases = loadAliases(pi, cwd);
-      cache.set(cwd, aliases);
+      const loading = loadAliases(pi, cwd, projectTrusted);
+      aliases = loading;
+      cache.set(key, loading);
+      // A rejected load is not kept: the next lookup loads the table again.
+      loading.catch(() => {
+        if (cache.get(key) === loading) {
+          cache.delete(key);
+        }
+      });
     }
 
     return aliases;
@@ -78,31 +171,76 @@ export function registerSkillAliases(
     ctx.ui.addAutocompleteProvider((current) => aliasProvider(ctx, current, getQualifiedAliases));
   });
 
+  // D-CF2-05: one path for a `/skill:` token and for every alias the table
+  // resolves, qualified or bare, from interactive and RPC input alike. An
+  // unexpected failure is reported and the prompt handled: Pi would otherwise
+  // send its own expansion, with the `!` commands not run, or the literal
+  // alias text to the model.
+  const invoke = async (
+    generatedName: string,
+    token: string,
+    commands: ReturnType<ExtensionAPI["getCommands"]>,
+    event: InputEvent,
+    ctx: ExtensionContext,
+  ): Promise<InputEventResult> => {
+    let outcome: SkillInvocationOutcome;
+    try {
+      outcome = await invokeSkill({
+        commands,
+        generatedName,
+        typed: `/${token}`,
+        args: event.text.slice(token.length + 1).trim(),
+        cwd: ctx.cwd,
+        projectTrusted: ctx.isProjectTrusted(),
+        sessionId: ctx.sessionManager.getSessionId(),
+        thinkingLevel: pi.getThinkingLevel(),
+      });
+    } catch (error) {
+      outcome = { kind: "abort", message: errorMessage(error) };
+    }
+
+    return inputResult(outcome, event, (message) => {
+      reportAbort(ctx, message);
+    });
+  };
+
   pi.on("input", (event, ctx) => {
-    if (event.source !== "interactive") {
+    if (event.source === "extension") {
       return { action: "continue" };
     }
 
-    const match = /^\/(\S+)(?=\s|$)/.exec(event.text);
-    const name = match?.[1];
-    if (!name?.includes(":")) {
+    const token = /^\/(\S+)(?=\s|$)/.exec(event.text)?.[1];
+    if (token === undefined) {
       return { action: "continue" };
     }
 
     const commands = pi.getCommands();
-    if (commands.some((command) => command.source !== "skill" && command.name === name)) {
+    if (commands.some((command) => command.source !== "skill" && command.name === token)) {
       return { action: "continue" };
     }
 
-    return getQualifiedAliases(ctx.cwd).then((aliases) => {
-      const generatedName = aliases.get(name);
-      return generatedName === undefined
-        ? { action: "continue" }
-        : {
-            action: "transform",
-            text: `/skill:${generatedName}${event.text.slice(name.length + 1)}`,
-            ...(event.images !== undefined && { images: event.images }),
-          };
-    });
+    if (token.startsWith("skill:")) {
+      return invoke(token.slice("skill:".length), token, commands, event, ctx);
+    }
+
+    // D-CF2-02 residual: a bare alias that equals a Pi built-in command name is
+    // not reserved here, because Pi does not export its built-in list.
+    // A table that cannot be loaded holds no alias, so the token stays Pi's.
+    return getQualifiedAliases(ctx.cwd, ctx.isProjectTrusted()).then(
+      (aliases) => {
+        const target = aliases.get(token);
+        if (target === undefined) {
+          return { action: "continue" };
+        }
+
+        return target.kind === "skill"
+          ? invoke(target.generatedName, token, commands, event, ctx)
+          : commandAliasResult(target.name, token, event);
+      },
+      (err: unknown): InputEventResult => {
+        hookDebugLog(`alias input skipped: ${errorMessage(err)}`, "skills");
+        return { action: "continue" };
+      },
+    );
   });
 }

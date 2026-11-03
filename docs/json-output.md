@@ -56,7 +56,7 @@ A valid empty inventory prints this array and exits successfully:
 For an installed plugin named `review` in marketplace `tools`, the extracted rows can look like this:
 
 ```json
-[{"status":"installed","name":"review","id":"review@tools","reasons":[]}]
+[{ "status": "installed", "name": "review", "id": "review@tools", "reasons": [] }]
 ```
 
 An absent command produces an error instead of an empty array. A command outcome without a `cascade` fails with `No plugin inventory received`. Row extraction does not decide whether the entire command succeeded. Keep the captured file for the severity and exit-policy examples, then remove it with `rm "$input_file"`.
@@ -171,13 +171,13 @@ Every kind includes these fields. The `internal-error` kind narrows origin and s
 
 <!-- fields: common-fields -->
 
-| Field path      | Type              | Presence | Meaning                                                 |
-| --------------- | ----------------- | -------- | ------------------------------------------------------- |
-| `schemaVersion` | integer `1`       | required | Payload compatibility version.                          |
-| `kind`          | string            | required | Payload kind from the twenty-three kind sections below. |
-| `origin`        | [Origin](#origin) | required | Source of this notification.                            |
-| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.     |
-| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.               |
+| Field path      | Type              | Presence | Meaning                                                |
+| --------------- | ----------------- | -------- | ------------------------------------------------------ |
+| `schemaVersion` | integer `1`       | required | Payload compatibility version.                         |
+| `kind`          | string            | required | Payload kind from the twenty-four kind sections below. |
+| `origin`        | [Origin](#origin) | required | Source of this notification.                           |
+| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.    |
+| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.              |
 
 <!-- /fields -->
 
@@ -207,7 +207,11 @@ The ten structured kinds through `prune-committed-warning` also permit this fiel
 
 Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
 
-A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. Such a load with nothing to change emits nothing. A background update reports the plugins it moved as one `background-update` whose `origin.kind` is `load`. Only a tui session runs the background update, so a json or rpc session never receives this entry; the kind stays in the schema (D-PL8-20).
+A bridged plugin skill that stops when you invoke it reports a `usage-error` whose `origin.commandId` is `skill`. This happens when a `` !`command` `` fails, the invocation is too large, Bash is missing, or the skill file cannot be read. A project skill also stops when Pi no longer trusts the project. Nothing reaches the model (D-CF2-06).
+
+A bridged plugin command that stops when you invoke it reports a `usage-error` whose `origin.commandId` is the command's name without its slash, such as `demo:greet`. This happens when a `` !`command` `` fails, the invocation is too large, Bash is missing, or the command file cannot be read. A project command also stops when Pi does not trust the project. Nothing reaches the model (D-CF3-06, D-LOC-01).
+
+A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. The apply covers the project scope only when Pi trusts the project. In a project that Pi does not trust, it covers the user scope, and the project scope gets the read-only pass, so its pending changes arrive as a `cascade` whose `origin.kind` is `load` (D-LOC-01). Such a load with nothing to change emits nothing. A background update changes the project scope only when Pi trusts the project (D-LOC-01), and reports the plugins it moved as one `background-update` whose `origin.kind` is `load`. Only a tui session runs the background update, so a json or rpc session never receives this entry; the kind stays in the schema (D-PL8-20).
 
 ### Command origin
 
@@ -566,10 +570,24 @@ The one notice of a background update, which runs after the first message of a s
 
 <!-- use: common-fields -->
 
-| Field path    | Type                                                    | Presence | Meaning                                                                                                   |
-| ------------- | ------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `needsReload` | boolean                                                 | required | Always `true`.                                                                                            |
-| `plugins`     | [Background update plugin](#background-update-plugin)[] | required | At least one row, one per updated install, in update order. A plugin updated in both scopes has two rows. |
+| Field path    | Type                                                    | Presence | Meaning                                                                                                                            |
+| ------------- | ------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `needsReload` | boolean                                                 | required | Always `true`.                                                                                                                     |
+| `plugins`     | [Background update plugin](#background-update-plugin)[] | required | At least one row, one per updated install, in update order. A plugin updated in both scopes or from two marketplaces has two rows. |
+
+<!-- /fields -->
+
+#### hook-notice
+
+One notice that a plugin's hook shows the user: a hook's `systemMessage` as `<Event>[:<Tool>] says: <text>`, a blocked prompt, a blocked compaction, or a block on an event that cannot block. Its origin is `hook`, severity is always `info`, and `needsReload` is always `false`. A hook's text never reaches the model. A notice with empty text emits nothing.
+
+<!-- fields: kind:hook-notice -->
+
+<!-- use: common-fields -->
+
+| Field path | Type   | Presence | Meaning                                                                                                                                                                                              |
+| ---------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`     | string | required | Notice text without terminal escapes or control characters other than line breaks and tabs, at most 2,000 characters before a `… (+N chars)` marker. This is distinct from the envelope's `summary`. |
 
 <!-- /fields -->
 

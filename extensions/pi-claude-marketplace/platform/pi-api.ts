@@ -13,6 +13,11 @@
 // carries the `requires pi-subagents` / `requires pi-mcp-adapter` /
 // `requires pi-dynamic-workflows` marker.
 
+import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
+
+import { createReadTool } from "@earendil-works/pi-coding-agent";
+
 export { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 /**
@@ -63,7 +68,11 @@ export type {
 } from "@earendil-works/pi-coding-agent";
 export type { AutocompleteProvider } from "@earendil-works/pi-tui";
 
-import type { AgentEndEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  AgentEndEvent,
+  ExtensionContext,
+  ToolResultEvent,
+} from "@earendil-works/pi-coding-agent";
 
 /** Pi's mode union, derived from its context because the root omits the alias. */
 export type ExtensionMode = ExtensionContext["mode"];
@@ -90,11 +99,12 @@ export interface PiTextContentBlock {
  * an `ExtensionHandler<ToolResultEvent, ToolResultEventResult>` whose
  * return-shape interface (defined in the peer-dep's internal
  * `core/extensions/types.d.ts`) carries the three optional fields
- * mirrored here. Tracked as a peer-dep export gap; structurally
- * compatible with the upstream declaration.
+ * mirrored here. `content` takes Pi's text and image parts, as the event
+ * carries them. Tracked as a peer-dep export gap; structurally compatible
+ * with the upstream declaration.
  */
 export interface ToolResultEventResult {
-  content?: PiTextContentBlock[];
+  content?: ToolResultEvent["content"];
   details?: unknown;
   isError?: boolean;
 }
@@ -261,4 +271,38 @@ export function softDepStatus(pi: PiInventory): SoftDepStatus {
     piMcpAdapterLoaded: hasLoadedPiMcpAdapter(pi),
     workflowEngineLoaded: hasLoadedWorkflowEngine(pi),
   };
+}
+
+/** One call of Pi's read tool on a text file, with its optional line range. */
+export interface ReadToolCall {
+  /** The absolute path of the file. */
+  readonly file: string;
+  readonly offset: number | undefined;
+  readonly limit: number | undefined;
+}
+
+/**
+ * Whether Pi's own read tool, called as `call` on a text file that holds
+ * `content`, returns exactly `text` as its one text block: the same lines,
+ * the same truncation, and the same continuation notice. The tool reads
+ * `content`, not the disk. Rejects with Pi's error for an offset past the
+ * end of `content`.
+ */
+export async function readToolReturns(
+  call: ReadToolCall,
+  content: string,
+  text: string,
+): Promise<boolean> {
+  const tool = createReadTool(path.dirname(call.file), {
+    operations: {
+      readFile: () => Promise.resolve(Buffer.from(content, "utf8")),
+      access: () => Promise.resolve(),
+    },
+  });
+  const result = await tool.execute("skill-read", {
+    path: call.file,
+    ...(call.offset === undefined ? {} : { offset: call.offset }),
+    ...(call.limit === undefined ? {} : { limit: call.limit }),
+  });
+  return isDeepStrictEqual(result.content, [{ type: "text", text }]);
 }

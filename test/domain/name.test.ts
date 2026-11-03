@@ -222,23 +222,27 @@ const pathMarketplaceSource = {
   logical: "./tools",
 } as const satisfies ParsedSource;
 
-const ORGANIZATION_REFUSAL = (name: string): string =>
-  `The name '${name}' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.`;
+function organizationRefusal(name: string): string {
+  return `The name '${name}' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.`;
+}
 
-const GITHUB_REFUSAL = (name: string): string =>
-  `The name '${name}' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name.`;
+function githubRefusal(name: string): string {
+  return `The name '${name}' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name.`;
+}
 
 const IMPERSONATION_REFUSAL =
   "Marketplace name impersonates an official Anthropic/Claude marketplace";
 
 const NEW_ADD = { repairedName: undefined, recorded: false } as const;
 
-const anthropicsSource = (repo: string): ParsedSource => ({
-  kind: "github",
-  raw: `anthropics/${repo}`,
-  owner: "anthropics",
-  repo,
-});
+function anthropicsSource(repo: string): ParsedSource {
+  return {
+    kind: "github",
+    raw: `anthropics/${repo}`,
+    owner: "anthropics",
+    repo,
+  };
+}
 
 describe("reservedMarketplaceNameRefusal", () => {
   for (const name of [
@@ -270,7 +274,7 @@ describe("reservedMarketplaceNameRefusal", () => {
       const refusal = reservedMarketplaceNameRefusal(declaredName, pathMarketplaceSource);
 
       // assert
-      assert.strictEqual(refusal, ORGANIZATION_REFUSAL(name));
+      assert.strictEqual(refusal, organizationRefusal(name));
     });
   }
 
@@ -322,7 +326,7 @@ describe("reservedMarketplaceNameRefusal", () => {
       const refusal = reservedMarketplaceNameRefusal(declaredName, source);
 
       // assert
-      assert.strictEqual(refusal, GITHUB_REFUSAL("healthcare"));
+      assert.strictEqual(refusal, githubRefusal("healthcare"));
     });
   }
 
@@ -510,7 +514,7 @@ describe("addedMarketplaceNameRefusal", () => {
     const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
 
     // assert
-    assert.strictEqual(refusal, ORGANIZATION_REFUSAL("claude-plugins-official"));
+    assert.strictEqual(refusal, organizationRefusal("claude-plugins-official"));
   });
 
   test("MKT-01 / D-PL5-28: lets the anthropics organization use a reserved name", () => {
@@ -711,7 +715,7 @@ describe("catalogMarketplaceNameRefusal", () => {
 
 describe("assertRecordedMarketplaceName", () => {
   for (const { source, reserved } of [
-    { source: pathMarketplaceSource, reserved: ORGANIZATION_REFUSAL("claude-plugins-official") },
+    { source: pathMarketplaceSource, reserved: organizationRefusal("claude-plugins-official") },
     {
       source: {
         kind: "github",
@@ -719,7 +723,7 @@ describe("assertRecordedMarketplaceName", () => {
         owner: "acme",
         repo: "claude-plugins-official",
       },
-      reserved: GITHUB_REFUSAL("claude-plugins-official"),
+      reserved: githubRefusal("claude-plugins-official"),
     },
   ] satisfies { source: ParsedSource; reserved: string }[]) {
     test(`D-PL5-28: refuses claude-plugins-official recorded from the ${source.kind} source ${source.raw}`, () => {
@@ -832,7 +836,7 @@ describe("recordedMarketplaceNameRefusal", () => {
       recordName: "claude-plugins-official",
       source: pathMarketplaceSource,
       declaredName: undefined,
-      refusal: `Marketplace "claude-plugins-official" is registered from an untrusted source: ${ORGANIZATION_REFUSAL("claude-plugins-official")} To fix it, remove the marketplace and re-add it from the official source.`,
+      refusal: `Marketplace "claude-plugins-official" is registered from an untrusted source: ${organizationRefusal("claude-plugins-official")} To fix it, remove the marketplace and re-add it from the official source.`,
     },
     {
       title: "refuses a reserved record name from another github owner as an untrusted source",
@@ -844,7 +848,7 @@ describe("recordedMarketplaceNameRefusal", () => {
         repo: "claude-plugins-official",
       },
       declaredName: "claude-plugins-official",
-      refusal: `Marketplace "claude-plugins-official" is registered from an untrusted source: ${GITHUB_REFUSAL("claude-plugins-official")} To fix it, remove the marketplace and re-add it from the official source.`,
+      refusal: `Marketplace "claude-plugins-official" is registered from an untrusted source: ${githubRefusal("claude-plugins-official")} To fix it, remove the marketplace and re-add it from the official source.`,
     },
     {
       title: "refuses a record named as another spelling of a reserved name",
@@ -1242,6 +1246,57 @@ describe("generatedAgentName", () => {
       });
     });
   }
+
+  for (const { namespace, expectedAgentName } of [
+    { namespace: [], expectedAgentName: "pi-claude-marketplace-demo-security" },
+    { namespace: ["review"], expectedAgentName: "pi-claude-marketplace-demo-review-security" },
+    {
+      namespace: ["review", "deep"],
+      expectedAgentName: "pi-claude-marketplace-demo-review-deep-security",
+    },
+    { namespace: [".hidden"], expectedAgentName: "pi-claude-marketplace-demo-.hidden-security" },
+  ]) {
+    test(`D-CF4-01 joins the folders ${JSON.stringify(namespace)} with a dash`, () => {
+      // arrange
+      const folders = namespace;
+
+      // act
+      const agentName = generatedAgentName("demo", "security", folders);
+
+      // assert
+      assert.strictEqual(agentName, expectedAgentName);
+    });
+  }
+
+  for (const { segment, errorMessage } of [
+    {
+      segment: "a/b",
+      errorMessage: 'agent namespace segment "a/b" must not contain path separators.',
+    },
+    {
+      segment: "a\u0001b",
+      errorMessage: 'agent namespace segment "a\u0001b" must not contain ASCII control characters.',
+    },
+    { segment: "", errorMessage: "agent namespace segment must be a non-empty string." },
+    { segment: ".", errorMessage: 'agent namespace segment must not be "." or "..".' },
+    { segment: "..", errorMessage: 'agent namespace segment must not be "." or "..".' },
+  ]) {
+    test(`D-CF4-01 rejects the folder ${JSON.stringify(segment)} in a generated name`, () => {
+      // arrange
+      const namespace = ["review", segment];
+
+      // act
+      const generateAgentName = () => generatedAgentName("demo", "security", namespace);
+
+      // assert
+      assert.throws(generateAgentName, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
+    });
+  }
 });
 
 describe("declaredAgentName", () => {
@@ -1302,6 +1357,54 @@ describe("declaredAgentName", () => {
 
       // act
       const declareAgentName = () => declaredAgentName(plugin, source);
+
+      // assert
+      assert.throws(declareAgentName, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
+    });
+  }
+
+  for (const { namespace, expectedDeclaredName } of [
+    { namespace: [], expectedDeclaredName: "demo:security" },
+    { namespace: ["review"], expectedDeclaredName: "demo:review:security" },
+    { namespace: ["review", "deep"], expectedDeclaredName: "demo:review:deep:security" },
+    { namespace: [".hidden"], expectedDeclaredName: "demo:.hidden:security" },
+  ]) {
+    test(`D-CF4-01 joins the folders ${JSON.stringify(namespace)} with a colon`, () => {
+      // arrange
+      const folders = namespace;
+
+      // act
+      const declaredName = declaredAgentName("demo", "security", folders);
+
+      // assert
+      assert.strictEqual(declaredName, expectedDeclaredName);
+    });
+  }
+
+  for (const { segment, errorMessage } of [
+    {
+      segment: "a/b",
+      errorMessage: 'agent namespace segment "a/b" must not contain path separators.',
+    },
+    {
+      segment: "a\u0001b",
+      errorMessage: 'agent namespace segment "a\u0001b" must not contain ASCII control characters.',
+    },
+    { segment: "", errorMessage: "agent namespace segment must be a non-empty string." },
+    { segment: ".", errorMessage: 'agent namespace segment must not be "." or "..".' },
+    { segment: "..", errorMessage: 'agent namespace segment must not be "." or "..".' },
+  ]) {
+    test(`D-CF4-01 rejects the folder ${JSON.stringify(segment)} in a declared name`, () => {
+      // arrange
+      const namespace = ["review", segment];
+
+      // act
+      const declareAgentName = () => declaredAgentName("demo", "security", namespace);
 
       // assert
       assert.throws(declareAgentName, (error: unknown) => {

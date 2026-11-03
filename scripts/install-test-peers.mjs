@@ -1,8 +1,9 @@
 // Installs the optional peers that the integration tests import into
-// node_modules/.cache/optional-peers. PIFL-03 keeps pi-mcp-adapter and
-// pi-subagents out of package.json dependencies and package-lock.json, so the
-// tests read them from this cache. Each peer is the lowest version that its
-// package.json `peerDependencies` range admits (PIFL-02).
+// node_modules/.cache/optional-peers. PIFL-03 keeps pi-mcp-adapter,
+// pi-subagents, and @quintinshaw/pi-dynamic-workflows out of package.json
+// dependencies and package-lock.json, so the tests read them from this cache.
+// Each peer is the lowest version that its package.json `peerDependencies`
+// range admits (PIFL-02).
 //
 // With no lockfile, the peers' own dependency ranges would resolve to the
 // newest release on each run. `--before` caps resolution at the newest floor's
@@ -25,7 +26,7 @@ const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 // test/integration/optional-peer.ts reads this directory; change the two together.
 const cacheParent = path.join(projectRoot, "node_modules", ".cache");
 const cacheDir = path.join(cacheParent, "optional-peers");
-const peerNames = ["pi-mcp-adapter", "pi-subagents"];
+const peerNames = ["pi-mcp-adapter", "pi-subagents", "@quintinshaw/pi-dynamic-workflows"];
 const retryHint = "Run `node scripts/install-test-peers.mjs` to retry.";
 
 function readJson(file) {

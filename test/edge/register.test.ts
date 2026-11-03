@@ -96,9 +96,9 @@ import type {
   ExtensionAPI,
   ExtensionCommandContext,
   ExtensionContext,
+  NotificationContext,
   SessionStartEvent,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -1636,7 +1636,9 @@ for (const mode of ["json", "rpc"] as const) {
     ]);
     assert.strictEqual(
       await readFile(path.join(locations.skillsTargetDir, "orphan-skill", "SKILL.md"), "utf8"),
-      "---\nname: orphan-skill\ndescription: A skill\n---\nbody\n",
+      "---\nname: orphan-skill\ndescription: A skill\n" +
+        `pi-claude-marketplace: {"names":["orphan:orphan-skill","orphan-skill"],"pluginRoot":"${plugin.resolvedSource}","pluginData":"${path.join(locations.extensionRoot, "data", "mp", "orphan")}"}\n` +
+        "---\nbody\n",
     );
     assert.strictEqual(
       (await loadState(locations.extensionRoot)).marketplaces.mp!.plugins.orphan!.enabled,

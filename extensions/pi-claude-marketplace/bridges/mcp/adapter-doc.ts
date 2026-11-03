@@ -1,7 +1,7 @@
 // bridges/mcp/adapter-doc.ts
 //
 // Reads an MCP config file and composes the next document the bridge writes
-// back. The read grammar is pi-mcp-adapter 5.2.0's loader grammar by
+// back. The read grammar is pi-mcp-adapter 7.0.0's loader grammar by
 // construction: the same `strip-json-comments` major with the same options,
 // after the same leading-BOM strip (AFILE-02). The server key is the key the
 // adapter's disable-writer picks, so entries land where the adapter loads
@@ -16,9 +16,9 @@
 // The top-level `_piClaudeMarketplace.serverChoices` member of the adapter
 // file holds a leaving server's user choices, keyed by its generated key and
 // recorded with the owning plugin's name and marketplace, until that plugin
-// stages the key again (D-08-02). pi-mcp-adapter 5.2.0 ignores and keeps unknown top-level
-// members. Only the adapter file holds the member; Pi's legacy `mcp.json`
-// never gains it.
+// stages the key again (D-08-02). pi-mcp-adapter 7.0.0 ignores and keeps
+// unknown top-level members. Only the adapter file holds the member; Pi's
+// legacy `mcp.json` never gains it.
 
 import { readFile } from "node:fs/promises";
 
@@ -329,8 +329,8 @@ function writtenBackOverride(entry: unknown): Record<string, unknown> | undefine
  * What one existing entry leaves in its place: itself, the override its
  * marker keeps with its own carried fields taking the entry's values
  * (AFILE-06), or nothing, which includes a kept override those values empty.
- * A name in `replaced` is restaged in this map, so the
- * new entry carries the plugin's kept override and absorbs an overlay.
+ * A name in `replaced` is restaged in this map, so the new entry carries the
+ * plugin's kept override and absorbs an overlay.
  */
 function survivingEntry(
   name: string,
@@ -376,11 +376,11 @@ function keptServers(
  * own order. A marked entry whose name is not restaged in its map writes back
  * the override its marker keeps, with its own carried fields taking the
  * entry's values, in the entry's position; one that keeps none, or whose
- * kept override those values empty, is removed (AFILE-01, AFILE-06). An overlay under the selected key that shares a name
- * with an entry is dropped, so the entry replaces it and keeps it in its
- * marker (AFILE-05, AFILE-06). Every existing top-level key keeps its
- * position. The selected key is added only when it is absent and `entries` is
- * non-empty, so no empty server map is introduced (AFILE-01, AFILE-03).
+ * kept override those values empty, is removed (AFILE-01, AFILE-06). An
+ * overlay under the selected key that shares a name with an entry is dropped,
+ * so the entry replaces it and keeps it in its marker (AFILE-05, AFILE-06).
+ * Every existing top-level key keeps its position. The selected key is added
+ * only when it is absent and `entries` is non-empty, so no empty server map is introduced (AFILE-01, AFILE-03).
  */
 export function withPluginServers(
   config: McpConfigDoc,
@@ -599,8 +599,8 @@ function nextChoices(
  * as `{ plugin, marketplace, fields }` under its name, replacing any store
  * entry there. Each name in `entries` consumes the store entry the
  * `(pluginName, marketplaceName)` pair recorded under it; another plugin's
- * store entry, or one without a marketplace, stays. A document with nothing captured or
- * consumed keeps its member as it is. The member is added last only when a
+ * store entry, or one without a marketplace, stays. A document with nothing
+ * captured or consumed keeps its member as it is. The member is added last only when a
  * choice is captured, `serverChoices` leaves when it empties, and the member
  * leaves when it then holds nothing. A member or `serverChoices` value that is
  * not a plain object is kept as it is and nothing is captured.

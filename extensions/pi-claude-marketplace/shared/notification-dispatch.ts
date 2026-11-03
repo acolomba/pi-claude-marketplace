@@ -1,3 +1,31 @@
+/**
+ * shared/notification-dispatch.ts -- the sole site that calls the Pi notify
+ * API (IL-2) and appendEntry API (JOUT-01). Text reaches `deliver`, which makes
+ * exactly one notify call from the argument tuple the text strategy returns
+ * (D-02). The text strategy in notification-grammar.ts supplies both the text
+ * and the argument count (D-15).
+ *
+ * Two paths reach the sink:
+ *
+ *  - The structured path. Every structured emission (`notify` and the context
+ *    emitters) is first presented once (notification-present.ts, JOUT-02). The
+ *    text strategy composes the body from that presentation and hands it with
+ *    the envelope to `formatEnvelopeArguments`; the JSON strategy
+ *    (notification-json.ts) reads the same value. Severity is a caller-stamped
+ *    per-row field, reduced to the envelope's severity at resolve time
+ *    (SEV-02). The command's run supplies the soft-dep snapshot (D-05).
+ *  - The raw-surface path. Each helper builds one `RawSurface` kind, which
+ *    `resolveRawSurface` serializes before transport selection (D-13). The MCP
+ *    config notice helper builds one per non-empty notice section.
+ *    Usage helpers receive the command run for the entry sink (D-05-05).
+ *
+ * The fallow rule `architecture/notify-chokepoint` excludes this file, so it
+ * needs no inline suppression.
+ *
+ * Callers import vocabulary from `notification-types.ts` and rendering or
+ * dispatch behavior directly from this file. No barrel re-exports.
+ */
+
 import { hookDebugLog } from "./debug-log.ts";
 import { resolveCommandError } from "./notification-command-error.ts";
 import {
@@ -22,7 +50,11 @@ import {
   presentReconcileApplied,
   presentUpdateNoOp,
 } from "./notification-present.ts";
-import { mcpConfigNoticeSurfaces, resolveRawSurface } from "./notification-resolve.ts";
+import {
+  mcpConfigNoticeSurfaces,
+  resolveRawSurface,
+  terminalSafeHookNotice,
+} from "./notification-resolve.ts";
 import { COMMAND_DELIVERY, requireNotificationMode } from "./notification-run.ts";
 import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
 
@@ -98,6 +130,7 @@ function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentatio
     case "mcp-config-notices":
     case "mcp-migration":
     case "background-update":
+    case "hook-notice":
       return false;
   }
 }
@@ -111,34 +144,6 @@ function commandStateFor(run: NotificationRun): CommandRunState | undefined {
       return undefined;
   }
 }
-
-/**
- * shared/notification-dispatch.ts -- the sole site that calls the Pi notify
- * API (IL-2) and appendEntry API (JOUT-01). Text reaches `deliver`, which makes
- * exactly one notify call from the argument tuple the text strategy returns
- * (D-02). The text strategy in notification-grammar.ts supplies both the text
- * and the argument count (D-15).
- *
- * Two paths reach the sink:
- *
- *  - The structured path. Every structured emission (`notify` and the context
- *    emitters) is first presented once (notification-present.ts, JOUT-02). The
- *    text strategy composes the body from that presentation and hands it with
- *    the envelope to `formatEnvelopeArguments`; the JSON strategy
- *    (notification-json.ts) reads the same value. Severity is a caller-stamped
- *    per-row field, reduced to the envelope's severity at resolve time
- *    (SEV-02). The command's run supplies the soft-dep snapshot (D-05).
- *  - The raw-surface path. Each helper builds one `RawSurface` kind, which
- *    `resolveRawSurface` serializes before transport selection (D-13). The MCP
- *    config notice helper builds one per non-empty notice section.
- *    Usage helpers receive the command run for the entry sink (D-05-05).
- *
- * The fallow rule `architecture/notify-chokepoint` excludes this file, so it
- * needs no inline suppression.
- *
- * Callers import vocabulary from `notification-types.ts` and rendering or
- * dispatch behavior directly from this file. No barrel re-exports.
- */
 
 /**
  * D-02 / D-15: makes exactly one notify call with the text strategy's arity.
@@ -280,8 +285,8 @@ export function notifyBackgroundUpdate(
 /**
  * Usage error notify (ES-3 primitive). Builds the `usage-error` kind from the
  * caller's message and usage block (RAWS-01, D-06). The text strategy joins
- * them with one blank line when usage is nonempty, at `error` severity (SNM-13); that blank
- * line is part of the user contract, and
+ * them with one blank line when usage is nonempty, at `error` severity
+ * (SNM-13). That blank line is part of the user contract, and
  * `test/shared/notification-dispatch.test.ts` asserts it byte-for-byte (the
  * SNM-13 case).
  */
@@ -468,6 +473,32 @@ export function notifyStopHookOverrideCap(
   cap: number,
 ): void {
   emitHookSurface(ctx, run, { kind: "stop-override-cap", pluginId, cap });
+}
+
+/**
+ * HOOK-05 / D-CF5-14 / D-CF5-24 IL-2 bridge seam: shows the user one notice a
+ * plugin's hook gave, built as the `hook-notice` hook kind. The hooks bridge
+ * (`bridges/hooks/dispatch.ts`) composes `text`, such as `<Event>[:<Tool>]
+ * says: <text>` for a `systemMessage`, and calls this once per notice, in
+ * routing order. The seam strips terminal escapes and control characters and
+ * bounds the length (`terminalSafeHookNotice`); the text strategy renders the
+ * result at `"info"` severity, and the JSON strategy appends it as `text`; it
+ * never reaches the model. A text that is empty, or that holds nothing but
+ * escapes, emits nothing. The byte form is locked by
+ * `test/architecture/hooks-notice-notify.test.ts` against the `hook-notice`
+ * block in `docs/output-catalog.md`.
+ */
+export function notifyHookNotice(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  text: string,
+): void {
+  const notice = terminalSafeHookNotice(text);
+  if (notice.length === 0) {
+    return;
+  }
+
+  emitHookSurface(ctx, run, { kind: "hook-notice", text: notice });
 }
 
 /**

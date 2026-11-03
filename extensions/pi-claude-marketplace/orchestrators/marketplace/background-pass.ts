@@ -3,6 +3,10 @@
 // turns autoupdate on, project scope first (MSG-GR-3). It is a separate run,
 // not a load, so a load still changes no installation state (APL-D1).
 //
+// D-LOC-01: the pass reads and changes the project scope only when Pi trusts
+// the project (`ctx.isProjectTrusted()`), as Claude Code loads no
+// project-scope plugin before the workspace is trusted.
+//
 // D-PL8-06 / D-PL8-12: the pass reports through a print-mode context whose
 // text goes to the debug log, and through a load-origin run whose entry sink
 // drops entries. Nothing reaches the session, and a load origin gives git
@@ -59,6 +63,8 @@ import type {
 /** The `input` event's context; Pi's extension context satisfies it. */
 export interface BackgroundContext extends NotificationContext {
   readonly cwd: string;
+  /** Whether Pi trusts the project at `cwd`. */
+  readonly isProjectTrusted: () => boolean;
 }
 
 /** One start of the pass. `isStopped` turns true when the runtime shuts down. */
@@ -93,6 +99,7 @@ export interface BackgroundPassDeps {
   readonly runWithAbortSignal: <T>(signal: AbortSignal, step: () => Promise<T>) => Promise<T>;
 }
 
+/** MSG-GR-3: the project scope runs before the user scope. */
 const SCOPES: readonly Scope[] = ["project", "user"];
 
 const DEBUG_TAG = "autoupdate";
@@ -361,9 +368,12 @@ function yieldingPluginUpdate(args: YieldingPluginUpdateArgs): PluginUpdateFn {
   };
 }
 
-/** Updates the autoupdate marketplaces of each scope; returns early once the pass is halted. */
-async function updateEveryScope(step: PassStep): Promise<void> {
-  for (const scope of SCOPES) {
+/**
+ * Updates the autoupdate marketplaces of each scope in `scopes`; returns early
+ * once the pass is halted.
+ */
+async function updateEveryScope(step: PassStep, scopes: readonly Scope[]): Promise<void> {
+  for (const scope of scopes) {
     // D-PL8-15 / D-PL8-25: a halted pass reads no further scope.
     if (step.halt.isHalted()) {
       return;
@@ -415,7 +425,11 @@ export function createBackgroundPass(deps: BackgroundPassDeps): BackgroundPass {
     };
 
     try {
-      await updateEveryScope(step);
+      // D-LOC-01: an untrusted project's scope is not read.
+      await updateEveryScope(
+        step,
+        ctx.isProjectTrusted() ? SCOPES : SCOPES.filter((scope) => scope === "user"),
+      );
     } catch (err: unknown) {
       // The pass's own error stays the one that propagates.
       try {

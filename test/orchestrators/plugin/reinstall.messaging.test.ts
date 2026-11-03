@@ -11,7 +11,11 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
 import { MarketplaceInLocalLayerOnlyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import {
+  runWithAllLoaded,
+  runWithNothingLoaded,
+  runWithSoftDeps,
+} from "../../shared/notification-run-seeds.ts";
 
 import type {
   ReinstallFailedOutcome,
@@ -99,7 +103,7 @@ test("reinstalledRowFromOutcome omits empty version, matching scope, reasons, an
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -130,7 +134,7 @@ test("reinstalledRowFromOutcome orders agent dependency and degraded reasons wit
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, "user");
+  const row = reinstalledRowFromOutcome(outcome, "user", runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -163,7 +167,7 @@ test("reinstalledRowFromOutcome projects an MCP-only dependency", () => {
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithAllLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -194,7 +198,7 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithAllLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -225,10 +229,9 @@ test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", 
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithAllLoaded().softDeps);
 
-  // assert -- SEV-01: the reinstall row stamps the marker and stays `info`; the
-  // no-raise asymmetry against install / update / enable is deliberate.
+  // assert
   assert.deepStrictEqual(row, {
     status: "reinstalled",
     name: "all-three",
@@ -238,6 +241,56 @@ test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", 
     needsReload: true,
   });
 });
+
+for (const { companion, declares, dependency, loaded } of [
+  {
+    companion: "pi-subagents",
+    declares: { declaresAgents: true, declaresMcp: false, declaresWorkflows: false },
+    dependency: "agents",
+    loaded: { piSubagentsLoaded: false, piMcpAdapterLoaded: true, workflowEngineLoaded: true },
+  },
+  {
+    companion: "pi-mcp-adapter",
+    declares: { declaresAgents: false, declaresMcp: true, declaresWorkflows: false },
+    dependency: "mcp",
+    loaded: { piSubagentsLoaded: true, piMcpAdapterLoaded: false, workflowEngineLoaded: true },
+  },
+  {
+    companion: "the workflow engine",
+    declares: { declaresAgents: false, declaresMcp: false, declaresWorkflows: true },
+    dependency: "workflows",
+    loaded: { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: false },
+  },
+] as const) {
+  test(`SEV-01: a reinstall whose declared ${companion} is unloaded raises the row to warning`, () => {
+    // arrange
+    const outcome: ReinstallReinstalledOutcome = {
+      partition: "reinstalled",
+      resourcesChanged: true,
+      name: "alpha",
+      marketplace: "official",
+      scope: "user",
+      version: "1.0.0",
+      fromVersion: "1.0.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      ...declares,
+    };
+
+    // act
+    const row = reinstalledRowFromOutcome(outcome, undefined, runWithSoftDeps(loaded).softDeps);
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "reinstalled",
+      name: "alpha",
+      dependencies: [dependency],
+      version: "1.0.0",
+      severity: "warning",
+      needsReload: true,
+    });
+  });
+}
 
 test("WDEP-02: a reinstall declaring no workflow carries no host-engine dependency", () => {
   // arrange
@@ -257,7 +310,7 @@ test("WDEP-02: a reinstall declaring no workflow carries no host-engine dependen
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row.dependencies, []);
@@ -281,7 +334,7 @@ test("UPR-03: a reinstall that moved its version composes the arrow from the rep
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -315,7 +368,7 @@ test("REI-01: a reinstall at the recorded revision composes the single version",
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -348,7 +401,7 @@ test("UPR-02: a reinstall onto a new commit at the same version names both commi
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -438,6 +491,46 @@ test("renderReinstallPartitionAndNotify projects a clean reinstalled row with a 
 
   // act
   renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "single");
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
+});
+
+test("SEV-01: the reinstall cascade reports an unloaded declared companion as needing attention", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation needs attention.",
+      "",
+      "● official [user]",
+      "  ● alpha v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}",
+      "",
+      "Plugin reinstall: 1 warning",
+      "",
+      "/reload to pick up changes",
+    ].join("\n"),
+    severity: "warning",
+  });
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "reinstalled",
+      resourcesChanged: true,
+      name: "alpha",
+      marketplace: "official",
+      scope: "user",
+      version: "1.0.0",
+      fromVersion: "1.0.0",
+      stagedAgentNames: ["reviewer"],
+      stagedMcpServerNames: ["docs"],
+      declaresAgents: true,
+      declaresMcp: true,
+      declaresWorkflows: false,
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "plural");
 
   // assert
   verify(harness.ctx);
@@ -967,7 +1060,7 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
       "● Beta [user]",
       "  ⊘ beta-failed (failed) {source missing}",
       "",
-      "Plugin reinstall: 1 failure, 1 warning, 3 successes",
+      "Plugin reinstall: 1 failure, 2 warnings, 2 successes",
       "",
       "/reload to pick up changes",
     ].join("\n"),
@@ -1078,10 +1171,11 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
-  // assert -- the malformed kinds first, the stale-command token at the tail,
-  // the same order the enable and update rows use.
+  // assert
+  // The malformed kinds come first and the stale-command token last, the same
+  // order the enable and update rows use.
   assert.deepStrictEqual(row, {
     status: "reinstalled",
     name: "alpha",
@@ -1094,7 +1188,8 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
 });
 
 test("WLIF-06: the token raises a row that has no other reason of its own", () => {
-  // arrange -- nothing degraded, so the raise can only come from this axis.
+  // arrange
+  // Nothing is degraded, so the raise can only come from this axis.
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
     resourcesChanged: true,
@@ -1112,7 +1207,7 @@ test("WLIF-06: the token raises a row that has no other reason of its own", () =
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -1126,9 +1221,10 @@ test("WLIF-06: the token raises a row that has no other reason of its own", () =
   });
 });
 
-test("WLIF-06: a reinstall that retired nothing renders the row it always rendered", () => {
-  // arrange -- the same outcome with the axis absent. The key must be ABSENT
-  // rather than present-and-empty, which is what preserves the legacy bytes.
+test("WLIF-06: a reinstall that retired nothing renders no reasons key", () => {
+  // arrange
+  // The axis is absent. The `reasons` key must be ABSENT rather than
+  // present-and-empty, which keeps the row bytes unchanged.
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
     resourcesChanged: true,
@@ -1145,7 +1241,7 @@ test("WLIF-06: a reinstall that retired nothing renders the row it always render
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -1179,7 +1275,7 @@ test("D-18-06: a reinstall names its malformed kinds before the kinds it left ou
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -1212,7 +1308,7 @@ test("D-18-06: an already partial record's reinstall names the left-out kind at 
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -1245,7 +1341,7 @@ test("D-18-06: a reinstall that newly left a kind out raises a row that has no o
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -1282,7 +1378,7 @@ test("D-10-15 / D-18-07: a reinstall that landed the marketplace's current copy 
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -1317,7 +1413,7 @@ test("D-10-13: a reinstall a dependent's range admitted names the range on its c
   };
 
   // act
-  const row = reinstalledRowFromOutcome(outcome, undefined);
+  const row = reinstalledRowFromOutcome(outcome, undefined, runWithNothingLoaded().softDeps);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -1332,14 +1428,17 @@ test("D-10-13: a reinstall a dependent's range admitted names the range on its c
 });
 
 test("REINSTALL_CONTEXT declares complete row policies", () => {
-  // act
-  const policies = REINSTALL_CONTEXT.rowPolicies;
-
-  // assert
-  assert.deepStrictEqual(policies, {
+  // arrange
+  const expectedPolicies = {
     reinstalled: { markers: true, contentReasons: true },
     skipped: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
     "manual recovery": { markers: false, contentReasons: true },
-  });
+  };
+
+  // act
+  const policies = REINSTALL_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, expectedPolicies);
 });

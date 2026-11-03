@@ -2,6 +2,54 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: component-features -- Component Behavioral Tests
+
+**Completed:** 2026-11-03 on `claude/quirky-planck-hhm592` (first closed 2026-11-02, reopened the same day; PR [#295](https://github.com/acolomba/pi-claude-marketplace/pull/295), no npm release yet)
+**Phases:** 8 | **Plans:** 65 | **Tasks:** 137 | **Requirements:** 62/62 | **Audit:** `tech_debt`, no blockers (integration 6/6, flows 5/5)
+
+### What Was Built
+
+- A cucumber harness that runs a real Pi 1.4.0 with a scripted faux model and the three companions (pi-subagents 0.84.0, pi-mcp-adapter 7.0.0, pi-dynamic-workflows 3.15.0), and compares whole model messages, so every bridged component kind is checked as Pi sees it after a real install, with no authenticated LLM. The suite ended at 1,539 scenarios.
+- Claude Code parity for typed skills and commands (argument substitution, variables, `!` commands), name aliases, a `run_plugin_command` tool, variable fill on a model's skill read (only of Pi's own read text), merged MCP sources, hook session/compaction/prompt/tool parity with whole hook output, and the workflow-wins name rule.
+- The locality principle (D-LOC-01, Phase 8): a project-scope operation keeps its effects in its project, trust comes from Pi alone, project workflows live in `.pi/`, and an untrusted project cannot turn on autoapply. It replaced a user-scope provenance ledger (D-CF2-13..16, D-CF3-07) that the first close had shipped.
+- Upstream fixes for Pi and pi-subagents, pushed to the user's forks for review.
+
+### What Worked
+
+- **Phase 1 as a harness phase, then six parallel component sessions.** Each child session owned its files and ran its own discuss/plan/execute/review/verify loop; the parent merged in a fixed order with `npm run check` after each merge, and conflicts stayed in the tracking files.
+- **One dubious-choices log collected from every session.** The user reviewed it one decision at a time through a short "waiting on you" digest; DC-41..45 came out of that review.
+- **Classifying each Pi gap as a bug or a design difference before reporting it.** Four of six Pi report items turned into accepted deviations with code changes, one became an upstream patch, and an investigation found the real pi-subagents bugs behind the MCP-07 gap.
+- **Writing the scenario before the fix.** For W2 and W4 the scenarios passed against the old code, which showed neither audit warning was a defect; they stayed as guards and no dead code was added.
+- **Re-verifying every phase after the reopen.** It found evidence the locality change had deleted (a skill path-variable scenario) and decision texts that no longer matched the code.
+
+### What Was Inefficient
+
+- **A whole security design was built and then reversed.** The provenance ledger grew through D-CF2-13..16 as each fix exposed the next writer, and the user then rejected the premise: a repository must not cause writes outside itself, even for security. Asking about the principle before the first ledger write would have saved four decisions, two phases' worth of plans and a reopen.
+- **A child session stalled in setup** and needed a replacement; the original later woke and had to stand down.
+- **A background `npm run check` started with a plain `&` died on a worker restart** and was reported as running for hours.
+- **Stale verification fingerprints** after doc-only and comment-only edits forced repeated verifier refreshes, and the first close-readiness check found three phases stale that the targeted re-verification had skipped.
+- **A first, wrong root cause** (a cache-key mismatch) was presented for the MCP-07 refusal before a probe found the validator bug, and the W2 walkthrough first named a collision case that actually aborts the install.
+
+### Patterns Established
+
+- **Locality as scope, not as reads versus writes:** a project-scope operation may use what the project inherits from the user scope (a marketplace, brought into the project first) but never materializes anything in the user scope.
+- **Upstream probes run offline:** `unshare -rn`, and only where the host's `/home/claude/.claude/remote` token directory is absent.
+- **A bug-or-design rule for upstream gaps:** report only real bugs (as patches on the user's fork); accept design differences and keep the extension consistent with them.
+- **Background jobs are tracked tasks,** never shell `&`, and status is read from the process, not the log.
+- **A retroactive phase** records work merged after a close, so the archive explains it.
+
+### Key Lessons
+
+1. Settle the governing principle with the user before designing around a threat; a well-built mitigation in the wrong place is still rework.
+2. Verify a suspected root cause, or a claimed defect, with a probe or a red scenario before presenting it.
+3. Before closing, check every phase's verification status, not only the phases the latest change touched.
+
+### Cost Observations
+
+- Model mix: Opus orchestrator, child sessions and verifiers; exact percentages were not recorded.
+- Sessions: one parent and six child sessions (one replacement), all archived at the close.
+- Timeline: 2026-10-31 -> 2026-11-03.
+
 ## Milestone: plugin-lifecycle -- Marketplace and Plugin Lifecycle Backlog
 
 **Completed:** 2026-10-29 on `features/plugin-lifecycle-p11` (PR #290, not yet merged, no npm release)
@@ -1097,6 +1145,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | json-output | 9 | Byte corpus captured before the first renderer change; one presentation model behind mode-selected text and JSON strategies; end-of-milestone tech-debt phases instead of carried items |
 | lifecycle-coverage | 30 | Command-complete Cucumber coverage against real headless Pi; many parallel sessions with explicit file ownership; read-only load plus explicit apply |
 | plugin-lifecycle | 11 | Parallel backlog closure followed by shared test/cleanup sweeps; one exact-tree gate reused by concurrent verifiers; dry-run archive validation |
+| component-features | 8 | A harness phase, then parallel component sessions with file ownership; a user-reviewed dubious-choices log; upstream gaps split into bugs (patches) and design differences (accepted); a reopen and a retroactive phase for the locality redesign |
 
 ### Cumulative Quality
 
@@ -1115,6 +1164,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | json-output | 10,228 (corpus run) | 3,149-record text corpus and output catalog byte-identical apart from ledgered exceptions; wire schema validated against all 260 catalog examples; real headless Pi at 0.87.1 and the 0.86.1 floor |
 | lifecycle-coverage | 825 scenarios | Every plugin lifecycle verb driven through a real headless Pi; path, GitHub, URL, and git-subdir source coverage |
 | plugin-lifecycle | 1,151 scenarios / 11,854 steps | 16 hooks and 309 direct-coverage records; all 64 requirements and 11 phase verifications current on the closeout tree |
+| component-features | 1,539 scenarios / 16,565 steps | Every bridged component kind checked against a real Pi with a scripted model; 327 direct-coverage records; 62/62 requirements and all 8 phase verifications current on the closeout tree |
 
 ### Top Lessons (Verified Across Milestones)
 

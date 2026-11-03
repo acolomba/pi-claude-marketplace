@@ -23,7 +23,10 @@ const WELL_PAST_THE_BOUND_MS = 2 * 24 * 60 * 60 * 1000;
 
 interface StagingScope {
   readonly home: string;
+  /** The user scope's locations, whose staging sits under the relocated home. */
   readonly locations: ScopedLocations;
+  /** The locations of a project scope rooted outside the home (D-LOC-01). */
+  readonly projectLocations: ScopedLocations;
 }
 
 /**
@@ -68,7 +71,11 @@ async function createStagingScope(t: TestContext, prefix: string): Promise<Stagi
   const scopeRoot = await mkdtemp(path.join(tmpdir(), `${prefix}scope-`));
 
   t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
-  return { home, locations: locationsFor("project", scopeRoot) };
+  return {
+    home,
+    locations: locationsFor("user", scopeRoot),
+    projectLocations: locationsFor("project", scopeRoot),
+  };
 }
 
 /** Backdate an entry so the sweep reads it as abandoned rather than in flight. */
@@ -157,24 +164,45 @@ test("returns an empty leak list when the staging directory is absent", async (t
   assert.deepStrictEqual(await stagingEntries(locations), []);
 });
 
+test("D-LOC-01: a project sweep removes only that project's aged staging trees", async (t) => {
+  // arrange
+  const { locations, projectLocations } = await createStagingScope(
+    t,
+    "workflows-staging-gc-project-",
+  );
+  await seedStagingTree(projectLocations, "project-abandoned", { aged: true });
+  await seedStagingTree(locations, "user-abandoned", { aged: true });
+
+  // act
+  const leaks = await garbageCollectWorkflowsStaging(projectLocations);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      leaks,
+      project: await stagingEntries(projectLocations),
+      user: await stagingEntries(locations),
+    },
+    { leaks: [], project: [], user: ["user-abandoned"] },
+  );
+});
+
 test("rethrows a non-ENOENT staging read failure without changing the path", async (t) => {
   // arrange
   const { locations } = await createStagingScope(t, "workflows-staging-gc-enotdir-");
   await mkdir(locations.workflowsHomeDir, { recursive: true });
   await writeFile(locations.workflowsStagingDir, "not a directory");
-  let caught: unknown;
 
-  // act
-  try {
-    await garbageCollectWorkflowsStaging(locations);
-  } catch (error) {
-    caught = error;
-  }
-
-  // assert
-  assert.ok(caught instanceof Error);
-  assert.strictEqual(caught.name, "Error");
-  assert.strictEqual((caught as NodeJS.ErrnoException).code, "ENOTDIR");
+  // act & assert
+  await assert.rejects(
+    () => garbageCollectWorkflowsStaging(locations),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.name, "Error");
+      assert.strictEqual((error as NodeJS.ErrnoException).code, "ENOTDIR");
+      return true;
+    },
+  );
 });
 
 test("skips an aged staging entry that is not a directory", async (t) => {
@@ -399,7 +427,6 @@ test("WR-02: sweeps an aged staging tree whose .previous is empty", async (t) =>
   assert.deepStrictEqual(await stagingEntries(locations), []);
 });
 
-// ---------------------------------------------------------------------------
 // WR-06: the read-only retained-tree scan.
 //
 // The sweep above declines to remove an aged tree whose `.previous/` still
@@ -408,7 +435,6 @@ test("WR-02: sweeps an aged staging tree whose .previous is empty", async (t) =>
 // names it. These cases pin the read-only sibling that names it, and pin that
 // it reports EXACTLY the set the sweep keeps for that reason -- same predicate,
 // same age bound -- so a live transaction mid-commit is never reported.
-// ---------------------------------------------------------------------------
 
 /** Give a staging tree a `.previous/` holding `count` displaced envelopes. */
 async function displace(root: string, count: number): Promise<string> {
@@ -597,7 +623,7 @@ test("WR-05: reports a retained tree whose .previous cannot be read, with no cou
 
 test("WR-02: the sweep's leak list and retention decisions survive the shared reader", async (t) => {
   // arrange
-  // The refactor's regression guard. One tree of each kind the sweep
+  // Regression guard for the shared reader. One tree of each kind the sweep
   // distinguishes -- retained for displaced envelopes, unremovable, ordinary
   // orphan -- swept in one pass, so a reader that answered any of the three
   // differently would move either the leak list or the surviving set.

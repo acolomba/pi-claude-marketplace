@@ -68,6 +68,11 @@ function resolvedFor(
   };
 }
 
+/** The D-CF3-06 record line a staged command ends its frontmatter with. */
+function recordLine(pluginRoot: string, pluginData: string): string {
+  return `"pi-claude-marketplace": {"pluginRoot":"${pluginRoot}","pluginData":"${pluginData}"}\n`;
+}
+
 async function pathIsPresent(filePath: string): Promise<boolean> {
   return access(filePath).then(
     () => true,
@@ -88,10 +93,15 @@ test("stages recursive commands with exact names, records, substitutions, and pr
     "---\ndescription: Show status\n---\n" + "Read ${CLAUDE_PLUGIN_DATA}/status.json.\n";
   const nestedSource = "---\ndescription: Build the web app\n---\nBuild web.\n";
   const expectedDeploy =
-    "---\ndescription: Deploy the service\n---\n" +
+    '---\n"description": "Deploy the service"\n' +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\n" +
     `Deploy from ${pluginRoot} in ${locations.scopeRoot}.\n`;
   const expectedStatus =
-    "---\ndescription: Show status\n---\n" + `Read ${pluginDataDir}/status.json.\n`;
+    '---\n"description": "Show status"\n' +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\n" +
+    `Read ${pluginDataDir}/status.json.\n`;
   await mkdir(path.join(commandsRoot, "build"), { recursive: true });
   await writeFile(path.join(commandsRoot, "acme-deploy.md"), deploySource);
   await writeFile(path.join(commandsRoot, "status.md"), statusSource);
@@ -148,7 +158,12 @@ test("stages recursive commands with exact names, records, substitutions, and pr
   assert.strictEqual(commitLeak, undefined);
   assert.deepStrictEqual(promptNames, ["acme:build:web.md", "acme:deploy.md", "acme:status.md"]);
   assert.strictEqual(deployBytes, expectedDeploy);
-  assert.strictEqual(nestedBytes, nestedSource);
+  assert.strictEqual(
+    nestedBytes,
+    '---\n"description": "Build the web app"\n' +
+      recordLine(pluginRoot, pluginDataDir) +
+      "---\nBuild web.\n",
+  );
   assert.strictEqual(statusBytes, expectedStatus);
 });
 
@@ -179,7 +194,9 @@ test("rewrites skill and command references in staged command Markdown", async (
   // assert
   assert.strictEqual(
     content,
-    "---\ndescription: Review\n---\nUse /skill:acme-helper, then /acme:review.\n",
+    '---\n"description": "Review"\n' +
+      recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data")) +
+      "---\nUse /skill:acme-helper, then /acme:review.\n",
   );
 });
 
@@ -201,7 +218,9 @@ test("stages a source led by a byte-order mark without the marker or a duplicate
     "\uFEFF---\ndescription: Deploy the service\nmodel: sonnet\n---\nDeploy carefully.\n",
   );
   const expectedDeploy =
-    "---\ndescription: Deploy the service\nmodel: sonnet\n---\nDeploy carefully.\n";
+    '---\n"description": "Deploy the service"\n"model": "sonnet"\n' +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\nDeploy carefully.\n";
 
   // act
   const prepared = await prepareStageCommands(createRemovalOps(), {
@@ -229,7 +248,7 @@ test("stages a source led by a byte-order mark without the marker or a duplicate
         targetPath: path.join(locations.promptsTargetDir, "acme:deploy.md"),
       },
     ],
-    warnings: [],
+    warnings: [{ kind: "discovery", message: "[deploy] dropped fields: model" }],
     degraded: [],
   });
   assert.strictEqual(deployBytes, expectedDeploy);
@@ -421,7 +440,12 @@ test("aborts staged commands without creating target prompts", async (t) => {
   const targetExists = await pathIsPresent(path.join(locations.promptsTargetDir, "acme:abort.md"));
 
   // assert
-  assert.strictEqual(stagedBytes, commandSource);
+  assert.strictEqual(
+    stagedBytes,
+    '---\n"description": "Abort me"\n' +
+      recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME)) +
+      "---\nDo not commit.\n",
+  );
   assert.strictEqual(abortLeak, undefined);
   assert.strictEqual(stagingExists, false);
   assert.strictEqual(targetExists, false);
@@ -459,7 +483,12 @@ test("removes prior owned prompts and tolerates a missing prior prompt during co
   // assert
   assert.strictEqual(commitLeak, undefined);
   assert.strictEqual(priorExists, false);
-  assert.strictEqual(currentBytes, currentSource);
+  assert.strictEqual(
+    currentBytes,
+    '---\n"description": "Current"\n' +
+      recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME)) +
+      "---\nCurrent prompt.\n",
+  );
 });
 
 test("neutralizes malformed frontmatter and preserves exact substituted body bytes", async (t) => {
@@ -470,7 +499,11 @@ test("neutralizes malformed frontmatter and preserves exact substituted body byt
   const malformedSource =
     "---\ntitle: Deploy: the whole thing\ndescription: never reached\n---\n\n" +
     "Run the deployment for ${CLAUDE_PLUGIN_ROOT}.\n";
-  const expectedBytes = `\nRun the deployment for ${pluginRoot}.\n`;
+  const expectedBytes =
+    `---\n"description": "Run the deployment for ${pluginRoot}."\n` +
+    recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME)) +
+    "---\n" +
+    `\nRun the deployment for ${pluginRoot}.\n`;
   const expectedParseError =
     "Nested mappings are not allowed in compact mappings at line 1, column 8:\n\n" +
     "title: Deploy: the whole thing\n       ^\n";
@@ -513,6 +546,9 @@ test("substitutes project variables and retains command-inapplicable skill varia
     "Project: ${CLAUDE_PROJECT_DIR}\n" +
     "Skill: ${CLAUDE_SKILL_DIR}\n";
   const expectedBytes =
+    `---\n"description": "Root: ${pluginRoot}"\n` +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\n" +
     `Root: ${pluginRoot}\n` +
     `Data: ${pluginDataDir}\n` +
     `Project: ${locations.scopeRoot}\n` +
@@ -548,7 +584,12 @@ test("retains the project variable for user scope and restores the user director
     "Data: ${CLAUDE_PLUGIN_DATA}\n" +
     "Project: ${CLAUDE_PROJECT_DIR}\n";
   const expectedBytes =
-    `Root: ${pluginRoot}\n` + `Data: ${pluginDataDir}\n` + "Project: ${CLAUDE_PROJECT_DIR}\n";
+    `---\n"description": "Root: ${pluginRoot}"\n` +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\n" +
+    `Root: ${pluginRoot}\n` +
+    `Data: ${pluginDataDir}\n` +
+    "Project: ${CLAUDE_PROJECT_DIR}\n";
   await mkdir(commandsRoot, { recursive: true });
   await writeFile(path.join(commandsRoot, "vars.md"), commandSource);
 
@@ -566,6 +607,40 @@ test("retains the project variable for user scope and restores the user director
 
   // assert
   assert.strictEqual(stagedBytes, expectedBytes);
+});
+
+test("D-CF3-06 records the same plugin root and data at user and project scope", async (t) => {
+  // arrange
+  const { agentDir } = await createHermeticEnvironment(t, "commands-stage-record-user-");
+  const userLocations = locationsFor("user", agentDir);
+  const projectLocations = await createProjectLocations(t, "commands-stage-record-project-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-record-");
+  const pluginDataDir = path.join(pluginRoot, "data");
+  await mkdir(path.join(pluginRoot, "commands"), { recursive: true });
+  await writeFile(path.join(pluginRoot, "commands", "scoped.md"), "Scope check.\n");
+  const expectedBytes =
+    '---\n"description": "Scope check."\n' +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\nScope check.\n";
+
+  // act
+  const stagedBytes = await Promise.all(
+    [userLocations, projectLocations].map(async (locations) => {
+      const prepared = await prepareStageCommands(createRemovalOps(), {
+        locations,
+        cwd: locations.scopeRoot,
+        pluginName: PLUGIN_NAME,
+        pluginRoot,
+        pluginDataDir,
+        resolved: resolvedFor(pluginRoot),
+      });
+      await commitPreparedCommands(createRemovalOps(), prepared);
+      return readFile(path.join(locations.promptsTargetDir, "acme:scoped.md"), "utf8");
+    }),
+  );
+
+  // assert
+  assert.deepStrictEqual(stagedBytes, [expectedBytes, expectedBytes]);
 });
 
 test("preserves first-wins discovery warnings on a staged result", async (t) => {
@@ -598,6 +673,140 @@ test("preserves first-wins discovery warnings on a staged result", async (t) => 
       message: `command source "tools/lint" in "${commandsRoot}" elides to generated name "acme:tools:lint", already produced by command source "acme-tools/lint"; ignoring duplicate.`,
     },
   ]);
+  assert.strictEqual(abortLeak, undefined);
+});
+
+test("skips a command that a workflow of its plugin names and stages the others", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-workflow-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-workflow-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  await mkdir(path.join(commandsRoot, "tools"), { recursive: true });
+  await writeFile(path.join(commandsRoot, "hello.md"), "Hello command.\n");
+  await writeFile(path.join(commandsRoot, "tools", "lint.md"), "Lint command.\n");
+  await writeFile(path.join(commandsRoot, "zeta.md"), "Zeta command.\n");
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+    workflowNames: ["acme:hello", "acme:tools:lint", "acme:other"],
+  });
+  const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      kind: prepared.kind,
+      stagedNames: prepared.result.stagedNames,
+      recorded: prepared.result.recorded.map((record) => record.generatedName),
+      warnings: prepared.result.warnings,
+    },
+    {
+      kind: "staged",
+      stagedNames: ["acme:zeta"],
+      recorded: ["acme:zeta"],
+      warnings: [
+        {
+          kind: "discovery",
+          message:
+            'command source "hello" has the same name "acme:hello" as a workflow of the plugin; ignoring the command.',
+        },
+        {
+          kind: "discovery",
+          message:
+            'command source "tools/lint" has the same name "acme:tools:lint" as a workflow of the plugin; ignoring the command.',
+        },
+      ],
+    },
+  );
+  assert.strictEqual(abortLeak, undefined);
+});
+
+test("returns a no-op with the warning when a workflow names the only command", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-workflow-noop-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-workflow-noop-");
+  await mkdir(path.join(pluginRoot, "commands"), { recursive: true });
+  await writeFile(path.join(pluginRoot, "commands", "hello.md"), "Hello command.\n");
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+    workflowNames: ["acme:hello"],
+  });
+  const stagingExists = await pathIsPresent(locations.commandsStagingDir);
+
+  // assert
+  assert.deepStrictEqual(prepared, {
+    kind: "noop",
+    result: {
+      stagedNames: [],
+      recorded: [],
+      warnings: [
+        {
+          kind: "discovery",
+          message:
+            'command source "hello" has the same name "acme:hello" as a workflow of the plugin; ignoring the command.',
+        },
+      ],
+      degraded: [],
+    },
+  });
+  assert.strictEqual(stagingExists, false);
+});
+
+test("D-CF3-09 returns the discover warnings, then each dropped-fields line in command order", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-dropped-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-dropped-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  await mkdir(path.join(commandsRoot, "acme-tools"), { recursive: true });
+  await mkdir(path.join(commandsRoot, "tools"), { recursive: true });
+  await writeFile(
+    path.join(commandsRoot, "acme-tools", "lint.md"),
+    "---\ndescription: Lints.\nmodel: opus\neffort: high\n---\nLint.\n",
+  );
+  await writeFile(path.join(commandsRoot, "tools", "lint.md"), "second prompt\n");
+  await writeFile(
+    path.join(commandsRoot, "deploy.md"),
+    "---\ndescription: Deploys.\nargument-hint: <env>\n---\nDeploy.\n",
+  );
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+  });
+  const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
+
+  // assert
+  assert.deepStrictEqual(
+    { stagedNames: prepared.result.stagedNames, warnings: prepared.result.warnings },
+    {
+      stagedNames: ["acme:tools:lint", "acme:deploy"],
+      warnings: [
+        {
+          kind: "discovery",
+          message: `command source "tools/lint" in "${commandsRoot}" elides to generated name "acme:tools:lint", already produced by command source "acme-tools/lint"; ignoring duplicate.`,
+        },
+        { kind: "discovery", message: "[acme-tools/lint] dropped fields: model, effort" },
+      ],
+    },
+  );
   assert.strictEqual(abortLeak, undefined);
 });
 
@@ -662,23 +871,26 @@ test("reports a commit rollback leak without promoting it to manual recovery", a
   const rollbackBlocker = path.join(prepared.stagingRoot, "rollback-blocker.md");
   await mkdir(rollbackBlocker, { recursive: true });
   await writeFile(path.join(rollbackBlocker, "child.txt"), "keep child\n");
-  const alphaPair = prepared._renamePairs.find((pair) => pair.to.endsWith("acme:alpha.md")) as
-    { from: string; to: string } | undefined;
+  const alphaPair = prepared._renamePairs.find((pair) => pair.to.endsWith("acme:alpha.md"));
   assert.ok(alphaPair);
   const actualFrom = alphaPair.from;
   let fromReads = 0;
-  delete (alphaPair as Partial<typeof alphaPair>).from;
-  Object.defineProperty(alphaPair, "from", {
-    configurable: true,
-    enumerable: true,
-    get() {
+  const shiftingAlphaPair = {
+    get from(): string {
       fromReads += 1;
       return fromReads === 1 ? actualFrom : rollbackBlocker;
     },
-  });
+    to: alphaPair.to,
+  };
+  const shiftingPrepared = {
+    ...prepared,
+    _renamePairs: prepared._renamePairs.map((pair) =>
+      pair === alphaPair ? shiftingAlphaPair : pair,
+    ),
+  };
 
   // act
-  const error = await commitPreparedCommands(createRemovalOps(), prepared).then(
+  const error = await commitPreparedCommands(createRemovalOps(), shiftingPrepared).then(
     () => undefined,
     (reason: unknown) => reason,
   );
@@ -857,9 +1069,22 @@ test("normalizes lone-CR and repeated malformed blocks to exact body bytes", asy
     prepared.result.degraded.map(({ generatedName }) => generatedName),
     ["acme:frontmatter-only", "acme:lone-cr", "acme:repeated"],
   );
-  assert.strictEqual(loneCrBytes, "\nLone CR body.\n");
-  assert.strictEqual(repeatedBytes, "Repeated body.\n");
-  assert.strictEqual(frontmatterOnlyBytes, "");
+  const expectedRecord = recordLine(
+    pluginRoot,
+    path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+  );
+  assert.strictEqual(
+    loneCrBytes,
+    '---\n"description": "Lone CR body."\n' + expectedRecord + "---\n\nLone CR body.\n",
+  );
+  assert.strictEqual(
+    repeatedBytes,
+    '---\n"description": "Repeated body."\n' + expectedRecord + "---\nRepeated body.\n",
+  );
+  assert.strictEqual(
+    frontmatterOnlyBytes,
+    '---\n"description": "Plugin command"\n' + expectedRecord + "---\n",
+  );
 });
 
 test("cleans staging when a repeated malformed block reaches the no-opening safeguard", async (t) => {
@@ -964,4 +1189,61 @@ test("cleans staging when a repeated malformed block reaches the no-close safegu
   assert.strictEqual(error.name, "BridgeStagingError");
   assert.strictEqual(remainderCloseSearches, 3);
   assert.deepStrictEqual(stagingChildren, []);
+});
+
+test("D-CF3-03 stages an inline command map entry and records it under the plugin root's commands key", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-inline-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-inline-");
+  const pluginDataDir = path.join(pluginRoot, "data");
+  const expectedBeta =
+    '---\n"description": "Beta from the manifest."\n' +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\nBeta inline body in ${CLAUDE_PLUGIN_ROOT}".replace("${CLAUDE_PLUGIN_ROOT}", pluginRoot);
+  const resolved: ResolvedPluginInstallable = {
+    ...resolvedFor(pluginRoot, []),
+    supported: ["commands"],
+    componentPaths: {
+      ...resolvedFor(pluginRoot, []).componentPaths,
+      commandMap: [
+        {
+          key: "beta",
+          content: "Beta inline body in ${CLAUDE_PLUGIN_ROOT}",
+          origin: "manifest",
+          description: "Beta from the manifest.",
+        },
+      ],
+    },
+  };
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir,
+    resolved,
+  });
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
+
+  // assert
+  assert.deepStrictEqual(
+    { commitLeak, recorded: prepared.result.recorded, warnings: prepared.result.warnings },
+    {
+      commitLeak: undefined,
+      recorded: [
+        {
+          generatedName: "acme:beta",
+          sourcePath: `${pluginRoot}#commands.beta`,
+          targetPath: path.join(locations.promptsTargetDir, "acme:beta.md"),
+        },
+      ],
+      warnings: [],
+    },
+  );
+  assert.strictEqual(
+    await readFile(path.join(locations.promptsTargetDir, "acme:beta.md"), "utf8"),
+    expectedBeta,
+  );
 });

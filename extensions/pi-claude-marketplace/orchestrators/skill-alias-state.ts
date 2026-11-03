@@ -1,8 +1,33 @@
+// orchestrators/skill-alias-state.ts
+//
+// D-CF2-02: the slash names a user can type for a bridged skill besides
+// `/skill:<generated name>`. They are exactly Claude Code 2.1.316's names for
+// the skill, which install stored in the record line of each staged
+// `SKILL.md` (`readSkillRecord`); this module reads them back at session time
+// and never reads the plugin source.
+//
+// D-CF2-02, extended to commands: a bridged command with a frontmatter `name`
+// also answers to `<plugin>:<name>` and, for a name with no `:`, the bare
+// `<name>`, as Claude Code 2.1.316 names it.
+// The staged command keeps its source frontmatter, so its names are read from
+// the staged file at session time with the skills' own rule
+// (`frontmatterNameAliases`).
+//
+// A name goes to the first skill or command that claims it, in loader order:
+// the user root before the project root, and state order within a root. Every
+// skill claims before any command, so a command alias never takes a name a
+// skill already answers to. SK-6: a name that a Pi command of another source
+// already has stays with that command.
+
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { frontmatterNameAliases, readSkillRecord } from "../bridges/skills/skill-names.ts";
 import { generatedSkillName } from "../domain/name.ts";
 import { loadState } from "../persistence/state-io.ts";
-import { getAgentDir } from "../platform/pi-api.ts";
+import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
 
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 
@@ -12,7 +37,15 @@ export interface SkillAliasState {
       string,
       {
         readonly plugins: Readonly<
-          Record<string, { readonly resources: { readonly skills: readonly string[] } }>
+          Record<
+            string,
+            {
+              readonly resources: {
+                readonly skills: readonly string[];
+                readonly prompts?: readonly string[];
+              };
+            }
+          >
         >;
       }
     >
@@ -22,9 +55,42 @@ export interface SkillAliasState {
 export interface SkillAliasDependencies {
   readonly loadState: (extensionRoot: string) => Promise<SkillAliasState>;
   readonly getAgentDir: () => string;
+  readonly readFile: (file: string) => Promise<string>;
 }
 
-const DEFAULT_DEPENDENCIES: SkillAliasDependencies = { loadState, getAgentDir };
+/** What a plugin alias stands for: a bridged skill or a bridged command. */
+export type PluginAliasTarget =
+  | { readonly kind: "skill"; readonly generatedName: string }
+  | { readonly kind: "command"; readonly name: string };
+
+const DEFAULT_DEPENDENCIES: SkillAliasDependencies = {
+  loadState,
+  getAgentDir,
+  readFile: (file) => readFile(file, "utf8"),
+};
+
+/** A skill or command of the state whose staged file Pi has loaded. */
+interface LoadedEntry {
+  readonly pluginName: string;
+  /** The generated skill name, or the command's Pi name. */
+  readonly name: string;
+  readonly file: string;
+}
+
+/** How one kind of bridged resource is found and named. */
+interface AliasKind {
+  /** The Pi command source that loads the kind. */
+  readonly source: "skill" | "prompt";
+  /** The names a plugin record lists for the kind. */
+  readonly resources: (record: {
+    readonly skills: readonly string[];
+    readonly prompts?: readonly string[];
+  }) => readonly string[];
+  /** The staged file of `name` under the scope root `root`. */
+  readonly stagedFile: (root: string, name: string) => string;
+  /** The names the entry claims, read from its staged frontmatter. */
+  readonly names: (entry: LoadedEntry, frontmatter: Record<string, unknown>) => readonly string[];
+}
 
 /** Removes the plugin prefix from a generated Pi skill name. */
 function skillSuffix(pluginName: string, generatedName: string): string | undefined {
@@ -44,67 +110,187 @@ function skillSuffix(pluginName: string, generatedName: string): string | undefi
     : undefined;
 }
 
-/** Adds only aliases whose recorded skill file Pi has loaded. */
-function addPluginAliases(
-  aliases: Map<string, string>,
-  pluginName: string,
-  generatedNames: readonly string[],
+/**
+ * D-CF2-02 residual: the one alias of a skill staged before install stored its
+ * names, derived from its generated name with the plugin prefix cut off. Claude
+ * Code has no such name; the skill keeps it until its plugin is staged again.
+ */
+function legacyAliases(skill: LoadedEntry): readonly string[] {
+  const suffix = skillSuffix(skill.pluginName, skill.name);
+  return suffix === undefined ? [] : [`${skill.pluginName}:${suffix}`];
+}
+
+/**
+ * D-CF2-02 / T-02-17: the stored names in the forms install writes for a skill
+ * of `pluginName`: names under the plugin's own prefix, and the one bare
+ * frontmatter name. A record that claims other names was not written by
+ * install for this plugin, so those names are dropped.
+ */
+function installedForms(pluginName: string, names: readonly string[]): readonly string[] {
+  const prefix = `${pluginName}:`;
+  const bare = names.find((name) => !name.includes(":"));
+  return names.filter((name) => name.startsWith(prefix) || name === bare);
+}
+
+const SKILL_KIND: AliasKind = {
+  source: "skill",
+  resources: (record) => record.skills,
+  stagedFile: (root, name) =>
+    path.join(root, "pi-claude-marketplace", "resources", "skills", name, "SKILL.md"),
+  names: (entry, frontmatter) => {
+    const record = readSkillRecord(frontmatter);
+    return record === undefined
+      ? legacyAliases(entry)
+      : installedForms(entry.pluginName, record.names);
+  },
+};
+
+const COMMAND_KIND: AliasKind = {
+  source: "prompt",
+  resources: (record) => record.prompts ?? [],
+  stagedFile: (root, name) =>
+    path.join(root, "pi-claude-marketplace", "resources", "prompts", `${name}.md`),
+  names: (entry, frontmatter) => frontmatterNameAliases(entry.pluginName, frontmatter.name),
+};
+
+/** The names the staged file of `entry` claims; none when it cannot be read. */
+async function entryNames(
+  kind: AliasKind,
+  entry: LoadedEntry,
+  dependencies: Pick<SkillAliasDependencies, "readFile">,
+): Promise<readonly string[]> {
+  let frontmatter: Record<string, unknown>;
+  try {
+    frontmatter = parseFrontmatter(await dependencies.readFile(entry.file)).frontmatter;
+  } catch (err) {
+    hookDebugLog(`skill aliases skip ${entry.file}: ${errorMessage(err)}`, "skills");
+    return [];
+  }
+
+  return kind.names(entry, frontmatter);
+}
+
+/** The entries of the state under `root` whose staged file Pi has loaded, in state order. */
+function loadedEntries(
+  kind: AliasKind,
+  state: SkillAliasState,
   root: string,
   loadedPaths: ReadonlySet<string>,
-  reserved: ReadonlySet<string>,
-): void {
-  for (const generatedName of generatedNames) {
-    const suffix = skillSuffix(pluginName, generatedName);
-    if (suffix === undefined) {
+): readonly LoadedEntry[] {
+  return Object.values(state.marketplaces)
+    .flatMap((marketplace) => Object.entries(marketplace.plugins))
+    .flatMap(([pluginName, plugin]) =>
+      kind.resources(plugin.resources).map((name) => ({
+        pluginName,
+        name,
+        file: path.resolve(kind.stagedFile(root, name)),
+      })),
+    )
+    .filter((entry) => loadedPaths.has(entry.file));
+}
+
+/** One scope root whose state could be read. */
+interface ReadScope {
+  readonly root: string;
+  readonly state: SkillAliasState;
+}
+
+/**
+ * The scope roots whose state can be read, user first. T-02-17: the project
+ * root is read only when Pi trusts the project (`projectTrusted`), as Claude
+ * Code loads no project-scope plugin before the workspace is trusted.
+ */
+async function readScopes(
+  cwd: string,
+  projectTrusted: boolean,
+  resolved: SkillAliasDependencies,
+): Promise<readonly ReadScope[]> {
+  const roots = [resolved.getAgentDir(), ...(projectTrusted ? [path.join(cwd, ".pi")] : [])];
+  const scopes: ReadScope[] = [];
+  for (const root of roots) {
+    let state: SkillAliasState;
+    try {
+      // eslint-disable-next-line no-await-in-loop -- two scope roots, one state read each
+      state = await resolved.loadState(path.join(root, "pi-claude-marketplace"));
+    } catch (err) {
+      hookDebugLog(`skill aliases skip the state under ${root}: ${errorMessage(err)}`, "skills");
       continue;
     }
 
-    const alias = `${pluginName}:${suffix}`;
-    const skillPath = path.resolve(
-      root,
-      "pi-claude-marketplace",
-      "resources",
-      "skills",
-      generatedName,
-      "SKILL.md",
-    );
-    if (loadedPaths.has(skillPath) && !reserved.has(alias)) {
-      aliases.set(alias, generatedName);
-    }
+    scopes.push({ root, state });
   }
+
+  return scopes;
 }
 
-/** Maps loaded plugin skills from state to their qualified slash names. */
-export async function loadQualifiedSkillAliases(
-  pi: ExtensionAPI,
-  cwd: string,
-  dependencies: SkillAliasDependencies = DEFAULT_DEPENDENCIES,
+/**
+ * D-CF2-02: maps each name that a loaded entry of `kind` claims to
+ * the entry's own name. The first claim wins, and a name that a Pi command of
+ * another source has is never mapped (SK-6).
+ */
+async function kindAliases(
+  kind: AliasKind,
+  commands: ReturnType<ExtensionAPI["getCommands"]>,
+  scopes: readonly ReadScope[],
+  resolved: SkillAliasDependencies,
 ): Promise<ReadonlyMap<string, string>> {
-  const commands = pi.getCommands();
   const reserved = new Set(
     commands.filter((command) => command.source !== "skill").map((command) => command.name),
   );
   const loadedPaths = new Set(
     commands
-      .filter((command) => command.source === "skill")
+      .filter((command) => command.source === kind.source)
       .map((command) => path.resolve(command.sourceInfo.path)),
   );
-  const roots = [dependencies.getAgentDir(), path.join(cwd, ".pi")];
+  const entries = scopes.flatMap(({ root, state }) =>
+    loadedEntries(kind, state, root, loadedPaths),
+  );
+  const claims = await Promise.all(
+    entries.map(async (entry) => ({
+      name: entry.name,
+      names: await entryNames(kind, entry, resolved),
+    })),
+  );
   const aliases = new Map<string, string>();
-
-  for (const root of roots) {
-    let state: SkillAliasState;
-    try {
-      // eslint-disable-next-line no-await-in-loop -- two scope roots, one state read each
-      state = await dependencies.loadState(path.join(root, "pi-claude-marketplace"));
-    } catch {
-      continue;
-    }
-
-    for (const marketplace of Object.values(state.marketplaces)) {
-      for (const [pluginName, plugin] of Object.entries(marketplace.plugins)) {
-        addPluginAliases(aliases, pluginName, plugin.resources.skills, root, loadedPaths, reserved);
+  for (const { name, names } of claims) {
+    for (const alias of names) {
+      if (!reserved.has(alias) && !aliases.has(alias)) {
+        aliases.set(alias, name);
       }
+    }
+  }
+
+  return aliases;
+}
+
+/**
+ * D-CF2-02: the plugin alias table under the rules of
+ * `kindAliases`: every name a loaded bridged skill stored, mapped to its
+ * generated name, then each name that the frontmatter `name` of a loaded
+ * bridged command gives it and no skill claimed, mapped to the command's Pi
+ * name. A command alias never displaces a name a skill answers to.
+ */
+export async function loadPluginAliases(
+  pi: ExtensionAPI,
+  cwd: string,
+  projectTrusted: boolean,
+  dependencies: Partial<SkillAliasDependencies> = {},
+): Promise<ReadonlyMap<string, PluginAliasTarget>> {
+  const resolved = { ...DEFAULT_DEPENDENCIES, ...dependencies };
+  const commands = pi.getCommands();
+  const scopes = await readScopes(cwd, projectTrusted, resolved);
+  const [skills, prompts] = await Promise.all([
+    kindAliases(SKILL_KIND, commands, scopes, resolved),
+    kindAliases(COMMAND_KIND, commands, scopes, resolved),
+  ]);
+  const aliases = new Map<string, PluginAliasTarget>();
+  for (const [alias, generatedName] of skills) {
+    aliases.set(alias, { kind: "skill", generatedName });
+  }
+
+  for (const [alias, name] of prompts) {
+    if (!aliases.has(alias)) {
+      aliases.set(alias, { kind: "command", name });
     }
   }
 

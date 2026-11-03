@@ -105,18 +105,18 @@ try {
 ' "$repo_root/test/pi-runtime.ts" "$repo_root")
 
 # Companion extensions, pinned here only (PIFL-07): never as dependencies,
-# devDependencies or package-lock.json entries (NFR-5, D-98-10). package.json
-# declares pi-mcp-adapter and pi-subagents as optional peers. Engine 3.14.0
-# is the newest release that docs/workflows-compatibility.md grades. It
-# includes engine PR #232, which fixes result delivery under the
+# devDependencies or package-lock.json entries (NFR-5, D-98-10). Each pin is
+# the floor that package.json declares for that optional peer, and engine
+# 3.15.0 is the declared optional-peer floor of the workflow engine. The
+# engine includes engine PR #232, which fixes result delivery under the
 # --no-extensions -e launch below. It stores workflows under
 # PI_CODING_AGENT_DIR when that variable is set, as the bridge does
 # (WPTH-04). --home sets the variable, so an engine before 3.14.0 does not
 # find the workflows the bridge installs.
 pi_cm_pins=(
-  "pi-mcp-adapter@5.2.0"
-  "pi-subagents@0.74.0"
-  "@quintinshaw/pi-dynamic-workflows@3.14.0"
+  "pi-mcp-adapter@7.0.0"
+  "pi-subagents@0.84.0"
+  "@quintinshaw/pi-dynamic-workflows@3.15.0"
 )
 
 # Prefix resolved against the invocation directory, before the --cd change

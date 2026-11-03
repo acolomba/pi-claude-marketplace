@@ -9,6 +9,12 @@
 // the bucket runs but its result is discarded, SFAIL-01); `pending`,
 // `aborted`, `toolUse` and `deferred` dispatch nothing.
 //
+// As Claude Code 2.1.316 does, a Stop re-entry sends every blocking reason
+// and every `additionalContext` back in one message, one
+// `Stop hook feedback:\n<text>` part per value in routing order (D-CF5-11 /
+// D-CF5-13 / D-CF5-25), and each Stop `systemMessage` is shown to the user as
+// `Stop says: <text>`, never to the model (D-CF5-14).
+//
 // Both handlers carry the captured-generation guard so a stale closure from a
 // prior `/reload` cannot fire against rebuilt routing tables;
 // `resetSettleState` clears the cache cell in `registerHooksBridge` for the
@@ -16,14 +22,16 @@
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { notifyStopHookOverrideCap } from "../../shared/notification-dispatch.ts";
+import { notifyHookNotice, notifyStopHookOverrideCap } from "../../shared/notification-dispatch.ts";
 import { openNotificationRun, requireNotificationMode } from "../../shared/notification-run.ts";
 
 import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
+import { hookSaysText } from "./hook-labels.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
 import { STOP_OVERRIDE_CAP, type HooksRuntime } from "./runtime.ts";
 
-import type { HookExecutor } from "./dispatch.ts";
+import type { BucketOutcome, HookExecutor } from "./dispatch.ts";
+import type { HookExecResult } from "./exec-result.ts";
 import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 import type { StopEvent } from "./payloads/stop.ts";
 import type { StopFailureErrorType } from "../../domain/components/hook-events.ts";
@@ -34,6 +42,7 @@ import type {
   AssistantMessage,
   ExtensionAPI,
   ExtensionContext,
+  PiTextContentBlock,
 } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 
@@ -207,26 +216,87 @@ function renderAssistantText(message: AssistantMessage): string {
   return parts.join("");
 }
 
+// A non-empty hook output, or `undefined`.
+function nonEmpty(text: string | undefined): string | undefined {
+  return text === undefined || text === "" ? undefined : text;
+}
+
+// What one Stop hook sends back: its block reason, then its own
+// `additionalContext`, each when present.
+function feedbackTexts(result: HookExecResult): string[] {
+  const texts = result.kind === "block" ? [result.reason ?? ""] : [];
+  const context = nonEmpty(result.additionalContext);
+  return context === undefined ? texts : [...texts, context];
+}
+
+/**
+ * D-CF5-11 / D-CF5-13 / D-CF5-25: the feedback the Stop hooks send back to the
+ * model, one `Stop hook feedback:\n<text>` part per value in routing order. A
+ * hook that neither blocks nor adds context adds no part. The plugin is the
+ * first hook that adds one, or `undefined` when none does; it names the
+ * re-entry and the cap notice.
+ */
+function stopFeedback(outcomes: readonly BucketOutcome[]): {
+  readonly parts: PiTextContentBlock[];
+  readonly pluginId: string | undefined;
+} {
+  return {
+    parts: outcomes.flatMap(({ result }) =>
+      feedbackTexts(result).map((text) => ({
+        type: "text" as const,
+        text: `Stop hook feedback:\n${text}`,
+      })),
+    ),
+    pluginId: outcomes.find(({ result }) => feedbackTexts(result).length > 0)?.entry.pluginId,
+  };
+}
+
+/**
+ * HOOK-05 / D-CF5-14: show the user each Stop hook's non-empty
+ * `systemMessage` as `Stop says: <text>`, in routing order, through the run
+ * the settle handler opened. A notice never reaches the model, and a notice
+ * that fails to show is debug-logged and never fails the settle.
+ */
+function showStopNotices(
+  ctx: ExtensionContext,
+  run: NotificationRun,
+  outcomes: readonly BucketOutcome[],
+): void {
+  for (const { result } of outcomes) {
+    const message = nonEmpty(result.systemMessage);
+    if (message === undefined) {
+      continue;
+    }
+
+    try {
+      notifyHookNotice(ctx, run, hookSaysText("Stop", message));
+    } catch (error: unknown) {
+      hookDebugLog(`settle: Stop notice failed: ${errorMessage(error)}`);
+    }
+  }
+}
+
 /**
  * Run the Stop bucket and adapt the collected outcomes over the full
  * `HookExecResult` union (STOP-03..06). Because D-88-05 makes Stop precedence
  * AGGREGATE (any `continue:false` suppresses re-entry regardless of another
- * hook's block), the bucket is collected without the first-block/stop
- * short-circuit `reduceBucket` uses, then scanned:
+ * hook's block), the bucket is collected without a short-circuit, its
+ * notices are shown (D-CF5-14), and then:
  *
  *   1. any `stop` (continue:false) among the group -> no re-entry (STOP-06).
- *   2. else the first `block` -> re-enter with the reason (STOP-03; exit-2
- *      already maps to `{kind:"block",reason:stderr}` in `parseHookStdout`, so
- *      STOP-04 rides this arm with no Stop-specific exit handling).
- *   3. else the first `mutate` carrying `additionalContext` -> re-enter with
- *      that context (STOP-05), via the SAME lane as a block.
- *   4. else nothing (`noop`).
+ *   2. else, when any hook blocks or adds context, re-enter once with every
+ *      reason and context as `Stop hook feedback:` parts (STOP-03 / STOP-05 /
+ *      D-CF5-25; exit-2 already maps to `{kind:"block",reason:stderr}` in
+ *      `parseHookStdout`, so STOP-04 rides this arm with no Stop-specific exit
+ *      handling).
+ *   3. else nothing (`noop`).
  *
  * Re-entry uses `sendMessage({deliverAs:"followUp", triggerTurn:true})` (the
  * agent is idle at settle, so `triggerTurn` starts the new turn),
- * display-suppressed. A Stop hook declaring `asyncRewake:true` cannot yield a
- * synchronous decision and is degraded to `noop` inside `collectBucketOutcomes`
- * with a `hookDebugLog` -- no silent block loss.
+ * display-suppressed, and passes once through the STOP-07 cap. A Stop hook
+ * declaring `asyncRewake:true` cannot yield a synchronous decision and is
+ * degraded to `noop` inside `collectBucketOutcomes` with a `hookDebugLog` --
+ * no silent block loss.
  *
  * The generation is re-checked AFTER the bucket's hooks finish: hook subprocesses
  * can outlive a `/reload`, and the entry-time guard in `settleHandlerFor` only
@@ -271,6 +341,8 @@ async function runStopBucket(
     return;
   }
 
+  showStopNotices(ctx, run, outcomes);
+
   // STOP-06 / D-88-05: any continue:false suppresses re-entry. This is a
   // non-re-entry outcome, so it resets the consecutive re-entry counter
   // (D-88-08).
@@ -284,22 +356,13 @@ async function runStopBucket(
     return;
   }
 
-  // STOP-03 / STOP-04: first block wins. Re-entry funnels through the shared
-  // bounded lane so it counts toward the STOP-07 cap (D-88-08).
-  const block = outcomes.find((o) => o.result.kind === "block");
-  if (block?.result.kind === "block") {
-    reenterBounded(runtime, pi, ctx, run, block.result.reason ?? "", block.entry.pluginId);
-    return;
-  }
-
-  // STOP-05: additionalContext-without-block re-enters through the SAME bounded
-  // lane as a block (D-88-08) -- it counts toward the cap and does NOT reset the
-  // counter, so a pure-additionalContext loop is bounded just like a block loop.
-  const mutate = outcomes.find(
-    (o) => o.result.kind === "mutate" && typeof o.result.additionalContext === "string",
-  );
-  if (mutate?.result.kind === "mutate" && mutate.result.additionalContext !== undefined) {
-    reenterBounded(runtime, pi, ctx, run, mutate.result.additionalContext, mutate.entry.pluginId);
+  // STOP-03 / STOP-04 / STOP-05 / D-CF5-25: every reason and context goes back
+  // in one re-entry, which funnels through the shared bounded lane once, so a
+  // block loop and a pure-additionalContext loop count toward the STOP-07 cap
+  // alike (D-88-08).
+  const feedback = stopFeedback(outcomes);
+  if (feedback.pluginId !== undefined) {
+    reenterBounded(runtime, pi, ctx, run, feedback.parts, feedback.pluginId);
     return;
   }
 
@@ -318,7 +381,9 @@ async function runStopBucket(
  * outcomes: StopFailure carries no decision control, so a blocking hook or an
  * exit-2 hook produces no re-entry and no loop-state mutation, and it cannot
  * suppress its peer observers. `stopHookActive`, the consecutive-block counter,
- * and `sendMessage` are never touched on this path. An empty bucket is a no-op.
+ * and `sendMessage` are never touched on this path. A StopFailure hook's
+ * `systemMessage` is dropped with a debug line, as Claude Code drops it
+ * (D-CF5-14). An empty bucket is a no-op.
  */
 async function runStopFailure(
   last: AssistantMessage,
@@ -349,7 +414,7 @@ async function runStopFailure(
   // exact members of the closed error-type vocabulary, so the dispatch filter
   // is literal equality against the classified error (the shared
   // `matcherFiresOnClosedSetValue` predicate).
-  await collectBucketOutcomes(
+  const outcomes = await collectBucketOutcomes(
     runtime,
     bucket,
     event,
@@ -361,6 +426,11 @@ async function runStopFailure(
 
   if (capturedGeneration !== runtime.currentGeneration()) {
     return;
+  }
+
+  const dropped = outcomes.filter(({ result }) => nonEmpty(result.systemMessage) !== undefined);
+  if (dropped.length > 0) {
+    hookDebugLog(`settle: ${dropped.length} systemMessage(s) dropped on StopFailure`);
   }
 }
 
@@ -384,7 +454,7 @@ function reenterBounded(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   run: NotificationRun,
-  content: string,
+  content: PiTextContentBlock[],
   pluginId: string,
 ): void {
   const transition = runtime.recordStopReentry();
@@ -404,11 +474,12 @@ function reenterBounded(
 }
 
 /**
- * Re-enter the idle agent loop with `content` as a display-suppressed followUp
- * message that triggers a new turn. Wrapped in try/catch so a `sendMessage`
- * throw degrades to a `hookDebugLog` rather than escaping the settle handler.
+ * Re-enter the idle agent loop with `content`, the feedback parts, as one
+ * display-suppressed followUp message that triggers a new turn (D-CF5-25).
+ * Wrapped in try/catch so a `sendMessage` throw degrades to a `hookDebugLog`
+ * rather than escaping the settle handler.
  */
-function reenter(pi: ExtensionAPI, content: string, pluginId: string): void {
+function reenter(pi: ExtensionAPI, content: PiTextContentBlock[], pluginId: string): void {
   try {
     pi.sendMessage(
       {

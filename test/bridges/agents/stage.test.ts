@@ -107,7 +107,7 @@ describe("prepareStagePluginAgents", () => {
     });
     assert.strictEqual(
       await readFile(targetPath, "utf8"),
-      `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${winnerPath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nFirst body.\n`,
+      `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${winnerPath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nFirst body.\n`,
     );
     assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
       schemaVersion: 1,
@@ -156,7 +156,7 @@ describe("prepareStagePluginAgents", () => {
       {
         kind: "hygiene",
         message:
-          "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+          "[bot] tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails",
       },
       { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_acme_web__get" },
     ]);
@@ -322,6 +322,8 @@ tools: read,grep
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -338,11 +340,13 @@ Helper body.
 name: acme:bot
 description: A bot agent
 aliases: pi-claude-marketplace-acme-bot
-model: anthropic/claude-sonnet-4-6
+model: anthropic/claude-sonnet-5-5
 tools: read,bash,edit
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -447,6 +451,8 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -458,6 +464,137 @@ provenance:
 ---
 
 Read \${CLAUDE_PROJECT_DIR} and ${pluginRoot}.
+`,
+    );
+    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
+  });
+
+  test("D-CF4-04: stages an agent that preloads a staged skill with the skill's content", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-preload-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "bot.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: bot\ndescription: Bot\ntools: Read\nskills: rules\n---\n\nBot body.\n",
+    );
+    const skillSource = path.join(pluginRoot, "skills", "rules");
+    await mkdir(skillSource, { recursive: true });
+    await writeFile(
+      path.join(skillSource, "SKILL.md"),
+      "---\ndescription: The rules.\n---\nWork in ${CLAUDE_PROJECT_DIR}; see acme:rules.\n",
+    );
+    const skillTarget = path.join(locations.skillsTargetDir, "acme-rules");
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: "/work/app",
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      knownSkills: ["acme-rules"],
+      referenceNames: { skills: ["acme-rules"], commands: [], workflows: [] },
+      skillSources: [
+        { generatedName: "acme-rules", sourcePath: skillSource, targetPath: skillTarget },
+      ],
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.strictEqual(
+      await readFile(path.join(prepared.stagingDir, "pi-claude-marketplace-acme-bot.md"), "utf8"),
+      `---
+name: acme:bot
+description: Bot
+aliases: pi-claude-marketplace-acme-bot
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: ${sourcePath}
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Bot body.
+
+Base directory for this skill: ${skillTarget}
+
+Work in /work/app; see /skill:acme-rules.
+`,
+    );
+    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
+  });
+
+  test("D-CF4-04: stages without reading a skill source when no agent declares skills", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-no-preload-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "bot.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: bot\ndescription: Bot\ntools: Read\n---\n\nBot body.\n",
+    );
+    const missingSource = path.join(pluginRoot, "skills", "missing");
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      knownSkills: ["acme-missing"],
+      skillSources: [
+        {
+          generatedName: "acme-missing",
+          sourcePath: missingSource,
+          targetPath: path.join(locations.skillsTargetDir, "acme-missing"),
+        },
+      ],
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.strictEqual(
+      await readFile(path.join(prepared.stagingDir, "pi-claude-marketplace-acme-bot.md"), "utf8"),
+      `---
+name: acme:bot
+description: Bot
+aliases: pi-claude-marketplace-acme-bot
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: ${sourcePath}
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Bot body.
 `,
     );
     assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
@@ -810,11 +947,14 @@ Review files.
 });
 
 describe("commitPreparedAgents", () => {
-  for (const { coexist, recovery } of [
-    { coexist: false, recovery: "commit" },
-    { coexist: true, recovery: "commit" },
+  for (const { coexistence, extraSources } of [
+    { coexistence: "without", extraSources: [] },
+    {
+      coexistence: "with",
+      extraSources: [{ name: "reviewer", description: "Reviewer", body: "Short body." }],
+    },
   ]) {
-    test(`AGENT-01: index persistence failure rolls back new names before ${recovery} retry with coexistence ${String(coexist)}`, async (t) => {
+    test(`AGENT-01: index persistence failure rolls back new names before the retry commits ${coexistence} a coexisting short-named agent`, async (t) => {
       // arrange
       const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
         t,
@@ -824,11 +964,17 @@ describe("commitPreparedAgents", () => {
       const sourceBytes =
         "---\nname: acme-reviewer\ndescription: Prefixed reviewer\ntools: Read\n---\n\nPrefixed body.\n";
       await writeFile(sourcePath, sourceBytes);
-      const shortSource = path.join(agentsSourceDir, "reviewer.md");
-      const shortBytes =
-        "---\nname: reviewer\ndescription: Reviewer\ntools: Read\n---\n\nShort body.\n";
-      if (coexist) {
-        await writeFile(shortSource, shortBytes);
+      const extras = extraSources.map(({ name, description, body }) => ({
+        name,
+        sourcePath: path.join(agentsSourceDir, `${name}.md`),
+        bytes: `---\nname: ${name}\ndescription: ${description}\ntools: Read\n---\n\n${body}\n`,
+        generatedName: `pi-claude-marketplace-acme-${name}`,
+        targetPath: path.join(locations.agentsDir, `pi-claude-marketplace-acme-${name}.md`),
+        expectedFileBytes: (extraSourcePath: string) =>
+          `---\nname: acme:${name}\ndescription: ${description}\naliases: pi-claude-marketplace-acme-${name}\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: ${name}\n  sourcePath: ${extraSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${body}\n`,
+      }));
+      for (const extra of extras) {
+        await writeFile(extra.sourcePath, extra.bytes);
       }
 
       await mkdir(locations.agentsDir, { recursive: true });
@@ -868,6 +1014,7 @@ describe("commitPreparedAgents", () => {
         pluginDataDir,
         agentsDirs: [agentsSourceDir],
       });
+      assert.strictEqual(prepared.kind, "staged");
       const expectedEntries = [
         {
           plugin: "acme",
@@ -881,52 +1028,41 @@ describe("commitPreparedAgents", () => {
           droppedTools: [],
           warnings: [],
         },
-        ...(coexist
-          ? [
-              {
-                plugin: "acme",
-                marketplace: "catalog",
-                sourceAgent: "reviewer",
-                generatedName: "pi-claude-marketplace-acme-reviewer",
-                sourcePath: shortSource,
-                targetPath: oldTarget,
-                sourceHash: createHash("sha256").update(shortBytes).digest("hex"),
-                droppedFields: [],
-                droppedTools: [],
-                warnings: [],
-              },
-            ]
-          : []),
+        ...extras.map((extra) => ({
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: extra.name,
+          generatedName: extra.generatedName,
+          sourcePath: extra.sourcePath,
+          targetPath: extra.targetPath,
+          sourceHash: createHash("sha256").update(extra.bytes).digest("hex"),
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        })),
+      ];
+      const expectedFileNames = [
+        "pi-claude-marketplace-acme-acme-reviewer.md",
+        ...extras.map((extra) => path.basename(extra.targetPath)),
       ];
 
-      assert.strictEqual(prepared.kind, "staged");
+      // act
       await chmod(locations.extensionRoot, 0o500);
-
-      // act & assert
+      let failure: unknown;
       try {
-        await assert.rejects(
-          commitPreparedAgents(createRemovalOps(), prepared),
-          (error: unknown) => {
-            assert.ok(error instanceof Error);
-            const errno = error as NodeJS.ErrnoException;
-            assert.strictEqual(errno.code, "EACCES");
-            assert.strictEqual(errno.syscall, "open");
-            assert.ok(errno.path);
-            assert.strictEqual(path.dirname(errno.path), locations.extensionRoot);
-            assert.match(path.basename(errno.path), /^agents-index\.json\.\d+$/);
-            assert.strictEqual(errno.message, `EACCES: permission denied, open '${errno.path}'`);
-            return true;
-          },
+        failure = await commitPreparedAgents(createRemovalOps(), prepared).then(
+          () => undefined,
+          (reason: unknown) => reason,
         );
       } finally {
         await chmod(locations.extensionRoot, 0o700);
       }
 
-      assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), oldIndexBytes);
-      assert.deepStrictEqual(await readdir(locations.agentsDir), []);
-      assert.strictEqual(await exists(prepared.stagingDir), false);
-      assert.strictEqual(await exists(oldTarget), false);
-      assert.strictEqual(await exists(newTarget), false);
+      const afterFailure = {
+        indexBytes: await readFile(locations.agentsIndexPath, "utf8"),
+        agentFileNames: await readdir(locations.agentsDir),
+        stagingExists: await exists(prepared.stagingDir),
+      };
       const retried = await prepareStagePluginAgents(createRemovalOps(), {
         locations,
         cwd: locations.scopeRoot,
@@ -936,15 +1072,25 @@ describe("commitPreparedAgents", () => {
         pluginDataDir,
         agentsDirs: [agentsSourceDir],
       });
-
-      // act
-      assert.strictEqual(await commitPreparedAgents(createRemovalOps(), retried), undefined);
+      const retryLeak = await commitPreparedAgents(createRemovalOps(), retried);
 
       // assert
+      assert.ok(failure instanceof Error);
+      const errno = failure as NodeJS.ErrnoException;
+      assert.strictEqual(errno.code, "EACCES");
+      assert.strictEqual(errno.syscall, "open");
+      assert.ok(errno.path);
+      assert.strictEqual(path.dirname(errno.path), locations.extensionRoot);
+      assert.match(path.basename(errno.path), /^agents-index\.json\.\d+$/);
+      assert.strictEqual(errno.message, `EACCES: permission denied, open '${errno.path}'`);
+      assert.deepStrictEqual(afterFailure, {
+        indexBytes: oldIndexBytes,
+        agentFileNames: [],
+        stagingExists: false,
+      });
+      assert.strictEqual(retryLeak, undefined);
       assert.deepStrictEqual(retried.result, {
-        stagedNames: coexist
-          ? ["pi-claude-marketplace-acme-acme-reviewer", "pi-claude-marketplace-acme-reviewer"]
-          : ["pi-claude-marketplace-acme-acme-reviewer"],
+        stagedNames: expectedEntries.map((entry) => entry.generatedName),
         recorded: expectedEntries.map(({ generatedName, sourcePath: source, targetPath }) => ({
           generatedName,
           sourcePath: source,
@@ -953,35 +1099,92 @@ describe("commitPreparedAgents", () => {
         warnings: [],
         failed: [],
       });
+      assert.deepStrictEqual((await readdir(locations.agentsDir)).sort(), expectedFileNames.sort());
       assert.strictEqual(
         await readFile(newTarget, "utf8"),
-        `---\nname: acme:acme-reviewer\ndescription: Prefixed reviewer\naliases: pi-claude-marketplace-acme-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
+        `---\nname: acme:acme-reviewer\ndescription: Prefixed reviewer\naliases: pi-claude-marketplace-acme-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
       );
+      for (const extra of extras) {
+        assert.strictEqual(
+          await readFile(extra.targetPath, "utf8"),
+          extra.expectedFileBytes(extra.sourcePath),
+        );
+      }
+
       assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
         schemaVersion: 1,
         agents: expectedEntries,
       });
-      if (coexist) {
-        assert.strictEqual(
-          await readFile(oldTarget, "utf8"),
-          `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${shortSource}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nShort body.\n`,
-        );
-      } else {
-        assert.strictEqual(await exists(oldTarget), false);
-      }
-
       assert.strictEqual(retried.kind, "staged");
       assert.strictEqual(await exists(retried.stagingDir), false);
     });
   }
 
-  for (const obstacle of [
-    "file",
-    "directory",
-    "symlink",
-    "late file",
-    "indexed foreign file",
-  ] as const) {
+  const foreignBytes = "Foreign bytes.\n";
+  const foreignRow = (sourcePath: string, newTarget: string): AgentsIndex["agents"] => [
+    {
+      plugin: "acme",
+      marketplace: "catalog",
+      sourceAgent: "reviewer",
+      generatedName: "pi-claude-marketplace-acme-reviewer",
+      sourcePath,
+      targetPath: newTarget,
+      sourceHash: "b".repeat(64),
+      droppedFields: [],
+      droppedTools: [],
+      warnings: [],
+    },
+  ];
+  const expectFileIntact = async (target: string): Promise<void> => {
+    assert.strictEqual(await readFile(target, "utf8"), foreignBytes);
+  };
+
+  for (const { obstacle, indexedRows, occupyBefore, occupyAfter, expectIntact } of [
+    {
+      obstacle: "file",
+      indexedRows: (): AgentsIndex["agents"] => [],
+      occupyBefore: (target: string) => writeFile(target, foreignBytes),
+      occupyAfter: () => Promise.resolve(),
+      expectIntact: expectFileIntact,
+    },
+    {
+      obstacle: "directory",
+      indexedRows: (): AgentsIndex["agents"] => [],
+      occupyBefore: async (target: string) => {
+        await mkdir(target);
+        await writeFile(path.join(target, "keep"), foreignBytes);
+      },
+      occupyAfter: () => Promise.resolve(),
+      expectIntact: async (target: string) => {
+        assert.deepStrictEqual(await readdir(target), ["keep"]);
+        assert.strictEqual(await readFile(path.join(target, "keep"), "utf8"), foreignBytes);
+      },
+    },
+    {
+      obstacle: "symlink",
+      indexedRows: (): AgentsIndex["agents"] => [],
+      occupyBefore: () => Promise.resolve(),
+      occupyAfter: (target: string) => symlink("missing-target", target),
+      expectIntact: async (target: string) => {
+        assert.strictEqual((await lstat(target)).isSymbolicLink(), true);
+        assert.strictEqual(await readlink(target), "missing-target");
+      },
+    },
+    {
+      obstacle: "late file",
+      indexedRows: (): AgentsIndex["agents"] => [],
+      occupyBefore: () => Promise.resolve(),
+      occupyAfter: (target: string) => writeFile(target, foreignBytes),
+      expectIntact: expectFileIntact,
+    },
+    {
+      obstacle: "indexed foreign file",
+      indexedRows: foreignRow,
+      occupyBefore: (target: string) => writeFile(target, foreignBytes),
+      occupyAfter: () => Promise.resolve(),
+      expectIntact: expectFileIntact,
+    },
+  ]) {
     test(`preserves old ownership and an occupied new ${obstacle} before deleting anything`, async (t) => {
       // arrange
       const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
@@ -997,7 +1200,7 @@ describe("commitPreparedAgents", () => {
       const oldBytes =
         "---\nname: pi-claude-marketplace-acme-old\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n---\n\nOld body.\n";
       await writeFile(oldTarget, oldBytes);
-      const oldIndex: AgentsIndex = {
+      const oldIndexBytes = JSON.stringify({
         schemaVersion: 1,
         agents: [
           {
@@ -1012,38 +1215,11 @@ describe("commitPreparedAgents", () => {
             droppedTools: [],
             warnings: [],
           },
-        ],
-      };
-      const oldIndexBytes = JSON.stringify({
-        ...oldIndex,
-        agents: [
-          ...oldIndex.agents,
-          ...(obstacle === "indexed foreign file"
-            ? [
-                {
-                  plugin: "acme",
-                  marketplace: "catalog",
-                  sourceAgent: "reviewer",
-                  generatedName: "pi-claude-marketplace-acme-reviewer",
-                  sourcePath,
-                  targetPath: newTarget,
-                  sourceHash: "b".repeat(64),
-                  droppedFields: [],
-                  droppedTools: [],
-                  warnings: [],
-                },
-              ]
-            : []),
+          ...indexedRows(sourcePath, newTarget),
         ],
       });
       await writeFile(locations.agentsIndexPath, oldIndexBytes);
-      if (obstacle === "file" || obstacle === "indexed foreign file") {
-        await writeFile(newTarget, "Foreign bytes.\n");
-      } else if (obstacle === "directory") {
-        await mkdir(newTarget);
-        await writeFile(path.join(newTarget, "keep"), "Foreign bytes.\n");
-      }
-
+      await occupyBefore(newTarget);
       const prepared = await prepareStagePluginAgents(createRemovalOps(), {
         locations,
         cwd: locations.scopeRoot,
@@ -1054,32 +1230,26 @@ describe("commitPreparedAgents", () => {
         agentsDirs: [agentsSourceDir],
       });
       assert.strictEqual(prepared.kind, "staged");
-      if (obstacle === "late file") {
-        await writeFile(newTarget, "Foreign bytes.\n");
-      } else if (obstacle === "symlink") {
-        await symlink("missing-target", newTarget);
-      }
+      await occupyAfter(newTarget);
 
-      // act & assert
-      await assert.rejects(commitPreparedAgents(createRemovalOps(), prepared), {
-        name: "AgentTargetOccupiedError",
-        message: `Cannot replace agent target with non-previous content at ${path.basename(newTarget)}`,
-      });
+      // act
+      const error = await commitPreparedAgents(createRemovalOps(), prepared).then(
+        () => undefined,
+        (reason: unknown) => reason,
+      );
+
+      // assert
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message },
+        {
+          name: "AgentTargetOccupiedError",
+          message: `Cannot replace agent target with non-previous content at ${path.basename(newTarget)}`,
+        },
+      );
       assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
       assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), oldIndexBytes);
-      if (obstacle === "symlink") {
-        assert.strictEqual((await lstat(newTarget)).isSymbolicLink(), true);
-        assert.strictEqual(await readlink(newTarget), "missing-target");
-      } else if (obstacle === "directory") {
-        assert.deepStrictEqual(await readdir(newTarget), ["keep"]);
-        assert.strictEqual(
-          await readFile(path.join(newTarget, "keep"), "utf8"),
-          "Foreign bytes.\n",
-        );
-      } else {
-        assert.strictEqual(await readFile(newTarget, "utf8"), "Foreign bytes.\n");
-      }
-
+      await expectIntact(newTarget);
       assert.strictEqual(await exists(prepared.stagingDir), false);
     });
   }
@@ -1122,6 +1292,8 @@ tools: read,grep
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1138,11 +1310,13 @@ Helper body.
 name: acme:bot
 description: A bot agent
 aliases: pi-claude-marketplace-acme-bot
-model: anthropic/claude-sonnet-4-6
+model: anthropic/claude-sonnet-5-5
 tools: read,bash,edit
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
+async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1547,15 +1721,16 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const zuluTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-zulu.md");
     const alphaStaged = path.join(prepared.stagingDir, path.basename(alphaTarget));
     const zuluStaged = path.join(prepared.stagingDir, path.basename(zuluTarget));
-    const stagedFilePaths = [...prepared.stagedFilePaths];
-    const zuluPair = stagedFilePaths[1];
+    const zuluPair = prepared.stagedFilePaths[1];
     assert.ok(zuluPair);
-    Object.defineProperty(stagedFilePaths, 1, {
-      configurable: true,
-      enumerable: true,
-      get() {
-        rmSync(prepared.stagingDir, { recursive: true, force: true });
-        return zuluPair;
+    const stagedFilePaths = new Proxy([...prepared.stagedFilePaths], {
+      get(target, property, receiver): unknown {
+        if (property === "1") {
+          rmSync(prepared.stagingDir, { recursive: true, force: true });
+          return zuluPair;
+        }
+
+        return Reflect.get(target, property, receiver) as unknown;
       },
     });
     const vanishingPrepared = { ...prepared, stagedFilePaths: stagedFilePaths };
@@ -1656,7 +1831,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.strictEqual(await readFile(handNamedTarget, "utf8"), handNamedBytes);
     assert.strictEqual(
       await readFile(currentTarget, "utf8"),
-      `---\nname: acme:current\ndescription: Current agent\naliases: pi-claude-marketplace-acme-current\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: current\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nCurrent.\n`,
+      `---\nname: acme:current\ndescription: Current agent\naliases: pi-claude-marketplace-acme-current\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: current\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nCurrent.\n`,
     );
     assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
       schemaVersion: 1,
@@ -1899,8 +2074,13 @@ describe("assertAgentCommitTargets", () => {
       agentsDirs: [],
     });
 
-    // act & assert
-    await assert.doesNotReject(assertAgentCommitTargets(prepared, { force: true }));
+    // act
+    const outcome = await assertAgentCommitTargets(prepared, { force: true }).then(
+      () => "accepted",
+    );
+
+    // assert
+    assert.strictEqual(outcome, "accepted");
     assert.strictEqual(await exists(locations.agentsDir), false);
   });
 

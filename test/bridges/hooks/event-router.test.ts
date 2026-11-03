@@ -20,7 +20,6 @@ import {
   shutdownInMemoryChildren,
   spawnAndRegister,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
-import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import {
   createHooksHydration,
   createHooksRouting,
@@ -58,6 +57,7 @@ import type {
   BeforeAgentStartEvent,
   ExtensionAPI,
   ExtensionContext,
+  SessionCompactEvent,
   ToolCallEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -601,6 +601,7 @@ test(
       "register:tool_call",
       "register:tool_result",
       "register:before_agent_start",
+      "register:turn_end",
       "register:agent_end",
       "register:agent_settled",
       "register:input",
@@ -616,6 +617,7 @@ test(
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
+        { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
         { event: "agent_settled", handlerType: "function" },
         { event: "input", handlerType: "function" },
@@ -761,8 +763,7 @@ async function makeProjectHookFixture(
   label: string,
   event: "PreToolUse" | "SessionStart",
 ): Promise<ProjectHookFixture> {
-  const root = await mkdtemp(path.join(tmpdir(), `hooks-router-${label}-`));
-  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  const { root } = await createHermeticEnvironment(t, `hooks-router-${label}-`);
   const factoryRoot = path.join(root, "factory");
   const projectRoot = path.join(root, "project");
   const locations = locationsFor("project", projectRoot);
@@ -790,7 +791,7 @@ async function makeProjectHookFixture(
   };
 }
 
-function makeContext(cwd: string, sessionRoot: string): ExtensionContext {
+function makeContext(cwd: string, sessionRoot: string, projectTrusted = true): ExtensionContext {
   return {
     ui: {
       notify(message: string, severity?: "info" | "warning" | "error"): void {
@@ -808,7 +809,7 @@ function makeContext(cwd: string, sessionRoot: string): ExtensionContext {
     model: undefined,
     scopedModels: [],
     isIdle: () => true,
-    isProjectTrusted: () => true,
+    isProjectTrusted: () => projectTrusted,
     signal: undefined,
     abort(): never {
       throw new Error("event router must not abort Pi");
@@ -970,7 +971,13 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
       const rejectedOutput = await handler(event, context);
 
       // assert
-      assert.deepStrictEqual(supportedOutput, { systemPrompt: "base\n\npending" });
+      assert.deepStrictEqual(supportedOutput, {
+        message: {
+          customType: "claude-hook-additional-context",
+          content: [{ type: "text", text: "SessionStart hook additional context: pending" }],
+          display: false,
+        },
+      });
       assert.deepStrictEqual(supportedPending, []);
       assert.strictEqual(rejectedOutput, undefined);
       assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [pending]);
@@ -1184,7 +1191,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
 
   // act
   await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
-    scope: "project",
+    scope: "user",
     marketplace: "catalog",
     plugin: "reader",
     resolvedSource: asAbsolutePluginRoot(path.join(root, "plugin")),
@@ -1204,7 +1211,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
   // assert
   assert.deepStrictEqual(cache, [
     {
-      scope: "project",
+      scope: "user",
       marketplace: "catalog",
       pluginId: "reader",
       resolvedSource: path.join(root, "plugin"),
@@ -1234,7 +1241,7 @@ test("runtime-bound routing mutations update only their supplied lifecycle owner
 
   // act
   await routing.readAndCachePluginHooks({
-    scope: "project",
+    scope: "user",
     marketplace: "catalog",
     plugin: "owned",
     resolvedSource: asAbsolutePluginRoot(root),
@@ -1252,7 +1259,7 @@ test("runtime-bound routing mutations update only their supplied lifecycle owner
   assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
 
   // act
-  routing.removePluginConfigFromCache("project", "catalog", "owned");
+  routing.removePluginConfigFromCache("user", "catalog", "owned");
   routing.rebuildRoutingTables();
 
   // assert
@@ -1268,7 +1275,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a read failure", 
 
   // act
   await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
-    scope: "project",
+    scope: "user",
     marketplace: "catalog",
     plugin: "missing",
     resolvedSource: asAbsolutePluginRoot(path.join(root, "plugin")),
@@ -1291,7 +1298,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
 
   // act
   await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
-    scope: "project",
+    scope: "user",
     marketplace: "catalog",
     plugin: "invalid",
     resolvedSource: asAbsolutePluginRoot(path.join(root, "plugin")),
@@ -1313,18 +1320,18 @@ test("registered before_agent_start drains ordered context once and leaves an em
   const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
   await hydration.registerHooksBridge(pi, { cwd: root });
   const handler = registeredHandler(registrations, "before_agent_start");
-  adaptObservationResultForEvent(
-    runtime,
-    { kind: "mutate", additionalContext: "alpha context" },
-    "SessionStart",
-    { scope: "project", marketplace: "catalog", pluginId: "alpha" },
-  );
-  adaptObservationResultForEvent(
-    runtime,
-    { kind: "mutate", additionalContext: "beta context" },
-    "SessionStart",
-    { scope: "user", marketplace: "catalog", pluginId: "beta" },
-  );
+  runtime.appendPendingSessionStartContext({
+    context: "alpha context",
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "alpha",
+  });
+  runtime.appendPendingSessionStartContext({
+    context: "beta context",
+    scope: "user",
+    marketplace: "catalog",
+    pluginId: "beta",
+  });
   const event = {
     type: "before_agent_start",
     prompt: "prompt",
@@ -1338,10 +1345,150 @@ test("registered before_agent_start drains ordered context once and leaves an em
 
   // assert
   assert.deepStrictEqual(firstTurn, {
-    systemPrompt: "base prompt\n\nalpha context\n\nbeta context",
+    message: {
+      customType: "claude-hook-additional-context",
+      content: [
+        { type: "text", text: "SessionStart hook additional context: alpha context\nbeta context" },
+      ],
+      display: false,
+    },
   });
   assert.strictEqual(secondTurn, undefined);
   assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+});
+
+// The registered `before_agent_start` handler of a fresh bridge, its runtime,
+// and a Pi context to call it with.
+async function beforeAgentStartFixture(t: TestContext): Promise<{
+  readonly runtime: HooksRuntime;
+  readonly handler: (...args: unknown[]) => unknown;
+  readonly context: ExtensionContext;
+}> {
+  const runtime = createHooksRuntime();
+  const { root } = await createHermeticEnvironment(t, "hooks-router-context-");
+  const { pi, registrations } = makeRecordingPi();
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, { cwd: root });
+  return {
+    runtime,
+    handler: registeredHandler(registrations, "before_agent_start"),
+    context: makeContext(root, root),
+  };
+}
+
+const PROMPT_TURN = {
+  type: "before_agent_start",
+  messageType: "user",
+  prompt: "hello there",
+  systemPrompt: "base prompt",
+  systemPromptOptions: {},
+} as BeforeAgentStartEvent;
+
+test("before_agent_start sends buffered prompt context as one message after the prompt (D-CF5-13)", async (t) => {
+  // arrange
+  const { runtime, handler, context } = await beforeAgentStartFixture(t);
+  runtime.appendPendingPromptContext({
+    context: "ctx-a",
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "alpha",
+  });
+  runtime.appendPendingPromptContext({
+    context: "ctx-b",
+    scope: "user",
+    marketplace: "catalog",
+    pluginId: "beta",
+  });
+
+  // act
+  const firstTurn = await handler(PROMPT_TURN, context);
+  const secondTurn = await handler(PROMPT_TURN, context);
+
+  // assert
+  assert.deepStrictEqual(firstTurn, {
+    message: {
+      customType: "claude-hook-additional-context",
+      content: [{ type: "text", text: "UserPromptSubmit hook additional context: ctx-a\nctx-b" }],
+      display: false,
+    },
+  });
+  assert.strictEqual(secondTurn, undefined);
+  assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+});
+
+test("before_agent_start adds no message for prompt context that is only whitespace (HOOK-05)", async (t) => {
+  // arrange
+  const { runtime, handler, context } = await beforeAgentStartFixture(t);
+  runtime.appendPendingPromptContext({
+    context: " \n\t",
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "alpha",
+  });
+
+  // act
+  const turn = await handler(PROMPT_TURN, context);
+
+  // assert
+  assert.strictEqual(turn, undefined);
+  assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+});
+
+test("before_agent_start sends session start context first and prompt context second in one message (D-CF5-13)", async (t) => {
+  // arrange
+  const { runtime, handler, context } = await beforeAgentStartFixture(t);
+  runtime.appendPendingPromptContext({
+    context: "ups-ctx",
+    scope: "user",
+    marketplace: "catalog",
+    pluginId: "beta",
+  });
+  runtime.appendPendingSessionStartContext({
+    context: "ss-ctx",
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "alpha",
+  });
+
+  // act
+  const turn = await handler(PROMPT_TURN, context);
+
+  // assert
+  assert.deepStrictEqual(turn, {
+    message: {
+      customType: "claude-hook-additional-context",
+      content: [
+        { type: "text", text: "SessionStart hook additional context: ss-ctx" },
+        { type: "text", text: "UserPromptSubmit hook additional context: ups-ctx" },
+      ],
+      display: false,
+    },
+  });
+  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+});
+
+test("before_agent_start of a reloaded bridge sends no context buffered before the reload (D-CF5-13)", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const { root } = await createHermeticEnvironment(t, "hooks-router-context-reload-");
+  const { pi, registrations } = makeRecordingPi();
+  const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
+  await hydration.registerHooksBridge(pi, { cwd: root });
+  const entry = {
+    context: "stale",
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "alpha",
+  } as const;
+  runtime.appendPendingSessionStartContext(entry);
+  runtime.appendPendingPromptContext(entry);
+  await hydration.registerHooksBridge(pi, { cwd: root });
+  const liveHandler = registeredHandler(registrations, "before_agent_start", 1);
+
+  // act
+  const turn = await liveHandler(PROMPT_TURN, makeContext(root, root));
+
+  // assert
+  assert.strictEqual(turn, undefined);
 });
 
 test("registered before_agent_start rejects a stale epoch without draining live context", async (t) => {
@@ -1354,12 +1501,12 @@ test("registered before_agent_start rejects a stale epoch without draining live 
   await hydration.registerHooksBridge(pi, { cwd: root });
   const handler = registeredHandler(registrations, "before_agent_start");
   await hydration.registerHooksBridge(pi, { cwd: root });
-  adaptObservationResultForEvent(
-    runtime,
-    { kind: "mutate", additionalContext: "live context" },
-    "SessionStart",
-    { scope: "project", marketplace: "catalog", pluginId: "live" },
-  );
+  runtime.appendPendingSessionStartContext({
+    context: "live context",
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "live",
+  });
   const event = {
     type: "before_agent_start",
     prompt: "prompt",
@@ -1380,6 +1527,56 @@ test("registered before_agent_start rejects a stale epoch without draining live 
       pluginId: "live",
     },
   ]);
+});
+
+test("registered turn_end sends a follow-up's context before the agent reads it (D-CF5-13)", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const { root } = await createHermeticEnvironment(t, "hooks-router-turn-end-");
+  const { pi, registrations, messages } = makeRecordingPi();
+  const context = makeContext(root, root);
+  const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
+  await hydration.registerHooksBridge(pi, { cwd: root });
+  const staleHandler = registeredHandler(registrations, "turn_end");
+  await hydration.registerHooksBridge(pi, { cwd: root });
+  const handler = registeredHandler(registrations, "turn_end", 1);
+  runtime.queueFollowUpContext({
+    context: "follow-up context",
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "live",
+    prompt: "also say hi",
+  });
+  const event = {
+    type: "turn_end",
+    message: { role: "assistant", content: [{ type: "text", text: "Done." }], stopReason: "stop" },
+    context: {
+      pendingMessages: [{ role: "user", content: [{ type: "text", text: "also say hi" }] }],
+    },
+  };
+
+  // act
+  const staleOutput = await staleHandler(event, context);
+  const sentByStale = [...messages];
+  const output = await handler(event, context);
+
+  // assert
+  assert.strictEqual(staleOutput, undefined);
+  assert.deepStrictEqual(sentByStale, []);
+  assert.strictEqual(output, undefined);
+  assert.deepStrictEqual(messages, [
+    {
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [
+          { type: "text", text: "UserPromptSubmit hook additional context: follow-up context" },
+        ],
+        display: false,
+      },
+      options: { triggerTurn: false },
+    },
+  ]);
+  assert.deepStrictEqual(runtime.drainFollowUpContext(), []);
 });
 
 test("rebuildRoutingTables preserves stable plugin and declaration order in all ten buckets", () => {
@@ -1558,8 +1755,7 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-hydrate-matrix-"));
-    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    const { cwd: root } = await createHermeticEnvironment(t, "hooks-router-hydrate-matrix-");
     const locations = locationsFor("project", root);
     const projectState = makeScopeState({
       scope: "project",
@@ -1649,6 +1845,7 @@ test(
     // act
     await createHooksHydration(runtime, { loadState, readHooksJson }).hydrateProjectScopeForCwd(
       root,
+      true,
     );
     createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
     const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
@@ -1743,7 +1940,7 @@ test(
     // act
     const hooksHydration = createHooksHydration(runtime, hydrationReader);
 
-    await hooksHydration.hydrateProjectScopeForCwd(root);
+    await hooksHydration.hydrateProjectScopeForCwd(root, true);
     const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
@@ -1819,7 +2016,7 @@ test(
     assert.strictEqual(sessionStartUpdate, undefined);
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 11);
+    assert.strictEqual(registrations.length, 12);
     assert.deepStrictEqual(diagnostics, [
       `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
     ]);
@@ -1872,7 +2069,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
     locationsFor("project", projectRoot).extensionRoot,
   ]);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 22);
+  assert.strictEqual(registrations.length, 24);
 });
 
 test(
@@ -1961,7 +2158,7 @@ test(
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 22);
+    assert.strictEqual(registrations.length, 24);
   },
 );
 
@@ -2038,7 +2235,7 @@ test("runtime hydration stops before mirroring when registration advances its ge
   };
   const runtime = createHooksRuntime();
   const hydration = createHooksHydration(runtime, reader);
-  const pendingHydration = hydration.hydrateProjectScopeForCwd(fixture.projectRoot);
+  const pendingHydration = hydration.hydrateProjectScopeForCwd(fixture.projectRoot, true);
   await readStarted.promise;
   const { pi } = makeRecordingPi();
   await hydration.registerHooksBridge(pi, {
@@ -2116,7 +2313,7 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
   const runtime = createHooksRuntime();
 
   // act
-  await createHooksHydration(runtime, reader).hydrateProjectScopeForCwd(fixture.projectRoot);
+  await createHooksHydration(runtime, reader).hydrateProjectScopeForCwd(fixture.projectRoot, true);
 
   // assert
   assert.deepStrictEqual(
@@ -2133,6 +2330,119 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
   // it reads empty on a hydration that completed and on one that stopped at the
   // first guard alike.
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+});
+
+/** A hydration reader that serves `fixture.state` for its project and no plugins elsewhere. */
+function fixtureStateReader(fixture: ProjectHookFixture): HooksHydrationDeps {
+  return {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      return Promise.resolve(
+        extensionRoot === fixture.locations.extensionRoot
+          ? fixture.state
+          : { schemaVersion: 2, marketplaces: {} },
+      );
+    },
+    readHooksJson,
+  };
+}
+
+test("D-LOC-01 project hydration caches nothing in a project Pi does not trust", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "untrusted-project-hydration", "PreToolUse");
+  const runtime = createHooksRuntime();
+
+  // act
+  await createHooksHydration(runtime, fixtureStateReader(fixture)).hydrateProjectScopeForCwd(
+    fixture.projectRoot,
+    false,
+  );
+
+  // assert
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+  assert.strictEqual(runtime.isProjectTrusted(fixture.projectRoot), false);
+});
+
+test("D-LOC-01 project hydration in an untrusted project drops the project configs it held", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "untrusted-project-rehydration", "PreToolUse");
+  const runtime = createHooksRuntime();
+  const hydration = createHooksHydration(runtime, fixtureStateReader(fixture));
+  await hydration.hydrateProjectScopeForCwd(fixture.projectRoot, true);
+
+  // act
+  await hydration.hydrateProjectScopeForCwd(fixture.projectRoot, false);
+
+  // assert
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+});
+
+for (const { title, hydratedCwd, trusted } of [
+  { title: "no project hydrate ran", hydratedCwd: undefined, trusted: false },
+  { title: "Pi does not trust the project", hydratedCwd: "project", trusted: false },
+  { title: "the trusted project is another one", hydratedCwd: "other", trusted: true },
+] as const) {
+  test(`D-LOC-01 readAndCachePluginHooks caches no project config when ${title}`, async (t) => {
+    // arrange
+    const fixture = await makeProjectHookFixture(t, "untrusted-project-read", "PreToolUse");
+    const runtime = createHooksRuntime();
+    if (hydratedCwd !== undefined) {
+      runtime.recordProjectTrust(
+        hydratedCwd === "project" ? fixture.projectRoot : path.join(fixture.root, "other"),
+        trusted,
+      );
+    }
+
+    // act
+    await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
+      scope: "project",
+      marketplace: "catalog",
+      plugin: "owner-hooks",
+      resolvedSource: asAbsolutePluginRoot(path.join(fixture.root, "plugins", "owner")),
+      hooksJsonPath: fixture.hookPath,
+      cwd: fixture.projectRoot,
+      logPrefix: "install",
+    });
+
+    // assert
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+  });
+}
+
+test("D-LOC-01 readAndCachePluginHooks caches a project config once the hydrate found the project trusted", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "trusted-project-read", "PreToolUse");
+  const runtime = createHooksRuntime();
+  await createHooksHydration(runtime, {
+    loadState: () => Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
+    readHooksJson,
+  }).hydrateProjectScopeForCwd(fixture.projectRoot, true);
+
+  // act
+  await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
+    scope: "project",
+    marketplace: "catalog",
+    plugin: "owner-hooks",
+    resolvedSource: asAbsolutePluginRoot(path.join(fixture.root, "plugins", "owner")),
+    hooksJsonPath: fixture.hookPath,
+    cwd: fixture.projectRoot,
+    logPrefix: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
+      scope: entry.scope,
+      pluginId: entry.pluginId,
+      config: entry.config,
+    })),
+    [
+      {
+        scope: "project",
+        pluginId: "owner-hooks",
+        config: makeConfig([{ event: "PreToolUse", handlers: 1 }]),
+      },
+    ],
+  );
 });
 
 test("project hydration stops before parsing a plugin's hooks.json read under a stale generation", async (t) => {
@@ -2158,7 +2468,10 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
       );
     },
     readHooksJson(hooksJsonPath: string): Promise<string> {
-      runtime.advanceGeneration();
+      if (hooksJsonPath === fixture.hookPath) {
+        runtime.advanceGeneration();
+      }
+
       // The call below is the imported production reader, not this member --
       // an object-literal method name binds no identifier in its own body.
       return readHooksJson(hooksJsonPath);
@@ -2167,7 +2480,7 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
   const hydration = createHooksHydration(runtime, reader);
 
   // act
-  await hydration.hydrateProjectScopeForCwd(fixture.projectRoot);
+  await hydration.hydrateProjectScopeForCwd(fixture.projectRoot, true);
 
   // assert
   assert.strictEqual(runtime.currentGeneration(), 1);
@@ -2344,6 +2657,7 @@ test(
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
+        { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
         { event: "agent_settled", handlerType: "function" },
         { event: "input", handlerType: "function" },
@@ -2392,7 +2706,7 @@ test(
     assert.deepStrictEqual(dispatched, ["project", "user"]);
     assert.strictEqual(userSharedBytes, "regular-file-boundary");
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.strictEqual(registrations.length, 11);
+    assert.strictEqual(registrations.length, 12);
   },
 );
 
@@ -2441,7 +2755,7 @@ for (const mode of ["tui", "print", "json", "rpc"] as const) {
     assert.deepStrictEqual(messages, []);
     assert.deepStrictEqual(capture.entries, []);
     capture.assertValid();
-    assert.strictEqual(registrations.length, 11);
+    assert.strictEqual(registrations.length, 12);
   });
 }
 
@@ -2566,11 +2880,11 @@ test("SessionStart contains a dispatch failure after preparing both directories"
   // assert
   assert.strictEqual(update, undefined);
   assert.deepStrictEqual(sharedPaths.map(fs.existsSync), [true, true]);
-  assert.deepStrictEqual(dispatched, ["project"]);
+  assert.deepStrictEqual(dispatched, ["project", "user"]);
   assert.deepStrictEqual(messages, []);
 });
 
-test("SessionStart runs once when Pi repeats the same session start", async (t) => {
+test("SessionStart runs once when Pi repeats the same session start (SSDEDUP-01)", async (t) => {
   // arrange
   const { root, projectRoot } = await makeSessionStartFixture(t);
   const { pi, registrations } = makeRecordingPi();
@@ -2579,8 +2893,9 @@ test("SessionStart runs once when Pi repeats the same session start", async (t) 
   await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry, event, ctx) => {
-      const { reason } = event as { reason: string };
-      dispatched.push(`${ctx.sessionManager.getSessionId()} ${reason} ${entry.scope}`);
+      dispatched.push(
+        `${ctx.sessionManager.getSessionId()} ${JSON.stringify(event)} ${entry.scope}`,
+      );
       return Promise.resolve({ kind: "noop" });
     },
   });
@@ -2598,18 +2913,166 @@ test("SessionStart runs once when Pi repeats the same session start", async (t) 
   // act
   await sessionStart({ type: "session_start", reason: "new" }, context);
   await sessionStart({ type: "session_start", reason: "new" }, context);
-  await sessionStart({ type: "session_start", reason: "reload" }, context);
-  await sessionStart({ type: "session_start", reason: "reload" }, otherSession);
+  await sessionStart({ type: "session_start", reason: "fork" }, context);
+  await sessionStart({ type: "session_start", reason: "fork" }, otherSession);
 
   // assert
   assert.deepStrictEqual(dispatched, [
-    `${sessionId} new project`,
-    `${sessionId} new user`,
-    `${sessionId} reload project`,
-    `${sessionId} reload user`,
-    "router-other-session reload project",
-    "router-other-session reload user",
+    `${sessionId} {"source":"clear"} project`,
+    `${sessionId} {"source":"clear"} user`,
+    `${sessionId} {"source":"fork"} project`,
+    `${sessionId} {"source":"fork"} user`,
+    'router-other-session {"source":"fork"} project',
+    'router-other-session {"source":"fork"} user',
   ]);
+});
+
+for (const { reason, source } of [
+  { reason: "startup", source: "startup" },
+  { reason: "new", source: "clear" },
+  { reason: "resume", source: "resume" },
+  { reason: "fork", source: "fork" },
+] as const) {
+  test(`session_start dispatches SessionStart with source ${source} for Pi ${reason} (D-CF5-01)`, async (t) => {
+    // arrange
+    const { root, projectRoot } = await makeSessionStartFixture(t);
+    const { pi, registrations } = makeRecordingPi();
+    const runtime = createHooksRuntime();
+    const dispatched: unknown[] = [];
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+      cwd: projectRoot,
+      executor: (entry, event) => {
+        dispatched.push({ scope: entry.scope, event });
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+
+    // act
+    await registeredHandler(registrations, "session_start")(
+      { type: "session_start", reason },
+      makeContext(projectRoot, root),
+    );
+
+    // assert
+    assert.deepStrictEqual(dispatched, [
+      { scope: "project", event: { source } },
+      { scope: "user", event: { source } },
+    ]);
+  });
+}
+
+test("session_start on Pi reload prepares the shared directories and runs no SessionStart (D-CF5-03)", async (t) => {
+  // arrange
+  const { root, projectRoot, sharedPaths } = await makeSessionStartFixture(t);
+  const { pi, registrations, messages } = makeRecordingPi();
+  const runtime = createHooksRuntime();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    cwd: projectRoot,
+    executor: (entry) => {
+      dispatched.push(entry.scope);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+
+  // act
+  const update = await registeredHandler(registrations, "session_start")(
+    { type: "session_start", reason: "reload" },
+    makeContext(projectRoot, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(sharedPaths.map(fs.existsSync), [true, true]);
+  assert.deepStrictEqual(
+    runtime.getRoutingBucket("SessionStart").map((entry) => entry.scope),
+    ["project", "user"],
+  );
+  assert.deepStrictEqual(dispatched, []);
+  assert.deepStrictEqual(messages, []);
+});
+
+for (const { reason, mode, expectedReason } of [
+  { reason: "new", mode: "print", expectedReason: "clear" },
+  { reason: "resume", mode: "rpc", expectedReason: "resume" },
+  { reason: "fork", mode: "json", expectedReason: "resume" },
+  { reason: "quit", mode: "tui", expectedReason: "prompt_input_exit" },
+  { reason: "quit", mode: "rpc", expectedReason: "other" },
+] as const) {
+  test(`session_shutdown dispatches SessionEnd with reason ${expectedReason} for Pi ${reason} in ${mode} mode (D-CF5-02)`, async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-session-end-");
+    const runtime = createHooksRuntime();
+    const { pi, registrations, messages } = makeRecordingPi();
+    const dispatched: unknown[] = [];
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry, event) => {
+        dispatched.push({ pluginId: entry.pluginId, event });
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    runtime.setRoutingBucket("SessionEnd", [
+      {
+        ...preToolUseEntry("session-end-plugin", root),
+        claudeEvent: "SessionEnd",
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      },
+    ]);
+    const context = new Proxy(makeContext(root, root), {
+      get(target, property, receiver): unknown {
+        return property === "mode" ? mode : Reflect.get(target, property, receiver);
+      },
+    });
+
+    // act
+    const update = await registeredHandler(registrations, "session_shutdown")(
+      { type: "session_shutdown", reason },
+      context,
+    );
+
+    // assert
+    assert.strictEqual(update, undefined);
+    assert.deepStrictEqual(dispatched, [
+      { pluginId: "session-end-plugin", event: { reason: expectedReason } },
+    ]);
+    assert.deepStrictEqual(messages, []);
+  });
+}
+
+test("session_shutdown on Pi reload runs no SessionEnd (D-CF5-03)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-session-end-reload-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.pluginId);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  runtime.setRoutingBucket("SessionEnd", [
+    {
+      ...preToolUseEntry("session-end-plugin", root),
+      claudeEvent: "SessionEnd",
+      matcher: parseMatcher(""),
+      rawMatcher: "",
+    },
+  ]);
+
+  // act
+  const update = await registeredHandler(registrations, "session_shutdown")(
+    { type: "session_shutdown", reason: "reload" },
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(dispatched, []);
+  assert.deepStrictEqual(messages, []);
 });
 
 test("SessionStart runs a repeat whose first event was skipped for its mode", async (t) => {
@@ -2728,7 +3191,16 @@ test(
       { pluginId: "beta", event: "SessionStart" },
     ]);
     assert.deepStrictEqual(firstTurn, {
-      systemPrompt: "base prompt\n\nbeta context",
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [
+          {
+            type: "text",
+            text: "SessionStart hook additional context: alpha context\nbeta context",
+          },
+        ],
+        display: false,
+      },
     });
     assert.strictEqual(secondTurn, undefined);
     assert.deepStrictEqual(routes, [
@@ -2745,12 +3217,73 @@ test(
   },
 );
 
+test("D-LOC-01 session_start in a project Pi does not trust runs no project SessionStart hook", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const { root } = await createHermeticEnvironment(t, "hooks-router-untrusted-project-");
+  const projectRoot = path.join(root, "project");
+  const projectLocations = locationsFor("project", projectRoot);
+  const hooksDirectory = path.join(projectLocations.hooksDir, "alpha-hooks");
+  await mkdir(hooksDirectory, { recursive: true });
+  await writeFile(
+    path.join(hooksDirectory, "hooks.json"),
+    JSON.stringify(makeConfig([{ event: "SessionStart", handlers: 1, prefix: "alpha" }])),
+    "utf8",
+  );
+  await saveState(
+    projectLocations.extensionRoot,
+    makeScopeState({
+      scope: "project",
+      cwd: projectRoot,
+      plugins: {
+        alpha: makeStoredPlugin({
+          root: path.join(root, "plugins", "alpha"),
+          hooks: ["alpha-hooks"],
+        }),
+      },
+    }),
+  );
+  const context = makeContext(projectRoot, root, false);
+  const { pi, registrations } = makeRecordingPi();
+  const dispatches: string[] = [];
+  const executor: HookExecutor = (entry) => {
+    dispatches.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    cwd: path.join(root, "factory-cwd"),
+    executor,
+  });
+  const sessionStart = registeredHandler(registrations, "session_start");
+
+  // act
+  await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+  // assert
+  assert.deepStrictEqual(dispatches, []);
+  assert.deepStrictEqual(
+    Array.from(runtime.parsedConfigEntries().values()).filter((entry) => entry.scope === "project"),
+    [],
+  );
+});
+
 test("session_start contains a lazy project cwd failure and still delegates safely", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const { root } = await createHermeticEnvironment(t, "hooks-router-lazy-failure-");
   const projectRoot = path.join(root, "project");
-  const context = makeContext(projectRoot, root);
+  let lazyCwdFails = false;
+  const baseContext = makeContext(projectRoot, root);
+  const context = new Proxy(baseContext, {
+    get(target, property, receiver): unknown {
+      if (property === "cwd" && lazyCwdFails) {
+        throw new Error("project cwd unavailable");
+      }
+
+      return Reflect.get(target, property, receiver) as unknown;
+    },
+  });
   const { pi, registrations, messages } = makeRecordingPi();
   const dispatches: string[] = [];
   const executor: HookExecutor = (entry) => {
@@ -2763,13 +3296,8 @@ test("session_start contains a lazy project cwd failure and still delegates safe
     executor,
   });
   const sessionStart = registeredHandler(registrations, "session_start");
-  // A throwing getter is the only way to make a later read of `ctx.cwd` fail.
-  Object.defineProperty(context, "cwd", {
-    configurable: true,
-    get(): string {
-      throw new Error("project cwd unavailable");
-    },
-  });
+  // The proxy makes every later read of `ctx.cwd` fail.
+  lazyCwdFails = true;
 
   // act
   const sessionStartUpdate = await sessionStart(
@@ -2781,7 +3309,211 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.strictEqual(sessionStartUpdate, undefined);
   assert.deepStrictEqual(dispatches, []);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 11);
+  assert.strictEqual(registrations.length, 12);
+});
+
+/** A manual compaction event whose entry carries `summary`. */
+function compactionEvent(summary: string): SessionCompactEvent {
+  return {
+    type: "session_compact",
+    compactionEntry: {
+      type: "compaction",
+      id: "router-compaction",
+      parentId: "router-parent",
+      timestamp: "2026-11-01T10:00:00.000Z",
+      summary,
+      firstKeptEntryId: "router-kept",
+      tokensBefore: 128,
+    },
+    fromExtension: false,
+    reason: "manual",
+    willRetry: false,
+  };
+}
+
+/** Routes one SessionStart and one PostCompact entry of the project scope. */
+function routeCompactionHooks(runtime: HooksRuntime, cwd: string): void {
+  for (const claudeEvent of ["SessionStart", "PostCompact"] as const) {
+    runtime.setRoutingBucket(claudeEvent, [
+      {
+        ...preToolUseEntry(`${claudeEvent.toLowerCase()}-plugin`, cwd),
+        claudeEvent,
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      },
+    ]);
+  }
+}
+
+test("session_compact runs SessionStart with source compact to completion, then PostCompact (D-CF5-04)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const log: unknown[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: async (entry, event) => {
+      log.push({ start: entry.claudeEvent, event });
+      await new Promise((resolve) => setImmediate(resolve));
+      log.push({ end: entry.claudeEvent });
+      return { kind: "noop" };
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  const event = compactionEvent("router summary");
+
+  // act
+  const update = await registeredHandler(registrations, "session_compact")(
+    event,
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(log, [
+    { start: "SessionStart", event: { source: "compact" } },
+    { end: "SessionStart" },
+    { start: "PostCompact", event },
+    { end: "PostCompact" },
+  ]);
+  assert.strictEqual(
+    fs.existsSync(path.join(locationsFor("project", root).dataRoot, "_shared")),
+    true,
+  );
+  assert.deepStrictEqual(messages, []);
+});
+
+test("a second session_compact in one session runs SessionStart compact again (D-CF5-05)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-repeat-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  const sessionCompact = registeredHandler(registrations, "session_compact");
+  const context = makeContext(root, root);
+
+  // act
+  await sessionCompact(compactionEvent("first summary"), context);
+  await sessionCompact(compactionEvent("second summary"), context);
+
+  // assert
+  assert.deepStrictEqual(dispatched, [
+    "SessionStart",
+    "PostCompact",
+    "SessionStart",
+    "PostCompact",
+  ]);
+});
+
+test("session_compact debug-logs a failed SessionStart and still runs PostCompact (NFR-2)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-failure-");
+  const readDiagnostics = observeRouterDebug(t);
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return entry.claudeEvent === "SessionStart"
+        ? Promise.reject(new Error("session start capability lost"))
+        : Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+
+  // act
+  const update = await registeredHandler(registrations, "session_compact")(
+    compactionEvent("failure summary"),
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(dispatched, ["SessionStart", "PostCompact"]);
+  assert.deepStrictEqual(
+    readDiagnostics().filter((line) => line.includes("session_compact")),
+    ["[hooks] session_compact SessionStart skipped: session start capability lost"],
+  );
+  assert.deepStrictEqual(messages, []);
+});
+
+test("session_compact runs no PostCompact once the compaction SessionStart went stale", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-stale-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      runtime.advanceGeneration();
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+
+  // act
+  await registeredHandler(registrations, "session_compact")(
+    compactionEvent("stale summary"),
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.deepStrictEqual(dispatched, ["SessionStart"]);
+});
+
+test("session_compact dispatches nothing when the generation goes stale while it prepares the shared directory", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-prepare-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  let modeReads = 0;
+  const context = new Proxy(makeContext(root, root), {
+    get(target, property, receiver): unknown {
+      if (property === "mode") {
+        modeReads += 1;
+        if (modeReads === 2) {
+          runtime.advanceGeneration();
+        }
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  // act
+  await registeredHandler(registrations, "session_compact")(
+    compactionEvent("prepare summary"),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(dispatched, []);
+  assert.strictEqual(
+    fs.existsSync(path.join(locationsFor("project", root).dataRoot, "_shared")),
+    true,
+  );
 });
 
 /** Collects the OBS-01 debug lines a case emits, restoring the flag afterwards. */
@@ -2803,9 +3535,9 @@ function observeRouterDebug(t: TestContext): () => string[] {
 }
 
 for (const { claudeEvent, event } of [
-  { claudeEvent: "SessionEnd", event: { type: "session_shutdown" } },
-  { claudeEvent: "PreCompact", event: { type: "session_before_compact", trigger: "manual" } },
-  { claudeEvent: "PostCompact", event: { type: "session_compact", trigger: "manual" } },
+  { claudeEvent: "SessionEnd", event: { type: "session_shutdown", reason: "quit" } },
+  { claudeEvent: "PreCompact", event: { type: "session_before_compact", reason: "manual" } },
+  { claudeEvent: "PostCompact", event: { type: "session_compact", reason: "manual" } },
   {
     claudeEvent: "UserPromptSubmit",
     event: { type: "input", text: "hello", source: "interactive" },

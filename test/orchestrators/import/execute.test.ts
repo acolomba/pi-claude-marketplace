@@ -4759,7 +4759,10 @@ test("resolves every collaborator from production when the caller supplies no de
   const { cwd, project } = await createHermeticScopes(t, "no-deps");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
   const ownerRuntime = createHooksRuntime();
+  // D-LOC-01: the session hydrate found the project trusted.
+  ownerRuntime.recordProjectTrust(cwd, true);
   const peerRuntime = createHooksRuntime();
+  peerRuntime.recordProjectTrust(cwd, true);
   const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
   const peerHooksRouting = createHooksRouting(peerRuntime, { readHooksJson });
   await seedHookRoute(hooksRouting, cwd, "unrelated-mp", "unrelated", "echo unrelated");

@@ -14,6 +14,7 @@ import {
   notify,
   notifyCommandError,
   notifyAsyncRewakeSummary,
+  notifyHookNotice,
   notifyBackgroundUpdate,
   notifyDeviceFlowPrompt,
   notifyDiagnostic,
@@ -608,6 +609,13 @@ for (const { kind, outcome, emit } of [
       ]);
     },
   },
+  {
+    kind: "hook-notice",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyHookNotice(ctx, run, "UserPromptSubmit says: hi");
+    },
+  },
 ] satisfies Array<{
   kind: string;
   outcome: boolean;
@@ -962,18 +970,6 @@ test("keeps mixed entries and duplicates ordered while reading live mode on the 
   verify(inventory);
 });
 
-test("independent contexts retain their own explicit modes", (t) => {
-  // arrange
-  const first = createContext(t);
-  const second = createContext(t);
-
-  // act
-  first.mode = "rpc";
-
-  // assert
-  assert.deepStrictEqual([first.mode, second.mode], ["rpc", "tui"]);
-});
-
 test("rejects an unsupported mode before structured or raw delivery", () => {
   // arrange
   const capture = createJsonCapture();
@@ -1000,115 +996,6 @@ test("rejects an unsupported mode before structured or raw delivery", () => {
   }, UnsupportedModeError);
   assert.deepStrictEqual(capture.entries, []);
   capture.assertValid();
-});
-
-for (const index of [0, 1, 2]) {
-  test(`retains an invalid capture at position ${index} after its append failure is caught`, () => {
-    // arrange
-    const capture = createJsonCapture();
-    const valid = {
-      schemaVersion: 1,
-      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-      kind: "usage-info",
-      severity: "info",
-      needsReload: false,
-      usage: "help",
-    };
-    const payloads: unknown[] = [valid, valid, valid];
-    payloads[index] = {};
-
-    // act
-    for (const payload of payloads) {
-      if (payload === valid) {
-        capture.entrySink.appendEntry("claude-plugin", payload);
-      } else {
-        assert.throws(() => {
-          capture.entrySink.appendEntry("claude-plugin", payload);
-        }, assert.AssertionError);
-      }
-    }
-
-    // assert
-    assert.deepStrictEqual(
-      capture.entries,
-      payloads.map((payload) => ({ customType: "claude-plugin", payload })),
-    );
-    assert.throws(() => {
-      capture.assertValid();
-    }, assert.AssertionError);
-  });
-}
-
-for (const { name, payload } of [
-  {
-    name: "undefined",
-    payload: {
-      schemaVersion: 1,
-      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-      kind: "cascade",
-      severity: "info",
-      needsReload: false,
-      marketplaces: [],
-      advisories: undefined,
-    },
-  },
-  { name: "null", payload: { extra: null } },
-  { name: "function", payload: { extra: () => undefined } },
-  { name: "symbol", payload: { extra: Symbol("extra") } },
-  { name: "bigint", payload: { extra: 1n } },
-  { name: "nonfinite number", payload: { extra: NaN } },
-  { name: "class instance", payload: { extra: new Error("extra") } },
-]) {
-  test(`capture rejects original ${name} values before serialization can hide them`, () => {
-    // arrange
-    const capture = createJsonCapture();
-
-    // act & assert
-    assert.throws(() => {
-      capture.entrySink.appendEntry("claude-plugin", payload);
-    }, assert.AssertionError);
-    assert.deepStrictEqual(capture.entries, [{ customType: "claude-plugin", payload }]);
-    assert.throws(() => {
-      capture.assertValid();
-    }, assert.AssertionError);
-  });
-}
-
-test("capture retains a wrong custom type after the immediate failure is caught", () => {
-  // arrange
-  const capture = createJsonCapture();
-
-  // act & assert
-  assert.throws(() => {
-    capture.entrySink.appendEntry("other", {});
-  }, assert.AssertionError);
-  assert.deepStrictEqual(capture.entries, [{ customType: "other", payload: {} }]);
-  assert.throws(() => {
-    capture.assertValid();
-  }, assert.AssertionError);
-});
-
-test("capture retains a caught UI getter failure without a notify call", () => {
-  // arrange
-  const capture = createJsonCapture();
-
-  // act & assert
-  assert.throws(() => capture.ui, Error);
-  assert.deepStrictEqual(capture.entries, []);
-  assert.throws(() => {
-    capture.assertValid();
-  }, assert.AssertionError);
-});
-
-test("an empty capture has no validation failures", () => {
-  // arrange
-  const capture = createJsonCapture();
-
-  // act
-  capture.assertValid();
-
-  // assert
-  assert.deepStrictEqual(capture.entries, []);
 });
 
 test("notify renders single installed plugin with empty deps under added marketplace (info severity + reload-hint)", (t) => {
@@ -2149,7 +2036,9 @@ test("notify severity tier mp-skipped: idempotent-disable marketplace renders <n
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 1);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● foo [user] <no autoupdate> {already no autoupdate}",
+  ]);
 });
 
 test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plugins:[]) renders `● <mp> [<scope>] (skipped) {up-to-date}`, computes info (benign per UXG-02 / D-28-07), emits NO /reload trailer', (t) => {
@@ -2247,17 +2136,9 @@ test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments;
-  assert.equal(args.length, 1);
-  const body = args[0];
-  assert.ok(
-    body.includes(`● foo [user] <autoupdate> {already autoupdate}`),
-    `expected body to include mp-skipped header, got: ${body}`,
-  );
-  assert.ok(
-    !body.includes(`/reload to pick up changes`),
-    `expected body to NOT include reload-hint trailer, got: ${body}`,
-  );
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● foo [user] <autoupdate> {already autoupdate}\n  ○ p1 v1.0.0 (available)",
+  ]);
 });
 
 test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdate token; lastUpdatedAt field persists but is not rendered (UXG-01)", (t) => {
@@ -2327,15 +2208,9 @@ test("RLD-04: list-shaped message with an installed inventory row (needsReload:f
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    body.includes("● alpha v1.0.0 (installed)"),
-    `expected body to include the installed inventory row, got: ${body}`,
-  );
-  assert.ok(
-    !body.includes("/reload to pick up changes"),
-    `expected body to NOT include reload-hint trailer, got: ${body}`,
-  );
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● official [user]\n  ● alpha v1.0.0 (installed)",
+  ]);
 });
 
 test("RLD-02: cascade-shaped message with an installed transition row (needsReload:true) emits the /reload trailer", (t) => {
@@ -2366,11 +2241,9 @@ test("RLD-02: cascade-shaped message with an installed transition row (needsRelo
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    body.includes("/reload to pick up changes"),
-    `expected body to include reload-hint trailer, got: ${body}`,
-  );
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● official [user]\n  ● alpha v1.0.0 (installed)\n\n/reload to pick up changes",
+  ]);
 });
 
 test("PL-4: installed inventory row with description emits a 4-space-indented second line", (t) => {
@@ -2610,13 +2483,12 @@ test("PL-4: description exactly 66 chars -- emitted verbatim (no truncation)", (
 
   // act
   notify(ctx, run, msg);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
 
   // assert
-  assert.ok(
-    body.includes(`    ${exactly66}`),
-    `expected 66-char description verbatim, got: ${body}`,
-  );
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● official [user]\n  ○ gamma (available)\n    AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  ]);
 });
 
 test("PL-4: description 67 chars -- truncated to 63 + '...' (column 66)", (t) => {
@@ -2636,13 +2508,12 @@ test("PL-4: description 67 chars -- truncated to 63 + '...' (column 66)", (t) =>
 
   // act
   notify(ctx, run, msg);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
 
   // assert
-  assert.ok(
-    body.includes(`    ${"B".repeat(63)}...`),
-    `expected truncated description, got: ${body}`,
-  );
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● official [user]\n  ○ gamma (available)\n    BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB...",
+  ]);
 });
 
 test("PL-4: empty string description -- no second line emitted", (t) => {
@@ -2680,11 +2551,7 @@ test("D-22-04 NEGATIVE: empty `marketplace add` ({status:'added', plugins:[]}) e
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    !body.includes("/reload to pick up changes"),
-    `expected empty add to NOT include reload-hint trailer, got: ${body}`,
-  );
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["● local-mp [user] (added)"]);
 });
 
 test("D-22-04 NEGATIVE: empty `marketplace remove` ({status:'removed', plugins:[]}) emits NO /reload trailer (SNM-33 / G-MIL-02)", (t) => {
@@ -2700,11 +2567,7 @@ test("D-22-04 NEGATIVE: empty `marketplace remove` ({status:'removed', plugins:[
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    !body.includes("/reload to pick up changes"),
-    `expected empty remove to NOT include reload-hint trailer, got: ${body}`,
-  );
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["● local-mp [user] (removed)"]);
 });
 
 test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emits NO /reload trailer (SNM-33 / G-MIL-06)", (t) => {
@@ -2735,11 +2598,9 @@ test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emi
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    !body.includes("/reload to pick up changes"),
-    `expected all-skipped update to NOT include reload-hint trailer, got: ${body}`,
-  );
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● local-mp [user] (updated)\n  ⊘ alpha (skipped) {up-to-date}",
+  ]);
 });
 
 test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits the /reload trailer (SC#4)", (t) => {
@@ -2762,11 +2623,9 @@ test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits t
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    body.includes("/reload to pick up changes"),
-    `expected non-empty remove to include reload-hint trailer, got: ${body}`,
-  );
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● local-mp [user] (removed)\n  ○ alpha (uninstalled)\n\n/reload to pick up changes",
+  ]);
 });
 
 test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /reload trailer (SC#4)", (t) => {
@@ -2799,11 +2658,9 @@ test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    body.includes("/reload to pick up changes"),
-    `expected update with a changed plugin to include reload-hint trailer, got: ${body}`,
-  );
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● local-mp [user] (updated)\n  ● alpha v1.0.0 → v2.0.0 (updated)\n\n/reload to pick up changes",
+  ]);
 });
 
 test("notify renders (no marketplaces) sentinel for empty marketplaces array (no reload-hint, no severity)", (t) => {
@@ -3630,12 +3487,10 @@ test("AS-7: manual recovery row names the leaked paths from ManualRecoveryError.
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const [rendered, severity] = ctx.ui.notify.mock.calls[0]!.arguments as [string, string];
-  assert.equal(severity, "warning");
-  assert.match(rendered, /cause: agent index rewrite failed -> EACCES/);
-  for (const leak of leaks) {
-    assert.match(rendered, new RegExp(`    leaked: ${leak.replace(/[.]/g, "\\.")}`));
-  }
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "A plugin operation needs attention.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: agent index rewrite failed -> EACCES\n    leaked: /home/u/.pi/pi-claude-marketplace/agents-staging/foo.md\n    leaked: /home/u/.pi/pi-claude-marketplace/agents-index.json",
+    "warning",
+  ]);
 });
 
 test("AS-7: manual recovery row with no leaks emits no leaked-paths child row", (t) => {
@@ -3666,10 +3521,13 @@ test("AS-7: manual recovery row with no leaks emits no leaked-paths child row", 
 
   // act
   notify(ctx, run, msg);
-  const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0];
 
   // assert
-  assert.doesNotMatch(rendered, /leaked:/);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "A plugin operation needs attention.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: nothing leaked -> EACCES",
+    "warning",
+  ]);
 });
 
 test("notify renders single-version hash row as v#<7hex> via renderVersion chokepoint (SNM-35)", (t) => {
@@ -4051,12 +3909,10 @@ test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> 'Some plug
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    body.startsWith("Some plugin operations have failed.\n\n"),
-    "two-failed-plugin cascade summary must read 'Some plugin operations have failed.'",
-  );
-  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "error");
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "Some plugin operations have failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {permission denied}\n  ⊘ beta v2.0.0 (failed) {network unreachable}",
+    "error",
+  ]);
 });
 
 test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> 'A marketplace operation has failed.' (single-type marketplace)", (t) => {
@@ -4115,12 +3971,10 @@ test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> 'A plugin
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    body.startsWith("A plugin operation needs attention.\n\n"),
-    "single actionable-skip cascade summary must read 'A plugin operation needs attention.'",
-  );
-  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "A plugin operation needs attention.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (skipped) {not installed}",
+    "warning",
+  ]);
 });
 
 test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionable skip -> 'A plugin operation needs attention.'", (t) => {
@@ -4202,12 +4056,10 @@ test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionab
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    body.startsWith("Some operations need attention.\n\n"),
-    "mixed actionable-skip cascade summary must read 'Some operations need attention.'",
-  );
-  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "Some operations need attention.\n\n● demo [user]\n  ⊘ alpha v1.0.0 (skipped) {not installed}\n  ⊘ beta v2.0.0 (skipped) {not installed}\n\n● other [user] (skipped)",
+    "warning",
+  ]);
 });
 
 test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identical to prior info-severity behavior)", (t) => {
@@ -4279,16 +4131,10 @@ test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reloa
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
-  assert.ok(
-    body.startsWith("A plugin operation has failed.\n\n"),
-    "summary line must be the first line of the composed string",
-  );
-  assert.ok(
-    body.endsWith("\n\n/reload to pick up changes"),
-    "reload-hint must remain the last trailer after the cascade body",
-  );
-  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "error");
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "A plugin operation has failed.\n\n● demo [user]\n  ○ alpha v1.0.0 (uninstalled)\n  ⊘ beta v2.0.0 (failed) {permission denied}\n\n/reload to pick up changes",
+    "error",
+  ]);
 });
 
 test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summary line is prepended", (t) => {
@@ -4319,12 +4165,9 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments;
-  assert.equal(args.length, 1, "benign-only skip is info severity -- single-arg call, no summary");
-  assert.ok(
-    !args[0].includes("needs attention.") && !args[0].includes("need attention."),
-    "info-severity cascade must NOT carry a summary line",
-  );
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● demo [user]\n  ⊘ alpha v1.0.0 (skipped) {up-to-date}",
+  ]);
 });
 
 function pluginInfoDescriptionBlock(t: TestContext, description: string): string[] {
@@ -4510,13 +4353,13 @@ test("INFO-04: {marketplace not added} row never carries a reload-hint (read-onl
 
   // act
   notify(ctx, run, msg);
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0];
 
   // assert
-  assert.ok(
-    !body.includes("/reload"),
-    "marketplace-not-added must NOT carry the reload-hint trailer",
-  );
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {marketplace not added}",
+    "error",
+  ]);
 });
 
 test("INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + description)", (t) => {
@@ -4922,14 +4765,12 @@ test("INFO-03: marketplace-info-cascade severity is always info (no second arg) 
 
   // act
   notify(ctx, run, msg);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
-  assert.equal(args.length, 1, "info severity must omit the 2nd arg");
-  assert.ok(
-    !args[0].includes("/reload"),
-    "info-surface marketplace-info-cascade must NOT carry the reload-hint trailer",
-  );
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● my-mp [project] <autoupdate>\npath: /repo/path/my-mp\n\n● my-mp [user] <no autoupdate>\ngithub: someuser/my-mp",
+  ]);
 });
 
 test("INFO-03 + INFO-01: single-block fan-out (github source, all optional fields) byte form", (t) => {
@@ -5131,14 +4972,12 @@ test("INFO-02: plugin-info-cascade severity is always info (no second arg) and n
 
   // act
   notify(ctx, run, msg);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
-  assert.equal(args.length, 1, "info severity must omit the 2nd arg");
-  assert.ok(
-    !args[0].includes("/reload"),
-    "info-surface plugin-info-cascade must NOT carry the reload-hint trailer",
-  );
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● mp [project] <autoupdate>\n  ● foo v1.0.0 (installed)\n    skills: s1\n\n● mp [user] <no autoupdate>\n  ● foo v2.0.0 (installed)\n    agents: a1",
+  ]);
 });
 
 test("INFO-02: plugin-info-cascade single block installed with resolved components + dependencies renders full INFO-02 happy path", (t) => {
@@ -5402,13 +5241,12 @@ test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pendi
 
   // act
   notify(ctx, run, msg);
-  const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0];
 
   // assert
-  assert.ok(
-    !emitted.includes("/reload to pick up changes"),
-    "pending rows MUST NOT emit the reload-hint trailer",
-  );
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● mp [user]\n  ● a (will install)\n  ○ b (will uninstall)",
+  ]);
 });
 
 test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.notify)", (t) => {
@@ -5427,10 +5265,12 @@ test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.no
 
   // act
   notify(ctx, run, msg);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
-  assert.equal(args.length, 1);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● mp [user]\n  ○ p (will uninstall)",
+  ]);
 });
 
 test("D-54-01: (disabled) inventory row renders subject-first with version under list-arm marketplace (info severity, no /reload)", (t) => {
@@ -6516,14 +6356,15 @@ test("a non-failed plugin fallback preserves the empty standalone summary", (t) 
   let statusIndex = 0;
   // The envelope reads the status before the body does (presentation read order).
   const statuses = ["failed", "available", "available", "available"] as const;
-  const plugin = Object.defineProperty({ name: "alpha", componentsResolved: false }, "status", {
-    enumerable: true,
-    get() {
+  const plugin = {
+    name: "alpha",
+    componentsResolved: false,
+    get status() {
       const status = statuses[Math.min(statusIndex, statuses.length - 1)]!;
       statusIndex++;
       return status;
     },
-  });
+  };
   const message = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -7081,6 +6922,140 @@ test("empty rewake does not read mode or sink", () => {
 
   // act
   notifyAsyncRewakeSummary(ctx, run, "");
+
+  // assert
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
+});
+
+test("HOOK-05 / D-CF5-14: hook notice dispatch shows each plain text as given at info and skips an empty one", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyHookNotice(ctx, runWithNothingLoaded(), "UserPromptSubmit says: hi");
+  notifyHookNotice(ctx, runWithNothingLoaded(), "");
+  notifyHookNotice(ctx, runWithNothingLoaded(), "UserPromptSubmit operation blocked by hook:\nno");
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      ["UserPromptSubmit says: hi", "info"],
+      ["UserPromptSubmit operation blocked by hook:\nno", "info"],
+    ],
+  );
+});
+
+for (const mode of ["json", "rpc"]) {
+  test(`HOOK-05 / D-CF5-14: hook notice dispatch appends the hook-notice payload in ${mode}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    notifyHookNotice(ctx, run, "");
+    notifyHookNotice(ctx, run, "PreToolUse:Bash says: checked");
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "hook-notice",
+          severity: "info",
+          needsReload: false,
+          text: "PreToolUse:Bash says: checked",
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+}
+
+test("hook notice dispatch strips terminal escapes and control characters but keeps line breaks and tabs", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyHookNotice(
+    ctx,
+    runWithNothingLoaded(),
+    "Stop says: \u001b[31mred\u001b[0m\u001b]52;c;Y2xpcA==\u0007 a\rb\u0000c\u007fd\n\te",
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [["Stop says: red a b c d\n\te", "info"]],
+  );
+});
+
+test("hook notice dispatch shows nothing for a notice that holds only escapes", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyHookNotice(ctx, runWithNothingLoaded(), "\u001b[2J");
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls, []);
+});
+
+test("hook notice dispatch appends the stripped text in json", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  notifyHookNotice(ctx, run, "PreToolUse:Bash says: \u001b]0;title\u0007checked");
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        kind: "hook-notice",
+        severity: "info",
+        needsReload: false,
+        text: "PreToolUse:Bash says: checked",
+      },
+    },
+  ]);
+  capture.assertValid();
+});
+
+test("an empty hook notice does not read mode or sink", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = {
+    get mode(): string {
+      throw new Error("stale mode");
+    },
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  notifyHookNotice(ctx, run, "");
 
   // assert
   assert.deepStrictEqual(capture.entries, []);

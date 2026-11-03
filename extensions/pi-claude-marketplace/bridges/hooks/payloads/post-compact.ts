@@ -6,7 +6,8 @@
 // stdin envelope. Like PreCompact, Claude's `trigger` field is
 // `"manual" | "auto"` (claude-hook-config-syntax.md § 3). Pi reports
 // `manual`, `threshold`, or `overflow`; the latter two are Claude automatic
-// compaction triggers.
+// compaction triggers. `compact_summary` is the summary Pi wrote into the
+// compaction entry, as upstream gives it (D-CF5-04).
 
 import { compactTrigger } from "./compact-trigger.ts";
 
@@ -19,6 +20,7 @@ export interface PostCompactStdin {
   readonly cwd: string;
   readonly hook_event_name: "PostCompact";
   readonly trigger: "auto" | "manual";
+  readonly compact_summary: string;
 }
 
 export function translatePostCompact(
@@ -31,5 +33,6 @@ export function translatePostCompact(
     cwd: ctx.cwd,
     hook_event_name: "PostCompact",
     trigger: compactTrigger(event.reason),
+    compact_summary: event.compactionEntry.summary,
   };
 }

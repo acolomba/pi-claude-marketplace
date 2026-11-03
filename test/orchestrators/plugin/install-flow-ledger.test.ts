@@ -317,9 +317,8 @@ function assertRetryFailure(
  * the staging root UUID a bridge generates per call, and V8's JSON position
  * text. `expectedPrefix` is a case-authored literal covering every byte the
  * module under test is responsible for, and `expectedTail` pins the shape of
- * the remainder. Returns the two halves rejoined so a case that renders the
- * Returns the raw halves rejoined so a caller can inspect the typed cause or
- * redact it before comparing a notification.
+ * the remainder. Returns the raw halves rejoined so a caller can inspect the
+ * typed cause or redact it before comparing a notification.
  */
 function assertRetryPartialFailure(
   outcome: Awaited<ReturnType<InstallOperation>>,
@@ -404,15 +403,6 @@ interface SeededPlugin {
   manifestPath: string;
 }
 
-/**
- * Write the plugin's component sources. Skills are directories carrying a
- * `SKILL.md`; commands and agents are single `.md` files; mcp is a
- * `.mcp.json` at the plugin root.
- *
- * WR-03: the hooks fixture seeds `<pluginRoot>/hooks/hooks.json` so the
- * resolver populates `installable.hooksConfigPath` and the install ledger's
- * cache-plus-rebuild path actually executes.
- */
 interface SeededAgentSource {
   readonly sourceName: string;
   readonly directory?: string;
@@ -434,6 +424,15 @@ async function writeAgentComponent(pluginRoot: string, agent: SeededAgentSource)
   );
 }
 
+/**
+ * Write the plugin's component sources. Skills are directories carrying a
+ * `SKILL.md`; commands and agents are single `.md` files; mcp is a
+ * `.mcp.json` at the plugin root.
+ *
+ * WR-03: the hooks fixture seeds `<pluginRoot>/hooks/hooks.json` so the
+ * resolver populates `installable.hooksConfigPath` and the install ledger's
+ * cache-plus-rebuild path actually executes.
+ */
 async function writePluginComponents(
   pluginRoot: string,
   opts: {
@@ -530,13 +529,6 @@ function seededDependencyElement(opts: {
 }
 
 /**
- * Build a plugin source tree on disk and seed a path-source marketplace
- * pointing at it. Returns the absolute paths for downstream assertions.
- *
- * The marketplace manifest is written under `<marketplaceRoot>/.claude-plugin/marketplace.json`.
- * The plugin tree lives at `<marketplaceRoot>/plugins/<plugin>/`.
- */
-/**
  * The plugin's OWN `.claude-plugin/plugin.json`. SNM-34 fixture knob: its
  * `version` is distinct from the marketplace `entry.version` (`pluginVersion`)
  * -- `undefined` preserves the legacy `0.0.1` shape, a string sets that
@@ -600,7 +592,7 @@ function buildSeededMarketplaceEntry(
     ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
     // RESV-01: a declaration the cascade can actually satisfy, so the case
     // exercises the successful-install surface. The named plugin must be seeded
-    // as a sibling; an unresolvable declaration now fails the whole install.
+    // as a sibling; an unresolvable declaration fails the whole install.
     ...(opts.declareDependencies === true && {
       dependencies: [seededDependencyElement(opts)],
     }),
@@ -671,6 +663,13 @@ async function seedSiblingPlugins(
   return entries;
 }
 
+/**
+ * Build a plugin source tree on disk and seed a path-source marketplace
+ * pointing at it. Returns the absolute paths for downstream assertions.
+ *
+ * The marketplace manifest is written under `<marketplaceRoot>/.claude-plugin/marketplace.json`.
+ * The plugin tree lives at `<marketplaceRoot>/plugins/<plugin>/`.
+ */
 async function seedPathMarketplaceWithPlugin(opts: {
   cwd: string;
   marketplaceRoot: string;
@@ -926,6 +925,7 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
   await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi3-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
       // Seed marketplace WITHOUT the plugin we ask for.
@@ -935,9 +935,10 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
         marketplaceName: "mp",
         pluginName: "real-plugin",
       });
-
       const { ctx, run, notifications } = makeCtx();
       const cacheDrops = observeCompletionDrops(t, completionCache);
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -947,21 +948,22 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
         plugin: "ghost-plugin",
       });
 
+      // assert
       // V2 byte form matches `docs/output-catalog.md` lines 308-314
       // (`failure-runtime-with-cause`) with the entity-shape `{not in
       // manifest}` reason. Severity `"error"` per D-16-11. UXG-07
       // (D-29-02/03): 1 failed plugin, 0 failed marketplace -> the
       // "A plugin operation has failed." summary line is prepended.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.equal(
-        notifications[0]?.message,
-        "A plugin operation has failed.\n\n" +
-          "● mp [project]\n" +
-          "  ⊘ ghost-plugin (failed) {not in manifest}\n" +
-          '    cause: Plugin "ghost-plugin" not found in marketplace "mp".',
-      );
-
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ ghost-plugin (failed) {not in manifest}\n" +
+            '    cause: Plugin "ghost-plugin" not found in marketplace "mp".',
+          severity: "error",
+        },
+      ]);
       // State unchanged.
       const after = await loadState(locations.extensionRoot);
       const mp = after.marketplaces["mp"];
@@ -978,12 +980,15 @@ test("ATTR-01 / M1: marketplace itself absent -> standalone {marketplace not add
   await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi3b-"));
     try {
+      // arrange
       // No state seeded -- the marketplace record is absent. After the CMP-3
       // project->user fallback also misses, install re-attributes the failure
       // to the MARKETPLACE subject via the canonical `MarketplaceNotAddedMessage` variant
       // (ATTR-01 / ATTR-08 split), NOT `{not in manifest}` on a plugin row.
       const { ctx, run, notifications } = makeCtx();
       const cacheDrops = observeCompletionDrops(t, completionCache);
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -993,18 +998,19 @@ test("ATTR-01 / M1: marketplace itself absent -> standalone {marketplace not add
         plugin: "anything",
       });
 
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
+      // assert
       // Standalone `marketplace-not-added` emission (D-47-A): a bare
       // column-0 row carrying the requested-scope bracket, NO summary line,
       // NO cause-chain trailer. Byte-identical to `info`'s scope-mismatch
       // not-added state.
-      assert.equal(
-        notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {marketplace not added}",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {marketplace not added}",
+          severity: "error",
+        },
+      ]);
       assert.equal(outcome.status, "failed");
-
       // State unchanged -- no marketplace container was synthesized.
       const after = await loadState(locationsFor("project", cwd).extensionRoot);
       assert.equal(after.marketplaces["ghost-mp"], undefined);
@@ -1019,7 +1025,10 @@ test("Orchestrated ATTR-01 / M1: marketplace absent in orchestrated mode -> fail
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-m1-"));
     try {
+      // arrange
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -1030,10 +1039,11 @@ test("Orchestrated ATTR-01 / M1: marketplace absent in orchestrated mode -> fail
         notifications: { mode: "orchestrated" },
       });
 
+      // assert
       // Orchestrated mode (import cascade) returns the failed outcome WITHOUT
       // emitting the standalone variant (the cascade caller renders its own
       // rows). Mirrors the entity-error orchestrated gate.
-      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.deepStrictEqual(notifications, []);
       assert.equal(outcome.status, "failed");
       assert.ok("cause" in outcome && typeof outcome.cause === "string");
       assert.match((outcome as { cause: string }).cause, /not added in the project scope/);
@@ -1051,6 +1061,7 @@ test("PI-4: unsupported source (npm) -> V2 unavailable/{unsupported source}", as
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi4-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -1063,6 +1074,8 @@ test("PI-4: unsupported source (npm) -> V2 unavailable/{unsupported source}", as
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -1072,6 +1085,7 @@ test("PI-4: unsupported source (npm) -> V2 unavailable/{unsupported source}", as
         plugin: "hello",
       });
 
+      // assert
       // V2 byte form matches `docs/output-catalog.md:295-302` (catalog
       // `failure-unsupported-features`): `(unavailable)` with no
       // `[scope]` bracket on the plugin row (MSG-PL-6 / SNM-11 carve-out)
@@ -1084,12 +1098,13 @@ test("PI-4: unsupported source (npm) -> V2 unavailable/{unsupported source}", as
       // install failure stamps `severity: "error"` (so the leading summary
       // line fires), but carries NO `--partial` hint trailer -- `--partial`
       // cannot degrade-install a structural defect.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.equal(
-        notifications[0]?.message,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (unavailable) {unsupported source}",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (unavailable) {unsupported source}",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1104,6 +1119,7 @@ test("PI-5: state already has plugin record -> V2 failed/{already installed}", a
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi5-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -1111,8 +1127,9 @@ test("PI-5: state already has plugin record -> V2 failed/{already installed}", a
         pluginName: "hello",
         preInstall: true,
       });
-
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -1122,24 +1139,26 @@ test("PI-5: state already has plugin record -> V2 failed/{already installed}", a
         plugin: "hello",
       });
 
+      // assert
       // V2 byte form matches `docs/output-catalog.md:306-314`
       // (`failure-runtime-with-cause`) with the entity-shape `{already
       // installed}` reason. No `v<version>` slot because the PI-5
       // early-sanity check throws BEFORE `resolvePluginVersion` runs
       // (`failureVersion` is undefined at throw time even though the
       // preInstall state record holds version "0.0.0").
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
       // UXG-07 (D-29-02/03): the already-installed case stays
       // classified as `(failed)` (D-29-05, UXG-09 out of scope); the summary
       // line "A plugin operation has failed." is prepended.
-      assert.equal(
-        notifications[0]?.message,
-        "A plugin operation has failed.\n\n" +
-          "● mp [project]\n" +
-          "  ⊘ hello (failed) {already installed}\n" +
-          '    cause: Plugin "hello" is already installed in marketplace "mp".',
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello (failed) {already installed}\n" +
+            '    cause: Plugin "hello" is already installed in marketplace "mp".',
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1154,6 +1173,7 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi6-"));
     try {
+      // arrange
       // The plugin we're installing is "hello"; its skill is "shared-tool"
       // which the generator maps to "hello-shared-tool".
       // We seed a prior plugin "world" that already owns the same name
@@ -1172,6 +1192,8 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -1181,6 +1203,7 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
         plugin: "hello",
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.match(notifications[0]?.message ?? "", /Cross-plugin name conflict/);
@@ -1283,7 +1306,7 @@ test("AGENT-01: fresh install preserves prefixed and unprefixed agent identities
         });
         assert.strictEqual(
           await readFile(targetPath, "utf8"),
-          `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+          `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
         );
       }
 
@@ -1301,13 +1324,14 @@ test("PDEF-01: install preview detects an agent conflict from a later resolved d
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-dir-preview-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        agentDirectories: ["declared-agents"],
+        agentDirectories: ["declared-agents", "agents"],
         agents: [
           { directory: "declared-agents", sourceName: "first", description: "First agent" },
           { sourceName: "later", description: "Later agent" },
@@ -1352,13 +1376,14 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-dirs-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const { pluginRoot } = await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        agentDirectories: ["declared-agents"],
+        agentDirectories: ["declared-agents", "agents"],
         agents: [
           {
             directory: "declared-agents",
@@ -1436,7 +1461,7 @@ test("PDEF-01 / D-PL1-02: a standalone install reports a later duplicate agent a
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        agentDirectories: ["declared-agents"],
+        agentDirectories: ["declared-agents", "agents"],
         agents: [
           {
             directory: "declared-agents",
@@ -1511,7 +1536,7 @@ async function seedCollidingAgentsBehindBlockedMcp(cwd: string): Promise<string>
     marketplaceRoot: path.join(cwd, "mp-src"),
     marketplaceName: "mp",
     pluginName: "hello",
-    agentDirectories: ["declared-agents"],
+    agentDirectories: ["declared-agents", "agents"],
     agents: [
       {
         directory: "declared-agents",
@@ -1661,6 +1686,7 @@ test("PI-7 (a): entry.version present, plugin.json version absent -> recorded st
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi7a-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -1675,6 +1701,8 @@ test("PI-7 (a): entry.version present, plugin.json version absent -> recorded st
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -1684,6 +1712,7 @@ test("PI-7 (a): entry.version present, plugin.json version absent -> recorded st
         plugin: "hello",
       });
 
+      // assert
       // No error notifications.
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
@@ -1702,6 +1731,7 @@ test("PI-7 (b): entry.version absent, plugin.json version absent -> recorded sta
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi7b-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -1715,6 +1745,8 @@ test("PI-7 (b): entry.version absent, plugin.json version absent -> recorded sta
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -1724,6 +1756,7 @@ test("PI-7 (b): entry.version absent, plugin.json version absent -> recorded sta
         plugin: "hello",
       });
 
+      // assert
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
@@ -1745,6 +1778,7 @@ test("SNM-34: plugin.json version present, entry.version absent -> recorded stat
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-snm34-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -1758,6 +1792,8 @@ test("SNM-34: plugin.json version present, entry.version absent -> recorded stat
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -1767,6 +1803,7 @@ test("SNM-34: plugin.json version present, entry.version absent -> recorded stat
         plugin: "hello",
       });
 
+      // assert
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
@@ -1921,6 +1958,7 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-row-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -1943,6 +1981,8 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
       // the one that would emit
       // `{requires pi-subagents, requires pi-mcp-adapter}` and fail below.
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -1953,6 +1993,7 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
         applyDefaultEnabled: true,
       });
 
+      // assert
       // IL-2: one install, one notification.
       assert.equal(notifications.length, 1);
       const note = notifications[0]!;
@@ -1994,6 +2035,7 @@ test("OUT-04 / D-102-10: the enable hint is a frozen, non-interpolating trailer 
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-hint-"));
     try {
+      // arrange
       // Deliberately distinctive names: a two-letter marketplace such as `mp`
       // is a substring of the trailer's own prose, so the non-interpolation
       // assertions below would fail for a reason that has nothing to do with
@@ -2010,6 +2052,8 @@ test("OUT-04 / D-102-10: the enable hint is a frozen, non-interpolating trailer 
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -2020,6 +2064,7 @@ test("OUT-04 / D-102-10: the enable hint is a frozen, non-interpolating trailer 
         applyDefaultEnabled: true,
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       const lines = (notifications[0]?.message ?? "").split("\n");
       const rowAt = lines.findIndex((l) => l.includes("(disabled)"));
@@ -2045,6 +2090,7 @@ test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint t
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-nohint-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -2054,6 +2100,8 @@ test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint t
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -2064,6 +2112,7 @@ test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint t
         applyDefaultEnabled: true,
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       // Without this the gate would be satisfiable by an unconditional append.
       assert.ok(
@@ -2814,6 +2863,7 @@ test("D-102-03: an install that does not opt in ignores defaultEnabled and lands
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d10203-optout-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       // The same declaration the opting-in cases install DISABLED from. The
       // only difference below is the missing `applyDefaultEnabled`.
@@ -2828,6 +2878,8 @@ test("D-102-03: an install that does not opt in ignores defaultEnabled and lands
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -2837,6 +2889,7 @@ test("D-102-03: an install that does not opt in ignores defaultEnabled and lands
         plugin: "hello",
       });
 
+      // assert
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
@@ -2886,6 +2939,7 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
   await withHermeticHome(async ({ hooksRouting, hooksRuntime, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-disabled-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -2906,6 +2960,8 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -2916,6 +2972,7 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
         applyDefaultEnabled: true,
       });
 
+      // assert
       const summary = notifications.map((n) => n.message).join("\n");
       assert.ok(summary.includes("(disabled)"), `expected a disabled row; got: ${summary}`);
 
@@ -2936,7 +2993,10 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
 test("T-102-01: the same hooks fixture installed ENABLED does get its routing entry", async () => {
   await withHermeticHome(async ({ hooksRuntime, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-enabled-"));
+    // D-LOC-01: the session hydrate found the project trusted.
+    hooksRuntime.recordProjectTrust(cwd, true);
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -2954,6 +3014,8 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -2964,6 +3026,7 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
         applyDefaultEnabled: true,
       });
 
+      // assert
       const bucket = hooksRuntime.getRoutingBucket("PreToolUse");
       assert.equal(bucket.length, 1);
       assert.equal(bucket[0]?.pluginId, "hooky");
@@ -3144,6 +3207,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi9-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -3163,6 +3227,8 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -3172,6 +3238,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
         plugin: "hello",
       });
 
+      // assert
       // End-state: every bridge's target file exists.
       const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
       assert.ok((await readFile(skillTarget, "utf8")).length > 0, "skill SKILL.md must exist");
@@ -3208,17 +3275,18 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       // PluginInstalledMessage triggers the reload-hint structurally per D-16-12.
       // SEV-01: both declared companions are unloaded, so the success row stamps
       // warning -- the cascade gains the `needs attention` summary line.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "warning");
-      assert.equal(
-        notifications[0]?.message,
-        "A plugin operation needs attention.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
-          "\n" +
-          "/reload to pick up changes",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n" +
+            "\n" +
+            "● mp [project]\n" +
+            "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
+            "\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3229,6 +3297,7 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-afile01-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplaceWithPlugin({
         cwd,
@@ -3246,8 +3315,10 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
       const dataDir = path.join(locations.dataRoot, "mp", "hello");
       const { ctx, run } = makeCtx();
 
+      // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
+      // assert
       assert.equal(
         await readFile(adapterPath, "utf8"),
         `{
@@ -3664,16 +3735,24 @@ test("ANAME-07: a server Claude Code's schema rejects makes the plugin unavailab
     try {
       // arrange
       const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        mcpServers: {
-          db: { command: "node", timeout: 1.5 },
-          live: { type: "ws", url: "wss://mcp.example.com/ws" },
-        },
       });
+      // D-CF6-02: only a server written inline in plugin.json refuses the plugin.
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({
+          name: "hello",
+          version: "0.0.1",
+          mcpServers: {
+            db: { command: "node", timeout: 1.5 },
+            live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          },
+        }),
+      );
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -3790,6 +3869,7 @@ test("AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and ke
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-afile02-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -3803,8 +3883,10 @@ test("AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and ke
       await writeFile(adapterPath, storedBytes);
       const { ctx, run, notifications } = makeCtx();
 
+      // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
+      // assert
       assert.equal(await readFile(adapterPath, "utf8"), storedBytes);
       assert.deepEqual(notifications, [
         {
@@ -4809,6 +4891,7 @@ test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and 
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-afile05-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -4820,8 +4903,10 @@ test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and 
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       const { ctx, run, notifications } = makeCtx();
 
+      // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
+      // assert
       assert.deepEqual(notifications, [
         {
           severity: "error",
@@ -4847,6 +4932,7 @@ test("PI-10: staged skill body has ${CLAUDE_PLUGIN_ROOT} replaced with absolute 
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi10-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const seeded = await seedPathMarketplaceWithPlugin({
         cwd,
@@ -4862,6 +4948,8 @@ test("PI-10: staged skill body has ${CLAUDE_PLUGIN_ROOT} replaced with absolute 
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -4871,6 +4959,7 @@ test("PI-10: staged skill body has ${CLAUDE_PLUGIN_ROOT} replaced with absolute 
         plugin: "hello",
       });
 
+      // assert
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
@@ -4917,6 +5006,7 @@ test("PI-11 / RH-3: staged agents + a run reporting pi-subagents unloaded -> the
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi11-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -4926,6 +5016,8 @@ test("PI-11 / RH-3: staged agents + a run reporting pi-subagents unloaded -> the
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -4935,19 +5027,23 @@ test("PI-11 / RH-3: staged agents + a run reporting pi-subagents unloaded -> the
         plugin: "hello",
       });
 
+      // assert
       // CMC-13 / MSG-SD-1: per-row soft-dep marker `{requires pi-subagents}`
       // fires when (declaresAgents AND !piSubagentsLoaded). The renderer
       // composes the marker into the reasons block of the PluginInlineRow
       // per D-13-07.
       // SEV-01: the declared `pi-subagents` companion is unloaded, so the
       // success row stamps warning (silent degradation of a clean install).
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "warning");
-      assert.match(
-        notifications[0]?.message ?? "",
-        /\{requires pi-subagents\}/,
-        "must include per-row {requires pi-subagents} marker",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n" +
+            "● mp [project]\n" +
+            "  ● hello v0.0.1 (installed) {requires pi-subagents}\n\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4962,6 +5058,7 @@ test("PI-12 / RH-4: staged mcp + a run reporting pi-mcp-adapter unloaded -> the 
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi12-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -4971,6 +5068,8 @@ test("PI-12 / RH-4: staged mcp + a run reporting pi-mcp-adapter unloaded -> the 
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -4980,17 +5079,21 @@ test("PI-12 / RH-4: staged mcp + a run reporting pi-mcp-adapter unloaded -> the 
         plugin: "hello",
       });
 
+      // assert
       // CMC-13 / MSG-SD-2: per-row soft-dep marker `{requires pi-mcp-adapter}`
       // fires when (declaresMcp AND !piMcpAdapterLoaded) per D-13-07.
       // SEV-01: the declared `pi-mcp-adapter` companion is unloaded, so the
       // success row stamps warning (silent degradation of a clean install).
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "warning");
-      assert.match(
-        notifications[0]?.message ?? "",
-        /\{requires pi-mcp-adapter\}/,
-        "must include per-row {requires pi-mcp-adapter} marker",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n" +
+            "● mp [project]\n" +
+            "  ● hello v0.0.1 (installed) {requires pi-mcp-adapter}\n\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5005,6 +5108,7 @@ test("SKILL-01 / WARN-01: standalone install of a plugin with one unparseable sk
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-malformed-skill-"));
     try {
+      // arrange
       // `name: [unterminated` is a closed `---` block whose inner YAML is
       // malformed -> parseFrontmatter throws at gate 1 -> the skill is
       // synthesized into a disable-model-invocation block and still installs.
@@ -5018,6 +5122,8 @@ test("SKILL-01 / WARN-01: standalone install of a plugin with one unparseable sk
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -5027,15 +5133,22 @@ test("SKILL-01 / WARN-01: standalone install of a plugin with one unparseable sk
         plugin: "hello",
       });
 
+      // assert
       // Not a hard fail: the degraded skill still installs.
       assert.equal(outcome.status, "installed");
       // D-86-03: the degrade surfaces the `{malformed skill}` reason token on
       // the `(installed)` row (NOT partially-installed -- the component is
       // installed in degraded form, not dropped) at warning severity.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "warning");
-      assert.match(notifications[0]?.message ?? "", /\(installed\)/);
-      assert.match(notifications[0]?.message ?? "", /\{malformed skill\}/);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n" +
+            "● mp [project]\n" +
+            "  ● hello v0.0.1 (installed) {malformed skill}\n\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
       // The installed outcome carries the `degradedKinds` seam the orchestrated
       // reconcile composer consumes.
       assert.ok(outcome.status === "installed");
@@ -5050,6 +5163,7 @@ test("CMD-01 / WARN-01: standalone install of a plugin with one unparseable comm
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-malformed-command-"));
     try {
+      // arrange
       // A closed `---` block whose inner YAML is malformed (`title: A: B` -> a
       // mapping value where none is allowed) -> parseFrontmatter throws at gate 1
       // -> the command frontmatter is neutralized (stripped) and it still installs.
@@ -5063,6 +5177,8 @@ test("CMD-01 / WARN-01: standalone install of a plugin with one unparseable comm
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -5072,15 +5188,22 @@ test("CMD-01 / WARN-01: standalone install of a plugin with one unparseable comm
         plugin: "hello",
       });
 
+      // assert
       // Not a hard fail: the degraded command still installs.
       assert.equal(outcome.status, "installed");
       // D-86-03: the degrade surfaces the `{malformed command}` reason token on
       // the `(installed)` row at warning severity (the command-vertical analogue
       // of the skill degrade E2E above).
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "warning");
-      assert.match(notifications[0]?.message ?? "", /\(installed\)/);
-      assert.match(notifications[0]?.message ?? "", /\{malformed command\}/);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n" +
+            "● mp [project]\n" +
+            "  ● hello v0.0.1 (installed) {malformed command}\n\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
       assert.ok(outcome.status === "installed");
       assert.deepEqual([...(outcome.degradedKinds ?? [])], ["command"]);
     } finally {
@@ -5097,6 +5220,7 @@ test("RESV-01 / D-19-01: an entry declaring a dependency renders no PR-5 trailer
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi13-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -5108,6 +5232,8 @@ test("RESV-01 / D-19-01: an entry declaring a dependency renders no PR-5 trailer
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -5117,6 +5243,7 @@ test("RESV-01 / D-19-01: an entry declaring a dependency renders no PR-5 trailer
         plugin: "hello",
       });
 
+      // assert
       // D-19-01: the PI-13 follow-up notifyWarning (PR-5
       // manual-install free-form trailer) is DROPPED entirely in
       // standalone mode. The resolver still detects the deps note and
@@ -5125,18 +5252,19 @@ test("RESV-01 / D-19-01: an entry declaring a dependency renders no PR-5 trailer
       // standalone-mode user-visible warning is gone (no clean
       // MarketplaceNotificationMessage representation for the PR-5 free
       // prose). Only the canonical success notification fires.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
-      assert.match(notifications[0]?.message ?? "", /● hello v\S+ \(installed\)/);
-      assert.doesNotMatch(notifications[0]?.message ?? "", /Plugin install:/);
-      // Defense-in-depth: the dropped PR-5 phrase must NOT leak onto the
-      // V2 notification surface (it does NOT appear on the success line
-      // either -- the renderer has no field for it).
-      assert.equal(
-        (notifications[0]?.message ?? "").includes("dependencies that must be installed manually"),
-        false,
-        "D-19-01: PR-5 phrase must not appear on the V2 success surface",
-      );
+      // The whole message also proves the dropped PR-5 phrase ("dependencies
+      // that must be installed manually") does not leak onto the V2 surface.
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ● hello v0.0.1 (installed)",
+            "  ● some-other-plugin@mp v0.0.1 (installed)",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5256,6 +5384,7 @@ for (const allowed of [false, true]) {
         }
 
         assert.equal(await readFile(user.stateJsonPath, "utf8"), userStateBefore);
+        // D-LOC-01: a project install writes nothing under the user scope.
         assert.deepEqual(await retryTree(user.scopeRoot), userTreeBefore);
         assert.equal(notifications.length, 1);
         assert.equal(notifications[0]?.severity, allowed ? undefined : "error");
@@ -5705,6 +5834,7 @@ test("PI-14: PathContainmentError from a bridge prepare propagates verbatim with
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi14-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -5725,6 +5855,8 @@ test("PI-14: PathContainmentError from a bridge prepare propagates verbatim with
       await symlink("/tmp/decoy", path.join(locations.skillsTargetDir, "hello-tool"));
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -5734,6 +5866,7 @@ test("PI-14: PathContainmentError from a bridge prepare propagates verbatim with
         plugin: "hello",
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
 
@@ -5766,6 +5899,7 @@ test("PI-15 layer (a): record already exists -> caught by early-sanity check (co
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi15-"));
     try {
+      // arrange
       // Pre-seed the record (PI-15 layer (a) sees this BEFORE the ledger runs).
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -5776,6 +5910,8 @@ test("PI-15 layer (a): record already exists -> caught by early-sanity check (co
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -5785,10 +5921,18 @@ test("PI-15 layer (a): record already exists -> caught by early-sanity check (co
         plugin: "hello",
       });
 
+      // assert
       // Surface collapses onto the PI-5 path: "is already installed".
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.match(notifications[0]?.message ?? "", /is already installed/);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello (failed) {already installed}\n" +
+            '    cause: Plugin "hello" is already installed in marketplace "mp".',
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5803,6 +5947,7 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning pe
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-as6-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -5821,10 +5966,10 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning pe
       // DROPPED per D-19-01 -- the side effect still runs inside its
       // try/catch but the user-visible warning surface is gone.
       await mkdir(path.join(locations.dataRoot, "mp"), { recursive: true });
-      const { chmod } = await import("node:fs/promises");
       await chmod(path.join(locations.dataRoot, "mp"), 0o555);
-
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       try {
         await installPlugin({
           ctx,
@@ -5839,6 +5984,7 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning pe
         await chmod(path.join(locations.dataRoot, "mp"), 0o755);
       }
 
+      // assert
       // The state record IS committed (state save happens BEFORE the mkdir).
       // AS-6's core invariant: state-commit precedes data-dir creation.
       const after = await loadState(locations.extensionRoot);
@@ -5851,13 +5997,11 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning pe
       // mode. Only the canonical success notification is emitted; the
       // "data dir creation deferred" phrase MUST NOT appear on any
       // notification.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
-      assert.equal(
-        (notifications[0]?.message ?? "").toLowerCase().includes("data dir creation deferred"),
-        false,
-        "D-19-01: mkdir-failure warning surface is dropped in V2",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5872,6 +6016,7 @@ test("AS-7: retired foreign agent target is preserved while a distinct new agent
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-as7-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -5917,6 +6062,8 @@ test("AS-7: retired foreign agent target is preserved while a distinct new agent
       );
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -5926,6 +6073,7 @@ test("AS-7: retired foreign agent target is preserved while a distinct new agent
         plugin: "hello",
       });
 
+      // assert
       // State record persisted.
       const after = await loadState(locations.extensionRoot);
       assert.ok("hello" in (after.marketplaces["mp"]?.plugins ?? {}));
@@ -5937,13 +6085,16 @@ test("AS-7: retired foreign agent target is preserved while a distinct new agent
       // `pi-subagents` companion is unloaded, so the canonical success row
       // independently stamps warning (the missing-companion ladder, not the
       // dropped AS-7 surface).
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "warning");
-      assert.equal(
-        (notifications[0]?.message ?? "").includes("pre-existing agent file"),
-        false,
-        "D-19-01: AS-7 foreign-agent warning surface is dropped in V2",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n" +
+            "● mp [project]\n" +
+            "  ● hello v0.0.1 (installed) {requires pi-subagents}\n\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
       assert.strictEqual(
         await readFile(foreignAgentPath, "utf8"),
         "---\nname: foreign\n---\n\nNo marker.\n",
@@ -5988,13 +6139,11 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
       // assert
       // V2 byte form: bare marketplace header + plugin row at 2-space
       // indent + reload-hint trailer per D-16-12.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
-      assert.match(
-        notifications[0]?.message ?? "",
-        /^● mp \[project\]\n {2}● hello [^(]*\(installed\)/,
-      );
-      assert.match(notifications[0]?.message ?? "", /\/reload to pick up changes$/);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
 
       const userAfter = await loadState(userLocations.extensionRoot);
       const projectAfter = await loadState(projectLocations.extensionRoot);
@@ -7125,6 +7274,7 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp4-"));
     try {
+      // arrange
       const userLocations = locationsFor("user", cwd);
       const projectLocations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
@@ -7135,6 +7285,8 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -7144,6 +7296,7 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
         plugin: "hello",
       });
 
+      // assert
       // ATTR-01 / SCOPE-01 / M1: a user-target install cannot source a
       // project-only marketplace and the CMP-3 fallback is user->? only (it
       // does NOT fall back project, so the user-target miss is terminal).
@@ -7151,12 +7304,13 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
       // `marketplace-not-added` variant with the `[user]` bracket and the
       // scope-qualified reason naming where the container actually sits --
       // NOT `{not in manifest}` on a plugin row.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.equal(
-        notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {marketplace not added to user scope}",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {marketplace not added to user scope}",
+          severity: "error",
+        },
+      ]);
 
       const userAfter = await loadState(userLocations.extensionRoot);
       const projectAfter = await loadState(projectLocations.extensionRoot);
@@ -7172,6 +7326,7 @@ test("PI-17: same plugin may be installed in both user and project target scopes
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi17-"));
     try {
+      // arrange
       const userLocations = locationsFor("user", cwd);
       const projectLocations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
@@ -7184,6 +7339,8 @@ test("PI-17: same plugin may be installed in both user and project target scopes
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -7193,14 +7350,14 @@ test("PI-17: same plugin may be installed in both user and project target scopes
         plugin: "hello",
       });
 
+      // assert
       // V2 byte form: bare marketplace header + plugin row at 2-space
       // indent.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
-      assert.match(
-        notifications[0]?.message ?? "",
-        /^● mp \[project\]\n {2}● hello [^(]*\(installed\)/,
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
 
       const userAfter = await loadState(userLocations.extensionRoot);
       const projectAfter = await loadState(projectLocations.extensionRoot);
@@ -7213,23 +7370,6 @@ test("PI-17: same plugin may be installed in both user and project target scopes
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// PI-2 / NFR-5 -- architectural: no gitOps surface in install-outcome.ts
-// ───────────────────────────────────────────────────────────────────────────
-
-test("PI-2 / NFR-5: install outcome has zero git surface (no platform-git import, no DEFAULT_GIT_OPS, no gitOps field)", async () => {
-  const src = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
-    "utf8",
-  );
-  // Header docstring legitimately mentions platform-git / DEFAULT_GIT_OPS /
-  // gitOps in prose; strip comments first.
-  const stripped = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  assert.equal(stripped.includes("platform/git"), false, "must not import platform/git");
-  assert.equal(stripped.includes("DEFAULT_GIT_OPS"), false, "must not reference DEFAULT_GIT_OPS");
-  assert.equal(stripped.includes("gitOps"), false, "must not reference gitOps");
-});
-
-// ───────────────────────────────────────────────────────────────────────────
 // Bridge ordering sanity (PI-9 corollary) -- state record reflects all 4 bridges
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -7237,6 +7377,7 @@ test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) -> V2 emits r
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi9b-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -7253,6 +7394,8 @@ test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) -> V2 emits r
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -7262,6 +7405,7 @@ test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) -> V2 emits r
         plugin: "hello",
       });
 
+      // assert
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined, "state record must be present");
@@ -7276,12 +7420,9 @@ test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) -> V2 emits r
       // is per-variant, not per-cascade-outcome resource count. The
       // resourcesChanged field on InstallPluginOutcome still tracks
       // whether anything was staged for downstream cascade consumers.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
-      assert.equal(
-        notifications[0]?.message,
-        "● mp [project]\n" + "  ● hello v0.1.0 (installed)\n" + "\n" + "/reload to pick up changes",
-      );
+      assert.deepStrictEqual(notifications, [
+        { message: "● mp [project]\n  ● hello v0.1.0 (installed)\n\n/reload to pick up changes" },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -7296,6 +7437,7 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-marker-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -7306,6 +7448,8 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -7315,6 +7459,7 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
         plugin: "hello",
       });
 
+      // assert
       const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       const body = await readFile(agentPath, "utf8");
       assert.ok(
@@ -7338,6 +7483,7 @@ test("Rollback-skills-undo: skills committed then commands phase fails -> skill 
   await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-undo-skills-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -7357,6 +7503,8 @@ test("Rollback-skills-undo: skills committed then commands phase fails -> skill 
 
       const { ctx, run, notifications } = makeCtx();
       const cacheDrops = observeCompletionDrops(t, completionCache);
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -7366,21 +7514,18 @@ test("Rollback-skills-undo: skills committed then commands phase fails -> skill 
         plugin: "hello",
       });
 
+      // assert
       // Install must fail.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
 
       // Skills undo: the committed skill dir must have been removed.
       const skillTarget = path.join(locations.skillsTargetDir, "hello-tool");
-      const { stat } = await import("node:fs/promises");
-      let exists = true;
-      try {
-        await stat(skillTarget);
-      } catch {
-        exists = false;
-      }
-
-      assert.equal(exists, false, "skills undo must remove the committed skill dir");
+      assert.equal(
+        await pathExists(skillTarget),
+        false,
+        "skills undo must remove the committed skill dir",
+      );
 
       // No state record persisted.
       const after = await loadState(locations.extensionRoot);
@@ -7398,6 +7543,7 @@ test("Rollback-commands-undo: commands committed then agents phase fails -> comm
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-undo-cmds-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -7414,6 +7560,8 @@ test("Rollback-commands-undo: commands committed then agents phase fails -> comm
       await writeFile(locations.agentsStagingDir, "not-a-dir");
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -7423,21 +7571,18 @@ test("Rollback-commands-undo: commands committed then agents phase fails -> comm
         plugin: "hello",
       });
 
+      // assert
       // Install must fail.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
 
       // Commands undo: the committed command file must have been removed.
       const commandTarget = path.join(locations.promptsTargetDir, "hello:deploy.md");
-      const { stat } = await import("node:fs/promises");
-      let exists = true;
-      try {
-        await stat(commandTarget);
-      } catch {
-        exists = false;
-      }
-
-      assert.equal(exists, false, "commands undo must remove the committed command file");
+      assert.equal(
+        await pathExists(commandTarget),
+        false,
+        "commands undo must remove the committed command file",
+      );
 
       // No state record persisted.
       const after = await loadState(locations.extensionRoot);
@@ -7456,6 +7601,7 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-undo-agents-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -7473,6 +7619,8 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
       await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -7482,21 +7630,18 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
         plugin: "hello",
       });
 
+      // assert
       // Install must fail.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
 
       // Agents undo: the committed agent file must have been removed.
       const agentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
-      const { stat } = await import("node:fs/promises");
-      let exists = true;
-      try {
-        await stat(agentTarget);
-      } catch {
-        exists = false;
-      }
-
-      assert.equal(exists, false, "agents undo must remove the committed agent file");
+      assert.equal(
+        await pathExists(agentTarget),
+        false,
+        "agents undo must remove the committed agent file",
+      );
 
       // No state record persisted.
       const after = await loadState(locations.extensionRoot);
@@ -7517,6 +7662,7 @@ test("Orchestrated-PI-3: plugin not found -> outcome.status 'failed' with not-fo
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi3-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -7525,6 +7671,8 @@ test("Orchestrated-PI-3: plugin not found -> outcome.status 'failed' with not-fo
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -7535,8 +7683,9 @@ test("Orchestrated-PI-3: plugin not found -> outcome.status 'failed' with not-fo
         notifications: { mode: "orchestrated" },
       });
 
+      // assert
       // No direct notification in orchestrated mode.
-      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.deepStrictEqual(notifications, []);
 
       // Outcome carries the failure status with the cause string.
       assert.equal(outcome.status, "failed");
@@ -7553,6 +7702,7 @@ test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi4-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -7562,6 +7712,8 @@ test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -7572,7 +7724,8 @@ test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable
         notifications: { mode: "orchestrated" },
       });
 
-      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      // assert
+      assert.deepStrictEqual(notifications, []);
       assert.equal(outcome.status, "failed");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -7585,6 +7738,7 @@ test("Orchestrated-PI-5: already installed -> outcome.status 'already-installed'
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi5-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -7594,6 +7748,8 @@ test("Orchestrated-PI-5: already installed -> outcome.status 'already-installed'
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -7604,7 +7760,8 @@ test("Orchestrated-PI-5: already installed -> outcome.status 'already-installed'
         notifications: { mode: "orchestrated" },
       });
 
-      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      // assert
+      assert.deepStrictEqual(notifications, []);
       assert.equal(outcome.status, "failed");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -7618,6 +7775,7 @@ test("Orchestrated-success: success path returns typed outcome, fires no notific
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-ok-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -7627,6 +7785,8 @@ test("Orchestrated-success: success path returns typed outcome, fires no notific
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -7637,7 +7797,8 @@ test("Orchestrated-success: success path returns typed outcome, fires no notific
         notifications: { mode: "orchestrated" },
       });
 
-      assert.equal(notifications.length, 0, "orchestrated mode fires no success notification");
+      // assert
+      assert.deepStrictEqual(notifications, []);
       assert.equal(outcome.status, "installed");
       assert.ok("resourcesChanged" in outcome);
       assert.equal((outcome as { resourcesChanged: boolean }).resourcesChanged, true);
@@ -7766,6 +7927,7 @@ test("install keeps a completion-cache maintenance failure silent in standalone 
   await withHermeticHome(async ({ completionCache, hooksRuntime, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cache-silent-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -7785,6 +7947,7 @@ test("install keeps a completion-cache maintenance failure silent in standalone 
       );
       const { ctx, notifications, run } = makeCtx();
 
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -7794,6 +7957,7 @@ test("install keeps a completion-cache maintenance failure silent in standalone 
         plugin: "hello",
       });
 
+      // assert
       assert.deepStrictEqual(outcome, {
         declaresAgents: false,
         declaresMcp: false,
@@ -7938,6 +8102,7 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-foreign-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -7978,6 +8143,8 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
       );
 
       const { ctx, run } = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -7988,6 +8155,7 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
         notifications: { mode: "orchestrated" },
       });
 
+      // assert
       assert.deepStrictEqual(outcome, {
         status: "installed",
         version: "0.0.1",
@@ -8022,6 +8190,7 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
   await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d03inv-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -8054,6 +8223,8 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -8063,6 +8234,7 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
         plugin: "hello",
       });
 
+      // assert
       // Memory must be cleared; with file absent, next read invokes rebuild.
       await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () => {
         rebuildCount += 1;
@@ -8097,6 +8269,7 @@ test("PHOOK-04: install --partial stages a strict-subset hooks.json -- dropped N
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook04-event-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -8118,6 +8291,8 @@ test("PHOOK-04: install --partial stages a strict-subset hooks.json -- dropped N
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -8128,6 +8303,7 @@ test("PHOOK-04: install --partial stages a strict-subset hooks.json -- dropped N
         partial: true,
       });
 
+      // assert
       // Read the staged file the bridge wrote and assert the strict-subset
       // property: the dropped `Notification` event is ABSENT, the supported
       // `PostToolUse` group is PRESENT (PHOOK-04 / V5 output containment).
@@ -8151,6 +8327,7 @@ test("PHOOK-04 / D-71-02: install --partial drops only the unsupportable matcher
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook04-matcher-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -8172,6 +8349,8 @@ test("PHOOK-04 / D-71-02: install --partial drops only the unsupportable matcher
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -8182,6 +8361,7 @@ test("PHOOK-04 / D-71-02: install --partial drops only the unsupportable matcher
         partial: true,
       });
 
+      // assert
       const stagedPath = path.join(locations.hooksDir, "hook-plugin", "hooks.json");
       const staged = JSON.parse(await readFile(stagedPath, "utf8")) as {
         PreToolUse: { matcher?: string }[];
@@ -8208,6 +8388,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook-sev-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -8225,6 +8406,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
         },
       });
 
+      // act
       // SEV-02: no `--partial`. The `partially-available` verdict blocks the
       // install at error severity and the row points at `--partial`. Nothing is
       // staged and no state record is written (the opt-in is never implied).
@@ -8237,6 +8419,8 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
         marketplace: "mp",
         plugin: "hook-plugin",
       });
+
+      // assert
       assert.equal(noForce.notifications.length, 1);
       assert.equal(noForce.notifications[0]?.severity, "error");
       // SEV-02 / XSURF-01 contract: the partially-available verdict renders
@@ -8266,6 +8450,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
         "a bare install must not record the plugin",
       );
 
+      // act
       // SEV-01 / D-71-06: with `--partial` the supported components install, the
       // Notification event degrades, and the success row reads `(partially-installed)
       // {unsupported hooks}` at info severity with NO summary line (the body
@@ -8281,6 +8466,8 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
         plugin: "hook-plugin",
         partial: true,
       });
+
+      // assert
       assert.equal(forced.notifications.length, 1);
       const forcedMsg = forced.notifications[0]?.message ?? "";
       assert.notEqual(forced.notifications[0]?.severity, "error");
@@ -10606,7 +10793,7 @@ test("LAYER-06: an install with --local under a marketplace only the base layer 
       assert.equal(
         merged.marketplaces["mp"]?.entry.autoupdate,
         true,
-        "the merged autoupdate no longer reads the base value",
+        "the merged autoupdate reads the base value",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -10803,6 +10990,8 @@ test("RESV-01 / WR-03: a cascade-installed dependency's hooks reach the routing 
       // immediately; a member the cascade installed is owed the same, or its
       // hooks sit on disk inert until the next `/reload`.
       const ownerRuntime = createHooksRuntime();
+      // D-LOC-01: the session hydrate found the project trusted.
+      ownerRuntime.recordProjectTrust(cwd, true);
       const runtimeInstallPlugin = createInstallOperation(
         createHooksRouting(ownerRuntime, { readHooksJson }),
         createCompletionCache(),
@@ -10868,6 +11057,7 @@ test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json vi
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-life01-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -10883,6 +11073,8 @@ test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json vi
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -10892,6 +11084,7 @@ test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json vi
         plugin: "p1",
       });
 
+      // assert
       const summary = notifications.map((n) => n.message).join("\n");
       assert.ok(
         !summary.includes("(failed)") && !summary.includes("(unavailable)"),
@@ -10911,6 +11104,7 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but 
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -10939,6 +11133,8 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but 
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -10948,6 +11144,7 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but 
         plugin: "orphan",
       });
 
+      // assert
       const message = notifications.map((n) => n.message).join("\n");
       // Renderer composes `(installed) {orphan rewake}` via the existing
       // composeReasons helper on PluginInstalledMessage.reasons.
@@ -10965,6 +11162,7 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND 
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05neg-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -10991,6 +11189,8 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND 
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11000,6 +11200,7 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND 
         plugin: "async-rewake",
       });
 
+      // assert
       const message = notifications.map((n) => n.message).join("\n");
       assert.ok(
         !message.includes("{orphan rewake}"),
@@ -11023,6 +11224,7 @@ test("FORCE-01: force on an unsupported plugin installs the supported components
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force01-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -11036,6 +11238,8 @@ test("FORCE-01: force on an unsupported plugin installs the supported components
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11046,6 +11250,7 @@ test("FORCE-01: force on an unsupported plugin installs the supported components
         partial: true,
       });
 
+      // assert
       // No error notifications: the degrade install succeeded.
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
@@ -11081,6 +11286,7 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force01noop-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -11091,6 +11297,8 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11101,6 +11309,7 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
         partial: true,
       });
 
+      // assert
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
@@ -11124,6 +11333,7 @@ test("FSTAT-07 / D-66-04: a partial install of a partially-available plugin emit
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-partially-installed-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -11139,6 +11349,8 @@ test("FSTAT-07 / D-66-04: a partial install of a partially-available plugin emit
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11149,18 +11361,19 @@ test("FSTAT-07 / D-66-04: a partial install of a partially-available plugin emit
         partial: true,
       });
 
+      // assert
       // FSTAT-07 / D-66-04: partially-installed is a realized install transition --
       // info severity, reload-hint (TRANSITION_STATUS_LIST membership), and the
       // ◉ glyph distinct from the clean (installed) row.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined, "partially-installed is info, not error");
-      assert.equal(
-        notifications[0]?.message,
-        "● mp [project]\n" +
-          "  ◉ p1 v1.0.0 (partially-installed) {unsupported component}\n" +
-          "\n" +
-          "/reload to pick up changes",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ◉ p1 v1.0.0 (partially-installed) {unsupported component}\n" +
+            "\n" +
+            "/reload to pick up changes",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -11237,6 +11450,7 @@ test("WR-03: a (partially-installed) success row renders soft-dep markers when a
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force-softdep-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -11256,6 +11470,8 @@ test("WR-03: a (partially-installed) success row renders soft-dep markers when a
       // Default run: pi-subagents is NOT loaded,
       // so the staged agent's `{requires pi-subagents}` soft-dep marker fires.
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11266,23 +11482,25 @@ test("WR-03: a (partially-installed) success row renders soft-dep markers when a
         partial: true,
       });
 
+      // assert
       // SEV-01: the partial install stages an agent while `pi-subagents`
       // is unloaded -> the missing-companion ladder raises the success row to
       // warning, so the cascade gains the `needs attention` summary line.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "warning", "missing companion -> warning");
       // WR-03: the soft-dep marker shares the brace with the dropped-component
       // reason -- composeReasons appends `{requires pi-subagents}` AFTER the
       // typed reason (MSG-GR-4), so `unsupported component` leads.
-      assert.equal(
-        notifications[0]?.message,
-        "A plugin operation needs attention.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ◉ p1 v1.0.0 (partially-installed) {unsupported component, requires pi-subagents}\n" +
-          "\n" +
-          "/reload to pick up changes",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n" +
+            "\n" +
+            "● mp [project]\n" +
+            "  ◉ p1 v1.0.0 (partially-installed) {unsupported component, requires pi-subagents}\n" +
+            "\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -11295,6 +11513,7 @@ test("SEV-01: install staging agents with pi-subagents loaded stays info (compan
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-sev01-loaded-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -11308,6 +11527,8 @@ test("SEV-01: install staging agents with pi-subagents loaded stays info (compan
       // The run reports the `pi-subagents` companion loaded -> no missing
       // companion -> the success row keeps its info stamp (no summary line).
       const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11317,12 +11538,10 @@ test("SEV-01: install staging agents with pi-subagents loaded stays info (compan
         plugin: "hello",
       });
 
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
-      assert.equal(
-        notifications[0]?.message,
-        "● mp [project]\n" + "  ● hello v1.0.0 (installed)\n" + "\n" + "/reload to pick up changes",
-      );
+      // assert
+      assert.deepStrictEqual(notifications, [
+        { message: "● mp [project]\n  ● hello v1.0.0 (installed)\n\n/reload to pick up changes" },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -11333,6 +11552,7 @@ test("FORCE-03: without force an unsupported plugin still blocks and writes no s
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force03-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -11346,6 +11566,8 @@ test("FORCE-03: without force an unsupported plugin still blocks and writes no s
       const { ctx, run, notifications } = makeCtx();
       // No `--partial` -> the default `requireInstallable` gate still blocks
       // the `partially-available` arm.
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11355,6 +11577,7 @@ test("FORCE-03: without force an unsupported plugin still blocks and writes no s
         plugin: "p1",
       });
 
+      // assert
       // A row surfaced (the plugin did not silently install) ...
       assert.ok(notifications.length >= 1, "a notification must surface on block");
       // ... and no state record was written.
@@ -11371,6 +11594,7 @@ test("FORCE-04: the partial-degrade path emits no warning-severity notification 
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force04-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -11381,6 +11605,8 @@ test("FORCE-04: the partial-degrade path emits no warning-severity notification 
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11391,6 +11617,7 @@ test("FORCE-04: the partial-degrade path emits no warning-severity notification 
         partial: true,
       });
 
+      // assert
       // FORCE-04: no row stamps `warning` severity, so the MAX-reduce summary
       // never renders a `Warning:` line.
       const warnings = notifications.filter((n) => n.severity === "warning");
@@ -11411,6 +11638,7 @@ test("FORCE-05: force cannot bypass an unavailable (structural) plugin", async (
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force05a-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -11425,6 +11653,8 @@ test("FORCE-05: force cannot bypass an unavailable (structural) plugin", async (
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11435,6 +11665,7 @@ test("FORCE-05: force cannot bypass an unavailable (structural) plugin", async (
         partial: true,
       });
 
+      // assert
       // Still blocks: an `(unavailable)` row surfaced and no record was written.
       const message = notifications.map((n) => n.message).join("\n");
       assert.ok(message.includes("(unavailable)"), `expected (unavailable) row; got:\n${message}`);
@@ -11715,6 +11946,7 @@ test("PURL-01/02/09 / VER-01: url-source install materializes a clone, records t
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-url-"));
     try {
+      // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       // The manifest's .git suffix survives onto the wire URL (source.raw)
       // while the parse-time identity (source.url) drops it, so this fixture
@@ -11730,6 +11962,8 @@ test("PURL-01/02/09 / VER-01: url-source install materializes a clone, records t
 
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11740,6 +11974,7 @@ test("PURL-01/02/09 / VER-01: url-source install materializes a clone, records t
         cloneCacheSeam: seamWith(gitOps),
       });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
@@ -11843,6 +12078,7 @@ test("PURL-04: a second install of the same url+sha does NOT clone again (dedup)
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-dedup-"));
     try {
+      // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedGitSourceMarketplace({
         cwd,
@@ -11874,6 +12110,8 @@ test("PURL-04: a second install of the same url+sha does NOT clone again (dedup)
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const seam = seamWith(gitOps);
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11894,6 +12132,8 @@ test("PURL-04: a second install of the same url+sha does NOT clone again (dedup)
         plugin: "gp2",
         cloneCacheSeam: seam,
       });
+
+      // assert
       assert.equal(
         gitState.cloneCalls.length,
         1,
@@ -11916,6 +12156,7 @@ test("PURL-03: git-subdir install resolves pluginRoot = cloneRoot + subdir", asy
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-subdir-"));
     try {
+      // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedGitSourceMarketplace({
         cwd,
@@ -11934,6 +12175,8 @@ test("PURL-03: git-subdir install resolves pluginRoot = cloneRoot + subdir", asy
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11944,6 +12187,7 @@ test("PURL-03: git-subdir install resolves pluginRoot = cloneRoot + subdir", asy
         cloneCacheSeam: seamWith(gitOps),
       });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
@@ -11965,6 +12209,7 @@ test("PURL-03: a git-subdir path escaping the clone root fails the install", asy
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-escape-"));
     try {
+      // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedGitSourceMarketplace({
         cwd,
@@ -11982,6 +12227,8 @@ test("PURL-03: a git-subdir path escaping the clone root fails the install", asy
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -11992,6 +12239,7 @@ test("PURL-03: a git-subdir path escaping the clone root fails the install", asy
         cloneCacheSeam: seamWith(gitOps),
       });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       assert.equal(after.marketplaces["mp"]?.plugins["gp"], undefined, "no record on escape");
@@ -12006,6 +12254,7 @@ test("PURL-03: a missing git-subdir path fails the install", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-missing-"));
     try {
+      // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedGitSourceMarketplace({
         cwd,
@@ -12025,6 +12274,8 @@ test("PURL-03: a missing git-subdir path fails the install", async () => {
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -12035,6 +12286,7 @@ test("PURL-03: a missing git-subdir path fails the install", async () => {
         cloneCacheSeam: seamWith(gitOps),
       });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       assert.equal(
@@ -12053,6 +12305,7 @@ test("D-77-06: a github-object source dedups to the same clone as a url naming t
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-github-"));
     try {
+      // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedGitSourceMarketplace({
         cwd,
@@ -12080,6 +12333,8 @@ test("D-77-06: a github-object source dedups to the same clone as a url naming t
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const seam = seamWith(gitOps);
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -12099,6 +12354,7 @@ test("D-77-06: a github-object source dedups to the same clone as a url naming t
         cloneCacheSeam: seam,
       });
 
+      // assert
       // github reconstructs https://github.com/org/repo -- same canonical url as
       // the url entry, so both dedup to ONE clone.
       assert.equal(
@@ -12125,6 +12381,7 @@ test("GIT-01: an unpinned url source installs a per-commit copy at the mirror HE
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-unpinned-"));
     try {
+      // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedGitSourceMarketplace({
         cwd,
@@ -12145,6 +12402,8 @@ test("GIT-01: an unpinned url source installs a per-commit copy at the mirror HE
         remoteRefs: { "refs/remotes/origin/main": headSha },
       });
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -12155,6 +12414,7 @@ test("GIT-01: an unpinned url source installs a per-commit copy at the mirror HE
         cloneCacheSeam: seamWith(gitOps),
       });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
@@ -12188,6 +12448,7 @@ test("GIT-01: an unpinned git-subdir source installs under the per-commit copy",
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-unpinned-subdir-"));
     try {
+      // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedGitSourceMarketplace({
         cwd,
@@ -12207,6 +12468,8 @@ test("GIT-01: an unpinned git-subdir source installs under the per-commit copy",
         remoteRefs: { "refs/remotes/origin/main": headSha },
       });
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -12217,6 +12480,7 @@ test("GIT-01: an unpinned git-subdir source installs under the per-commit copy",
         cloneCacheSeam: seamWith(gitOps),
       });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
@@ -12243,6 +12507,7 @@ test("MIRR-01 regression: a PINNED install still records a per-sha <12hex>-<12he
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-pinned-key-"));
     try {
+      // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedGitSourceMarketplace({
         cwd,
@@ -12255,6 +12520,8 @@ test("MIRR-01 regression: a PINNED install still records a per-sha <12hex>-<12he
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -12265,6 +12532,7 @@ test("MIRR-01 regression: a PINNED install still records a per-sha <12hex>-<12he
         cloneCacheSeam: seamWith(gitOps),
       });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
@@ -12287,6 +12555,7 @@ test("PURL-09 / sha over ref: a source with both ref and sha records the sha's v
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-shaoverref-"));
     try {
+      // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedGitSourceMarketplace({
         cwd,
@@ -12309,6 +12578,8 @@ test("PURL-09 / sha over ref: a source with both ref and sha records the sha's v
         remoteResolveMap: { "v2.0.0": refSha },
       });
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -12319,6 +12590,7 @@ test("PURL-09 / sha over ref: a source with both ref and sha records the sha's v
         cloneCacheSeam: seamWith(gitOps),
       });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
@@ -12340,6 +12612,7 @@ test("PURL-09 regression: a path-source install keeps its 3-tier ladder version 
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-pathreg-"));
     try {
+      // arrange
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -12352,8 +12625,11 @@ test("PURL-09 regression: a path-source install keeps its 3-tier ladder version 
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "p" });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["p"];
@@ -12379,6 +12655,7 @@ test("SUB-02: project-scope install substitutes ${CLAUDE_PROJECT_DIR} to the ins
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-sub02-proj-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -12402,8 +12679,11 @@ test("SUB-02: project-scope install substitutes ${CLAUDE_PROJECT_DIR} to the ins
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
+      // assert
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
@@ -12468,6 +12748,7 @@ test("SUB-02: user-scope install keeps ${CLAUDE_PROJECT_DIR} literal in skill, c
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-sub02-user-"));
     try {
+      // arrange
       const locations = locationsFor("user", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -12481,8 +12762,11 @@ test("SUB-02: user-scope install keeps ${CLAUDE_PROJECT_DIR} literal in skill, c
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({ ctx, run, scope: "user", cwd, marketplace: "mp", plugin: "hello" });
 
+      // assert
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
@@ -12532,6 +12816,7 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-unwind-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -12546,8 +12831,11 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
       await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
+      // assert
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(allText, /⊘ hello v0\.0\.1 \(failed\)/, `no failed row in:\n${allText}`);
 
@@ -12602,6 +12890,7 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-discwarn-"));
     try {
+      // arrange
       const marketplaceRoot = path.join(cwd, "mp-src");
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -12614,8 +12903,11 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
 
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
       const run = runWithNothingLoaded();
+
+      // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
+      // assert
       assert.deepStrictEqual(notifications, [
         {
           message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
@@ -12726,6 +13018,7 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-discwarn-orch-"));
     try {
+      // arrange
       const marketplaceRoot = path.join(cwd, "mp-src");
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -12738,6 +13031,8 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
 
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
       const run = runWithNothingLoaded();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -12748,6 +13043,7 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
         notifications: { mode: "orchestrated" },
       });
 
+      // assert
       assert.equal(outcome.status, "installed");
       assert.deepStrictEqual(notifications, []);
       const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
@@ -13591,7 +13887,8 @@ test("plugin install authentication: contains a non-Error clone failure without 
         materializePluginCommitCopy: cloneCache.materializePluginCommitCopy,
         materializePluginClone: async () => {
           await Promise.resolve();
-          throw "disk exploded"; // eslint-disable-line @typescript-eslint/only-throw-error
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- a non-Error rejection is the behavior under test
+          throw "disk exploded";
         },
         resolvePluginPin: cloneCache.resolvePluginPin,
       };
@@ -14433,7 +14730,7 @@ test("standalone install normalizes a non-Error lock-directory failure", async (
         pluginName: "hello",
       });
       const transactionCall = t.mock.method(transaction, "withLockedStateTransaction", () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- a non-Error throw is the behavior under test
         throw "lock directory unavailable";
       });
       const { ctx, notifications, run } = makeCtx();
@@ -17778,10 +18075,9 @@ test("WLIF-01: a statePhase failure takes the envelope and the staging tree back
         { name: "ConcurrentInstallError" },
       );
 
-      // assert -- filesystem facts, not a rejected promise. The preceding
-      // phase's review found two data-loss defects in this rollback code under
-      // 100% line, branch and function coverage; only an assertion on what the
-      // failed install LEFT catches that class.
+      // assert -- filesystem facts, not a rejected promise. Full line, branch
+      // and function coverage cannot show that the rollback removes too much or
+      // too little; only an assertion on what the failed install LEFT does.
       const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
       assert.strictEqual(await pathExists(envelopePath), false);
       assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
@@ -17792,13 +18088,14 @@ test("WLIF-01: a statePhase failure takes the envelope and the staging tree back
   });
 });
 
-test("WLIF-01: an undo before the workflows phase ran removes nothing and does not throw", async () => {
+test("WLIF-01: a plugin refused for an inline malformed MCP server saves no workflow", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-undo-noop-"));
     try {
-      // arrange -- the mcp phase runs BEFORE the workflows phase, so a
-      // malformed `.mcp.json` fails the install with `workflowsPrep` still
-      // undefined and the workflows undo reaching its early return.
+      // arrange -- a malformed server written inline in plugin.json makes the
+      // plugin unavailable (D-CF6-02), so the install fails before any ledger
+      // phase runs and the workflows phase never starts. The workflows undo's
+      // early return is reached by the workflows prepare failure case below.
       const locations = locationsFor("project", cwd);
       const { pluginRoot } = await seedPathMarketplaceWithPlugin({
         cwd,
@@ -17808,7 +18105,10 @@ test("WLIF-01: an undo before the workflows phase ran removes nothing and does n
         mcpServers: { srv: { command: "node" } },
         workflows: [{ sourceName: "greet" }],
       });
-      await writeFile(path.join(pluginRoot, ".mcp.json"), "{ not json");
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "0.0.1", mcpServers: { srv: { command: 42 } } }),
+      );
       const { ctx, run } = makeCtx();
 
       // act
@@ -18384,12 +18684,9 @@ test("WLIF-01: an install succeeds unchanged when the staging sweep throws", asy
       // assert -- the swallow is the point: the sweep failure is invisible to
       // the user, though it is debug-logged.
       assert.equal(outcome.status, "installed");
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
-      assert.equal(
-        notifications[0]?.message,
-        "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
-      );
+      assert.deepStrictEqual(notifications, [
+        { message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes" },
+      ]);
       assert.equal(await readFile(locations.workflowsStagingDir, "utf8"), "not a directory");
       assert.deepStrictEqual(logged, [
         `[hooks] install: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir '${locations.workflowsStagingDir}'`,
@@ -18441,8 +18738,9 @@ test("WLIF-01: install debug-logs a leak when the staging sweep cannot remove an
 
       // assert -- the leak never reaches the user-facing notification.
       assert.equal(outcome.status, "installed");
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.deepStrictEqual(notifications, [
+        { message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes" },
+      ]);
       assert.deepStrictEqual(logged, [
         `[hooks] install: workflows staging GC left 1 tree(s) for hello@mp: abandoned: EACCES: permission denied, rmdir '${abandoned}'`,
       ]);

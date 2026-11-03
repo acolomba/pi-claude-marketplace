@@ -9,17 +9,38 @@
 // in the directory is enumerated, read or unlinked. The `<plugin>:` prefix is
 // what keeps those names from colliding.
 //
-// This is the only thing that cleans up after a failed install. The envelopes
-// live outside every scope root, so no scope-root cleanup will ever find them.
+// This is the only thing that cleans up after a failed install. A user-scope
+// envelope lives outside every scope root, so no scope-root cleanup will ever
+// find it.
+//
+// D-LOC-01: a project-scope name is also removed from the directory where an
+// earlier version placed the project's envelopes, under the user's workflow
+// home, which the engine reads before the in-project one. A name counts as
+// removed when either copy was removed.
 //
 // Two failure policies, split by class rather than by position: an ordinary
 // per-name failure accumulates into `failed[]` and the loop carries on
 // (WLIF-03), while a containment refusal is raised to the caller (PI-14). The
 // loop runs to completion either way, so choosing the second policy costs the
-// envelopes recorded after a refused name nothing.
+// envelopes recorded after a refused name nothing. The refusal is raised
+// wrapped in `WorkflowsUnstageRefusedError`, which carries the names already
+// removed so the caller can record them as dropped.
+//
+// `removedNames` and `failed[]` are disjoint. A name is in `removedNames` only
+// when no copy of it is known to remain: if the current envelope was unlinked
+// and the former copy then failed to unlink, the former copy is still
+// executable code, so the name is reported as failed alone. Callers treat
+// `removedNames` as "gone everywhere" (the cascade's `dropped` list) and
+// `failed` as "something is left behind", and a name cannot be both. One
+// exception: when the current envelope was removed and the former path is
+// then refused, the name is in `removedNames` although the refused former
+// copy is left in place. A retry would refuse the same path again, so the
+// refusal itself is the failure the user sees, and the record stops naming
+// an envelope this extension can no longer reach.
 
 import { unlink } from "node:fs/promises";
 
+import { WorkflowsUnstageRefusedError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 
@@ -29,6 +50,34 @@ import type {
   UnstageWorkflowsResult,
 } from "./types.ts";
 
+/**
+ * Removes `target` and reports whether it was there. ENOENT means the file is
+ * already gone (a prior failed install never finished its commit, or a
+ * repeated call), so the unlink is idempotent; `undefined` names no file. Any
+ * other error propagates.
+ */
+async function unlinkIfPresent(target: string | undefined): Promise<boolean> {
+  if (target === undefined) {
+    return false;
+  }
+
+  try {
+    await unlink(target);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * Removes the recorded workflow envelopes by name and reports which names were
+ * removed and which failed. Raises the first containment refusal, wrapped with the
+ * names already removed, after the loop has run to completion.
+ */
 export async function unstagePluginWorkflows(
   input: UnstageWorkflowsInput,
 ): Promise<UnstageWorkflowsResult> {
@@ -39,6 +88,9 @@ export async function unstagePluginWorkflows(
   let refusal: PathContainmentError | undefined;
 
   for (const name of input.previousWorkflowNames) {
+    // Set once the current envelope is gone, so the catch below can tell a
+    // name that lost its current copy from one that lost nothing.
+    let removedCurrent = false;
     try {
       // The bundle's composer runs assertSafeName + assertPathInside itself, so
       // there is no second containment check at this call site. It sits inside
@@ -49,10 +101,20 @@ export async function unstagePluginWorkflows(
       // time.
       // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
       const target = await input.locations.workflowArtifactPath(name);
+      // The current envelope is unlinked BEFORE the former path is composed.
+      // The former composer can refuse (a symlink or containment error in the
+      // legacy chain), and a refusal there must not leave the valid current
+      // envelope behind, still executable.
+      // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
+      removedCurrent = await unlinkIfPresent(target);
 
       // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
-      await unlink(target);
-      removed.push(name);
+      const former = await input.locations.formerWorkflowArtifactPath(name);
+      // eslint-disable-next-line no-await-in-loop -- `refusal ??=` keeps the first refusal in name order
+      const removedThere = await unlinkIfPresent(former);
+      if (removedCurrent || removedThere) {
+        removed.push(name);
+      }
     } catch (err) {
       if (err instanceof PathContainmentError) {
         // PI-14: a containment refusal is NOT an ordinary per-name failure and
@@ -70,28 +132,30 @@ export async function unstagePluginWorkflows(
         // The FIRST refusal is the one raised -- every later one is reached
         // only by continuing past it.
         refusal ??= err;
+        // The refusal ends this name's work, but the current envelope is
+        // already gone and the former path was never reached to hold it back.
+        if (removedCurrent) {
+          removed.push(name);
+        }
+
         continue;
       }
 
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        // WLIF-03: accumulate rather than throw. A throw at the first bad name
-        // would abandon every later envelope -- executable files left behind,
-        // and the caller told nothing about them. The loop continues so the
-        // caller learns the full picture in one pass.
-        failed.push({ name, reason: errorMessage(err) });
-        continue;
-      }
-      // ENOENT: the previously-staged file is already gone (e.g. a prior
-      // failed install never finished commit). Idempotent -- skip without
-      // adding to `removed`.
+      // WLIF-03: accumulate rather than throw. A throw at the first bad name
+      // would abandon every later envelope -- executable files left behind,
+      // and the caller told nothing about them. The loop continues so the
+      // caller learns the full picture in one pass. `removed` is pushed only
+      // at the end of the try, so a name that reaches here is in `failed`
+      // alone even when its current envelope was already removed.
+      failed.push({ name, reason: errorMessage(err) });
     }
   }
 
   if (refusal !== undefined) {
-    // Raised bare. Wrapping it -- `appendLeaks` and friends return a plain
-    // `Error` -- would carry the text and destroy the class, which is the one
-    // thing the caller narrows on.
-    throw refusal;
+    // The refusal rides `refusal` unchanged, so the class survives for the
+    // caller to narrow on after it unwraps; `appendLeaks` and friends return a
+    // plain `Error`, which would carry the text and destroy it.
+    throw new WorkflowsUnstageRefusedError(removed, refusal);
   }
 
   return {

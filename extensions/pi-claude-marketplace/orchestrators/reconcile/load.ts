@@ -7,15 +7,22 @@
 //
 // AAP-02 / AAP-D1: the one exception is the `autoapply` setting. When the
 // effective value (`config-merge.ts::effectiveAutoapply`, the most specific config
-// file that sets it) is true, the load runs the injected apply step for both
-// scopes instead of the read-only pass below, and returns. The apply step runs
-// the same read pass, MCP move, warnings and routing rebuild, and its report
-// replaces the pending block.
+// file that sets it) is true, the load runs the injected apply step instead of
+// the read-only pass below, and returns. The apply step runs the same read
+// pass, MCP move, warnings and routing rebuild, and its report replaces the
+// pending block. When the apply step throws (AAP-03), the read-only pass runs
+// for both scopes instead.
+//
+// D-LOC-01: the apply step covers the project scope only when Pi trusts the
+// project (`ctx.isProjectTrusted()`), as Claude Code loads no project-scope
+// plugin before the workspace is trusted. In a project Pi does not trust the
+// apply step covers the user scope only (D-LOC-01), and the read-only pass
+// covers the project scope and its pending block.
 //
 // AAP-03 / NFR-2: an apply step that throws (GHB-03 ends its pass) is reported
-// as `reconcile-aborted`, and the read-only pass below then runs, so the
-// routing table and the warnings are rebuilt and the pending block lists what
-// the apply step did not make.
+// as `reconcile-aborted`, and the read-only pass below then runs for both
+// scopes, so the routing table and the warnings are rebuilt and the pending
+// block lists what the apply step did not make.
 //
 // What still runs, per scope, project first (MSG-GR-3):
 //   - the shared locked read pass (`read-pass.ts`): the MIG-01 first-run
@@ -69,6 +76,8 @@ export interface LoadReconcileOptions {
   readonly run: NotificationRun;
   /** Project-scope cwd (ignored for the user scope). */
   readonly cwd: string;
+  /** D-LOC-01: whether Pi trusts the project at `cwd` (`ctx.isProjectTrusted()`). */
+  readonly projectTrusted: boolean;
   /** Lifecycle-owned route effects shared with registered hook callbacks. */
   readonly hooksRouting: InstallHooksRouting;
   /** AAP-02: the completion cache an autoapply load hands the apply step. */
@@ -82,33 +91,70 @@ export interface LoadReconcileOptions {
 
 const SCOPES: readonly Scope[] = ["project", "user"];
 
+/**
+ * AAP-02 / D-LOC-01: runs the apply step when the configs turn autoapply on,
+ * for both scopes in a project Pi trusts and for the user scope otherwise.
+ * Only a trusted project's own configs count, so an untrusted project cannot
+ * turn on an apply of the user scope. Returns the scopes the read-only pass
+ * still covers: none after an apply step of both scopes, the project scope
+ * after one of the user scope, and both scopes when autoapply is off or the
+ * apply step threw (AAP-03).
+ */
+async function autoapplyScopes(
+  applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
+  opts: LoadReconcileOptions,
+): Promise<readonly Scope[]> {
+  const files = await loadAutoapplyFiles(
+    locationsFor("project", opts.cwd),
+    locationsFor("user", opts.cwd),
+  );
+  const autoapply = effectiveAutoapply(
+    opts.projectTrusted ? files : files.filter((file) => file.scope === "user"),
+  );
+  const enabled = autoapply.status === "valid" && autoapply.enabled;
+  if (enabled) {
+    return applyLoadScopes(applyReconcile, opts);
+  }
+
+  return SCOPES;
+}
+
+/** D-LOC-01: the apply step of an autoapply load, and the scopes the read-only pass still covers. */
+async function applyLoadScopes(
+  applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
+  opts: LoadReconcileOptions,
+): Promise<readonly Scope[]> {
+  try {
+    await applyReconcile({
+      ctx: opts.ctx,
+      run: opts.run,
+      cwd: opts.cwd,
+      hooksRouting: opts.hooksRouting,
+      completionCache: opts.completionCache,
+      ...(!opts.projectTrusted && { scope: "user" }),
+      ...(opts.migrateMcpEntries !== undefined && { migrateMcpEntries: opts.migrateMcpEntries }),
+    });
+    return opts.projectTrusted ? [] : ["project"];
+  } catch (err) {
+    // A failed notify must not skip the read-only pass and its routing rebuild.
+    try {
+      notifyReconcileAborted(opts.ctx, opts.run, err);
+    } catch (notifyErr) {
+      hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
+    }
+
+    return SCOPES;
+  }
+}
+
 async function loadReconcileWithReader(
   reader: ReconcileStateReader,
   applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
   opts: LoadReconcileOptions,
 ): Promise<void> {
-  const autoapply = effectiveAutoapply(
-    await loadAutoapplyFiles(locationsFor("project", opts.cwd), locationsFor("user", opts.cwd)),
-  );
-  if (autoapply.status === "valid" && autoapply.enabled) {
-    try {
-      await applyReconcile({
-        ctx: opts.ctx,
-        run: opts.run,
-        cwd: opts.cwd,
-        hooksRouting: opts.hooksRouting,
-        completionCache: opts.completionCache,
-        ...(opts.migrateMcpEntries !== undefined && { migrateMcpEntries: opts.migrateMcpEntries }),
-      });
-      return;
-    } catch (err) {
-      // A failed notify must not skip the read-only pass and its routing rebuild.
-      try {
-        notifyReconcileAborted(opts.ctx, opts.run, err);
-      } catch (notifyErr) {
-        hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
-      }
-    }
+  const scopes = await autoapplyScopes(applyReconcile, opts);
+  if (scopes.length === 0) {
+    return;
   }
 
   const accumulators: ScopePassAccumulators = {
@@ -117,7 +163,7 @@ async function loadReconcileWithReader(
   };
   const readableScopes: Scope[] = [];
 
-  for (const scope of SCOPES) {
+  for (const scope of scopes) {
     // D-06: pending's block reports these rows, so the load drops them.
     const configOutcomes: PerEntryOutcome[] = [];
     // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing

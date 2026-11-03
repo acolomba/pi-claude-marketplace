@@ -54,7 +54,7 @@ for (const { title, firstFile, secondFile, firstBytes, raw } of [
   });
 }
 
-test("discovers flat markdown agents in source order with complete records", async (t) => {
+test("discovers markdown agents in walk order with complete records", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-flat-"));
   t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
@@ -75,6 +75,14 @@ test("discovers flat markdown agents in source order with complete records", asy
   const expectedDiscovery = {
     discovered: [
       {
+        sourceName: "hidden",
+        generatedName: "pi-claude-marketplace-acme-hidden",
+        sourcePath: path.join(agentsDirectory, ".hidden.md"),
+        sourceHash: createHash("sha256").update("---\nname: hidden\n---\n").digest("hex"),
+        raw: { name: "hidden" },
+        body: "",
+      },
+      {
         sourceName: "acme-helper",
         generatedName: "pi-claude-marketplace-acme-acme-helper",
         sourcePath: helperPath,
@@ -85,6 +93,15 @@ test("discovers flat markdown agents in source order with complete records", asy
           tools: "Read, Write",
         },
         body: "\nHelp carefully.\r\n",
+      },
+      {
+        sourceName: "nested",
+        generatedName: "pi-claude-marketplace-acme-nested-nested",
+        sourcePath: path.join(nestedDirectory, "nested.md"),
+        namespace: ["nested"],
+        sourceHash: createHash("sha256").update("---\nname: nested\n---\n").digest("hex"),
+        raw: { name: "nested" },
+        body: "",
       },
       {
         sourceName: "z-last",
@@ -420,6 +437,284 @@ test("resolves the frontmatter name of a source led by a byte-order mark", async
     pluginName: "acme",
     agentsDirs: [directory],
   });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+// Writes `text` at `file` below `root`, creating its folders, and returns its path.
+async function writeAgentFile(root: string, file: string, text: string): Promise<string> {
+  const target = path.join(root, file);
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, text);
+  return target;
+}
+
+function sha256(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+test("D-CF4-01 names a nested file after its folders and keeps a frontmatter name last", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-nested-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const securityPath = await writeAgentFile(directory, "review/security.md", "Check security.\n");
+  const nestedPath = await writeAgentFile(
+    directory,
+    "review/deep/nested.md",
+    "---\nname: nested-x\n---\nReview deeply.\n",
+  );
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "nested-x",
+        generatedName: "pi-claude-marketplace-acme-review-deep-nested-x",
+        sourcePath: nestedPath,
+        namespace: ["review", "deep"],
+        sourceHash: sha256("---\nname: nested-x\n---\nReview deeply.\n"),
+        raw: { name: "nested-x" },
+        body: "Review deeply.\n",
+      },
+      {
+        sourceName: "security",
+        generatedName: "pi-claude-marketplace-acme-review-security",
+        sourcePath: securityPath,
+        namespace: ["review"],
+        sourceHash: sha256("Check security.\n"),
+        raw: {},
+        body: "Check security.\n",
+      },
+    ],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF4-01 finds dotfiles, dot-folders, and an upper-case extension but not other files", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-dotfiles-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const hiddenPath = await writeAgentFile(directory, ".hidden.md", "Hidden.\n");
+  const insidePath = await writeAgentFile(directory, ".hiddendir/inside.md", "Inside.\n");
+  const upperPath = await writeAgentFile(directory, "UPPER.MD", "Upper.\n");
+  await writeAgentFile(directory, "notes.txt", "Notes.\n");
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: ".hidden",
+        generatedName: "pi-claude-marketplace-acme-.hidden",
+        sourcePath: hiddenPath,
+        sourceHash: sha256("Hidden.\n"),
+        raw: {},
+        body: "Hidden.\n",
+      },
+      {
+        sourceName: "inside",
+        generatedName: "pi-claude-marketplace-acme-.hiddendir-inside",
+        sourcePath: insidePath,
+        namespace: [".hiddendir"],
+        sourceHash: sha256("Inside.\n"),
+        raw: {},
+        body: "Inside.\n",
+      },
+      {
+        sourceName: "UPPER.MD",
+        generatedName: "pi-claude-marketplace-acme-UPPER.MD",
+        sourcePath: upperPath,
+        sourceHash: sha256("Upper.\n"),
+        raw: {},
+        body: "Upper.\n",
+      },
+    ],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF4-01 skips a symlinked folder without following it", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-symlink-dir-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const agentsDirectory = path.join(directory, "agents");
+  await writeAgentFile(directory, "outside/linked.md", "Outside.\n");
+  const keptPath = await writeAgentFile(agentsDirectory, "kept.md", "Kept.\n");
+  await symlink(path.join(directory, "outside"), path.join(agentsDirectory, "linked"));
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "kept",
+        generatedName: "pi-claude-marketplace-acme-kept",
+        sourcePath: keptPath,
+        sourceHash: sha256("Kept.\n"),
+        raw: {},
+        body: "Kept.\n",
+      },
+    ],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginAgents({
+    pluginName: "acme",
+    agentsDirs: [agentsDirectory],
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF4-01 finds a file 31 folders deep and does not read a folder 32 deep", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-depth-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const folders = Array.from({ length: 31 }, () => "d");
+  const foundPath = await writeAgentFile(directory, path.join(...folders, "found.md"), "Found.\n");
+  await writeAgentFile(directory, path.join(...folders, "d", "lost.md"), "Lost.\n");
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "found",
+        generatedName: `pi-claude-marketplace-acme-${folders.join("-")}-found`,
+        sourcePath: foundPath,
+        namespace: folders,
+        sourceHash: sha256("Found.\n"),
+        raw: {},
+        body: "Found.\n",
+      },
+    ],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF4-01 keeps a declared file's bare name and walks a declared folder", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-declared-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const declaredPath = await writeAgentFile(directory, "custom/review/security.md", "Secure.\n");
+  const walkedPath = await writeAgentFile(directory, "more/review/audit.md", "Audit.\n");
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "security",
+        generatedName: "pi-claude-marketplace-acme-security",
+        sourcePath: declaredPath,
+        sourceHash: sha256("Secure.\n"),
+        raw: {},
+        body: "Secure.\n",
+      },
+      {
+        sourceName: "audit",
+        generatedName: "pi-claude-marketplace-acme-review-audit",
+        sourcePath: walkedPath,
+        namespace: ["review"],
+        sourceHash: sha256("Audit.\n"),
+        raw: {},
+        body: "Audit.\n",
+      },
+    ],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginAgents({
+    pluginName: "acme",
+    agentsDirs: [declaredPath, path.join(directory, "more")],
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF4-01 finds no agent at a declared symlink, upper-case file, or missing file", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-declared-none-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const targetPath = await writeAgentFile(directory, "real/target.md", "Target.\n");
+  const linkPath = path.join(directory, "link.md");
+  await symlink(targetPath, linkPath);
+  const upperPath = await writeAgentFile(directory, "custom/UPPER.MD", "Upper.\n");
+  const filePath = await writeAgentFile(directory, "plugin.txt", "Plugin.\n");
+  const expectedDiscovery = { discovered: [], warnings: [] };
+
+  // act
+  const discovery = await discoverPluginAgents({
+    pluginName: "acme",
+    agentsDirs: [
+      linkPath,
+      upperPath,
+      path.join(directory, "missing.md"),
+      path.join(filePath, "below.md"),
+    ],
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF4-01 rejects a declared file path the filesystem cannot inspect", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-declared-error-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const longPath = path.join(directory, `${"a".repeat(300)}.md`);
+
+  // act & assert
+  await assert.rejects(
+    () => discoverPluginAgents({ pluginName: "acme", agentsDirs: [longPath] }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          code: (error as NodeJS.ErrnoException).code,
+          syscall: (error as NodeJS.ErrnoException).syscall,
+        },
+        { code: "ENAMETOOLONG", syscall: "lstat" },
+      );
+      return true;
+    },
+  );
+});
+
+test("AG-12 keeps a nested file over the flat file its folder name flattens onto", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-flattened-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const nestedPath = await writeAgentFile(directory, "review/security.md", "Nested.\n");
+  const flatPath = await writeAgentFile(directory, "review-security.md", "Flat.\n");
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "security",
+        generatedName: "pi-claude-marketplace-acme-review-security",
+        sourcePath: nestedPath,
+        namespace: ["review"],
+        sourceHash: sha256("Nested.\n"),
+        raw: {},
+        body: "Nested.\n",
+      },
+    ],
+    warnings: [
+      `agent source "review-security" at "${flatPath}" duplicates generated name "pi-claude-marketplace-acme-review-security" already produced by agent source "security" at "${nestedPath}"; keeping first discovered source.`,
+    ],
+  };
+
+  // act
+  const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
 
   // assert
   assert.deepStrictEqual(discovery, expectedDiscovery);

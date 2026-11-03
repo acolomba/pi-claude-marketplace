@@ -1,4 +1,6 @@
+import type { ComponentPathKind } from "../../extensions/pi-claude-marketplace/domain/component-paths.ts";
 import type {
+  CommandMapEntry,
   GitPluginRootResult,
   MaterializablePlugin,
   ResolveContext,
@@ -74,6 +76,60 @@ const unavailableWithExtraField = {
   pluginRoot: "/must-not-leak",
 };
 void (unavailableWithExtraField satisfies ResolvedPlugin);
+// D-CF1-06: a materializable arm may name the folders a declaration leaves unread.
+void ({ ...installableExample, shadowedFolders: ["commands"] } satisfies ResolvedPlugin);
+void ({ ...partialExample, shadowedFolders: ["agents", "workflows"] } satisfies ResolvedPlugin);
+// D-CF1-06: the schema's folder kinds are exactly the component path kinds.
+type ShadowedFolderKindsMatch = AssertTrue<
+  [NonNullable<MaterializablePlugin["shadowedFolders"]>[number]] extends [ComponentPathKind]
+    ? [ComponentPathKind] extends [NonNullable<MaterializablePlugin["shadowedFolders"]>[number]]
+      ? true
+      : false
+    : false
+>;
+void (true satisfies ShadowedFolderKindsMatch);
+// @ts-expect-error the shadowed folders are kind names.
+void ({ ...installableExample, shadowedFolders: [1] } satisfies ResolvedPlugin);
+// D-CF3-03: the command map holds source entries and inline entries, each with its origin.
+void ({
+  ...installableExample,
+  componentPaths: {
+    ...installableExample.componentPaths,
+    commandMap: [
+      { key: "alpha", source: "cmds/alpha.md", origin: "manifest", argumentHint: "<target>" },
+      { key: "beta", content: "Beta body", origin: "entry", description: "Beta.", model: "opus" },
+    ],
+  },
+} satisfies ResolvedPlugin);
+const commandMapEntryContract = {
+  key: "alpha",
+  source: "cmds/alpha.md",
+  origin: "manifest",
+} satisfies CommandMapEntry;
+void ({
+  ...installableExample,
+  componentPaths: {
+    ...installableExample.componentPaths,
+    // @ts-expect-error a command map entry sets a source or inline content.
+    commandMap: [{ key: "alpha", origin: "manifest" }],
+  },
+} satisfies ResolvedPlugin);
+void ({
+  ...installableExample,
+  componentPaths: {
+    ...installableExample.componentPaths,
+    // @ts-expect-error a command map entry comes from the plugin manifest or the marketplace entry.
+    commandMap: [{ key: "alpha", source: "a.md", origin: "plugin" }],
+  },
+} satisfies ResolvedPlugin);
+void ({
+  ...installableExample,
+  componentPaths: {
+    ...installableExample.componentPaths,
+    // @ts-expect-error a command map override is a string.
+    commandMap: [{ key: "alpha", source: "a.md", origin: "manifest", model: 1 }],
+  },
+} satisfies ResolvedPlugin);
 // @ts-expect-error the resolver's state set is closed.
 void ({ ...unavailableExample, state: "unknown" } satisfies ResolvedPlugin);
 // @ts-expect-error installable and state discriminants must agree.
@@ -158,3 +214,4 @@ void materializableExposesFields;
 void materializableExcludesUnavailable;
 void unavailableHasNoDefaultEnabled;
 void resolveContextContract;
+void commandMapEntryContract;

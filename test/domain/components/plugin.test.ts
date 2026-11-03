@@ -21,7 +21,7 @@ void ({ source: "./plugin" } satisfies PluginEntry);
 void ({ name: "plugin" } satisfies PluginEntry);
 // @ts-expect-error The enablement declaration is boolean when present.
 void ({ name: "plugin", source: "./plugin", defaultEnabled: "false" } satisfies PluginEntry);
-// @ts-expect-error MCP servers are a file reference or a server map.
+// @ts-expect-error MCP servers are a file reference, a server map, or an array of both.
 void ({ name: "plugin", source: "./plugin", mcpServers: 42 } satisfies PluginEntry);
 
 describe("PLUGIN_ENTRY_SCHEMA", () => {
@@ -53,8 +53,24 @@ describe("PLUGIN_ENTRY_SCHEMA", () => {
           anyOf: [
             { type: "string" },
             {
-              type: "object",
-              patternProperties: { "^.*$": {} },
+              anyOf: [
+                {
+                  type: "object",
+                  patternProperties: { "^.*$": {} },
+                },
+                {
+                  type: "array",
+                  items: {
+                    anyOf: [
+                      { type: "string" },
+                      {
+                        type: "object",
+                        patternProperties: { "^.*$": {} },
+                      },
+                    ],
+                  },
+                },
+              ],
             },
           ],
         },
@@ -132,6 +148,14 @@ describe("PLUGIN_ENTRY_VALIDATOR", () => {
       },
     },
     {
+      entryShape: "an array of MCP file references and server maps",
+      pluginEntry: {
+        name: "plugin",
+        source: "./plugin",
+        mcpServers: ["./plugin.mcp.json", { local: { command: "node" } }],
+      },
+    },
+    {
       entryShape: "enabled-by-default declarations",
       pluginEntry: {
         name: "plugin",
@@ -200,7 +224,7 @@ describe("PLUGIN_ENTRY_VALIDATOR", () => {
     });
   }
 
-  for (const mcpServers of [null, [], 1, true]) {
+  for (const mcpServers of [null, [1], 1, true]) {
     test(`rejects the MCP declaration ${JSON.stringify(mcpServers)}`, () => {
       // arrange
       const pluginEntry = { name: "plugin", source: "./plugin", mcpServers };
@@ -261,6 +285,10 @@ describe("PLUGIN_MANIFEST_VALIDATOR", () => {
       pluginManifest: { mcpServers: "./plugin.mcp.json" },
     },
     {
+      manifestShape: "an array of MCP file references and server maps",
+      pluginManifest: { mcpServers: ["./plugin.mcp.json", { local: { command: "node" } }] },
+    },
+    {
       manifestShape: "enabled-by-default declarations",
       pluginManifest: { defaultEnabled: true },
     },
@@ -309,7 +337,7 @@ describe("PLUGIN_MANIFEST_VALIDATOR", () => {
     });
   }
 
-  for (const mcpServers of [null, [], 1, true]) {
+  for (const mcpServers of [null, [1], 1, true]) {
     test(`rejects the MCP declaration ${JSON.stringify(mcpServers)}`, () => {
       // arrange
       const pluginManifest = { mcpServers };

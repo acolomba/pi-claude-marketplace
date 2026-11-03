@@ -1,4 +1,5 @@
-// Unit test for the PostCompact payload translator (PAYL-01 / D-60-04).
+// Unit test for the PostCompact payload translator (PAYL-01 / D-60-04 /
+// D-CF5-04).
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -50,6 +51,7 @@ for (const { reason, trigger } of compactTriggerCases) {
       cwd: "/workspace/project",
       hook_event_name: "PostCompact",
       trigger,
+      compact_summary: "Earlier context",
     };
 
     // act
@@ -89,6 +91,7 @@ test("preserves empty context strings in the complete PostCompact envelope", () 
     cwd: "",
     hook_event_name: "PostCompact",
     trigger: "manual",
+    compact_summary: "",
   };
 
   // act
@@ -96,4 +99,33 @@ test("preserves empty context strings in the complete PostCompact envelope", () 
 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
+});
+
+test("carries the compaction entry's whole summary as compact_summary (D-CF5-04)", () => {
+  // arrange
+  const event = {
+    ...postCompactEvent("threshold"),
+    compactionEntry: {
+      ...postCompactEvent("threshold").compactionEntry,
+      summary: "Goal\n\n---\n\nTurn context",
+    },
+  } satisfies SessionCompactEvent;
+  const context = {
+    sessionId: "session-summary",
+    transcriptPath: "/sessions/session-summary.jsonl",
+    cwd: "/workspace/summary",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostCompact(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "session-summary",
+    transcript_path: "/sessions/session-summary.jsonl",
+    cwd: "/workspace/summary",
+    hook_event_name: "PostCompact",
+    trigger: "auto",
+    compact_summary: "Goal\n\n---\n\nTurn context",
+  });
 });

@@ -249,6 +249,8 @@ function wireRawSurface(
         kind: surface.kind,
         plugins: surface.plugins.map((plugin) => wireBackgroundUpdatePlugin(plugin)),
       };
+    case "hook-notice":
+      return { ...envelope, kind: surface.kind, text: surface.text };
   }
 }
 

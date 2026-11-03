@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  firstBodyParagraph,
   foldWhenToUse,
   repairSingleLineScalars,
   setDescriptionScalar,
@@ -47,137 +46,6 @@ describe("synthesizeUnparseableSkill", () => {
       assert.strictEqual(skillContent, expectedSkillContent);
     });
   }
-});
-
-describe("firstBodyParagraph", () => {
-  for (const { description, body, expectedParagraph } of [
-    {
-      description: "blank lines, headings, and a backtick fence",
-      body:
-        "\n# A Leading Heading\n\n```bash\necho skipped\n# still fenced\n```\n\n" +
-        "The first genuine prose paragraph.\nSecond line of that paragraph.\n\nLater prose.",
-      expectedParagraph: "The first genuine prose paragraph.\nSecond line of that paragraph.",
-    },
-    {
-      description: "a tilde fence",
-      body: "~~~\ncode in a tilde fence\n~~~\n\nReal prose here.\n",
-      expectedParagraph: "Real prose here.",
-    },
-    {
-      description: "an immediate paragraph",
-      body: "First line.\nSecond line.\n\nLater paragraph.",
-      expectedParagraph: "First line.\nSecond line.",
-    },
-    {
-      description: "an empty body",
-      body: "",
-      expectedParagraph: "",
-    },
-    {
-      description: "whitespace only",
-      body: "\n\n   \n",
-      expectedParagraph: "",
-    },
-    {
-      description: "headings only",
-      body: "# One\n\n###### Six\n",
-      expectedParagraph: "",
-    },
-    {
-      description: "a closed fence with no following prose",
-      body: "```\nonly a fence\n```\n",
-      expectedParagraph: "",
-    },
-    {
-      description: "an unterminated fence",
-      body: "```\nnever closed\nstill inside the fence\n",
-      expectedParagraph: "",
-    },
-  ]) {
-    test(`returns the first prose paragraph after ${description}`, () => {
-      // arrange
-      const expectedBodyParagraph = expectedParagraph;
-
-      // act
-      const bodyParagraph = firstBodyParagraph(body);
-
-      // assert
-      assert.strictEqual(bodyParagraph, expectedBodyParagraph);
-    });
-  }
-
-  test("treats sparse split entries inside a fence as blank lines", (t) => {
-    // arrange
-    const body = "sparse fenced body";
-    t.mock.method(String.prototype, "split", function (this: string) {
-      if (this === body) {
-        const lines: string[] = [];
-        lines.length = 4;
-        lines[0] = "```";
-        lines[2] = "```";
-        lines[3] = "Body prose.";
-        return lines;
-      }
-
-      return [this];
-    });
-
-    // act
-    const bodyParagraph = firstBodyParagraph(body);
-
-    // assert
-    assert.strictEqual(bodyParagraph, "Body prose.");
-  });
-
-  test("treats a sparse leading split entry as a blank line", (t) => {
-    // arrange
-    const body = "sparse leading body";
-    t.mock.method(String.prototype, "split", function (this: string) {
-      if (this === body) {
-        const lines: string[] = [];
-        lines.length = 2;
-        lines[1] = "Body prose.";
-        return lines;
-      }
-
-      return [this];
-    });
-
-    // act
-    const bodyParagraph = firstBodyParagraph(body);
-
-    // assert
-    assert.strictEqual(bodyParagraph, "Body prose.");
-  });
-
-  test("treats a disappearing split entry as an empty paragraph line", (t) => {
-    // arrange
-    const body = "volatile split body";
-    let reads = 0;
-    t.mock.method(String.prototype, "split", function (this: string) {
-      if (this === body) {
-        const lines: string[] = [];
-        lines.length = 2;
-        Object.defineProperty(lines, "0", {
-          configurable: true,
-          enumerable: true,
-          get() {
-            reads += 1;
-            return reads < 3 ? "Body prose." : undefined;
-          },
-        });
-        return lines;
-      }
-
-      return [this];
-    });
-
-    // act
-    const bodyParagraph = firstBodyParagraph(body);
-
-    // assert
-    assert.strictEqual(bodyParagraph, "");
-  });
 });
 
 describe("foldWhenToUse", () => {
@@ -346,6 +214,28 @@ describe("setDescriptionScalar", () => {
         "---\nname: quoted\ndescription: 'first source line\n  second source line'\nversion: 4\n---\nBody.\n",
       expectedContent: '---\nname: quoted\ndescription: "new value"\nversion: 4\n---\nBody.\n',
     },
+    ...['"description": old value', "'description': old value", "description : old value"].map(
+      (keyLine) => ({
+        description: `a description spelled as ${keyLine}`,
+        sourceContent: `---\nname: spelled\n${keyLine}\nwhen_to_use: Reviews.\n---\nBody.\n`,
+        expectedContent:
+          '---\nname: spelled\ndescription: "new value"\nwhen_to_use: Reviews.\n---\nBody.\n',
+      }),
+    ),
+    {
+      description: "an explicit description key and its value line",
+      sourceContent:
+        "---\nname: explicit\n? description\n: old value\nwhen_to_use: Reviews.\n---\nBody.\n",
+      expectedContent:
+        '---\nname: explicit\ndescription: "new value"\nwhen_to_use: Reviews.\n---\nBody.\n',
+    },
+    {
+      description: "a literal block scalar holding an indented rule line before when_to_use",
+      sourceContent:
+        "---\nname: review\ndescription: |\n  Part one.\n  ---\n  Part two.\nwhen_to_use: Reviews.\n---\nBody.\n",
+      expectedContent:
+        '---\nname: review\ndescription: "new value"\nwhen_to_use: Reviews.\n---\nBody.\n',
+    },
   ]) {
     test(`replaces ${description} across its complete node span`, () => {
       // arrange
@@ -388,29 +278,6 @@ describe("setDescriptionScalar", () => {
     // arrange
     const sourceContent = "---\ndescription: old value\nname: acme-skill";
     const expectedContent = '---\ndescription: "new value"\nname: acme-skill';
-
-    // act
-    const skillContent = setDescriptionScalar(sourceContent, "new value");
-
-    // assert
-    assert.strictEqual(skillContent, expectedContent);
-  });
-
-  test("treats a sparse frontmatter split entry as an absent description", (t) => {
-    // arrange
-    const sourceContent = "sparse frontmatter";
-    t.mock.method(String.prototype, "split", function (this: string) {
-      if (this === sourceContent) {
-        const lines: string[] = [];
-        lines.length = 3;
-        lines[0] = "---";
-        lines[2] = "---";
-        return lines;
-      }
-
-      return [this];
-    });
-    const expectedContent = '---\n\ndescription: "new value"\n---';
 
     // act
     const skillContent = setDescriptionScalar(sourceContent, "new value");
@@ -509,6 +376,13 @@ describe("repairSingleLineScalars", () => {
       sourceContent: "---\ntags: [alpha: 1, beta]\ndescription: Use this: when reviewing\n---\n",
       expectedContent:
         '---\ntags: [alpha: 1, beta]\ndescription: "Use this: when reviewing"\n---\n',
+    },
+    {
+      description: "repairs a line after a block scalar holding an indented rule line",
+      sourceContent:
+        "---\ndescription: |\n  Part one.\n  ---\n  Part two.\nargument-hint: Use this: carefully\n---\n",
+      expectedContent:
+        '---\ndescription: |\n  Part one.\n  ---\n  Part two.\nargument-hint: "Use this: carefully"\n---\n',
     },
     {
       description: "drops the trailing carriage return of a repaired CRLF line",

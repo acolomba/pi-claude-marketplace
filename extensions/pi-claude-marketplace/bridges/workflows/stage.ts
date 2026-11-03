@@ -3,8 +3,14 @@
 // WorkflowsBridge: prepare / commit / abort.
 //
 // Storage layout:
-//   - Staging:   <workflow home>/.pi-claude-marketplace-staging/<uuid>/<plugin>:<name>.json
+//   - Staging:   <the scope's workflow staging directory>/<uuid>/<plugin>:<name>.json
 //   - Target:    <the scope's saved directory>/<plugin>:<name>.json
+//
+// For the user scope both sit under the engine's storage root; for a project
+// both sit under its `.pi/` (D-LOC-01). A project re-stage also removes the
+// previous names from the directory under the user's workflow home where an
+// earlier version placed the project's envelopes, since the engine reads that
+// one first.
 //
 // Only the bundle composes that target. This file never joins a name onto the
 // saved directory itself -- it asks `locations.workflowArtifactPath(name)`,
@@ -17,13 +23,13 @@
 // targeted, and the host engine's own saved-name rule forbids only "/", "\"
 // and NUL.
 //
-// WPTH-05: staging is a SIBLING of the target under the engine's storage root,
-// not a child of this extension's own writable root as every other bridge's
-// staging tree is. That root sits at `<cwd>/.pi/...` for project scope and can
-// land on a different filesystem from the home directory, which makes the
-// commit `rename()` fail EXDEV. Staging beside the target keeps the rename
-// inside one filesystem, which is where NFR-1 atomicity comes from. No path in
-// this bridge derives from the extension's own root.
+// WPTH-05: staging lies on the same filesystem as the target, so the commit
+// `rename()` stays atomic (NFR-1). User scope: a sibling of the saved
+// directory under the engine's root (`workflowsHomeDir`), because the
+// extension's own writable root can live on a different filesystem and make
+// the rename fail EXDEV. Project scope: `<extensionRoot>/workflows-staging`,
+// while the saved directory is `<cwd>/.pi/workflows/saved`; both are inside
+// the project's `.pi/`.
 //
 // WBRG-04: the ONLY operation that touches a directory the engine scans is the
 // commit `rename`. Envelope bytes are written exclusively into the staging
@@ -45,7 +51,7 @@
 // envelope (`discover.ts::readScriptSource`).
 
 import { randomUUID } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertNoWorkflowNameCollisions } from "../../domain/workflow-script.ts";
@@ -207,7 +213,7 @@ export async function prepareStageWorkflows(
   }
 
   const stagingRoot = path.join(locations.workflowsStagingDir, randomUUID());
-  // WPTH-04: the boundary is the engine's storage ROOT, not the staging
+  // WPTH-04: the boundary is the scope's `workflowsHomeDir`, not the staging
   // directory. `assertPathInside` trusts its own boundary and starts the
   // symlink walk at it, so anchoring on `workflowsStagingDir` would skip an
   // lstat of the one segment an attacker could have replaced with a symlink,
@@ -434,10 +440,10 @@ export async function commitPreparedWorkflows(
   try {
     // WPTH-04: the same anchor the staging root takes above, for its sibling.
     // `workflowArtifactPath` trusts `workflowsSavedDir` as its own boundary, so
-    // nothing else lstats the `saved` segment (or the `projects/<key>` levels
-    // above it), and `mkdir` with `recursive: true` follows a link planted at
-    // any of them. Anchoring on the engine's storage ROOT walks every one of
-    // those segments, and the check runs BEFORE the `mkdir` for the reason the
+    // nothing else lstats the `saved` segment (or the `workflows` level above
+    // it for a project), and `mkdir` with `recursive: true` follows a link
+    // planted at any of them. Anchoring on `workflowsHomeDir` walks every one
+    // of those segments, and the check runs BEFORE the `mkdir` for the reason the
     // staging check does: a refusal after the write refuses nothing.
     await assertPathInside(
       prepared.locations.workflowsHomeDir,
@@ -445,7 +451,7 @@ export async function commitPreparedWorkflows(
       "workflows saved directory",
     );
 
-    // Lazy-create: for project scope this creates the `projects/<key>/saved`
+    // Lazy-create: for project scope this creates the `workflows/saved`
     // levels too. The engine's own directory helper does the same, so we are
     // not racing it into an inconsistent state.
     await mkdir(prepared.locations.workflowsSavedDir, { recursive: true });
@@ -531,7 +537,50 @@ export async function commitPreparedWorkflows(
   }
 
   reportPlaced(prepared._renamePairs.map((pair) => pair.name));
-  return cleanupStaging(createRemovalOps(), prepared.stagingRoot, STAGING_LABEL);
+  return finishCommit(prepared);
+}
+
+/**
+ * The cleanup after a commit that placed every envelope: the earlier project
+ * copies of the previous names, then the staging directory. Returns their
+ * leak messages joined, or `undefined` when there are none.
+ */
+async function finishCommit(prepared: PreparedWorkflowsStaged): Promise<string | undefined> {
+  const leaks = [
+    ...(await removeFormerPreviousTargets(prepared)),
+    await cleanupStaging(createRemovalOps(), prepared.stagingRoot, STAGING_LABEL),
+  ].filter((leak) => leak !== undefined);
+  return leaks.length === 0 ? undefined : leaks.join("; ");
+}
+
+/**
+ * D-LOC-01: removes each previous name from the directory where an earlier
+ * version placed the project's envelopes, after the commit placed the new
+ * ones in the project. The engine reads that directory first, so a copy left
+ * there would shadow the new envelope. Only names this plugin's record lists
+ * are touched, and a name with no file there is skipped. A failure is a leak
+ * message: the commit itself succeeded.
+ */
+async function removeFormerPreviousTargets(
+  prepared: PreparedWorkflowsStaged,
+): Promise<readonly string[]> {
+  const leaks: string[] = [];
+  for (const name of prepared._previousNames) {
+    try {
+      // eslint-disable-next-line no-await-in-loop -- one name at a time, in record order
+      const former = await prepared.locations.formerWorkflowArtifactPath(name);
+      if (former !== undefined) {
+        // eslint-disable-next-line no-await-in-loop -- one name at a time, in record order
+        await unlink(former);
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        leaks.push(`failed to remove earlier workflow envelope of ${name}: ${errorMessage(err)}`);
+      }
+    }
+  }
+
+  return leaks;
 }
 
 /**

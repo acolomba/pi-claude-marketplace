@@ -25,6 +25,10 @@ function ref(name: string): Segment {
   return { kind: "ref", name };
 }
 
+function refWithDefault(name: string, fallback: string): Segment {
+  return { kind: "ref", name, fallback };
+}
+
 const ROWS: readonly SerializeRow[] = [
   {
     title: "AVAR-03: splits literal {env:K}",
@@ -129,6 +133,67 @@ const ROWS: readonly SerializeRow[] = [
     written: `{e${SPLIT}\${PI_CM_R}`,
   },
   {
+    title: "D-CF1-13: writes a reference with a default as ${NAME:-default}",
+    segments: [refWithDefault("PI_CM_LEVEL", "info")],
+    secret: false,
+    written: "${PI_CM_LEVEL:-info}",
+  },
+  {
+    title: "VER-05: writes an empty default as ${NAME:-}",
+    segments: [refWithDefault("PI_CM_V", "")],
+    secret: false,
+    written: "${PI_CM_V:-}",
+  },
+  {
+    title: "VER-05: writes a default of spaces unchanged",
+    segments: [refWithDefault("PI_CM_V", "   ")],
+    secret: true,
+    written: "${PI_CM_V:-   }",
+  },
+  {
+    title: "VER-05: writes a non-ASCII default as the same code units",
+    segments: [refWithDefault("PI_CM_V", "café 😀")],
+    secret: false,
+    written: "${PI_CM_V:-café 😀}",
+  },
+  {
+    title: "D-CF1-13: keeps text beside a reference with a default out of its run",
+    segments: [text("a/"), refWithDefault("PI_CM_V", "x"), text("/b")],
+    secret: false,
+    written: "a/${PI_CM_V:-x}/b",
+  },
+  ...["$", "$en", "{", "{env"].map((tail): SerializeRow => ({
+    title: `D-CF1-13: guards a reference with a default after the partial trigger ${tail}`,
+    segments: [text(tail), refWithDefault("PI_CM_V", "x")],
+    secret: false,
+    written: `${tail}${SPLIT}\${PI_CM_V:-x}`,
+  })),
+  ...["v:K", "K", "}"].map((completion): SerializeRow => ({
+    title: `D-CF1-13: guards ${completion} after a reference with a default`,
+    segments: [refWithDefault("PI_CM_V", "$en"), text(completion)],
+    secret: false,
+    written: `\${PI_CM_V:-$en}${SPLIT}${completion}`,
+  })),
+  {
+    title:
+      "D-CF1-13: guards a default that could complete a marker begun by the reference before it",
+    segments: [ref("PI_CM_R"), refWithDefault("PI_CM_V", "v:K")],
+    secret: false,
+    written: `\${PI_CM_R}${SPLIT}\${PI_CM_V:-v:K}`,
+  },
+  {
+    title: "D-CF1-13: does not guard a default that cannot complete a marker after a reference",
+    segments: [ref("PI_CM_R"), refWithDefault("PI_CM_V", "/x")],
+    secret: false,
+    written: "${PI_CM_R}${PI_CM_V:-/x}",
+  },
+  {
+    title: "D-CF1-13: guards a reference after a default that ends in a partial trigger",
+    segments: [refWithDefault("PI_CM_V", "p{en"), ref("PI_CM_R")],
+    secret: false,
+    written: `\${PI_CM_V:-p{en}${SPLIT}\${PI_CM_R}`,
+  },
+  {
     title: "AVAR-03: doubles a leading ! in a secret field",
     segments: [text("!x")],
     secret: true,
@@ -197,4 +262,53 @@ describe("serializeLiteral", () => {
     // assert
     assert.strictEqual(writtenValue, expectedWritten);
   });
+
+  for (const { title, literal, written } of [
+    {
+      title: "VER-04: splits a literal ${A:-x}",
+      literal: "${A:-x}",
+      written: `$${SPLIT}{A:-x}`,
+    },
+    {
+      title: "VER-04: splits a literal ${A:-} with an empty default",
+      literal: "${A:-}",
+      written: `$${SPLIT}{A:-}`,
+    },
+    {
+      title: "VER-04: splits the adapter-only literal ${1A:-x}",
+      literal: "${1A:-x}",
+      written: `$${SPLIT}{1A:-x}`,
+    },
+    {
+      title: "VER-04: still splits a literal ${A}",
+      literal: "${A}",
+      written: `$${SPLIT}{A}`,
+    },
+    {
+      title: "VER-04: leaves ${É} unchanged, a reference in neither grammar",
+      literal: "${É}",
+      written: "${É}",
+    },
+    {
+      title: "VER-04: leaves ${A:x} unchanged, a default without its dash",
+      literal: "${A:x}",
+      written: "${A:x}",
+    },
+    {
+      title: "VER-04: writes an empty literal as the empty string",
+      literal: "",
+      written: "",
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const expectedWritten = written;
+
+      // act
+      const writtenValue = serializeLiteral(literal, false);
+
+      // assert
+      assert.strictEqual(writtenValue, expectedWritten);
+    });
+  }
 });

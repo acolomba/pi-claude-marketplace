@@ -1,39 +1,38 @@
 ---
 gsd_state_version: "1.0"
-milestone: plugin-lifecycle
-status: plugin-lifecycle milestone complete
-stopped_at: "Milestone plugin-lifecycle shipped; PR #290 merged, released as 0.21.0"
-last_updated: "2026-10-31T08:13:42.210Z"
-last_activity: 2026-10-30
-last_activity_desc: "Completed quick task 261030-ogp: bootstrap runs only marketplace add"
-state_head: 9847e01b61249175f6ed565fdb02b2e0c5215253
-milestone_name: Marketplace and Plugin Lifecycle Backlog
-current_phase: 11
+milestone: component-features
+status: Awaiting next milestone
+stopped_at: Milestone component-features completed and archived 2026-11-03 (8 phases, 65 plans, 62/62 requirements)
+last_updated: "2026-11-03T11:38:09.234Z"
+last_activity: 2026-11-03
+last_activity_desc: Milestone component-features completed and archived
+state_head: 5de5e65a9b1bf1fb1e73040eadf49278601f6051
 progress:
-  total_phases: 11
-  completed_phases: 11
-  total_plans: 80
-  completed_plans: 80
+  total_phases: 8
+  completed_phases: 8
+  total_plans: 65
+  completed_plans: 65
   percent: 100
+milestone_name: Component Behavioral Tests
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-29 after plugin-lifecycle completion)
+See: `.planning/PROJECT.md` (updated 2026-11-02 after the component-features milestone)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone
+**Current focus:** component-features closed again 2026-11-03 after Phase 8 and the re-verification of every phase. Next: version bump, CHANGELOG entry and the PR for `claude/quirky-planck-hhm592` (dispatch `ci.yml` first to re-measure the components shard). Open for the user: review the upstream branches on `acolomba/pi` and `acolomba/pi-subagents`.
 
 ## Current Position
 
-Phase: Milestone plugin-lifecycle complete
+Phase: Milestone component-features complete
 Plan: —
-Status: plugin-lifecycle milestone complete
-Last activity: 2026-10-30 - Completed quick task 261030-ogp: bootstrap runs only marketplace add
+Status: Awaiting next milestone
+Last activity: 2026-11-03 — Milestone component-features completed and archived
 
 ### mcp-4 closeout
 
@@ -188,6 +187,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
 | 261030-ogp | bootstrap runs only marketplace add | 2026-10-30 | 841e3dc2 | complete | [261030-ogp-bootstrap-runs-only-marketplace-add](./quick/261030-ogp-bootstrap-runs-only-marketplace-add/) |
 | 12 | Fix STATE.md health warnings: archived 03.x phase tokens, milestone-complete status, PR #290 merged | 2026-10-31 | 9847e01b | — | — |
+| 261103-eqa | Make tests robust to Pi upgrades: stop pinning upstream text | 2026-11-03 | 5de5e65 | — | [261103-eqa-make-tests-robust-to-pi-upgrades](./quick/261103-eqa-make-tests-robust-to-pi-upgrades/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
@@ -271,7 +271,8 @@ archived milestone artifacts.
 ## Operator Next Steps
 
 
-- Start the next milestone with $gsd-new-milestone
+
+- Start the next milestone with /gsd-new-milestone
 
 
 ## Performance Metrics
@@ -792,6 +793,11 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Roadmap Evolution
 
+- component-features roadmap created 2026-10-31: Phase 1 (Harness and
+  Version Raise, with the pre-fan-out decisions in its discuss step) then
+  Phases 2-7, one per component kind, in parallel; no suite-close phase, the
+  parent applies each phase's collected CHANGELOG, README, README.es,
+  PROJECT, and BACKLOG lines at merge
 - lifecycle-coverage roadmap created 2026-10-22: Phase 1 (Suite Foundation)
   then Phases 2-15 in parallel, each owning disjoint feature files and step
   modules
@@ -803,15 +809,53 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Recent Decisions
 
-- D-MF-05: unscoped marketplace removal selects project before user, falls
-  back to a sole user record, and never falls through after selecting a
-  project record whose base layer does not declare the marketplace.
-- D-MF-06: marketplace info evaluates both scopes independently in
-  project-first order, keeps the shipped invalid-manifest failed row, and
-  preserves manifest declaration order for allowed dependency marketplaces.
+Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
+
+- D-CF1-01..05: user-invoked bridged skills and commands get Claude Code's
+  argument substitution, `` !`cmd` `` injection, description fallback, and
+  dropped-field warnings. Phase 1 built the unwired cores; Phases 2 and 3
+  wire them.
+- D-CF3-01..13 (Phase 3, child session, pending parent merge): commands are
+  wired to the Phase 1 cores in `edge/command-invocation.ts`; commands stay
+  invisible to the model (Pi gap); `user-invocable: false` stays listed; the
+  object-map `commands` form installs; a marketplace entry's `commands` adds
+  to `commands/`; project commands run only with a user-scope ledger entry.
+  Rows and parent lines: `03-09-SUMMARY.md`.
+- D-CF1-06: a declared `commands`, `agents`, or `workflows` path replaces the
+  conventional folder; a declared `skills` path still adds (shipped).
+- D-CF1-09..12: `user-invocable: false` keeps today's behavior (gap reported
+  to Pi); `new` is sent as `clear`; `compact` fires SessionStart; `clear`,
+  `compact`, and `fork` matchers are admitted. Phases 2 and 5 pin them.
+- D-CF1-13/14: under pi-mcp-adapter 7.x the bridge leaves `${NAME:-default}`
+  to the adapter; `appendStructuredContent` and `roots` are carried fields.
+- D-CF1-15..17: one profile Pi per scenario through a `Given`, two CI
+  behavioral shards, `.ts` stand-ins under `features/lib/` and a file-backed
+  model script.
+- D-CF4-01..14 (Phase 4, Agents; rows drafted in `04-06-SUMMARY.md` for the
+  parent): nested agent names, upstream description fallback, `advertise:
+  true`, `async: false` by default, 5.x `--map-model` table, preloaded skill
+  content inlined into the agent prompt, trust divergence licensed as a Pi
+  gap, AGT-04 closed on a recorded gap (D-CF4-10).
 
 ### Blockers/Concerns
 
+- [component-features] No scenario may pin an unlicensed gap before the user
+  decides; the pre-fan-out decisions are recorded (D-CF1-01..17).
+- [Phase 1] `.fallowrc.json` carries `dynamicallyLoaded` and `ignoreExports`
+  entries for the six unwired invocation cores (argument substitution, shell
+  words, context injection, description fallback, and the rest); remove them
+  and rerun `npm run fallow` once Phases 2 and 3 import the cores.
+- [Phase 4] Settled by D-CF4-09: Claude Code runs plugin agents in untrusted
+  folders; pi-subagents refuses project-scope runs, a Pi-gap divergence. The
+  trust-blind list is drafted as a pi-subagents defect report (not filed).
+- [Phase 4] `advertise: true` (D-CF4-14) changes every parent system prompt
+  with pi-subagents loaded; re-verify sibling whole-prompt comparisons at merge.
+- [Phase 1] The sandbox runs as root, which breaks the permission-injection
+  tests; run npm scripts and hook-running commits through the non-DAC shell
+  wrapper (`npm_config_script_shell`) with a 6 GB heap.
+- [component-features] Parallel phases share append-only closed sets, the
+  `soft-dep.ts` arms, and reviewed clone pairs; rerun `npx fallow dupes` after
+  the second merge and re-verify a phase after any merge that touches its files.
 - [lifecycle-coverage] Parallel Phases 2-15 own disjoint `features/` files,
   but a product fix can touch production code or `CHANGELOG.md` that another
   phase also changes; the later merge resolves the overlap and re-runs
@@ -826,6 +870,6 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ## Session Continuity
 
-Last session: 2026-10-28T11:38:54.366Z
-Stopped at: Phase 11 complete — all phases complete
+Last session: 2026-11-01T20:10:00Z
+Stopped at: Phase 06 complete — all phases complete
 Resume file: None

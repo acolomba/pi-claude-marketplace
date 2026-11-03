@@ -2,7 +2,7 @@
 //
 // Identity, range and module-loading support for the integration tests that
 // check this extension's output against an optional peer's own code
-// (pi-subagents, pi-mcp-adapter).
+// (pi-subagents, pi-mcp-adapter, @quintinshaw/pi-dynamic-workflows).
 //
 // PIFL-03: an optional peer is never a `dependencies` or `devDependencies`
 // entry and never a lockfile package. `scripts/install-test-peers.mjs` puts

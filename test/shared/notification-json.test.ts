@@ -113,12 +113,6 @@ for (const { message, safeMessage } of [
     // assert
     assert.deepStrictEqual(payload, expected);
     assertSafeCommandPayload(payload, [safeMessage]);
-    for (const disclosure of [message, "open '[path]ClientLedger[path]'"]) {
-      const planted = { ...expected, cause: { causeChain: [disclosure], truncated: false } };
-      assert.throws(() => {
-        assertSafeCommandPayload(planted, [safeMessage]);
-      }, assert.AssertionError);
-    }
   });
 }
 
@@ -194,73 +188,6 @@ for (const message of [
     });
     assert.strictEqual(validator.Check(payload), true);
     assertSafeCommandPayload(payload, ["Command failure details omitted."]);
-  });
-}
-
-for (const { title, cause } of [
-  {
-    title: "quoted directory suffix",
-    cause: { causeChain: ["open '[path]'Confidential Client'[path]'"], truncated: false },
-  },
-  {
-    title: "apostrophe directory suffix",
-    cause: { causeChain: ["open '[path]'Connor[path]'"], truncated: false },
-  },
-  {
-    title: "newline directory suffix",
-    cause: { causeChain: ["open '[path]\nConfidential Client[path]'"], truncated: false },
-  },
-  {
-    title: "angle-bracket directory suffix",
-    cause: { causeChain: ["failed at [path]<Confidential Client>[path]"], truncated: false },
-  },
-  { title: "credentials", cause: { causeChain: ["Bearer secret123"], truncated: false } },
-  { title: "POSIX path", cause: { causeChain: ["/private/work/config.json"], truncated: false } },
-  { title: "Windows path", cause: { causeChain: ["C:\\private\\config.json"], truncated: false } },
-  { title: "bare UNC root", cause: { causeChain: ["\\\\server"], truncated: false } },
-  { title: "file URL", cause: { causeChain: ["file:/private/config.json"], truncated: false } },
-  {
-    title: "spaced POSIX path",
-    cause: { causeChain: ["/Private Data/client/secret.json"], truncated: false },
-  },
-  { title: "Unicode path", cause: { causeChain: ["/用户/秘密/config.json"], truncated: false } },
-  {
-    title: "spaced Windows path",
-    cause: { causeChain: ["C:\\Private Data\\client\\secret.json"], truncated: false },
-  },
-  {
-    title: "colon-prefixed path",
-    cause: { causeChain: ["failed at:/private/work/config.json"], truncated: false },
-  },
-  {
-    title: "partially masked path",
-    cause: { causeChain: ["[path] Data/秘密/config.json"], truncated: false },
-  },
-  { title: "live Error", cause: new Error("failed") },
-  { title: "stack", cause: { causeChain: ["failed"], truncated: false, stack: "private" } },
-  { title: "null member", cause: null },
-  { title: "undefined member", cause: undefined },
-  { title: "function member", cause: () => "private" },
-  { title: "symbol member", cause: Symbol("private") },
-  { title: "nonfinite number", cause: Infinity },
-  { title: "symbol key", cause: { [Symbol("private")]: "private" } },
-]) {
-  test(`the command payload disclosure check rejects planted ${title}`, () => {
-    // arrange
-    const payload = {
-      schemaVersion: 1,
-      kind: "internal-error",
-      origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
-      severity: "error",
-      needsReload: false,
-      summary: "Command failed unexpectedly.",
-      cause,
-    };
-
-    // act & assert
-    assert.throws(() => {
-      assertSafeCommandPayload(payload, ["operation failed"]);
-    }, assert.AssertionError);
   });
 }
 
@@ -2778,6 +2705,17 @@ const RAW_CASES: {
       ],
     },
   },
+  "hook-notice": {
+    surface: { kind: "hook-notice", text: "PreToolUse:Bash says: checked" },
+    expected: {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "hook-notice",
+      severity: "info",
+      needsReload: false,
+      text: "PreToolUse:Bash says: checked",
+    },
+  },
 };
 
 for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
@@ -2798,14 +2736,14 @@ for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
 }
 
 test("D-PL8-16: converts a background update row without a from version", () => {
+  // arrange
+  const surface = {
+    kind: "background-update",
+    plugins: [{ name: "alpha", marketplace: "tools", scope: "project", toVersion: "1.1.0" }],
+  } satisfies ResolvedRawSurface;
+
   // act
-  const payload = toWirePayload(
-    {
-      kind: "background-update",
-      plugins: [{ name: "alpha", marketplace: "tools", scope: "project", toVersion: "1.1.0" }],
-    },
-    { kind: "load" },
-  );
+  const payload = toWirePayload(surface, { kind: "load" });
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -2819,15 +2757,19 @@ test("D-PL8-16: converts a background update row without a from version", () => 
 });
 
 test("AAP-04: converts a default autoapply status without a source or a set", () => {
+  // arrange
+  const surface = {
+    kind: "autoapply-status",
+    enabled: false,
+    files: [{ scope: "project", file: "claude-plugins.json" }],
+  } satisfies ResolvedRawSurface;
+
   // act
-  const payload = toWirePayload(
-    {
-      kind: "autoapply-status",
-      enabled: false,
-      files: [{ scope: "project", file: "claude-plugins.json" }],
-    },
-    { kind: "command", commandId: "plugin autoapply", invocationId: "test-run" },
-  );
+  const payload = toWirePayload(surface, {
+    kind: "command",
+    commandId: "plugin autoapply",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {

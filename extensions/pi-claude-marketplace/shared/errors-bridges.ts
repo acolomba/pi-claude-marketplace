@@ -8,6 +8,7 @@
 import { redactAbsolutePaths } from "./redact-absolute-paths.ts";
 
 import type { McpConfigNotice } from "./notification-types.ts";
+import type { PathContainmentError } from "./path-containment.ts";
 
 /**
  * The (marketplace, plugin) tuple an agent name belongs to. Declared once so
@@ -193,6 +194,27 @@ export class McpUnstagePartialError extends Error {
 }
 
 /**
+ * PI-14: a workflows unstage that met a containment refusal (a symlink or an
+ * escaping path at a recorded name). The refusal rides `refusal` (and
+ * `Error.cause`) and is
+ * the failure the user sees; a caller that must keep the class (the phase
+ * ledger narrows on `PathContainmentError`) rethrows `refusal` bare.
+ * `removedNames` lists the names whose envelope the loop had already removed
+ * and that no failure holds back, so a caller can record them as dropped
+ * before it surfaces the refusal.
+ */
+export class WorkflowsUnstageRefusedError extends Error {
+  readonly removedNames: readonly string[];
+  readonly refusal: PathContainmentError;
+  constructor(removedNames: readonly string[], refusal: PathContainmentError) {
+    super("Workflows unstage stopped on a containment refusal.", { cause: refusal });
+    this.name = "WorkflowsUnstageRefusedError";
+    this.removedNames = Object.freeze([...removedNames]);
+    this.refusal = refusal;
+  }
+}
+
+/**
  * Generic wrapper for prepare-time staging tmp failures (mkdtemp, partial
  * writes). Carries the underlying cause via Error.cause; downstream
  * callers may use appendLeakToError to surface cleanup leaks.
@@ -242,5 +264,34 @@ export class WorkflowTargetOccupiedError extends Error {
     super(`Cannot replace workflow target with non-previous content at ${targetPath}`);
     this.name = "WorkflowTargetOccupiedError";
     this.targetPath = targetPath;
+  }
+}
+
+/**
+ * WR-05: a skill's frontmatter holds the key a staging writer rewrites in one
+ * top-level node beside other keys, such as the flow mapping
+ * `{name: x, description: y}`. The writer cannot replace that key without
+ * dropping the others, so the install stops and names the skill and the line.
+ */
+export class SkillFrontmatterNodeError extends Error {
+  readonly key: string;
+  /** The 1-based line of the node, counting the opening `---` as line 1. */
+  readonly line: number;
+  readonly keys: readonly string[];
+  /** The source name of the skill, once the staging loop knows it. */
+  readonly skill: string | undefined;
+
+  constructor(key: string, line: number, keys: readonly string[], skill?: string) {
+    const subject =
+      skill === undefined ? "The skill frontmatter" : `The frontmatter of the skill "${skill}"`;
+    super(
+      `${subject} holds "${key}" on line ${line.toString()} in one node with other keys ` +
+        `(${keys.join(", ")}); write each key on its own line.`,
+    );
+    this.name = "SkillFrontmatterNodeError";
+    this.key = key;
+    this.line = line;
+    this.keys = Object.freeze([...keys]);
+    this.skill = skill;
   }
 }

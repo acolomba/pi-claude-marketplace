@@ -92,6 +92,7 @@ import {
   commitPreparedWorkflows,
   prepareStageWorkflows,
 } from "../../bridges/workflows/index.ts";
+import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -306,10 +307,12 @@ interface PrepHandles {
   workflows: PreparedWorkflowsStaging;
 }
 
+/** A phase-3 commit failure that keeps the error behind it. */
 export interface UpdatePhase3Failure extends Phase3Failure {
   readonly cause: Error;
 }
 
+/** Every update outcome except a failed one. */
 export type NonFailedUpdateOutcome = Exclude<PluginUpdateOutcome, PluginUpdateFailedOutcome>;
 
 /**
@@ -332,6 +335,7 @@ export type DirectRenderableFailedOutcome = PluginUpdateFailedOutcome & {
   readonly toVersion?: never;
 };
 
+/** The failed outcome of a phase-3 replace: it carries the per-bridge failures. */
 export interface UpdatePhase3FailedOutcome extends Omit<
   PluginUpdateFailedOutcome,
   "cause" | "fromVersion" | "phaseFailures" | "reasons"
@@ -342,16 +346,18 @@ export interface UpdatePhase3FailedOutcome extends Omit<
   readonly cause?: never;
 }
 
+/** An outcome the direct path can render without the phase-3 rollback payload. */
 export type DirectRenderableOutcome = NonFailedUpdateOutcome | DirectRenderableFailedOutcome;
+/** What one plugin's update run returns. */
 export type UpdateRunOutcome = DirectRenderableOutcome | UpdatePhase3FailedOutcome;
 type NonEmptyUpdatePhase3Failures = readonly [UpdatePhase3Failure, ...UpdatePhase3Failure[]];
 
 type PluginPreflight = PreparedPluginUpdate;
 
 /**
- * Prepare all four bridges into tmp, in skills -> commands -> agents -> mcp
- * order; any throw aborts the handles already prepared and appends their
- * cleanup-leak descriptors.
+ * Prepare all five bridges into tmp, in skills -> commands -> agents -> mcp ->
+ * workflows order; any throw aborts the handles already prepared and appends
+ * their cleanup-leak descriptors.
  *
  * D-141-03 / D-PL1-02: each returned handle carries a tagged
  * `result.warnings` array. A throw here reports the warnings of the handles
@@ -391,6 +397,8 @@ async function prepareUpdateHandles(
       resolved: installable,
       referenceNames,
       previousCommandNames: record.resources.prompts,
+      // A workflow keeps a name it shares with a command of its plugin.
+      workflowNames: referenceNames.workflows,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });
@@ -402,6 +410,7 @@ async function prepareUpdateHandles(
       pluginDataDir,
       agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
+      skillSources: handles.skills.result.recorded,
       referenceNames,
       // AG-7 opt-in: forward the direct-path `--map-model` setting. The
       // cascade entrypoint never sets `args.mapModel`, so cascade re-
@@ -794,9 +803,11 @@ function applyPerBridgeResources(
     readonly failedPhases: ReadonlySet<Phase3Phase>;
     readonly installable: MaterializablePlugin;
     readonly hookEntries: readonly HookSummaryEntry[] | undefined;
-    /** CR-03: the PRE-update inventory, read off `preflight.record`. The
-     * record this function mutates was already widened to the intent-mark
-     * union, so it cannot supply this. */
+    /**
+     * CR-03: the PRE-update inventory, read off `preflight.record`. The record
+     * this function mutates was already widened to the intent-mark union, so it
+     * cannot supply this.
+     */
     readonly previousWorkflowNames: readonly string[];
     /** CR-03 / WR-01: what the workflows commit reported. */
     readonly workflows: WorkflowsCommitReport;
@@ -962,6 +973,7 @@ async function refreshHooksCacheAfterUpdate(
  *      agents    -> resources.agents
  *      hooks     -> resources.hooks, hookEntries
  *      mcp       -> resources.mcpServers
+ *      workflows -> resources.workflows (keyed on the commit's own verdict)
  *
  * 2. ALL-OR-NOTHING (version bump + installable flip + resolvedSource):
  *    only when `phase3aFailures.length === 0`. On any failure the
@@ -1007,7 +1019,7 @@ async function finalizeUpdateRecord(
       }
 
       // Anchor the per-bridge gating against the runtime tuple of known
-      // phases, so a future fifth bridge forces an explicit tuple update
+      // phases, so a future seventh phase forces an explicit tuple update
       // before landing here.
       const failedPhases = new Set<Phase3Phase>(
         phase3aFailures.map((f) => f.phase).filter((p) => PHASE3_FAILURE_PHASES.includes(p)),
@@ -1196,8 +1208,10 @@ async function commitUpdatePhase3a(
 ): Promise<{
   readonly failures: UpdatePhase3Failure[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
-  /** CR-03 / WR-01: what the workflows commit reported. The record write is
-   * the only consumer. */
+  /**
+   * CR-03 / WR-01: what the workflows commit reported. The record write is the
+   * only consumer.
+   */
   readonly workflows: WorkflowsCommitReport;
   /**
    * AFILE-04 / AMIG-02: the MCP commit's file notices, then the legacy
@@ -1436,12 +1450,14 @@ export async function assertUpdateNamesFree(
   await assertAgentTargetsFree(args.locations, args, names.agents);
 }
 
-// The three-phase update body sequences preflight, the D-UPD disabled-record
-// fast path, prepare-handles, the intent-mark window, phase-3a per-bridge
-// commits, finalize, and the phase-3b aggregate error path. The per-phase
-// save-vs-throw discipline stays visible here; the phase bodies themselves are
-// extracted above. `policy` is the calling verb's; its `overwrite` reaches the
-// agents commit.
+/**
+ * Runs the three-phase update body: preflight, the D-UPD disabled-record fast
+ * path, prepare-handles, the intent-mark window, phase-3a per-bridge commits,
+ * finalize, and the phase-3b aggregate error path. The per-phase save-vs-throw
+ * discipline stays visible here; the phase bodies themselves are extracted
+ * above. `policy` is the calling verb's; its `overwrite` reaches the agents
+ * commit.
+ */
 export async function swapPluginUpdate(
   args: ThreePhaseArgs,
   preflight: PreparedPluginUpdate,
@@ -1450,7 +1466,7 @@ export async function swapPluginUpdate(
   const { plugin, marketplace } = args;
   const { installable } = preflight;
 
-  // ─── : prepare into tmp ────────────────────────────────────────────
+  // ─── Prepare into tmp ──────────────────────────────────────────────────────
   //
   // Bridge prepare* writes only under <extensionRoot>/<bridge>-staging/<uuid>/.
   // Sequential ordering -- skills -> commands -> agents -> mcp -> workflows --
@@ -1517,7 +1533,7 @@ export async function swapPluginUpdate(
   // The finalize window writes per-bridge resource updates for every
   // bridge whose commit succeeded (independent of other bridges' outcomes),
   // and bumps `version` + the `compatibility` block + `resolvedSource` ONLY
-  // when all four bridges succeeded.
+  // when every bridge succeeded.
   //
   // Order discipline: finalize MUST run BEFORE the phase-3b recovery-hint
   // emission. If finalize ran AFTER the recovery-hint emission on a success
@@ -1607,7 +1623,10 @@ export async function swapPluginUpdate(
     preflight.record.resources.workflows,
     handles.workflows.result.stagedNames,
   );
-  const stagingWarnings = collectUpdateWarnings(handles);
+  const stagingWarnings = [
+    ...shadowedFolderDiscoveryWarnings(installable.shadowedFolders),
+    ...collectUpdateWarnings(handles),
+  ];
   await dropPluginCompletionCache(args);
 
   return {
@@ -1752,10 +1771,3 @@ async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {
 function isDirectUpdate(args: ThreePhaseArgs): args is DirectThreePhaseArgs {
   return !args.cascade;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Cascade construction (CMC-26). shared/notification-summary.ts derives
-// content severity and the reload hint before shared/notification-dispatch.ts
-// dispatches; shared/notification-grammar.ts owns every row-rendering concern
-// (icon, version arrow, reasons brace, rollback-partial children).
-// ─────────────────────────────────────────────────────────────────────────────

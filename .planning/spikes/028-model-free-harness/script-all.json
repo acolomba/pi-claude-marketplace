@@ -1,0 +1,10 @@
+[
+  { "text": "greeted" },
+  { "text": "skilled" },
+  { "tool": "mcp", "args": { "search": "echo" } },
+  { "tool": "mcp", "args": { "tool": "mcp__plugin_kit_stub__echo", "args": { "text": "ping" } } },
+  { "text": "mcp done" },
+  { "tool": "subagent", "args": { "action": "list" } },
+  { "tool": "subagent", "args": { "agent": "reviewer", "task": "say hi" } },
+  { "text": "agents done" }
+]

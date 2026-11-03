@@ -296,14 +296,10 @@ function withoutDisabledDependents(plan: ReconcilePlan, state: ExtensionState): 
 }
 
 /**
- * WR-06: observations of the workflow staging trees the sweeper
- * keeps forever. The optional field is absent when there are none.
- *
- * `workflowsStagingDir` and `workflowsHomeDir` are scope-INDEPENDENT, so the
- * scope handed to `locationsFor` is immaterial and one call answers for the
- * whole invocation. That is also why the caller must not put this inside its
- * per-scope loop: a two-scope invocation would render the identical advisory
- * twice.
+ * WR-06: observations of the workflow staging trees the sweeper keeps forever,
+ * in the staging directory of each of `scopes`, in that order. The optional
+ * field is absent when there are none. D-LOC-01: each scope has its own
+ * staging directory, the project's inside the project.
  *
  * D-19-01 shape, owned by the scan rather than repeated here: a scan that
  * cannot answer costs the advisory, never the command. The scan is TOTAL -- an
@@ -313,8 +309,12 @@ function withoutDisabledDependents(plan: ReconcilePlan, state: ExtensionState): 
  */
 async function retainedWorkflowsFacts(
   cwd: string,
+  scopes: readonly Scope[],
 ): Promise<Pick<ReconcilePendingEmptyMessage, "retainedWorkflows">> {
-  const retainedWorkflows = await scanRetainedWorkflowsStaging(locationsFor("user", cwd));
+  const scanned = await Promise.all(
+    scopes.map(async (scope) => scanRetainedWorkflowsStaging(locationsFor(scope, cwd))),
+  );
+  const retainedWorkflows = scanned.flat();
   return retainedWorkflows.length === 0 ? {} : { retainedWorkflows };
 }
 
@@ -540,11 +540,9 @@ export async function composePendingReport(opts: {
   // their `.previous/` holds the only surviving copy of the user's previous
   // workflow scripts and no other surface reaches them.
   //
-  // Called ONCE per report, deliberately OUTSIDE the per-scope loop above:
-  // `workflowsStagingDir` and `workflowsHomeDir` are scope-INDEPENDENT, so the
-  // scope handed to `locationsFor` is immaterial and a call inside the loop
-  // would render the identical advisory twice whenever no scope was given.
-  const retained = await retainedWorkflowsFacts(opts.cwd);
+  // Called once per report, after the per-scope loop, over every scope the
+  // report covers, so the advisory lists each scope's trees once.
+  const retained = await retainedWorkflowsFacts(opts.cwd, opts.scopes);
 
   // DIFF-01 SC #2 empty-steady-state: no invalid-config rows AND every plan
   // is empty -> no block. Every non-empty bucket yields a block, so an empty

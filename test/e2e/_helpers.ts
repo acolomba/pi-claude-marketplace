@@ -101,6 +101,9 @@ export function makeCtx(cwd: string): { ctx: ExtensionContext; notifications: No
   const ctx = {
     mode: "tui",
     cwd,
+    // D-LOC-01: project plugins load only in a project Pi trusts, and these
+    // cases install at project scope into a project the user trusts.
+    isProjectTrusted: (): boolean => true,
     ui: {
       notify: (message: string, severity?: string): void => {
         notifications.push(severity === undefined ? { message } : { message, severity });
@@ -233,7 +236,8 @@ export async function runPiRuntimeSmoke(): Promise<{
     );
     const output = `${stdout}\n${stderr}`;
     return { ok: !/failed to load|error loading/i.test(output), output };
-  } catch (err) {
+  } catch (err: unknown) {
+    // execFile rejects with an Error that also carries the child's stdout and stderr.
     const error = err as { stdout?: string; stderr?: string; message?: string };
     const output = `${error.stdout ?? ""}\n${error.stderr ?? ""}\n${error.message ?? ""}`;
     return { ok: false, output };

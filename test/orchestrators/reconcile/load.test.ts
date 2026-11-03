@@ -53,12 +53,13 @@ function applyNeverRuns(): Promise<void> {
 
 const loadReconcile = createLoadReconcile({ loadState }, applyNeverRuns);
 
-/** One load over the case's tree with a fresh routing owner. */
+/** One load over the case's tree with a fresh routing owner, in a project Pi trusts. */
 function load(
-  opts: Omit<LoadReconcileOptions, "hooksRouting" | "run" | "completionCache">,
+  opts: Omit<LoadReconcileOptions, "hooksRouting" | "run" | "completionCache" | "projectTrusted">,
 ): Promise<void> {
   return loadReconcile({
     ...opts,
+    projectTrusted: true,
     run: runWithNothingLoaded(),
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
@@ -608,7 +609,7 @@ test("AAP-02 / D-05: a project config that turns autoapply on hands the load to 
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  await autoLoad({ ctx, run, cwd: scope.cwd, hooksRouting, completionCache });
+  await autoLoad({ ctx, run, cwd: scope.cwd, projectTrusted: true, hooksRouting, completionCache });
 
   // assert
   assert.equal(applied.length, 1);
@@ -630,6 +631,78 @@ test("AAP-02 / D-05: a project config that turns autoapply on hands the load to 
   verifyBoundary();
 });
 
+test("D-LOC-01: in a project Pi does not trust, a user config's autoapply applies the user scope and prints the project's pending block", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "autoapply-untrusted");
+  await seedInstalled(scope, scope.project, {}, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaringAutoapply(scope.marketplaceRoot, { "hello@mp": {} }, false),
+  );
+  await writeUnder(scope.user.baseConfigJsonPath, JSON.stringify({ autoapply: true }));
+  const before = await scopeFiles(scope.project);
+  const { loadReconcile: autoLoad, applied } = recordingLoad();
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await autoLoad({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: scope.cwd,
+    projectTrusted: false,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    applied.map((opts) => opts.scope),
+    ["user"],
+  );
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project]\n  ● hello (will install)\n\nReconcile pending: 1 success" + APPLY_TRAILER,
+    },
+  ]);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  verifyBoundary();
+});
+
+test("D-LOC-01: in a project Pi does not trust, the project config's autoapply applies nothing", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "autoapply-untrusted-project");
+  await seedInstalled(scope, scope.project, {}, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaringAutoapply(scope.marketplaceRoot, { "hello@mp": {} }, true),
+  );
+  const before = await scopeFiles(scope.project);
+  const { loadReconcile: autoLoad, applied } = recordingLoad();
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await autoLoad({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: scope.cwd,
+    projectTrusted: false,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  assert.deepStrictEqual(applied, []);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project]\n  ● hello (will install)\n\nReconcile pending: 1 success" + APPLY_TRAILER,
+    },
+  ]);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  verifyBoundary();
+});
+
 test("AAP-02 / D-22: an autoapply load hands the apply step its MCP move", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "autoapply-mcp");
@@ -643,6 +716,7 @@ test("AAP-02 / D-22: an autoapply load hands the apply step its MCP move", async
     ctx,
     run: runWithNothingLoaded(),
     cwd: scope.cwd,
+    projectTrusted: true,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
     migrateMcpEntries,
@@ -673,6 +747,7 @@ test("AAP-03 / NFR-2: an apply step that throws is reported as aborted, then the
     ctx,
     run: runWithNothingLoaded(),
     cwd: scope.cwd,
+    projectTrusted: true,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
   });
@@ -702,7 +777,7 @@ test("AAP-03 / NFR-2: a refused abort notice still lets the read-only pass run",
     Promise.reject(new Error("the pass ended")),
   );
   const attempted: string[] = [];
-  const ctx = {
+  const ctx: LoadReconcileOptions["ctx"] = {
     mode: "tui",
     ui: {
       notify: (message: string): never => {
@@ -710,13 +785,14 @@ test("AAP-03 / NFR-2: a refused abort notice still lets the read-only pass run",
         throw new Error("host notification refused");
       },
     },
-  } as unknown as LoadReconcileOptions["ctx"];
+  };
 
   // act
   await throwingLoad({
     ctx,
     run: runWithNothingLoaded(),
     cwd: scope.cwd,
+    projectTrusted: true,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
   });
@@ -744,6 +820,7 @@ test("AAP-01 / D-03: a config that turns autoapply on beside an invalid config k
     ctx,
     run: runWithNothingLoaded(),
     cwd: scope.cwd,
+    projectTrusted: true,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
   });

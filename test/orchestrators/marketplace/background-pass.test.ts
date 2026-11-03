@@ -212,11 +212,12 @@ function createPassUnderTest(options: {
   return { gate, calls, scopes, notifications, capture, deps };
 }
 
-/** The `input` event's context; any UI read fails the case. */
-function sessionContext(cwd: string, mode = "tui"): BackgroundContext {
+/** The `input` event's context in a project Pi trusts unless `trusted` says no; any UI read fails the case. */
+function sessionContext(cwd: string, mode = "tui", trusted = true): BackgroundContext {
   return {
     mode,
     cwd,
+    isProjectTrusted: () => trusted,
     get ui(): NotificationUi {
       throw new Error("the background pass must not touch the session UI");
     },
@@ -418,6 +419,21 @@ test("updates each recorded marketplace whose merged autoupdate is true, project
     calls.map((call) => call.cwd),
     [cwd, cwd],
   );
+});
+
+test("D-LOC-01: leaves the project scope alone in a project Pi does not trust", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-untrusted-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "gamma", true);
+  const { calls, deps } = createPassUnderTest({});
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd, "tui", false), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(updatedTargets(calls), ["gamma [user]"]);
 });
 
 test("D-PL2-10: hands each autoupdate cascade a missing-dependency step", async (t) => {

@@ -112,38 +112,49 @@ export interface ScopedLocations {
    */
   readonly marketplaceNamesCacheFile: string;
   /**
-   * The host workflow engine's storage root (WPTH-04), from `workflowHomeDir`:
-   * `<agent dir>/workflows/` when `PI_CODING_AGENT_DIR` is non-empty, else
-   * `~/.pi/workflows/`. It follows the engine's rule, not `scopeRoot`, so it
-   * is scope-INDEPENDENT: this member is byte-identical for
-   * `locationsFor("user", cwd)` and `locationsFor("project", cwd)`. Any other
-   * root would put artifacts where the engine never looks.
+   * The directory that holds the scope's saved-workflow directory and its
+   * workflow staging directory, and the boundary every containment check of
+   * the two starts its walk at (WPTH-04):
+   *   user    -> the host workflow engine's storage root, from
+   *              `workflowHomeDir`: `<agent dir>/workflows/` when
+   *              `PI_CODING_AGENT_DIR` is non-empty, else `~/.pi/workflows/`.
+   *   project -> `scopeRoot`, `<cwd>/.pi/` (D-LOC-01).
    */
   readonly workflowsHomeDir: string;
   /**
-   * The scope's canonical saved-workflow directory (WPTH-01):
+   * The scope's saved-workflow directory, where installs place envelopes
+   * (WPTH-01, amended by D-LOC-01):
    *   user    -> `<workflowsHomeDir>/saved/`
-   *   project -> `<workflowsHomeDir>/projects/<key>/saved/`
-   * where `<key>` is `workflowProjectKey(cwd)`. This is the ONLY workflows
-   * member that branches on scope. The deprecated `<cwd>/.pi/workflows/saved/`
-   * location is NEVER this value: the engine still reads it, but its own
-   * module header says new writes live under the user's workflow home, so
-   * writing it would make installed workflows vanish if that read is dropped
-   * (WPTH-02).
+   *   project -> `<cwd>/.pi/workflows/saved/`
+   * The engine (pi-dynamic-workflows 3.15.0) reads both as full sources. A
+   * project install writes inside its project, so it never writes the user's
+   * workflow home (D-LOC-01, which reverses WPTH-02).
    */
   readonly workflowsSavedDir: string;
   /**
-   * `<workflowsHomeDir>/.pi-claude-marketplace-staging/` -- pre-rename staging
-   * tree for workflow envelopes. Deliberately NOT under `extensionRoot`,
-   * unlike every other bridge's staging directory: a project-scope
-   * `extensionRoot` sits at `<cwd>/.pi/` and can live on a different
-   * filesystem from the home directory, which makes the commit `rename()` fail
-   * EXDEV. Staging beside the target keeps the rename inside one filesystem
-   * (WPTH-05, NFR-1). Scope-independent, like `workflowsHomeDir`.
+   * The saved-workflow directory where an earlier version placed the
+   * project's envelopes, `<engine home>/projects/<key>/saved/` with `<key>`
+   * from `workflowProjectKey(cwd)`, or `undefined` for the user scope. The
+   * engine reads it before the in-project directory, so an uninstall, a
+   * disable, and a re-stage remove the names they own from it too
+   * (D-LOC-01). Nothing new is written there.
+   */
+  readonly formerWorkflowsSavedDir: string | undefined;
+  /**
+   * The pre-rename staging tree for workflow envelopes, on the same filesystem
+   * as the saved directory so the commit `rename()` stays atomic (WPTH-05,
+   * NFR-1):
+   *   user    -> `<workflowsHomeDir>/.pi-claude-marketplace-staging/`, a
+   *              sibling of `<workflowsHomeDir>/saved/`
+   *   project -> `<extensionRoot>/workflows-staging/`, not a sibling of the
+   *              saved directory `<cwd>/.pi/workflows/saved/`, but both lie
+   *              inside the project's `.pi/`
+   * Each scope's staging is its own, so a sweep after a project operation
+   * reaches only that project's staging (D-LOC-01).
    *
-   * Owner-named rather than generically named because this root is shared with
-   * the host engine and with the user's own saved workflows -- a stray
-   * directory here must say who left it.
+   * The user arm is owner-named because that root is shared with the host
+   * engine and with the user's own saved workflows -- a stray directory there
+   * must say who left it.
    */
   readonly workflowsStagingDir: string;
 
@@ -185,6 +196,12 @@ export interface ScopedLocations {
    * `list()` reports the envelope field, so the two must agree (WBRG-01).
    */
   workflowArtifactPath(generatedName: string): Promise<string>;
+  /**
+   * D-LOC-01: returns `<formerWorkflowsSavedDir>/<generatedName>.json` after
+   * the same checks as `workflowArtifactPath`, the walk starting at the
+   * engine's storage root, or `undefined` for the user scope.
+   */
+  formerWorkflowArtifactPath(generatedName: string): Promise<string | undefined>;
 }
 
 /**
@@ -238,24 +255,33 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   // D-03: completion cache root. Sibling of dataRoot, sourcesDir.
   const cacheDir = path.join(extensionRoot, "cache");
   const marketplaceNamesCacheFile = path.join(cacheDir, "marketplace-names.json");
-  // WPTH-04: the host workflow engine's storage root. Every other base in this
-  // factory hangs off scopeRoot. This one follows the engine's own rule, which
-  // `workflowHomeDir` copies, so it reaches the bundle through that platform
-  // seam and nowhere else.
-  const workflowsHomeDir = workflowHomeDir();
-  // WPTH-01: the only workflows member that branches on scope, mirroring the
-  // scopeRoot branch at the top of this function. The project arm's middle
-  // segment is derived from cwd rather than hard-coded -- see the disposition
-  // note below.
-  const workflowsSavedDir =
+  // WPTH-04: the host workflow engine's storage root follows the engine's own
+  // rule, which `workflowHomeDir` copies, so it reaches the bundle through that
+  // platform seam and nowhere else. D-LOC-01: only the user scope keeps its
+  // workflows there; a project keeps them inside its own `.pi/`.
+  const engineHomeDir = workflowHomeDir();
+  const workflowsHomeDir = scope === "user" ? engineHomeDir : scopeRoot;
+  const workflowsSavedDir = path.join(
+    workflowsHomeDir,
+    ...(scope === "user" ? ["saved"] : ["workflows", "saved"]),
+  );
+  // The project arm's middle segment is derived from cwd rather than
+  // hard-coded -- see the disposition note below.
+  const formerWorkflowsSavedDir =
     scope === "user"
-      ? path.join(workflowsHomeDir, "saved")
-      : path.join(workflowsHomeDir, "projects", workflowProjectKey(cwd), "saved");
-  // WPTH-05: staging is a SIBLING of the saved directory under the engine's
-  // own root, not a child of extensionRoot, so the commit rename() stays
-  // within one filesystem (NFR-1). It sits outside all three directories the
-  // engine scans, so staged bytes are invisible to it.
-  const workflowsStagingDir = path.join(workflowsHomeDir, ".pi-claude-marketplace-staging");
+      ? undefined
+      : path.join(engineHomeDir, "projects", workflowProjectKey(cwd), "saved");
+  // WPTH-05: staging must share a filesystem with the saved directory so the
+  // commit rename() is atomic (NFR-1). User scope: a sibling of the saved
+  // directory under `workflowsHomeDir`. Project scope: under `extensionRoot`
+  // (`<cwd>/.pi/pi-claude-marketplace/`), beside but not under the saved
+  // directory `<cwd>/.pi/workflows/saved`; both sit inside the project's
+  // `.pi/`. Staging is outside every directory the engine scans, so staged
+  // bytes are invisible to it.
+  const workflowsStagingDir =
+    scope === "user"
+      ? path.join(workflowsHomeDir, ".pi-claude-marketplace-staging")
+      : path.join(extensionRoot, "workflows-staging");
 
   // T-03-04 disposition: every new field above (including hooksDir per
   // HOOK-01 / D-57-03) is constructed from `extensionRoot` joined to a
@@ -268,14 +294,14 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   // escape impossible at this layer.
   //
   // WPTH-01 amends clause (a) of that disposition, not clause (b):
-  // `workflowsSavedDir`'s project arm interpolates `workflowProjectKey(cwd)`,
+  // `formerWorkflowsSavedDir`'s project arm interpolates `workflowProjectKey(cwd)`,
   // which is DERIVED from cwd rather than hard-coded. It is still escape-proof
   // at this layer because the derivation's own character class is
   // `[a-z0-9._-]` with every other run collapsed to a single dash, the
   // leading/trailing dash strip runs over that result, and an empty result
   // falls back to the literal `project`. A lone `.` and a `..` are therefore
   // unreachable outputs and no path separator can survive, so the joined
-  // segment cannot climb out of `workflowsHomeDir`. Name-bearing LEAVES under
+  // segment cannot climb out of the engine's root. Name-bearing LEAVES under
   // the saved directory are a different matter and do route through
   // `assertPathInside` -- see `workflowArtifactPath`.
 
@@ -305,6 +331,7 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     marketplaceNamesCacheFile,
     workflowsHomeDir,
     workflowsSavedDir,
+    formerWorkflowsSavedDir,
     workflowsStagingDir,
 
     async pluginDataDir(mp: string, plugin: string): Promise<string> {
@@ -384,6 +411,21 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
         workflowsSavedDir,
         candidate,
         `workflowArtifactPath(${generatedName})`,
+      );
+      return candidate;
+    },
+
+    async formerWorkflowArtifactPath(generatedName: string): Promise<string | undefined> {
+      if (formerWorkflowsSavedDir === undefined) {
+        return undefined;
+      }
+
+      assertSafeName(generatedName, `formerWorkflowArtifactPath workflow name "${generatedName}"`);
+      const candidate = path.join(formerWorkflowsSavedDir, `${generatedName}.json`);
+      await assertPathInside(
+        engineHomeDir,
+        candidate,
+        `formerWorkflowArtifactPath(${generatedName})`,
       );
       return candidate;
     },

@@ -1,8 +1,8 @@
 Feature: Marketplace background update
 
-  Pi updates the plugins of autoupdate marketplaces in the background only in a tui session.
-  The suite drives a real pseudoterminal and a headless RPC negative control in one sandbox,
-  with local marketplaces in place of published ones.
+  Pi updates the plugins of autoupdate marketplaces in the background only in a tui session, and
+  those of a project only when Pi trusts it. The suite drives a real pseudoterminal and a headless RPC
+  negative control in one sandbox, with local marketplaces in place of published ones.
 
   Scenario: A PTY backed TUI session is interactive and ready inside its sandbox
     When the user starts a tui session

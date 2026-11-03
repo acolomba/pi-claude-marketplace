@@ -75,6 +75,10 @@ Record `claude --version` first. Create a fresh tree with `mktemp -d` and keep t
 
 Scrub the ambient environment rather than overriding variables one at a time. `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, and `CLAUDE_CODE_PLUGIN_SEED_DIR` all redirect state and the list grows with each release, so pass only the variables the probe needs, each pointed inside the temporary tree. A probe that inherits the operator's environment is not isolated even when every documented variable is set.
 
+Run every probe inside a network namespace that has only loopback, for example `unshare -rn`, and point the binary at a local HTTP stub with a dummy key. A scrubbed environment and a throwaway `HOME` do not stop the binary from calling its built-in API address: Claude Code 2.1.316 fetched `https://api.anthropic.com/api/claude_code/policy_limits` under `env -i` and ignored `ANTHROPIC_BASE_URL` for that call. Start inside the namespace, not after the first networked run.
+
+Run the probe where the host's Claude Code credential directory is absent or unreadable to the probe, such as `/home/claude/.claude/remote` in a Claude Code cloud session. Under `env -i` with a fresh `HOME`, Claude Code 2.1.316 still read `.oauth_token` and `.session_ingress_token` from that directory. Check this before the first run, and do not run the probe if you cannot hide the directory.
+
 Prefer local-path fixtures and non-interactive `claude plugin` commands, run from the temporary project. Never read, write, add, remove, enable, disable, or update anything in the real user configuration or plugin cache, and never reuse `~/.claude`, the real project `.claude/`, or an existing marketplace clone. Put a timeout on anything that could block. Remove the tree when the probe finishes, keeping the evidence record.
 
 If isolation cannot be established, or the probe would need credentials, destructive behavior, or unrelated network access, do not run it. Record the unresolved question instead.

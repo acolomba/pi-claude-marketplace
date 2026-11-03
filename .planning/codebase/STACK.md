@@ -29,10 +29,12 @@ last_mapped_at: 2026-10-05
 
 **Core:**
 - No web/app framework -- this is a Pi extension (library-style), not a server or SPA
-- `@earendil-works/pi-coding-agent` (peer dep `>=1.0.0`, dev dep `^1.0.0`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
-- `@earendil-works/pi-tui` (peer dep `*`, dev dep `^1.0.0`) - Pi terminal UI primitives
-- `pi-subagents` (optional peer dep `>=0.74.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent; the integration tests install its declared floor into `node_modules/.cache/optional-peers` through `scripts/install-test-peers.mjs`
-- `pi-mcp-adapter` (optional peer dep `>=5.2.0 <6`) - soft-dependency companion extension that serves MCP servers; never a dependency, devDependency, or lockfile package (PIFL-03); the integration tests install its declared floor into `node_modules/.cache/optional-peers` through `scripts/install-test-peers.mjs`
+- `@earendil-works/pi-coding-agent` (peer dep `>=1.4.0`, dev dep `^1.4.0`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
+- `@earendil-works/pi-tui` (peer dep `*`, dev dep `^1.4.0`) - Pi terminal UI primitives
+- `@earendil-works/pi-ai` (exact dev dep `1.4.0`) - the faux model provider that the cucumber harness loads
+- `pi-subagents` (optional peer dep `>=0.84.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent; the integration tests install its declared floor into `node_modules/.cache/optional-peers` through `scripts/install-test-peers.mjs`
+- `pi-mcp-adapter` (optional peer dep `>=7.0.0 <8`) - soft-dependency companion extension that serves MCP servers; never a dependency, devDependency, or lockfile package (PIFL-03); the integration tests install its declared floor into `node_modules/.cache/optional-peers` through `scripts/install-test-peers.mjs`
+- `@quintinshaw/pi-dynamic-workflows` (optional peer dep `>=3.15.0 <4`, `pi.extensions` entry `extensions/workflow.ts`) - soft-dependency workflow engine that runs saved workflow scripts; never a dependency, devDependency, or lockfile package; `scripts/install-test-peers.mjs` installs its declared floor into `node_modules/.cache/optional-peers`
 
 **Testing:**
 - `node:test` (Node's built-in test runner) - suites under `test/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts` plus `test/index.test.ts` (`npm test`; `npm run test:modules` is the same minus `architecture`; `npm run test:unpaired` runs `test/architecture/**` plus `test/{domain,platform}/**/*-fake.test.ts`, the tests with no source pair), plus a separate `test/integration/**/*.test.ts` suite (`npm run test:integration`, which first runs `scripts/install-test-peers.mjs`) and `test/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)

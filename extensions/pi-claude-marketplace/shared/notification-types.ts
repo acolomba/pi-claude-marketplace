@@ -489,7 +489,7 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
    * registered stays live until a reload.
    *
    * That is the only fact a realized removal has left to state. Absent `reasons`
-   * renders the legacy brace-less row byte-for-byte: `composeReasons` returns
+   * renders the brace-less row byte-for-byte: `composeReasons` returns
    * `""` for an undefined list and `joinTokens` collapses the empty slot.
    *
    * MSG-SD-3: every marker policy maps `uninstalled` to off (D-12), so an
@@ -1714,10 +1714,21 @@ export interface StopOverrideCapSurface {
 }
 
 /**
+ * D-CF5-14 / D-CF5-24: one notice a plugin's hook shows the user, composed by
+ * the hooks bridge and kept verbatim: a hook's `systemMessage`
+ * (`<Event>[:<Tool>] says: <text>`), a blocked prompt, or a block on an event
+ * that cannot block. It never reaches the model.
+ */
+export interface HookNoticeSurface {
+  readonly kind: "hook-notice";
+  readonly text: string;
+}
+
+/**
  * D-14: the hook-origin group of raw output surfaces. Hook callbacks get no run
  * object.
  */
-export type HookSurface = AsyncRewakeSummarySurface | StopOverrideCapSurface;
+export type HookSurface = AsyncRewakeSummarySurface | StopOverrideCapSurface | HookNoticeSurface;
 
 /**
  * D-10 / AUTH-03: the device-flow values a user needs to authorize this

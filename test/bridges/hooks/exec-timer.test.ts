@@ -347,6 +347,54 @@ test("cancels both signals before either deadline", (t) => {
   assertTimerLifecycle(timers, [1_000, 6_000]);
 });
 
+test("reports the timeout as fired only once the SIGTERM leg sends its signal", (t) => {
+  // arrange
+  const child = makeSpyChild();
+  const { ladder } = installObservedLadder(t, child, 1);
+
+  // act
+  const firedAtSpawn = ladder.fired();
+  t.mock.timers.tick(999);
+  const firedBeforeDeadline = ladder.fired();
+  t.mock.timers.tick(1);
+  const firedAtDeadline = ladder.fired();
+  ladder.cancel();
+
+  // assert
+  assert.deepStrictEqual(
+    { firedAtSpawn, firedBeforeDeadline, firedAtDeadline },
+    { firedAtSpawn: false, firedBeforeDeadline: false, firedAtDeadline: true },
+  );
+});
+
+test("never reports a cancelled ladder as fired", (t) => {
+  // arrange
+  const child = makeSpyChild();
+  const { ladder } = installObservedLadder(t, child, 1);
+
+  // act
+  ladder.cancel();
+  t.mock.timers.tick(6_000);
+
+  // assert
+  assert.strictEqual(ladder.fired(), false);
+});
+
+test("does not report a timeout for a child that exited before its deadline", (t) => {
+  // arrange
+  const child = makeSpyChild();
+  const { ladder } = installObservedLadder(t, child, 1);
+
+  // act
+  child.exitCode = 1;
+  t.mock.timers.tick(1_000);
+  const fired = ladder.fired();
+  ladder.cancel();
+
+  // assert
+  assert.strictEqual(fired, false);
+});
+
 test("cancels SIGKILL after SIGTERM fires", (t) => {
   // arrange
   const child = makeSpyChild();

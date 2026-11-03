@@ -37,7 +37,10 @@ import {
   UnsupportedSourceError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import {
+  PathContainmentError,
+  SymlinkRefusedError,
+} from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -462,9 +465,9 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
     get(target, property, receiver): unknown {
       if (property === "marketplace") {
         marketplaceReads += 1;
-        // The workflows phase's previous-names lookup adds one read ahead of
-        // the state commit's, so the marketplace must survive one read
-        // longer than it did with five phases.
+        // The workflows phase's previous-names lookup reads the marketplace
+        // ahead of the state commit, so the marketplace must survive three
+        // reads and vanish on the fourth.
         return marketplaceReads >= 4 ? undefined : marketplace;
       }
 
@@ -644,7 +647,7 @@ async function installWithFaultedStagingCleanup(
 }
 
 test("surfaces the skills staging cleanup leak and still lands the install", async (t) => {
-  // arrange + act
+  // act
   const installed = await installWithFaultedStagingCleanup(t, {
     prefix: "install-outcome-skills-leak-",
     components: { skills: ["alpha"] },
@@ -662,7 +665,7 @@ test("surfaces the skills staging cleanup leak and still lands the install", asy
 });
 
 test("surfaces the commands staging cleanup leak and still lands the install", async (t) => {
-  // arrange + act
+  // act
   const installed = await installWithFaultedStagingCleanup(t, {
     prefix: "install-outcome-commands-leak-",
     components: { commands: ["beta"] },
@@ -818,6 +821,108 @@ test("a failed workflows removal during rollback surfaces as its own partial rat
   assert.strictEqual(partial?.phase, "workflows");
   assert.strictEqual(partial.cause?.name, "WorkflowsUnstageFailureError");
   assert.match(partial.cause.message, /^empty:delta: /);
+});
+
+test("PI-14: a workflows undo that meets a symlink on the former path rethrows the containment refusal unwrapped", async (t) => {
+  // arrange -- the state commit fails after the workflows phase placed its
+  // envelope, and a symlink then appears at the envelope's former path.
+  const environment = await createHermeticEnvironment(t, "install-outcome-workflows-undo-link-");
+  const seeded = await seedPlugin(environment.cwd, { components: { workflows: ["delta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const formerDirectory = locations.formerWorkflowsSavedDir ?? "";
+  const linkedFormerPath = path.join(formerDirectory, "empty:delta.json");
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction: InstallLedgerTransaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> => {
+          if (phase.name === "workflows") {
+            return {
+              ...phase,
+              do: async (c) => {
+                await phase.do(c);
+                await mkdir(formerDirectory, { recursive: true });
+                await symlink("/nonexistent-decoy", linkedFormerPath);
+              },
+            };
+          }
+
+          return phase.name === "state"
+            ? { ...phase, do: () => Promise.reject(new Error("state phase failed")) }
+            : phase;
+        }),
+        ctx,
+      ),
+  };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert -- bare class, not the wrapper, and the current envelope is gone
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof SymlinkRefusedError);
+    assert.strictEqual(error.linkPath, linkedFormerPath);
+    return true;
+  });
+  assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), []);
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+test("a workflows undo that fails without a refusal is kept as a rollback partial", async (t) => {
+  // arrange -- the recorded names cannot even be iterated, so the unstage
+  // throws something that is not the containment wrapper.
+  const environment = await createHermeticEnvironment(t, "install-outcome-workflows-undo-other-");
+  const seeded = await seedPlugin(environment.cwd, { components: { workflows: ["delta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction: InstallLedgerTransaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> => {
+          if (phase.name === "workflows") {
+            return {
+              ...phase,
+              do: async (c) => {
+                await phase.do(c);
+                (c as { stagedWorkflowNames: readonly string[] }).stagedWorkflowNames =
+                  Object.assign(["empty:delta"], {
+                    [Symbol.iterator]: (): never => {
+                      throw new Error("names unreadable");
+                    },
+                  });
+              },
+            };
+          }
+
+          return phase.name === "state"
+            ? { ...phase, do: () => Promise.reject(new Error("state phase failed")) }
+            : phase;
+        }),
+        ctx,
+      ),
+  };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, /state phase failed/);
+  assert.deepStrictEqual(
+    capture.rollbackPartials.map((partial) => [partial.phase, partial.msg]),
+    [["workflows", "names unreadable"]],
+  );
 });
 
 /**
@@ -1089,7 +1194,7 @@ test("PI-14: a skills undo that meets a symlink rethrows the containment refusal
 });
 
 test("surfaces the agents staging cleanup leak and still lands the install", async (t) => {
-  // arrange + act
+  // act
   const installed = await installWithFaultedStagingCleanup(t, {
     prefix: "install-outcome-agents-leak-",
     components: { agents: ["gamma"] },
@@ -1882,7 +1987,7 @@ test("a hooks.json that turns malformed after resolution unwinds the ledger", as
 });
 
 /**
- * A bridge whose prepare throws never reaches its `c.<kind>Prep` assignment,
+ * A bridge whose prepare throws never reaches its `installCtx.<kind>Prep` assignment,
  * so the undo the ledger still invokes for the FAILING phase has nothing to
  * discard and returns immediately. A symlink occupying the generated target
  * name is what makes prepare refuse: `assertPathInside` walks the segment
@@ -2088,7 +2193,7 @@ test("ANAME-02: a server left out by a partial install is not granted to the plu
     {
       kind: "hygiene",
       message:
-        "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+        "[bot] tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails",
     },
     { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_empty_live__stream" },
   ]);
@@ -2133,6 +2238,88 @@ test("D-PL1-03: an agents duplicate joins the discovery warnings and a conversio
   assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
     { kind: "hygiene", message: "[helper] dropped tools: WebFetch" },
   ]);
+});
+
+test("D-CF1-06: a commands folder the manifest's declared path leaves unread joins the discovery warnings", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-shadowed-folder-");
+  const seeded = await seedPlugin(environment.cwd, { pluginJson: { commands: "./custom" } });
+  await mkdir(path.join(seeded.pluginRoot, "custom"), { recursive: true });
+  await mkdir(path.join(seeded.pluginRoot, "commands"), { recursive: true });
+  await writeFile(path.join(seeded.pluginRoot, "commands", "old.md"), "Do the old thing.\n");
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(
+    {
+      discoveryWarnings: ledgerOutcome.summary.discoveryWarnings,
+      stagedCommandNames: ledgerOutcome.summary.stagedCommandNames,
+    },
+    {
+      discoveryWarnings: [
+        {
+          kind: "discovery",
+          message: 'Default commands/ folder is ignored because the manifest sets "commands"',
+        },
+      ],
+      stagedCommandNames: [],
+    },
+  );
+});
+
+test("stages the workflow and skips a command of the same name with a discovery warning", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-workflow-command-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { commands: ["delta", "echo"], workflows: ["delta"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(
+    {
+      discoveryWarnings: ledgerOutcome.summary.discoveryWarnings,
+      stagedCommandNames: ledgerOutcome.summary.stagedCommandNames,
+      stagedWorkflowNames: ledgerOutcome.summary.stagedWorkflowNames,
+    },
+    {
+      discoveryWarnings: [
+        {
+          kind: "discovery",
+          message:
+            'command source "delta" has the same name "empty:delta" as a workflow of the plugin; ignoring the command.',
+        },
+      ],
+      stagedCommandNames: ["empty:echo"],
+      stagedWorkflowNames: ["empty:delta"],
+    },
+  );
 });
 
 test("D-PL1-13: an mcp phase failure captures the warnings the agents phase collected", async (t) => {
@@ -2415,7 +2602,7 @@ test("AFILE-04 / NFR-3: an mcp restore that cannot write is reported as the mcp 
       ),
   };
 
-  // act
+  // act & assert
   try {
     await assert.rejects(
       runInstallLedger(
@@ -2822,9 +3009,9 @@ test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the 
 });
 
 test("an unpinned path-source install threads neither pathPluginPin nor resolvePathPluginRoot", async (t) => {
-  // arrange: no `sourcePinOverride`, so the unpinned path is byte-identical to
-  // today -- the ordinary marketplaceRoot-anchored resolution runs, and a
-  // `pathPinProbe` that would otherwise reveal itself must never be reached.
+  // arrange: no `sourcePinOverride`, so the ordinary marketplaceRoot-anchored
+  // resolution runs, and a `pathPinProbe` that would otherwise reveal itself
+  // must never be reached.
   const environment = await createHermeticEnvironment(t, "install-outcome-path-unpinned-");
   const seeded = await seedPlugin(environment.cwd);
   const locations = locationsFor("project", environment.cwd);
@@ -3290,7 +3477,7 @@ test("D-PL9-05: a state phase failure removes the node_modules the packages phas
       ),
   };
 
-  // act
+  // act & assert
   await assert.rejects(
     runInstallLedger(
       seeded.state,

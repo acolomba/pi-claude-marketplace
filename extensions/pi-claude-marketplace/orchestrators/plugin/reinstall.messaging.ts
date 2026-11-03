@@ -8,12 +8,16 @@ import {
   type PluginUpdateSkippedMessage,
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
+import {
+  companionSeverity,
+  malformedReasonsForKinds,
+  skipSeverity,
+} from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import { disclosureCause, revisionVersionSlot } from "./update-row.ts";
 
-import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext, MarketplaceRows, Plural } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -52,15 +56,7 @@ export const REINSTALL_CONTEXT = {
   },
 } as const satisfies CommandContext<ReinstallStatus>;
 
-// ───────────────────────────────────────────────────────────────────────────
-// Outcome -> row projection.
-//
-// This family lived in reinstall.ts and was reached through two `__test_*`
-// re-exports. It is reinstall's message vocabulary rather than any part of its
-// transaction, which is what this module already owns, so it moved here and
-// the seams went with it (FLOW-09). The orchestrator now calls it across a
-// public interface, the same one the tests use.
-// ───────────────────────────────────────────────────────────────────────────
+// Outcome -> row projection: reinstall's message vocabulary (FLOW-09).
 /**
  * Render the bulk-reinstall outcome cascade as a single
  * `notify(ctx, run, NotificationMessage)` call per orchestration.
@@ -85,18 +81,9 @@ export const REINSTALL_CONTEXT = {
  * - Per-marketplace iteration order is honored end-to-end: the orchestrator
  *   pre-sorts via `compareByNameThenScope`; notify() does NOT sort
  *   marketplaces[] or plugins[].
+ * - Callers MUST NOT compose the "/reload to pick up changes" trailer
+ *   themselves; notify() aggregates it from the rows.
  */
-// NotificationMessage cascade recipe:
-// - One MarketplaceNotificationMessage per affected marketplace, emitted via
-//   a single notify(ctx, run, ...) call per orchestration.
-// - plugins: readonly PluginNotificationMessage[] in display order
-//   (orchestrator-controlled iteration; notify does not sort).
-// - Discriminators by status: "reinstalled" / "skipped" / "failed" /
-//   "manual recovery".
-// - Each row's severity + reload-hint are set explicitly by its producer;
-//   notify() aggregates them into the cascade's overall "/reload to pick up
-//   changes" trailer. Callers MUST NOT compose that trailer themselves.
-// - Reference: catalog UAT plugin-reinstall fixtures.
 export function renderReinstallPartitionAndNotify(
   ctx: NotificationContext,
   run: NotificationRun,
@@ -128,7 +115,7 @@ export function renderReinstallPartitionAndNotify(
 
   // Order marketplace blocks via compareByNameThenScope (name primary
   // case-insensitive, scope secondary project-before-user per MSG-GR-3).
-  // the orchestrator owns the sort; notify does not reorder.
+  // The orchestrator owns the sort; notify does not reorder.
   const sortedBlocks = [...byMp.values()].sort((a, b) =>
     compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
   );
@@ -137,11 +124,13 @@ export function renderReinstallPartitionAndNotify(
   // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
   // variable-length array, identical at runtime.
   // WR-01: the per-block plugin rows are built through the `outcomeToPluginMessage`
-  // helper, now typed to `ReinstallMsg`, so the `MarketplaceRows<ReinstallMsg>`
+  // helper, typed to `ReinstallMsg`, so the `MarketplaceRows<ReinstallMsg>`
   // annotation holds without a cast -- a status drift between the producer and
   // the policy map is a compile error here.
   const marketplaces: Plural<MarketplaceRows<ReinstallMsg>> = sortedBlocks.map((block) => {
-    const plugins: ReinstallMsg[] = block.outcomes.map((o) => outcomeToPluginMessage(o));
+    const plugins: ReinstallMsg[] = block.outcomes.map((o) =>
+      outcomeToPluginMessage(o, run.softDeps),
+    );
     return { name: block.name, scope: block.scope, plugins };
   });
 
@@ -179,14 +168,20 @@ function isManualRecoveryOutcome(
  * takes the info -> warning raise, exactly as on the install, enable and backfill
  * arms. Discarding the signal here would leave a bare `(reinstalled)` row that
  * `list` renders as degraded one command later. A clean reinstall composes no
- * reasons and stays info, so its row is byte-identical to before (NREG-01).
+ * reasons, so its row bytes stay the same (NREG-01).
+ *
+ * SEV-01 / COMPSEV-01: a declared companion that `probe` reports unloaded
+ * raises the row to `warning`, as on install, update and enable. A row with no
+ * raise and every declared companion loaded stays `info`.
  *
  * `rowScope` is the caller's orphan-fold decision: `undefined` suppresses the
- * `[<scope>]` bracket per `renderScopeBracket`.
+ * `[<scope>]` bracket per `renderScopeBracket`. `probe` is the command run's
+ * soft-dep snapshot (D-05), the one `resolveRows` reads for the markers.
  */
 export function reinstalledRowFromOutcome(
   outcome: ReinstallReinstalledOutcome,
   rowScope: Scope | undefined,
+  probe: SoftDepStatus,
 ): PluginReinstalledMessage {
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
   // D-10-15 / D-18-07: no tag a range admits pinned this; the marketplace's
@@ -220,11 +215,8 @@ export function reinstalledRowFromOutcome(
   return {
     status: "reinstalled",
     name: outcome.name,
-    // WDEP-04 / SEV-01: the reinstall row stamps the soft-dep marker but takes
-    // NO `companionSeverity` raise, matching the `agents` and `mcp` markers on
-    // this same row. That asymmetry against install / update / enable is
-    // deliberate and byte-pinned by the catalog's reinstall soft-dep state,
-    // which carries no attention summary line; do not "repair" it with a raise.
+    // WDEP-04: the soft-dep markers come from this list. SEV-01 / COMPSEV-01:
+    // the same declared companions decide the severity below.
     dependencies: declaredDependencies(outcome),
     // UPR-03: the arrow only when the revision moved, so a repair at the
     // recorded revision keeps its single version. IN-02: an empty version
@@ -235,7 +227,10 @@ export function reinstalledRowFromOutcome(
     ...(reasons.length > 0 && { reasons }),
     ...(cause !== undefined && { cause }),
     // D-03/D-06: realized reinstall transition -> reloads Pi resources.
-    severity: raised ? "warning" : "info",
+    // SEV-01 / COMPSEV-01: a declared companion the snapshot reports unloaded
+    // leaves the reinstall short of working, so it raises the row to
+    // `warning`, as on install, update and enable. The row bytes stay the same.
+    severity: raised ? "warning" : companionSeverity(outcome, probe),
     needsReload: true,
   };
 }
@@ -258,10 +253,13 @@ export function reinstalledRowFromOutcome(
  * `shared/notification-grammar.ts` suppresses the `[<scope>]` bracket for a row
  * whose scope is absent.
  */
-function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
+function outcomeToPluginMessage(
+  outcome: ReinstallPluginOutcome,
+  probe: SoftDepStatus,
+): ReinstallMsg {
   switch (outcome.partition) {
     case "reinstalled":
-      return reinstalledRowFromOutcome(outcome, undefined);
+      return reinstalledRowFromOutcome(outcome, undefined, probe);
 
     case "skipped":
       return skippedRowFromOutcome(outcome);

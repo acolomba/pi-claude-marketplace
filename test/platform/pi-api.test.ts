@@ -12,6 +12,7 @@ import {
   DynamicBorder,
   getAgentDir,
   parseFrontmatter,
+  readToolReturns,
   softDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -106,6 +107,9 @@ void ({
   details: { command: "build" },
   isError: false,
 } satisfies PiBoundary.ToolResultEventResult);
+void ({
+  content: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
+} satisfies PiBoundary.ToolResultEventResult);
 void (true satisfies Same<PiBoundary.ResourcesDiscoverEvent, UpstreamResourcesDiscoverEvent>);
 void (true satisfies PeerChecksLocalResourcesDiscoverHandler);
 void ({
@@ -142,12 +146,12 @@ void ({
 } satisfies PiBoundary.PiInventory);
 void ({
   mode: "tui",
-  ui: { notify: (_message: string): void => undefined },
+  ui: { notify: (): void => undefined },
 } satisfies PiBoundary.NotificationContext);
 
 // @ts-expect-error a text content block requires text
 void ({ type: "text" } satisfies PiBoundary.PiTextContentBlock);
-// @ts-expect-error a tool result accepts text content blocks only
+// @ts-expect-error an image content block needs its data and MIME type
 void ({ content: [{ type: "image", text: "message" }] } satisfies PiBoundary.ToolResultEventResult);
 // @ts-expect-error a resources-discover event has a closed reason set
 void ("manual" satisfies PiBoundary.ResourcesDiscoverEvent["reason"]);
@@ -281,6 +285,63 @@ describe("DynamicBorder", () => {
 
     // assert
     assert.strictEqual(boundaryDynamicBorder, expectedDynamicBorder);
+  });
+});
+
+describe("readToolReturns", () => {
+  const file = "/work/skills/demo/SKILL.md";
+  const content = "one\ntwo\nthree";
+
+  for (const { range, offset, limit, text } of [
+    { range: "the whole file", offset: undefined, limit: undefined, text: content },
+    {
+      range: "a limit, with Pi's continuation notice",
+      offset: 2,
+      limit: 1,
+      text: "two\n\n[1 more lines in file. Use offset=3 to continue.]",
+    },
+  ]) {
+    test(`matches the text Pi's read tool returns for ${range}`, async () => {
+      // arrange
+      const call = { file, offset, limit };
+
+      // act
+      const matches = await readToolReturns(call, content, text);
+
+      // assert
+      assert.strictEqual(matches, true);
+    });
+  }
+
+  for (const { title, offset, text } of [
+    { title: "a text that differs from the file", offset: undefined, text: "one\ntwo\nfour" },
+    { title: "the lines of another offset", offset: 2, text: "three" },
+  ]) {
+    test(`does not match ${title}`, async () => {
+      // arrange
+      const call = { file, offset, limit: undefined };
+
+      // act
+      const matches = await readToolReturns(call, content, text);
+
+      // assert
+      assert.strictEqual(matches, false);
+    });
+  }
+
+  test("rejects with Pi's error for an offset past the end of the file", async () => {
+    // arrange
+    const call = { file, offset: 9, limit: undefined };
+
+    // act & assert
+    await assert.rejects(
+      () => readToolReturns(call, content, ""),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.message, "Offset 9 is beyond end of file (3 lines total)");
+        return true;
+      },
+    );
   });
 });
 
@@ -685,11 +746,11 @@ describe("softDepStatus", () => {
 
   test("degrades to unloaded when a tool name accessor fails", () => {
     // arrange
-    const inaccessibleTool = Object.defineProperty({}, "name", {
-      get: () => {
+    const inaccessibleTool = {
+      get name(): string {
         throw new Error("inaccessible");
       },
-    });
+    };
     const extensionApi = toolInventory([inaccessibleTool]);
 
     // act

@@ -52,7 +52,6 @@ import type { Scope } from "./types.ts";
 //
 // SNM-17 / SNM-18 contract: the marketplace-header grammar and per-status
 // icon discipline live HERE as the sole site that knows them.
-// entry point.
 // ---------------------------------------------------------------------------
 
 const ICON_INSTALLED = "●";
@@ -87,10 +86,10 @@ const ICON_REMOTE = "◌";
 const ICON_PARTIALLY_INSTALLED = "◉";
 
 /**
- * USTAT-02 / D-64-01: dedicated glyph for a not-installed, partially-available
+ * USTAT-02 / D-64-01: dedicated glyph for a not-installed
  * `partially-available` row (`⊖` U+2296, circled minus) -- a plugin whose manifest is
  * sound but carries unsupported kinds (LSP, partial hooks, or other
- * components). Thus, `--partial` can install its supported components. Stays in the circled-
+ * components), so `--partial` can install its supported components. Stays in the circled-
  * operator family with `ICON_UNINSTALLABLE` (`⊘`) but reads "diminished /
  * components dropped" rather than "blocked". DISTINCT from `⊘`
  * (`ICON_UNINSTALLABLE`, reserved for unavailable / blocked / failed / manual-
@@ -175,6 +174,10 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
   return lines;
 }
 
+/**
+ * Renders the one-line header of a resolved marketplace: icon, name, scope
+ * bracket, and the status token (or list-surface marker) its status selects.
+ */
 export function renderMpHeader(mp: ResolvedMarketplace): string {
   switch (mp.status) {
     case "added":
@@ -279,14 +282,15 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
 // each row arrives with its final `reasons`.
 // ---------------------------------------------------------------------------
 
+// D-notification-refactor-01-11: the row-composition primitives below (joinTokens, renderScopeBracket,
+// renderVersion, composeVersionArrow, composeReasons) stay declared HERE as
+// the single source of the byte-stable presentation vocabulary.
+
 /**
  * Join tokens with single spaces, suppressing empty slots so absent
  * optional tokens (e.g. an undefined scope-bracket on `available` rows)
  * never produce a double-space. Single canonical implementation.
  */
-// D-notification-refactor-01-11: the row-composition primitives below (joinTokens, renderScopeBracket,
-// renderVersion, composeVersionArrow, composeReasons) stay declared HERE as
-// the single source of the byte-stable presentation vocabulary.
 function joinTokens(parts: readonly string[]): string {
   return parts.filter((p) => p !== "").join(" ");
 }
@@ -604,7 +608,6 @@ function renderAllowedMarketplaces(names: readonly string[]): string {
  *     compact JSON array without changing the parsed strings.
  *
  * Joins all lines with `\n`. Info messages do not emit soft-dep markers.
- * File-private; sole caller is `notify()` dispatcher.
  */
 export function renderMarketplaceInfo(message: MarketplaceInfoMessage): string {
   const lines: string[] = [composeMpInfoHeader(message.name, message.scope, message.details)];
@@ -663,8 +666,6 @@ export function renderMarketplaceInfo(message: MarketplaceInfoMessage): string {
  * empty string (the orchestrator MUST NOT construct an empty fan-out for
  * the user-facing path, but the renderer keeps the edge case
  * deterministic).
- *
- * File-private; sole caller is `notify()` dispatcher.
  */
 export function renderMarketplaceInfoCascade(message: MarketplaceInfoCascadeMessage): string {
   return message.blocks.map((b) => renderMarketplaceInfo(b)).join("\n\n");
@@ -747,17 +748,17 @@ const COMPONENT_KIND_NAMES = [
   "workflows",
 ] as const satisfies readonly ComponentKind[];
 
-type _AssertNever<T extends never> = T;
-type _UncoveredComponentKind = Exclude<ComponentKind, (typeof COMPONENT_KIND_NAMES)[number]>;
-type _ComponentKindsCoverageProof = _AssertNever<_UncoveredComponentKind>;
+type AssertNever<T extends never> = T;
+type UncoveredComponentKind = Exclude<ComponentKind, (typeof COMPONENT_KIND_NAMES)[number]>;
+type ComponentKindsCoverageProof = AssertNever<UncoveredComponentKind>;
 
-// INFO-02 / WFLW-04 completeness proof: a non-never `_ComponentKindsCoverageProof`
+// INFO-02 / WFLW-04 completeness proof: a non-never `ComponentKindsCoverageProof`
 // is a TS2344 build failure naming the uncovered kind. The proof is consumed
 // here, by the tuple it guards, rather than exported for a caller who has no
 // use for it.
 const COMPONENT_KINDS = COMPONENT_KIND_NAMES satisfies readonly Exclude<
   ComponentKind,
-  _ComponentKindsCoverageProof
+  ComponentKindsCoverageProof
 >[];
 
 /**
@@ -1121,9 +1122,9 @@ export function composePluginLines<R extends ResolvedRow>(
 
 /**
  * D-11 / PMOD-03: the failure lines of a failed or manual-recovery row, or of a
- * realized row carrying a remedy cause, in order: the 4-space cause line, one `    leaked: <path>` line per AS-7 leak,
- * then each rollback phase as a 4-space `[<phase>] (rollback failed)` row with
- * its optional 6-space cause line.
+ * realized row carrying a remedy cause, in order: the 4-space cause line, one
+ * `    leaked: <path>` line per AS-7 leak, then each rollback phase as a 4-space
+ * `[<phase>] (rollback failed)` row with its optional 6-space cause line.
  */
 function composeFailureLines(failure: ResolvedFailure): string[] {
   const lines: string[] = [];
@@ -1332,8 +1333,8 @@ function composeBackgroundUpdateText(plugins: readonly BackgroundUpdatePlugin[])
  * yields two arguments.
  * `undefined` means nothing is emitted. The diagnostic arm reads the line count
  * and the async-rewake arm reads the summary length, so only a zero-length line
- * list or summary is a no-op (D-05, D-08). Producer strings pass through
- * verbatim.
+ * list or summary is a no-op (D-05, D-08); the hook-notice arm reads its text
+ * length the same way (D-CF5-14). Producer strings pass through verbatim.
  */
 export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments | undefined {
   switch (surface.kind) {
@@ -1387,5 +1388,11 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
 
     case "background-update":
       return [composeBackgroundUpdateText(surface.plugins), RAW_SURFACE_SEVERITY[surface.kind]];
+    case "hook-notice":
+      // D-CF5-14: the hooks bridge composed the notice and the seam made it
+      // terminal-safe; it passes through as given.
+      return surface.text.length === 0
+        ? undefined
+        : [surface.text, RAW_SURFACE_SEVERITY[surface.kind]];
   }
 }

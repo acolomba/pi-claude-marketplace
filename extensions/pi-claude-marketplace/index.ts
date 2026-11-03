@@ -6,8 +6,11 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "./bridges/hooks/index.ts";
+import { registerCommandInvocation } from "./edge/command-invocation.ts";
+import { registerCommandTool } from "./edge/command-tool.ts";
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { registerSkillAliases } from "./edge/skill-aliases.ts";
+import { registerSkillReadFill } from "./edge/skill-read.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { createBackgroundGate } from "./orchestrators/marketplace/background-gate.ts";
 import { createBackgroundPass } from "./orchestrators/marketplace/background-pass.ts";
@@ -60,7 +63,7 @@ function applyMcpAdapterEnvFrom(readCwd: () => string): void {
  * Registers the extension's Pi hooks, tools, and slash command surface.
  */
 // DISP-01: async factory; Pi's loader awaits this Promise (loader.d.ts
-// `loadExtensionFromFactory(...): Promise<Extension>`), so the 11 pi.on
+// `loadExtensionFromFactory(...): Promise<Extension>`), so the 12 pi.on
 // registrations inside `registerHooksBridge` complete BEFORE the loader
 // proceeds to emit any session-lifecycle event. The `void` fire-and-forget
 // alternative would race against the first session_start because the loader
@@ -126,7 +129,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   //      project cache. Both are idempotent against the same cwd.
   //
   // The `await` is LOAD-BEARING: Pi's loader awaits the factory Promise, so
-  // the 11 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
+  // the 12 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
   // are guaranteed to complete BEFORE the first Pi event fires.
   await hooksHydration.registerHooksBridge(pi, { cwd: homedir() });
 
@@ -136,15 +139,25 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   ): Promise<void> {
     requireNotificationMode(ctx.mode);
     const run = openNotificationRun(pi, { kind: "load" });
+    // D-LOC-01: an untrusted project's hooks are not routed, and a load with
+    // autoapply on does not apply its scope.
+    const projectTrusted = ctx.isProjectTrusted();
     try {
-      await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
+      await hooksHydration.hydrateProjectScopeForCwd(event.cwd, projectTrusted);
     } catch (err) {
       hookDebugLog(`project-scope hydrate threw unexpectedly: ${errorMessage(err)}`, "hydrate");
     }
 
     requireNotificationMode(ctx.mode);
     try {
-      await loadReconcile({ ctx, run, cwd: event.cwd, hooksRouting, completionCache });
+      await loadReconcile({
+        ctx,
+        run,
+        cwd: event.cwd,
+        projectTrusted,
+        hooksRouting,
+        completionCache,
+      });
     } catch (err) {
       try {
         notifyReconcileAborted(ctx, run, err);
@@ -188,9 +201,14 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       }
 
       try {
+        // T-02-17: Pi withholds an untrusted project's own `.pi/skills` and
+        // `.pi/prompts`, and Claude Code loads no project-scope plugin
+        // component before trust, so an untrusted project's staged skills and
+        // prompts are not discovered at all. Pi resolves trust before it
+        // emits this event.
         const discovered = await aggregateDiscoveredResources(
           locationsFor("user", homedir()),
-          locationsFor("project", event.cwd),
+          ctx.isProjectTrusted() ? locationsFor("project", event.cwd) : undefined,
         );
         return {
           skillPaths: [...discovered.skillPaths],
@@ -263,4 +281,13 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   );
   registerClaudeMarketplaceTools(pi);
   registerSkillAliases(pi);
+  // D-CF1-01 / D-CF1-02: Pi runs input handlers in registration order, so the
+  // command invocation handler sees the text after the skill-alias rewrite.
+  registerCommandInvocation(pi);
+  // Amends D-CF1-03: a staged `SKILL.md` that the model reads gets its
+  // variables filled. The hooks bridge registered its `tool_result` handler
+  // first, so PostToolUse hooks see the file as read.
+  registerSkillReadFill(pi);
+  // Closes the D-CF3-01 gap: the model runs a plugin command through a tool.
+  registerCommandTool(pi);
 }

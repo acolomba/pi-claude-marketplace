@@ -8,8 +8,11 @@
 //
 // Living here so the two call sites cannot drift on the exec-form vs
 // shell-form discriminator (EXEC-04: `args` field presence, NOT
-// emptiness) and on the truncation marker placement (WR-02: assign
+// emptiness), on the exec-form path-variable substitution (D-CF5-15,
+// FG-19), and on the truncation marker placement (WR-02: assign
 // `_truncated: true` LAST so a payload-supplied key cannot win).
+
+import { substituteClaudeVars, type ClaudePluginVars } from "../../shared/vars.ts";
 
 import type { RoutingEntry } from "./routing-state.ts";
 
@@ -18,6 +21,7 @@ const STDIN_TRUNCATION_BYTES = 256 * 1024;
 
 const TRUNCATION_MARKER_JSON = '"_truncated":true';
 
+/** The `child_process.spawn` invocation a routing entry resolves to. */
 export interface SpawnPlan {
   readonly command: string;
   readonly args: readonly string[];
@@ -30,16 +34,26 @@ export interface SpawnPlan {
  * `spawn(command, [], { shell: entry.handlerDecl.shell ?? true })`.
  * `args: []` is the exec-form arm -- the discriminator is "args defined",
  * not "args non-empty".
+ *
+ * D-CF5-15 / FG-19: on the exec-form arm, `command` and every string `args`
+ * element get `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and
+ * `${CLAUDE_PROJECT_DIR}` replaced from `vars`, the values the hook's
+ * environment exports, as Claude Code does. No shell reads an exec-form
+ * argument, so nothing else would expand them. One pass: a spliced value is
+ * never rescanned. Any other `${...}`, `${user_config.KEY}` included, stays
+ * literal. A non-string element is passed as its JSON text. The shell-form
+ * command is never rewritten: the shell expands the variables from the
+ * environment, and its quoting decides where.
  */
-export function planSpawn(entry: RoutingEntry): SpawnPlan {
+export function planSpawn(entry: RoutingEntry, vars: ClaudePluginVars): SpawnPlan {
   const command = entry.handlerDecl.command ?? "";
   const argsField = entry.handlerDecl.args;
 
   if (Array.isArray(argsField)) {
     const args: string[] = (argsField as readonly unknown[]).map((a): string =>
-      typeof a === "string" ? a : JSON.stringify(a),
+      typeof a === "string" ? substituteClaudeVars(a, vars) : JSON.stringify(a),
     );
-    return { command, args, shell: false };
+    return { command: substituteClaudeVars(command, vars), args, shell: false };
   }
 
   const shellField = entry.handlerDecl.shell;
@@ -60,7 +74,7 @@ export function planSpawn(entry: RoutingEntry): SpawnPlan {
  * documented 256 KB stdin cap.
  *
  * WR-02: the `_truncated: true` marker is serialized LAST so a payload key
- * named `_truncated` cannot override it (defense in depth; no v1.13
+ * named `_truncated` cannot override it (defense in depth; no
  * translator emits this key today).
  */
 export function serializeWithTruncation(payload: unknown): string {
@@ -78,8 +92,8 @@ export function serializeWithTruncation(payload: unknown): string {
     return serializeBoundedObject(parsed as Record<string, unknown>);
   }
 
-  // An oversized JSON primitive can only be a string. Keep the defensive
-  // envelope used by the prior implementation, but bound its string value.
+  // An oversized JSON primitive can only be a string. Wrap it in a defensive
+  // envelope and bound its string value.
   return serializeBoundedPrimitive(parsed as string);
 }
 

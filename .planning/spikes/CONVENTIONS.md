@@ -25,6 +25,15 @@ real `pi` session for the actual visual behavior. Load every related
 `extension.ts` into one session with multiple `-e` flags (`pi -e a.ts -e
 b.ts -e c.ts`) rather than asking the user to restart `pi` per spike.
 
+**Deviation for Pi-runtime behavior questions (spikes 027, 028):** a question
+about what Pi or a companion does at runtime runs the real thing. Spike 028
+drives a headless RPC Pi through `test/e2e/_rpc.ts` (`piArguments`,
+`rpcChildEnvironment`) with companions loaded as `--extension` paths, a
+sandbox under `os.tmpdir()`, and a probe extension that reports host state
+as a custom entry. Spike 027 drove the engine's modules directly in a
+scratch install. Pin the companion version the project declares as its
+floor, and check it before blaming the bridge.
+
 ## Structure
 
 One spike = one directory `NNN-descriptive-name/` with a `README.md` and,

@@ -674,7 +674,7 @@ for (const coexist of [false, true]) {
         });
         assert.strictEqual(
           await readFile(targetPath, "utf8"),
-          `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+          `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
         );
       }
 
@@ -920,7 +920,7 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
-        agentDirectories: ["declared-agents"],
+        agentDirectories: ["declared-agents", "agents"],
         resources: {
           agents: [
             { directory: "declared-agents", sourceName: "first", body: "First agent.\n" },
@@ -983,7 +983,7 @@ test("PDEF-01: reinstall stages every agent directory", async () => {
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
-        agentDirectories: ["declared-agents"],
+        agentDirectories: ["declared-agents", "agents"],
         resources: {
           agents: [
             {
@@ -1313,42 +1313,45 @@ test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even wit
         install: true,
       });
       const { ctx, run, notifications } = makeCtx();
-      // act & assert
-      const noResource = await reinstallDefault(cwd, ctx, run);
-      assert.equal(noResource.partition, "reinstalled");
-      // The reload-hint trailer is emitted structurally
-      // from the `reinstalled` variant per D-16-12.
-      assert.equal(
-        (notifications.at(-1)?.message ?? "").includes("/reload to pick up changes"),
-        true,
-      );
+      const cwdWithDependencies = await mkdtemp(path.join(tmpdir(), "reinstall-output-deps-"));
+      try {
+        await seedMarketplace({
+          cwd: cwdWithDependencies,
+          marketplaceRoot: path.join(cwdWithDependencies, "mp-src"),
+          resources: { agent: "agent", mcp: true },
+          install: true,
+        });
 
-      notifications.length = 0;
-      const cwd2 = await mkdtemp(path.join(tmpdir(), "reinstall-output-deps-"));
-      await seedMarketplace({
-        cwd: cwd2,
-        marketplaceRoot: path.join(cwd2, "mp-src"),
-        resources: { agent: "agent", mcp: true },
-        install: true,
-      });
-      const withDeps = await reinstallPlugin({
-        ctx,
-        run,
-        scope: "project",
-        cwd: cwd2,
-        marketplace: "mp",
-        plugin: "hello",
-      });
-      assert.equal(withDeps.partition, "reinstalled");
-      const body = notifications.at(-1)?.message ?? "";
-      // CMC-13 / MSG-SD-1..2: per-row soft-dep markers. The single-plugin
-      // reinstall renders as a 1-row cascade and the soft-dep markers
-      // appear on the (reinstalled) row when companion extensions are
-      // unloaded.
-      assert.match(body, /\{[^}]*requires pi-subagents[^}]*\}/);
-      assert.match(body, /\{[^}]*requires pi-mcp-adapter[,}]/);
-      assert.match(body, /\/reload to pick up changes/);
-      await rm(cwd2, { recursive: true, force: true });
+        // act
+        const noResource = await reinstallDefault(cwd, ctx, run);
+        const noResourceBody = notifications.at(-1)?.message ?? "";
+        notifications.length = 0;
+        const withDeps = await reinstallPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd: cwdWithDependencies,
+          marketplace: "mp",
+          plugin: "hello",
+        });
+        const body = notifications.at(-1)?.message ?? "";
+
+        // assert
+        assert.equal(noResource.partition, "reinstalled");
+        // The reload-hint trailer is emitted structurally
+        // from the `reinstalled` variant per D-16-12.
+        assert.match(noResourceBody, /\/reload to pick up changes/);
+        assert.equal(withDeps.partition, "reinstalled");
+        // CMC-13 / MSG-SD-1..2: per-row soft-dep markers. The single-plugin
+        // reinstall renders as a 1-row cascade and the soft-dep markers
+        // appear on the (reinstalled) row when companion extensions are
+        // unloaded.
+        assert.match(body, /\{[^}]*requires pi-subagents[^}]*\}/);
+        assert.match(body, /\{[^}]*requires pi-mcp-adapter[,}]/);
+        assert.match(body, /\/reload to pick up changes/);
+      } finally {
+        await rm(cwdWithDependencies, { recursive: true, force: true });
+      }
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1381,7 +1384,7 @@ test("PRL-13 quiet render suppresses per-plugin notifications", async () => {
 
       // assert
       assert.equal(outcome.partition, "reinstalled");
-      assert.equal(notifications.length, 0);
+      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2275,7 +2278,7 @@ test("PRL-15: batch soft dependency markers ride only the reinstalled row", asyn
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}\n\nPlugin reinstall: 1 failure, 1 warning\n\n/reload to pick up changes",
           severity: "error",
         },
       ]);
@@ -2321,13 +2324,13 @@ test("DLS-01: a recorded plugin the manifest no longer declares keeps its instal
       assert.deepStrictEqual(notifications, [
         {
           message: [
-            "A plugin operation needs attention.",
+            "Some plugin operations need attention.",
             "",
             "● mp [project]",
             "  ⊘ bad (skipped) {not in manifest}",
             "  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}",
             "",
-            "Plugin reinstall: 1 warning, 1 success",
+            "Plugin reinstall: 2 warnings",
             "",
             "/reload to pick up changes",
           ].join("\n"),
@@ -2414,10 +2417,6 @@ test("D-18-17: a recorded plugin the manifest no longer declares and whose insta
     }
   });
 });
-
-// -----------------------------------------------------------------------
-// Additional coverage tests for uncovered paths
-// -----------------------------------------------------------------------
 
 test("GAP-01: an empty bulk reinstall emits only its sentinel", async () => {
   await withHermeticHome(async () => {
@@ -2561,12 +2560,18 @@ test("GAP-04: a reinstall of an empty-resource plugin whose state save fails rep
       });
 
       // assert
-      assert.equal(outcome.partition, "failed");
-      const note = outcome.notes?.[0] ?? "";
-      assert.ok(note.includes("atomic-save-failed"), `expected cause in: ${note}`);
-      assert.equal(
-        notifications.some((n) => n.severity === "error"),
-        true,
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        notes: ["atomic-save-failed\n\ncause: atomic-save-failed"],
+      });
+      assert.deepStrictEqual(
+        notifications.map(({ severity }) => severity),
+        ["error"],
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2627,7 +2632,16 @@ test("GAP-06: an MCP collision at prepare aborts the prepared handles and fails 
       });
 
       // assert
-      assert.equal(outcome.partition, "failed");
+      const message = `Refusing to stage MCP server "plugin_hello_server1_": ${mcpPath} already defines it, and pi-mcp-adapter would load the definition in ${mcpPath}.`;
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        notes: [`${message}\n\ncause: ${message}`],
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2806,14 +2820,14 @@ test("GAP-08: reinstallPlugin render=none with a not-installed failure emits no 
 
       // assert
       assert.equal(outcome.partition, "failed");
-      assert.equal(notifications.length, 0);
+      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("GAP-10: reinstallPlugin render=none success with no warnings returns bare locked.outcome", async () => {
+test("GAP-10: reinstallPlugin render=none success with no warnings returns an outcome without notes", async () => {
   // When no bridge warnings and no maintenance warnings exist, the outcome
   // carries no notes field.
   await withHermeticHome(async () => {
@@ -3056,9 +3070,7 @@ test("D-PL1-17: a reinstall whose completion-cache drop fails still reinstalls a
 });
 
 test("GAP-17: reinstallPlugin outcome notes include reinstall-specific failure message", async () => {
-  // Verify the 'notes' field on a failed outcome contains the formatted
-  // error chain from formatErrorWithCauses, covering the catch-block at
-  // lines 175-182 in reinstallPlugin.
+  // The 'notes' field on a failed outcome holds the formatted error chain.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-notes-chain-"));
     try {
@@ -3085,12 +3097,8 @@ test("GAP-17: reinstallPlugin outcome notes include reinstall-specific failure m
       });
 
       // assert
-      assert.equal(outcome.partition, "failed");
-      assert.ok(outcome.notes !== undefined && outcome.notes.length > 0);
-      assert.ok(
-        outcome.notes.some((n) => n.includes("root-cause-error")),
-        `expected root-cause-error in notes: ${JSON.stringify(outcome.notes)}`,
-      );
+      assert.strictEqual(outcome.partition, "failed");
+      assert.deepStrictEqual(outcome.notes, ["root-cause-error\n\ncause: root-cause-error"]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3491,7 +3499,9 @@ async function deleteInstalledCopy(
       readonly mp: { readonly plugins: Record<string, { readonly resolvedSource: string }> };
     };
   };
-  await rm(state.marketplaces.mp.plugins[plugin]!.resolvedSource, { recursive: true, force: true });
+  const record = state.marketplaces.mp.plugins[plugin];
+  assert.ok(record !== undefined, `the state records ${plugin}`);
+  await rm(record.resolvedSource, { recursive: true, force: true });
 }
 
 /**
@@ -3921,12 +3931,10 @@ test("CFG-03: a named flagless reinstall whose local layer cannot be read is ref
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // WR-03 / D-60-05: after reinstallPlugin succeeds, the hooks-bridge routing
 // table reflects the post-reinstall entry set. Reinstall does NOT delegate
 // to install/uninstall; the shared swap wires the cache lifecycle, and this
 // section verifies it end-to-end.
-// ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries without /reload", async () => {
   await withHermeticHome(async () => {
@@ -3934,7 +3942,10 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
     try {
       // arrange
       const ownerRuntime = createHooksRuntime();
+      // D-LOC-01: the session hydrate found the project trusted.
+      ownerRuntime.recordProjectTrust(cwd, true);
       const peerRuntime = createHooksRuntime();
+      peerRuntime.recordProjectTrust(cwd, true);
       const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
       const { pluginRoot } = await seedMarketplace({
         cwd,
@@ -4016,16 +4027,15 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // LIFE-01: the shared swap reinstall runs writes <hooksDir>/<plugin>/hooks.json
 // between its agents and mcp commits, and removes the stale subtree when the
 // plugin no longer ships hooks.
-// ─────────────────────────────────────────────────────────────────────────────
 
 test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hooks.json from the resolved manifest", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-life01-rewrite-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
 
       const hooksJson = {
@@ -4051,6 +4061,8 @@ test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hook
       );
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         run,
@@ -4059,6 +4071,8 @@ test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hook
         marketplace: "mp",
         plugin: "hello",
       });
+
+      // assert
       assert.equal(outcome.partition, "reinstalled");
 
       const summary = notifications.map((n) => n.message).join("\n");
@@ -4116,18 +4130,9 @@ test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<
       assert.ok(!summary.includes("(failed)"), `expected clean reinstall; got: ${summary}`);
 
       // The stale hooks dir must be gone.
-      let stillThere = true;
-      try {
-        await readFile(path.join(locations.hooksDir, "hello", "hooks.json"), "utf8");
-      } catch {
-        stillThere = false;
-      }
-
-      assert.equal(
-        stillThere,
-        false,
-        "reinstall cascade slot must removeHookConfig when the resolved plugin has no hooks",
-      );
+      await assert.rejects(readFile(path.join(locations.hooksDir, "hello", "hooks.json"), "utf8"), {
+        code: "ENOENT",
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4176,7 +4181,7 @@ test("BFILL-01 / RINST-01: reinstalling a partially-installed plugin succeeds in
 
       // assert
       assert.equal(outcome.partition, "reinstalled");
-      assert.equal(notifications.length, 0);
+      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4302,13 +4307,11 @@ test("BFILL-01 / D-18-06 full: reinstall of an installable plugin records instal
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // PURL-07 / D-18-04 -- reinstall of a pinned git-source (url / git-subdir /
 // github) plugin. The shared runner materializes the marketplace entry's sha
 // through the clone-cache seam's resolvePluginPin then materializePluginClone;
 // a pinned ref resolves with no remote call, so a warm copy is offline and only
 // a cache miss clones.
-// ───────────────────────────────────────────────────────────────────────────
 
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 const DEVICE_CODE = {
@@ -5070,6 +5073,8 @@ test("GHB-03: reinstalling a pinned GitHub-source plugin whose clone is gone fai
           return true;
         },
       );
+
+      // assert
       assert.deepStrictEqual(gitState.cloneCalls, []);
       verifyBoundary();
     } finally {
@@ -5121,6 +5126,8 @@ test("GHB-03 / D-18-16: an invalid GitHub base fails a reinstall of a GitHub-sou
           return true;
         },
       );
+
+      // assert
       assert.deepStrictEqual(gitState.cloneCalls, []);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     } finally {
@@ -5182,13 +5189,11 @@ test("a git-subdir reinstall honors clone-root subdir containment (pluginRoot un
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // MIRR-06 / D-18-04 / PRL-07 -- an unpinned git-source reinstall reads, offline,
 // the commit the mirror last fetched for the ref the entry declares, and
 // copies that commit. Only a missing mirror is a cache miss: reinstall clones
 // it once (the NFR-5 cache-miss allowance) and installs its HEAD; a failed
 // clone skips the reinstall.
-// ───────────────────────────────────────────────────────────────────────────
 
 const MIRROR_HEAD_SHA = "b2c3d4e5f60718293a4b5c6d7e8f90123456789a";
 
@@ -5544,7 +5549,6 @@ test("D-18-04 / SRC-01: an unpinned reinstall whose mirror clone fails fails wit
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // SUB-02 -- end-to-end ${CLAUDE_PROJECT_DIR} delivery through the reinstall path
 //
 // the shared swap's prepare step threads `cwd` into every stage input by hand
@@ -5554,7 +5558,6 @@ test("D-18-04 / SRC-01: an unpinned reinstall whose mirror clone fails fails wit
 // project-scope fixture whose skill/command/agent bodies carry
 // ${CLAUDE_PROJECT_DIR} and ${CLAUDE_SKILL_DIR}, reinstall, and assert the
 // re-staged files -- closing the silent-miss gap end-to-end.
-// ───────────────────────────────────────────────────────────────────────────
 
 test("SUB-02: project-scope reinstall substitutes ${CLAUDE_PROJECT_DIR} to the install cwd in skill, command, and agent files; keeps ${CLAUDE_SKILL_DIR} literal in command and agent", async () => {
   await withHermeticHome(async () => {
@@ -5703,9 +5706,7 @@ test("SUB-02: user-scope reinstall keeps ${CLAUDE_PROJECT_DIR} literal in skill,
   });
 });
 
-// ──────────────────────────────────────────────────────────────────────────
 // WARN-01 / WR-04: the reinstall outcome carries the degraded-component kinds
-// ──────────────────────────────────────────────────────────────────────────
 
 test("WR-04: a reinstall whose source frontmatter no longer parses reports the degraded kind on its outcome", async () => {
   await withHermeticHome(async () => {
@@ -5846,6 +5847,49 @@ test("WR-09: the standalone reinstall row names the degraded kind and takes the 
   });
 });
 
+for (const { label, softDeps, expected } of [
+  {
+    label: "unloaded raises the row to warning",
+    softDeps: {},
+    expected: {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-subagents}\n\n/reload to pick up changes",
+      severity: "warning",
+    },
+  },
+  {
+    label: "loaded keeps the row at info",
+    softDeps: { piSubagentsLoaded: true },
+    expected: {
+      message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+    },
+  },
+] as const) {
+  test(`SEV-01: a reinstall whose declared pi-subagents is ${label}`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-companion-severity-"));
+      try {
+        // arrange
+        await seedMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          resources: { agent: "reviewer agent" },
+          install: true,
+        });
+        const { ctx, run, notifications } = makeCtx(softDeps);
+
+        // act
+        await reinstallDefault(cwd, ctx, run);
+
+        // assert
+        assert.deepStrictEqual(notifications, [expected]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("WR-09: a clean reinstall row carries no brace and no raise", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr09-clean-"));
@@ -5917,10 +5961,8 @@ test("WR-04: a clean reinstall omits the degraded-kinds field entirely", async (
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // Rare failure arms (D-99-05b). Each case reaches one arm no happy-path test
 // touches, and asserts the arm's observable consequence.
-// ───────────────────────────────────────────────────────────────────────────
 
 test("LAYER-04: a reinstall over an unreadable base layer reinstalls, renders only its row, and leaves the layer unchanged", async () => {
   await withHermeticHome(async () => {
@@ -6098,9 +6140,7 @@ test("SRC-01: a source whose directory is missing fails the reinstall as source 
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // ENBL-05: reinstall over a record the user disabled
-// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * Overwrite the installed record's enablement marker in place, keeping every
@@ -6247,15 +6287,12 @@ test("DFEN-07 / D-103-12: the standalone reinstall renders one benign skipped ro
       // only when the producer passes one, so an absent severity is the info
       // row -- the reason is benign and idempotent, so it must neither raise
       // nor take the error flip the absent-target skip takes.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
       // Subject-first, and asserted whole rather than as independent
       // `includes` checks a reordering could survive. No summary line (an info
       // cascade emits none) and no reload hint (nothing was materialized).
-      assert.equal(
-        notifications[0]?.message,
-        "● mp [project]\n  ⊘ hello (skipped) {already disabled}",
-      );
+      assert.deepStrictEqual(notifications, [
+        { message: "● mp [project]\n  ⊘ hello (skipped) {already disabled}" },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -6786,17 +6823,13 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
       assert.deepStrictEqual(notifications, []);
       // The flat `notes` fold reaches orchestrated consumers (reconcile
       // backfill) and MUST keep carrying the discovery half.
-      const notes = outcome.partition === "reinstalled" ? (outcome.notes ?? []) : [];
-      assert.ok(
-        notes.some((n) => n.startsWith("warning: ") && n.includes('"hello-foo"')),
-        `expected the discovery warning on notes; got: ${JSON.stringify(notes)}`,
-      );
+      const discovery = `skill source "hello-foo" in "${path.join(pluginRoot, "skills")}" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.`;
+      assert.ok(outcome.partition === "reinstalled");
+      assert.deepStrictEqual(outcome.notes, [`warning: ${discovery}`]);
       // The unprefixed carrier is what `reinstallPlugins` renders from.
-      const carried = outcome.partition === "reinstalled" ? (outcome.discoveryWarnings ?? []) : [];
-      assert.equal(carried.length, 1, JSON.stringify(carried));
-      assert.equal(carried[0]?.kind, "discovery");
-      assert.ok(carried[0].message.includes('"hello-foo"'));
-      assert.ok(!carried[0].message.startsWith("warning: "));
+      assert.deepStrictEqual(outcome.discoveryWarnings, [
+        { kind: "discovery", message: discovery },
+      ]);
       verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -6951,7 +6984,6 @@ test("D-141-03: a reinstall carries its discovery warning on notes and drops the
   });
 });
 
-// ──────────────────────────────────────────────────────────────────────────
 // WGATE-01 / D-115-05: the workflows discovery channel on a standalone reinstall
 //
 // The families below are the `WorkflowOutcomeSite` union
@@ -6965,7 +6997,6 @@ test("D-141-03: a reinstall carries its discovery warning on notes and drops the
 // `lstat` fails on an entry `readdir` returned, which needs the directory's
 // execute bit cleared -- and that also stops every sibling in the same
 // directory from being opened. It gets its own case below.
-// ──────────────────────────────────────────────────────────────────────────
 
 /**
  * One script per family, named so the discovery walk's name sort is the order
@@ -7104,7 +7135,7 @@ test("WGATE-01 / D-115-05: a standalone reinstall reports a workflow script it c
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflow-inspect-"));
     let lockedDir: string | undefined;
     try {
-      // arrange -- clearing the directory's execute bit is what makes the
+      // act -- clearing the directory's execute bit is what makes the
       // `lstat` inside it fail while `readdir` still returns the entry, which
       // is the only shape that reaches the `inspect` site.
       const notifications = await standaloneReinstallNotifications(
@@ -7234,11 +7265,6 @@ test(
         // enumeration pass -- sees it gone, removed by the other process. The
         // pipe pairs each read with one payload, so the removal provably lands
         // between them.
-        //
-        // The earlier shape forced the IL-3 migration-save warning by stealing
-        // `write-file-atomic`'s temp file mid-rename. That was a race against
-        // library internals, and the warning it proved is covered directly by
-        // test/persistence/migrate.test.ts, so it is gone from here.
         const locations = locationsFor("project", cwd);
         await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -7689,7 +7715,6 @@ function retryCauseChain(message: string): string {
  */
 const CONVERGED_SCHEDULE = ["save:state", "save:state", "drop:cache", "remove:data"];
 
-// ──────────────────────────────────────────────────────────────────────────
 // NFR-3 failure-then-retry proof: every operation is safe to retry --
 // idempotent or fail-clean. NFR-2 bounds the recovery model: nothing below
 // may need more than a reload.
@@ -7702,7 +7727,6 @@ const CONVERGED_SCHEDULE = ["save:state", "save:state", "drop:cache", "remove:da
 // The schedule records the state writes, the completion-cache drops, and the
 // plugin-data removal. The bridge commits carry no schedule entry; they are
 // proven by the authoritative bytes and the owned-tree inventory.
-// ──────────────────────────────────────────────────────────────────────────
 
 test("retry proof: reinstall: skills prepare failure with no prepared handles converges on the same root", async () => {
   await withHermeticHome(async () => {
@@ -9246,7 +9270,6 @@ const retryFs = createRequire(import.meta.url)(
   "node:fs/promises",
 ) as typeof import("node:fs/promises");
 
-// ──────────────────────────────────────────────────────────────────────────
 // WLIF-01: the workflows handle -- reinstall's fifth prepare and its abort arm.
 //
 // `locationsFor` is called INSIDE the `withHermeticHome` closure in every case
@@ -9257,7 +9280,6 @@ const retryFs = createRequire(import.meta.url)(
 // Envelope paths are composed with a plain `path.join`, NOT with the async
 // artifact-path composer: a forgotten await there yields a leaf named after a
 // promise instead of throwing.
-// ──────────────────────────────────────────────────────────────────────────
 
 test("WLIF-01: a replace-step failure leaves no workflows staging tree behind", async (t) => {
   await withHermeticHome(async () => {
@@ -9418,11 +9440,9 @@ test("WLIF-01: a reinstall of a plugin with no workflows touches neither workflo
   });
 });
 
-// ──────────────────────────────────────────────────────────────────────────
 // WLIF-01: the workflows commit -- the LAST step of the replace sequence, the
 // placed names threaded out of it, and the outer recovery path that is the
 // only thing able to take those envelopes back.
-// ──────────────────────────────────────────────────────────────────────────
 
 /**
  * A foreign envelope in the shared saved directory. Nothing this extension
@@ -9510,9 +9530,7 @@ test("WLIF-04: a reinstall REPLACES a workflow envelope at its recorded target",
   });
 });
 
-// ──────────────────────────────────────────────────────────────────────────
 // WLIF-01 / T-112-15: the record names the envelopes reinstall actually wrote.
-// ──────────────────────────────────────────────────────────────────────────
 
 test("WLIF-01: the record names both envelopes a two-workflow reinstall wrote", async () => {
   await withHermeticHome(async () => {
@@ -9853,7 +9871,9 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
       });
       assert.strictEqual(
         await readFile(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"),
-        '---\nname: hello-tool\ndescription: "new skill"\n---\n\nnew skill\n',
+        '---\nname: hello-tool\ndescription: "new skill"\n' +
+          `pi-claude-marketplace: {"names":["hello:tool","tool"],"pluginRoot":"${seeded.pluginRoot}","pluginData":"${dataDir}"}\n` +
+          "---\n\nnew skill\n",
       );
       await assert.rejects(() => readFile(path.join(dataDir, "state.txt"), "utf8"), {
         code: "ENOENT",
@@ -9974,7 +9994,8 @@ test("AFILE-04: reinstall over a commented mcp-adapter.json shows the comments-r
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+          severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
       ]);
@@ -10125,7 +10146,8 @@ test("AFILE-04: a self-rendered reinstall shows the notice after its row", async
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+          severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
       ]);
@@ -10172,7 +10194,8 @@ for (const { label, env, notices } of [
         assert.deepStrictEqual(notifications, [
           {
             message:
-              "● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            severity: "warning",
           },
           ...notices,
         ]);

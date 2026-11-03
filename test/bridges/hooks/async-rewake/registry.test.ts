@@ -664,6 +664,7 @@ test(
   "keeps same-shaped child persistence and stale completion isolated by runtime",
   { concurrency: false },
   async (t) => {
+    // arrange
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-runtime-isolation-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T11:10:00.000Z"));
     const locations = locationsFor("project", root);
@@ -681,6 +682,7 @@ test(
     const secondWrites: Array<readonly PidTableEntry[]> = [];
 
     try {
+      // act
       await spawnAndRegister(
         firstRuntime,
         createEntry(root, {
@@ -743,6 +745,7 @@ test(
         setImmediate(resolve);
       });
 
+      // assert
       assert.deepStrictEqual(firstPi.messages, []);
       assert.deepStrictEqual(firstContext.notifications, []);
       assert.deepStrictEqual(secondPi.messages, [
@@ -823,6 +826,7 @@ test(
         ".pi",
         "pi-claude-marketplace",
         "data",
+        "catalog-lifecycle",
         "plugin-lifecycle",
       ),
       ["PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH"]: "dispatch-lifecycle",
@@ -1014,6 +1018,56 @@ test("registers a child whose optional stdin pipe is absent", { concurrency: fal
     child.child.removeAllListeners();
     child.stdout.destroy();
     child.stderr.destroy();
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("spawns an async-rewake hook with Claude's path variables filled in", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-substitution-"));
+  shutdownInMemoryChildren(runtime);
+  const locations = locationsFor("project", root);
+  const entry = createEntry(root, {
+    handlerDecl: {
+      type: "command",
+      command: "${CLAUDE_PLUGIN_ROOT}/bin/scan",
+      args: ["--data=${CLAUDE_PLUGIN_DATA}", "${CLAUDE_PROJECT_DIR}", "${HOME}"],
+      asyncRewake: true,
+    },
+  });
+  const context = createContext(root, "session-substitution", true);
+  const pi = createPi();
+  const spawnCalls: Array<{ command: string; args: readonly string[] }> = [];
+  const spawnImpl = ((
+    command: string,
+    args: readonly string[],
+    _options: SpawnOptions,
+  ): ChildProcess => {
+    spawnCalls.push({ command, args: [...args] });
+    throw new Error("the case stops at the spawn boundary");
+  }) as NonNullable<SpawnDeps["spawnImpl"]>;
+
+  try {
+    // act
+    await spawnAndRegister(runtime, entry, {}, context.context, pi.pi, locations, {
+      spawnImpl,
+      dispatchId: () => "dispatch-substitution",
+    });
+
+    // assert
+    assert.deepStrictEqual(spawnCalls, [
+      {
+        command: path.join(root, "plugin-source", "bin", "scan"),
+        args: [
+          `--data=${path.join(root, ".pi", "pi-claude-marketplace", "data", "catalog-lifecycle", "plugin-lifecycle")}`,
+          root,
+          "${HOME}",
+        ],
+      },
+    ]);
+  } finally {
+    shutdownInMemoryChildren(runtime);
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
 });
@@ -1411,7 +1465,9 @@ test("contains a synchronous stdin end failure and cleans the registered child",
   const context = createContext(root, "session-stdin-end", true);
   const pi = createPi();
   const child = createChild(24_684);
-  t.mock.method(child.stdin!, "end", () => {
+  const stdin = child.stdin;
+  assert.ok(stdin !== null);
+  t.mock.method(stdin, "end", () => {
     throw new Error("synchronous stdin end failure");
   });
 
@@ -1811,26 +1867,26 @@ test(
 );
 
 test(
-  "frames truncated stderr before the surviving tail and rewake message",
+  "injects the whole stderr of a large exit-2 output after the rewake message",
   { concurrency: false },
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const root = await mkdtemp(path.join(tmpdir(), "async-registry-truncated-"));
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-large-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T10:55:00.000Z"));
     shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
-    const context = createContext(root, "session-truncated", true);
+    const context = createContext(root, "session-large", true);
     const pi = createPi();
     const child = createChild(24_692);
-    const survivingTail = "x".repeat(65_536);
+    const largeStderr = `d${"x".repeat(65_536)}`;
 
     try {
       await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
         spawnImpl: createSpawn(child.child, []),
-        dispatchId: () => "dispatch-truncated",
+        dispatchId: () => "dispatch-large",
       });
-      child.stderr.end(Buffer.from(`d${survivingTail}`));
+      child.stderr.end(Buffer.from(largeStderr));
       await once(child.stderr, "end");
 
       // act
@@ -1844,9 +1900,9 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: `Review finding:\n\n[…truncated]\n${survivingTail}`,
+            content: `Review finding:\n\n${largeStderr}`,
             display: false,
-            details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-truncated" },
+            details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-large" },
           },
           options: { deliverAs: "nextTurn" },
         },
@@ -2603,15 +2659,7 @@ test("uses the real spawn and generated dispatch ID at the default boundary", as
 });
 
 function setCasePlatform(t: TestContext, platform: NodeJS.Platform): void {
-  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
-  if (descriptor === undefined) {
-    throw new Error("process.platform descriptor is unavailable");
-  }
-
-  t.after(() => {
-    Object.defineProperty(process, "platform", descriptor);
-  });
-  Object.defineProperty(process, "platform", { ...descriptor, value: platform });
+  t.mock.property(process, "platform", platform);
 }
 
 test(

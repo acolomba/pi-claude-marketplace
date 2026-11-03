@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import {
   isScopeBearingListRow,
@@ -12,6 +12,7 @@ import {
   type DeviceFlowPrompt,
   type DeviceFlowPromptSurface,
   type DiagnosticSurface,
+  type HookNoticeSurface,
   type HookSurface,
   type LoadSurface,
   type MarketplaceNotificationMessage,
@@ -426,6 +427,12 @@ void ({
 void ({ kind: "stop-override-cap", pluginId: "official:guard", cap: 8 } satisfies HookSurface);
 // @ts-expect-error D-14: a hook surface is not a load surface
 void ({ kind: "async-rewake-summary", summary: "ready" } satisfies LoadSurface);
+void ({ kind: "hook-notice", text: "UserPromptSubmit says: hi" } satisfies HookNoticeSurface);
+void ({ kind: "hook-notice", text: "UserPromptSubmit says: hi" } satisfies HookSurface);
+// @ts-expect-error D-CF5-14: the bridge composes the notice; the kind carries its text only
+void ({ kind: "hook-notice", text: "hi", label: "UserPromptSubmit" } satisfies HookNoticeSurface);
+// @ts-expect-error D-14: a hook notice is not a load surface
+void ({ kind: "hook-notice", text: "UserPromptSubmit says: hi" } satisfies LoadSurface);
 void ({
   kind: "stop-override-cap",
   pluginId: "official:guard",
@@ -545,316 +552,277 @@ for (const { name, members } of VOCABULARIES) {
   });
 }
 
-for (const { name, row, expected } of [
-  {
-    name: "recognizes an installed list row as scope-bearing",
-    row: installedMessage,
-    expected: true,
-  },
-  {
-    name: "recognizes a disabled list row as scope-bearing",
-    row: {
-      status: "disabled",
+describe("isScopeBearingListRow", () => {
+  for (const { name, row, expected } of [
+    {
+      name: "recognizes an installed list row as scope-bearing",
+      row: installedMessage,
+      expected: true,
+    },
+    {
+      name: "recognizes a disabled list row as scope-bearing",
+      row: {
+        status: "disabled",
+        name: "alpha",
+        severity: "info",
+        needsReload: false,
+      } satisfies PluginNotificationMessage,
+      expected: true,
+    },
+    {
+      name: "recognizes a will-update row as not list-scope-bearing",
+      row: {
+        status: "will update",
+        name: "alpha",
+        from: "1.0.0",
+        to: "1.1.0",
+      } satisfies PluginNotificationMessage,
+      expected: false,
+    },
+    {
+      name: "recognizes an available row as not scope-bearing",
+      row: { status: "available", name: "alpha" } satisfies PluginNotificationMessage,
+      expected: false,
+    },
+    {
+      name: "recognizes a failed row as not list-scope-bearing",
+      row: {
+        status: "failed",
+        name: "alpha",
+        reasons: ["not found"],
+        severity: "error",
+        needsReload: false,
+      } satisfies PluginNotificationMessage,
+      expected: false,
+    },
+  ] as const) {
+    test(name, () => {
+      // act
+      const scopeBearing = isScopeBearingListRow(row);
+
+      // assert
+      assert.equal(scopeBearing, expected);
+    });
+  }
+});
+
+describe("pluginScopeOrFallback", () => {
+  test("returns row scope when present on scope-bearing row", () => {
+    // arrange
+    const row = {
+      status: "installed",
       name: "alpha",
+      version: "1.0.0",
+      dependencies: [],
       severity: "info",
       needsReload: false,
-    } satisfies PluginNotificationMessage,
-    expected: true,
-  },
-  {
-    name: "recognizes a will-update row as not list-scope-bearing",
-    row: {
-      status: "will update",
-      name: "alpha",
-      from: "1.0.0",
-      to: "1.1.0",
-    } satisfies PluginNotificationMessage,
-    expected: false,
-  },
-  {
-    name: "recognizes an available row as not scope-bearing",
-    row: { status: "available", name: "alpha" } satisfies PluginNotificationMessage,
-    expected: false,
-  },
-  {
-    name: "recognizes a failed row as not list-scope-bearing",
-    row: {
-      status: "failed",
-      name: "alpha",
-      reasons: ["not found"],
-      severity: "error",
-      needsReload: false,
-    } satisfies PluginNotificationMessage,
-    expected: false,
-  },
-] as const) {
-  test(name, () => {
+      scope: "project",
+    } satisfies PluginNotificationMessage;
+
     // act
-    const scopeBearing = isScopeBearingListRow(row);
+    const scope = pluginScopeOrFallback(row, "user");
 
     // assert
-    assert.equal(scopeBearing, expected);
+    assert.equal(scope, "project");
   });
-}
 
-test("pluginScopeOrFallback returns row scope when present on scope-bearing row", () => {
-  // arrange
-  const row = {
-    status: "installed",
-    name: "alpha",
-    version: "1.0.0",
-    dependencies: [],
-    severity: "info",
-    needsReload: false,
-    scope: "project",
-  } satisfies PluginNotificationMessage;
-
-  // act
-  const scope = pluginScopeOrFallback(row, "user");
-
-  // assert
-  assert.equal(scope, "project");
-});
-
-test("pluginScopeOrFallback falls back to marketplace scope when scope absent on scope-bearing row", () => {
-  // arrange
-  const row = {
-    status: "installed",
-    name: "alpha",
-    version: "1.0.0",
-    dependencies: [],
-    severity: "info",
-    needsReload: false,
-  } satisfies PluginNotificationMessage;
-
-  // act
-  const scope = pluginScopeOrFallback(row, "user");
-
-  // assert
-  assert.equal(scope, "user");
-});
-
-test("pluginScopeOrFallback falls back to marketplace scope for non-scope-bearing row", () => {
-  // arrange
-  const row = {
-    status: "available",
-    name: "alpha",
-  } satisfies PluginNotificationMessage;
-
-  // act
-  const scope = pluginScopeOrFallback(row, "project");
-
-  // assert
-  assert.equal(scope, "project");
-});
-
-test("pluginVersion returns version when present on supported row", () => {
-  // arrange
-  const row = {
-    status: "installed",
-    name: "alpha",
-    version: "1.2.3",
-    dependencies: [],
-    severity: "info",
-    needsReload: false,
-  } satisfies PluginNotificationMessage;
-
-  // act
-  const version = pluginVersion(row);
-
-  // assert
-  assert.equal(version, "1.2.3");
-});
-
-test("pluginVersion returns target version on updated row", () => {
-  // arrange
-  const row = {
-    status: "updated",
-    name: "alpha",
-    from: "1.0.0",
-    to: "2.0.0",
-    dependencies: [],
-    severity: "info",
-    needsReload: false,
-  } satisfies PluginNotificationMessage;
-
-  // act
-  const version = pluginVersion(row);
-
-  // assert
-  assert.equal(version, "2.0.0");
-});
-
-const pluginVersionCases: readonly {
-  readonly title: string;
-  readonly row: PluginNotificationMessage;
-  readonly expectedVersion: string | undefined;
-}[] = [
-  {
-    title: "returns the version field for an installed row",
-    row: {
+  test("falls back to marketplace scope when scope absent on scope-bearing row", () => {
+    // arrange
+    const row = {
       status: "installed",
-      name: "a",
-      version: "1.0",
+      name: "alpha",
+      version: "1.0.0",
       dependencies: [],
       severity: "info",
       needsReload: false,
-    },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for a reinstalled row",
-    row: {
-      status: "reinstalled",
-      name: "a",
-      version: "1.0",
-      dependencies: [],
-      severity: "info",
-      needsReload: false,
-    },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for an uninstalled row",
-    row: { status: "uninstalled", name: "a", version: "1.0", severity: "info", needsReload: false },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for a disabled row",
-    row: { status: "disabled", name: "a", version: "1.0", severity: "info", needsReload: false },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for an available row",
-    row: { status: "available", name: "a", version: "1.0" },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for a remote row",
-    row: { status: "remote", name: "a", version: "1.0" },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for an unavailable row",
-    row: { status: "unavailable", name: "a", version: "1.0", reasons: [] },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for a partially-available row",
-    row: { status: "partially-available", name: "a", version: "1.0", reasons: [] },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for an upgradable row",
-    row: { status: "upgradable", name: "a", version: "1.0", reasons: [] },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for a partially-installed row",
-    row: {
-      status: "partially-installed",
-      name: "a",
-      version: "1.0",
-      reasons: [],
-      severity: "info",
-      needsReload: false,
-    },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for a partially-upgradable row",
-    row: { status: "partially-upgradable", name: "a", version: "1.0", reasons: [] },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for a failed row",
-    row: { status: "failed", name: "a", version: "1.0", reasons: [], severity: "error" },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the version field for a skipped row",
-    row: { status: "skipped", name: "a", version: "1.0", reasons: [] },
-    expectedVersion: "1.0",
-  },
-  {
-    title: "returns the target version for an updated row",
-    row: {
-      status: "updated",
-      name: "a",
-      from: "1.0",
-      to: "2.0",
-      dependencies: [],
-      severity: "info",
-      needsReload: false,
-    },
-    expectedVersion: "2.0",
-  },
-  {
-    title: "returns undefined for a manual recovery row",
-    row: { status: "manual recovery", name: "a", severity: "warning", reasons: [] },
-    expectedVersion: undefined,
-  },
-  {
-    title: "returns undefined for a will-install row",
-    row: { status: "will install", name: "a" },
-    expectedVersion: undefined,
-  },
-  {
-    title: "returns the recorded version of a will-uninstall row",
-    row: { status: "will uninstall", name: "a", version: "1.2.0" },
-    expectedVersion: "1.2.0",
-  },
-  {
-    title: "returns undefined for a will-enable row",
-    row: { status: "will enable", name: "a" },
-    expectedVersion: undefined,
-  },
-  {
-    title: "returns undefined for a will-disable row",
-    row: { status: "will disable", name: "a" },
-    expectedVersion: undefined,
-  },
-  {
-    title: "returns the catalog version of a will-update row",
-    row: { status: "will update", name: "a", from: "1.0.0", to: "1.1.0" },
-    expectedVersion: "1.1.0",
-  },
-];
+    } satisfies PluginNotificationMessage;
 
-for (const { title, row, expectedVersion } of pluginVersionCases) {
-  test(title, () => {
+    // act
+    const scope = pluginScopeOrFallback(row, "user");
+
+    // assert
+    assert.equal(scope, "user");
+  });
+
+  test("falls back to marketplace scope for non-scope-bearing row", () => {
+    // arrange
+    const row = {
+      status: "available",
+      name: "alpha",
+    } satisfies PluginNotificationMessage;
+
+    // act
+    const scope = pluginScopeOrFallback(row, "project");
+
+    // assert
+    assert.equal(scope, "project");
+  });
+});
+
+describe("pluginVersion", () => {
+  const pluginVersionCases: readonly {
+    readonly title: string;
+    readonly row: PluginNotificationMessage;
+    readonly expectedVersion: string | undefined;
+  }[] = [
+    {
+      title: "returns the version field for an installed row",
+      row: {
+        status: "installed",
+        name: "a",
+        version: "1.0",
+        dependencies: [],
+        severity: "info",
+        needsReload: false,
+      },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for a reinstalled row",
+      row: {
+        status: "reinstalled",
+        name: "a",
+        version: "1.0",
+        dependencies: [],
+        severity: "info",
+        needsReload: false,
+      },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for an uninstalled row",
+      row: {
+        status: "uninstalled",
+        name: "a",
+        version: "1.0",
+        severity: "info",
+        needsReload: false,
+      },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for a disabled row",
+      row: { status: "disabled", name: "a", version: "1.0", severity: "info", needsReload: false },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for an available row",
+      row: { status: "available", name: "a", version: "1.0" },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for a remote row",
+      row: { status: "remote", name: "a", version: "1.0" },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for an unavailable row",
+      row: { status: "unavailable", name: "a", version: "1.0", reasons: [] },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for a partially-available row",
+      row: { status: "partially-available", name: "a", version: "1.0", reasons: [] },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for an upgradable row",
+      row: { status: "upgradable", name: "a", version: "1.0", reasons: [] },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for a partially-installed row",
+      row: {
+        status: "partially-installed",
+        name: "a",
+        version: "1.0",
+        reasons: [],
+        severity: "info",
+        needsReload: false,
+      },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for a partially-upgradable row",
+      row: { status: "partially-upgradable", name: "a", version: "1.0", reasons: [] },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for a failed row",
+      row: { status: "failed", name: "a", version: "1.0", reasons: [], severity: "error" },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the version field for a skipped row",
+      row: { status: "skipped", name: "a", version: "1.0", reasons: [] },
+      expectedVersion: "1.0",
+    },
+    {
+      title: "returns the target version for an updated row",
+      row: {
+        status: "updated",
+        name: "a",
+        from: "1.0",
+        to: "2.0",
+        dependencies: [],
+        severity: "info",
+        needsReload: false,
+      },
+      expectedVersion: "2.0",
+    },
+    {
+      title: "returns undefined for a manual recovery row",
+      row: { status: "manual recovery", name: "a", severity: "warning", reasons: [] },
+      expectedVersion: undefined,
+    },
+    {
+      title: "returns undefined for a will-install row",
+      row: { status: "will install", name: "a" },
+      expectedVersion: undefined,
+    },
+    {
+      title: "returns the recorded version of a will-uninstall row",
+      row: { status: "will uninstall", name: "a", version: "1.2.0" },
+      expectedVersion: "1.2.0",
+    },
+    {
+      title: "returns undefined for a will-enable row",
+      row: { status: "will enable", name: "a" },
+      expectedVersion: undefined,
+    },
+    {
+      title: "returns undefined for a will-disable row",
+      row: { status: "will disable", name: "a" },
+      expectedVersion: undefined,
+    },
+    {
+      title: "returns the catalog version of a will-update row",
+      row: { status: "will update", name: "a", from: "1.0.0", to: "1.1.0" },
+      expectedVersion: "1.1.0",
+    },
+  ];
+
+  for (const { title, row, expectedVersion } of pluginVersionCases) {
+    test(title, () => {
+      // act
+      const version = pluginVersion(row);
+
+      // assert
+      assert.equal(version, expectedVersion);
+    });
+  }
+
+  test("returns undefined when version omitted on supported row", () => {
+    // arrange
+    const row = {
+      status: "available",
+      name: "alpha",
+    } satisfies PluginNotificationMessage;
+
     // act
     const version = pluginVersion(row);
 
     // assert
-    assert.equal(version, expectedVersion);
+    assert.equal(version, undefined);
   });
-}
-
-test("pluginVersion returns undefined when version omitted on supported row", () => {
-  // arrange
-  const row = {
-    status: "available",
-    name: "alpha",
-  } satisfies PluginNotificationMessage;
-
-  // act
-  const version = pluginVersion(row);
-
-  // assert
-  assert.equal(version, undefined);
-});
-
-test("pluginVersion returns undefined for non-versioned row statuses", () => {
-  // arrange
-  const row = {
-    status: "will install",
-    name: "alpha",
-  } satisfies PluginNotificationMessage;
-
-  // act
-  const version = pluginVersion(row);
-
-  // assert
-  assert.equal(version, undefined);
 });

@@ -24,7 +24,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 
 - Comandos.
 - Habilidades.
-- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents).
+- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`.
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
 - Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 - Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
@@ -35,12 +35,14 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 
 ## Requisitos previos
 
-- [Pi Coding Agent](https://pi.dev) 1.0.0 o posterior
-- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.74.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.2.0 o una versión 5.x posterior (opcional pero recomendado, `pi install npm:pi-mcp-adapter`). La compatibilidad con MCP integrada en Pi no cumple este requisito.
-- [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
+- [Pi Coding Agent](https://pi.dev) 1.4.0 o posterior
+- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 o una versión 7.x posterior (opcional pero recomendado, `pi install npm:pi-mcp-adapter`).
+- [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 o posterior (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Uso
+
+Para scripts, consulta [Salida JSON](docs/json-output.md).
 
 Instala la extensión de Pi:
 
@@ -108,15 +110,18 @@ Los comandos usan dos puntos (`:`) en POSIX y un punto (`.`) en Windows:
 | `foo`                  | `foo-bar`          | `/foo:bar`           | `/foo.bar`             |
 | `foo`                  | `foo`              | `/foo:foo`           | `/foo.foo`             |
 
-Las habilidades usan la forma `/skill:` de Pi y también tienen un alias en las sesiones interactivas:
+Un comando también tiene alias en las sesiones interactivas y por RPC. Si el frontmatter del comando define `name`, el comando también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos. Por ejemplo, `bar` con el frontmatter `name: baz` en el complemento `foo` también responde a `/foo:baz` y a `/baz`. Si dos comandos definen el mismo `name`, el primer comando recibe el alias. Una habilidad conserva un alias que ya tiene. Los alias de comandos usan dos puntos en todas las plataformas.
 
-| Nombre del complemento | Nombre de la habilidad | Forma de Pi      | Alias interactivo |
-| ---------------------- | ---------------------- | ---------------- | ----------------- |
-| `foo`                  | `bar`                  | `/skill:foo-bar` | `/foo:bar`        |
-| `foo`                  | `foo-bar`              | `/skill:foo-bar` | `/foo:bar`        |
-| `foo`                  | `foo`                  | `/skill:foo`     | `/foo:foo`        |
+Las habilidades usan la forma `/skill:` de Pi y también tienen alias en las sesiones interactivas y por RPC:
 
-Los alias de habilidades usan dos puntos en todas las plataformas. Si un alias entra en conflicto con un comando, el comando tiene prioridad. Usa `/skill:foo-bar` para ejecutar la habilidad.
+| Nombre del complemento | Nombre de la habilidad                   | Forma de Pi      | Alias                          |
+| ---------------------- | ---------------------------------------- | ---------------- | ------------------------------ |
+| `foo`                  | `bar`                                    | `/skill:foo-bar` | `/foo:bar`                     |
+| `foo`                  | `foo-bar`                                | `/skill:foo-bar` | `/foo:foo-bar`                 |
+| `foo`                  | `foo`                                    | `/skill:foo`     | `/foo:foo`                     |
+| `foo`                  | `bar`, con `name: baz` en el frontmatter | `/skill:foo-bar` | `/foo:bar`, `/foo:baz`, `/baz` |
+
+Los alias son los nombres que Claude Code da a una habilidad. El nombre de la habilidad es el nombre de su carpeta. Si el frontmatter de la habilidad define `name`, la habilidad también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos.
 
 Los servidores MCP de los complementos reciben los nombres que les da Claude Code. El modelo ve cada herramienta como `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter guarda cada servidor bajo una clave que termina en `_`. `/claude:plugin info` muestra cada servidor como `plugin:<plugin>:<server>`.
 
@@ -136,7 +141,7 @@ También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y
 
 ### Complementos parcialmente disponibles
 
-Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema o un servidor MCP que usa una función que pi-mcp-adapter no puede ejecutar. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
+Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema, un servidor MCP que usa una función que pi-mcp-adapter no puede ejecutar o un paquete MCP. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
 
 Lista los complementos parcialmente disponibles.
 
@@ -250,6 +255,15 @@ Fija un mercado de GitHub a una rama, etiqueta o confirmación con un sufijo `#r
 /claude:plugin marketplace add https://github.com/upstash/context7-marketplace#v1.0.30
 ```
 
+Agrega un mercado desde otro host git `https://`, como GitLab.
+
+```text
+/claude:plugin marketplace add https://gitlab.com/my-group/my-marketplace
+```
+
+> [!NOTE]
+> La autenticación Device Flow también cubre `gitlab.com`. Los hosts que no son GitHub necesitan la URL `https://` completa; la forma abreviada `owner/repo` solo apunta a GitHub.
+
 Agrega un mercado desde el sistema de archivos local. La ruta puede ser un directorio con `.claude-plugin/marketplace.json`, o una ruta directa a un archivo `marketplace.json`.
 
 ```text
@@ -296,6 +310,7 @@ Elimina un mercado y desinstala sus complementos. Una dependencia que otro compl
 `autoupdate` es un ajuste de cada mercado. Controla lo que pasa cuando el mercado se actualiza:
 
 - Si `autoupdate` está activado, la extensión actualiza el mercado y sus complementos instalados en segundo plano. La actualización empieza después del primer mensaje de una sesión `tui`, con un retraso aleatorio de hasta diez minutos. Un `marketplace update` manual también actualiza los complementos instalados del mercado.
+- La actualización en segundo plano cambia los mercados del ámbito del proyecto solo cuando Pi confía en el proyecto.
 - Si `autoupdate` está desactivado, `marketplace update` solo actualiza la lista de complementos del mercado.
 
 Activa o desactiva `autoupdate` para un mercado.
@@ -362,7 +377,7 @@ Actualiza un complemento instalado, todos los complementos instalados de un merc
 ```
 
 > [!NOTE]
-> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`.
+> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`. Mapea `sonnet`, `opus`, `haiku`, `fable`, `best` y `opusplan`, con o sin `[1m]`, a los modelos actuales de Claude, por ejemplo `anthropic/claude-sonnet-5-5`. Conserva los ID de modelo completos que empiezan por `claude-`.
 
 Reinstala un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 
@@ -385,7 +400,37 @@ Desinstala un complemento.
 /claude:plugin uninstall context7-plugin@context7-marketplace
 ```
 
-Recarga Pi después de los cambios.
+Conserva la carpeta de datos del complemento con `--keep-data`.
+
+```text
+/claude:plugin uninstall context7-plugin@context7-marketplace --keep-data
+```
+
+Elimina también las dependencias que ya no necesita ningún complemento restante con `--prune`.
+
+```text
+/claude:plugin uninstall context7-plugin@context7-marketplace --prune
+```
+
+Puedes desinstalar un complemento que otro complemento instalado necesita. Su fila nombra a los dependientes activados como `{dependents unsatisfied}`. El siguiente `/claude:plugin apply` vuelve a instalar el complemento como dependencia, porque los dependientes todavía lo declaran. Si esa instalación falla, `apply` desactiva esos dependientes. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
+
+Para eliminar las instalaciones de dependencias huérfanas sin nombrar un complemento que desinstalar, ejecuta `prune`. Selecciona el ámbito del usuario de forma predeterminada. Usa `--scope project` para seleccionar el ámbito del proyecto.
+
+```text
+/claude:plugin prune
+/claude:plugin prune --scope project
+```
+
+Previsualiza el mismo ámbito con `--dry-run`. La vista previa lee el estado actual y no escribe nada. Un `prune` posterior vuelve a comprobar el estado, así que su resultado puede cambiar.
+
+```text
+/claude:plugin prune --dry-run
+/claude:plugin prune --scope project --dry-run
+```
+
+Solo cuentan los complementos instalados como dependencia que ningún complemento instalado del mismo ámbito declara. Incluso los complementos desactivados conservan sus dependencias. Los complementos que instalaste por su nombre siguen instalados. La limpieza se repite hasta que ningún complemento cumple la condición. Las filas reales dicen `(uninstalled) {dependency pruned}`; las filas de la vista previa dicen `(will uninstall) {dependency pruned}`. Si ninguno cumple la condición, los dos comandos informan `Nothing to prune in user scope: no orphaned dependency installs were found.` para el ámbito predeterminado.
+
+Recarga Pi después de los cambios. Ni `/reload` ni `/claude:plugin apply` eliminan las dependencias huérfanas. Ejecuta `prune` o `uninstall <plugin> --prune` para eliminarlas.
 
 ```text
 /reload

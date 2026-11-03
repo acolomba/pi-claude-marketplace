@@ -10,6 +10,12 @@ import {
 void ({ type: "command", command: "/bin/true" } satisfies HookHandlerEntry);
 void ({ type: "future-handler", futureHandlerField: true } satisfies HookHandlerEntry);
 void ({
+  type: "command",
+  command: "/bin/true",
+  once: true,
+  onFailure: "block",
+} satisfies HookHandlerEntry);
+void ({
   PreToolUse: [
     {
       matcher: "Edit",
@@ -40,6 +46,17 @@ describe("HOOKS_VALIDATOR", () => {
           {
             matcher: "Edit",
             hooks: [{ type: "command", command: "/bin/true" }],
+          },
+        ],
+      },
+    },
+    {
+      role: "a command handler with once and onFailure",
+      config: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [{ type: "command", command: "/bin/true", once: true, onFailure: "block" }],
           },
         ],
       },
@@ -150,12 +167,12 @@ function walkSchemaForStrictAdditionalProperties(schema: unknown, path: string[]
     return offenders;
   }
 
-  const obj = schema as Record<string, unknown>;
-  if (obj.additionalProperties === false) {
+  const properties = schema as Record<string, unknown>;
+  if (properties.additionalProperties === false) {
     offenders.push(path.length === 0 ? "<root>" : path.join("."));
   }
 
-  for (const [key, child] of Object.entries(obj)) {
+  for (const [key, child] of Object.entries(properties)) {
     if (child === null || typeof child !== "object") {
       continue;
     }
@@ -167,10 +184,43 @@ function walkSchemaForStrictAdditionalProperties(schema: unknown, path: string[]
 }
 
 test("HOOK-03: the live hook validator schema carries NO `additionalProperties: false` at any nesting level", () => {
-  const offenders = walkSchemaForStrictAdditionalProperties(HOOKS_VALIDATOR.Type(), []);
+  // arrange
+  const schema = HOOKS_VALIDATOR.Type();
+
+  // act
+  const offenders = walkSchemaForStrictAdditionalProperties(schema, []);
+
+  // assert
   assert.deepStrictEqual(
     offenders,
     [],
     `HOOK-03 lenient stance violated -- strict gates found at: ${offenders.join(", ")}`,
   );
+});
+
+test("D-CF5-17 / D-CF5-18: the handler schema lists once and onFailure without constraining them", () => {
+  // arrange
+  const schema = JSON.parse(JSON.stringify(HOOKS_VALIDATOR.Type())) as {
+    patternProperties: Record<
+      string,
+      { items: { properties: { hooks: { items: { properties: Record<string, unknown> } } } } }
+    >;
+  };
+
+  // act
+  const handlerProperties = Object.values(schema.patternProperties)[0]?.items.properties.hooks.items
+    .properties;
+
+  // assert
+  assert.deepStrictEqual(handlerProperties, {
+    type: { type: "string" },
+    command: { type: "string" },
+    if: { type: "string" },
+    timeout: {},
+    asyncRewake: {},
+    rewakeMessage: {},
+    rewakeSummary: {},
+    once: {},
+    onFailure: {},
+  });
 });

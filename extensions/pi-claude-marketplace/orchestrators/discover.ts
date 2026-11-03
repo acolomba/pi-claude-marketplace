@@ -14,15 +14,22 @@ export interface DiscoveredResources {
 
 type ResourceKind = ResourcesDiscoverFailure["kind"];
 
+/**
+ * The staged skill directories and prompt files of the user scope, then of
+ * the project scope. T-02-17: `projectLocations` is `undefined` for a project
+ * Pi does not trust, and its resources are then left out.
+ */
 export async function aggregateDiscoveredResources(
   userLocations: ScopedLocations,
-  projectLocations: ScopedLocations,
+  projectLocations: ScopedLocations | undefined,
 ): Promise<DiscoveredResources> {
   const skillPaths: string[] = [];
   const promptPaths: string[] = [];
   const failures: ResourcesDiscoverFailure[] = [];
+  const scopes =
+    projectLocations === undefined ? [userLocations] : [userLocations, projectLocations];
 
-  for (const locations of [userLocations, projectLocations]) {
+  for (const locations of scopes) {
     // eslint-disable-next-line no-await-in-loop -- two scopes, one skills-dir read each
     await collectForKind(
       locations,

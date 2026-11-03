@@ -41,6 +41,7 @@ import {
   PluginShapeError,
   StoredCredentialRejectedError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -1011,6 +1012,28 @@ test("cascadeUnstagePlugin removes every recorded workflow envelope", async (t) 
   assert.deepStrictEqual(outcome.dropped.workflows, ["sample:greet", "sample:farewell"]);
   await assert.rejects(() => stat(firstPath), { code: "ENOENT" });
   await assert.rejects(() => stat(secondPath), { code: "ENOENT" });
+});
+
+test("PI-14: cascadeUnstagePlugin drops the removed envelopes and surfaces a refusal on the former path", async (t) => {
+  // arrange -- the current envelope is removed first, then the former path
+  // refuses; the plugin record must not keep naming the envelope that is gone.
+  const { locations } = await createProjectScope(t, "cascade-workflows-refusal");
+  const currentPath = await seedWorkflowEnvelope(locations, "sample:greet");
+  const formerDirectory = locations.formerWorkflowsSavedDir ?? "";
+  await mkdir(formerDirectory, { recursive: true });
+  const linkedFormerPath = path.join(formerDirectory, "sample:greet.json");
+  await symlink(currentPath, linkedFormerPath, "file");
+  const record = pluginRecord({ workflows: ["sample:greet"] });
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.equal(outcome.ok, false);
+  assert.deepStrictEqual(outcome.dropped.workflows, ["sample:greet"]);
+  assert.ok(!outcome.ok && outcome.cause instanceof SymlinkRefusedError);
+  assert.equal(outcome.cause.linkPath, linkedFormerPath);
+  await assert.rejects(() => stat(currentPath), { code: "ENOENT" });
 });
 
 test("cascadeUnstagePlugin reports an empty workflows axis for an empty inventory", async (t) => {

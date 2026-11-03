@@ -39,6 +39,7 @@ const LOCATION_KEYS = [
   "marketplaceNamesCacheFile",
   "workflowsHomeDir",
   "workflowsSavedDir",
+  "formerWorkflowsSavedDir",
   "workflowsStagingDir",
   "pluginDataDir",
   "marketplaceDataDir",
@@ -47,6 +48,7 @@ const LOCATION_KEYS = [
   "sourcesStagingDir",
   "pluginCacheFile",
   "workflowArtifactPath",
+  "formerWorkflowArtifactPath",
 ] as const;
 
 function fixedLocationBundle(locations: ScopedLocations) {
@@ -558,16 +560,18 @@ test("derives every user-scope workflows path from the home directory", async (t
   );
 });
 
-test("WPTH-01 branches only the saved directory on scope", async (t) => {
+test("D-LOC-01 keeps every project-scope workflows path inside the project", async (t) => {
   // arrange
-  const home = await hermeticHome(t, "project-saved");
+  const home = await hermeticHome(t, "project-values");
   const projectDirectory = await temporaryDirectory(t, "project-cwd");
+  const scopeRoot = path.join(projectDirectory, ".pi");
   // The project key is obtained from its own module rather than transcribed:
   // this case asserts where the key LANDS, and the derivation itself is pinned
-  // by a literal parity table in that module's own owner test. A second copy of
-  // those literals here would give the derivation two sources of truth.
+  // by a literal parity table in that module's own owner test.
   const expectedProjectValues = {
-    workflowsSavedDir: path.join(
+    workflowsHomeDir: scopeRoot,
+    workflowsSavedDir: path.join(scopeRoot, "workflows", "saved"),
+    formerWorkflowsSavedDir: path.join(
       home,
       ".pi",
       "workflows",
@@ -575,33 +579,8 @@ test("WPTH-01 branches only the saved directory on scope", async (t) => {
       workflowProjectKey(projectDirectory),
       "saved",
     ),
-    homeMatchesUserScope: true,
-    stagingMatchesUserScope: true,
+    workflowsStagingDir: path.join(scopeRoot, "pi-claude-marketplace", "workflows-staging"),
   };
-
-  // act
-  const userLocations = locationsFor("user", projectDirectory);
-  const projectLocations = locationsFor("project", projectDirectory);
-
-  // assert
-  assert.deepStrictEqual(
-    {
-      workflowsSavedDir: projectLocations.workflowsSavedDir,
-      homeMatchesUserScope: projectLocations.workflowsHomeDir === userLocations.workflowsHomeDir,
-      stagingMatchesUserScope:
-        projectLocations.workflowsStagingDir === userLocations.workflowsStagingDir,
-    },
-    expectedProjectValues,
-  );
-});
-
-test("WPTH-02 roots the saved directory under the home and never under the project", async (t) => {
-  // arrange
-  await hermeticHome(t, "home-derived");
-  // A project directory distinct from the relocated home is what makes the
-  // home derivation observable: with one directory serving as both, these
-  // assertions pass just as happily for a project-derived saved directory.
-  const projectDirectory = await temporaryDirectory(t, "home-derived-cwd");
 
   // act
   const locations = locationsFor("project", projectDirectory);
@@ -609,36 +588,45 @@ test("WPTH-02 roots the saved directory under the home and never under the proje
   // assert
   assert.deepStrictEqual(
     {
-      underProjectDirectory: isInsideDirectory(projectDirectory, locations.workflowsSavedDir),
-      legacyProjectPath:
-        locations.workflowsSavedDir === path.join(projectDirectory, ".pi", "workflows", "saved"),
+      workflowsHomeDir: locations.workflowsHomeDir,
+      workflowsSavedDir: locations.workflowsSavedDir,
+      formerWorkflowsSavedDir: locations.formerWorkflowsSavedDir,
+      workflowsStagingDir: locations.workflowsStagingDir,
     },
-    { underProjectDirectory: false, legacyProjectPath: false },
+    expectedProjectValues,
   );
 });
 
-test("WPTH-05 keeps the staging directory outside every scope and extension root when PI_CODING_AGENT_DIR is unset", async (t) => {
+test("D-LOC-01 gives the user scope no former saved directory", async (t) => {
   // arrange
-  await hermeticHome(t, "staging-invariant");
-  const firstProjectDirectory = await temporaryDirectory(t, "staging-cwd-first");
-  const secondProjectDirectory = await temporaryDirectory(t, "staging-cwd-second");
+  await hermeticHome(t, "user-former");
+  const projectDirectory = await temporaryDirectory(t, "user-former-cwd");
+  const locations = locationsFor("user", projectDirectory);
 
   // act
-  const userLocations = locationsFor("user", firstProjectDirectory);
-  const projectLocations = locationsFor("project", secondProjectDirectory);
+  const formerPath = await locations.formerWorkflowArtifactPath("acme:deploy");
 
   // assert
-  // Two bundles under one home but with differing project directories. A
-  // refactor that rerouted staging under the extension root would break both
-  // the equality and the containment booleans; a rename-fails assertion would
-  // not, because whether the two roots land on one filesystem is a property of
-  // the machine, not of the code. The user-scope-root boolean holds only while
-  // `PI_CODING_AGENT_DIR` is unset: with it set, the workflow root sits inside
-  // the agent directory, which is that scope root (WPTH-04).
+  assert.deepStrictEqual(
+    { formerWorkflowsSavedDir: locations.formerWorkflowsSavedDir, formerPath },
+    { formerWorkflowsSavedDir: undefined, formerPath: undefined },
+  );
+});
+
+test("WPTH-05 keeps the user staging directory outside every scope and extension root when PI_CODING_AGENT_DIR is unset", async (t) => {
+  // arrange
+  await hermeticHome(t, "staging-invariant");
+  const projectDirectory = await temporaryDirectory(t, "staging-cwd");
+
+  // act
+  const userLocations = locationsFor("user", projectDirectory);
+
+  // assert
+  // The user-scope-root boolean holds only while `PI_CODING_AGENT_DIR` is
+  // unset: with it set, the workflow root sits inside the agent directory,
+  // which is that scope root (WPTH-04).
   assert.deepStrictEqual(
     {
-      stagingIsIdentical:
-        userLocations.workflowsStagingDir === projectLocations.workflowsStagingDir,
       insideUserScopeRoot: isInsideDirectory(
         userLocations.scopeRoot,
         userLocations.workflowsStagingDir,
@@ -647,26 +635,12 @@ test("WPTH-05 keeps the staging directory outside every scope and extension root
         userLocations.extensionRoot,
         userLocations.workflowsStagingDir,
       ),
-      insideProjectScopeRoot: isInsideDirectory(
-        projectLocations.scopeRoot,
-        projectLocations.workflowsStagingDir,
-      ),
-      insideProjectExtensionRoot: isInsideDirectory(
-        projectLocations.extensionRoot,
-        projectLocations.workflowsStagingDir,
-      ),
     },
-    {
-      stagingIsIdentical: true,
-      insideUserScopeRoot: false,
-      insideUserExtensionRoot: false,
-      insideProjectScopeRoot: false,
-      insideProjectExtensionRoot: false,
-    },
+    { insideUserScopeRoot: false, insideUserExtensionRoot: false },
   );
 });
 
-test("roots every workflows path under PI_CODING_AGENT_DIR when it is set", async (t) => {
+test("roots every user workflows path under PI_CODING_AGENT_DIR when it is set, and the former project one", async (t) => {
   // arrange
   await hermeticHome(t, "agent-dir-values");
   const agentDirectory = await temporaryDirectory(t, "agent-dir");
@@ -674,21 +648,15 @@ test("roots every workflows path under PI_CODING_AGENT_DIR when it is set", asyn
   process.env.PI_CODING_AGENT_DIR = agentDirectory;
   const workflowsHome = path.join(agentDirectory, "workflows");
   const expectedValues = {
-    user: {
-      workflowsHomeDir: workflowsHome,
-      workflowsSavedDir: path.join(workflowsHome, "saved"),
-      workflowsStagingDir: path.join(workflowsHome, ".pi-claude-marketplace-staging"),
-    },
-    project: {
-      workflowsHomeDir: workflowsHome,
-      workflowsSavedDir: path.join(
-        workflowsHome,
-        "projects",
-        workflowProjectKey(projectDirectory),
-        "saved",
-      ),
-      workflowsStagingDir: path.join(workflowsHome, ".pi-claude-marketplace-staging"),
-    },
+    workflowsHomeDir: workflowsHome,
+    workflowsSavedDir: path.join(workflowsHome, "saved"),
+    workflowsStagingDir: path.join(workflowsHome, ".pi-claude-marketplace-staging"),
+    formerProjectSavedDir: path.join(
+      workflowsHome,
+      "projects",
+      workflowProjectKey(projectDirectory),
+      "saved",
+    ),
   };
 
   // act
@@ -698,81 +666,66 @@ test("roots every workflows path under PI_CODING_AGENT_DIR when it is set", asyn
   // assert
   assert.deepStrictEqual(
     {
-      user: {
-        workflowsHomeDir: userLocations.workflowsHomeDir,
-        workflowsSavedDir: userLocations.workflowsSavedDir,
-        workflowsStagingDir: userLocations.workflowsStagingDir,
-      },
-      project: {
-        workflowsHomeDir: projectLocations.workflowsHomeDir,
-        workflowsSavedDir: projectLocations.workflowsSavedDir,
-        workflowsStagingDir: projectLocations.workflowsStagingDir,
-      },
+      workflowsHomeDir: userLocations.workflowsHomeDir,
+      workflowsSavedDir: userLocations.workflowsSavedDir,
+      workflowsStagingDir: userLocations.workflowsStagingDir,
+      formerProjectSavedDir: projectLocations.formerWorkflowsSavedDir,
     },
     expectedValues,
   );
 });
 
-test("WPTH-05 keeps staging outside the extension root when PI_CODING_AGENT_DIR is set", async (t) => {
+for (const scope of ["user", "project"] as const) {
+  test(`keeps the ${scope} staging directory and saved directory under one workflows home`, async (t) => {
+    // arrange
+    await hermeticHome(t, `adjacency-${scope}`);
+    const projectDirectory = await temporaryDirectory(t, `adjacency-${scope}-cwd`);
+
+    // act
+    const locations = locationsFor(scope, projectDirectory);
+
+    // assert
+    // WPTH-05 / NFR-1: one root holds both, so the commit rename stays inside
+    // one filesystem.
+    assert.deepStrictEqual(
+      {
+        stagingUnderHome: isInsideDirectory(
+          locations.workflowsHomeDir,
+          locations.workflowsStagingDir,
+        ),
+        savedUnderHome: isInsideDirectory(locations.workflowsHomeDir, locations.workflowsSavedDir),
+      },
+      { stagingUnderHome: true, savedUnderHome: true },
+    );
+  });
+}
+
+test("composes a former workflow artifact path of a project from a safe generated name", async (t) => {
   // arrange
-  await hermeticHome(t, "staging-agent-dir");
-  const agentDirectory = await temporaryDirectory(t, "staging-agent-dir-root");
-  const projectDirectory = await temporaryDirectory(t, "staging-agent-dir-cwd");
-  process.env.PI_CODING_AGENT_DIR = agentDirectory;
-
-  // act
-  const userLocations = locationsFor("user", projectDirectory);
-  const projectLocations = locationsFor("project", projectDirectory);
-
-  // assert
-  assert.deepStrictEqual(
-    {
-      insideUserScopeRoot: isInsideDirectory(
-        userLocations.scopeRoot,
-        userLocations.workflowsStagingDir,
-      ),
-      insideUserExtensionRoot: isInsideDirectory(
-        userLocations.extensionRoot,
-        userLocations.workflowsStagingDir,
-      ),
-      insideProjectExtensionRoot: isInsideDirectory(
-        projectLocations.extensionRoot,
-        projectLocations.workflowsStagingDir,
-      ),
-    },
-    {
-      insideUserScopeRoot: true,
-      insideUserExtensionRoot: false,
-      insideProjectExtensionRoot: false,
-    },
+  const home = await hermeticHome(t, "former-artifact-path");
+  const projectDirectory = await temporaryDirectory(t, "former-artifact-cwd");
+  const expectedPath = path.join(
+    home,
+    ".pi",
+    "workflows",
+    "projects",
+    workflowProjectKey(projectDirectory),
+    "saved",
+    "acme:deploy.json",
   );
-});
-
-test("keeps the staging directory adjacent to the saved directory", async (t) => {
-  // arrange
-  const home = await hermeticHome(t, "adjacency");
-  const projectDirectory = await temporaryDirectory(t, "adjacency-cwd");
-  const expectedAdjacency = {
-    stagingParent: path.join(home, ".pi", "workflows"),
-    savedUnderWorkflowHome: true,
-  };
-
-  // act
   const locations = locationsFor("project", projectDirectory);
 
+  // act
+  const formerPath = await locations.formerWorkflowArtifactPath("acme:deploy");
+  const unsafePath = locations.formerWorkflowArtifactPath("../escape");
+
   // assert
-  // Weak on its own: it restates the composer, so it guards a careless edit
-  // rather than standing in for the cross-configuration invariant above.
-  assert.deepStrictEqual(
-    {
-      stagingParent: path.dirname(locations.workflowsStagingDir),
-      savedUnderWorkflowHome: isInsideDirectory(
-        locations.workflowsHomeDir,
-        locations.workflowsSavedDir,
-      ),
-    },
-    expectedAdjacency,
-  );
+  assert.strictEqual(formerPath, expectedPath);
+  await assert.rejects(unsafePath, {
+    name: "Error",
+    message:
+      'formerWorkflowArtifactPath workflow name "../escape" "../escape" must not contain path separators.',
+  });
 });
 
 test("composes a workflow artifact path from a safe generated name", async (t) => {

@@ -38,6 +38,7 @@ import { convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
 import { discoverPluginAgents } from "./discover.ts";
 import { assertAgentNamesUnclaimed, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
+import { readSkillPreloads } from "./skill-preload.ts";
 
 import type {
   ConvertedAgent,
@@ -101,6 +102,23 @@ export async function prepareStagePluginAgents(
   const discovered: readonly DiscoveredAgent[] = discoverResult.discovered;
   const discoverWarnings: readonly string[] = discoverResult.warnings;
 
+  // D-CF4-04: read the source of every skill an agent preloads, once, with
+  // the same project folder and reference names the agent bodies get.
+  const skillPreloads = await readSkillPreloads({
+    discovered,
+    knownSkills: knownSkills ?? [],
+    skillSources: input.skillSources,
+    pluginName,
+    pluginRoot,
+    pluginDataDir,
+    projectDir,
+    referenceNames: input.referenceNames ?? {
+      skills: knownSkills ?? [],
+      commands: [],
+      workflows: [],
+    },
+  });
+
   // Step 2: convert (AG-7 + AG-11). AG-11 throws here if mapped tools is empty.
   // `mapModel` defaults to false: the omit-by-default behavior is the
   // contract; only explicit `--map-model` on install/update flips it on.
@@ -116,6 +134,7 @@ export async function prepareStagePluginAgents(
       mapModel: mapModel ?? false,
       projectDir,
       mcpServerNames: input.mcpServerNames,
+      skillPreloads,
     }),
   );
 

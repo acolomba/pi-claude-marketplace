@@ -10,8 +10,11 @@ import {
   McpServerCollisionError,
   McpServerKeyCollisionError,
   McpUnstagePartialError,
+  SkillFrontmatterNodeError,
+  WorkflowsUnstageRefusedError,
   WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import { PathContainmentError } from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { AgentOwnershipConflict } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
@@ -538,6 +541,38 @@ describe("McpUnstagePartialError", () => {
   });
 });
 
+describe("WorkflowsUnstageRefusedError", () => {
+  test("PI-14: carries a frozen copy of the removed names and the refusal as its cause", () => {
+    // arrange
+    const cause = new PathContainmentError("/saved", "/outside", "workflow envelope");
+    const removedNames = ["acme:deploy"];
+
+    // act
+    const error = new WorkflowsUnstageRefusedError(removedNames, cause);
+    removedNames.push("acme:later");
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        removedNames: error.removedNames,
+        cause: error.cause,
+        refusal: error.refusal,
+        frozen: Object.isFrozen(error.removedNames),
+      },
+      {
+        name: "WorkflowsUnstageRefusedError",
+        message: "Workflows unstage stopped on a containment refusal.",
+        removedNames: ["acme:deploy"],
+        cause,
+        refusal: cause,
+        frozen: true,
+      },
+    );
+  });
+});
+
 describe("BridgeStagingError", () => {
   test("preserves its complete message and cause", () => {
     // arrange
@@ -733,4 +768,48 @@ describe("WorkflowTargetOccupiedError", () => {
     // assert
     assert.strictEqual(error.targetPath, targetPath);
   });
+});
+
+describe("SkillFrontmatterNodeError", () => {
+  for (const { skill, message } of [
+    {
+      skill: undefined,
+      message:
+        'The skill frontmatter holds "name" on line 2 in one node with other keys (name, description); write each key on its own line.',
+    },
+    {
+      skill: "review",
+      message:
+        'The frontmatter of the skill "review" holds "name" on line 2 in one node with other keys (name, description); write each key on its own line.',
+    },
+  ]) {
+    test(`WR-05: names the key, its line, the node's keys${skill === undefined ? "" : " and the skill"}`, () => {
+      // arrange
+      const keys = ["name", "description"];
+
+      // act
+      const error = new SkillFrontmatterNodeError("name", 2, keys, skill);
+
+      // assert
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          key: error.key,
+          line: error.line,
+          keys: error.keys,
+          skill: error.skill,
+        },
+        {
+          name: "SkillFrontmatterNodeError",
+          message,
+          key: "name",
+          line: 2,
+          keys: ["name", "description"],
+          skill,
+        },
+      );
+    });
+  }
 });

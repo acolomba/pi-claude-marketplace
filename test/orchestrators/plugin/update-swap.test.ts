@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -229,7 +239,7 @@ async function assertAgentsMigrated(params: {
     });
     assert.strictEqual(
       await readFile(targetPath, "utf8"),
-      `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${agentSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+      `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${agentSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
     );
   }
 
@@ -695,7 +705,7 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
   });
   assert.strictEqual(
     await readFile(target, "utf8"),
-    `---\nname: hello:bot\ndescription: Imported Claude Code plugin agent bot from plugin hello.\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - source description was missing or empty -- using fallback\n---\n\nBody.\n`,
+    `---\nname: hello:bot\ndescription: Agent from hello plugin\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - source description was missing or empty -- using fallback\n---\n\nBody.\n`,
   );
   assert.deepStrictEqual(JSON.parse(await readFile(args.locations.agentsIndexPath, "utf8")), {
     schemaVersion: 1,
@@ -931,6 +941,113 @@ test("D-PL1-14: a phase-3 failure puts every handle's warnings on its failed out
   });
 });
 
+test("D-CF1-06: a swap to a version whose declared commands path leaves commands/ unread warns before the bridges", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-shadowed-folder-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: {
+        version: "2.0.0",
+        hasSkill: false,
+        hasCommand: true,
+        agents: [
+          { sourceName: "first", frontmatterName: "helper", description: "First" },
+          { sourceName: "second", frontmatterName: "helper", description: "Second" },
+        ],
+      },
+    },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "2.0.0", commands: "./custom" }),
+  );
+  await mkdir(path.join(pluginRoot, "custom"), { recursive: true });
+  const agentsDir = path.join(pluginRoot, "agents");
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    resourcesChanged: true,
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    stagedAgentNames: ["pi-claude-marketplace-hello-helper"],
+    stagedMcpServerNames: [],
+    declaresAgents: true,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+    stagingWarnings: [
+      {
+        kind: "discovery",
+        message: 'Default commands/ folder is ignored because the manifest sets "commands"',
+      },
+      {
+        kind: "discovery",
+        message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-hello-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+      },
+    ],
+  });
+});
+
+test("a swap to a version whose workflow takes a command's name warns and stages no prompt for it", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-workflow-command-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasCommand: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "workflows", "deploy.js"),
+    'export const meta = { name: "deploy", description: "Deploys." };\n',
+  );
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+  const locations = locationsFor("project", cwd);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+  const prompts = await readdir(locations.promptsTargetDir).catch(() => []);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      stagingWarnings: "stagingWarnings" in outcome ? outcome.stagingWarnings : undefined,
+      prompts,
+    },
+    {
+      partition: "updated",
+      stagingWarnings: [
+        {
+          kind: "discovery",
+          message:
+            'command source "deploy" has the same name "hello:deploy" as a workflow of the plugin; ignoring the command.',
+        },
+      ],
+      prompts: [],
+    },
+  );
+});
+
 test("NREG-01: a clean swap's updated outcome has neither stagingWarnings nor notes", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-clean-warnings-");
@@ -976,11 +1093,6 @@ test("D-18-15 / NFR-3: without an overwrite policy a user-edited previous agent 
   assert.strictEqual(await readFile(target, "utf8"), editedBytes);
   assert.strictEqual(await readFile(args.locations.agentsIndexPath, "utf8"), indexBytes);
   assert.strictEqual(await readFile(args.locations.stateJsonPath, "utf8"), stateBefore);
-});
-
-test("exposes the atomic plugin update swap owner", () => {
-  // act & assert
-  assert.strictEqual(typeof swapPluginUpdate, "function");
 });
 
 test("atomically replaces staged resources and finalizes the update ledger", async () => {

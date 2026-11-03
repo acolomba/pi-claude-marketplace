@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { RingBuffer } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -12,6 +11,8 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts";
 import type {
   CacheEntry,
+  PendingFollowUpContext,
+  PendingPromptContext,
   PendingSessionStartContext,
   RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
@@ -92,6 +93,9 @@ function runtimeChildEntry(
     cancel(): void {
       calls.push(`cancel:${dispatchId}`);
     },
+    fired(): boolean {
+      return false;
+    },
   } satisfies TimerLadder;
 
   return {
@@ -106,11 +110,39 @@ function runtimeChildEntry(
     rewakeSummary: undefined,
     child,
     ladder,
-    stdoutBuffer: new RingBuffer(16),
-    stderrBuffer: new RingBuffer(16),
+    stdout: { text: () => "" },
+    stderr: { text: () => "" },
     capturedGeneration: 1,
     loc,
   };
+}
+
+for (const { title, records, expected } of [
+  { title: "no answer was recorded", records: [], expected: false },
+  { title: "Pi trusts the project", records: [["/work", true]], expected: true },
+  { title: "Pi does not trust the project", records: [["/work", false]], expected: false },
+  { title: "Pi trusts only another project", records: [["/other", true]], expected: false },
+  {
+    title: "a later answer for the project says no",
+    records: [
+      ["/work", true],
+      ["/work", false],
+    ],
+    expected: false,
+  },
+] as const) {
+  test(`D-LOC-01: the project is trusted only by the last recorded answer for it when ${title}`, () => {
+    // arrange
+    const runtime = createHooksRuntime();
+
+    // act
+    for (const [cwd, trusted] of records) {
+      runtime.recordProjectTrust(cwd, trusted);
+    }
+
+    // assert
+    assert.strictEqual(runtime.isProjectTrusted("/work"), expected);
+  });
 }
 
 test("keeps every state family isolated between runtime instances", () => {
@@ -134,6 +166,7 @@ test("keeps every state family isolated between runtime instances", () => {
   firstRuntime.setParsedConfig("first-key", firstCacheEntry);
   firstRuntime.setRoutingBucket("PreToolUse", [firstRoutingEntry]);
   firstRuntime.appendPendingSessionStartContext(firstPendingEntry);
+  firstRuntime.appendPendingPromptContext(firstPendingEntry);
   firstRuntime.recordLastAssistant(assistantMessage("first message"));
   firstRuntime.recordStopReentry();
   firstRuntime.registerChild(childEntry);
@@ -142,6 +175,7 @@ test("keeps every state family isolated between runtime instances", () => {
     parsed: Array.from(secondRuntime.parsedConfigEntries()),
     routes: Array.from(secondRuntime.routingTableEntries()),
     pending: secondRuntime.pendingSessionStartContextEntries(),
+    promptPending: secondRuntime.pendingPromptContextEntries(),
     assistant: secondRuntime.takeLastAssistant(),
     stopHookActive: secondRuntime.isStopHookActive(),
     pidEntries: secondRuntime.pidTableEntries(loc),
@@ -154,6 +188,7 @@ test("keeps every state family isolated between runtime instances", () => {
     parsed: [],
     routes: [],
     pending: [],
+    promptPending: [],
     assistant: undefined,
     stopHookActive: false,
     pidEntries: [],
@@ -227,6 +262,92 @@ test("appends and drains pending context once in declaration order", () => {
   assert.deepStrictEqual(drainedEntries, [firstEntry, secondEntry]);
   assert.deepStrictEqual(secondDrain, []);
   assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+});
+
+test("appends and drains pending prompt context once in arrival order, apart from the SessionStart buffer (D-CF5-13)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const firstEntry = {
+    context: "first prompt context",
+    pluginId: "first-plugin",
+    marketplace: "catalog",
+    scope: "user",
+  } satisfies PendingPromptContext;
+  const secondEntry = {
+    context: "second prompt context",
+    pluginId: "second-plugin",
+    marketplace: "catalog",
+    scope: "project",
+  } satisfies PendingPromptContext;
+
+  // act
+  runtime.appendPendingPromptContext({ ...firstEntry, context: "" });
+  runtime.appendPendingPromptContext(firstEntry);
+  runtime.appendPendingPromptContext(secondEntry);
+  const readSnapshot = runtime.pendingPromptContextEntries();
+  const sessionStartSnapshot = runtime.pendingSessionStartContextEntries();
+  const drainedEntries = runtime.drainPendingPromptContext();
+  const secondDrain = runtime.drainPendingPromptContext();
+
+  // assert
+  assert.deepStrictEqual(readSnapshot, [firstEntry, secondEntry]);
+  assert.deepStrictEqual(sessionStartSnapshot, []);
+  assert.deepStrictEqual(drainedEntries, [firstEntry, secondEntry]);
+  assert.deepStrictEqual(secondDrain, []);
+});
+
+test("empties every pending context buffer at registration (D-CF5-13)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const entry = {
+    context: "stale context",
+    pluginId: "stale-plugin",
+    marketplace: "catalog",
+    scope: "project",
+  } satisfies PendingPromptContext;
+  runtime.appendPendingSessionStartContext(entry);
+  runtime.appendPendingPromptContext(entry);
+  runtime.queueFollowUpContext({ ...entry, prompt: "stale follow-up" });
+
+  // act
+  runtime.preparePendingContextForRegistration();
+
+  // assert
+  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+  assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+  assert.deepStrictEqual(runtime.drainPendingPromptContext(), []);
+  assert.deepStrictEqual(runtime.drainFollowUpContext(), []);
+});
+
+test("hands out the context of the follow-up Pi reads and drops the ones queued before it (D-CF5-13)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const entry = (name: string): PendingFollowUpContext => ({
+    context: `${name} context`,
+    pluginId: `${name}-plugin`,
+    marketplace: "catalog",
+    scope: "user",
+    prompt: `${name} follow-up`,
+  });
+  runtime.queueFollowUpContext({ ...entry("empty"), context: "" });
+  runtime.queueFollowUpContext(entry("first"));
+  runtime.queueFollowUpContext(entry("second"));
+  runtime.queueFollowUpContext(entry("third"));
+
+  // act
+  const forUnknown = runtime.takeFollowUpContext("unknown follow-up");
+  const forSecond = runtime.takeFollowUpContext("second follow-up");
+  const forFirst = runtime.takeFollowUpContext("first follow-up");
+  const left = runtime.drainFollowUpContext();
+  const leftAfterDrain = runtime.drainFollowUpContext();
+
+  // assert
+  assert.strictEqual(forUnknown, undefined);
+  assert.deepStrictEqual(forSecond, entry("second"));
+  assert.strictEqual(forFirst, undefined);
+  assert.deepStrictEqual(left, [entry("third")]);
+  assert.deepStrictEqual(leftAfterDrain, []);
+  assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
 });
 
 test("applies settle registration, input, and bounded reentry transitions", () => {

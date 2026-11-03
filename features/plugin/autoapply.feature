@@ -1,7 +1,8 @@
 Feature: Plugin autoapply
 
-  When autoapply is on, a new session applies its configs and marketplaces.
-  /claude:plugin autoapply shows or changes that setting.
+  When autoapply is on, a new session applies its configs and marketplaces, and the project's only when
+  Pi trusts the project. /claude:plugin autoapply shows or changes that setting. A local marketplace
+  and a git host on this machine stand in for published ones.
 
   Scenario: A new session installs the plugins a project config declares when the config turns autoapply on
     Given the marketplace "fixtures" is published as a dir source
@@ -195,6 +196,58 @@ Feature: Plugin autoapply
       | fixtures         | project           | demo@fixtures | demo | will install |         | project |
     Then the project scope has no installed plugins
     Then the session offers no skills
+
+  Scenario: A new session in a project Pi does not trust leaves the plugins a project config declares pending
+    Given the project holds a pi settings file
+    Given pi runs with the scripted model in an untrusted project
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
+      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
+      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
+    Then the project scope has no installed plugins
+
+  Scenario: A project Pi does not trust cannot turn on autoapply for the plugins a user config declares
+    Given the project holds a pi settings file
+    Given pi runs with the scripted model in an untrusted project
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope |
+      | fixtures         | user              | demo@fixtures | demo | will install |         | user  |
+      | fixtures         | user              | demo@fixtures | demo | will install |         | user  |
+    Then the user scope has no installed plugins
 
   Scenario: A config whose autoapply is not a boolean is reported as invalid and keeps a new session read-only
     Given the marketplace "fixtures" is published as a dir source

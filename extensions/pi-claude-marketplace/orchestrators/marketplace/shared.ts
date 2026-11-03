@@ -38,7 +38,11 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { McpUnstagePartialError, type McpWrittenFile } from "../../shared/errors-bridges.ts";
+import {
+  McpUnstagePartialError,
+  WorkflowsUnstageRefusedError,
+  type McpWrittenFile,
+} from "../../shared/errors-bridges.ts";
 import {
   CrossOriginChallengeError,
   errorMessage,
@@ -667,6 +671,12 @@ export async function cascadeUnstagePlugin(
       mcpConfigNotices = err.notices;
       writtenMcpFiles = err.written;
       failure = err.cause;
+    } else if (err instanceof WorkflowsUnstageRefusedError) {
+      // PI-14: a refusal after some envelopes were removed still reports
+      // those names as dropped, so the record stops naming files that are
+      // gone. The refusal itself stays the plugin's cause.
+      dropped.workflows = [...err.removedNames];
+      failure = err.refusal;
     }
 
     return Object.freeze({

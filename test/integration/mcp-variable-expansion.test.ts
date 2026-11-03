@@ -1,3 +1,10 @@
+// A real install writes Claude Code's variable rule into the plugin's
+// pi-mcp-adapter entry (AVAR-01..03), leaves a `${NAME:-default}` for the
+// adapter to expand at connect time (D-CF1-13), and warns about the variables
+// the server needs that are not set (AVAR-04). The install reads Pi's process
+// environment, so the case sets and deletes its own `PI_CM_AVAR_*` variables
+// and restores each one afterwards.
+
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -19,12 +26,6 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { makeCtx, seedMcpPlugin, type NotifyRecord } from "./mcp-plugin-seed.ts";
-
-// A real install writes Claude Code's variable rule into the plugin's
-// pi-mcp-adapter entry (AVAR-01..03) and warns about the variables the server
-// needs that are not set (AVAR-04). The install reads Pi's process
-// environment, so the case sets and deletes its own `PI_CM_AVAR_*` variables
-// and restores each one afterwards.
 
 const AVAR_VARIABLES = ["PI_CM_AVAR_SITE", "PI_CM_AVAR_LEVEL", "PI_CM_AVAR_TOKEN"] as const;
 
@@ -83,7 +84,7 @@ test("AVAR-02: a project install writes Claude's variable rule for the adapter a
               "--site",
               "${PI_CM_AVAR_SITE}",
               "--level",
-              "info",
+              "${PI_CM_AVAR_LEVEL:-info}",
               "--token",
               "${PI_CM_AVAR_TOKEN}",
             ],
@@ -303,8 +304,8 @@ test("AVAR-04: a reinstall reports the unset variable and the withheld credentia
       assertVariableWarningsAfter(reinstalled.notifications, [
         {
           message:
-            "● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
-          severity: undefined,
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+          severity: "warning",
         },
       ]);
     });

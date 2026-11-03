@@ -1,6 +1,6 @@
 // bridges/mcp/collision-slots.ts
 //
-// Walks pi-mcp-adapter 5's config sources in its precedence order and records
+// Walks pi-mcp-adapter 7's config sources in its precedence order and records
 // every full server definition each one holds (AFILE-05, MC-4, RN-5, closes
 // MCPSRC-01). The order, lowest precedence first:
 //

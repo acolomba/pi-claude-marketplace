@@ -557,6 +557,8 @@ async function populateRuntimeRoute(
       PreToolUse: [{ hooks: [{ command: opts.command, type: "command" }], matcher: "" }],
     }),
   );
+  // D-LOC-01: the session hydrate found the project trusted.
+  runtime.recordProjectTrust(cwd, true);
   const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await hooksRouting.readAndCachePluginHooks({
     cwd,
@@ -2943,6 +2945,8 @@ describe("applyReconcile", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
+    // D-LOC-01: the session hydrate found the project trusted.
+    ownerRuntime.recordProjectTrust(cwd, true);
     const peerRuntime = createHooksRuntime();
     const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
 

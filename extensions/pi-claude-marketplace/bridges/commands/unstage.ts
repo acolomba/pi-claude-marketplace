@@ -13,6 +13,30 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 
 import type { UnstageCommandsInput, UnstageCommandsResult } from "./types.ts";
 
+/**
+ * Removes one staged command file and reports whether it was there. ENOENT
+ * means the file is already gone (a prior failed install never finished its
+ * commit, or a repeated call), so the unlink is idempotent; any other error
+ * propagates.
+ */
+async function unlinkIfPresent(target: string): Promise<boolean> {
+  try {
+    await unlink(target);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * Removes each previously staged command file from the prompts target dir and
+ * returns the names whose file was present. A name that escapes the dir throws
+ * before anything later in the list is removed.
+ */
 export async function unstagePluginCommands(
   input: UnstageCommandsInput,
 ): Promise<UnstageCommandsResult> {
@@ -23,18 +47,9 @@ export async function unstagePluginCommands(
     // eslint-disable-next-line no-await-in-loop -- the first containment or unlink failure stops later unlinks
     await assertPathInside(input.locations.promptsTargetDir, target, "command to unstage");
 
-    try {
-      // eslint-disable-next-line no-await-in-loop -- the first containment or unlink failure stops later unlinks
-      await unlink(target);
-      // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
+    // eslint-disable-next-line no-await-in-loop -- the first containment or unlink failure stops later unlinks
+    if (await unlinkIfPresent(target)) {
       removed.push(name);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw err;
-      }
-      // ENOENT: the previously-staged file is already gone (e.g. a prior
-      // failed install never finished commit). Idempotent -- skip without
-      // adding to `removed`.
     }
   }
 

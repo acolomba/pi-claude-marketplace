@@ -26,7 +26,16 @@ export class UnsupportedModeError extends Error {
 /** Normalize a thrown `unknown` to its message text, since `instanceof Error`
  *  narrowing must be repeated everywhere a caught value is interpolated. */
 export function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof Error) {
+    return err.message;
+  }
+
+  try {
+    return String(err);
+  } catch {
+    // A null-prototype object or a throwing `toString` has no string form.
+    return "unknown error";
+  }
 }
 
 /**
