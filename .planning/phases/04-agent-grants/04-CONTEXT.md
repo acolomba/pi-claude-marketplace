@@ -158,9 +158,27 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   failure on the `mcp` channel. A held lock (`StateLockHeldError`) skips the
   scope until the next load. It never throws (NFR-2; the materializer also
   catches).
-- **Legacy rows.** A row written before this phase has no stored forms, and
-  its file holds the adapter form. The load leaves it. `reinstall`,
-  `update`, and disable-then-enable re-stage it with forms.
+- **Legacy rows (revised after the parent's review of P4-DC-06).** A row
+  written before this phase has no stored forms, and its file holds the
+  adapter form. When the active implementation is built-in, the load derives
+  the built-in form from the file's adapter frontmatter with a pure textual
+  translation in `bridges/agents/` and stores both forms on the row (then the
+  normal swap runs, and later switches use the stored forms):
+  - each `mcp:<key>` / `mcp:<key>/<tool>` entry of this plugin
+    (`<key>` = `plugin_<plugin>_..._`, the adapter key, which is always the
+    built-in name plus `_`) becomes `mcp:<key without its last _>[/<tool>]`;
+  - each per-tool MCP `excludeTools` name (a Claude-form token
+    `mcp__plugin_<plugin>_...`) becomes Pi's built-in tool name: every
+    character outside `[A-Za-z0-9_]` replaced by `_`; when the result is
+    longer than 64 characters (Pi would cut and hash it, which needs the
+    server/tool split), the translation gives up for that agent (known gap,
+    the agent is left as it is and debug-logged);
+  - the adapter async warning becomes the built-in text, and the
+    cannot-narrow warning's `mcp:<key>` selector becomes the built-in one.
+  Known gaps: a grant of a server that built-in cannot run (an `sse` server)
+  is translated, not dropped, so its launch still fails under built-in as
+  before; the long-name `excludeTools` case above. `reinstall`, `update`,
+  and disable-then-enable re-stage exactly.
 
 ### Background child (MGRT-02, D-MB-12)
 
@@ -288,9 +306,8 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
 <deferred>
 ## Deferred Ideas
 
-- Rewriting legacy rows (written before this phase, no stored forms) at load
-  without a reinstall: needs a lossy reverse mapping for long built-in tool
-  names; left for a follow-up if the user wants it.
+- Exact legacy translation for long per-tool `excludeTools` names and for
+  grants of servers built-in cannot run (see "Legacy rows").
 - A user-visible warning when a load cannot rewrite an agent (edited file,
   held lock): would need a new closed-set entry.
 - Background agents calling plugin MCP tools under built-in (MCPV2-03).

@@ -90,18 +90,21 @@ session copies every item here. Phase 6 merges this file into the root log.
   verdicts, which Phase 3 may still refine.
 - **Recorded in:** `04-CONTEXT.md`.
 
-### P4-DC-06: Agents installed before this phase are not rewritten at load
+### P4-DC-06: Agents installed before this phase get a textual adapter-to-built-in translation at load
 
-- **Phase / source:** Phase 4 discuss; child session.
-- **Severity:** High. **Status:** open.
-- **Choice:** a legacy agents-index row has no stored forms, so the load
-  leaves its adapter-form file. Under built-in its MCP grant fails to resolve
-  until `reinstall`, `update`, or disable-then-enable re-stages it.
-- **Alternatives:** translate legacy adapter files to the built-in form at
-  load (exact for selectors and warnings, lossy only for long per-tool
-  `excludeTools` names), or re-stage the plugin's agents at load.
-- **Why dubious:** the milestone goal says a switch never needs user action;
-  this is a gap for agents installed by an earlier release.
+- **Phase / source:** Phase 4 discuss; child session; revised after the
+  parent's review (prefer the translation).
+- **Severity:** Medium (was High as "not rewritten"). **Status:** open.
+- **Choice:** a legacy agents-index row (no stored forms) gets its built-in
+  form derived from the adapter-form file at load (selectors lose the key's
+  trailing `_`, per-tool `excludeTools` tokens become Pi's sanitized tool
+  name, the warnings switch), and both forms are stored on the row.
+- **Alternatives:** leave legacy files until `reinstall` (the first choice);
+  re-stage the plugin's agents at load.
+- **Why dubious:** known gaps: a per-tool `excludeTools` name over 64
+  characters leaves that agent untranslated, and a grant of a server
+  built-in cannot run (`sse`) is translated rather than dropped, so it still
+  fails under built-in.
 - **Recorded in:** `04-CONTEXT.md` "Legacy rows", "Deferred Ideas".
 
 ### P4-DC-07: A background child is detected by `PI_SUBAGENT_CHILD=1`
@@ -189,3 +192,83 @@ session copies every item here. Phase 6 merges this file into the root log.
   install did not, which D-MB-06's spirit (no failure because of a switch)
   argues against.
 - **Recorded in:** `04-CONTEXT.md` "AG-11 per form".
+
+## Research step (gsd-phase-researcher, 2026-11-04)
+
+### P4-DC-13: Cascade updates render the adapter form until the next load
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** the update agent staging reads `args.run`, then
+  `args.preflightNotification?.run`, then falls back to `none` (adapter
+  form). Autoupdate and `apply` convergence carry no run, so under built-in
+  they write the adapter form until the next `/reload` rewrites it.
+- **Alternatives:** thread an `mcpImplementation` field through
+  `ThreePhaseArgsBase`, `update-flow.ts`, `orchestrators/types.ts`, and
+  `apply.ts` (unowned files; Phase 3 plans its own `ThreePhaseArgs` field).
+- **Why dubious:** a user-visible wrong form for one session after a cascade.
+  Parent line: after Phase 3 merges, repoint the fallback to Phase 3's field.
+- **Recorded in:** `04-RESEARCH.md` Pattern 5, Pitfall 1, Open Question 1.
+
+### P4-DC-14: `agentGrantsStep` takes an optional `env` second parameter
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** `agentGrantsStep(input, env = process.env)`, because fallow
+  fails an export that only tests use.
+- **Alternatives:** keep the exact one-parameter frozen signature and have
+  tests mutate `process.env`.
+- **Why dubious:** adds a call-compatible parameter to a frozen signature.
+- **Recorded in:** `04-RESEARCH.md` Pattern 4.
+
+### P4-DC-15: The grants step locks with `persistMigration: false`
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** the step never triggers `loadState`'s legacy-migration save.
+- **Alternatives:** the default, which may write `state.json`.
+- **Recorded in:** `04-RESEARCH.md` Pattern 4.
+
+### P4-DC-16: The rewrite stages through `agents-staging/<uuid>/` and renames
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** the same path stage's commit uses, not a temp file in the
+  watched `agents/` directory.
+- **Recorded in:** `04-RESEARCH.md` Pattern 4.
+
+### P4-DC-17: Stored forms are validated before a write
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** a form must have the `---` frame and the generated-agent
+  marker, and the target must pass `assertPathInside` and match
+  `<generatedName>.md`, before any write.
+- **Alternatives:** trust the index (same trust boundary as the files).
+- **Recorded in:** `04-RESEARCH.md` Security Domain.
+
+### P4-DC-18: The untrusted-project leg is covered by unit tests only
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** no cucumber scenario, because pi-subagents does not show an
+  untrusted project's agents and the harness has no per-restart trust toggle.
+- **Recorded in:** `04-RESEARCH.md` Open Question 2.
+
+### P4-DC-19: The child grants scenario is red only by mutation
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** "a child leaves an adapter-form agent" passes on the pre-phase
+  tree (nothing rewrote there); its red proof is a run with the gate removed.
+  The child autoapply scenario is a real pre-phase red.
+- **Recorded in:** `04-RESEARCH.md` Pitfall 7.
+
+### P4-DC-20: The switch scenario starts from no implementation
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** install with built-in turned off (adapter form), then restart
+  with built-in on: one restart instead of adapter -> none -> built-in.
+- **Alternatives:** start with pi-mcp-adapter and restart twice.
+- **Recorded in:** `04-RESEARCH.md` Validation Architecture.
+
+### P4-DC-21: A child still prints the load's pending block
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** the read-only pass kept in a child still notifies in its
+  print-mode session (existing behavior, no state change).
+- **Alternatives:** silence it by editing the unowned `read-pass.ts`.
+- **Recorded in:** `04-RESEARCH.md` Assumptions A4.
