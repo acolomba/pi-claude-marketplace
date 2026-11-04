@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   requirePartialInstallable,
   requireInstallable,
+  resolutionFor,
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
 import { PluginShapeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -21,6 +22,7 @@ import { resolveGitSubdirRoot } from "../../extensions/pi-claude-marketplace/sha
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type {
   GitPluginRootResult,
+  MaterializablePlugin,
   ResolveContext,
   ResolvedPlugin,
   ResolvedPluginUnavailable,
@@ -4993,4 +4995,148 @@ describe("requirePartialInstallable", () => {
       },
     );
   });
+});
+
+// D-P3-03: the resolver's own verdict is the neutral one, so each case builds
+// that neutral resolution as the resolver returns it.
+function neutralResolution(
+  overrides: Partial<Omit<MaterializablePlugin, "state" | "installable">> & {
+    readonly state?: MaterializablePlugin["state"];
+  } = {},
+): MaterializablePlugin {
+  return {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: "/abs/marketplace/local",
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    declaredMcpServers: {},
+    defaultEnabled: true,
+    ...overrides,
+  };
+}
+
+const LOCAL = { command: "node" };
+const EVENTS = { type: "sse", url: "https://mcp.example.com/sse" };
+const ASKER = { command: "node", bareElicitationCapability: true };
+const LIVE = { type: "ws", url: "wss://mcp.example.com/ws" };
+
+describe("resolutionFor", () => {
+  test("D-P3-03: the none view deep-equals the neutral resolution", () => {
+    // arrange
+    const neutral = neutralResolution({
+      state: "partially-available",
+      unsupported: ["mcpServers"],
+      mcpServers: { local: LOCAL, events: EVENTS },
+      declaredMcpServers: { local: LOCAL, events: EVENTS, asker: ASKER, live: LIVE },
+      droppedMcpServers: [{ server: "live", feature: "ws" }],
+    });
+
+    // act
+    const view = resolutionFor(neutral, "none");
+
+    // assert
+    assert.deepStrictEqual(view, neutral);
+  });
+
+  test("D-P3-03: the builtin view of an sse plugin is partially available with the sse server dropped", () => {
+    // arrange
+    const neutral = neutralResolution({
+      mcpServers: { events: EVENTS },
+      declaredMcpServers: { events: EVENTS },
+    });
+
+    // act
+    const view = resolutionFor(neutral, "builtin");
+
+    // assert
+    assert.deepStrictEqual(
+      view,
+      neutralResolution({
+        state: "partially-available",
+        unsupported: ["mcpServers"],
+        mcpServers: { events: EVENTS },
+        declaredMcpServers: { events: EVENTS },
+        droppedMcpServers: [{ server: "events", feature: "sse" }],
+      }),
+    );
+  });
+
+  test("D-P3-03: the adapter view appends mcpServers after the neutral kinds", () => {
+    // arrange
+    const neutral = neutralResolution({
+      state: "partially-available",
+      unsupported: ["hooks"],
+      notes: ["contains hooks"],
+      declaredMcpServers: { asker: ASKER },
+    });
+
+    // act
+    const view = resolutionFor(neutral, "adapter");
+
+    // assert
+    assert.deepStrictEqual(
+      view,
+      neutralResolution({
+        state: "partially-available",
+        unsupported: ["hooks", "mcpServers"],
+        notes: ["contains hooks"],
+        declaredMcpServers: { asker: ASKER },
+        droppedMcpServers: [{ server: "asker", feature: "bareElicitationCapability" }],
+      }),
+    );
+  });
+
+  test("D-P3-03: a bundle keeps the plugin partially available under every view", () => {
+    // arrange
+    const neutral = neutralResolution({
+      state: "partially-available",
+      unsupported: ["mcpServers"],
+      mcpServers: { local: LOCAL },
+      declaredMcpServers: { local: LOCAL },
+      mcpBundle: true,
+    });
+
+    // act
+    const views = [resolutionFor(neutral, "adapter"), resolutionFor(neutral, "builtin")];
+
+    // assert
+    assert.deepStrictEqual(views, [neutral, neutral]);
+  });
+
+  test("D-P3-03: an unavailable resolution returns unchanged", () => {
+    // arrange
+    const unavailablePlugin: ResolvedPlugin = {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: ["source dir does not exist: /abs/marketplace/missing"],
+    };
+
+    // act
+    const view = resolutionFor(unavailablePlugin, "builtin");
+
+    // assert
+    assert.strictEqual(view, unavailablePlugin);
+  });
+
+  for (const active of ["adapter", "builtin", "none"] as const) {
+    test(`D-P3-03: the ${active} view of a stdio plugin deep-equals the neutral resolution`, () => {
+      // arrange
+      const neutral = neutralResolution({
+        mcpServers: { local: LOCAL },
+        declaredMcpServers: { local: LOCAL },
+      });
+
+      // act
+      const view = resolutionFor(neutral, active);
+
+      // assert
+      assert.deepStrictEqual(view, neutral);
+    });
+  }
 });

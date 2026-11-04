@@ -685,6 +685,9 @@ for (const coexist of [false, true]) {
         JSON.parse(await readFile(locations.agentsIndexPath, "utf8")),
         expectedIndex,
       );
+      // WR-02: the reinstall writes its compatibility through
+      // `replaceCompatibility`, which clears the basis the install set.
+      const { compatibilityBasis: _installBasis, ...reinstalledFields } = oldRecord;
       const migratedState = (updatedAt: string) => ({
         ...beforeState,
         marketplaces: {
@@ -693,7 +696,7 @@ for (const coexist of [false, true]) {
             ...beforeState.marketplaces.mp,
             plugins: {
               hello: {
-                ...oldRecord,
+                ...reinstalledFields,
                 resources: { ...oldRecord.resources, agents: expectedNames },
                 updatedAt,
               },
@@ -8420,7 +8423,13 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       // before the mark fails as concurrently updated.
       assert.ok(firstRecord !== undefined);
       const { updatedAt: markedStamp, ...markedFields } = firstRecord;
-      const { updatedAt: readStamp, ...readFields } = recordBefore;
+      // WR-02: the intent mark and the final write replace the compatibility
+      // through `replaceCompatibility`, which clears the basis the install set.
+      const {
+        updatedAt: readStamp,
+        compatibilityBasis: _installBasis,
+        ...readFields
+      } = recordBefore;
       assert.deepStrictEqual(markedFields, {
         ...readFields,
         compatibility: {

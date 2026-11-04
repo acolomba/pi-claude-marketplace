@@ -42,7 +42,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { narrowUnsupportedKinds } from "../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 import {
   buildInstalledPluginRecord,
@@ -4751,6 +4754,7 @@ test("loadPluginListPayload filters project marketplaces and projects autoupdate
       cwd,
       scope: "project",
       marketplace: "alpha",
+      mcpImplementation: "adapter",
     });
 
     // assert
@@ -4798,7 +4802,7 @@ test("D-PL8-07: loadPluginListPayload defaults autoupdate by marketplace name in
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
 
     // act
-    const marketplaces = await loadPluginListPayload({ ctx, cwd });
+    const marketplaces = await loadPluginListPayload({ ctx, cwd, mcpImplementation: "adapter" });
 
     // assert
     assert.deepStrictEqual(marketplaces, [
@@ -4841,7 +4845,12 @@ test("loadPluginListPayload preserves input order for case-tied marketplaces in 
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
 
     // act
-    const marketplaces = await loadPluginListPayload({ ctx, cwd, scope: "project" });
+    const marketplaces = await loadPluginListPayload({
+      ctx,
+      cwd,
+      scope: "project",
+      mcpImplementation: "adapter",
+    });
 
     // assert
     assert.deepStrictEqual(marketplaces, [
@@ -5118,3 +5127,188 @@ void ("will uninstall" satisfies LoadedPluginRow["status"]);
 void ("will enable" satisfies LoadedPluginRow["status"]);
 // @ts-expect-error this notification status is not a loader row
 void ("will disable" satisfies LoadedPluginRow["status"]);
+
+const SSE_EVENTS = { type: "sse", url: "https://mcp.example.com/sse" };
+
+/**
+ * D-P3-02: a user-scope marketplace `mp1` listing `alpha` 1.0.0, whose record
+ * an install stored with the neutral verdict and its one sse server.
+ */
+async function seedNeutralSseRecord(home: string, cwd: string): Promise<void> {
+  await seedMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp1",
+    manifest: { name: "mp1", plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }] },
+    installed: { alpha: { version: "1.0.0", resources: { skills: [], mcpServers: ["events"] } } },
+    installablePluginDirs: ["alpha"],
+  });
+  const { extensionRoot } = locationsFor("user", cwd);
+  const state = await loadState(extensionRoot);
+  const record = state.marketplaces.mp1?.plugins.alpha;
+  assert.ok(record !== undefined);
+  record.compatibilityBasis = "neutral";
+  record.mcpServerConfigs = [{ name: "events", config: SSE_EVENTS }];
+  await saveState(extensionRoot, state);
+}
+
+for (const { mcpImplementation, expectedRow } of [
+  {
+    mcpImplementation: "adapter",
+    expectedRow: {
+      status: "installed",
+      name: "alpha",
+      dependencies: ["mcp"],
+      version: "1.0.0",
+      severity: "info",
+      needsReload: false,
+    },
+  },
+  {
+    mcpImplementation: "builtin",
+    expectedRow: {
+      status: "partially-installed",
+      name: "alpha",
+      reasons: ["unsupported mcp"],
+      version: "1.0.0",
+    },
+  },
+  {
+    mcpImplementation: "none",
+    expectedRow: {
+      status: "installed",
+      name: "alpha",
+      dependencies: ["mcp"],
+      version: "1.0.0",
+      severity: "info",
+      needsReload: false,
+    },
+  },
+] as const) {
+  test(`MREC-03: loadPluginListPayload lists a neutral sse record as ${expectedRow.status} under ${mcpImplementation}`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedNeutralSseRecord(home, cwd);
+      const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+
+      // act
+      const marketplaces = await loadPluginListPayload({ ctx, cwd, mcpImplementation });
+
+      // assert
+      assert.deepStrictEqual(marketplaces, [
+        { name: "mp1", scope: "user", plugins: [expectedRow] },
+      ]);
+      verify(ctx);
+    });
+  });
+}
+
+test("MREC-03: listPlugins reads the rows for the run's MCP implementation", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedNeutralSseRecord(home, cwd);
+    const { ctx, run, notifications, ui } = makeCtx({
+      softDeps: { mcpImplementation: "builtin" },
+    });
+
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "user" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp1 [user]\n  ◉ alpha v1.0.0 (partially-installed) {unsupported mcp}" },
+    ]);
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("MREC-03: listing twice leaves state.json byte-identical and repeats the rows", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedNeutralSseRecord(home, cwd);
+    const { stateJsonPath } = locationsFor("user", cwd);
+    const stateBytes = await readFile(stateJsonPath);
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+
+    // act
+    const first = await loadPluginListPayload({ ctx, cwd, mcpImplementation: "builtin" });
+    const second = await loadPluginListPayload({ ctx, cwd, mcpImplementation: "builtin" });
+
+    // assert
+    assert.deepStrictEqual(second, first);
+    assert.deepStrictEqual(await readFile(stateJsonPath), stateBytes);
+    verify(ctx);
+  });
+});
+
+/** A user-scope marketplace `mp1` offering `beta` 1.0.0, not installed, with one sse server. */
+async function seedSseCandidate(home: string, cwd: string): Promise<void> {
+  const userRoot = path.join(home, ".pi", "agent");
+  await seedMarketplace({
+    scope: "user",
+    scopeRoot: userRoot,
+    cwd,
+    mpName: "mp1",
+    manifest: { name: "mp1", plugins: [{ name: "beta", source: "./beta", version: "1.0.0" }] },
+    installablePluginDirs: ["beta"],
+  });
+  await writeFile(
+    path.join(userRoot, "marketplaces", "mp1", "beta", ".mcp.json"),
+    JSON.stringify({ mcpServers: { events: SSE_EVENTS } }),
+  );
+}
+
+test("MREC-03 / D-67-01: --partial keeps a not-installed sse plugin under Pi's built-in MCP", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedSseCandidate(home, cwd);
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+
+    // act
+    const marketplaces = await loadPluginListPayload({
+      ctx,
+      cwd,
+      partial: true,
+      mcpImplementation: "builtin",
+    });
+
+    // assert
+    assert.deepStrictEqual(marketplaces, [
+      {
+        name: "mp1",
+        scope: "user",
+        plugins: [
+          {
+            status: "partially-available",
+            name: "beta",
+            version: "1.0.0",
+            reasons: ["unsupported mcp"],
+          },
+        ],
+      },
+    ]);
+    verify(ctx);
+  });
+});
+
+test("MREC-03 / D-67-01: --partial leaves out a not-installed sse plugin under pi-mcp-adapter", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedSseCandidate(home, cwd);
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+
+    // act
+    const marketplaces = await loadPluginListPayload({
+      ctx,
+      cwd,
+      partial: true,
+      mcpImplementation: "adapter",
+    });
+
+    // assert
+    assert.deepStrictEqual(marketplaces, [{ name: "mp1", scope: "user", plugins: [] }]);
+    verify(ctx);
+  });
+});

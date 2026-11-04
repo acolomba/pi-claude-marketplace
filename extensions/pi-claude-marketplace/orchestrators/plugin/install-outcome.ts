@@ -1622,6 +1622,8 @@ async function runInstallLedgerBody(
           supported: [...installCtx.resolved.supported],
           unsupported: [...installCtx.resolved.unsupported],
         },
+        // D-P3-02: the resolver's verdict above is the neutral one.
+        compatibilityBasis: "neutral",
         resources: {
           skills: [...installCtx.stagedSkillNames],
           prompts: [...installCtx.stagedCommandNames],

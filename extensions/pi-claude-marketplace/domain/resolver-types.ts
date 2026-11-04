@@ -169,7 +169,8 @@ interface MaterializableFields {
         : never
     >
   >;
-  // ANAME-07: the servers a partial install leaves out, each with its feature.
+  // ANAME-07 / D-P3-01: the servers every MCP implementation blocks, each with
+  // its feature, in merge order. `resolutionFor` gives one implementation's list.
   droppedMcpServers: Type.TOptional<
     Type.TArray<
       [DroppedMcpServerDriftCheck, DroppedMcpServerKeysCheck] extends [true, true]
