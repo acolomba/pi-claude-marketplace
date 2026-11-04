@@ -504,6 +504,35 @@ test("MREC-01 / D-MB-04: an all-success swap records the new version's declared 
   );
 });
 
+test("D-P3-10 / D-MB-07: an update to a candidate whose only server the adapter blocks carries Pi's built-in MCP", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-dependency-");
+  const args = await seedMcpRecordUpdate(
+    cwd,
+    {},
+    { mcpJson: { asker: { command: "node", bareElicitationCapability: true } } },
+  );
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      stagedMcpServerNames: outcome.partition === "updated" && outcome.stagedMcpServerNames,
+      declaresMcp: outcome.declaresMcp,
+    },
+    {
+      partition: "updated",
+      stagedMcpServerNames: [],
+      declaresMcp: { kind: "mcp", runEvery: ["builtin"] },
+    },
+  );
+});
+
 test("MREC-01: a swap to a version without a bundle drops the recorded bundle flag", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-bundle-drop-");

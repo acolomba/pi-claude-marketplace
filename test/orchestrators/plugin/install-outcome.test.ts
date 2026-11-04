@@ -3623,3 +3623,87 @@ test("D-PL9-05: a state phase failure removes the node_modules the packages phas
     "package.json",
   ]);
 });
+
+/**
+ * D-P3-10: a ledger summary that staged the adapter's subset of the declared
+ * servers, so a producer reading the staged count instead of the declaration
+ * gives a different answer.
+ */
+function summaryDeclaring(
+  declaredMcpServers: Record<string, Record<string, unknown>>,
+  stagedMcpServerNames: readonly string[],
+): InstallLedgerSummary {
+  const cwd = path.join(path.sep, "work");
+  const locations = locationsFor("project", cwd);
+  return {
+    agentForeignFailures: [],
+    bridgeWarnings: [],
+    cwd,
+    discoveryWarnings: [],
+    frontmatterDegradations: [],
+    locations,
+    marketplace: "marketplace",
+    mcpConfigNotices: [],
+    plugin: "servers",
+    pluginDataDir: path.join(locations.dataRoot, "marketplace", "servers"),
+    resolved: {
+      componentPaths: { agents: [], commands: [], skills: [], workflows: [] },
+      declaredMcpServers,
+      defaultEnabled: true,
+      installable: true,
+      mcpServers: {},
+      name: "servers",
+      notes: [],
+      pluginRoot: path.join(cwd, "servers"),
+      state: "installable",
+      supported: [],
+      unsupported: [],
+    },
+    stagedAgentNames: [],
+    stagedCommandNames: [],
+    stagedMcpServerNames: [...stagedMcpServerNames],
+    stagedSkillNames: [],
+    stagedWorkflowNames: [],
+    version: "1.0.0",
+  };
+}
+
+for (const { title, declaredMcpServers, staged, runEvery } of [
+  {
+    title:
+      "D-P3-10 / D-MB-07: an install declaring an sse and a bare-elicitation server carries an empty runEvery",
+    declaredMcpServers: {
+      events: { type: "sse", url: "https://mcp.example.com/sse" },
+      asker: { command: "node", bareElicitationCapability: true },
+    },
+    staged: ["events"],
+    runEvery: [],
+  },
+  {
+    title: "D-P3-10 / D-MB-07: an install declaring a stdio server carries both implementations",
+    declaredMcpServers: { tool: { command: "node" } },
+    staged: ["tool"],
+    runEvery: ["adapter", "builtin"],
+  },
+  {
+    title:
+      "D-P3-10 / D-MB-07: an install whose only server the adapter blocks still carries Pi's built-in MCP",
+    declaredMcpServers: { asker: { command: "node", bareElicitationCapability: true } },
+    staged: [],
+    runEvery: ["builtin"],
+  },
+] as const) {
+  test(title, () => {
+    // arrange
+    const summary = summaryDeclaring(declaredMcpServers, staged);
+
+    // act
+    const outcome = installedPluginOutcome(summary, [], false);
+
+    // assert
+    assert.deepStrictEqual(outcome.status === "installed" && outcome.declaresMcp, {
+      kind: "mcp",
+      runEvery,
+    });
+  });
+}

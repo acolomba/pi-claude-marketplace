@@ -3203,6 +3203,53 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
 // PI-9 -- 7-phase order + end-state assertion
 // ───────────────────────────────────────────────────────────────────────────
 
+test("D-P3-10 / D-MB-07: the installed row takes its MCP dependency from the declared servers, not the staged ones", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-mcp-dependency-"));
+    try {
+      // arrange: the adapter stages no server, Pi's built-in MCP runs the one
+      // declared, so the row still declares an MCP dependency and, with no
+      // MCP implementation loaded, renders the MCP marker (D-MB-07).
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        mcpServers: { asker: { command: "node", bareElicitationCapability: true } },
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n" +
+            "\n" +
+            "● mp [project]\n" +
+            "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+            "\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PI-9: happy-path install lands skills + commands + agents + mcp + state in order", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi9-"));

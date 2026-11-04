@@ -528,6 +528,42 @@ describe("promotion", () => {
     });
   });
 
+  test("D-P3-10 / D-MB-07: promotes a recorded stdio server as a dependency both implementations run", async (t) => {
+    // arrange
+    const { cwd, locations } = await tempLocations(t, "install-results-promotion-mcp-");
+    const { ctx, run } = makeCtx();
+    const record = pluginRecord({
+      provenance: "dependency",
+      compatibilityBasis: "neutral",
+      mcpServerConfigs: [{ name: "tool", config: { command: "node" } }],
+      resources: { ...EMPTY_RESOURCES, mcpServers: ["tool"] },
+    });
+
+    // act
+    const promotion = await promoteDependencyRecord({
+      opts: { ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "app" },
+      state: stateWith(record),
+      locations,
+      orchestrated: true,
+      config: {
+        current: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
+        targetIsLocal: false,
+      },
+      capture: { rollbackPartials: [], version: undefined },
+      transaction: { runPhases, withLockedStateTransaction },
+      sink: { mcpConfigNotices: [] },
+      env: {},
+      removalOps: REMOVAL_OPS,
+    });
+
+    // assert
+    assert.deepStrictEqual(promotion?.declaresMcp, {
+      kind: "mcp",
+      runEvery: ["adapter", "builtin"],
+    });
+  });
+
   test("promotes and declares an enabled dependency in standalone mode", async (t) => {
     // arrange
     const { cwd, locations } = await tempLocations(t, "install-results-promotion-declare-");
