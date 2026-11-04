@@ -43,6 +43,32 @@ const NAMING_ROWS: readonly NamingRow[] = [
   },
 ];
 
+interface AdapterToolNameRow {
+  readonly title: string;
+  readonly tool: string;
+  readonly toolName: string;
+}
+
+// pi-mcp-adapter 7.0.0 `formatToolName` with `toolPrefix: "mcp"`, for server "stub" of plugin "demo".
+const ADAPTER_TOOL_NAME_ROWS: readonly AdapterToolNameRow[] = [
+  {
+    title: "ANAME-01: the adapter profile turns each dot in a tool name into an underscore",
+    tool: "files.read.all",
+    toolName: "mcp__plugin_demo_stub__files_read_all",
+  },
+  {
+    title:
+      "ANAME-01: the adapter profile does not prefix a tool name that already carries the prefix",
+    tool: "mcp__plugin_demo_stub__echo",
+    toolName: "mcp__plugin_demo_stub__echo",
+  },
+  {
+    title: "ANAME-01: the adapter profile prefixes a tool name equal to the bare prefix",
+    tool: "mcp__plugin_demo_stub__",
+    toolName: "mcp__plugin_demo_stub__mcp__plugin_demo_stub__",
+  },
+];
+
 interface BuiltinToolNameRow {
   readonly title: string;
   readonly plugin: string;
@@ -151,6 +177,19 @@ describe("profileFor", () => {
 
       // assert
       assert.deepStrictEqual(names, expectedNames);
+    });
+  }
+
+  for (const { title, tool, toolName } of ADAPTER_TOOL_NAME_ROWS) {
+    test(title, () => {
+      // arrange
+      const profile = profileFor("adapter");
+
+      // act
+      const adapterToolName = profile.toolName("demo", "stub", tool);
+
+      // assert
+      assert.strictEqual(adapterToolName, toolName);
     });
   }
 

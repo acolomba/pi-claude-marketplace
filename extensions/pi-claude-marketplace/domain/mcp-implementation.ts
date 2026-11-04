@@ -43,10 +43,25 @@ export interface McpImplementationProfile {
 /**
  * The adapter's tool prefix is Claude Code's own tool-name form,
  * `mcp__plugin_<plugin>_<server>__` (ANAME-01), which is what D-MB-08 says a
- * hook matcher sees. pi-mcp-adapter appends the tool name unchanged.
+ * hook matcher sees.
  */
 function adapterToolNamePrefix(plugin: string, server: string): string {
   return `mcp__${generatedMcpServerKey(plugin, server)}_`;
+}
+
+/**
+ * pi-mcp-adapter 7.0.0 `formatToolName` with `toolPrefix: "mcp"`: it turns
+ * each `.` in the tool name into `_`, and it does not add the prefix again to
+ * a tool name that already starts with it.
+ */
+function adapterToolName(plugin: string, server: string, tool: string): string {
+  const prefix = adapterToolNamePrefix(plugin, server);
+  const sanitized = tool.replaceAll(".", "_");
+  if (sanitized.startsWith(prefix) && sanitized.length > prefix.length) {
+    return sanitized;
+  }
+
+  return `${prefix}${sanitized}`;
 }
 
 const ADAPTER_PROFILE: McpImplementationProfile = Object.freeze({
@@ -54,8 +69,7 @@ const ADAPTER_PROFILE: McpImplementationProfile = Object.freeze({
   classify: classifyMcpServer,
   serverName: generatedMcpServerKey,
   toolNamePrefix: adapterToolNamePrefix,
-  toolName: (plugin: string, server: string, tool: string) =>
-    `${adapterToolNamePrefix(plugin, server)}${tool}`,
+  toolName: adapterToolName,
   grantSelector: (plugin: string, server: string) => `mcp:${generatedMcpServerKey(plugin, server)}`,
 });
 
