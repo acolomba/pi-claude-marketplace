@@ -548,3 +548,69 @@ copies every item here. Phase 6 merges this file into the root log.
   `@own-implementation` flag is set by a tagged Before hook; the settings-off
   release removes `{agent dir}/settings.json`; the seed is compact JSON.
 - **Recorded in:** `01-07-SUMMARY.md`.
+
+### P1-DC-32: Plan 01-10 executor choices (stand-in and remaining steps)
+
+- **Severity:** Low. **Status:** open.
+- The stand-in's server list lives at `<home>/builtin-mcp-stand-in.json`
+  (the plan said the harness dir, which exists only after the Pi starts).
+- `features/support/world.ts` gained a read-only `profilePiStarted` getter
+  (outside the plan's files).
+- The builtin wait derives the namespace from `path.basename` of the stub's
+  plugin argument.
+- The adapter wait and the neutral wait share one function; the adapter
+  wait's failure text changed to "the adapter mcp implementation did not
+  finish listing ...".
+- The builtin seed pins that Pi 1.5.0 lists a deferred tool, inactive,
+  before any search (measured).
+- Seeds install at user scope; a project-scope adapter server needs an
+  adapter-only step.
+- An unrelated http MCP scenario in `configuration.feature` flaked once
+  (OAuth probe error) and passed on rerun; recorded only in the SUMMARY.
+- **Recorded in:** `01-10-SUMMARY.md`.
+
+### P1-DC-33: Plan 01-09 executor choices (profile-following shared Pi, tags, moves)
+
+- **Severity:** Medium. **Status:** open.
+- (Medium) Added `the user has run {string}, which did not fail` to
+  `command.steps.ts`, which plan 01-10 also added; the orchestrator keeps
+  one definition at merge.
+- (Low) Three `configuration.feature` installs now accept any non-error
+  result (they used to prove a notice appeared).
+- (Low) The `.fallowrc.json` `ignoreExports` entry for the seed and stub-pid
+  helpers stays although `pi-process.ts` now uses them; Phase 6 removes it.
+- (Low) The onboarding seed is also written in `BeforeAll`; the shared Pi
+  uses `TMPDIR=<run root>/shared-pi-tmp` with its own jiti cache;
+  `BeforeAll` has its own 90 s timeout.
+- (Low) The stub-exit check runs only under the builtin profile.
+- (Low) Tag-reason sentences make some feature descriptions four or five
+  lines; reason IDs follow the plan (configuration and sources cite BLT-02).
+- (Low) The moved `apply` pair inlines an unused four-plugin Background;
+  builtin twins copy rows verbatim; twin titles end ", under Pi's built-in
+  MCP" / ", under pi-mcp-adapter".
+- **Recorded in:** `01-09-SUMMARY.md`.
+- (Orchestrator) At the wave-3 merge both copies of the step landed in
+  `command.steps.ts`; commit e4f64ba keeps 01-10's copy (it goes through the
+  shared `runSetup` with `["info", "warning"]`) and drops 01-09's
+  "no error" copy.
+
+### P1-DC-34: Plan 01-08 executor choices (record producer)
+
+- **Severity:** Low to Medium. **Status:** open.
+- (Medium) No RED-only commits (P1-DC-28 precedent); RED evidence captured
+  by reverting sources temporarily.
+- (Low) New export `mcpServerConfigsOf` in the frozen
+  `persistence/state-io.ts` (the record's own conversion; has production
+  users).
+- (Low) `compatibilityBasis` sits at the record's top level (RESEARCH
+  Pattern 3 and 01-03's `StoredMcpCompatibility`), not inside
+  `compatibility` as the CONTEXT amendment's wording suggests.
+- (Low) `disabledPinProjection` now takes a `Pick` of the record, changing
+  one call line in `disabledRefreshWouldWrite`.
+- (Low) An old disabled record without `mcpServerConfigs` is rewritten on
+  its next update (bumps `updatedAt`); key order inside a config counts as a
+  change for a disabled plugin (`JSON.stringify` comparison).
+- (Low) The import integration case declares the marketplace through
+  `extraKnownMarketplaces`; five whole-record test files outside the plan
+  gained `mcpServerConfigs: []`.
+- **Recorded in:** `01-08-SUMMARY.md`.
