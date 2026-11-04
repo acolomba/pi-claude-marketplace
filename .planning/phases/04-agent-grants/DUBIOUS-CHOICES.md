@@ -272,3 +272,31 @@ session copies every item here. Phase 6 merges this file into the root log.
   print-mode session (existing behavior, no state change).
 - **Alternatives:** silence it by editing the unowned `read-pass.ts`.
 - **Recorded in:** `04-RESEARCH.md` Assumptions A4.
+
+## Plan step (gsd-planner, 2026-11-04)
+
+Each entry: severity; choice; alternatives; why dubious. Recorded in the named plan.
+
+- **P4-DC-22 (Low):** four waves (04-01+04-02, 04-03+04-04, 04-05, 04-06 gate), not the ROADMAP's three; call sites move to Wave 3. Alt: ROADMAP waves. Why: forced by fallow (no export without a production importer) and disjoint files per wave; longer critical path.
+- **P4-DC-23 (Medium):** from Wave 3 Phase 3's `@builtin-only` "Update preserves dependency move warnings and MCP notices, under Pi's built-in MCP" fails at its diagnostic row (built-in async text); 04-05 checks it is the only failure, 04-06 excludes it by name; parent line 1 fixes the row at merge. Alts: edit Phase 3's file (forbidden); keep adapter text under built-in (breaks MGRT-01); parent applies the line on the milestone branch first. Why: a known red row and a name-excluded scenario.
+- **P4-DC-24 (Medium):** the built-in async warning has no Phase 4 scenario (unit tests only; Phase 3's row proves it after parent line 1), because notification rows that depend on the implementation are Phase 3's. Alt: a Phase 4 scenario pinning the warning row.
+- **P4-DC-25 (Low):** separate `@adapter-only`/`@builtin-only` pairs per verb (install, update, reinstall, enable) plus a built-in twin of the D-CF6-10 refusal: 17 scenarios. Alt: Scenario Outlines. Why: longer runs.
+- **P4-DC-26 (Low):** the install pair installs inside the profile Pi, departing from the harness rule "an MCP scenario installs through the shared Pi before the profile Pi starts", so the session-start rewrite cannot mask a staging bug.
+- **P4-DC-27 (Low):** one optional grouped `StageAgentsInput.mcpGrantForms` (active implementation + declared servers); absent = adapter form. Alt: required field. Why: a caller that omits it silently gets the adapter form.
+- **P4-DC-28 (Low):** new leaf `bridges/agents/mcp-async-warning.ts` (`mcpAsyncWarning(id)`). Alt: constants in convert.ts.
+- **P4-DC-29 (Low):** `convertAgentForm` returns `undefined` where AG-11 would throw (the inactive form is left out). Alt: catch the untyped throw; add a typed error in an unowned file.
+- **P4-DC-30 (Low):** when the legacy translation gives up (exclude name over 64 chars), the row stores only the adapter form and is not retried; the agent keeps an unresolvable grant under built-in silently.
+- **P4-DC-31 (Low):** legacy candidates are rows whose `warnings` hold the adapter async warning text. Alt: read every legacy file. Why: depends on earlier releases' warning text.
+- **P4-DC-32 (Low):** one corrupt index row stops the rewrite save for its scope (saving would drop the row and orphan its file); silent.
+- **P4-DC-33 (Low):** the earlier-release scenario simulates the old index by deleting the new fields (`features/lib/mcp-agent-earlier-index.ts`). Alt: a checked-in old index; install with the old release.
+- **P4-DC-34 (Low):** the background-child grants scenario relies on `@own-implementation` running under the adapter profile (shared Pi writes the adapter form).
+- **P4-DC-35 (Low):** the optional conformance test `test/integration/agents-builtin-grant-conformance.test.ts` imports a non-public pi-subagents module path.
+- **P4-DC-36 (Low):** a user-edited legacy file is translated in place if it keeps the `---` frame and the generated marker; files with stored forms are rewritten only on an exact match. Two rules for user edits.
+- **P4-DC-37 (Low):** both `emitGeneratedAgentFrontmatter` and `emitGeneratedAgentFile` stay exported; the block is built twice per conversion.
+- **P4-DC-38 (Low):** the agents block of `prepareUpdateHandles` in update-swap.ts moves to private `prepareUpdateAgents` (+ `updateAgentImplementation`), touching lines Phase 3 may also edit (merge conflict risk).
+- **P4-DC-39 (Low):** the MCP-free child autoapply scenario lives in `features/mcp-server/agent-grants.feature`, beside its shared steps. Alt: `features/agent/`.
+- **P4-DC-40 (Low):** `.planning/codebase/` map updates are parent lines, not edits.
+- **P4-DC-41 (Low):** three tasks exceed the five-file split signal (6-7 files with test pairs).
+- **P4-DC-42 (Low):** the gate plan declares `files_modified: []`; a combined-tree fix would touch unnamed files.
+- **P4-DC-43 (Low):** switch scenarios use two `When` steps (restart, then prompt).
+- **P4-DC-44 (Low):** the planner left ROADMAP.md's Phase 4 `Plans: TBD` for the tools to fill.
