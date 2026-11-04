@@ -376,3 +376,15 @@ The planner's choices, numbered here. Each is Low unless marked.
 - **P3-DC-53 (Low): interim marker between 03-02 and 03-04**: a plugin whose
   only servers are bare-elicitation servers shows `requires pi-mcp-adapter`
   without the adapter until 03-04 lands; no test covers the interim.
+
+## Execute step (2026-11-04)
+
+- **P3-DC-54 (Low): executor prompts name the GSD execution files by
+  absolute path instead of inlining them** (about 150 KB per dispatch), as
+  component-features DC-17 did; the small worktree branch-check block is
+  inlined with its base SHA. Alternative: inline every file verbatim.
+- **P3-DC-55 (Low): the post-merge gate of each wave is the brief's gate**
+  (`npm run check` in parts plus both cucumber profiles in their CI shards),
+  not GSD's generic build sniff; GSD's evaluation-scope commit spot-check is
+  replaced by a check of the merged commits and SUMMARY, because commit titles
+  carry no plan IDs (brief).
