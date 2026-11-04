@@ -629,3 +629,16 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Choice:** The tool-search projector accepts any tool name on a loaded line, not only `mcp__` names.
 - **Alternatives:** Filter to `mcp__` names.
 - **Why dubious:** A search that also loads another extension's tool would list it.
+
+## Wave 2 dispatch (Phase 2 session, 2026-11-04)
+
+### P2-DC-59: Wave 2 runs in two batches (3 then 4) with cucumber at `--parallel 2`
+
+- **Phase / source:** Phase 2 execution; orchestrator.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The container has 4 CPUs and 15 GB RAM, so the seven Wave 2
+  plans run as a batch of 02-04, 02-03, 02-07, then 02-02, 02-05, 02-06, 02-09,
+  and executors run cucumber with `--parallel 2`.
+- **Alternatives:** All seven at once, as the workflow dispatches a wave.
+- **Why dubious:** a longer wave; a batch-two plan forks from the same base
+  as batch one, so the post-merge gate runs once for the whole wave.
