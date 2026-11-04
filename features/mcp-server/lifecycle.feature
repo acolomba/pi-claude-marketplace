@@ -1,9 +1,11 @@
+@adapter-only
 Feature: MCP server lifecycle
 
   Each plugin verb changes the MCP servers pi-mcp-adapter offers in a session
   started after it, as Pi's /reload would. A stdio stub server stands in for a
   real one, a scripted model for a real model, and a local marketplace for a
   published one.
+  They run under pi-mcp-adapter only, until their built-in twins (BLT-06) lift the tag.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -12,7 +14,7 @@ Feature: MCP server lifecycle
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
 
   Scenario: Disabling a plugin removes its server from what pi-mcp-adapter offers
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
@@ -64,7 +66,7 @@ Feature: MCP server lifecycle
 
   Scenario: Enabling a disabled plugin offers its server again
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
-    Given the user has run "/claude:plugin enable demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin enable demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -98,7 +100,7 @@ Feature: MCP server lifecycle
       """
       {"stub": {"stub": {"env": {"STUB_TAG": "v2"}}}}
       """
-    Given the user has run "/claude:plugin update demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin update demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -166,7 +168,7 @@ Feature: MCP server lifecycle
       """
       {"stub": {"stub": {"env": {"STUB_TAG": "v2"}}}}
       """
-    Given the user has run "/claude:plugin update demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin update demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -192,7 +194,7 @@ Feature: MCP server lifecycle
   Scenario: A user's disabled choice for a plugin server survives a disable and enable
     Given the user has disabled the mcp server "plugin_demo_stub_" in the mcp-adapter.json file of the user scope
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
-    Given the user has run "/claude:plugin enable demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin enable demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -218,7 +220,7 @@ Feature: MCP server lifecycle
   Scenario: A user's disabled choice for a plugin server survives an uninstall and install
     Given the user has disabled the mcp server "plugin_demo_stub_" in the mcp-adapter.json file of the user scope
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope user"
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |

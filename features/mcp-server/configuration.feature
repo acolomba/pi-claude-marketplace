@@ -1,9 +1,11 @@
+@adapter-only
 Feature: MCP server configuration
 
   A plugin's MCP server receives its configuration as Claude Code gives it.
   A stdio stub server and a loopback HTTP server stand in for real servers,
   a scripted model for a real model, and a local marketplace for a published
   one.
+  They run under pi-mcp-adapter only, until their built-in twins (BLT-02) lift the tag.
 
   Scenario: A loopback remote server receives the plugin's headers, a variable among them expanded when it connects
     Given the marketplace "fixtures" is published as a dir source
@@ -15,7 +17,7 @@ Feature: MCP server configuration
       | Authorization | Bearer t0k3n  |
       | X-Team        | ${PI_CM_TEAM} |
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given pi runs with the scripted model, pi-mcp-adapter, and the environment variable "PI_CM_TEAM" set to "core"
     Given pi-mcp-adapter has listed the tools of the http mcp server "web"
     Given the scripted model plays these steps:
@@ -52,7 +54,7 @@ Feature: MCP server configuration
       | header | value |
       | X-Team | core  |
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -92,7 +94,7 @@ Feature: MCP server configuration
       | Authorization | Bearer t0k3n        |
       | X-Team        | ${PI_CM_UNSET_TEAM} |
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -132,7 +134,7 @@ Feature: MCP server configuration
       {"mcpServers": {"tag": {"stub": {"env": {"STUB_TAG": "<env value>"}}}}}
       """
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -166,7 +168,7 @@ Feature: MCP server configuration
       {"mcpServers": {"tag": {"stub": {"env": {"STUB_TAG": "${PI_CM_STUB_TAG}"}}}}}
       """
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given pi runs with the scripted model, pi-mcp-adapter, and the environment variable "PI_CM_STUB_TAG" set to "late"
     Given pi-mcp-adapter has listed the tools of the stub mcp server "tag" of the plugin "demo"
     Given the scripted model plays these steps:
@@ -191,7 +193,7 @@ Feature: MCP server configuration
       {"mcpServers": {"root": {"stub": {"plugin": "${CLAUDE_PLUGIN_ROOT}"}}}}
       """
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -224,7 +226,7 @@ Feature: MCP server configuration
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub" that echoes its "CLAUDE_PLUGIN_ROOT" and "CLAUDE_PLUGIN_DATA" environment variables
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |

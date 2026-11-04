@@ -1,7 +1,7 @@
 /**
- * @fileoverview Steps about the agents of a plugin that call its MCP tools:
- * an agent whose `tools:` line grants a plugin MCP tool by its Claude Code
- * name, and an agent with no `tools:` line (MCP-07, D-CF6-07, D-CF6-10).
+ * @fileoverview Steps about the MCP tool grants of a plugin's agents: an
+ * agent whose `tools:` line grants a plugin MCP tool by its Claude Code name,
+ * and an agent with no `tools:` line (MCP-07, D-CF6-07, D-CF6-10, MGRT-01).
  *
  * Both write the agent through the MCP server fixture writer, never through
  * the agent fixtures, so the agent's file holds only what these steps name.

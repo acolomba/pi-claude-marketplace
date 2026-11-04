@@ -1,3 +1,4 @@
+@adapter-only
 Feature: MCP server invalid configs
 
   A plugin whose MCP config holds a server or a file that Claude Code's schema
@@ -5,6 +6,7 @@ Feature: MCP server invalid configs
   loader skips and refuses what Claude Code refuses (D-CF6-02). The stub
   stands in for a real server, a scripted model for a real model, and a local
   marketplace for a published one.
+  They run under pi-mcp-adapter only, until the built-in verdicts (MREC-04) lift the tag.
 
   Scenario: A malformed server in .mcp.json is skipped and the plugin's other server answers
     Given the marketplace "fixtures" is published as a dir source
@@ -16,7 +18,7 @@ Feature: MCP server invalid configs
       {"mcpServers": {"ok": {"stub": {}}, "broken": {"type": "bogus"}}}
       """
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -70,7 +72,7 @@ Feature: MCP server invalid configs
       """
     Given the mcp file "<broken file>" of the published plugin "demo" of the marketplace "fixtures" is "<file state>"
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |

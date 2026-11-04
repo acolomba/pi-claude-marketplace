@@ -1,3 +1,4 @@
+@adapter-only
 Feature: MCP server sources
 
   A plugin can declare its MCP servers in more than one place, and
@@ -5,6 +6,7 @@ Feature: MCP server sources
   Code's order. Each stub server tags its echo with the source that declared
   it. The stub stands in for a real server, a scripted model for a real model,
   and a local marketplace for a published one.
+  They run under pi-mcp-adapter only, until their built-in twins (BLT-02) lift the tag.
 
   Scenario: A plugin's MCP servers are the union of its .mcp.json and its plugin.json, the later declaration winning a shared name
     Given the marketplace "fixtures" is published as a dir source
@@ -20,7 +22,7 @@ Feature: MCP server sources
       {"name": "demo", "version": "1.0.0", "mcpServers": {"a": {"stub": {"env": {"STUB_TAG": "a-manifest"}}}, "b": {"stub": {"env": {"STUB_TAG": "b-manifest"}}}}}
       """
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -67,7 +69,7 @@ Feature: MCP server sources
       {"name": "demo", "version": "1.0.0", "mcpServers": ["./a.json", {"y": {"stub": {"env": {"STUB_TAG": "y-inline"}}}}, "./b.json"]}
       """
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -107,7 +109,7 @@ Feature: MCP server sources
       """
     Given the published plugin "demo" of the marketplace "fixtures" has no plugin.json, so its marketplace entry declares its mcp servers
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -145,7 +147,7 @@ Feature: MCP server sources
       {"d": {"stub": {}}}
       """
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -203,7 +205,7 @@ Feature: MCP server sources
       {"mcpServers": {"r": {"stub": {}}}}
       """
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -228,7 +230,7 @@ Feature: MCP server sources
       """
     Given the mcp file "servers.json" of the published plugin "demo" of the marketplace "fixtures" is a symbolic link to "config/servers.json"
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
