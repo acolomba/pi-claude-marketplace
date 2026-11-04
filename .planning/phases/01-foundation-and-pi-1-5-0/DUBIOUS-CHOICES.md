@@ -363,3 +363,26 @@ copies every item here. Phase 6 merges this file into the root log.
   `**D-MB-11 (amended, reversed in part):**` so the decision-coverage gate
   parses it (7/7 covered).
 - **Recorded in:** the 01-01..01-14 plans.
+
+## Plan check step (gsd-plan-checker + orchestrator, 2026-11-04)
+
+### P1-DC-23: Plan-check revisions and accepted warnings
+
+- **Severity:** Medium. **Status:** open.
+- (Medium) CI measurement for DUAL-03 moved from the 01-14 executor to the
+  parent session: executors have no GitHub tools here (`gh` is search-only).
+  01-14 now writes `01-CI-HANDOFF.md`; the parent pushes after the merge,
+  dispatches `ci.yml`, and amends the D-CF1-16 row and `01-FROZEN.md`. This
+  also removes P1-DC-22's worktree-push concern.
+- (Low) Fixed by the orchestrator, not a planner revision: 01-01's version
+  grep now exits non-zero on failure; 01-08 gains reinstall and import cases
+  in the integration test.
+- (Low) Accepted without a split: 01-05 (29 files in one task), 01-08 (33),
+  01-11 (25) exceed the checker's 15-file budget; the bulk is mechanical
+  typecheck-driven literal edits.
+- (Low) Accepted: 01-06 adds one probe per `session_start` (a second
+  notification run); Phase 2 may reuse the load run's snapshot.
+- (Medium, checker) The checker did not re-measure research inventories
+  (47/49 failing adapter scenarios, 9 marker rows); a wrong count would show
+  as red scenarios during execution.
+- **Recorded in:** `01-01-PLAN.md`, `01-08-PLAN.md`, `01-14-PLAN.md`.
