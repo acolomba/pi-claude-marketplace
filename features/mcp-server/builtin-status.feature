@@ -27,7 +27,7 @@ Feature: MCP server builtin status
       | plugin id                      | demo@fixtures                                      |
       | plugin name                    | demo                                               |
       | plugin reasons                 |                                                    |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]    |
+      | plugin requires                | [{"companion":"mcp","missing":false}]              |
       | plugin scope                   | user                                               |
       | plugin status                  | installed                                          |
       | plugin version                 | 1.0.0                                              |
@@ -58,7 +58,7 @@ Feature: MCP server builtin status
       | plugin id                      | demo@fixtures                                          |
       | plugin name                    | demo                                                   |
       | plugin reasons                 |                                                        |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]        |
+      | plugin requires                | [{"companion":"mcp","missing":false}]                  |
       | plugin scope                   | user                                                   |
       | plugin status                  | installed                                              |
       | plugin version                 | 1.0.0                                                  |
@@ -89,7 +89,7 @@ Feature: MCP server builtin status
       | plugin id                      | demo@fixtures                                                                               |
       | plugin name                    | demo                                                                                        |
       | plugin reasons                 |                                                                                             |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]                                             |
+      | plugin requires                | [{"companion":"mcp","missing":false}]                                                       |
       | plugin scope                   | user                                                                                        |
       | plugin status                  | installed                                                                                   |
       | plugin version                 | 1.0.0                                                                                       |
@@ -120,7 +120,7 @@ Feature: MCP server builtin status
       | plugin id                      | demo@fixtures                                       |
       | plugin name                    | demo                                                |
       | plugin reasons                 |                                                     |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]     |
+      | plugin requires                | [{"companion":"mcp","missing":false}]               |
       | plugin scope                   | user                                                |
       | plugin status                  | installed                                           |
       | plugin version                 | 1.0.0                                               |
@@ -150,7 +150,7 @@ Feature: MCP server builtin status
       | plugin id                      | demo@fixtures                                                   |
       | plugin name                    | demo                                                            |
       | plugin reasons                 |                                                                 |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]                 |
+      | plugin requires                | [{"companion":"mcp","missing":false}]                           |
       | plugin scope                   | user                                                            |
       | plugin status                  | installed                                                       |
       | plugin version                 | 1.0.0                                                           |
@@ -179,7 +179,7 @@ Feature: MCP server builtin status
       | plugin id                      | demo@fixtures                                                |
       | plugin name                    | demo                                                         |
       | plugin reasons                 |                                                              |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]              |
+      | plugin requires                | [{"companion":"mcp","missing":false}]                        |
       | plugin scope                   | project                                                      |
       | plugin status                  | installed                                                    |
       | plugin version                 | 1.0.0                                                        |
@@ -209,7 +209,7 @@ Feature: MCP server builtin status
       | plugin id                      | demo@fixtures                                                        |
       | plugin name                    | demo                                                                 |
       | plugin reasons                 |                                                                      |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]                      |
+      | plugin requires                | [{"companion":"mcp","missing":false}]                                |
       | plugin scope                   | user                                                                 |
       | plugin status                  | installed                                                            |
       | plugin version                 | 1.0.0                                                                |

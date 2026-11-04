@@ -26,7 +26,7 @@ Feature: MCP server verdict info
       | marketplace name               | fixtures                                                                                                          |
       | marketplace scope              | user                                                                                                              |
       | needs reload                   | false                                                                                                             |
-      | plugin components mcp          | [{"name":"plugin:demo:events","unsupportedFeature":"sse"},{"name":"plugin:demo:tools","status":"status unknown"}] |
+      | plugin components mcp          | [{"name":"plugin:demo:events","unsupportedFeature":"sse"},{"name":"plugin:demo:tools","status":"not loaded"}]     |
       | plugin components resolved     | true                                                                                                              |
       | plugin components skills       | demo-skill                                                                                                        |
       | plugin id                      | demo@fixtures                                                                                                     |
