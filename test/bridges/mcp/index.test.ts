@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { builtinServerConfig as peerBuiltinServerConfig } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-entry.ts";
+import { syncBuiltinRegistrations as peerSyncBuiltinRegistrations } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-registration.ts";
 import {
   abortPreparedMcp,
+  builtinServerConfig,
   checkMcpAdapterConfig,
   commitPreparedMcp,
   prepareStageMcpServers,
@@ -12,6 +15,7 @@ import {
   removeProjectDisableStubs,
   replacePreparedMcp,
   rollbackMcpReplacement,
+  syncBuiltinRegistrations,
   unstageMcpServers,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
 import {
@@ -33,8 +37,10 @@ import { unstageMcpServers as peerUnstageMcpServers } from "../../../extensions/
 import type {
   LegacyMcpOwner,
   McpReplacement,
+  McpSubstitutionContext,
   PreparedMcpStaging,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
+import type { McpSubstitutionContext as PeerMcpSubstitutionContext } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 import type {
   LegacyMcpOwner as PeerLegacyMcpOwner,
   McpReplacement as PeerMcpReplacement,
@@ -50,6 +56,7 @@ type ReplacementReplaced = Extract<McpReplacement, { kind: "replaced" }>;
 void (true satisfies Same<PreparedMcpStaging, PeerPreparedMcpStaging>);
 void (true satisfies Same<McpReplacement, PeerMcpReplacement>);
 void (true satisfies Same<LegacyMcpOwner, PeerLegacyMcpOwner>);
+void (true satisfies Same<McpSubstitutionContext, PeerMcpSubstitutionContext>);
 void (true satisfies Same<PreparedNoop["kind"], "noop">);
 void (true satisfies Same<PreparedStaged["kind"], "staged">);
 void (true satisfies Same<ReplacementNoop["prepared"], PreparedNoop>);
@@ -177,5 +184,27 @@ describe("MCP barrel runtime bindings", () => {
 
     // assert
     assert.strictEqual(boundaryUnstageMcpServers, expectedUnstageMcpServers);
+  });
+
+  test("re-exports builtinServerConfig from the built-in entry module", () => {
+    // arrange
+    const expectedBuiltinServerConfig = peerBuiltinServerConfig;
+
+    // act
+    const boundaryBuiltinServerConfig = builtinServerConfig;
+
+    // assert
+    assert.strictEqual(boundaryBuiltinServerConfig, expectedBuiltinServerConfig);
+  });
+
+  test("re-exports syncBuiltinRegistrations from the built-in registration module", () => {
+    // arrange
+    const expectedSyncBuiltinRegistrations = peerSyncBuiltinRegistrations;
+
+    // act
+    const boundarySyncBuiltinRegistrations = syncBuiltinRegistrations;
+
+    // assert
+    assert.strictEqual(boundarySyncBuiltinRegistrations, expectedSyncBuiltinRegistrations);
   });
 });

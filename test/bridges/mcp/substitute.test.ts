@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  ADAPTER_FIELD_ENCODER,
   substituteAndInject,
+  type McpFieldEncoder,
   type McpSubstitutionContext,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 
@@ -82,7 +84,7 @@ for (const {
     const context: McpSubstitutionContext = { ...SCOPE_BUILTINS[scope], env: installEnv };
 
     // act
-    const substituted = substituteAndInject(shape.entry(raw), context);
+    const substituted = substituteAndInject(shape.entry(raw), context, ADAPTER_FIELD_ENCODER);
 
     // assert
     assert.deepStrictEqual(substituted, {
@@ -111,7 +113,7 @@ test("AVAR-01: writes oauth.redirectUri, description, keys and non-string values
   const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, env: { PI_CM_PATH: "path" } };
 
   // act
-  const substituted = substituteAndInject(translated, context);
+  const substituted = substituteAndInject(translated, context, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(substituted, {
@@ -146,8 +148,8 @@ test("AVAR-01: passes field values of an unexpected type through unchanged", () 
   const stdio = { command: "server", args: ["--level", 2, null], env: { RETRIES: 3 } };
 
   // act
-  const substitutedRemote = substituteAndInject(remote, PROJECT_CONTEXT);
-  const substitutedStdio = substituteAndInject(stdio, PROJECT_CONTEXT);
+  const substitutedRemote = substituteAndInject(remote, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
+  const substitutedStdio = substituteAndInject(stdio, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(substitutedRemote, {
@@ -184,7 +186,7 @@ test("MENV-02: injects the env first and in place, lets declared keys win and ke
   };
 
   // act
-  const { entry } = substituteAndInject(translated, PROJECT_CONTEXT);
+  const { entry } = substituteAndInject(translated, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(entry, {
@@ -222,7 +224,7 @@ for (const scope of ["project", "user"] as const) {
     const context: McpSubstitutionContext = { ...SCOPE_BUILTINS[scope], env: {} };
 
     // act
-    const { entry } = substituteAndInject({ command: "server" }, context);
+    const { entry } = substituteAndInject({ command: "server" }, context, ADAPTER_FIELD_ENCODER);
 
     // assert
     assert.deepStrictEqual(Object.entries(entry.env as Record<string, unknown>), [
@@ -240,7 +242,7 @@ test("AVAR-01: a declared env.CLAUDE_PROJECT_DIR follows the plain rule", () => 
   };
 
   // act
-  const substituted = substituteAndInject(translated, PROJECT_CONTEXT);
+  const substituted = substituteAndInject(translated, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(substituted, {
@@ -265,8 +267,8 @@ test("AVAR-01: a project-scope ${CLAUDE_PROJECT_DIR} expands at install in comma
   };
 
   // act
-  const substitutedStdio = substituteAndInject(stdio, PROJECT_CONTEXT);
-  const substitutedRemote = substituteAndInject(remote, PROJECT_CONTEXT);
+  const substitutedStdio = substituteAndInject(stdio, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
+  const substitutedRemote = substituteAndInject(remote, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(
@@ -287,7 +289,7 @@ test("MENV-02: injects the env into a stdio entry without args", () => {
   const translated = { command: "server", directTools: "search" };
 
   // act
-  const { entry } = substituteAndInject(translated, PROJECT_CONTEXT);
+  const { entry } = substituteAndInject(translated, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(Object.keys(entry), ["command", "env", "directTools"]);
@@ -303,7 +305,7 @@ test("returns a fresh entry and leaves the translated entry unchanged", () => {
   const originalTranslated = structuredClone(translated);
 
   // act
-  substituteAndInject(translated, PROJECT_CONTEXT);
+  substituteAndInject(translated, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(translated, originalTranslated);
@@ -320,8 +322,8 @@ test("preserves a literal __proto__ key in env and headers without changing glob
   ) as Record<string, unknown>;
 
   // act
-  const substitutedStdio = substituteAndInject(stdio, PROJECT_CONTEXT);
-  const substitutedRemote = substituteAndInject(remote, PROJECT_CONTEXT);
+  const substitutedStdio = substituteAndInject(stdio, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
+  const substitutedRemote = substituteAndInject(remote, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(Object.entries(substitutedStdio.entry.env as Record<string, unknown>), [
@@ -358,8 +360,8 @@ test("AVAR-02: writes no value of a referenced variable", () => {
 
   // act
   const writtenText = JSON.stringify([
-    substituteAndInject(stdio, context),
-    substituteAndInject(remote, context),
+    substituteAndInject(stdio, context, ADAPTER_FIELD_ENCODER),
+    substituteAndInject(remote, context, ADAPTER_FIELD_ENCODER),
   ]);
 
   // assert
@@ -385,8 +387,8 @@ test("AVAR-03: no written env or headers value starts with a single !", () => {
   const remote = { url: "!url", headers: { Value: "!header" } };
 
   // act
-  const substitutedStdio = substituteAndInject(stdio, context);
-  const substitutedRemote = substituteAndInject(remote, context);
+  const substitutedStdio = substituteAndInject(stdio, context, ADAPTER_FIELD_ENCODER);
+  const substitutedRemote = substituteAndInject(remote, context, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(substitutedStdio.entry, {
@@ -414,7 +416,7 @@ test("AVAR-02: reports a stdio server's missing names once each in command, args
   };
 
   // act
-  const { report } = substituteAndInject(translated, PROJECT_CONTEXT);
+  const { report } = substituteAndInject(translated, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(report, {
@@ -431,7 +433,7 @@ test("AVAR-02: reports a remote server's missing names once each in url, headers
   };
 
   // act
-  const { report } = substituteAndInject(translated, PROJECT_CONTEXT);
+  const { report } = substituteAndInject(translated, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(report, { missing: ["PI_CM_U", "PI_CM_V", "PI_CM_W"], blanked: [] });
@@ -458,7 +460,7 @@ test("AVAR-05: reports a remote server's set withheld names once each in url, he
   };
 
   // act
-  const { report } = substituteAndInject(translated, context);
+  const { report } = substituteAndInject(translated, context, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(report, {
@@ -475,7 +477,7 @@ test("AVAR-05: a remote unset withheld name is neither blanked nor missing", () 
   };
 
   // act
-  const substituted = substituteAndInject(translated, PROJECT_CONTEXT);
+  const substituted = substituteAndInject(translated, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(substituted, {
@@ -497,7 +499,7 @@ test("AVAR-05: a plain-field blank adds no blanked name", () => {
   };
 
   // act
-  const substituted = substituteAndInject(translated, context);
+  const substituted = substituteAndInject(translated, context, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(substituted, {
@@ -515,11 +517,57 @@ test("AVAR-05: a deny-listed header variable set to the empty string is blanked 
   const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, env: { ANTHROPIC_API_KEY: "" } };
 
   // act
-  const substituted = substituteAndInject(translated, context);
+  const substituted = substituteAndInject(translated, context, ADAPTER_FIELD_ENCODER);
 
   // assert
   assert.deepStrictEqual(substituted, {
     entry: { url: "https://mcp.example.test", headers: { Value: "" } },
     report: { missing: [], blanked: ["ANTHROPIC_API_KEY"] },
+  });
+});
+
+test("P2-DC-19: without an encoder the walk writes pi-mcp-adapter's encoding", () => {
+  // arrange
+  const translated = { url: "https://mcp.example.test", headers: { Value: "!token" } };
+
+  // act
+  const substituted = substituteAndInject(translated, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(substituted, {
+    entry: { url: "https://mcp.example.test", headers: { Value: "!!token" } },
+    report: { missing: [], blanked: [] },
+  });
+});
+
+test("BLT-02: routes command, args, and url as plain, env and headers as secret, and literals", () => {
+  // arrange
+  const encoder: McpFieldEncoder = {
+    expanded: (segments, secret, env) =>
+      `expanded ${JSON.stringify(segments)} secret=${String(secret)} env=${String(env.PI_CM_MARK)}`,
+    literal: (text, secret) => `literal ${text} secret=${String(secret)}`,
+  };
+  const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, env: { PI_CM_MARK: "m" } };
+  const stdio = { command: "c", args: ["a"], env: { K: "e" } };
+  const remote = { url: "u", headers: { H: "h" }, oauth: { clientId: "o" } };
+
+  // act
+  const substitutedStdio = substituteAndInject(stdio, context, encoder);
+  const substitutedRemote = substituteAndInject(remote, context, encoder);
+
+  // assert
+  assert.deepStrictEqual(substitutedStdio.entry, {
+    command: 'expanded [{"kind":"text","text":"c"}] secret=false env=m',
+    args: ['expanded [{"kind":"text","text":"a"}] secret=false env=m'],
+    env: {
+      CLAUDE_PLUGIN_ROOT: "literal /plugins/acme secret=true",
+      CLAUDE_PLUGIN_DATA: "literal /data/mp/acme secret=true",
+      K: 'expanded [{"kind":"text","text":"e"}] secret=true env=m',
+    },
+  });
+  assert.deepStrictEqual(substitutedRemote.entry, {
+    url: 'expanded [{"kind":"text","text":"u"}] secret=false env=m',
+    headers: { H: 'expanded [{"kind":"text","text":"h"}] secret=true env=m' },
+    oauth: { clientId: "literal o secret=false" },
   });
 });

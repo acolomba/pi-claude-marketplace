@@ -27,6 +27,7 @@ import {
 } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 import {
+  ADAPTER_FIELD_ENCODER,
   substituteAndInject,
   type McpSubstitutionContext,
   type SubstitutedEntry,
@@ -184,7 +185,11 @@ function translatedEntry(
   }
 
   return withOAuthDecision(
-    substituteAndInject(translateMcpServer(entry, description), substitution),
+    substituteAndInject(
+      translateMcpServer(entry, description),
+      substitution,
+      ADAPTER_FIELD_ENCODER,
+    ),
     substitution.env,
   );
 }
