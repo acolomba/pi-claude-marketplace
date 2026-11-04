@@ -173,7 +173,9 @@ async function isContained(source: RecordSource, locations: ScopedLocations): Pr
 /**
  * The servers of one plugin that the built-in profile runs, named and built in
  * the record's server order. The install-time verdict does not filter: a
- * server only pi-mcp-adapter blocks registers here (P2-DC-06).
+ * server only pi-mcp-adapter blocks registers here (P2-DC-06). A server whose
+ * resolved config Pi would run differently, such as a variable that resolved
+ * to a leading `~`, is skipped and logged.
  */
 function serverRegistrations(
   pluginName: string,
@@ -183,14 +185,18 @@ function serverRegistrations(
 ): Registration[] {
   return servers
     .filter(({ config }) => BUILTIN_PROFILE.classify(config).kind === "supported")
-    .map(
-      ({ name, config }) =>
-        [
-          BUILTIN_PROFILE.serverName(pluginName, name),
-          builtinServerConfig(config, ctx, description),
-        ] as const,
-    )
-    .filter((entry): entry is Registration => entry[1] !== undefined);
+    .flatMap(({ name, config }): Registration[] => {
+      const serverName = BUILTIN_PROFILE.serverName(pluginName, name);
+      const built = builtinServerConfig(config, ctx, description);
+      if (built === undefined) {
+        debugLog(
+          `MCP server ${serverName} not registered: Pi would not run it as Claude Code does`,
+        );
+        return [];
+      }
+
+      return [[serverName, built]];
+    });
 }
 
 async function recordRegistrations(

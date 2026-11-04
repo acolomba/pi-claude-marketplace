@@ -8,6 +8,8 @@
 // encoder. Nothing here writes a file: the config lives in Pi's session
 // registry only (D-MB-04).
 
+import path from "node:path";
+
 import { translateBuiltinMcpServer } from "../../domain/mcp-builtin-translation.ts";
 
 import { BUILTIN_FIELD_ENCODER } from "./builtin-escape.ts";
@@ -25,11 +27,29 @@ function isPiServerConfig(entry: object): entry is McpServerConfig {
   );
 }
 
+// Pi 1.5.0 `createDefaultTransport` expands `~`, `~/...`, and on Windows
+// `~\...` in `command` and in each `args` element to the home directory when
+// it starts a stdio server. Claude Code passes them as written.
+function piExpandsHome(value: string): boolean {
+  return value === "~" || value.startsWith("~/") || value.startsWith(`~${path.sep}`);
+}
+
+function startsWithHome(config: McpServerConfig): boolean {
+  if (!("command" in config)) {
+    return false;
+  }
+
+  return [config.command, ...(config.args ?? [])].some(piExpandsHome);
+}
+
 /**
  * The config of one server as Claude Code would run it, or `undefined` for a
- * server that is not an object or has neither a string `command` nor a
- * string `url`. `ctx.projectDir` is the session's working directory for
- * both scopes, because the registration happens per session.
+ * server that is not an object, has neither a string `command` nor a string
+ * `url`, or is a stdio server whose resolved `command` or an `args` element
+ * starts with a `~` that Pi would expand. The built-in profile blocks a
+ * literal leading `~`; this catches one that a variable resolved to.
+ * `ctx.projectDir` is the session's working directory for both scopes,
+ * because the registration happens per session.
  */
 export function builtinServerConfig(
   server: unknown,
@@ -45,5 +65,5 @@ export function builtinServerConfig(
     ctx,
     BUILTIN_FIELD_ENCODER,
   );
-  return isPiServerConfig(entry) ? entry : undefined;
+  return isPiServerConfig(entry) && !startsWithHome(entry) ? entry : undefined;
 }

@@ -78,3 +78,47 @@ for (const { title, server } of [
     assert.strictEqual(config, expectedConfig);
   });
 }
+
+const HOME_CONTEXT: McpSubstitutionContext = {
+  ...CONTEXT,
+  env: { PI_CM_TILDE: "~", PI_CM_CONFIG: "~/conf", PI_CM_USER: "~user" },
+};
+
+for (const { title, server } of [
+  { title: "a command that resolves to ~", server: { command: "${PI_CM_TILDE}" } },
+  { title: "an arg that resolves to ~/", server: { command: "node", args: ["${PI_CM_CONFIG}"] } },
+  {
+    title: "an arg whose empty default leaves a leading ~/",
+    server: { command: "node", args: ["--flag", "${PI_CM_UNSET:-}~/a"] },
+  },
+]) {
+  test(`BLT-02: ${title} gives no config, since Pi would expand it to the home directory`, () => {
+    // arrange
+    const expectedConfig = undefined;
+
+    // act
+    const config = builtinServerConfig(server, HOME_CONTEXT, undefined);
+
+    // assert
+    assert.strictEqual(config, expectedConfig);
+  });
+}
+
+test("BLT-02: a ~ that is not leading, or that names a user, is kept as Pi keeps it", () => {
+  // arrange
+  const server = { command: "node", args: ["a~/b", "${PI_CM_USER}"] };
+
+  // act
+  const config = builtinServerConfig(server, HOME_CONTEXT, undefined);
+
+  // assert
+  assert.strictEqual(
+    JSON.stringify(config),
+    JSON.stringify({
+      command: "node",
+      args: ["a~/b", "~user"],
+      env: { CLAUDE_PLUGIN_ROOT: "/plugins/a$$b", CLAUDE_PLUGIN_DATA: "/data/mp/a" },
+      exposure: "deferred",
+    }),
+  );
+});

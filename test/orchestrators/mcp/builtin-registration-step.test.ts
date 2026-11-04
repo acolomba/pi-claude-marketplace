@@ -629,6 +629,41 @@ describe("builtinRegistrationStep", () => {
     verify(ctx);
   });
 
+  test("BLT-02: a server whose arg resolves to a leading ~/ is skipped and logged", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    process.env.PI_CM_STEP_TOKEN = "~/conf";
+    await writeState(fixture, "user", {
+      demo: installRecord(fixture.pluginRoot, [
+        { name: "home", config: { command: "node", args: ["${PI_CM_STEP_TOKEN}"] } },
+        { name: "plain", config: { command: "node" } },
+      ]),
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_plain", {
+        command: "node",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+        },
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      "[mcp] MCP server plugin_demo_home not registered: Pi would not run it as Claude Code does",
+    ]);
+    verify(pi);
+    verify(ctx);
+  });
+
   test("ANAME-06: the plugin's description reaches its registered server", async (t) => {
     // arrange
     const fixture = await session(t);

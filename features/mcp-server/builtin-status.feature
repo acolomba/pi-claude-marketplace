@@ -95,6 +95,37 @@ Feature: MCP server builtin status
       | plugin version                 | 1.0.0                                                                                       |
       | severity                       | info                                                                                        |
 
+  Scenario: Plugin info shows a server whose arg resolves to a leading ~ as not loaded (BLT-02)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"stub": {"command": "pi-cm-no-such-program", "args": ["${PI_CM_UNSET_PREFIX:-}~/conf"]}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model
+    When the user runs "/claude:plugin info demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind                           | plugin-info                                         |
+      | marketplace details autoupdate | false                                               |
+      | marketplace name               | fixtures                                            |
+      | marketplace scope              | user                                                |
+      | needs reload                   | false                                               |
+      | plugin components mcp          | [{"name":"plugin:demo:stub","status":"not loaded"}] |
+      | plugin components resolved     | true                                                |
+      | plugin components skills       | demo-skill                                          |
+      | plugin id                      | demo@fixtures                                       |
+      | plugin name                    | demo                                                |
+      | plugin reasons                 |                                                     |
+      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]     |
+      | plugin scope                   | user                                                |
+      | plugin status                  | installed                                           |
+      | plugin version                 | 1.0.0                                               |
+      | severity                       | info                                                |
+
   Scenario: Plugin info shows a plugin server that the user's mcp.json overrides as overridden by mcp.json (BLT-04, BLT-05)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
