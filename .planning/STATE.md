@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
-current_phase: 4
-current_phase_name: Agent Grants
-status: executing
-stopped_at: Completed 04-06-PLAN.md
-last_updated: "2026-11-04T15:39:22.992Z"
+current_phase: 2
+current_phase_name: Built-in Materialization
+status: verifying
+stopped_at: Phase 4 complete, ready to verify Phase 2
+last_updated: "2026-11-04T16:37:44.254Z"
 last_activity: 2026-11-04
-last_activity_desc: Phase 4 execution started
-state_head: 8c95f25701e120fb9a10c4bf7d7d14b5ed44bc2c
+last_activity_desc: Phase 4 complete, transitioned to Phase 2
+state_head: 3a7e91095c99c7cc819cfd64a2cf33fcc1918b52
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 20
   completed_plans: 20
-  percent: 17
+  percent: 33
 ---
 
 # Project State
@@ -34,12 +34,12 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 
 ## Current Position
 
-Phase: 4 (Agent Grants) — EXECUTING
-Plan: 5 of 6
-Status: Ready to execute
-Last activity: 2026-11-04 — Phase 4 execution started
+Phase: 2 — Built-in Materialization
+Plan: 2
+Status: Phase complete — ready for verification
+Last activity: 2026-11-04 — Phase 4 complete, transitioned to Phase 2
 
-Progress: [██░░░░░░░░] 17%
+Progress: [███░░░░░░░] 33%
 
 
 ### mcp-4 closeout
@@ -903,5 +903,5 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 ## Session Continuity
 
 Last session: 2026-11-04T15:39:22.876Z
-Stopped at: Completed 04-06-PLAN.md
+Stopped at: Phase 4 complete, ready to verify Phase 2
 Resume file: None

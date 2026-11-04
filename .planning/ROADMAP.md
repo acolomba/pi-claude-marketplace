@@ -321,7 +321,7 @@ changes their names or shapes.
 - [x] **Phase 1: Foundation and Pi 1.5.0** - Pi 1.5.0, the active-implementation snapshot, the pure profiles, records that keep every declared server, and the dual-profile cucumber harness, with every shared file and interface frozen and no visible change (completed 2026-11-04)
 - [ ] **Phase 2: Built-in Materialization** - Recorded servers connect through Pi's built-in MCP on startup and `/reload` with Claude's values and names, trust gating, status in `info`, and a switch that needs no plugin action
 - [ ] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records
-- [ ] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child
+- [x] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child (completed 2026-11-04)
 - [ ] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter
 - [ ] **Phase 6: Release Docs and Combined Tree** - The CHANGELOG and READMEs describe built-in MCP support, closed sets are clean, and the combined tree passes under both profiles
 
@@ -444,7 +444,7 @@ Plans:
 - Wave 2: `orchestrators/mcp/agent-grants-step.ts` with child detection, and `agent-grants.feature` (MGRT-01 switch side, MGRT-02).
 - Wave 3: parent lines and the phase gate.
 
-**Plans**: 6/6 plans executed
+**Plans**: 6/6 plans complete
 - [x] 04-01-PLAN.md
 - [x] 04-02-PLAN.md
 - [x] 04-03-PLAN.md
@@ -488,7 +488,7 @@ Plans:
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
 | 2. Built-in Materialization | 0/TBD | Not started | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
-| 4. Agent Grants | 6/6 | In Progress | - |
+| 4. Agent Grants | 6/6 | Complete    | 2026-11-04 |
 | 5. Hook Tool Names | 0/TBD | Not started | - |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
 

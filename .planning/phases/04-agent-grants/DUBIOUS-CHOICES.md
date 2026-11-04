@@ -352,3 +352,11 @@ Review: 0 critical, 6 warnings, 5 info (`04-REVIEW.md`); fixed WR-01, WR-02, WR-
 - **P4-DC-73 (Low, fixer):** WR-01 and WR-06 fixed in one commit (switch to `withExistingScopeLock` with `assertLockHeld`; `state.json` is no longer read by the rewrite).
 - **P4-DC-74 (Low, fixer):** the malformed-form debug line wording changed.
 - **P4-DC-75 (Low, orchestrator):** one fix pass instead of the autonomous fix+re-review loop (up to 3); the phase gate and the verifier run after it.
+
+## Verification (gsd-verifier, 2026-11-04)
+
+Status `passed`, 3/3 must-haves; three accepted gaps listed as warnings (cascade updates, legacy translation gaps, untrusted leg unit-only).
+
+- **P4-DC-76 (High):** verification passed despite the cascade-update grant gap (P4-DC-13/60): SC1 says "updating", and autoupdate and `apply` convergence are updates that stage the adapter form under built-in until the next load. Alt: `gaps_found` or `human_needed`. Closure is parent line 2 after Phase 3 merges; the parent must not drop it.
+- **P4-DC-77 (Low):** the verifier relied on the phase gate logs and re-ran only the feature under both profiles, focused unit suites, and two red experiments.
+- **P4-DC-78 (Low):** the verifier briefly edited `subagent-child.ts` and `agent-grants-step.ts` in the main checkout for red proofs and restored them with `git checkout --`.
