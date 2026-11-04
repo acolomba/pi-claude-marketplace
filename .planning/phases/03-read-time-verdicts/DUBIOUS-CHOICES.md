@@ -388,3 +388,28 @@ The planner's choices, numbered here. Each is Low unless marked.
   not GSD's generic build sniff; GSD's evaluation-scope commit spot-check is
   replaced by a check of the merged commits and SUMMARY, because commit titles
   carry no plan IDs (brief).
+
+### Wave 1 (03-01, neutral record and read-time list)
+
+- **P3-DC-56 (Medium): the list switch scenario uses a fresh Pi with
+  built-in MCP, not the "restart without pi-mcp-adapter" step**, because
+  pi-mcp-adapter turns built-in MCP off on its machine, so that restart lands
+  on no implementation. The plugin installs under the adapter-profile Pi and is
+  listed from a fresh built-in Pi with no reinstall. Alternatives: two restarts;
+  expect the no-implementation row.
+- **P3-DC-57 (Medium): sibling tests pin the cleared basis after update and
+  reinstall for one wave** (`install-flow-ledger`, `operations`,
+  `reinstall-flow`), until 03-06 writes the basis in the update runner.
+- **P3-DC-58 (Low): the LLM list tool opens one snapshot also on its
+  load-failure paths.**
+- **P3-DC-59 (Low): the no-trace legacy proof strips the record's trace and
+  keeps a declared sse server**, since removing the manifest turns the list into
+  a bare `(failed)` header.
+- **P3-DC-60 (Low): `resolutionFor` spreads the neutral resolution**, relying
+  on "every implementation blocks what neutral blocks" to leave no stale
+  `droppedMcpServers`.
+- **P3-DC-61 (Low): the interim update/reinstall basis gap is tracked in the
+  SUMMARY, not WINDOWS.md**, to avoid ledger conflicts between parallel
+  worktrees.
+- **P3-DC-62 (Low): the browse loader's implementation wiring has no dedicated
+  unit test**; it is proven through the shared payload builder.
