@@ -82,14 +82,14 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 ### Implementation selection
 
 - [x] **MSEL-01**: Each command run, load, and session sees one active MCP implementation: pi-mcp-adapter when `/mcp-adapter` is loaded, built-in when `/mcp` comes from `builtin:mcp`, otherwise none; nothing reads it before every extension has loaded
-- [ ] **MSEL-02**: After the active implementation changes (the user installs or uninstalls pi-mcp-adapter, or turns Pi's built-in MCP on or off) and runs `/reload` or starts Pi again, every installed plugin's MCP servers run through the new active implementation with no reinstall, `apply`, or other plugin action. Turning built-in MCP back on after the adapter turned it off is the user's step (D-MB-01)
-- [ ] **MSEL-03**: The extension never registers a server with Pi while the adapter is active or while no implementation is active, so Pi reports no extension error for an unconnected registration
-- [ ] **MSEL-04**: Adapter entries keep being written at install whatever the active implementation, so a switch from built-in to the adapter serves every server without rewriting `mcp-adapter.json` at load
+- [x] **MSEL-02**: After the active implementation changes (the user installs or uninstalls pi-mcp-adapter, or turns Pi's built-in MCP on or off) and runs `/reload` or starts Pi again, every installed plugin's MCP servers run through the new active implementation with no reinstall, `apply`, or other plugin action. Turning built-in MCP back on after the adapter turned it off is the user's step (D-MB-01)
+- [x] **MSEL-03**: The extension never registers a server with Pi while the adapter is active or while no implementation is active, so Pi reports no extension error for an unconnected registration
+- [x] **MSEL-04**: Adapter entries keep being written at install whatever the active implementation, so a switch from built-in to the adapter serves every server without rewriting `mcp-adapter.json` at load
 
 ### Records and verdicts
 
 - [x] **MREC-01**: Install, update, reinstall, enable, and import record every declared MCP server in its Claude form before plugin-variable substitution (D-MB-04), including servers the active implementation cannot run; `state.json` still holds no absolute paths
-- [ ] **MREC-02**: A plugin installed before this milestone, whose record lists no servers, materializes correctly under either implementation with no reinstall
+- [x] **MREC-02**: A plugin installed before this milestone, whose record lists no servers, materializes correctly under either implementation with no reinstall
 - [ ] **MREC-03**: `list`, `info`, `install`, `update`, `pending`, and `apply` compute a plugin's available or partially available state against the active implementation, so one installed plugin can be available under one implementation and partially available under the other
 - [ ] **MREC-04**: `info` shows each server's verdict for the active implementation with that implementation's reason tokens (for example, an `sse` server is blocked under built-in and runs under the adapter)
 - [ ] **MREC-05**: With no active implementation, a plugin with MCP servers stays `installed` and its row carries `{requires mcp}`, `{requires pi-mcp-adapter}`, or `{requires builtin mcp}`, naming the implementation that would run every server (D-MB-01, D-MB-07); installing it needs no `--partial` (D-MB-05)
@@ -98,12 +98,12 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 
 ### Built-in materialization
 
-- [ ] **BLT-01**: Under built-in, every enabled plugin's runnable servers are registered with `pi.registerMcpServer` on every startup and `/reload`, and the model can call their tools: through `tool_search` for `exposure: "deferred"`, and directly for an `alwaysLoad: true` server (D-MB-02)
-- [ ] **BLT-02**: A built-in server receives the values Claude Code would give it: stdio and streamable HTTP transports, `command`, `args`, `url`, `env`, and `headers` with Claude's variable expansion (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${VAR}`, `${VAR:-default}`), `timeout` converted from milliseconds to seconds, and the OAuth fields; no plugin value is reinterpreted by Pi, so a `$` or a leading `!` never expands or runs a shell command
-- [ ] **BLT-03**: A project-scope plugin's servers are registered only when Pi trusts the project
-- [ ] **BLT-04**: A built-in server is named `plugin_<plugin>_<server>` and its tools `mcp__plugin_<plugin>_<server>__<tool>` with Pi's `-`→`_` fold recorded as a divergence; a name collision or an `mcp.json` entry that overrides a plugin server is reported, never silent
-- [ ] **BLT-05**: `info` shows each built-in server's status as far as Pi exposes it (connected, not connected, disabled, overridden by `mcp.json`, project not trusted)
-- [ ] **BLT-06**: Under built-in, disable and uninstall remove a plugin's servers from the next session, enable restores them, and update replaces them with the new declaration
+- [x] **BLT-01**: Under built-in, every enabled plugin's runnable servers are registered with `pi.registerMcpServer` on every startup and `/reload`, and the model can call their tools: through `tool_search` for `exposure: "deferred"`, and directly for an `alwaysLoad: true` server (D-MB-02)
+- [x] **BLT-02**: A built-in server receives the values Claude Code would give it: stdio and streamable HTTP transports, `command`, `args`, `url`, `env`, and `headers` with Claude's variable expansion (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${VAR}`, `${VAR:-default}`), `timeout` converted from milliseconds to seconds, and the OAuth fields; no plugin value is reinterpreted by Pi, so a `$` or a leading `!` never expands or runs a shell command
+- [x] **BLT-03**: A project-scope plugin's servers are registered only when Pi trusts the project
+- [x] **BLT-04**: A built-in server is named `plugin_<plugin>_<server>` and its tools `mcp__plugin_<plugin>_<server>__<tool>` with Pi's `-`→`_` fold recorded as a divergence; a name collision or an `mcp.json` entry that overrides a plugin server is reported, never silent
+- [x] **BLT-05**: `info` shows each built-in server's status as far as Pi exposes it (connected, not connected, disabled, overridden by `mcp.json`, project not trusted)
+- [x] **BLT-06**: Under built-in, disable and uninstall remove a plugin's servers from the next session, enable restores them, and update replaces them with the new declaration
 
 ### Agent grants
 
@@ -124,7 +124,7 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 
 ### Documentation and decisions
 
-- [ ] **MDOC-01**: `docs/mcp-compatibility.md` has a built-in column, and each built-in statement cites a scenario or the Pi 1.5.0 source
+- [x] **MDOC-01**: `docs/mcp-compatibility.md` has a built-in column, and each built-in statement cites a scenario or the Pi 1.5.0 source
 - [ ] **MDOC-02**: CHANGELOG, README, `README.es.md`, and `docs/hooks-compatibility.md` describe built-in MCP support, the three `requires` markers, and the naming divergence; the docs say to turn on built-in MCP or install pi-mcp-adapter, and list what the adapter adds
 - [x] **MDEC-01**: D-MB-01 to D-MB-07 and the defaults above carry IDs in PROJECT.md Key Decisions, and the APL-D1 and Current Milestone text reflect them
 
@@ -153,22 +153,22 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 | PI15-02 | Phase 1 | Complete |
 | PI15-03 | Phase 1 | Complete |
 | MSEL-01 | Phase 1 | Complete |
-| MSEL-02 | Phase 2 | Pending |
-| MSEL-03 | Phase 2 | Pending |
-| MSEL-04 | Phase 2 | Pending |
+| MSEL-02 | Phase 2 | Complete |
+| MSEL-03 | Phase 2 | Complete |
+| MSEL-04 | Phase 2 | Complete |
 | MREC-01 | Phase 1 | Complete |
-| MREC-02 | Phase 2 | Pending |
+| MREC-02 | Phase 2 | Complete |
 | MREC-03 | Phase 3 | Pending |
 | MREC-04 | Phase 3 | Pending |
 | MREC-05 | Phase 3 | Pending |
 | MREC-06 | Phase 3 | Pending |
 | MREC-07 | Phase 3 | Pending |
-| BLT-01 | Phase 2 | Pending |
-| BLT-02 | Phase 2 | Pending |
-| BLT-03 | Phase 2 | Pending |
-| BLT-04 | Phase 2 | Pending |
-| BLT-05 | Phase 2 | Pending |
-| BLT-06 | Phase 2 | Pending |
+| BLT-01 | Phase 2 | Complete |
+| BLT-02 | Phase 2 | Complete |
+| BLT-03 | Phase 2 | Complete |
+| BLT-04 | Phase 2 | Complete |
+| BLT-05 | Phase 2 | Complete |
+| BLT-06 | Phase 2 | Complete |
 | MGRT-01 | Phase 4 | Pending |
 | MGRT-02 | Phase 4 | Pending |
 | MHK-01 | Phase 5 | Pending |
@@ -177,7 +177,7 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 | DUAL-02 | Phase 1 | Complete |
 | DUAL-03 | Phase 1 | Complete |
 | DUAL-04 | Phase 6 | Pending |
-| MDOC-01 | Phase 2 | Pending |
+| MDOC-01 | Phase 2 | Complete |
 | MDOC-02 | Phase 6 | Pending |
 | MDEC-01 | Phase 1 | Complete |
 

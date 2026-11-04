@@ -1011,3 +1011,19 @@ item here. The milestone parent merges this file into the root log in Phase 6.
   transition (`verification_deferred_human`); add a load-time notice and a
   `/reload` scenario now.
 - **Why dubious:** a human gate is passed by the agent on the user's behalf.
+
+## Transition (Phase 2 session, 2026-11-04)
+
+### P2-DC-101: The transition skips the PROJECT.md evolution steps
+
+- **Phase / source:** Phase 2 transition; Phase 2 session.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The transition runs `phase.complete 2` (ROADMAP, STATE,
+  REQUIREMENTS traceability, all tool-written) and skips `evolve_project` and
+  `update_project_reference`, because a child phase never edits PROJECT.md;
+  the PROJECT.md lines are parent lines in `02-08-SUMMARY.md`. The security
+  audit (`02-SECURITY.md`, 46/46 threats closed, `status: verified` with user
+  review pending) and the validation audit (`nyquist_compliant: false`, the
+  `/reload` and load-notice gaps as manual rows) are committed as written.
+- **Alternatives:** Run the full transition and edit PROJECT.md (forbidden).
+- **Why dubious:** PROJECT.md stays behind until the parent applies the lines.

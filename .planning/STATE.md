@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
-current_phase: 2
-current_phase_name: Built-in Materialization
-status: executing
-stopped_at: Phase 01 complete, ready to verify Phase 2
-last_updated: "2026-11-04T13:05:39.986Z"
+current_phase: 3
+current_phase_name: Read-Time Verdicts
+status: verifying
+stopped_at: Phase 2 complete, ready to verify Phase 3
+last_updated: "2026-11-04T17:01:24.986Z"
 last_activity: 2026-11-04
-last_activity_desc: Phase 2 execution started
-state_head: 730f507b38082dd87c9f84b2c72d68195f63c0c3
+last_activity_desc: Phase 2 complete, transitioned to Phase 3
+state_head: 7802eecb10c4405eb30b5de0feeea57d85e67f68
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 23
-  completed_plans: 14
-  percent: 17
+  completed_plans: 23
+  percent: 33
 ---
 
 # Project State
@@ -34,12 +34,12 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 
 ## Current Position
 
-Phase: 2 (Built-in Materialization) — EXECUTING
-Plan: 1 of 9
-Status: Executing Phase 2
-Last activity: 2026-11-04 — Phase 2 execution started
+Phase: 3 — Read-Time Verdicts
+Plan: 7
+Status: Phase complete — ready for verification
+Last activity: 2026-11-04 — Phase 2 complete, transitioned to Phase 3
 
-Progress: [██░░░░░░░░] 17%
+Progress: [███░░░░░░░] 33%
 
 
 ### mcp-4 closeout
@@ -901,5 +901,5 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 ## Session Continuity
 
 Last session: 2026-11-04T00:54:44Z
-Stopped at: Phase 01 complete, ready to verify Phase 2
+Stopped at: Phase 2 complete, ready to verify Phase 3
 Resume file: None

@@ -319,7 +319,7 @@ changes their names or shapes.
   status scenarios under both profiles, then run Phase 6.
 
 - [x] **Phase 1: Foundation and Pi 1.5.0** - Pi 1.5.0, the active-implementation snapshot, the pure profiles, records that keep every declared server, and the dual-profile cucumber harness, with every shared file and interface frozen and no visible change (completed 2026-11-04)
-- [ ] **Phase 2: Built-in Materialization** - Recorded servers connect through Pi's built-in MCP on startup and `/reload` with Claude's values and names, trust gating, status in `info`, and a switch that needs no plugin action
+- [x] **Phase 2: Built-in Materialization** - Recorded servers connect through Pi's built-in MCP on startup and `/reload` with Claude's values and names, trust gating, status in `info`, and a switch that needs no plugin action (completed 2026-11-04)
 - [ ] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records
 - [ ] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child
 - [ ] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter
@@ -402,7 +402,7 @@ Plans:
 - Wave 2, in parallel, one feature file and step module each: configuration and source variants with the `substitute.ts` encoder parameter (BLT-02); project trust (BLT-03); naming, collisions, overrides, and status in `info-mcp-status.ts` and `platform/mcp-builtin-status.ts` (BLT-04, BLT-05); lifecycle (BLT-06); invocation through `tool_search` and direct `alwaysLoad` calls (BLT-01); the switch and legacy records in `implementation-switch.feature` (MSEL-02, MSEL-04, MREC-02; Phase 6 adds the `{requires mcp}` step for DUAL-04).
 - Wave 3: the built-in column in `docs/mcp-compatibility.md` (MDOC-01), decision rows, parent lines, and the phase gate.
 
-**Plans**: 9/9 plans executed in 3 waves (the suggested waves; Wave 2 splits into seven plans with disjoint files, the registration's `description` reader moves into Wave 1 so that only one Wave 2 plan edits the `bridges/mcp` barrel, and the rest of the `listing.feature` lift moves out of the Wave 1 tracer plan into its own Wave 2 plan)
+**Plans**: 9/9 plans complete in 3 waves (the suggested waves; Wave 2 splits into seven plans with disjoint files, the registration's `description` reader moves into Wave 1 so that only one Wave 2 plan edits the `bridges/mcp` barrel, and the rest of the `listing.feature` lift moves out of the Wave 1 tracer plan into its own Wave 2 plan)
 
 Plans:
 **Wave 1**
@@ -496,7 +496,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
-| 2. Built-in Materialization | 9/9 | In Progress | - |
+| 2. Built-in Materialization | 9/9 | Complete    | 2026-11-04 |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
 | 4. Agent Grants | 0/TBD | Not started | - |
 | 5. Hook Tool Names | 0/TBD | Not started | - |
