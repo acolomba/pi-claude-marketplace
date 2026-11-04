@@ -1,3 +1,4 @@
+@builtin-only
 Feature: MCP server companion missing
 
   An install without pi-mcp-adapter names the missing companion, and the
@@ -5,6 +6,7 @@ Feature: MCP server companion missing
   A Pi started after the change stands in for `/reload` (D-CF6-11), a stdio
   stub server for a real one, a scripted model for a real model, and a local
   marketplace for a published one.
+  They hold only where the run's shared Pi has no pi-mcp-adapter, until MREC-05 rewrites them.
 
   Scenario: Installing a plugin with an MCP server without pi-mcp-adapter reports the missing companion
     Given the marketplace "fixtures" is published as a dir source

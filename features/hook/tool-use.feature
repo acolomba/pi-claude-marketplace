@@ -3,6 +3,8 @@ Feature: Hook tool use
   A hook of a bridged plugin runs on a tool call the model makes, with the
   tool call in Claude's shape on its stdin. A scripted model stands in for a
   real one, and a hook that records each run stands in for a plugin's hook.
+  The scenario on a plugin MCP tool runs under pi-mcp-adapter only, until the
+  built-in tool names (MHK-01, MHK-02) lift its tag.
 
   Scenario: A PreToolUse hook runs once for a scripted bash call with Claude's tool name and input
     Given pi runs with the scripted model
@@ -319,6 +321,7 @@ Feature: Hook tool use
       | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/alpha | {project dir}/.pi/pi-claude-marketplace/data/fixtures/alpha | first                  | first             | 1          |
       | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/beta  | {project dir}/.pi/pi-claude-marketplace/data/fixtures/beta  | first                  | first             | 1          |
 
+  @adapter-only
   Scenario: A hook on a plugin MCP tool runs once per call under the real tool name
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -331,7 +334,7 @@ Feature: Hook tool use
       | after   | PostToolUse | *                           |
     Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub" for its hooks
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |

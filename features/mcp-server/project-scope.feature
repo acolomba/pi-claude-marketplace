@@ -1,8 +1,10 @@
+@adapter-only
 Feature: MCP server project scope
 
   A project-scope plugin server runs only when pi-mcp-adapter's project trust
   admits it, though Claude Code asks no approval for one (D-CF6-03). A stdio stub,
   a scripted model, and a local marketplace stand in.
+  They run under pi-mcp-adapter only, until their built-in twins (BLT-03) lift the tag.
 
   Scenario: An allowed project-scope plugin server connects and answers a scripted call
     Given pi-mcp-adapter allows project mcp servers for the user
@@ -12,7 +14,7 @@ Feature: MCP server project scope
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
     Given the marketplace "fixtures" is added to the project scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope project", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the project holds a pi settings file
     Given pi runs with the scripted model and these companions:
       | companion      |
@@ -46,7 +48,7 @@ Feature: MCP server project scope
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
     Given the marketplace "fixtures" is added to the project scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope project", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the project holds a pi settings file
     Given pi runs with the scripted model and these companions:
       | companion      |
@@ -78,7 +80,7 @@ Feature: MCP server project scope
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
     Given the marketplace "fixtures" is added to the project scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope project", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the project holds a pi settings file
     Given pi runs with the scripted model and these companions in an untrusted project:
       | companion      |
@@ -109,7 +111,7 @@ Feature: MCP server project scope
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
     Given the marketplace "fixtures" is added to the project scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope project", which warned
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the project holds a pi settings file
     Given pi runs with the scripted model and these companions:
       | companion      |
