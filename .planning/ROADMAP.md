@@ -355,7 +355,7 @@ changes their names or shapes.
 | 3 | Wiring | `orchestrators/mcp/{session-materialize,recorded-servers,builtin-registration-step,agent-grants-step}.ts`, the `platform/mcp-builtin-status.ts` seed, `EdgeDeps.mcpStatus` in `edge/{types,register}.ts` and `edge/handlers/plugin/info.ts`, the status call in `orchestrators/plugin/info.ts`, `index.ts`, the factory-time probe ban |
 | 4 | Phase gate | `npm run check`, both cucumber profiles, `npm run test:modules`, the CI timing measurement, the frozen-file record, the parent lines |
 
-**Plans:** 10/14 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the snapshot and the session steps move to wave 2, the record producer to wave 3, the status pair and `recorded-servers.ts` to wave 4 after the producer, and the harness splits into four plans across waves 2-4)
+**Plans:** 13/14 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the snapshot and the session steps move to wave 2, the record producer to wave 3, the status pair and `recorded-servers.ts` to wave 4 after the producer, and the harness splits into four plans across waves 2-4)
 
 Plans:
 **Wave 1**
@@ -375,9 +375,9 @@ Plans:
 - [x] 01-10-PLAN.md — Wave 3: the MCP implementation step and the built-in stand-in server (DUAL-01)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 01-11-PLAN.md — Wave 4: the `mcpStatus` reader pair, the built-in status seed, and the frozen status call in `info` (MSEL-01)
-- [ ] 01-12-PLAN.md — Wave 4: `recordedMcpServers` and the read-only legacy reader (MREC-01)
-- [ ] 01-13-PLAN.md — Wave 4: the profile-tag rules, the `@mcp` tags, the CI profile axis, and the cucumber skill as built (DUAL-01..03)
+- [x] 01-11-PLAN.md — Wave 4: the `mcpStatus` reader pair, the built-in status seed, and the frozen status call in `info` (MSEL-01)
+- [x] 01-12-PLAN.md — Wave 4: `recordedMcpServers` and the read-only legacy reader (MREC-01)
+- [x] 01-13-PLAN.md — Wave 4: the profile-tag rules, the `@mcp` tags, the CI profile axis, and the cucumber skill as built (DUAL-01..03)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 01-14-PLAN.md — Wave 5: phase gate: `npm run check` with both profiles, `test:modules`, `test:e2e`, the CI timing, the frozen record, and the parent lines (all nine requirements)
@@ -479,7 +479,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Foundation and Pi 1.5.0 | 10/14 | In Progress | - |
+| 1. Foundation and Pi 1.5.0 | 13/14 | In Progress | - |
 | 2. Built-in Materialization | 0/TBD | Not started | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
 | 4. Agent Grants | 0/TBD | Not started | - |
