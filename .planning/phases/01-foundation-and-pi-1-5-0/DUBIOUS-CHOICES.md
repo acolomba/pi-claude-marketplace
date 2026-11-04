@@ -185,3 +185,114 @@ copies every item here. Phase 6 merges this file into the root log.
   read from its snapshot; a wrong snapshot read is caught only once Phases 2
   and 3 add output that depends on it.
 - **Recorded in:** `01-CONTEXT.md` "Dual-profile cucumber harness".
+
+## Research step (gsd-phase-researcher, 2026-11-04; adopted by the parent)
+
+### P1-DC-12: D-MB-11 reversed in part: no `clientName`, so Pi keeps CIMD
+
+- **Phase / source:** Phase 1 research; parent decision.
+- **Severity:** High. **Status:** open.
+- **Choice:** write neither `oauth.clientName` nor `clientRegistration` under
+  built-in. Pi 1.5.0 turns CIMD off whenever `clientName` is set
+  (`dist/extensions/mcp/oauth.js` `offersClientMetadataDocument`), so a set
+  name would force DCR for every server. Unset, Pi follows Claude Code's
+  protocol (CIMD when supported, else DCR) but names itself pi.
+- **Alternatives:** keep the original D-MB-11: DCR always, with the name
+  "Claude Code (plugin:<plugin>:<server>)".
+- **Why dubious:** parity cannot hold both the flow and the name; this picks
+  the flow and records the name as a Pi-gap divergence. Supersedes P1-DC-06.
+- **Recorded in:** `01-CONTEXT.md` "Amendments after research".
+
+### P1-DC-13: The adapter-profile shared Pi gets seeded onboarding state
+
+- **Phase / source:** Phase 1 research (measured); parent decision.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** each reset writes `mcp-onboarding.json` with
+  `piBuiltinMcpHandledVersion` so pi-mcp-adapter does not rewrite the sandbox
+  settings every session (without it: 66 failures, `EEXIST`, reset timeouts).
+  `@own-implementation` scenarios that need the real first-run write remove
+  the seed.
+- **Alternatives:** keep the shared Pi companion-free; give the adapter its own
+  agent directory.
+- **Why dubious:** the seed hides the adapter's real first-run behavior in
+  every shared-Pi scenario.
+- **Recorded in:** `01-CONTEXT.md` amendments; RESEARCH Harness section.
+
+### P1-DC-14: Each Pi is checked against its own launch configuration
+
+- **Phase / source:** Phase 1 research; parent decision.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** the implementation probe compares each Pi with what its launch
+  implies (the profile for the shared Pi and "MCP implementation" Pis), not
+  with the profile for every Pi. Amends P1-DC-11's scope.
+- **Alternatives:** check every Pi against the profile, which fails today's
+  non-MCP profile Pis and every restart scenario.
+- **Why dubious:** a Pi started with a fixed companion list is not held to the
+  profile.
+- **Recorded in:** `01-CONTEXT.md` amendments.
+
+### P1-DC-15: `companion-missing.feature` runs `@builtin-only` in Phase 1
+
+- **Phase / source:** Phase 1 research; parent decision.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** the feature names pi-mcp-adapter and passes only where the shared
+  Pi has no adapter, so it is `@builtin-only` until Phase 3 rewrites it.
+- **Alternatives:** turn the scenarios into `@own-implementation` profile-Pi
+  scenarios now.
+- **Why dubious:** an adapter-named feature runs only under the builtin
+  profile for a while.
+- **Recorded in:** `01-CONTEXT.md` amendments.
+
+### P1-DC-16: The 9 `{requires pi-mcp-adapter}` rows move to one Phase 3 file as tag pairs
+
+- **Phase / source:** Phase 1 research; parent decision.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** move them into one new Phase 3 feature file as
+  `@adapter-only`/`@builtin-only` pairs (the builtin twin keeps today's marker
+  row, the adapter twin drops it).
+- **Alternatives:** leave them in `features/plugin/*` and
+  `features/marketplace/update.feature` with pairs, since Phase 3 owns the rows
+  by function.
+- **Why dubious:** the moved scenarios also pin warnings and notices that are
+  not about MCP.
+- **Recorded in:** `01-CONTEXT.md` amendments.
+
+### P1-DC-17: Phase 1 edits `update-preflight.ts`, a Phase 3 file
+
+- **Phase / source:** Phase 1 research; parent decision.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Phase 1 edits `refreshDisabledRecord` and its projection, the
+  disabled-plugin update write the ROADMAP missed; Phase 3 keeps the rest.
+- **Alternatives:** leave it to Phase 3 (then a disabled update records the old
+  version's servers until Phase 3).
+- **Why dubious:** it departs from the ownership table.
+- **Recorded in:** `01-CONTEXT.md` amendments.
+
+### P1-DC-18: New fields `compatibilityBasis?: "neutral"` and `mcpBundle?: true`
+
+- **Phase / source:** Phase 1 research; parent decision.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** the neutral mark P1-DC-02 asked for, plus a bundle flag so a
+  `.mcpb`/`.dxt` block survives the read for legacy records.
+- **Why dubious:** two record fields for bookkeeping; a development-build record
+  with a bundle and an adapter-blocked server stays ambiguous (the rule keeps
+  the block).
+- **Recorded in:** `01-CONTEXT.md` amendments.
+
+### P1-DC-19: Smaller research choices
+
+- **Severity:** Low. **Status:** open.
+- The "no absolute path" test covers only `mcpServerConfigs` values;
+  `resolvedSource` already stores the plugin root.
+- Frozen exports a later phase uses go under `ignoreExports` in
+  `.fallowrc.json`, not source markers; Phase 6 removes them.
+- Tag rules live in `scripts/check-features.mjs`, not a `test/architecture`
+  file (ROADMAP called it "the profile-tag architecture test").
+- Tag reasons cite requirement or decision IDs, not phase numbers.
+- The Pi 1.5.0 packages, flagged `[SUS]` by the package check only for their
+  age (two days, no download data), are accepted: no postinstall, same repo.
+- The record producer moves from W2 to W3 (seven test files overlap the
+  snapshot plan).
+- The frozen status call passes `{ reader, implementation }` to
+  `withMcpServerStatus` so Phase 2 needs no frozen-file edit.
+- **Recorded in:** `01-RESEARCH.md`.

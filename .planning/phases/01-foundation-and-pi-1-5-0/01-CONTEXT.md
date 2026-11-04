@@ -285,6 +285,65 @@ ask, and log every questionable choice. Phase 1's log is
   stand-in's step wording, and how the shared Pi's reset proves no stub
   survives.
 
+
+### Amendments after research (2026-11-04)
+
+`01-RESEARCH.md` measured facts that change the decisions above. Where they
+conflict, these amendments win.
+
+- **D-MB-11 reversed in part.** Pi 1.5.0 turns CIMD off whenever
+  `oauth.clientName` is set (`dist/extensions/mcp/oauth.js`
+  `offersClientMetadataDocument`), so the extension writes neither
+  `clientName` nor `clientRegistration`. Pi then does what Claude Code
+  2.1.318 does with the protocol: CIMD when the server supports it, else
+  DCR. Only the name differs: Pi's CIMD document and its DCR `client_name`
+  name pi, not "Claude Code (<server>)". That is a divergence licensed by a
+  Pi capability gap (Pi cannot send a custom name and keep CIMD). Phase 2
+  implements it.
+- **The implementation probe checks each Pi against its own launch
+  configuration**, not against the profile. That equals the profile for the
+  shared Pi and for every Pi started through the "MCP implementation" step;
+  a Pi started with a fixed companion list, or by a restart step, is checked
+  against what its launch implies.
+- **The adapter-profile shared Pi needs seeded onboarding state.** Each reset
+  writes `<agent dir>/mcp-onboarding.json` with `piBuiltinMcpHandledVersion`
+  set to the cached adapter's version, so pi-mcp-adapter does not rewrite the
+  sandbox settings on every session (measured: without it, 66 scenarios fail,
+  with `EEXIST` and reset timeouts). An `@own-implementation` scenario that
+  needs the adapter's real first-run write removes the seed before its Pi
+  starts.
+- **Record producer scope:** Phase 1 also edits the disabled-plugin update
+  write in `orchestrators/plugin/update-preflight.ts` (`refreshDisabledRecord`
+  and its projection), the one record-write site the ROADMAP missed. Phase 3
+  keeps every other function of that file.
+- **Neutral mark and bundle flag:** the stored compatibility gains the
+  optional `compatibilityBasis?: "neutral"` (Phase 3's producer writes it),
+  and the resolver and record gain `mcpBundle?: true` so a `.mcpb`/`.dxt`
+  bundle block survives the read. The "no absolute path" test covers the
+  values of `mcpServerConfigs` (`resolvedSource` already holds the plugin
+  root by design).
+- **Frozen exports a later phase uses** are listed per file under
+  `ignoreExports` in `.fallowrc.json` (never reported stale), not marked in
+  source; Phase 6 removes the entries. `effectiveMcpCompatibility` is
+  complete and fully tested in Phase 1, since its file is frozen.
+- **Tag rules live in `scripts/check-features.mjs`**, which already parses
+  every scenario's tags and steps; `.agents/skills/cucumber/rules/features.md`
+  is updated to allow the four tags. Tag reasons cite requirement or decision
+  IDs, never phase numbers (project comment rules).
+- **Implementation-dependent rows:** `features/mcp-server/companion-missing.feature`
+  runs `@builtin-only` in Phase 1 (it passes only where the shared Pi has no
+  adapter) until Phase 3 rewrites it; the 9 rows that show
+  `{requires pi-mcp-adapter}` move into one new Phase 3 feature file as
+  `@adapter-only`/`@builtin-only` pairs.
+- **Waves:** W1 raise, decisions, domain seam, closed set; W2 harness and
+  snapshot; W3 record producer and wiring; W4 `recorded-servers.ts` and the
+  phase gate. CI runs one cucumber profile per job through a single-profile
+  script, because `npm run test:cucumber -- <paths>` passes the paths only to
+  the last command of a chain.
+- **Pi 1.5.0 needs no code fix** (measured: typecheck, modules, integration,
+  e2e, both shards pass); only the version pins, the floor fixture, the
+  `peer-floor.test.ts` literals, and the version text change.
+
 </decisions>
 
 <code_context>
