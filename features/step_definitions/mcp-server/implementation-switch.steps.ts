@@ -3,7 +3,8 @@
  * installed plugin's servers: a plugin record an earlier release wrote, before
  * records held the plugin's MCP servers (MREC-02), and the wait for the
  * implementation a restart brought in to list a stub server's tools
- * (MSEL-02, MSEL-04).
+ * (MSEL-02, MSEL-04), and the extension errors Pi reported since it started,
+ * which include a registration no implementation serves (MSEL-03).
  */
 
 import assert from "node:assert/strict";
@@ -49,3 +50,19 @@ Then(
     await waitForListingAfterRestart(this, "adapter", server, plugin);
   },
 );
+
+Then(
+  "pi's built-in mcp lists the tools of the stub mcp server {string} of the plugin {string}",
+  async function (this: ScenarioWorld, server: string, plugin: string) {
+    await waitForListingAfterRestart(this, "builtin", server, plugin);
+  },
+);
+
+// Pi's RPC mode prints each extension error, among them the one it raises at
+// startup for an MCP server registration that no extension serves, as a
+// record of type `extension_error`. A restarted Pi is a new process, so its
+// records start at its own start. The message shows every error Pi reported.
+Then("pi reports no extension error", function (this: ScenarioWorld) {
+  const errors = this.pi.recordsSince(0).filter((record) => record.type === "extension_error");
+  assert.deepStrictEqual(errors, []);
+});
