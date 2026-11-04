@@ -3,11 +3,12 @@
 // inventory-probe command, then adds a path-source marketplace, installs a
 // plugin that declares one MCP server, lists it and prints its info, reading
 // each result from the schema-checked `claude-plugin` entries Pi streams.
-// Pi's built-in MCP client does not run Claude plugin MCP servers, so only a
-// loaded pi-mcp-adapter clears the `requires pi-mcp-adapter` reason (ADET-01).
-// The adapter counts when it registers its `mcp-adapter` command, and a
-// foreign tool named `mcp` does not count (ADET-02). No real pi-mcp-adapter is
-// installed: small fixture extensions stand in for each state.
+// Pi's built-in MCP and pi-mcp-adapter both run the fixture's stdio server, so
+// either one clears the marker, and with neither active the rows carry
+// `requires mcp` and info names `mcp` missing (D-MB-07, D-P3-08). The adapter
+// counts when it registers its `mcp-adapter` command, and a foreign tool named
+// `mcp` does not count (ADET-02). No real pi-mcp-adapter is installed: small
+// fixture extensions stand in for each state.
 import assert from "node:assert/strict";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -45,8 +46,8 @@ interface PiMcpState {
   readonly expectedRow: FixtureRow;
   /** The severity of the install cascade that carries the row. */
   readonly expectedInstallSeverity: string;
-  /** Whether the info payload's pi-mcp-adapter requirement is missing. */
-  readonly expectedAdapterMissing: boolean;
+  /** Whether the info payload's `mcp` requirement is missing (D-P3-08). */
+  readonly expectedMcpMissing: boolean;
 }
 
 type NotificationPayload = Static<typeof NOTIFICATION_PAYLOAD_SCHEMA>;
@@ -60,18 +61,26 @@ interface FixtureRow {
 
 const PAYLOAD_VALIDATOR = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
 const MCP_FIXTURE = "mcp-fixture";
-const ADAPTER_REQUIRED_ROW: FixtureRow = {
+// D-MB-07: the fixture row with no MCP implementation active, and with one.
+const MCP_REQUIRED_ROW: FixtureRow = {
   status: "installed",
   version: "1.0.0",
-  reasons: ["requires pi-mcp-adapter"],
+  reasons: ["requires mcp"],
 };
-const ADAPTER_CLEARED_ROW: FixtureRow = { status: "installed", version: "1.0.0", reasons: [] };
+const MCP_RUNNING_ROW: FixtureRow = { status: "installed", version: "1.0.0", reasons: [] };
 const MCP_COMMAND_NAME = /^mcp(-adapter(:\d+)?)?$/;
 const PLUGIN_STEP_IDS = ["add", "install", "list", "info"];
 
 async function writeJson(file: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+/** Turns Pi's built-in MCP off in the user's Pi settings, so it registers no `mcp` command. */
+async function turnOffBuiltinMcp(env: HermeticEnvironment): Promise<void> {
+  await writeJson(path.join(env.agentDir, "settings.json"), {
+    extensions: ["-builtin:mcp"],
+  });
 }
 
 /** Writes the `fx-mkt` marketplace with one plugin declaring one stdio MCP server. */
@@ -385,7 +394,7 @@ function sourcePaths(entries: readonly unknown[]): readonly unknown[] {
 }
 
 test(
-  "ADET-01: with only Pi's built-in MCP active, install, list and info require pi-mcp-adapter and the install warns",
+  "ADET-01 / D-MB-07: with only Pi's built-in MCP active, install and list carry no marker, the install stays at info and info names mcp",
   { timeout: 120_000 },
   async (t) => {
     // arrange
@@ -445,11 +454,11 @@ test(
       expectedCommand,
     ]);
     assert.deepStrictEqual(fixtureRow(run, "install"), {
-      row: ADAPTER_REQUIRED_ROW,
-      severity: "warning",
+      row: MCP_RUNNING_ROW,
+      severity: "info",
     });
-    assert.deepStrictEqual(fixtureRow(run, "list")?.row, ADAPTER_REQUIRED_ROW);
-    assert.deepStrictEqual(infoRequires(run), [{ companion: "pi-mcp-adapter", missing: true }]);
+    assert.deepStrictEqual(fixtureRow(run, "list")?.row, MCP_RUNNING_ROW);
+    assert.deepStrictEqual(infoRequires(run), [{ companion: "mcp", missing: false }]);
     // Pi stops the stub MCP server, which runs in a process group of its own;
     // the session's group kill on Pi's exit stops the sentinel.
     const stubPid = await readPid(stubPidFile).catch((error: unknown) => {
@@ -465,20 +474,18 @@ test(
 const PI_MCP_STATES: readonly PiMcpState[] = [
   {
     title:
-      "ADET-01: with the built-in MCP disabled and no adapter, install, list and info require pi-mcp-adapter and the install warns",
+      "ADET-01 / D-MB-07: with the built-in MCP turned off and no adapter, install, list and info require mcp and the install warns",
     prepare: async (env) => {
-      await writeJson(path.join(env.agentDir, "settings.json"), {
-        extensions: ["-builtin:mcp"],
-      });
+      await turnOffBuiltinMcp(env);
       return { extraExtensions: [], mcpCommands: [], mcpToolPaths: [] };
     },
-    expectedRow: ADAPTER_REQUIRED_ROW,
+    expectedRow: MCP_REQUIRED_ROW,
     expectedInstallSeverity: "warning",
-    expectedAdapterMissing: true,
+    expectedMcpMissing: true,
   },
   {
     title:
-      "ADET-02: an extension's mcp-adapter command clears the marker, keeps the install at info and info names pi-mcp-adapter",
+      "ADET-02 / D-MB-07: an extension's mcp-adapter command clears the marker, keeps the install at info and info names mcp",
     prepare: async (env) => {
       const adapter = await writeExtension(env, "adapter.mjs", ADAPTER_COMMAND_SOURCE);
       return {
@@ -490,13 +497,13 @@ const PI_MCP_STATES: readonly PiMcpState[] = [
         mcpToolPaths: [],
       };
     },
-    expectedRow: ADAPTER_CLEARED_ROW,
+    expectedRow: MCP_RUNNING_ROW,
     expectedInstallSeverity: "info",
-    expectedAdapterMissing: false,
+    expectedMcpMissing: false,
   },
   {
     title:
-      "ADET-02: two mcp-adapter registrations, listed as mcp-adapter:1 and mcp-adapter:2, clear the marker",
+      "ADET-02 / D-MB-07: two mcp-adapter registrations, listed as mcp-adapter:1 and mcp-adapter:2, clear the marker",
     prepare: async (env) => {
       const first = await writeExtension(env, "adapter-1.mjs", ADAPTER_COMMAND_SOURCE);
       const second = await writeExtension(env, "adapter-2.mjs", ADAPTER_COMMAND_SOURCE);
@@ -510,24 +517,27 @@ const PI_MCP_STATES: readonly PiMcpState[] = [
         mcpToolPaths: [],
       };
     },
-    expectedRow: ADAPTER_CLEARED_ROW,
+    expectedRow: MCP_RUNNING_ROW,
     expectedInstallSeverity: "info",
-    expectedAdapterMissing: false,
+    expectedMcpMissing: false,
   },
   {
     title:
-      "ADET-02: a foreign extension's tool named mcp keeps {requires pi-mcp-adapter} and the install warns",
+      "ADET-02 / D-MB-07: with the built-in MCP turned off, a foreign extension's tool named mcp keeps {requires mcp} and the install warns",
+    // The built-in MCP is off, so the foreign tool is the only surface named
+    // mcp, and the case proves it does not count as pi-mcp-adapter.
     prepare: async (env) => {
+      await turnOffBuiltinMcp(env);
       const foreign = await writeExtension(env, "foreign-mcp-tool.mjs", FOREIGN_MCP_TOOL_SOURCE);
       return {
         extraExtensions: [foreign],
-        mcpCommands: [{ name: "mcp", sourcePath: "builtin:mcp" }],
+        mcpCommands: [],
         mcpToolPaths: [foreign],
       };
     },
-    expectedRow: ADAPTER_REQUIRED_ROW,
+    expectedRow: MCP_REQUIRED_ROW,
     expectedInstallSeverity: "warning",
-    expectedAdapterMissing: true,
+    expectedMcpMissing: true,
   },
 ];
 
@@ -553,7 +563,7 @@ for (const state of PI_MCP_STATES) {
     });
     assert.deepStrictEqual(fixtureRow(run, "list")?.row, state.expectedRow);
     assert.deepStrictEqual(infoRequires(run), [
-      { companion: "pi-mcp-adapter", missing: state.expectedAdapterMissing },
+      { companion: "mcp", missing: state.expectedMcpMissing },
     ]);
   });
 }
