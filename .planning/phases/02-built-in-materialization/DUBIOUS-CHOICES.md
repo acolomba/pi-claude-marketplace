@@ -992,3 +992,22 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Choice:** IN-01: the shared redaction helper is reused for debug lines.
 - **Alternatives:** A log-specific redaction.
 - **Why dubious:** Some lines read oddly (`state.json at state.json`).
+
+## Verification (Phase 2 session, 2026-11-04)
+
+### P2-DC-100: The verifier's two human items are accepted provisionally so the phase can transition
+
+- **Phase / source:** Phase 2 verification; Phase 2 session.
+- **Severity:** High. **Status:** open.
+- **Choice:** The verifier returned `human_needed` (no failed truth) for two
+  judgment items: BLT-04's "never silent" met by `info` and Pi's `/mcp` only
+  (P2-DC-08, P2-DC-46), and built-in `/reload` and in-session new-session
+  re-registration unproven by a scenario (P2-DC-77, P2-DC-88). Per the user's
+  standing instruction never to stop, the session persists both as
+  `02-UAT.md` items, sets the verification status to `passed` (the workflow's
+  "All good — continue" route), and transitions. The user decides both at the
+  end-of-milestone review.
+- **Alternatives:** Leave the phase at `human_needed` and stop before the
+  transition (`verification_deferred_human`); add a load-time notice and a
+  `/reload` scenario now.
+- **Why dubious:** a human gate is passed by the agent on the user's behalf.
