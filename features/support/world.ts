@@ -16,7 +16,9 @@
  * run's sandbox. It takes the place of the run's Pi until the scenario's
  * release stops it, so the run's shared Pi never gets a model. The world keeps
  * the last model turn, and a second turn fails when no step compared the
- * first.
+ * first. Every profile Pi is checked at start against the MCP implementation
+ * its launch implies (DUAL-02), and a restart step replaces it with another
+ * in the same sandbox.
  */
 
 import assert from "node:assert/strict";
@@ -33,7 +35,18 @@ import {
   World,
 } from "@cucumber/cucumber";
 
+import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { inLoadOrder, resolveCompanion } from "../lib/companions.ts";
+import {
+  classifyMcpImplementation,
+  expectedMcpImplementation,
+  parseMcpProfile,
+  readBuiltinTurnedOff,
+  removeAdapterOnboardingSeed,
+  turnOffBuiltinMcp,
+  turnOnBuiltinMcp,
+  waitForAdapterOnboarding,
+} from "../lib/mcp-implementation.ts";
 import { npmConfigText, NpmRegistry } from "../lib/npm-registry.ts";
 import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
@@ -48,6 +61,7 @@ import { currentRun } from "./pi-process.ts";
 import type { CompanionName } from "../lib/companions.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
+import type { McpProfile } from "../lib/mcp-implementation.ts";
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
 import type { RpcGitEnvironment, RpcRecord, RpcRequest } from "../lib/pi-process.ts";
@@ -73,6 +87,10 @@ setDefaultTimeout(STEP_TIMEOUT_MS);
  */
 export const PROFILE_PI_START_TIMEOUT_MS = 90_000;
 
+// pi-mcp-adapter writes its onboarding file within a second of its
+// `session_start`; the margin covers a loaded CI runner.
+const ADAPTER_ONBOARDING_TIMEOUT_MS = 10_000;
+
 // The scripted model, which every profile Pi loads right after the real extension.
 const SCRIPTED_MODEL_EXTENSION = fileURLToPath(
   new URL("../lib/scripted-model/extension.ts", import.meta.url),
@@ -95,6 +113,20 @@ export interface PiProfile {
   readonly companions: readonly CompanionName[];
   readonly extraExtensions?: readonly string[];
   readonly trust?: "trusted" | "untrusted";
+}
+
+/**
+ * How a restart step changes the launch of the scenario's profile Pi:
+ * `without-adapter` removes pi-mcp-adapter from its companions, and
+ * `with-adapter` adds it; `builtin-on` removes `-builtin:mcp` from the user's
+ * Pi settings and keeps the companions; `no-mcp` removes pi-mcp-adapter and
+ * starts Pi with `--no-mcp`.
+ */
+export type PiRestart = "without-adapter" | "with-adapter" | "builtin-on" | "no-mcp";
+
+// What a profile Pi starts with: its profile and whether it starts with `--no-mcp`.
+interface ProfileLaunch extends PiProfile {
+  readonly noMcp?: true;
 }
 
 /**
@@ -159,6 +191,13 @@ export class ScenarioWorld extends World {
   // The last report of the registry probe that a `When` step read from the
   // profile Pi: its tools and its slash commands (HAR-04).
   registrySnapshot: RegistrySnapshot | undefined = undefined;
+  // What this scenario's profile Pi launched with, once one started; a restart
+  // changes it.
+  private profileLaunch: ProfileLaunch | undefined = undefined;
+  // Whether the scenario carries `@own-implementation`, so it chooses its own
+  // MCP implementation; the `Before()` hook in `support/mcp-implementation.ts`
+  // sets it.
+  ownImplementation = false;
   private lastTurn: ModelTurn | undefined = undefined;
   // Whether a step has compared `lastTurn`; a scenario with no turn has nothing to compare.
   private lastTurnCompared = true;
@@ -174,6 +213,20 @@ export class ScenarioWorld extends World {
    */
   get pi(): PiProcess {
     return this.scenarioPi ?? currentRun().pi;
+  }
+
+  /**
+   * The cucumber profile of the run, which names the MCP implementation that
+   * its shared Pi runs (DUAL-01). Fails on any other value of the world
+   * parameter `mcpImplementation`.
+   */
+  get mcpProfile(): McpProfile {
+    const parameters: unknown = this.parameters;
+    const value =
+      typeof parameters === "object" && parameters !== null && "mcpImplementation" in parameters
+        ? parameters.mcpImplementation
+        : undefined;
+    return parseMcpProfile(value);
   }
 
   /** The directory the marketplace steps write local marketplaces into. */
@@ -532,14 +585,16 @@ export class ScenarioWorld extends World {
    * project through a `trust.json` entry, as Pi records a user's answer to
    * its trust prompt, unless the profile is untrusted (D-CF1-07). It runs the
    * scripted model, with auto retry off, so a call past the script fails at
-   * once. One scenario starts at most one profile Pi.
+   * once. The start fails when the Pi does not run the MCP implementation its
+   * launch implies (DUAL-02). One scenario starts at most one profile Pi; only
+   * `restartPi()` replaces it.
    */
   async usePiWithProfile(profile: PiProfile): Promise<void> {
     if (this.profileHarnessDirectory !== undefined) {
       throw new Error("a profile Pi already started in this scenario");
     }
 
-    const { root, sandbox, piEnvironment } = currentRun();
+    const { root, sandbox } = currentRun();
     const harness = harnessDirectory(sandbox.home);
     const temporary = path.join(sandbox.home, "tmp");
     await mkdir(harness);
@@ -556,28 +611,60 @@ export class ScenarioWorld extends World {
       await this.trustSandboxProject();
     }
 
-    const companions = await Promise.all(
-      inLoadOrder(profile.companions).map((name) => resolveCompanion(name)),
-    );
-    const pi = await PiProcess.start(sandbox, piEnvironment, {
-      extensions: [
-        SCRIPTED_MODEL_EXTENSION,
-        REGISTRY_PROBE_EXTENSION,
-        ...companions.map((companion) => companion.entry),
-        ...(profile.extraExtensions ?? []),
-      ],
-      environment: { TMPDIR: temporary },
-    });
-    // HAR-05: the profile Pi stops first, so a stand-in that exits when its
-    // stdin closes has exited before its pid file is checked.
-    this.onRelease(async () => {
-      await pi.stop();
-      await assertStandInsStopped(harness);
-    });
-    this.scenarioPi = pi;
     this.profileHarnessDirectory = harness;
-    await this.expectSuccess({ type: "set_model", provider: "faux", modelId: "faux-1" });
-    await this.expectSuccess({ type: "set_auto_retry", enabled: false });
+    await this.startProfilePi(profile);
+  }
+
+  /**
+   * Adds `-builtin:mcp` to the `extensions` of the sandbox user's Pi
+   * settings, as pi-mcp-adapter or a user does, before any profile Pi starts,
+   * since Pi reads its settings when it starts. Fails once a profile Pi has
+   * started.
+   */
+  async turnOffBuiltinMcpBeforeStart(): Promise<void> {
+    if (this.profileHarnessDirectory !== undefined) {
+      throw new Error("a profile Pi already started in this scenario");
+    }
+
+    const { agentDir } = currentRun().sandbox;
+    await turnOffBuiltinMcp(agentDir);
+    this.onRelease(() => rm(path.join(agentDir, "settings.json"), { force: true }));
+  }
+
+  /**
+   * Stops this scenario's profile Pi, asserts that its stand-ins stopped, and
+   * starts another with the launch that `restart` changes, in the same
+   * sandbox, so the trust entry, the script, and the installed plugins stay.
+   * When the stopped Pi loaded pi-mcp-adapter, it first waits until the
+   * adapter's onboarding file records its version, so the `-builtin:mcp`
+   * entry the adapter writes is on disk, as after a real removal. A
+   * `builtin-on` restart removes that entry from the user's Pi settings
+   * between the two Pis, as a user does (P1-DC-08). Returns what the new Pi's
+   * first session offers and reports. Fails when no profile Pi started, or
+   * when the new Pi does not run the MCP implementation its launch implies
+   * (DUAL-02).
+   */
+  async restartPi(restart: PiRestart): Promise<SessionReport> {
+    const harness = this.profileHarness();
+    const launch = this.profileLaunch;
+    if (launch === undefined) {
+      assert.fail("no profile Pi of this scenario is running");
+    }
+
+    const { agentDir } = currentRun().sandbox;
+    if (launch.companions.includes("pi-mcp-adapter")) {
+      const { version } = await resolveCompanion("pi-mcp-adapter");
+      await waitForAdapterOnboarding(agentDir, version, ADAPTER_ONBOARDING_TIMEOUT_MS);
+    }
+
+    await this.pi.stop();
+    await assertStandInsStopped(harness);
+    if (restart === "builtin-on") {
+      await turnOnBuiltinMcp(agentDir);
+    }
+
+    await this.startProfilePi(restartedLaunch(launch, restart));
+    return readSession(this.pi);
   }
 
   /**
@@ -767,6 +854,73 @@ export class ScenarioWorld extends World {
     const pi = await PiProcess.start(currentRun().sandbox, environment);
     this.onRelease(() => pi.stop());
     this.scenarioPi = pi;
+  }
+
+  // Starts a profile Pi with `launch` in the sandbox that `usePiWithProfile()`
+  // prepared, makes it the Pi the steps talk to, selects the scripted model,
+  // and fails unless the Pi runs the MCP implementation that `launch` implies.
+  private async startProfilePi(launch: ProfileLaunch): Promise<void> {
+    const { sandbox, piEnvironment } = currentRun();
+    const harness = harnessDirectory(sandbox.home);
+    const adapterLoaded = launch.companions.includes("pi-mcp-adapter");
+    if (adapterLoaded && this.ownImplementation) {
+      // Without the harness seed, the adapter makes its real first-run write.
+      const { version } = await resolveCompanion("pi-mcp-adapter");
+      await removeAdapterOnboardingSeed(sandbox.agentDir, version);
+    }
+
+    const expected = expectedMcpImplementation({
+      adapterLoaded,
+      noMcp: launch.noMcp === true,
+      builtinTurnedOff: await readBuiltinTurnedOff(sandbox.agentDir, sandbox.cwd),
+    });
+    const companions = await Promise.all(
+      inLoadOrder(launch.companions).map((name) => resolveCompanion(name)),
+    );
+    const pi = await PiProcess.start(sandbox, piEnvironment, {
+      extensions: [
+        SCRIPTED_MODEL_EXTENSION,
+        REGISTRY_PROBE_EXTENSION,
+        ...companions.map((companion) => companion.entry),
+        ...(launch.extraExtensions ?? []),
+      ],
+      environment: { TMPDIR: path.join(sandbox.home, "tmp") },
+      ...(launch.noMcp === true ? { noMcp: true } : {}),
+    });
+    // HAR-05: the profile Pi stops first, so a stand-in that exits when its
+    // stdin closes has exited before its pid file is checked.
+    this.onRelease(async () => {
+      await pi.stop();
+      await assertStandInsStopped(harness);
+    });
+    this.scenarioPi = pi;
+    this.profileLaunch = launch;
+    await this.expectSuccess({ type: "set_model", provider: "faux", modelId: "faux-1" });
+    await this.expectSuccess({ type: "set_auto_retry", enabled: false });
+    // Pi answers a request only after its startup, so the listing holds a
+    // command that an extension registers late in startup.
+    const { response } = await pi.request({ type: "get_commands" });
+    const actual = classifyMcpImplementation(listedCommands(response));
+    assert.strictEqual(
+      actual,
+      expected,
+      `the profile Pi runs the MCP implementation ${actual}, but its launch implies ${expected}`,
+    );
+  }
+}
+
+// The launch of a profile Pi after `restart` changes `launch`.
+function restartedLaunch(launch: ProfileLaunch, restart: PiRestart): ProfileLaunch {
+  const withoutAdapter = launch.companions.filter((name) => name !== "pi-mcp-adapter");
+  switch (restart) {
+    case "without-adapter":
+      return { ...launch, companions: withoutAdapter };
+    case "with-adapter":
+      return { ...launch, companions: [...withoutAdapter, "pi-mcp-adapter"] };
+    case "builtin-on":
+      return launch;
+    case "no-mcp":
+      return { ...launch, companions: withoutAdapter, noMcp: true };
   }
 }
 

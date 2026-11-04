@@ -60,7 +60,8 @@ export async function readLogLinesSince(
   return new Map(gained.filter(([, lines]) => lines.length > 0));
 }
 
-function isRunning(pid: number): boolean {
+/** Returns whether the process `pid` still exists. */
+export function isRunning(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;

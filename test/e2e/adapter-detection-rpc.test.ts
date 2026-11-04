@@ -27,10 +27,13 @@ import type { ListedCommand, RpcSessionResult } from "./_rpc.ts";
 import type { HermeticEnvironment } from "../platform/hermetic-environment.ts";
 import type { Static } from "typebox";
 
+/** The name and `sourceInfo.path` of one listed command. */
+type McpCommand = Pick<ListedCommand, "name" | "sourcePath">;
+
 interface PreparedPiMcpState {
   readonly extraExtensions: readonly string[];
   /** The `get_commands` entries named `mcp` or `mcp-adapter[:<digits>]`, sorted by name. */
-  readonly mcpCommands: readonly ListedCommand[];
+  readonly mcpCommands: readonly McpCommand[];
   /** The `sourceInfo.path` of every live tool named `mcp`. */
   readonly mcpToolPaths: readonly string[];
 }
@@ -256,10 +259,11 @@ function assertCleanSession(run: RpcSessionResult): void {
   );
 }
 
-/** The `get_commands` entries named `mcp` or `mcp-adapter[:<digits>]`, sorted by name. */
-function mcpCommands(run: RpcSessionResult): readonly ListedCommand[] {
+/** The name and path of each `get_commands` entry named `mcp` or `mcp-adapter[:<digits>]`, sorted by name. */
+function mcpCommands(run: RpcSessionResult): readonly McpCommand[] {
   return listedCommands(run.responses.get("commands"))
     .filter((command) => MCP_COMMAND_NAME.test(command.name))
+    .map(({ name, sourcePath }) => ({ name, sourcePath }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 

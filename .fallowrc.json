@@ -23,6 +23,10 @@
     {
       "file": "extensions/pi-claude-marketplace/platform/pi-api.ts",
       "exports": ["McpServerConfig", "PiMcpRegistry", "RegisteredMcpServer"]
+    },
+    {
+      "file": "features/lib/mcp-implementation.ts",
+      "exports": ["stubPidsIn", "waitUntilProcessesExit", "writeAdapterOnboardingSeed"]
     }
   ],
   "production": {
