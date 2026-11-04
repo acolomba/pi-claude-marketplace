@@ -519,6 +519,13 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
     });
     await seedLegacyNames(cwd, ["srv", "live", "gone"]);
     const locations = locationsFor("project", cwd);
+    // A released build recorded no server configs, so the move reads the
+    // declaration at the recorded version (MREC-02).
+    const state = await loadState(locations.extensionRoot);
+    const seeded = state.marketplaces.mp?.plugins.hello;
+    assert.ok(seeded);
+    delete seeded.mcpServerConfigs;
+    await saveState(locations.extensionRoot, state);
 
     // act
     const notifications = await reload(cwd);

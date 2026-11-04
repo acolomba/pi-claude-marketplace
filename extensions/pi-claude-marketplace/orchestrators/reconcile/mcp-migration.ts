@@ -23,10 +23,15 @@
 // no longer declares is removed. A server the source declares with a feature
 // pi-mcp-adapter cannot run is removed and not written, because
 // `mcp-adapter.json` is pi-mcp-adapter's file under every implementation
-// (MSEL-04, D-P3-16). The record gets the neutral verdict of the servers the
-// source declares, with its basis (D-P3-02): it becomes partially installed,
-// as `install --partial` leaves it, only for a server no implementation runs.
-// A plugin whose MCP
+// (MSEL-04, D-P3-16). The record gets the neutral verdict of the servers its
+// recorded version declares, with its basis and those servers (D-P3-02): it
+// becomes partially installed, as `install --partial` leaves it, only for a
+// server no implementation runs. The servers come through the frozen record
+// read (MREC-02), which never returns the servers of a version the record
+// does not name. When it cannot read them, as when the source moved past the
+// recorded version, the record keeps its stored verdict, with no basis and
+// no server configs, so every later read refuses it the same way. A plugin
+// whose MCP
 // config is malformed has every legacy entry removed and none written, and
 // its record lists no MCP server, as a fresh install refuses it. A disabled
 // plugin's entries are removed with no re-stage and no record change
@@ -58,9 +63,10 @@
 // NFR-5: no network. This module stays outside `NETWORK_SEAMS` and never names
 // the git surface. A path source is read from the marketplace's current
 // checkout, as reinstall reads it, so a newer plugin version there can stage
-// under the recorded version (reinstall parity). A git source is read from
-// the warm clone of the record's sha through the fs-only presence probe; a
-// cold cache leaves the entries in place.
+// under the recorded version (reinstall parity); the record's verdict and
+// server configs still come from the recorded version only. A git source is
+// read from the warm clone of the record's sha through the fs-only presence
+// probe; a cold cache leaves the entries in place.
 
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -82,11 +88,7 @@ import { effectiveMcpCompatibility } from "../../domain/mcp-implementation.ts";
 import { generatedMcpServerKey } from "../../domain/name.ts";
 import { resolutionFor, resolveStrict } from "../../domain/plugin-resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import {
-  isRecordedButDisabled,
-  mcpServerConfigsOf,
-  replaceCompatibility,
-} from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, replaceCompatibility } from "../../persistence/state-io.ts";
 import { McpConfigFileError, McpServerCollisionError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
@@ -98,11 +100,13 @@ import {
   withExistingScopeLock,
   withLockedStateTransaction,
 } from "../../transaction/with-state-guard.ts";
+import { createLegacyServersReader, recordedMcpServers } from "../mcp/recorded-servers.ts";
 import { makeRecordedShaPresenceProbe } from "../plugin/git-source-probe.ts";
 
 import type { McpMigrationInput, ReconcilePlan } from "./types.ts";
 import type { LegacyMcpOwner, ProjectDisableStubOwner } from "../../bridges/mcp/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { RecordedMcpServers } from "../../domain/mcp-implementation.ts";
 import type {
   GitPluginRootResult,
   MaterializablePlugin,
@@ -147,8 +151,9 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
 
 /**
  * An owner whose entries this step acts on. A `move` owner's servers are
- * re-staged from its source; a `malformed` or `disabled` owner's entries are
- * removed and none is written.
+ * re-staged from its source, and `recorded` holds the servers of its recorded
+ * version, which its verdict is read from; a `malformed` or `disabled`
+ * owner's entries are removed and none is written.
  */
 type OwnerAction =
   | {
@@ -156,6 +161,7 @@ type OwnerAction =
       readonly owner: LegacyMcpOwner;
       readonly record: PluginInstallRecord;
       readonly resolved: MaterializablePlugin;
+      readonly recorded: RecordedMcpServers;
     }
   | {
       readonly arm: "malformed" | "disabled";
@@ -392,9 +398,19 @@ async function ownerAction(
     return undefined;
   }
 
-  return resolved.state === "unavailable"
-    ? { arm: "malformed", owner, record }
-    : { arm: "move", owner, record, resolved };
+  if (resolved.state === "unavailable") {
+    return { arm: "malformed", owner, record };
+  }
+
+  const recorded = await recordedMcpServers(
+    record,
+    createLegacyServersReader({
+      marketplaceName: owner.marketplace,
+      marketplace,
+      pluginName: owner.plugin,
+    }),
+  );
+  return { arm: "move", owner, record, resolved, recorded };
 }
 
 /**
@@ -522,24 +538,27 @@ function sameKinds(left: readonly string[], right: readonly string[]): boolean {
 
 /**
  * AMIG-01 / D-P3-16: a moving owner's record holds the neutral verdict of the
- * servers its source declares, with `compatibilityBasis: "neutral"`, so a
- * migration never puts pi-mcp-adapter's verdict into a record (D-P3-02). A
- * server no implementation runs makes the record partially installed, as
- * `install --partial` records it. The write also records the declared servers
- * and the bundle flag, as an install does: a neutral verdict does not name a
- * server only one implementation blocks, so the record must carry the servers
- * every read re-classifies (MREC-01). A record that already holds that verdict
- * and the basis is not rewritten. Returns whether the record changed.
+ * servers its recorded version declares, with `compatibilityBasis:
+ * "neutral"`, so a migration never puts pi-mcp-adapter's verdict into a record
+ * (D-P3-02). A server no implementation runs makes the record partially
+ * installed, as `install --partial` records it. The write also records those
+ * servers and the bundle flag, as an install does: a neutral verdict does not
+ * name a server only one implementation blocks, so the record must carry the
+ * servers every read re-classifies (MREC-01). A record whose recorded servers
+ * cannot be read keeps its stored verdict and gets neither the basis nor the
+ * servers: the staged source may be a newer version, whose servers the record
+ * must not claim (MREC-02). A record that already holds that verdict and the
+ * basis is not rewritten. Returns whether the record changed.
  */
 function applyNeutralVerdict(action: OwnerAction): boolean {
-  if (action.arm !== "move") {
+  if (action.arm !== "move" || action.recorded.kind === "unreadable") {
     return false;
   }
 
-  const { record, resolved } = action;
-  const servers = mcpServerConfigsOf(resolved.declaredMcpServers);
-  const bundle = resolved.mcpBundle === true;
-  const neutral = effectiveMcpCompatibility(record, { kind: "recorded", servers, bundle }, "none");
+  const { record, recorded } = action;
+  const servers = recorded.servers.map(({ name, config }) => ({ name, config }));
+  const bundle = recorded.bundle;
+  const neutral = effectiveMcpCompatibility(record, recorded, "none");
   const compatibility = record.compatibility;
   if (
     record.compatibilityBasis === "neutral" &&

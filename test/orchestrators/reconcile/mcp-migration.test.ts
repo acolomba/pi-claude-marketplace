@@ -79,6 +79,8 @@ interface PluginSeed {
   readonly lsp?: boolean;
   /** `plugin.json` also names a `.mcpb` bundle beside `.mcp.json`. */
   readonly bundle?: boolean;
+  /** The version the catalog lists, `1.0.0` unless the catalog moved past the record. */
+  readonly version?: string;
 }
 
 /** Writes path marketplace `mp` at `<cwd>/mp-src` holding each plugin, and returns its paths. */
@@ -94,7 +96,7 @@ async function seedMarketplace(
       path.join(pluginRoot, ".claude-plugin", "plugin.json"),
       JSON.stringify({
         name: plugin,
-        version: "1.0.0",
+        version: seed.version ?? "1.0.0",
         ...(seed.bundle === true && { mcpServers: ["./.mcp.json", "./tool.mcpb"] }),
       }),
     );
@@ -120,10 +122,10 @@ async function seedMarketplace(
     manifestPath,
     JSON.stringify({
       name: "mp",
-      plugins: Object.keys(plugins).map((plugin) => ({
+      plugins: Object.entries(plugins).map(([plugin, seed]) => ({
         name: plugin,
         source: `./plugins/${plugin}`,
-        version: "1.0.0",
+        version: seed.version ?? "1.0.0",
       })),
     }),
   );
@@ -1741,6 +1743,36 @@ describe("migrateLegacyMcpEntries", () => {
         },
         mcpServerConfigs: [{ name: "srv", config: { command: "srv" } }],
         mcpBundle: true,
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("MREC-02: a legacy record whose catalog moved past its version keeps its stored verdict and records no servers of the newer version", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "moved-legacy");
+    const { cwd, locations } = scope;
+    const events = { type: "sse", url: "http://127.0.0.1:9/sse" };
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" }, events }, version: "1.1.0" },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv", "events"]),
         updatedAt: MOVED_AT,
       },
     });
