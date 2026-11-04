@@ -5,10 +5,13 @@
  * variable the user set, and an install that warns of an unset variable
  * (MCP-03, D-CF6-06, BLT-02, IN-02).
  *
- * pi-mcp-adapter's MCP client sends its JSON-RPC requests over HTTP one after
- * another, and opens its optional event stream with a `GET` beside them. The
- * `GET` races the next `POST` by about a millisecond, so the steps state the
- * `POST` requests in arrival order and the other requests in any order.
+ * pi-mcp-adapter's MCP client, like Pi's built-in one, sends its JSON-RPC
+ * requests over HTTP one after another, and opens its optional event stream
+ * with a `GET` beside them. The `GET` races the next `POST` by about a
+ * millisecond, so the steps state the `POST` requests in arrival order and the
+ * other requests in any order. A Pi with built-in MCP and no companion
+ * registers the plugin's servers with Pi, so its listing waits read Pi's tool
+ * registry as well as the server's log.
  */
 
 import assert from "node:assert/strict";
@@ -18,6 +21,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { profileFor } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
+import { settledRegistry } from "../../lib/mcp-implementation.ts";
 import { MCP_SERVER_ENVIRONMENT_PRELOAD } from "../../lib/mcp-server-environment.ts";
 import { McpHttpServer, readMcpHttpRequests } from "../../lib/mcp-server-http.ts";
 import { MCP_STUB_SERVER } from "../../lib/mcp-stub-server.ts";
@@ -40,6 +44,9 @@ import type { PiProfile, ScenarioWorld } from "../../support/world.ts";
 // server's listing wait does.
 const HTTP_LISTING_TIMEOUT_MS = 15_000;
 const HTTP_LISTING_POLL_MS = 50;
+
+// The one tool the loopback HTTP server lists.
+const HTTP_TOOL = "echo";
 
 // Writes `servers` as the `mcpServers` of the plugin's `.mcp.json`, which
 // must not exist yet, and asserts it reads back.
@@ -89,6 +96,40 @@ function requestHeaders(table: DataTable): string[] {
   const [column, ...headers] = first;
   assert.strictEqual(column, "request");
   return headers;
+}
+
+// Waits until the server `server` logged a `tools/list` and `registered`
+// holds, and fails with the server's requests after the listing deadline.
+// `client` names the MCP client the failure blames.
+async function waitForHttpListing(
+  world: ScenarioWorld,
+  server: string,
+  client: string,
+  registered: () => Promise<boolean>,
+): Promise<void> {
+  const deadline = Date.now() + HTTP_LISTING_TIMEOUT_MS;
+  for (;;) {
+    const requests = await requestsOf(world, server);
+    if (requests.some((request) => request.rpcMethod === "tools/list") && (await registered())) {
+      return;
+    }
+
+    if (Date.now() > deadline) {
+      assert.fail(`${client} did not list the tools of ${server}: ${JSON.stringify(requests)}`);
+    }
+
+    await delay(HTTP_LISTING_POLL_MS);
+  }
+}
+
+// Whether `name` is the built-in MCP name of a tool of the HTTP server
+// `server` of `plugin`, which lists one tool.
+function isBuiltinHttpTool(name: string, plugin: string, server: string): boolean {
+  const profile = profileFor("builtin");
+  const prefix = profile.toolNamePrefix(plugin, server);
+  return prefix === undefined
+    ? name === profile.toolName(plugin, server, HTTP_TOOL)
+    : name.startsWith(prefix);
 }
 
 // The scope a setup command names with `--scope`, which the config notices
@@ -226,21 +267,22 @@ Given(
 Given(
   "pi-mcp-adapter has listed the tools of the http mcp server {string}",
   async function (this: ScenarioWorld, server: string) {
-    const deadline = Date.now() + HTTP_LISTING_TIMEOUT_MS;
-    for (;;) {
-      const requests = await requestsOf(this, server);
-      if (requests.some((request) => request.rpcMethod === "tools/list")) {
-        return;
-      }
+    await waitForHttpListing(this, server, "pi-mcp-adapter", () => Promise.resolve(true));
+  },
+);
 
-      if (Date.now() > deadline) {
-        assert.fail(
-          `pi-mcp-adapter did not list the tools of ${server}: ${JSON.stringify(requests)}`,
-        );
-      }
-
-      await delay(HTTP_LISTING_POLL_MS);
-    }
+// BLT-01: Pi's built-in MCP keeps its connection open and registers the
+// listed tools with Pi after the `tools/list`, so the listing is done once
+// the server logged that request and Pi's settled registry holds a tool of
+// the server: one in its built-in namespace, or, when the namespace is too
+// long to be a prefix of a cut tool name, the full name of its one tool.
+Given(
+  "pi's built-in mcp has listed the tools of the http mcp server {string} of the plugin {string}",
+  async function (this: ScenarioWorld, server: string, plugin: string) {
+    await waitForHttpListing(this, server, "pi's built-in mcp", async () => {
+      const { allTools } = await settledRegistry(this.pi);
+      return allTools.some(({ name }) => isBuiltinHttpTool(name, plugin, server));
+    });
   },
 );
 
