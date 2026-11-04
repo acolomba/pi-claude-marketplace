@@ -355,7 +355,32 @@ changes their names or shapes.
 | 3 | Wiring | `orchestrators/mcp/{session-materialize,recorded-servers,builtin-registration-step,agent-grants-step}.ts`, the `platform/mcp-builtin-status.ts` seed, `EdgeDeps.mcpStatus` in `edge/{types,register}.ts` and `edge/handlers/plugin/info.ts`, the status call in `orchestrators/plugin/info.ts`, `index.ts`, the factory-time probe ban |
 | 4 | Phase gate | `npm run check`, both cucumber profiles, `npm run test:modules`, the CI timing measurement, the frozen-file record, the parent lines |
 
-**Plans**: TBD
+**Plans:** 14 plans in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the snapshot and the session steps move to wave 2, the record producer to wave 3, the status pair and `recorded-servers.ts` to wave 4 after the producer, and the harness splits into four plans across waves 2-4)
+
+Plans:
+**Wave 1**
+- [ ] 01-01-PLAN.md — Wave 1: Pi 1.5.0 raise (pins, locks, floor tests), the version text, and the suites on 1.5.0 (PI15-01..03)
+- [ ] 01-02-PLAN.md — Wave 1: D-MB-01..13 Key Decisions, the APL-D1 and Current Milestone text, and the dual-profile cucumber contract (MDEC-01, DUAL-01)
+- [ ] 01-03-PLAN.md — Wave 1: domain seam: Pi MCP types, the `"sse"` feature split, the built-in scanner, `builtinMcpServerName`, the profiles, and `effectiveMcpCompatibility` (MSEL-01, MREC-01)
+- [ ] 01-04-PLAN.md — Wave 1: closed set in one commit: `requires mcp`, `requires builtin mcp`, the two built-in status tokens, and the companions, none emitted (MDEC-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-05-PLAN.md — Wave 2: `SoftDepStatus.mcpImplementation` and `hasLoadedBuiltinMcp` in the run snapshot with unchanged probe counts (MSEL-01)
+- [ ] 01-06-PLAN.md — Wave 2: no-op session step seeds, `session-materialize.ts`, the `index.ts` wiring, and the factory-time probe ban (MSEL-01)
+- [ ] 01-07-PLAN.md — Wave 2: cucumber profiles, the implementation probe, the restart steps, and `--no-mcp` (DUAL-01, DUAL-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-08-PLAN.md — Wave 3: record producer: `declaredMcpServers`, `mcpServerConfigs`, `mcpBundle`, and `compatibilityBasis` (MREC-01)
+- [ ] 01-09-PLAN.md — Wave 3: the shared Pi follows the profile, `@adapter-only` tags, the agent-grants split, and the implementation-dependent marker rows (DUAL-01, DUAL-02)
+- [ ] 01-10-PLAN.md — Wave 3: the MCP implementation step and the built-in stand-in server (DUAL-01)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 01-11-PLAN.md — Wave 4: the `mcpStatus` reader pair, the built-in status seed, and the frozen status call in `info` (MSEL-01)
+- [ ] 01-12-PLAN.md — Wave 4: `recordedMcpServers` and the read-only legacy reader (MREC-01)
+- [ ] 01-13-PLAN.md — Wave 4: the profile-tag rules, the `@mcp` tags, the CI profile axis, and the cucumber skill as built (DUAL-01..03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 01-14-PLAN.md — Wave 5: phase gate: `npm run check` with both profiles, `test:modules`, `test:e2e`, the CI timing, the frozen record, and the parent lines (all nine requirements)
 
 ### Phase 2: Built-in Materialization
 **Goal**: Without pi-mcp-adapter and with Pi's built-in MCP on, every enabled plugin's MCP servers connect through built-in on every startup and `/reload`, with the values and names Claude Code would give them, gated on project trust and visible in `info`; a switch between the adapter and built-in needs no plugin action (turning built-in MCP back on after the adapter turned it off is the user's step, D-MB-01).
