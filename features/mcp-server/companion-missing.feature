@@ -2,12 +2,12 @@ Feature: MCP server companion missing
 
   With no MCP implementation, a plugin with MCP servers still installs, and its
   row names the implementation that would run every server (MREC-05, D-MB-05,
-  D-MB-07). The user's Pi settings stay as the user wrote them (D-MB-01), and a
-  server answers once a session loads an implementation, with no reinstall. A
-  Pi started after the change stands in for `/reload` (D-CF6-11), a stdio stub
-  server for a real one, a scripted model for a real model, and a local
-  marketplace for a published one. The plugin info scenarios hold only under
-  Pi's built-in MCP until info's requires line follows D-MB-07.
+  D-MB-07). Plugin info's requires line names the same implementation, tagged
+  missing until a session loads it (D-P3-08). The user's Pi settings stay as
+  the user wrote them (D-MB-01), and a server answers once a session loads an
+  implementation, with no reinstall. A Pi started after the change stands in
+  for `/reload` (D-CF6-11), a stdio stub server for a real one, a scripted
+  model for a real model, and a local marketplace for a published one.
 
   @own-implementation
   Scenario: Installing a plugin with an MCP server with no MCP implementation names mcp as missing (MREC-05)
@@ -113,36 +113,38 @@ Feature: MCP server companion missing
       | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
       | 2    | tool result | mcp returned: echo:ping                                                     |
 
-  @builtin-only
-  Scenario: Plugin info names pi-mcp-adapter as a missing companion
+  @own-implementation
+  Scenario: Plugin info names mcp as missing with no MCP implementation (D-P3-08, MREC-07)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user's pi settings turn off pi's built-in mcp
+    Given pi runs with the scripted model
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
     When the user runs "/claude:plugin info demo@fixtures --scope user"
     Then the result has these fields:
-      | kind                           | plugin-info                                              |
-      | marketplace details autoupdate | false                                                    |
-      | marketplace name               | fixtures                                                 |
-      | marketplace scope              | user                                                     |
-      | needs reload                   | false                                                    |
+      | kind                           | plugin-info                                             |
+      | marketplace details autoupdate | false                                                   |
+      | marketplace name               | fixtures                                                |
+      | marketplace scope              | user                                                    |
+      | needs reload                   | false                                                   |
       | plugin components mcp          | [{"name":"plugin:demo:stub","status":"status unknown"}] |
-      | plugin components resolved     | true                                                     |
-      | plugin components skills       | demo-skill                                               |
-      | plugin id                      | demo@fixtures                                            |
-      | plugin name                    | demo                                                     |
-      | plugin reasons                 |                                                          |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]          |
-      | plugin scope                   | user                                                     |
-      | plugin status                  | installed                                                |
-      | plugin version                 | 1.0.0                                                    |
-      | severity                       | info                                                     |
+      | plugin components resolved     | true                                                    |
+      | plugin components skills       | demo-skill                                              |
+      | plugin id                      | demo@fixtures                                           |
+      | plugin name                    | demo                                                    |
+      | plugin reasons                 |                                                         |
+      | plugin requires                | [{"companion":"mcp","missing":true}]                    |
+      | plugin scope                   | user                                                    |
+      | plugin status                  | installed                                               |
+      | plugin version                 | 1.0.0                                                   |
+      | severity                       | info                                                    |
 
-  @builtin-only
-  Scenario: Plugin info names no missing companion once pi loads pi-mcp-adapter
+  @own-implementation
+  Scenario: Plugin info names mcp without the missing tag once pi loads pi-mcp-adapter (D-P3-08)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -150,6 +152,7 @@ Feature: MCP server companion missing
     Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user's pi settings turn off pi's built-in mcp
     Given pi runs with the scripted model and these companions:
       | companion      |
       | pi-mcp-adapter |
@@ -157,19 +160,19 @@ Feature: MCP server companion missing
     Given pi-mcp-adapter has reported the mcp servers of the plugin "demo@fixtures" of the user scope
     When the user runs "/claude:plugin info demo@fixtures --scope user"
     Then the result has these fields:
-      | kind                           | plugin-info                                                             |
-      | marketplace details autoupdate | false                                                                   |
-      | marketplace name               | fixtures                                                                |
-      | marketplace scope              | user                                                                    |
-      | needs reload                   | false                                                                   |
+      | kind                           | plugin-info                                                            |
+      | marketplace details autoupdate | false                                                                  |
+      | marketplace name               | fixtures                                                               |
+      | marketplace scope              | user                                                                   |
+      | needs reload                   | false                                                                  |
       | plugin components mcp          | [{"name":"plugin:demo:stub","status":"cached, connects on first use"}] |
-      | plugin components resolved     | true                                                                    |
-      | plugin components skills       | demo-skill                                                              |
-      | plugin id                      | demo@fixtures                                                           |
-      | plugin name                    | demo                                                                    |
-      | plugin reasons                 |                                                                         |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":false}]                        |
-      | plugin scope                   | user                                                                    |
-      | plugin status                  | installed                                                               |
-      | plugin version                 | 1.0.0                                                                   |
-      | severity                       | info                                                                    |
+      | plugin components resolved     | true                                                                   |
+      | plugin components skills       | demo-skill                                                             |
+      | plugin id                      | demo@fixtures                                                          |
+      | plugin name                    | demo                                                                   |
+      | plugin reasons                 |                                                                        |
+      | plugin requires                | [{"companion":"mcp","missing":false}]                                  |
+      | plugin scope                   | user                                                                   |
+      | plugin status                  | installed                                                              |
+      | plugin version                 | 1.0.0                                                                  |
+      | severity                       | info                                                                   |

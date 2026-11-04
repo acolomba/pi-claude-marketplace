@@ -18,6 +18,9 @@ import type {
 
 // D-P3-10: an MCP dependency that only pi-mcp-adapter runs every server of.
 const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
+const BOTH_RUN_EVERY: McpDependency = { kind: "mcp", runEvery: ["adapter", "builtin"] };
+const BUILTIN_MCP: McpDependency = { kind: "mcp", runEvery: ["builtin"] };
+const SPLIT_MCP: McpDependency = { kind: "mcp", runEvery: [] };
 
 void ("agents" satisfies Dependency);
 void ({ kind: "mcp", runEvery: ["builtin"] } satisfies Dependency);
@@ -341,9 +344,9 @@ const requirementCases = [
   },
   {
     title:
-      "tags pi-mcp-adapter missing when MCP is declared and the adapter is not loaded (ADET-01)",
+      "D-P3-08: tags pi-mcp-adapter missing for servers only the adapter runs with no MCP implementation (ADET-01)",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
@@ -354,9 +357,10 @@ const requirementCases = [
     expectedRequirements: [{ companion: "pi-mcp-adapter", missing: true }],
   },
   {
-    title: "orders every declared companion by name and tags each from the probe (ADET-01)",
+    title:
+      "MREC-07: orders every declared companion by name and tags each from the probe (ADET-01)",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: false,
@@ -368,6 +372,40 @@ const requirementCases = [
       { companion: "pi-dynamic-workflows", missing: true },
       { companion: "pi-mcp-adapter", missing: false },
       { companion: "pi-subagents", missing: true },
+    ],
+  },
+  {
+    title: "MREC-07: sorts builtin mcp before the pi- companions (D-P3-08)",
+    declaresAgents: true,
+    declaresMcp: BUILTIN_MCP,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
+      workflowEngineLoaded: false,
+    },
+    expectedRequirements: [
+      { companion: "builtin mcp", missing: true },
+      { companion: "pi-dynamic-workflows", missing: true },
+      { companion: "pi-subagents", missing: true },
+    ],
+  },
+  {
+    title: "MREC-07: sorts mcp before the pi- companions (D-P3-08)",
+    declaresAgents: true,
+    declaresMcp: BOTH_RUN_EVERY,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      mcpImplementation: "builtin",
+      workflowEngineLoaded: true,
+    },
+    expectedRequirements: [
+      { companion: "mcp", missing: false },
+      { companion: "pi-dynamic-workflows", missing: false },
+      { companion: "pi-subagents", missing: false },
     ],
   },
 ] as const;
@@ -396,6 +434,133 @@ for (const {
     assert.deepStrictEqual(requirements, expectedCompanionRequirements);
   });
 }
+
+// D-P3-08: the MCP entry for each runEvery shape and active implementation.
+const MCP_REQUIREMENT_CASES = [
+  { label: "both", dependency: BOTH_RUN_EVERY, active: "none", companion: "mcp", missing: true },
+  {
+    label: "both",
+    dependency: BOTH_RUN_EVERY,
+    active: "adapter",
+    companion: "mcp",
+    missing: false,
+  },
+  {
+    label: "both",
+    dependency: BOTH_RUN_EVERY,
+    active: "builtin",
+    companion: "mcp",
+    missing: false,
+  },
+  {
+    label: "adapter only",
+    dependency: ADAPTER_MCP,
+    active: "adapter",
+    companion: "pi-mcp-adapter",
+    missing: false,
+  },
+  {
+    label: "adapter only",
+    dependency: ADAPTER_MCP,
+    active: "builtin",
+    companion: "pi-mcp-adapter",
+    missing: true,
+  },
+  {
+    label: "adapter only",
+    dependency: ADAPTER_MCP,
+    active: "none",
+    companion: "pi-mcp-adapter",
+    missing: true,
+  },
+  {
+    label: "builtin only",
+    dependency: BUILTIN_MCP,
+    active: "builtin",
+    companion: "builtin mcp",
+    missing: false,
+  },
+  {
+    label: "builtin only",
+    dependency: BUILTIN_MCP,
+    active: "adapter",
+    companion: "builtin mcp",
+    missing: true,
+  },
+  {
+    label: "builtin only",
+    dependency: BUILTIN_MCP,
+    active: "none",
+    companion: "builtin mcp",
+    missing: true,
+  },
+  { label: "split", dependency: SPLIT_MCP, active: "none", companion: "mcp", missing: true },
+  {
+    label: "split",
+    dependency: SPLIT_MCP,
+    active: "adapter",
+    companion: "builtin mcp",
+    missing: true,
+  },
+  {
+    label: "split",
+    dependency: SPLIT_MCP,
+    active: "builtin",
+    companion: "pi-mcp-adapter",
+    missing: true,
+  },
+] as const;
+
+describe("companionRequirements MCP entry", () => {
+  for (const { label, dependency, active, companion, missing } of MCP_REQUIREMENT_CASES) {
+    test(`D-P3-08: ${label} MCP dependency under ${active} gives ${companion}${missing ? " (missing)" : ""}`, () => {
+      // arrange
+      const probe = probeWith(active);
+
+      // act
+      const requirements = companionRequirements(false, dependency, false, probe);
+
+      // assert
+      assert.deepStrictEqual(requirements, [{ companion, missing }]);
+    });
+
+    test(`D-P3-06: ${label} MCP dependency under ${active} names the entry's companion in the marker exactly when the entry is missing`, () => {
+      // arrange
+      const probe = probeWith(active);
+      const expectedMarker = missing ? `requires ${companion}` : undefined;
+
+      // act
+      const marker = mcpDependencyMarker(dependency, probe);
+
+      // assert
+      assert.strictEqual(marker, expectedMarker);
+    });
+  }
+
+  for (const active of ["none", "adapter", "builtin"] as const) {
+    test(`MREC-07: gives no MCP entry for no MCP dependency under ${active} (D-P3-08)`, () => {
+      // arrange
+      const probe = probeWith(active);
+
+      // act
+      const requirements = companionRequirements(false, false, false, probe);
+
+      // assert
+      assert.deepStrictEqual(requirements, []);
+    });
+  }
+
+  test("D-P3-08: ignores the adapter-loaded flag and reads the active implementation", () => {
+    // arrange
+    const probe = { ...probeWith("builtin"), piMcpAdapterLoaded: true };
+
+    // act
+    const requirements = companionRequirements(false, ADAPTER_MCP, false, probe);
+
+    // assert
+    assert.deepStrictEqual(requirements, [{ companion: "pi-mcp-adapter", missing: true }]);
+  });
+});
 
 const NOTHING_LOADED = {
   piSubagentsLoaded: false,
@@ -438,7 +603,7 @@ for (const { kind, declaresAgents, declaresMcp, declaresWorkflows, companion } o
     const markers = softDepMarkers(declaresAgents, declaresMcp, declaresWorkflows, NOTHING_LOADED);
     const requirements = companionRequirements(
       declaresAgents,
-      declaresMcp !== false,
+      declaresMcp,
       declaresWorkflows,
       NOTHING_LOADED,
     );
@@ -530,10 +695,6 @@ test("D-P3-10: isMcpDependency picks the McpDependency out of a mixed list", () 
   // assert
   assert.deepStrictEqual(picked, [ADAPTER_MCP]);
 });
-
-const BOTH_RUN_EVERY: McpDependency = { kind: "mcp", runEvery: ["adapter", "builtin"] };
-const BUILTIN_MCP: McpDependency = { kind: "mcp", runEvery: ["builtin"] };
-const SPLIT_MCP: McpDependency = { kind: "mcp", runEvery: [] };
 
 /** A snapshot with every non-MCP companion loaded and `active` as the MCP implementation. */
 function probeWith(active: ActiveMcpImplementation): SoftDepStatus {

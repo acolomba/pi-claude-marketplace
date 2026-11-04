@@ -126,3 +126,87 @@ Feature: MCP server verdict info
       | plugin status                  | available                                                    |
       | plugin version                 | 1.0.0                                                        |
       | severity                       | info                                                         |
+
+  @mcp
+  Scenario: Plugin info names mcp for a plugin whose stdio server either implementation runs (D-P3-08)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin info demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind                           | plugin-info                           |
+      | marketplace details autoupdate | false                                 |
+      | marketplace name               | fixtures                              |
+      | marketplace scope              | user                                  |
+      | needs reload                   | false                                 |
+      | plugin components mcp          | [{"name":"plugin:demo:stub"}]         |
+      | plugin components resolved     | true                                  |
+      | plugin components skills       | demo-skill                            |
+      | plugin id                      | demo@fixtures                         |
+      | plugin name                    | demo                                  |
+      | plugin reasons                 |                                       |
+      | plugin requires                | [{"companion":"mcp","missing":false}] |
+      | plugin status                  | available                             |
+      | plugin version                 | 1.0.0                                 |
+      | severity                       | info                                  |
+
+  @adapter-only
+  Scenario: Plugin info names Pi's built-in MCP as missing for a server only it runs, under pi-mcp-adapter (D-P3-08, MREC-07)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"asker": {"command": "node", "bareElicitationCapability": true}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin info demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind                           | plugin-info                                                                     |
+      | marketplace details autoupdate | false                                                                           |
+      | marketplace name               | fixtures                                                                        |
+      | marketplace scope              | user                                                                            |
+      | needs reload                   | false                                                                           |
+      | plugin components mcp          | [{"name":"plugin:demo:asker","unsupportedFeature":"bareElicitationCapability"}] |
+      | plugin components resolved     | true                                                                            |
+      | plugin components skills       | demo-skill                                                                      |
+      | plugin id                      | demo@fixtures                                                                   |
+      | plugin name                    | demo                                                                            |
+      | plugin reasons                 | unsupported mcp                                                                 |
+      | plugin requires                | [{"companion":"builtin mcp","missing":true}]                                    |
+      | plugin status                  | partially-available                                                             |
+      | plugin version                 | 1.0.0                                                                           |
+      | severity                       | info                                                                            |
+
+  @builtin-only
+  Scenario: Plugin info names Pi's built-in MCP for a server only it runs, under Pi's built-in MCP (D-P3-08)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"asker": {"command": "node", "bareElicitationCapability": true}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin info demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind                           | plugin-info                                   |
+      | marketplace details autoupdate | false                                         |
+      | marketplace name               | fixtures                                      |
+      | marketplace scope              | user                                          |
+      | needs reload                   | false                                         |
+      | plugin components mcp          | [{"name":"plugin:demo:asker"}]                |
+      | plugin components resolved     | true                                          |
+      | plugin components skills       | demo-skill                                    |
+      | plugin id                      | demo@fixtures                                 |
+      | plugin name                    | demo                                          |
+      | plugin reasons                 |                                               |
+      | plugin requires                | [{"companion":"builtin mcp","missing":false}] |
+      | plugin status                  | available                                     |
+      | plugin version                 | 1.0.0                                         |
+      | severity                       | info                                          |
