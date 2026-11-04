@@ -123,6 +123,42 @@ const BUILTIN_TOOL_NAME_ROWS: readonly BuiltinToolNameRow[] = [
   },
 ];
 
+interface LongNameRow {
+  readonly title: string;
+  readonly id: McpImplementationId;
+  readonly server: string;
+  readonly toolNamePrefix: string | undefined;
+  readonly toolName: string;
+}
+
+// Every row names tool "search_pages" of plugin "atlassian-confluence-tools".
+// The built-in names were computed once with Pi 1.5.0's `createMcpToolName`.
+const LONG_NAME_ROWS: readonly LongNameRow[] = [
+  {
+    title:
+      "D-MB-13: the built-in profile promises a 55-character namespace that a cut tool name keeps",
+    id: "builtin",
+    server: "confluence-api",
+    toolNamePrefix: "mcp__plugin_atlassian_confluence_tools_confluence_api__",
+    toolName: "mcp__plugin_atlassian_confluence_tools_confluence_api___aa54f171",
+  },
+  {
+    title:
+      "D-MB-13: the built-in profile promises no prefix for a namespace that a cut tool name loses",
+    id: "builtin",
+    server: "confluence-cloud",
+    toolNamePrefix: undefined,
+    toolName: "mcp__plugin_atlassian_confluence_tools_confluence_cloud_0e6bb645",
+  },
+  {
+    title: "ANAME-01: the adapter profile keeps the prefix of a long server name",
+    id: "adapter",
+    server: "confluence-cloud",
+    toolNamePrefix: "mcp__plugin_atlassian-confluence-tools_confluence-cloud__",
+    toolName: "mcp__plugin_atlassian-confluence-tools_confluence-cloud__search_pages",
+  },
+];
+
 describe("profileFor", () => {
   for (const id of ["adapter", "builtin"] as const) {
     test(`MSEL-01: returns the same frozen ${id} profile on every call`, () => {
@@ -173,6 +209,22 @@ describe("profileFor", () => {
         toolNamePrefix: profile.toolNamePrefix("my-plugin", "api.v1"),
         toolName: profile.toolName("my-plugin", "api.v1", "get-item"),
         grantSelector: profile.grantSelector("my-plugin", "api.v1"),
+      };
+
+      // assert
+      assert.deepStrictEqual(names, expectedNames);
+    });
+  }
+
+  for (const { title, id, server, ...expectedNames } of LONG_NAME_ROWS) {
+    test(title, () => {
+      // arrange
+      const profile = profileFor(id);
+
+      // act
+      const names = {
+        toolNamePrefix: profile.toolNamePrefix("atlassian-confluence-tools", server),
+        toolName: profile.toolName("atlassian-confluence-tools", server, "search_pages"),
       };
 
       // assert

@@ -151,6 +151,9 @@ function callResult(params: unknown): unknown {
   return { content: [{ type: "text", text: echoed }] };
 }
 
+/** The names of the tools the stub lists. */
+export const STUB_TOOL_NAMES: readonly string[] = [ECHO_TOOL.name];
+
 function resultFor(method: unknown, params: unknown): unknown {
   switch (method) {
     case "initialize":

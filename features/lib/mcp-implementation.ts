@@ -41,7 +41,7 @@ import { profileFor } from "../../extensions/pi-claude-marketplace/domain/mcp-im
 import { softDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 import { BUILTIN_MCP_STAND_IN_EXTENSION } from "./builtin-mcp-stand-in/servers.ts";
-import { listedTools, readStubRequests, stubPidFiles } from "./mcp-stub-server.ts";
+import { listedTools, readStubRequests, STUB_TOOL_NAMES, stubPidFiles } from "./mcp-stub-server.ts";
 import { readRegistrySnapshot, REGISTRY_PROBE_COMMAND } from "./pi-registry-probe/snapshot.ts";
 import { isRunning } from "./turn-records.ts";
 
@@ -433,9 +433,20 @@ export async function settledRegistry(pi: PiProcess): Promise<RegistrySnapshot> 
 // adapter lists them over a connection that it closes, so it is done once the
 // stub logged a tools/list and no stub runs. Pi's built-in MCP keeps the
 // connection, so it is done once the stub logged a tools/list and Pi has a
-// tool in the server's built-in namespace. `plugin` is the argument the stub
-// logs: a stub started with the plugin root is named by that path, whose last
-// segment is the plugin's name.
+// tool of the server: one in the server's built-in namespace, or, when the
+// namespace is too long to be a prefix of a cut tool name, one with the full
+// name of a stub tool. `plugin` is the argument the stub logs: a stub started
+// with the plugin root is named by that path, whose last segment is the
+// plugin's name.
+// Whether `name` is a built-in MCP tool name of the stub `server` of `plugin`.
+function isBuiltinStubTool(name: string, plugin: string, server: string): boolean {
+  const profile = profileFor("builtin");
+  const prefix = profile.toolNamePrefix(plugin, server);
+  return prefix === undefined
+    ? STUB_TOOL_NAMES.some((tool) => profile.toolName(plugin, server, tool) === name)
+    : name.startsWith(prefix);
+}
+
 async function listingDone(
   implementation: McpProfile,
   pi: PiProcess,
@@ -451,9 +462,8 @@ async function listingDone(
     return (await stubPidFiles(harness)).length === 0;
   }
 
-  const prefix = profileFor("builtin").toolNamePrefix(path.basename(plugin), server);
   const { allTools } = await probedRegistry(pi);
-  return allTools.some((tool) => tool.name.startsWith(prefix));
+  return allTools.some((tool) => isBuiltinStubTool(tool.name, path.basename(plugin), server));
 }
 
 /**

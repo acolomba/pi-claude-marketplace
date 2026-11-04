@@ -32,8 +32,14 @@ export interface McpImplementationProfile {
   readonly classify: (config: unknown) => McpServerVerdict;
   /** The name the implementation runs a plugin's server under. */
   readonly serverName: (plugin: string, server: string) => string;
-  /** The text every tool name of the server starts with. */
-  readonly toolNamePrefix: (plugin: string, server: string) => string;
+  /**
+   * The text every tool name of the server starts with, or `undefined` when
+   * the implementation cannot promise one: Pi's built-in MCP cuts a long tool
+   * name inside a long server namespace (D-MB-13). Without a prefix, a caller
+   * matches the full names from `toolName` instead. The adapter profile
+   * always returns a prefix.
+   */
+  readonly toolNamePrefix: (plugin: string, server: string) => string | undefined;
   /** The full name the model sees for one tool of the server. */
   readonly toolName: (plugin: string, server: string, tool: string) => string;
   /** The `mcp:` entry that grants an agent the whole server. */
@@ -77,13 +83,18 @@ const ADAPTER_PROFILE: McpImplementationProfile = Object.freeze({
 // (`dist/extensions/mcp/tools.js` `MAX_TOOL_NAME_LENGTH`).
 const MAX_TOOL_NAME_LENGTH = 64;
 const TOOL_NAME_HASH_LENGTH = 8;
+// A cut tool name keeps this many characters, then `_` and the hash.
+const KEPT_TOOL_NAME_LENGTH = MAX_TOOL_NAME_LENGTH - TOOL_NAME_HASH_LENGTH - 1;
 
 /**
  * D-MB-13: Pi's built-in namespace for a registered server name, `mcp__`
- * plus the name with `-` folded to `_`, then the `__` before the tool.
+ * plus the name with `-` folded to `_`, then the `__` before the tool. Pi
+ * keeps the first 55 characters of a cut tool name, so the profile promises
+ * the namespace as a prefix only when it fits in those characters.
  */
-function builtinToolNamePrefix(plugin: string, server: string): string {
-  return `mcp__${foldedMcpServerKey(builtinMcpServerName(plugin, server))}__`;
+function builtinToolNamePrefix(plugin: string, server: string): string | undefined {
+  const prefix = `mcp__${foldedMcpServerKey(builtinMcpServerName(plugin, server))}__`;
+  return prefix.length <= KEPT_TOOL_NAME_LENGTH ? prefix : undefined;
 }
 
 /**
@@ -108,7 +119,7 @@ function builtinToolName(plugin: string, server: string, tool: string): string {
     .update(`${serverName}\0${tool}`)
     .digest("hex")
     .slice(0, TOOL_NAME_HASH_LENGTH);
-  return `${name.slice(0, MAX_TOOL_NAME_LENGTH - TOOL_NAME_HASH_LENGTH - 1)}_${hash}`;
+  return `${name.slice(0, KEPT_TOOL_NAME_LENGTH)}_${hash}`;
 }
 
 const BUILTIN_PROFILE: McpImplementationProfile = Object.freeze({
