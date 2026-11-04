@@ -1352,7 +1352,7 @@ test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even wit
         // appear on the (reinstalled) row when companion extensions are
         // unloaded.
         assert.match(body, /\{[^}]*requires pi-subagents[^}]*\}/);
-        assert.match(body, /\{[^}]*requires pi-mcp-adapter[,}]/);
+        assert.match(body, /\{[^}]*requires mcp[,}]/);
         assert.match(body, /\/reload to pick up changes/);
       } finally {
         await rm(cwdWithDependencies, { recursive: true, force: true });
@@ -2283,7 +2283,7 @@ test("PRL-15: batch soft dependency markers ride only the reinstalled row", asyn
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}\n\nPlugin reinstall: 1 failure, 1 warning\n\n/reload to pick up changes",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires mcp}\n\nPlugin reinstall: 1 failure, 1 warning\n\n/reload to pick up changes",
           severity: "error",
         },
       ]);
@@ -2333,7 +2333,7 @@ test("DLS-01: a recorded plugin the manifest no longer declares keeps its instal
             "",
             "● mp [project]",
             "  ⊘ bad (skipped) {not in manifest}",
-            "  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}",
+            "  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires mcp}",
             "",
             "Plugin reinstall: 2 warnings",
             "",
@@ -10024,7 +10024,7 @@ test("AFILE-04: reinstall over a commented mcp-adapter.json shows the comments-r
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
           severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
@@ -10176,7 +10176,7 @@ test("AFILE-04: a self-rendered reinstall shows the notice after its row", async
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
           severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
@@ -10224,7 +10224,7 @@ for (const { label, env, notices } of [
         assert.deepStrictEqual(notifications, [
           {
             message:
-              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
             severity: "warning",
           },
           ...notices,

@@ -11,9 +11,9 @@
  * declare `dependencies`: `installed`, `updated`, `reinstalled`, and
  * `partially-installed`. Every other status is off in every policy.
  *
- * `plugin list`'s `partially-installed` is the one deliberate off among those
- * four. Its producer never sets `dependencies` on that row. The explicit
- * policy also suppresses markers if a future producer supplies dependencies.
+ * `plugin list`'s `partially-installed` turns markers on for its MCP marker
+ * (D-P3-07 / D-MB-07): its producer gives that row only its MCP dependency, so
+ * agents and workflows markers never show on it.
  *
  * MSG-SD-3 keeps removal rows (`uninstalled`) marker-free, and ENBL-15 /
  * ENBL-18 keep `disabled` rows marker-free.
@@ -128,7 +128,7 @@ const MARKER_POLICY_TABLE = [
       "partially-available": { markers: false, contentReasons: true },
       unavailable: { markers: false, contentReasons: true },
       upgradable: { markers: false, contentReasons: true },
-      "partially-installed": { markers: false, contentReasons: true },
+      "partially-installed": { markers: true, contentReasons: true },
       "partially-upgradable": { markers: false, contentReasons: true },
       disabled: { markers: false, contentReasons: true },
       failed: { markers: false, contentReasons: true },

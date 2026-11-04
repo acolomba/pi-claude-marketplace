@@ -2,8 +2,9 @@ Feature: MCP server verdict list
 
   A plugin's list row follows the MCP implementation pi runs when the list is
   read, not the one it ran at install (MREC-03, D-P3-05), so a switch needs no
-  reinstall. A local marketplace stands in for a published one, and each sse
-  server points at a loopback port that nothing listens on.
+  reinstall, and its marker names the implementation that runs a server the
+  active one cannot (D-MB-07). A local marketplace stands in for a published
+  one, and each sse server points at a loopback port that nothing listens on.
 
   @adapter-only
   Scenario: An installed plugin with an sse server lists as installed, under pi-mcp-adapter (MREC-03)
@@ -52,8 +53,8 @@ Feature: MCP server verdict list
       | tally warnings      | 0           |
       | tally success count | 1           |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status              | reasons         | scope   | version |
-      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp | project | 1.0.0   |
+      | marketplace name | marketplace scope | id            | name | status              | reasons                                  | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp, requires pi-mcp-adapter | project | 1.0.0   |
 
   @own-implementation
   Scenario: A plugin installed under pi-mcp-adapter lists as partially installed when pi runs its built-in MCP instead, with no reinstall (MREC-03)
@@ -78,8 +79,8 @@ Feature: MCP server verdict list
       | tally warnings      | 0           |
       | tally success count | 1           |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status              | reasons         | scope   | version |
-      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp | project | 1.0.0   |
+      | marketplace name | marketplace scope | id            | name | status              | reasons                                  | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp, requires pi-mcp-adapter | project | 1.0.0   |
 
   @adapter-only
   Scenario: A plugin with an sse server is available to install, under pi-mcp-adapter (MREC-03)

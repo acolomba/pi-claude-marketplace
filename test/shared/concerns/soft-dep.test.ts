@@ -5,10 +5,16 @@ import {
   companionRequirements,
   declaredDependencies,
   isMcpDependency,
+  mcpDependencyMarker,
   softDepMarkers,
   type Dependency,
   type McpDependency,
 } from "../../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
+
+import type {
+  ActiveMcpImplementation,
+  SoftDepStatus,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // D-P3-10: an MCP dependency that only pi-mcp-adapter runs every server of.
 const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
@@ -525,22 +531,145 @@ test("D-P3-10: isMcpDependency picks the McpDependency out of a mixed list", () 
   assert.deepStrictEqual(picked, [ADAPTER_MCP]);
 });
 
-for (const runEvery of [["builtin"], [], ["adapter", "builtin"]] as const) {
-  test(`D-MB-07: the MCP marker follows only the adapter probe for runEvery [${runEvery.join(", ")}]`, () => {
+const BOTH_RUN_EVERY: McpDependency = { kind: "mcp", runEvery: ["adapter", "builtin"] };
+const BUILTIN_MCP: McpDependency = { kind: "mcp", runEvery: ["builtin"] };
+const SPLIT_MCP: McpDependency = { kind: "mcp", runEvery: [] };
+
+/** A snapshot with every non-MCP companion loaded and `active` as the MCP implementation. */
+function probeWith(active: ActiveMcpImplementation): SoftDepStatus {
+  return {
+    piSubagentsLoaded: true,
+    piMcpAdapterLoaded: active === "adapter",
+    mcpImplementation: active,
+    workflowEngineLoaded: true,
+  };
+}
+
+describe("mcpDependencyMarker", () => {
+  for (const { label, dependency, active, expectedMarker } of [
+    { label: "both", dependency: BOTH_RUN_EVERY, active: "none", expectedMarker: "requires mcp" },
+    {
+      label: "adapter only",
+      dependency: ADAPTER_MCP,
+      active: "none",
+      expectedMarker: "requires pi-mcp-adapter",
+    },
+    {
+      label: "builtin only",
+      dependency: BUILTIN_MCP,
+      active: "none",
+      expectedMarker: "requires builtin mcp",
+    },
+    { label: "split", dependency: SPLIT_MCP, active: "none", expectedMarker: "requires mcp" },
+    { label: "both", dependency: BOTH_RUN_EVERY, active: "adapter", expectedMarker: undefined },
+    { label: "both", dependency: BOTH_RUN_EVERY, active: "builtin", expectedMarker: undefined },
+    {
+      label: "adapter only",
+      dependency: ADAPTER_MCP,
+      active: "builtin",
+      expectedMarker: "requires pi-mcp-adapter",
+    },
+    {
+      label: "adapter only",
+      dependency: ADAPTER_MCP,
+      active: "adapter",
+      expectedMarker: undefined,
+    },
+    {
+      label: "builtin only",
+      dependency: BUILTIN_MCP,
+      active: "adapter",
+      expectedMarker: "requires builtin mcp",
+    },
+    {
+      label: "builtin only",
+      dependency: BUILTIN_MCP,
+      active: "builtin",
+      expectedMarker: undefined,
+    },
+    {
+      label: "split",
+      dependency: SPLIT_MCP,
+      active: "adapter",
+      expectedMarker: "requires builtin mcp",
+    },
+    {
+      label: "split",
+      dependency: SPLIT_MCP,
+      active: "builtin",
+      expectedMarker: "requires pi-mcp-adapter",
+    },
+    { label: "no", dependency: false, active: "none", expectedMarker: undefined },
+    { label: "no", dependency: false, active: "adapter", expectedMarker: undefined },
+    { label: "no", dependency: false, active: "builtin", expectedMarker: undefined },
+  ] as const) {
+    test(`D-MB-07: ${label} MCP dependency under ${active} gives ${expectedMarker ?? "no marker"}`, () => {
+      // arrange
+      const probe = probeWith(active);
+
+      // act
+      const marker = mcpDependencyMarker(dependency, probe);
+
+      // assert
+      assert.strictEqual(marker, expectedMarker);
+    });
+  }
+
+  test("D-MB-07: ignores the adapter-loaded flag and reads the active implementation", () => {
     // arrange
-    const dependency: McpDependency = { kind: "mcp", runEvery };
+    const probe = { ...probeWith("builtin"), piMcpAdapterLoaded: true };
 
     // act
-    const markers = {
-      absent: softDepMarkers(false, dependency, false, NOTHING_LOADED),
-      loaded: softDepMarkers(false, dependency, false, {
-        ...NOTHING_LOADED,
-        piMcpAdapterLoaded: true,
-        mcpImplementation: "adapter",
-      }),
-    };
+    const marker = mcpDependencyMarker(ADAPTER_MCP, probe);
 
     // assert
-    assert.deepStrictEqual(markers, { absent: ["requires pi-mcp-adapter"], loaded: [] });
+    assert.strictEqual(marker, "requires pi-mcp-adapter");
+  });
+});
+
+for (const { active, dependency, expectedMarkers } of [
+  {
+    active: "none",
+    dependency: BOTH_RUN_EVERY,
+    expectedMarkers: ["requires pi-subagents", "requires mcp", "requires pi-dynamic-workflows"],
+  },
+  {
+    active: "adapter",
+    dependency: BUILTIN_MCP,
+    expectedMarkers: [
+      "requires pi-subagents",
+      "requires builtin mcp",
+      "requires pi-dynamic-workflows",
+    ],
+  },
+  {
+    active: "builtin",
+    dependency: ADAPTER_MCP,
+    expectedMarkers: [
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+      "requires pi-dynamic-workflows",
+    ],
+  },
+  {
+    active: "builtin",
+    dependency: BOTH_RUN_EVERY,
+    expectedMarkers: ["requires pi-subagents", "requires pi-dynamic-workflows"],
+  },
+] as const) {
+  test(`D-MB-07: puts the MCP marker between agents and workflows under ${active} for runEvery [${dependency.runEvery.join(", ")}]`, () => {
+    // arrange
+    const probe: SoftDepStatus = {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: active === "adapter",
+      mcpImplementation: active,
+      workflowEngineLoaded: false,
+    };
+
+    // act
+    const markers = softDepMarkers(true, dependency, true, probe);
+
+    // assert
+    assert.deepStrictEqual(markers, [...expectedMarkers]);
   });
 }

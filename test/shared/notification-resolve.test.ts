@@ -1600,11 +1600,23 @@ describe("resolveRows", () => {
         severity: "info",
         needsReload: true,
         name: "alpha",
-        reasons: [
-          "requires pi-subagents",
-          "requires pi-mcp-adapter",
-          "requires pi-dynamic-workflows",
-        ],
+        reasons: ["requires pi-subagents", "requires builtin mcp", "requires pi-dynamic-workflows"],
+      },
+    },
+    {
+      title:
+        "D-P3-07 / D-MB-07: puts the MCP marker of a split dependency after the content reasons",
+      row: {
+        status: "partially-installed",
+        name: "alpha",
+        dependencies: [{ kind: "mcp", runEvery: [] }],
+        reasons: ["unsupported mcp"],
+      },
+      markers: { "partially-installed": { markers: true, contentReasons: true } },
+      expectedRow: {
+        status: "partially-installed",
+        name: "alpha",
+        reasons: ["unsupported mcp", "requires mcp"],
       },
     },
     {

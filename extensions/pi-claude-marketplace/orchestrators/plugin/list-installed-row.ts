@@ -78,6 +78,19 @@ function dependenciesFromRecord(
   return dependencies;
 }
 
+/**
+ * D-P3-07 / D-MB-07: a partially-installed row carries only its MCP
+ * dependency, so its marker can name the implementation that runs a server
+ * the active one blocks; agents and workflows markers stay off on it.
+ */
+function mcpOnlyDependencies(
+  record: PluginInstallRecord,
+  recorded: RecordedMcpServers,
+): Pick<PluginPartiallyInstalledMessage, "dependencies"> {
+  const mcp = recordMcpDependency(recorded, record);
+  return mcp === false ? {} : { dependencies: [mcp] };
+}
+
 function partiallyInstalledReasons(
   effectiveUnsupported: readonly string[],
   notInManifest: boolean,
@@ -202,6 +215,7 @@ export async function composeInstalledListRow(
       status: "partially-installed",
       name: pluginName,
       reasons: partiallyInstalledReasons(effective.unsupported, notInManifest),
+      ...mcpOnlyDependencies(record, recorded),
       version: record.version,
       ...scopeField,
       ...descriptionField,

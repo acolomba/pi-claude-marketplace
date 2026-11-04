@@ -5171,6 +5171,7 @@ for (const { mcpImplementation, expectedRow } of [
       status: "partially-installed",
       name: "alpha",
       reasons: ["unsupported mcp"],
+      dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
       version: "1.0.0",
     },
   },
@@ -5204,7 +5205,7 @@ for (const { mcpImplementation, expectedRow } of [
   });
 }
 
-test("MREC-03: listPlugins reads the rows for the run's MCP implementation", async () => {
+test("MREC-03 / D-MB-07: listPlugins reads the rows for the run's MCP implementation", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     await seedNeutralSseRecord(home, cwd);
@@ -5217,7 +5218,10 @@ test("MREC-03: listPlugins reads the rows for the run's MCP implementation", asy
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp1 [user]\n  ◉ alpha v1.0.0 (partially-installed) {unsupported mcp}" },
+      {
+        message:
+          "● mp1 [user]\n  ◉ alpha v1.0.0 (partially-installed) {unsupported mcp, requires pi-mcp-adapter}",
+      },
     ]);
     verify(ctx);
     verify(ui);

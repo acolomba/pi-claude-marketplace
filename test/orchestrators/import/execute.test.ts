@@ -3482,7 +3482,7 @@ test("AVAR-04: an import reports the unset variable and the withheld credential 
     {
       message:
         "● fixture-mp [project] (added)\n" +
-        "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n\n" +
+        "  ● hello v1.0.0 (installed) {requires mcp}\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },

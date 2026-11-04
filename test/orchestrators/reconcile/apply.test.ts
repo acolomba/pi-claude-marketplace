@@ -3015,7 +3015,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● rich v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
+          "  ● rich v1.0.0 (installed) {requires pi-subagents, requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -3555,7 +3555,7 @@ describe("applyReconcile", () => {
     {
       name: "declares both companions when the ledger stages an agent and a server",
       tree: { agents: ["with-tools"], mcpServer: true, skill: "clean" },
-      row: "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}",
+      row: "  ● hello v1.0.0 (installed) {requires pi-subagents, requires mcp}",
       severity: undefined,
       summary: "",
       tally: "Reconcile: 1 success",
@@ -7877,7 +7877,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -7945,7 +7945,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -8055,7 +8055,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -8088,7 +8088,7 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ● duo v1.0.0 (installed) {requires pi-subagents}\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 2 successes\n" +
           "\n" +
@@ -8294,7 +8294,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● secrets-vault v1.0.0 (installed) {dependency installed, requires pi-mcp-adapter}\n" +
+          "  ● secrets-vault v1.0.0 (installed) {dependency installed, requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -8331,7 +8331,7 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ○ alfa v1.0.0 (uninstalled)\n" +
-          "  ● bravo v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● bravo v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 2 successes\n" +
           "\n" +
@@ -10775,7 +10775,7 @@ describe("applyReconcile catalog convergence", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● alfa v1.0.0 (installed) {components now supported, requires pi-mcp-adapter}\n" +
+          "  ● alfa v1.0.0 (installed) {components now supported, requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
