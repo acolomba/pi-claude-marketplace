@@ -51,12 +51,14 @@ the load reconcile, not immediately on install; the OAuth client name is set
 as Claude Code sets it; background subagent children never write files.
 
 **Parallel work:** Phase 1 is the only serial prerequisite. It freezes the
-shared files and cross-phase interfaces. Every later phase runs in its own
-child session and worktree, on its own `features/mcp-builtin-*` branch that
-the session pushes to GitHub, and the parent merges the branches into
+shared files and cross-phase interfaces. Phases 2-5 each run in their own
+child session and worktree, on their own `features/mcp-builtin-phase-N`
+branch that the session pushes to GitHub, and the parent merges the branches into
 `features/mcp-builtin` (merge commits, never rebase). Child phases never edit
 frozen files, `CHANGELOG.md`, the READMEs, PROJECT.md Key Decisions, or
 `BACKLOG.md`; they list those lines as parent lines in their last SUMMARY.
+Phase 6 runs in the parent session after the last merge, because only the
+parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 
 ## v1 Requirements
 
@@ -69,7 +71,7 @@ frozen files, `CHANGELOG.md`, the READMEs, PROJECT.md Key Decisions, or
 ### Implementation selection
 
 - [ ] **MSEL-01**: Each command run, load, and session sees one active MCP implementation: pi-mcp-adapter when `/mcp-adapter` is loaded, built-in when `/mcp` comes from `builtin:mcp`, otherwise none; nothing reads it before every extension has loaded
-- [ ] **MSEL-02**: After the user installs or uninstalls pi-mcp-adapter and runs `/reload` or starts Pi again, every installed plugin's MCP servers run through the new active implementation with no reinstall, `apply`, or other user action
+- [ ] **MSEL-02**: After the active implementation changes (the user installs or uninstalls pi-mcp-adapter, or turns Pi's built-in MCP on or off) and runs `/reload` or starts Pi again, every installed plugin's MCP servers run through the new active implementation with no reinstall, `apply`, or other plugin action. Turning built-in MCP back on after the adapter turned it off is the user's step (D-MB-01)
 - [ ] **MSEL-03**: The extension never registers a server with Pi while the adapter is active or while no implementation is active, so Pi reports no extension error for an unconnected registration
 - [ ] **MSEL-04**: Adapter entries keep being written at install whatever the active implementation, so a switch from built-in to the adapter serves every server without rewriting `mcp-adapter.json` at load
 
@@ -107,7 +109,7 @@ frozen files, `CHANGELOG.md`, the READMEs, PROJECT.md Key Decisions, or
 - [ ] **DUAL-01**: The cucumber suite has an adapter profile and a built-in profile; every MCP feature runs under both with shared step definitions, and implementation-specific expectations live in their own tagged scenarios
 - [ ] **DUAL-02**: Each profile's Pi proves which implementation is active, and an architecture test fails when an MCP scenario runs under only one profile without an implementation tag
 - [ ] **DUAL-03**: CI runs both profiles within the behavioral job timeouts
-- [ ] **DUAL-04**: A switch scenario installs a plugin, reaches its server under the adapter, then under built-in after the adapter is removed, then under the adapter again, with no user action other than adding or removing the adapter
+- [ ] **DUAL-04**: A switch scenario installs a plugin and reaches its server under the adapter; after the adapter is removed it shows the missing-MCP marker while built-in MCP is off; after built-in MCP is on it reaches the server under built-in; and after the adapter is added again it reaches the server under the adapter, with no plugin command in between
 
 ### Documentation and decisions
 
@@ -136,14 +138,46 @@ frozen files, `CHANGELOG.md`, the READMEs, PROJECT.md Key Decisions, or
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| PI15-01 | Phase 1 | Pending |
+| PI15-02 | Phase 1 | Pending |
+| PI15-03 | Phase 1 | Pending |
+| MSEL-01 | Phase 1 | Pending |
+| MSEL-02 | Phase 2 | Pending |
+| MSEL-03 | Phase 2 | Pending |
+| MSEL-04 | Phase 2 | Pending |
+| MREC-01 | Phase 1 | Pending |
+| MREC-02 | Phase 2 | Pending |
+| MREC-03 | Phase 3 | Pending |
+| MREC-04 | Phase 3 | Pending |
+| MREC-05 | Phase 3 | Pending |
+| MREC-06 | Phase 3 | Pending |
+| MREC-07 | Phase 3 | Pending |
+| BLT-01 | Phase 2 | Pending |
+| BLT-02 | Phase 2 | Pending |
+| BLT-03 | Phase 2 | Pending |
+| BLT-04 | Phase 2 | Pending |
+| BLT-05 | Phase 2 | Pending |
+| BLT-06 | Phase 2 | Pending |
+| MGRT-01 | Phase 4 | Pending |
+| MGRT-02 | Phase 4 | Pending |
+| MHK-01 | Phase 5 | Pending |
+| MHK-02 | Phase 5 | Pending |
+| DUAL-01 | Phase 1 | Pending |
+| DUAL-02 | Phase 1 | Pending |
+| DUAL-03 | Phase 1 | Pending |
+| DUAL-04 | Phase 6 | Pending |
+| MDOC-01 | Phase 2 | Pending |
+| MDOC-02 | Phase 6 | Pending |
+| MDEC-01 | Phase 1 | Pending |
 
 **Coverage:**
 
 - v1 requirements: 31 total
-- Mapped to phases: 0
-- Unmapped: 31 (filled by the roadmap)
+- Mapped to phases: 31
+- Unmapped: 0
+- Per phase: Phase 1: 9, Phase 2: 11, Phase 3: 5, Phase 4: 2, Phase 5: 2, Phase 6: 2
 
 ---
 
 *Requirements defined: 2026-11-04*
-*Last updated: 2026-11-04 after definition*
+*Last updated: 2026-11-04 after roadmap creation (31/31 mapped)*

@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
 status: planning
-last_updated: "2026-11-04T00:11:07.328Z"
+last_updated: "2026-11-04T00:54:44.000Z"
 last_activity: 2026-11-04
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,19 +17,27 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-02 after the component-features milestone)
+See: `.planning/PROJECT.md` (updated 2026-11-04 when the mcp-builtin milestone started)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** component-features closed again 2026-11-03 after Phase 8 and the re-verification of every phase. Next: version bump, CHANGELOG entry and the PR for `claude/quirky-planck-hhm592` (dispatch `ci.yml` first to re-measure the components shard). Open for the user: review the upstream branches on `acolomba/pi` and `acolomba/pi-subagents`.
+**Current focus:** mcp-builtin -- MCP Built-in, on `features/mcp-builtin`.
+Phase 1 (Foundation and Pi 1.5.0) runs serially in the parent session; then
+Phases 2-5 run in parallel child sessions on `features/mcp-builtin-phase-N`
+(brief: `.planning/CHILD-SESSION-BRIEF.md`), merged in the order 5, 4, 2, 3;
+Phase 6 closes on the milestone branch. Still open from component-features:
+the PR for `claude/quirky-planck-hhm592` and the upstream branches on
+`acolomba/pi` and `acolomba/pi-subagents`.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-11-04 — Milestone mcp-builtin started
+Phase: 1 of 6 (Foundation and Pi 1.5.0)
+Plan: not planned yet
+Status: Ready to plan
+Last activity: 2026-11-04 — Roadmap created (6 phases, 31/31 requirements mapped)
+
+Progress: [░░░░░░░░░░] 0%
 
 
 ### mcp-4 closeout
@@ -268,9 +276,14 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-
-
-- Start the next milestone with /gsd-new-milestone
+- Plan and run Phase 1 in the parent session on `features/mcp-builtin`
+  (`/gsd-plan-phase 1`, or the `gsd-autonomous` skill with `--only 1`).
+- When Phase 1 is verified and pushed: create and push
+  `features/mcp-builtin-phase-2` to `-phase-5` at the milestone head, then
+  start one child session per phase with `.planning/CHILD-SESSION-BRIEF.md`
+  (Phase 3 first).
+- Merge the phase branches in the order 5, 4, 2, 3 with the post-merge gate
+  (`npm run check` plus both cucumber profiles), then run Phase 6.
 
 
 ## Performance Metrics
@@ -791,6 +804,13 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Roadmap Evolution
 
+- mcp-builtin roadmap created 2026-11-04 (phase numbers reset to 1): Phase 1
+  (Foundation and Pi 1.5.0, serial, freezes the shared files and the
+  cross-phase interfaces), then Phases 2-5 in parallel child sessions
+  (Built-in Materialization, Read-Time Verdicts, Agent Grants, Hook Tool
+  Names), then Phase 6 (Release Docs and Combined Tree, serial, parent). The
+  research's settings-cleanup phase is dropped (D-MB-01); the built-in status
+  reader moved from the verdicts phase to the built-in phase.
 - component-features roadmap created 2026-10-31: Phase 1 (Harness and
   Version Raise, with the pre-fan-out decisions in its discuss step) then
   Phases 2-7, one per component kind, in parallel; no suite-close phase, the
@@ -837,6 +857,16 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 
 ### Blockers/Concerns
 
+- [mcp-builtin] Resolved 2026-11-04: pi-mcp-adapter 7.0.0 writes
+  `-builtin:mcp` into the user's Pi settings once per version, so after the
+  adapter is removed the next start is usually `none`. Under D-MB-01 that is
+  the missing-MCP marker until the user turns built-in MCP back on. MSEL-02
+  and DUAL-04 now say so, and DUAL-04 moved to Phase 6 because it needs
+  Phase 2's registration and Phase 3's marker on the combined tree.
+- [mcp-builtin] Phases 4 and 5 prove their built-in legs with a Phase 1
+  stand-in server; re-run those scenarios after Phase 2 merges.
+- [mcp-builtin] Phase 3 merges last and merges the milestone branch before
+  its gate, because its `info` rows pick up Phase 2's built-in status tokens.
 - [component-features] No scenario may pin an unlicensed gap before the user
   decides; the pre-fan-out decisions are recorded (D-CF1-01..17).
 - [Phase 1] `.fallowrc.json` carries `dynamicallyLoaded` and `ignoreExports`
@@ -868,6 +898,6 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 
 ## Session Continuity
 
-Last session: 2026-11-01T20:10:00Z
-Stopped at: Phase 06 complete — all phases complete
+Last session: 2026-11-04T00:54:44Z
+Stopped at: mcp-builtin roadmap created; Phase 1 ready to plan
 Resume file: None
