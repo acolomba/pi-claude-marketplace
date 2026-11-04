@@ -895,9 +895,10 @@ export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
       : undefined;
 
 /**
- * The value a matcher of `claudeEvent` selects on: the mapped SessionStart
- * `source` and SessionEnd `reason` (D-CF5-01 / D-CF5-02), the PreToolUse Pi
- * tool name, and the Claude compaction `trigger` the translators also send
+ * The value of `claudeEvent` that its notice label names and a closed-set
+ * matcher selects on: the mapped SessionStart `source` and SessionEnd
+ * `reason` (D-CF5-01 / D-CF5-02), the PreToolUse tool name as the hooks see
+ * it (D-P5-03), and the Claude compaction `trigger` the translators also send
  * (D-CF5-04). UserPromptSubmit has none, because the parser rejects a
  * non-empty matcher on it.
  */
