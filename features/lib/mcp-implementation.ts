@@ -348,8 +348,26 @@ export async function turnOnBuiltinMcp(agentDir: string): Promise<void> {
 }
 
 /**
+ * Returns the text of the stub pid file `name` in `harness`, or `undefined`
+ * when the file is gone: a stub removes its file when its stdin closes, so a
+ * stub that exits between the listing and the read takes its file with it.
+ */
+async function readStubPidFile(harness: string, name: string): Promise<string | undefined> {
+  try {
+    return await readFile(path.join(harness, name), "utf8");
+  } catch (error: unknown) {
+    if (isMissing(error)) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+/**
  * Returns the pids that the pid files of the stub MCP servers in `harness`
- * name, none when the directory is absent.
+ * name, none when the directory is absent. A file that vanishes before it is
+ * read belongs to a stub that exited, so it names no pid.
  */
 export async function stubPidsIn(harness: string): Promise<readonly number[]> {
   let names: readonly string[];
@@ -364,11 +382,16 @@ export async function stubPidsIn(harness: string): Promise<readonly number[]> {
     throw error;
   }
 
-  const texts = await Promise.all(names.map((name) => readFile(path.join(harness, name), "utf8")));
-  return texts.map((text, index) => {
+  const texts = await Promise.all(names.map((name) => readStubPidFile(harness, name)));
+  return names.flatMap((name, index) => {
+    const text = texts[index];
+    if (text === undefined) {
+      return [];
+    }
+
     const pid = Number(text.trim());
-    assert.ok(Number.isInteger(pid) && pid > 0, `${names[index]} names no pid: ${text}`);
-    return pid;
+    assert.ok(Number.isInteger(pid) && pid > 0, `${name} names no pid: ${text}`);
+    return [pid];
   });
 }
 
