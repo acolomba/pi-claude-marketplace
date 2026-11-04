@@ -31,7 +31,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -82,6 +82,10 @@ let piRun: PiRun | undefined = undefined;
  * `world.ts`).
  */
 const RUN_START_TIMEOUT_MS = 90_000;
+
+// The jiti compile cache of a Pi child whose environment has no TMPDIR:
+// Node's `os.tmpdir()` falls back to `/tmp`.
+const DEFAULT_COMPILE_CACHE = "/tmp/jiti";
 
 // A stub MCP server exits when its stdin closes, which the new session's
 // shutdown of the old connections causes; the margin covers a loaded CI runner.
@@ -156,6 +160,12 @@ BeforeAll({ timeout: RUN_START_TIMEOUT_MS }, async (): Promise<void> => {
       // empty, so the compile cache under it lasts the whole run.
       const temporary = path.join(root, "shared-pi-tmp");
       await mkdir(temporary);
+      // A Pi started without a TMPDIR, such as a terminal Pi, compiles the
+      // extension into Node's default `/tmp/jiti`. The shared Pi warms that
+      // cache, as it did before it needed a TMPDIR, so a worker's first
+      // terminal Pi does not compile cold under load.
+      await mkdir(DEFAULT_COMPILE_CACHE, { recursive: true });
+      await symlink(DEFAULT_COMPILE_CACHE, path.join(temporary, "jiti"));
       piProfile = { extensions: [adapter.entry], environment: { TMPDIR: temporary } };
       adapterVersion = adapter.version;
       // Pi starts its first session at once, before any reset seeds it.
