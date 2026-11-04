@@ -107,19 +107,29 @@ async function writeJson(filePath: string, document: unknown): Promise<void> {
   await writeFile(filePath, JSON.stringify(document));
 }
 
+/** The marketplace record of `mp`: the local marketplace unless a test names another. */
+interface MarketplaceShape {
+  readonly source: unknown;
+  readonly marketplaceRoot: string;
+}
+
 async function writeState(
   fixture: Session,
   scope: ScopeName,
   plugins: Readonly<Record<string, PluginInstallRecord>>,
+  shape: MarketplaceShape = {
+    source: { kind: "path", raw: fixture.marketplaceRoot },
+    marketplaceRoot: fixture.marketplaceRoot,
+  },
 ): Promise<void> {
-  const { marketplaceRoot } = fixture;
+  const { marketplaceRoot } = shape;
   await writeJson(path.join(fixture.roots[scope], "state.json"), {
     schemaVersion: 3,
     marketplaces: {
       mp: {
         name: "mp",
         scope,
-        source: { kind: "path", raw: marketplaceRoot },
+        source: shape.source,
         addedFromCwd: fixture.environment.cwd,
         manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
         marketplaceRoot,
@@ -128,6 +138,13 @@ async function writeState(
     },
   });
 }
+
+/** A record installed from a git source at a commit: `resolvedSha` is set. */
+function gitRecord(resolvedSource: string): PluginInstallRecord {
+  return { ...installRecord(resolvedSource), resolvedSha: "0123456789ab".padEnd(40, "0") };
+}
+
+const GITHUB_MARKETPLACE = { kind: "github", raw: "owner/mp" } as const;
 
 /** Writes the marketplace manifest of `mp`, listing `plugins`. */
 async function writeManifest(
@@ -420,12 +437,17 @@ describe("builtinRegistrationStep", () => {
     verify(ctx);
   });
 
-  test("UF-1: a git record inside the scope's plugin clones registers", async (t) => {
+  test("UF-1: a git record inside its own plugin clone registers", async (t) => {
     // arrange
     const fixture = await session(t);
-    const pluginRoot = path.join(fixture.roots.user, "plugin-clones", "0123456789ab", "demo");
+    const pluginRoot = path.join(
+      fixture.roots.user,
+      "plugin-clones",
+      "0123456789ab-0123456789ab",
+      "demo",
+    );
     await mkdir(pluginRoot, { recursive: true });
-    await writeState(fixture, "user", { demo: installRecord(pluginRoot) });
+    await writeState(fixture, "user", { demo: gitRecord(pluginRoot) });
     const ctx = sessionContext(fixture, false);
     const pi = emptyRegistry();
     when(() => {
@@ -438,7 +460,87 @@ describe("builtinRegistrationStep", () => {
     verify(ctx);
   });
 
-  test("UF-1: a record whose plugin root climbs out of both roots registers nothing and is logged", async (t) => {
+  for (const { title, record } of [
+    {
+      title: "a record without a commit whose root lies in the plugin clones",
+      record: (clones: string) =>
+        installRecord(path.join(clones, "0123456789ab-0123456789ab", "demo")),
+    },
+    {
+      title: "a git record whose root lies outside a clone entry of the plugin clones",
+      record: (clones: string) => gitRecord(path.join(clones, "shared", "demo")),
+    },
+  ]) {
+    test(`UF-1: ${title} registers nothing and is logged`, async (t) => {
+      // arrange
+      const fixture = await session(t);
+      const logged = captureDebugLog(t);
+      const clones = path.join(fixture.roots.user, "plugin-clones");
+      await writeState(fixture, "user", { demo: record(clones) });
+      const ctx = sessionContext(fixture, false);
+      const pi = emptyRegistry();
+
+      // act
+      await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+      // assert
+      assert.deepStrictEqual(logged, [
+        "[mcp] MCP servers of demo@mp not registered: its plugin root is outside its sources",
+      ]);
+      verify(pi);
+      verify(ctx);
+    });
+  }
+
+  test("UF-1: a path record of a cloned marketplace inside its checkout registers", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    const marketplaceRoot = path.join(fixture.roots.user, "sources", "mp");
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "demo");
+    await mkdir(pluginRoot, { recursive: true });
+    await writeState(
+      fixture,
+      "user",
+      { demo: installRecord(pluginRoot) },
+      { source: GITHUB_MARKETPLACE, marketplaceRoot },
+    );
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_stub", stubConfig(fixture, "user", pluginRoot));
+    }).thenReturn(undefined);
+
+    // act & assert
+    await assert.doesNotReject(builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") }));
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("UF-1: a cloned marketplace whose recorded root lies outside its checkout registers nothing", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(
+      fixture,
+      "user",
+      { demo: installRecord(fixture.pluginRoot) },
+      { source: GITHUB_MARKETPLACE, marketplaceRoot: fixture.marketplaceRoot },
+    );
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      "[mcp] MCP servers of demo@mp not registered: its plugin root is outside its sources",
+    ]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("UF-1: a record whose plugin root climbs out of its marketplace registers nothing and is logged", async (t) => {
     // arrange
     const fixture = await session(t);
     const logged = captureDebugLog(t);

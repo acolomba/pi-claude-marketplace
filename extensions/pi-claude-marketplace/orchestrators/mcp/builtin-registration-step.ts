@@ -21,14 +21,18 @@
  * a registration nothing connects as an extension error, and the adapter
  * would proxy a duplicate.
  *
- * UF-1 / NFR-10: a record's plugin root must lie inside its marketplace root
- * or the scope's plugin clones directory before any of its files is read or
- * its root reaches `${CLAUDE_PLUGIN_ROOT}`.
+ * UF-1 / NFR-10: a record's plugin root must lie inside its own clone root
+ * before any of its files is read or its root reaches `${CLAUDE_PLUGIN_ROOT}`:
+ * a git record's own `plugin-clones/<key>/` entry, any other record's
+ * marketplace root, which for a cloned marketplace must itself lie inside the
+ * scope's `sources/<marketplace>/` checkout.
  *
  * NFR-2: neither step throws. Every skipped record, scope, or server is
  * debug-logged on the `mcp` channel with names only. The steps never handle
  * `mcp_servers_change`, which would make this extension the connector (PI-11).
  */
+
+import path from "node:path";
 
 import {
   builtinServerConfig,
@@ -99,25 +103,71 @@ function enabledRecords(state: ExtensionState): RecordSource[] {
   return sources;
 }
 
-async function isInside(root: string, pluginRoot: string): Promise<boolean> {
-  try {
-    await assertPathInside(root, pluginRoot, "plugin root");
-    return true;
-  } catch {
-    // Any refusal, a traversal, a path outside, or a symlinked segment,
-    // leaves the plugin root uncontained under this root.
-    return false;
+/** `pluginCloneKey` (`<12hex>-<sha12>`) and `pluginMirrorKey` (`<12hex>`) outputs. */
+const CLONE_KEY = /^[0-9a-f]{12}(?:-[0-9a-f]{12})?$/;
+
+/**
+ * D-PL2-23: the `plugin-clones/` entry that owns a record, or `undefined` when
+ * the record runs in place in its marketplace. Records carry no source kind,
+ * so `plugin-clones/` owns one only when it has `resolvedSha` and its root
+ * lies under `plugin-clones/`.
+ */
+function cloneKeyOf(record: PluginInstallRecord, pluginClonesDir: string): string | undefined {
+  const relative = path.relative(pluginClonesDir, record.resolvedSource);
+  if (
+    record.resolvedSha === undefined ||
+    relative === "" ||
+    relative.startsWith("..") ||
+    path.isAbsolute(relative)
+  ) {
+    return undefined;
   }
+
+  return relative.split(path.sep)[0];
 }
 
-/** UF-1: a path record's root is inside its marketplace, a git record's inside the clones. */
-async function isContained(source: RecordSource, locations: ScopedLocations): Promise<boolean> {
-  const pluginRoot = source.record.resolvedSource;
-  if (await isInside(source.marketplace.marketplaceRoot, pluginRoot)) {
-    return true;
+/** A `dir` or `file` marketplace, whose root is the user's own directory. */
+function isPathMarketplace(source: unknown): boolean {
+  return (
+    typeof source === "object" && source !== null && "kind" in source && source.kind === "path"
+  );
+}
+
+/**
+ * UF-1 / NFR-10: the one clone root a record's plugin root must lie in. A
+ * cloned marketplace's root is taken from the same state file as the record,
+ * so it must itself lie inside the scope's checkout of that marketplace.
+ * Throws when the record names no such root.
+ */
+async function owningRoot(source: RecordSource, locations: ScopedLocations): Promise<string> {
+  const cloneKey = cloneKeyOf(source.record, locations.pluginClonesDir);
+  if (cloneKey !== undefined) {
+    if (!CLONE_KEY.test(cloneKey)) {
+      throw new Error(`plugin root is not inside a plugin clone: ${cloneKey}`);
+    }
+
+    return locations.pluginCloneDir(cloneKey);
   }
 
-  return isInside(locations.pluginClonesDir, pluginRoot);
+  const { marketplace } = source;
+  if (!isPathMarketplace(marketplace.source)) {
+    const checkout = await locations.sourceCloneDir(source.marketplaceName);
+    await assertPathInside(checkout, marketplace.marketplaceRoot, "marketplace root");
+  }
+
+  return marketplace.marketplaceRoot;
+}
+
+async function isContained(source: RecordSource, locations: ScopedLocations): Promise<boolean> {
+  try {
+    const root = await owningRoot(source, locations);
+    await assertPathInside(root, source.record.resolvedSource, "plugin root");
+    return true;
+  } catch {
+    // Any refusal, a traversal, a path outside, a symlinked segment, or a
+    // root the record cannot own, leaves the plugin root uncontained.
+    return false;
+  }
 }
 
 /**
