@@ -40,6 +40,38 @@ Feature: MCP server listing
       | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
       | request      | tools/list                |                                                                                                                                                                                                                                                                 |
 
+  @builtin-only
+  Scenario: A search through pi's tool search activates the plugin's tool under Claude Code's name (BLT-01)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    Given the scripted model plays these steps:
+      | reply | tool        | arguments         |
+      |       | tool_search | {"query": "echo"} |
+      | Done. |             |                   |
+    When the user prompts "find the echo tool"
+    Then the model receives these calls, with each tool search reduced to the tools it loads:
+      | call | role        | text                                                                                  |
+      | 1    | user        | find the echo tool                                                                    |
+      | 2    | user        | find the echo tool                                                                    |
+      | 2    | assistant   | tool call tool_search {"query":"echo"}                                                |
+      | 2    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given. |
+    Then the model calls are offered these marketplace tools:
+      | call | tools                                                                                      |
+      | 1    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list                              |
+      | 2    | mcp__plugin_demo_stub__echo, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
+    Then the stub mcp server "stub" of the plugin "demo" receives these messages:
+      | kind         | method                    | params                                                                                                    |
+      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.0"}} |
+      | notification | notifications/initialized |                                                                                                           |
+      | request      | tools/list                |                                                                                                           |
+
   @adapter-only
   Scenario: The mcp tool lists the plugin's server under its generated key
     Given the marketplace "fixtures" is published as a dir source
