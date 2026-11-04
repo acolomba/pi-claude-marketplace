@@ -112,8 +112,8 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 
 ### Hook naming
 
-- [ ] **MHK-01**: A plugin hook whose matcher names a plugin MCP tool fires on the built-in tool call with the server segment matched in Claude's form (with `-`); only the tool segment's fold is a recorded divergence licensed by a Pi capability gap
-- [ ] **MHK-02**: The pi-mcp-adapter `mcp` proxy special case in hook dispatch applies only while the adapter is active
+- [x] **MHK-01**: A plugin hook whose matcher names a plugin MCP tool fires on the built-in tool call with the server segment matched in Claude's form (with `-`); only the tool segment's fold is a recorded divergence licensed by a Pi capability gap
+- [x] **MHK-02**: The pi-mcp-adapter `mcp` proxy special case in hook dispatch applies only while the adapter is active
 
 ### Dual-profile behavioral tests
 
@@ -171,8 +171,8 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 | BLT-06 | Phase 2 | Pending |
 | MGRT-01 | Phase 4 | Pending |
 | MGRT-02 | Phase 4 | Pending |
-| MHK-01 | Phase 5 | Pending |
-| MHK-02 | Phase 5 | Pending |
+| MHK-01 | Phase 5 | Complete |
+| MHK-02 | Phase 5 | Complete |
 | DUAL-01 | Phase 1 | Complete |
 | DUAL-02 | Phase 1 | Complete |
 | DUAL-03 | Phase 1 | Complete |

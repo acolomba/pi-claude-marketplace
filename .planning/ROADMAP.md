@@ -322,7 +322,7 @@ changes their names or shapes.
 - [ ] **Phase 2: Built-in Materialization** - Recorded servers connect through Pi's built-in MCP on startup and `/reload` with Claude's values and names, trust gating, status in `info`, and a switch that needs no plugin action
 - [ ] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records
 - [ ] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child
-- [ ] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter
+- [x] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter (completed 2026-11-04)
 - [ ] **Phase 6: Release Docs and Combined Tree** - The CHANGELOG and READMEs describe built-in MCP support, closed sets are clean, and the combined tree passes under both profiles
 
 ## Phase Details
@@ -457,7 +457,18 @@ Plans:
   2. The pi-mcp-adapter `mcp` proxy special case in hook dispatch applies only while the adapter is active; under built-in or with no implementation, no call is treated as a proxy call (MHK-02).
   3. `docs/hooks-compatibility.md` states the built-in tool names and the divergence, and every MCP scenario in `features/hook/` runs under both profiles or carries an implementation tag.
 
-**Plans**: TBD
+**Plans:** 4/4 plans complete in 3 waves
+
+Plans:
+**Wave 1**
+- [x] 05-01-PLAN.md — Wave 1: the per-event built-in tool identity end to end: Claude-form matchers, `if` fields, stdin, and labels, with the shared `@mcp` scenario (MHK-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 05-02-PLAN.md — Wave 2: the proxy rule only under pi-mcp-adapter, one read per bridge generation, the D-P5-11 pair, and the cut-name scenario (MHK-02)
+- [x] 05-03-PLAN.md — Wave 2: the tool-segment fold scenario on a Pi `mcp.json` server, the notice-label scenario, and `docs/hooks-compatibility.md` (MHK-01, MHK-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 05-04-PLAN.md — Wave 3: phase gate with both profiles, `test:modules`, the red sweep, the ownership check, and the parent lines (MHK-01, MHK-02)
 
 ### Phase 6: Release Docs and Combined Tree
 **Goal**: The combined milestone tree is ready to ship: the CHANGELOG and READMEs describe built-in MCP support, the three `requires` markers, and the naming divergence; closed sets hold no unused entry; and every MCP feature and the switch scenario pass under both profiles after the last merge.
@@ -483,7 +494,7 @@ Plans:
 | 2. Built-in Materialization | 0/TBD | Not started | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
 | 4. Agent Grants | 0/TBD | Not started | - |
-| 5. Hook Tool Names | 0/TBD | Not started | - |
+| 5. Hook Tool Names | 4/4 | Complete    | 2026-11-04 |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
 
 ## Carried Forward

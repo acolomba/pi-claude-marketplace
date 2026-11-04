@@ -68,6 +68,7 @@ import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.t
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapters.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
+import { createHookToolView } from "./mcp-tool-view.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
 import { claudeSessionStartSource } from "./payloads/session-start.ts";
 import {
@@ -1192,16 +1193,20 @@ async function registerHooksBridgeWith(
       compositeHandlerFor(runtime, "UserPromptSubmit", generation, pi, opts.executor),
     ),
   );
+  // D-P5-07: both tool handlers of this generation share one view, so they
+  // read the proxy rule's implementation at most once together. Creating the
+  // view reads nothing (MSEL-01).
+  const tools = createHookToolView(pi);
   pi.on(
     "tool_call",
     bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "PreToolUse", generation, pi, opts.executor),
+      compositeHandlerFor(runtime, "PreToolUse", generation, pi, opts.executor, tools),
     ),
   );
   pi.on(
     "tool_result",
     bindWithMode((generation) =>
-      toolResultCompositeHandler(runtime, generation, pi, opts.executor),
+      toolResultCompositeHandler(runtime, generation, pi, opts.executor, tools),
     ),
   );
   // Hook additionalContext drain (D-CF5-13): every agent turn fires

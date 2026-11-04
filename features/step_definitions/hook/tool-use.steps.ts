@@ -10,17 +10,30 @@
  * the tools of a server it has not cached and then disconnects, in the
  * background, so a scenario waits until that listing is over before it
  * prompts.
+ *
+ * The call step scripts the model's call of one of the stub's tools through
+ * whichever MCP implementation the profile runs: pi-mcp-adapter's `mcp` proxy,
+ * or `tool_search` and then the tool itself under Pi's built-in MCP (D-P5-08).
+ *
+ * The `mcp.json` step configures, in Pi's own `mcp.json` in the user's agent
+ * directory, one server that Pi's built-in MCP runs: the hooks' stub MCP tool
+ * server, which offers one tool under the given name, with `direct` exposure,
+ * so Pi declares the tool to the model before the first prompt (D-P5-09). Pi
+ * reads the file when it starts, so the step precedes the profile Pi.
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 
 import { Given } from "@cucumber/cucumber";
 
+import { hookMcpCallScript } from "../../lib/hook-mcp-calls.ts";
+import { HOOK_MCP_TOOL_SERVER } from "../../lib/hook-mcp-tool-server.ts";
 import { MCP_STUB_SERVER, readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
+import { readModelScript, writeModelScript } from "../../lib/scripted-model/script.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -30,6 +43,21 @@ const HOOK_STUB_LISTING_DEADLINE_MS = 15_000;
 const HOOK_STUB_LISTING_RECHECK_MS = 100;
 
 const MCP_FILE = ".mcp.json";
+
+// Pi's global MCP config, in the agent directory, which Pi reads with no
+// trust check.
+const PI_MCP_FILE = "mcp.json";
+
+// Pi's `mcp.json` with the one server `server`, which runs the hooks' stub MCP
+// tool server with this process's Node and offers the tool `tool`.
+function piMcpText(server: string, tool: string): string {
+  const launch = {
+    command: process.execPath,
+    args: [HOOK_MCP_TOOL_SERVER, tool],
+    exposure: "direct",
+  };
+  return `${JSON.stringify({ mcpServers: { [server]: launch } }, null, 2)}\n`;
+}
 
 // The `.mcp.json` of a plugin whose only server is the stub, started as the
 // server `server` of the plugin `plugin`.
@@ -76,5 +104,34 @@ Given(
       );
       await pause(HOOK_STUB_LISTING_RECHECK_MS);
     }
+  },
+);
+
+Given(
+  "the scripted model calls the tool {string} of the hooks' stub mcp server {string} of the plugin {string} through the mcp implementation with {string}, then replies {string}",
+  async function (
+    this: ScenarioWorld,
+    tool: string,
+    server: string,
+    plugin: string,
+    argumentsText: string,
+    reply: string,
+  ) {
+    const steps = hookMcpCallScript(this.mcpProfile, plugin, server, tool, argumentsText, reply);
+    const harness = this.profileHarness();
+    await writeModelScript(harness, steps);
+    assert.deepStrictEqual(await readModelScript(harness), steps);
+  },
+);
+
+Given(
+  "pi's mcp.json configures the server {string} with the hooks' stub mcp tool {string}",
+  async function (this: ScenarioWorld, server: string, tool: string) {
+    assert.ok(!this.profilePiStarted, "a profile Pi already started in this scenario");
+    const file = path.join(this.tokens.agentDir, PI_MCP_FILE);
+    const text = piMcpText(server, tool);
+    await writeFile(file, text, { flag: "wx" });
+    this.onRelease(() => rm(file, { force: true }));
+    assert.strictEqual(await readFile(file, "utf8"), text);
   },
 );

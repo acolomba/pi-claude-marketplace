@@ -5,17 +5,17 @@ milestone_name: MCP Built-in
 current_phase: 2
 current_phase_name: Built-in Materialization
 status: verifying
-stopped_at: Phase 01 complete, ready to verify Phase 2
-last_updated: "2026-11-04T10:34:36.589Z"
+stopped_at: Phase 5 complete, ready to verify Phase 2
+last_updated: "2026-11-04T17:31:11.974Z"
 last_activity: 2026-11-04
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: 7c19bbba31fc9431af48b7b0b4703ecfe3f3ffb1
+last_activity_desc: Phase 5 complete, transitioned to Phase 2
+state_head: d89c1d9ed3c52263cc0aafc9d763fb42016e7f2f
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 14
-  completed_plans: 14
-  percent: 17
+  completed_phases: 2
+  total_plans: 18
+  completed_plans: 18
+  percent: 33
 ---
 
 # Project State
@@ -27,7 +27,8 @@ See: `.planning/PROJECT.md` (updated 2026-11-04 after mcp-builtin Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phases 2-5 in parallel child sessions (Phase 2 Built-in Materialization, Phase 3, Phase 4, Phase 5); Phase 1 complete
+**Current focus:** Phase 5 (Hook Tool Names) complete and verified on
+`features/mcp-builtin-phase-5`; Phases 2, 3, and 4 run in sibling sessions.
 Phase 6 closes on the milestone branch. Still open from component-features:
 the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 `acolomba/pi` and `acolomba/pi-subagents`.
@@ -37,9 +38,9 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 Phase: 2 — Built-in Materialization
 Plan: 2
 Status: Phase complete — ready for verification
-Last activity: 2026-11-04 — Phase 01 complete, transitioned to Phase 2
+Last activity: 2026-11-04 — Phase 5 complete, transitioned to Phase 2
 
-Progress: [██░░░░░░░░] 17%
+Progress: [███░░░░░░░] 33%
 
 
 ### mcp-4 closeout
@@ -901,5 +902,5 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 ## Session Continuity
 
 Last session: 2026-11-04T00:54:44Z
-Stopped at: Phase 01 complete, ready to verify Phase 2
+Stopped at: Phase 5 complete, ready to verify Phase 2
 Resume file: None
