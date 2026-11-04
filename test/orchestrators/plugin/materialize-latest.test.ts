@@ -125,6 +125,7 @@ async function seedRecordedPlugin(
       completionCache: createCompletionCache(),
       env: {},
       cleanupClones: () => Promise.resolve(),
+      mcpImplementation: "none",
     },
   };
 }

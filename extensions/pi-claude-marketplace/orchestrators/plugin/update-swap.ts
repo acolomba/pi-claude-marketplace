@@ -94,6 +94,7 @@ import {
 } from "../../bridges/workflows/index.ts";
 import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
+import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { mcpServerConfigsOf, replaceCompatibility } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -118,6 +119,7 @@ import {
 } from "../../transaction/with-state-guard.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
+import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
 import { mcpDependencyOf } from "./mcp-verdict.ts";
 import {
   assertNoCrossPluginConflicts,
@@ -131,6 +133,7 @@ import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -216,6 +219,12 @@ export interface ThreePhaseArgsBase {
   readonly mapModel?: boolean;
   readonly local?: boolean;
   readonly partial?: boolean;
+  /**
+   * D-P3-11 / D-P3-12: the MCP implementation of the calling run. The
+   * preflight asks for `--partial` against its view, and the outcome reports
+   * the kinds it drops. It is required, so no builder leaves it out.
+   */
+  readonly mcpImplementation: ActiveMcpImplementation;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   readonly cloneCandidates?: Set<string>;
   readonly credentialOps?: CredentialOps;
@@ -1480,6 +1489,8 @@ export async function swapPluginUpdate(
 ): Promise<UpdateRunOutcome> {
   const { plugin, marketplace } = args;
   const { installable } = preflight;
+  // D-P3-12: read before the swap replaces the record it compares with.
+  const partialDegrade = await partialDegradeOf(args, preflight);
 
   // ─── Prepare into tmp ──────────────────────────────────────────────────────
   //
@@ -1679,24 +1690,9 @@ export async function swapPluginUpdate(
     // reads. Without this the one verb that INHERITS the signal was the one
     // verb whose row could never carry it.
     ...(installable.orphanRewake === true && { orphanRewake: true }),
-    // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
-    // `partially-available` degraded it -- carry the dropped kinds so the cascade
-    // renders `(partially-installed)` instead of `(updated)`. Empty for a clean
-    // candidate (FSTAT-03 -- no lingering partial state).
-    //
-    // SEV-03 / D-69-01: `newlyDegraded` records whether this degrade NEWLY
-    // introduced partial state -- the PERSISTED `compatibility.unsupported` read
-    // from the prior install record (`preflight.record`, loaded BEFORE the
-    // update applied) was empty. The autoupdate cascade renderer reads it to
-    // raise the row to `warning` (newly degraded) vs `info` (already degraded);
-    // the manual `update --partial` renderer ignores it (explicit opt-in stays
-    // info). No schema change -- the field already exists on the record.
-    ...(installable.state === "partially-available" && {
-      partialDegrade: {
-        kinds: [...installable.unsupported],
-        newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
-      },
-    }),
+    // FSTAT-07 / D-66-04: same NREG-01 spread rule; `partialDegradeOf` says
+    // when a candidate degrades the plugin.
+    ...(partialDegrade !== undefined && { partialDegrade }),
     // D-PL1-10: same NREG-01 spread rule as `degradedKinds` -- a clean
     // update's outcome keeps the key absent.
     ...(stagingWarnings.length > 0 && { stagingWarnings }),
@@ -1722,6 +1718,41 @@ export function preflightMove(preflight: PreparedPluginUpdate): RevisionMove {
     ...(fromCommit !== undefined && { fromCommit }),
     ...(toCommit !== undefined && { toCommit }),
   };
+}
+
+/**
+ * FSTAT-07 / D-66-04 / D-P3-11: a candidate that the run's MCP implementation
+ * sees as partially available degrades the plugin. The outcome carries the
+ * kinds that implementation drops, so the cascade renders
+ * `(partially-installed)` instead of `(updated)`. A candidate the
+ * implementation runs whole carries nothing (FSTAT-03).
+ *
+ * SEV-03 / D-69-01 / D-P3-12: `newlyDegraded` is true when the installed
+ * record, read under the same implementation, dropped nothing. The autoupdate
+ * cascade raises such a row to `warning`; the manual `update --partial` row
+ * ignores it. A record that only a switch of implementation made partial is
+ * already degraded, so its row stays `info`.
+ */
+async function partialDegradeOf(
+  args: ThreePhaseArgs,
+  preflight: PreparedPluginUpdate,
+): Promise<{ readonly kinds: readonly string[]; readonly newlyDegraded: boolean } | undefined> {
+  const view = resolutionFor(preflight.installable, args.mcpImplementation);
+  if (view.state === "installable") {
+    return undefined;
+  }
+
+  const marketplace = ownValue(preflight.state.marketplaces, args.marketplace);
+  if (marketplace === undefined) {
+    throw new PluginUpdateConcurrencyError("marketplace-removed", args.plugin, args.marketplace);
+  }
+
+  const { effective } = await readRecordMcpVerdict(
+    preflight.record,
+    { marketplaceName: args.marketplace, marketplace, pluginName: args.plugin },
+    args.mcpImplementation,
+  );
+  return { kinds: [...view.unsupported], newlyDegraded: effective.unsupported.length === 0 };
 }
 
 /**

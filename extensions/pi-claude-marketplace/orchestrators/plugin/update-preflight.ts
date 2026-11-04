@@ -3,6 +3,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import {
   requireInstallable,
   requirePartialInstallable,
+  resolutionFor,
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
@@ -58,6 +59,7 @@ import {
 import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type {
   GitPluginRootResult,
@@ -202,6 +204,12 @@ export interface PreparePluginUpdateOptions {
   /** State I/O for the disabled-pin refresh; production callers omit it. */
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly partial?: boolean;
+  /**
+   * D-P3-11: the MCP implementation of the calling run. The candidate gate
+   * asks for `--partial` against this implementation's view. It is required,
+   * so no caller gets a view by leaving it out.
+   */
+  readonly mcpImplementation: ActiveMcpImplementation;
   readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   /** Exact clone-cache keys created by the current dependency-planning attempt. */
@@ -460,6 +468,7 @@ async function resolveUpdateCandidate(
     readonly plugin: string;
     readonly fromVersion: string;
     readonly partial: boolean;
+    readonly mcpImplementation: ActiveMcpImplementation;
     readonly locations: ScopedLocations;
     readonly pin?: UpdateTagPin;
     readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
@@ -515,12 +524,18 @@ async function resolveUpdateCandidate(
         },
       }),
     });
+    // D-P3-11: the gate asks for `--partial` against the active
+    // implementation's view. The candidate stays the neutral resolution that
+    // the swap records. Every implementation blocks what the neutral verdict
+    // blocks, so the neutral narrowing below cannot throw once the view passed.
+    const view = resolutionFor(resolved, options.mcpImplementation);
     if (options.partial) {
-      requirePartialInstallable(resolved, "update");
+      requirePartialInstallable(view, "update");
     } else {
-      requireInstallable(resolved, "update");
+      requireInstallable(view, "update");
     }
 
+    requirePartialInstallable(resolved, "update");
     return { candidate: resolved, pathResolvedSha };
   } catch (error: unknown) {
     // GHB-03: an invalid GitHub base override fails the whole command; it never
@@ -954,6 +969,7 @@ async function resolvePinnedUpdateCandidate(
     readonly plugin: string;
     readonly fromVersion: string;
     readonly partial: boolean;
+    readonly mcpImplementation: ActiveMcpImplementation;
     readonly locations: ScopedLocations;
     readonly cloneCandidates?: Set<string>;
   },
@@ -1198,6 +1214,7 @@ export async function preparePluginUpdate(
       plugin: options.plugin,
       fromVersion: triaged.record.version,
       partial: options.partial === true || widensPartialGate(triaged.record),
+      mcpImplementation: options.mcpImplementation,
       locations: options.locations,
       ...(options.cloneCandidates !== undefined && {
         cloneCandidates: options.cloneCandidates,

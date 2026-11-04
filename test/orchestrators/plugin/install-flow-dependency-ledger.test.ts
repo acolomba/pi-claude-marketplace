@@ -389,6 +389,7 @@ describe("dependency planning operations", () => {
         locations: args.target.locations,
         policy: UPDATE_MATERIALIZATION,
         cleanupClones: () => Promise.resolve(),
+        mcpImplementation: "none",
       });
       assert.ok(!isUpdatePreflightOutcome(prepared));
       if (isUpdatePreflightOutcome(prepared)) {

@@ -59,6 +59,8 @@ const UPDATE_POLICY = {
 
 // D-18-04: a caller names its verb's policy; omitting it does not compile.
 void (true satisfies undefined extends Parameters<typeof swapPluginUpdate>[2] ? false : true);
+// D-P3-11: every builder names the run's MCP implementation; omitting it does not compile.
+void (true satisfies undefined extends ThreePhaseArgsBase["mcpImplementation"] ? false : true);
 
 /**
  * Seed a legacy pre-migration agent target, its index row, an unrelated
@@ -158,6 +160,7 @@ async function seedLegacyAgentUpdate(t: TestContext, coexist: boolean) {
     env: {},
     cascade: true,
     cleanupClones: () => Promise.resolve(),
+    mcpImplementation: "none",
   } as const;
   return {
     locations,
@@ -383,6 +386,7 @@ function cascadeSwapArgs(cwd: string): ThreePhaseArgsBase & { readonly cascade: 
     env: {},
     cascade: true,
     cleanupClones: () => Promise.resolve(),
+    mcpImplementation: "none",
   };
 }
 
@@ -531,6 +535,105 @@ test("D-P3-10 / D-MB-07: an update to a candidate whose only server the adapter 
       declaresMcp: { kind: "mcp", runEvery: ["builtin"] },
     },
   );
+});
+
+const SSE_SERVER = { type: "sse", url: "http://127.0.0.1:9/sse" };
+
+for (const { mcpImplementation, partialDegrade } of [
+  { mcpImplementation: "builtin", partialDegrade: { kinds: ["mcpServers"], newlyDegraded: true } },
+  { mcpImplementation: "adapter", partialDegrade: undefined },
+  { mcpImplementation: "none", partialDegrade: undefined },
+] as const) {
+  test(`D-P3-11 / D-P3-12: a --partial update that adds an sse server reports ${partialDegrade === undefined ? "no degrade" : "a new degrade"} under ${mcpImplementation} and records the neutral verdict`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "update-swap-view-degrade-");
+    const args = {
+      ...(await seedMcpRecordUpdate(cwd, {}, { mcpJson: { events: SSE_SERVER } })),
+      mcpImplementation,
+    };
+    const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args, partial: true });
+    assert.ok(!("partition" in preflight));
+
+    // act
+    const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+    // assert
+    const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+    assert.deepStrictEqual(
+      {
+        partition: outcome.partition,
+        partialDegrade: "partialDegrade" in outcome ? outcome.partialDegrade : undefined,
+        compatibility: record?.compatibility,
+      },
+      {
+        partition: "updated",
+        partialDegrade,
+        compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+      },
+    );
+  });
+}
+
+test("D-P3-12: a --partial update of a record that already drops its sse server under Pi's built-in MCP reports the degrade as not new", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-view-already-degraded-");
+  const args = {
+    ...(await seedMcpRecordUpdate(
+      cwd,
+      { compatibilityBasis: "neutral" },
+      { mcpJson: { events: SSE_SERVER } },
+    )),
+    mcpImplementation: "builtin" as const,
+  };
+  const state = await loadState(args.locations.extensionRoot);
+  const installed = state.marketplaces.mp?.plugins.hello;
+  assert.ok(installed !== undefined);
+  installed.mcpServerConfigs = [{ name: "events", config: SSE_SERVER }];
+  await saveState(args.locations.extensionRoot, state);
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args, partial: true });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      partialDegrade: "partialDegrade" in outcome ? outcome.partialDegrade : undefined,
+    },
+    { partition: "updated", partialDegrade: { kinds: ["mcpServers"], newlyDegraded: false } },
+  );
+});
+
+test("D-P3-12: a degrading swap whose prepared state no longer records the marketplace fails as removed and writes nothing", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-view-marketplace-gone-");
+  const args = {
+    ...(await seedMcpRecordUpdate(cwd, {}, { mcpJson: { events: SSE_SERVER } })),
+    mcpImplementation: "builtin" as const,
+  };
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args, partial: true });
+  assert.ok(!("partition" in preflight));
+  const before = await readFile(args.locations.stateJsonPath, "utf8");
+
+  // act & assert
+  await assert.rejects(
+    swapPluginUpdate(
+      args,
+      { ...preflight, state: { ...preflight.state, marketplaces: {} } },
+      UPDATE_POLICY,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginUpdateConcurrencyError);
+      assert.deepStrictEqual(
+        { kind: error.kind, plugin: error.plugin, marketplace: error.marketplace },
+        { kind: "marketplace-removed", plugin: "hello", marketplace: "mp" },
+      );
+      return true;
+    },
+  );
+  assert.strictEqual(await readFile(args.locations.stateJsonPath, "utf8"), before);
 });
 
 test("MREC-01: a swap to a version without a bundle drops the recorded bundle flag", async (t) => {
@@ -1351,6 +1454,7 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
         scope: "project",
         locations,
         cleanupClones: () => Promise.resolve(),
+        mcpImplementation: "none",
       });
       assert.ok(!("partition" in preflight));
 
@@ -1367,6 +1471,7 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
           env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
+          mcpImplementation: "none",
         },
         preflight,
         UPDATE_POLICY,
@@ -1412,6 +1517,7 @@ test("D-10-17a: the updated outcome forwards the preflight's own constraint, key
         scope: "project",
         locations,
         cleanupClones: () => Promise.resolve(),
+        mcpImplementation: "none",
         constraintGate: () =>
           Promise.resolve({
             kind: "admits",
@@ -1437,6 +1543,7 @@ test("D-10-17a: the updated outcome forwards the preflight's own constraint, key
           env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
+          mcpImplementation: "none",
         },
         preflight,
         UPDATE_POLICY,
@@ -1474,6 +1581,7 @@ test("D-10-17a: an unconstrained update forwards constraint: undefined, key stil
         scope: "project",
         locations,
         cleanupClones: () => Promise.resolve(),
+        mcpImplementation: "none",
       });
       assert.ok(!("partition" in preflight));
       assert.strictEqual(preflight.constraint, undefined);
@@ -1491,6 +1599,7 @@ test("D-10-17a: an unconstrained update forwards constraint: undefined, key stil
           env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
+          mcpImplementation: "none",
         },
         preflight,
         UPDATE_POLICY,
@@ -1535,6 +1644,7 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
         scope: "project",
         locations,
         cleanupClones: () => Promise.resolve(),
+        mcpImplementation: "none",
       });
       assert.ok(!("partition" in preflight));
       let cleanupCalls = 0;
@@ -1551,6 +1661,7 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
           completionCache: createCompletionCache(),
           env: {},
           cascade: true,
+          mcpImplementation: "none",
           cleanupClones: () => {
             cleanupCalls += 1;
             return Promise.resolve();
@@ -1608,6 +1719,7 @@ test("UPR-02: the updated outcome stamps the record's and the candidate's commit
         scope: "project",
         locations,
         cleanupClones: () => Promise.resolve(),
+        mcpImplementation: "none",
       });
       assert.ok(!("partition" in prepared));
       // The candidate's sha, as a git source's clone would report it.
@@ -1626,6 +1738,7 @@ test("UPR-02: the updated outcome stamps the record's and the candidate's commit
           env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
+          mcpImplementation: "none",
         },
         preflight,
         UPDATE_POLICY,
@@ -1663,6 +1776,7 @@ test("finalizes the update ledger even when the post-finalize hooks-cache refres
         scope: "project",
         locations,
         cleanupClones: () => Promise.resolve(),
+        mcpImplementation: "none",
       });
       assert.ok(!("partition" in preflight));
       const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
@@ -1683,6 +1797,7 @@ test("finalizes the update ledger even when the post-finalize hooks-cache refres
           env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
+          mcpImplementation: "none",
         },
         preflight,
         UPDATE_POLICY,
@@ -1724,6 +1839,7 @@ test("retains the intent ledger and old resource tree after a replacement failur
         scope: "project",
         locations,
         cleanupClones: () => Promise.resolve(),
+        mcpImplementation: "none",
       });
       assert.ok(!("partition" in preflight));
 
@@ -1740,6 +1856,7 @@ test("retains the intent ledger and old resource tree after a replacement failur
           env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
+          mcpImplementation: "none",
         },
         preflight,
         UPDATE_POLICY,
@@ -1789,6 +1906,7 @@ async function prepareMcpUpdate(cwd: string, adapterText: string) {
     env: {},
     cascade: true,
     cleanupClones: () => Promise.resolve(),
+    mcpImplementation: "none",
   } as const;
   return { locations, pluginRoot: path.join(marketplaceRoot, "plugins", "hello"), args };
 }
@@ -1806,6 +1924,7 @@ async function preflightOf(
     scope: args.scope,
     locations: args.locations,
     cleanupClones: args.cleanupClones,
+    mcpImplementation: "none",
   });
   assert.ok(!("partition" in preflight));
   return preflight;
@@ -2143,6 +2262,7 @@ async function prepareDirectUpdate(cwd: string) {
       messages.push(error.message);
     },
     cleanupClones: () => Promise.resolve(),
+    mcpImplementation: "none",
   } satisfies DirectThreePhaseArgs;
   return { locations, args, messages };
 }

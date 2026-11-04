@@ -163,6 +163,8 @@ function moveArgs(
     completionCache: context.completionCache,
     env: context.env,
     cascade: true,
+    // D-P3-11: a move asks against the implementation of the operation's run.
+    mcpImplementation: context.softDeps.mcpImplementation,
     cleanupClones: context.cleanupClones,
     cloneCandidates: context.cloneCandidates,
     constraintTagMemo: context.constraintTagMemo,
