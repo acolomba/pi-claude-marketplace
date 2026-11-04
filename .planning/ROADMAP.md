@@ -402,7 +402,7 @@ Plans:
 - Wave 2, in parallel, one feature file and step module each: configuration and source variants with the `substitute.ts` encoder parameter (BLT-02); project trust (BLT-03); naming, collisions, overrides, and status in `info-mcp-status.ts` and `platform/mcp-builtin-status.ts` (BLT-04, BLT-05); lifecycle (BLT-06); invocation through `tool_search` and direct `alwaysLoad` calls (BLT-01); the switch and legacy records in `implementation-switch.feature` (MSEL-02, MSEL-04, MREC-02; Phase 6 adds the `{requires mcp}` step for DUAL-04).
 - Wave 3: the built-in column in `docs/mcp-compatibility.md` (MDOC-01), decision rows, parent lines, and the phase gate.
 
-**Plans**: 8/9 plans executed in 3 waves (the suggested waves; Wave 2 splits into seven plans with disjoint files, the registration's `description` reader moves into Wave 1 so that only one Wave 2 plan edits the `bridges/mcp` barrel, and the rest of the `listing.feature` lift moves out of the Wave 1 tracer plan into its own Wave 2 plan)
+**Plans**: 9/9 plans executed in 3 waves (the suggested waves; Wave 2 splits into seven plans with disjoint files, the registration's `description` reader moves into Wave 1 so that only one Wave 2 plan edits the `bridges/mcp` barrel, and the rest of the `listing.feature` lift moves out of the Wave 1 tracer plan into its own Wave 2 plan)
 
 Plans:
 **Wave 1**
@@ -418,7 +418,7 @@ Plans:
 - [x] 02-09-PLAN.md — Wave 2: the remaining `listing.feature` twins: a search that matches nothing, per-server names under both implementations, the hyphen fold and the 64-character cut, and a plugin without servers (BLT-01, BLT-04)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 02-08-PLAN.md — Wave 3: the built-in column and sections of `docs/mcp-compatibility.md`, the phase gate, and the parent lines (MDOC-01)
+- [x] 02-08-PLAN.md — Wave 3: the built-in column and sections of `docs/mcp-compatibility.md`, the phase gate, and the parent lines (MDOC-01)
 
 ### Phase 3: Read-Time Verdicts
 **Goal**: A plugin's available or partially available state, each server's verdict, the markers, and `--partial` consent follow the active implementation, computed at read time from neutral records, so a switch never asks the user for anything and a Pi with no MCP support tells the user what to turn on.
@@ -496,7 +496,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
-| 2. Built-in Materialization | 8/9 | In Progress | - |
+| 2. Built-in Materialization | 9/9 | In Progress | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
 | 4. Agent Grants | 0/TBD | Not started | - |
 | 5. Hook Tool Names | 0/TBD | Not started | - |
