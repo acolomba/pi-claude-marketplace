@@ -386,3 +386,101 @@ copies every item here. Phase 6 merges this file into the root log.
   (47/49 failing adapter scenarios, 9 marker rows); a wrong count would show
   as red scenarios during execution.
 - **Recorded in:** `01-01-PLAN.md`, `01-08-PLAN.md`, `01-14-PLAN.md`.
+
+## Execution step, orchestrator (2026-11-04)
+
+### P1-DC-24: Executor prompts list the GSD contract files instead of inlining them
+
+- **Severity:** Low. **Status:** open.
+- execute-phase asks the orchestrator to inline `execute-plan.md`,
+  `summary.md`, `checkpoints.md`, `tdd.md`, `worktree-path-safety.md`, and
+  `executor-examples.md` verbatim (about 148 KB) into every executor prompt.
+  The prompts instead tell each executor to Read those absolute paths first.
+  The rule exists because `@` includes do not expand; an explicit Read
+  instruction reaches the executor the same way, at a fraction of the
+  orchestrator's context.
+- Executors also get: `npm ci` in each worktree (no shared node_modules),
+  the nondac-sh wrapper, foreground-only commands, and a required
+  `<worktree_metadata>` block plus `## Dubious Choices` in the final report.
+- The research step's leftover probe worktree (detached at 4908728, holding
+  uncommitted experimental 1.5.0 lock changes in the old scratchpad) was
+  force-removed before wave 1; 01-01 redoes the raise.
+- **Recorded in:** this log only.
+
+### P1-DC-25: Plan 01-02 executor choices (decision records, cucumber contract)
+
+- **Severity:** Low. **Status:** open.
+- D-MB-08..13 rows carry outcome `-- Pending` (user review), provenance
+  naming their P1-DC entry; D-MB-11 written in its amended form.
+- Rationale text for D-MB-01..07 was written by the executor (REQUIREMENTS
+  gives none), e.g. D-MB-06 "A switch is not a plugin action...".
+- Kept the durable part of the cucumber skill's "Component features" section
+  under a new "Function directories" heading instead of deleting it.
+- Added a step-text rule (a phase's step names its topic, D-08) not in the
+  ROADMAP ownership text.
+- The contract text names details from later plans (01-07, 01-10) and
+  RESEARCH: `mcpImplementationLaunch(profile)`, the stub-exit reset check,
+  the stand-in loading last, both settings files for the off check.
+- Reserved names split by owner: `verdict-markers.feature` to Phase 3,
+  `agent-grants.*` to Phase 4.
+- Fixed three existing skill lines that contradicted the new contract.
+- **Recorded in:** `01-02-SUMMARY.md`.
+
+### P1-DC-26: Plan 01-04 executor choices (closed-set entries)
+
+- **Severity:** Low. **Status:** open.
+- The closed-set commit touches a ninth file,
+  `test/shared/notification-types.test.ts`, whose exact-type lock fails
+  typecheck without the two new reasons.
+- Comment wording for `overridden by mcp.json` and `project not trusted`
+  was inferred from BLT-05; Phase 2 may adjust it.
+- New members appended at the end of the `docs/json-output.md` lists (the
+  existing list is not in declaration order).
+- No `windows append --kind deviation` entry for the ninth file (it would
+  block ship while open, and nothing is unresolved).
+- **Recorded in:** `01-04-SUMMARY.md`.
+
+### P1-DC-27: Plan 01-01 executor choices (Pi 1.5.0 raise)
+
+- **Severity:** Medium. **Status:** open.
+- (Medium) The automated legitimacy check (P1-DC-21) passed: same
+  repository and maintainers as 1.4.0, no install scripts, integrity
+  strings recorded. The packages are two days old.
+- (Low) New transitive packages (`@earendil-works/pi-schema` 1.5.0,
+  `@isaacs/nonrecursive-glob-match` 1.0.3, nested `minimatch` 11.0.3) were
+  checked only for install scripts and against research's lock diff, not
+  audited maintainer by maintainer.
+- (Low) `docs/mcp-compatibility.md` line 9 reworded to "a run of Pi 1.4.0
+  and pi-mcp-adapter 7.0.0" so the dated run stays correct.
+- (Low) `docs/hooks-compatibility.md` gained "and then its hooks do not
+  run" after the "Do not trust" sentence (no scenario covers it).
+- (Low) CHANGELOG bullet has no PR number yet; the PR author appends it.
+- (Low) The gate ran in parts on one commit, reusing the pre-commit
+  `check:static` result.
+- **Recorded in:** `01-01-SUMMARY.md`.
+
+### P1-DC-28: Plan 01-03 executor choices (domain seam) and an orchestrator fix
+
+- **Severity:** Medium. **Status:** open.
+- (Medium) No RED-only commits for the TDD plan: the commit hook runs the
+  staged pairs' tests and refused a failing RED commit; `--no-verify` and
+  `test.skip` are forbidden. RED evidence is recorded in the SUMMARY. The
+  end-of-phase TDD review will flag the plan.
+- (Low) Commit scope `mcp`, not the plan ID (project rule), so the GSD TDD
+  gate greps find nothing.
+- (Low) A stored `false` turns `true` only when `unsupported` is non-empty
+  and holds only `mcpServers` (the plan's wording was vacuously true for
+  `[]`).
+- (Medium, fixed by the orchestrator) The adapter profile's `toolName` was
+  `prefix + tool`. pi-mcp-adapter 7.0.0 `formatToolName` (toolPrefix "mcp")
+  turns `.` into `_` and does not re-prefix a name that already carries the
+  prefix. Commit 3def844 matches the adapter, with three test rows. The
+  adapter's deferred surface (`mcp__<ns>__<tool>`, sanitized, 64-char cut)
+  is a different surface the extension does not configure.
+- (Low) The built-in `grantSelector` `mcp:<registered name>` is unverified
+  against pi-subagents' grant syntax for Pi built-in servers; Phase 4 uses
+  it.
+- (Low) `McpServerShape` carries full TypeBox static types; the built-in
+  tool prefix reuses `foldedMcpServerKey`; `PiMcpRegistry` uses method
+  signatures like the rest of `pi-api.ts`.
+- **Recorded in:** `01-03-SUMMARY.md`, commit 3def844.
