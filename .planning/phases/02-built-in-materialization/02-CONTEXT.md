@@ -264,6 +264,51 @@ parent session.
 - How the encoder parameter is threaded through `substitute.ts` without
   changing the adapter output.
 
+
+### Amendments after research (2026-11-04)
+
+`02-RESEARCH.md` measured facts that change the decisions above. Where they
+conflict, these amendments win.
+
+- **Containment root (UF-1):** the check requires `record.resolvedSource` to
+  be inside the record's marketplace `marketplaceRoot` (path records; a `dir`
+  or `file` marketplace's root is the user's own directory, not under
+  `<scopeRoot>/pi-claude-marketplace/`) or inside the scope's
+  `pluginClonesDir` (git records). Checking against
+  `<scopeRoot>/pi-claude-marketplace/` would refuse every local-marketplace
+  plugin.
+- **`info` stays synchronous:** the frozen call to `withMcpServerStatus` is
+  synchronous, so the `mcp.json` override read is synchronous too. Under
+  `builtin`, the stamp keys on the names in the record's `mcpServerConfigs`
+  (through the same names the registration uses), not on
+  `resources.mcpServers`, which holds only the adapter-supported subset.
+- **Same plugin in both scopes:** the trusted project record wins per
+  registered server name (the project's server overwrites the user's of the
+  same name), as the adapter's file merge and `info`'s per-server
+  `overridden by project scope` do.
+- **`description`:** no record field holds it; the registration reads it as
+  install does (the plugin's `plugin.json` description, else the marketplace
+  entry's; empty counts as absent) with a small read-only reader in the owned
+  built-in files. If that reader would be an unreviewable clone, drop
+  `description` under built-in and record the gap.
+- **`${VAR:-default}` with `VAR` set to the empty string** expands to the empty
+  string (Claude 2.1.318); the existing `expandClaudeValue` rule is reused as
+  is.
+- **Claude's `mcp-server-suppressed-duplicate`** matches by command or URL, not
+  by name; P2-DC-08 keeps the `info` report and notes the difference.
+- **Encoder parameter:** `substitute.ts` takes a required `McpFieldEncoder`;
+  `adapter-escape.ts` exports the adapter encoder and the adapter path passes
+  it explicitly, so the adapter tests prove byte-identical output.
+- **Observing values under built-in:** a Phase 2 harness probe extension
+  (owned lib `features/lib/mcp-builtin-*`) reports `getMcpServers()` configs,
+  so OAuth, timeout, exposure, and description values are pinned from what Pi
+  holds; the stub server observes `env`, `args`, and connection.
+- **`tool_search` projection:** Phase 2 adds its own step module and lib that
+  project Pi's `tool_search` result rows; moving it into
+  `features/lib/upstream/` is a Phase 6 parent line.
+- **Deny-lists** stay pinned to Claude Code 2.1.291 (unowned files); a re-pin
+  to 2.1.318 is a parent line for the backlog.
+
 </decisions>
 
 <code_context>

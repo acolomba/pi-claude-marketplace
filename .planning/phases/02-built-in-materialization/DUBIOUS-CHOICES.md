@@ -190,3 +190,120 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Alternatives:** Skip the `none` leg in Phase 2 and add it in Phase 6.
 - **Why dubious:** the scenario is incomplete until Phase 6.
 - **Recorded in:** `02-CONTEXT.md`.
+
+## Research step (gsd-phase-researcher, 2026-11-04)
+
+### P2-DC-13: Containment root corrected to the marketplace root or the plugin clones directory
+
+- **Phase / source:** Phase 2 research; amends `02-CONTEXT.md`.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** UF-1's check requires `resolvedSource` inside the record's
+  `marketplaceRoot` (path records) or the scope's `pluginClonesDir` (git
+  records), not inside `<scopeRoot>/pi-claude-marketplace/` as the parent's
+  advisory worded it, because a `dir`/`file` marketplace's root is the user's
+  own directory.
+- **Alternatives:** The advisory's wording (refuses every local-marketplace
+  plugin); no check.
+- **Why dubious:** it departs from the advisory text; the bound is the owning
+  clone root NFR-10 names.
+
+### P2-DC-14: The project record wins per server name, not per whole record
+
+- **Phase / source:** Phase 2 research (researcher DC 1); amends CONTEXT.
+- **Severity:** Low. **Status:** open.
+- **Choice:** With the same plugin in both trusted scopes, each project server
+  overwrites the user server of the same name; user servers the project record
+  lacks still register.
+- **Alternatives:** Skip the whole user record (CONTEXT's first wording).
+- **Why dubious:** differs only when the two records declare different server
+  sets; matches the adapter's file merge.
+
+### P2-DC-15: Any JSON-object `mcp.json` entry counts as an override in `info`
+
+- **Phase / source:** Phase 2 research (researcher DC 2).
+- **Severity:** Low. **Status:** open.
+- **Choice:** The override check treats any object entry with our namespace as
+  an override, without Pi's `validateMcpServerConfig` (not re-exported by the
+  frozen `pi-api.ts`).
+- **Alternatives:** A frozen-file parent line to re-export the validator.
+- **Why dubious:** an invalid entry would show `overridden by mcp.json` while
+  Pi actually connects our server.
+
+### P2-DC-16: `info` status scenarios use the full-field step and pin Phase 3's `requires` row
+
+- **Phase / source:** Phase 2 research (researcher DC 3).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Built-in `info` status scenarios assert the whole info block,
+  which includes rows Phase 3 may change; they are re-verified after Phase 3
+  merges.
+- **Alternatives:** A narrow step that compares only the `mcp` list.
+- **Why dubious:** couples a Phase 2 file to Phase 3 rows.
+
+### P2-DC-17: OAuth and timeout values are observed through a Phase 2 registry-config probe
+
+- **Phase / source:** Phase 2 research (researcher DC 4).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** A harness Pi extension reports `getMcpServers()` configs, so
+  scenarios pin the values Pi holds for each registration.
+- **Alternatives:** A loopback 401 authorization-server stand-in; unit and
+  integration proof only.
+- **Why dubious:** it observes Pi's registry, not Pi's runtime use of the
+  values.
+
+### P2-DC-18: A Phase 2-local `tool_search` projection step, moved to `upstream/` later by a parent line
+
+- **Phase / source:** Phase 2 research (researcher DC 5).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Phase 2 owns a step module and lib that project Pi's
+  `tool_search` result; a Phase 6 parent line moves it into the shared
+  `features/lib/upstream/`.
+- **Alternatives:** Ask the parent to add it to the frozen shared module now.
+- **Why dubious:** Phases 4 and 5 may write their own copy.
+
+### P2-DC-19: The adapter path passes its encoder explicitly
+
+- **Phase / source:** Phase 2 research (researcher DC 6).
+- **Severity:** Low. **Status:** open.
+- **Choice:** `substituteAndInject` takes the encoder as a required parameter.
+- **Alternatives:** A default parameter (CONTEXT's first wording).
+- **Why dubious:** wording change only; output identical.
+
+### P2-DC-20: `callbackUrl` is written only when `callbackPort` is set
+
+- **Phase / source:** Phase 2 research (researcher DC 7).
+- **Severity:** Low. **Status:** open.
+- **Choice:** Without `callbackPort`, no `callbackUrl` is written and Pi uses
+  `http://127.0.0.1:<free port>/callback`.
+- **Alternatives:** Always write `http://localhost/callback` (Claude's host).
+- **Why dubious:** a pre-registered client that allows only `localhost` would
+  be refused.
+
+### P2-DC-21: Claude's stdio `cwd` rests on minified helper attribution
+
+- **Phase / source:** Phase 2 research (researcher DC 8).
+- **Severity:** Low. **Status:** open.
+- **Choice:** P2-DC-04 (no `cwd`) is supported by helpers found by name in the
+  minified binary, plus CC-1.
+- **Alternatives:** A live probe of Claude Code (no credentials here).
+- **Why dubious:** symbol attribution in minified code can be wrong.
+
+### P2-DC-22: The deny-lists stay pinned to Claude Code 2.1.291
+
+- **Phase / source:** Phase 2 research (researcher DC 9).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** The built-in encoder reuses `expandClaudeValue` and its
+  2.1.291 deny-lists unchanged; the re-pin to 2.1.318 is a parent line
+  (unowned files).
+- **Alternatives:** Diff and re-pin in this phase (needs unowned files).
+- **Why dubious:** a credential 2.1.318 would blank could still reach a
+  built-in server (same exposure as the adapter today).
+
+### P2-DC-23: `description` read from the manifest at registration, or dropped
+
+- **Phase / source:** Phase 2 research (open question 1); amends CONTEXT.
+- **Severity:** Low. **Status:** open.
+- **Choice:** A small read-only reader in the owned built-in files gives the
+  description install would; if it is an unreviewable clone, built-in drops
+  `description` and records the gap.
+- **Alternatives:** A record field (frozen `state-io.ts`).
+- **Why dubious:** a fourth manifest reader, or a lost tool-search hint.
