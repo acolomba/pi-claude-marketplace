@@ -130,7 +130,7 @@ Feature: MCP server project scope
       | plugin id                      | demo@fixtures                                             |
       | plugin name                    | demo                                                      |
       | plugin reasons                 |                                                           |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":false}]          |
+      | plugin requires                | [{"companion":"mcp","missing":false}]                     |
       | plugin scope                   | project                                                   |
       | plugin status                  | installed                                                 |
       | plugin version                 | 1.0.0                                                     |
