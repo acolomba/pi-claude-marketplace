@@ -199,7 +199,7 @@ test("MREC-01 / D-MB-04: an install records every declared server in merge order
           { name: "extra", config: EXTRA },
         ],
         hasBundleFlag: false,
-        hasCompatibilityBasis: false,
+        hasCompatibilityBasis: true,
         unsupported: ["mcpServers"],
         holdsPluginRoot: false,
         holdsDataDir: false,
@@ -248,8 +248,12 @@ test("MREC-01: enabling a disabled plugin records its servers on a record that l
 
     // assert
     assert.deepStrictEqual(
-      { enabled: record.enabled, mcpServerConfigs: record.mcpServerConfigs },
-      { enabled: true, mcpServerConfigs: CLEAN_1_RECORDED },
+      {
+        enabled: record.enabled,
+        mcpServerConfigs: record.mcpServerConfigs,
+        compatibilityBasis: record.compatibilityBasis,
+      },
+      { enabled: true, mcpServerConfigs: CLEAN_1_RECORDED, compatibilityBasis: "neutral" },
     );
   });
 });
