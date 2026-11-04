@@ -90,3 +90,22 @@ Feature: MCP server implementation profiles
     Then pi offers these plugin mcp tools:
       | tool                        | active |
       | mcp__plugin_demo_stub__echo | no     |
+
+  @adapter-only
+  Scenario: Pi-mcp-adapter serves the stub mcp server under the adapter profile
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given a stand-in registers the stub mcp server "stub" of the plugin "demo" with pi's built-in mcp
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    When the user lists the mcp tools pi offers
+    Then pi lists these registered mcp servers:
+      | name |
+    Then pi offers these plugin mcp tools:
+      | tool                        | active |
+      | mcp__plugin_demo_stub__echo | no     |
