@@ -35,7 +35,7 @@ async function readPackageLock(): Promise<PackageLockJson> {
   ) as PackageLockJson;
 }
 
-test("package.json peerDependencies pins the pi-coding-agent floor at >=1.4.0 (FLOOR-01, VER-01)", async () => {
+test("package.json peerDependencies pins the pi-coding-agent floor at >=1.5.0 (FLOOR-01, VER-01)", async () => {
   // arrange
   const pkg = await readPackageJson();
 
@@ -44,7 +44,7 @@ test("package.json peerDependencies pins the pi-coding-agent floor at >=1.4.0 (F
 
   // assert
   assert.ok(range, `peerDependencies["${PEER}"] is missing`);
-  assert.equal(range, ">=1.4.0", `FLOOR-01 violation: expected floor ">=1.4.0", got "${range}"`);
+  assert.equal(range, ">=1.5.0", `FLOOR-01 violation: expected floor ">=1.5.0", got "${range}"`);
 });
 
 test("package-lock.json root peerDependencies stays in sync with package.json for pi-coding-agent (FLOOR-01)", async () => {
@@ -71,7 +71,7 @@ test("package-lock.json root peerDependencies stays in sync with package.json fo
   );
 });
 
-test("devDependencies pins pi-coding-agent and pi-tui at ^1.4.0 and pi-ai at exactly 1.4.0 (VER-01)", async () => {
+test("devDependencies pins pi-coding-agent and pi-tui at ^1.5.0 and pi-ai at exactly 1.5.0 (VER-01)", async () => {
   // arrange
   const pkg = await readPackageJson();
   const devDependencies = pkg.devDependencies ?? {};
@@ -85,9 +85,9 @@ test("devDependencies pins pi-coding-agent and pi-tui at ^1.4.0 and pi-ai at exa
 
   // assert
   assert.deepStrictEqual(piDevDependencies, {
-    "@earendil-works/pi-coding-agent": "^1.4.0",
-    "@earendil-works/pi-tui": "^1.4.0",
-    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-coding-agent": "^1.5.0",
+    "@earendil-works/pi-tui": "^1.5.0",
+    "@earendil-works/pi-ai": "1.5.0",
   });
 });
 
