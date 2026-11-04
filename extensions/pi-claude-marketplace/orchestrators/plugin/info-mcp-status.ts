@@ -33,9 +33,24 @@
 // adapter blocks included. A record that predates that key falls back to
 // `resources.mcpServers`, because the call is synchronous and the
 // asynchronous legacy reader is out of reach.
+//
+// BLT-05: under `builtin` the stamps run in a fixed order. A project row
+// reads `project not trusted` while Pi does not trust the project (D-MB-09).
+// Then a server reads `overridden by mcp.json` when a server of Pi's
+// `mcp.json` files holds its namespace (BLT-04, P2-DC-08): the user's file,
+// and the project's only while trusted, read synchronously through the bridge
+// (P2-DC-26). Then a user row's server that the plugin's enabled project
+// record lists reads `overridden by project scope` while the project is
+// trusted (ASTAT-01, P2-DC-14). Otherwise it reads the reader's answer.
 
+import { readMcpJsonServerNamespaces } from "../../bridges/mcp/index.ts";
 import { profileFor } from "../../domain/mcp-implementation.ts";
-import { generatedMcpServerKey, mcpServerDisplayName } from "../../domain/name.ts";
+import {
+  foldedMcpServerKey,
+  generatedMcpServerKey,
+  mcpServerDisplayName,
+} from "../../domain/name.ts";
+import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
@@ -128,16 +143,69 @@ function builtinRecordedServers(record: PluginInstallRecord): readonly string[] 
   return record.mcpServerConfigs?.map(({ name }) => name) ?? record.resources.mcpServers;
 }
 
+// D-MB-09: Pi reads the project's `mcp.json` only while it trusts the project.
+function mcpJsonFiles(lookup: McpStatusLookup): readonly string[] {
+  const user = locationsFor("user", lookup.cwd).mcpJsonPath;
+  return lookup.projectTrusted ? [user, locationsFor("project", lookup.cwd).mcpJsonPath] : [user];
+}
+
+// ASTAT-01 / P2-DC-14: the registration step replaces a user server with the
+// same-named server of the plugin's enabled project record, and it registers
+// project servers only while Pi trusts the project.
+function builtinProjectOverrides(
+  block: PluginInfoMessage,
+  lookup: McpStatusLookup,
+  projectRecord: PluginInstallRecord | undefined,
+): ReadonlySet<string> {
+  if (!lookup.projectTrusted || block.marketplaceScope !== "user") {
+    return new Set<string>();
+  }
+
+  return projectRecord === undefined || isRecordedButDisabled(projectRecord)
+    ? new Set<string>()
+    : new Set(builtinRecordedServers(projectRecord));
+}
+
+/**
+ * BLT-05: one server's built-in state, in a fixed order: an `mcp.json`
+ * server that holds its namespace (BLT-04, T-02-19), so a same-named
+ * `mcp.json` server never reads as the plugin's; then a project override;
+ * then the reader's answer under the registered name.
+ */
+function builtinStatus(
+  plugin: string,
+  server: string,
+  configured: ReadonlySet<string>,
+  overridden: ReadonlySet<string>,
+  reader: McpStatusReader,
+): McpServerStatus {
+  const name = profileFor("builtin").serverName(plugin, server);
+  if (configured.has(foldedMcpServerKey(name))) {
+    return "overridden by mcp.json";
+  }
+
+  return overridden.has(server) ? "overridden by project scope" : statusToken(reader.lookup(name));
+}
+
 function stampBuiltinEntries(
   block: PluginInfoMessage,
   entries: readonly McpServerSummaryEntry[],
   record: PluginInstallRecord,
   lookup: McpStatusLookup,
+  projectRecord: PluginInstallRecord | undefined,
 ): McpServerSummaryEntry[] {
   const plugin = block.plugin.name;
-  const { serverName } = profileFor("builtin");
-  return stampEntries(plugin, entries, builtinRecordedServers(record), (server) =>
-    statusToken(lookup.reader.lookup(serverName(plugin, server))),
+  const recorded = builtinRecordedServers(record);
+  // D-MB-09: the extension registers no project server while Pi does not
+  // trust the project, so a project row reads `project not trusted` first.
+  if (block.marketplaceScope === "project" && !lookup.projectTrusted) {
+    return stampEntries(plugin, entries, recorded, () => "project not trusted");
+  }
+
+  const configured = readMcpJsonServerNamespaces(mcpJsonFiles(lookup));
+  const overridden = builtinProjectOverrides(block, lookup, projectRecord);
+  return stampEntries(plugin, entries, recorded, (server) =>
+    builtinStatus(plugin, server, configured, overridden, lookup.reader),
   );
 }
 
@@ -169,7 +237,7 @@ export function withMcpServerStatus(
 
   const mcp =
     lookup.implementation === "builtin"
-      ? stampBuiltinEntries(block, entries, record, lookup)
+      ? stampBuiltinEntries(block, entries, record, lookup, projectRecord)
       : stampAdapterEntries(block, entries, record, lookup, projectRecord);
   return { ...block, plugin: { ...plugin, components: { ...plugin.components, mcp } } };
 }

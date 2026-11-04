@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import { readBuiltinServerDescription as peerReadBuiltinServerDescription } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-description.ts";
 import { builtinServerConfig as peerBuiltinServerConfig } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-entry.ts";
+import { readMcpJsonServerNamespaces as peerReadMcpJsonServerNamespaces } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-overrides.ts";
 import { syncBuiltinRegistrations as peerSyncBuiltinRegistrations } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-registration.ts";
 import {
   abortPreparedMcp,
@@ -13,6 +14,7 @@ import {
   projectDisableStubNames,
   readBuiltinServerDescription,
   readLegacyMcpOwners,
+  readMcpJsonServerNamespaces,
   removeLegacyMcpEntries,
   removeProjectDisableStubs,
   replacePreparedMcp,
@@ -219,5 +221,16 @@ describe("MCP barrel runtime bindings", () => {
 
     // assert
     assert.strictEqual(boundaryReadBuiltinServerDescription, expectedReadBuiltinServerDescription);
+  });
+
+  test("re-exports readMcpJsonServerNamespaces from the built-in overrides module", () => {
+    // arrange
+    const expectedReadMcpJsonServerNamespaces = peerReadMcpJsonServerNamespaces;
+
+    // act
+    const boundaryReadMcpJsonServerNamespaces = readMcpJsonServerNamespaces;
+
+    // assert
+    assert.strictEqual(boundaryReadMcpJsonServerNamespaces, expectedReadMcpJsonServerNamespaces);
   });
 });
