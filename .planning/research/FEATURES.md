@@ -1,378 +1,365 @@
 # Feature Research
 
-**Domain:** Behavioral (cucumber) coverage of the six bridged Claude plugin component kinds -- skills, commands, agents, hooks, MCP servers, workflows -- observed through Pi and its companions after a real `/claude:plugin install`, with Claude Code as the reference and Pi's faux model in place of an authenticated LLM (milestone `component-features`).
-**Researched:** 2026-10-31
-**Confidence:** MEDIUM-HIGH overall. HIGH where the 2.1.316 binary was grepped and the extension code was read; MEDIUM where only the docs state the upstream behavior; each row carries its own level.
+**Domain:** Claude plugin MCP servers on Pi, served by one of two equal MCP implementations (pi-mcp-adapter 7.x or Pi 1.5.0 built-in MCP), chosen per session
+**Milestone:** mcp-builtin
+**Researched:** 2026-11-04
+**Confidence:** HIGH for the field and transport verdicts (read from the Claude Code 2.1.318 binary, the Pi 1.5.0 and pi-mcp 1.5.0 package sources, and the pi-mcp-adapter 7.0.0 and pi-subagents 0.84.0 package sources). MEDIUM for the user-visible wording and the switch UX, which are recommendations with no direct upstream counterpart.
 
-## How to read this file
+## Evidence base
 
-**Evidence tags.** `[bin]` = grep of `/opt/claude-code/bin/claude`, `claude --version` = **2.1.316**, run 2026-10-31. `[doc:<page>]` = https://code.claude.com/docs/en/<page>, retrieved 2026-10-31. `[pi]` = Pi 1.3.0 source and docs in `node_modules/@earendil-works/pi-coding-agent` (1.4.0 checked where named). `[repo]` = a path in this repository. Decision and requirement IDs (SK-2, D-07, ANAME-01, ...) are recorded licenses.
+Claude Code facts come from `/opt/claude-code/bin/claude`. `claude --version` prints **2.1.318**, not 2.1.316 as the brief assumed. I extracted strings from the binary and grepped them. Nothing ran beyond `--version`. Pi facts come from `npm pack @earendil-works/pi-coding-agent@1.5.0` and `@earendil-works/pi-mcp@1.5.0`. pi-mcp-adapter facts come from `npm pack pi-mcp-adapter@7.0.0`, and pi-subagents facts from `npm pack pi-subagents@0.84.0`. Each tarball was unpacked into its own scratch directory, and none of its code ran. Primary-source reads like these rank first in the compat-research skill's evidence order, so they are tagged HIGH. The `classify-confidence` seam has no provider for direct source reads. It rates every web provider MEDIUM, and no web source decided anything here.
 
-**Disposition codes.**
+### Claude Code 2.1.318 facts this milestone depends on
 
-| Code | Meaning |
-|------|---------|
-| MATCH | The extension does what Claude Code does |
-| DIV(id) | Recorded divergence; `id` is the license |
-| PIGAP | Pi capability gap licenses it (recorded or obvious) |
-| **GAP** | UNRECORDED gap: upstream behavior with no license -- needs a user decision |
-| **CONTRA** | A recorded decision or doc contradicts current upstream evidence |
-| **EDGE** | Unrecorded edge case or doc drift worth a decision or a scenario |
-| **BUG** | Unlicensed divergence the bug policy says to fix in the phase |
+| # | Fact | Evidence |
+|---|------|----------|
+| CC-1 | The plugin server config union is `stdio`, `sse`, `http`/`streamable-http`, `ws`, `sse-ide`, `ws-ide`, `sdk`, `claudeai-proxy` (schema `Lse`). The stdio fields are `type, command, args, env, timeout, alwaysLoad, bareElicitationCapability, role`. **There is no `cwd`.** The remote fields add `url, headers, headersHelper, oauth, request_timeout_ms, tools[], displayName, discoveryCache, toolPermissions`. | binary strings: `Ugt=…u({type:T("stdio").optional(),command:…,args:…,env:…,timeout:…,alwaysLoad:…,bareElicitationCapability:…,role:…})`; `q$t`/`xon` for http/sse |
+| CC-2 | `oauth` accepts only `clientId, callbackPort, authServerMetadataUrl (https://), scopes, xaa`. It has no `clientSecret`. | `Qa=…u({clientId,callbackPort,authServerMetadataUrl…startsWith("https://"),scopes,xaa})` |
+| CC-3 | `displayName` is new since 2.1.291 and marked `@internal`. It labels the server's tools and is `.catch(void 0)`, so it can never make a config malformed. | `WA=…describe("@internal A readable name for this server…")` |
+| CC-4 | A plugin server whose type is host-only (`sse-ide`, `ws-ide`, `sdk`) or `claudeai-proxy` is **dropped at plugin load**. Claude records a plugin error, `MCP server "<name>" invalid: type "<t>" servers cannot be declared by a plugin; only the host application registers them`, and the plugin's other components still load. | `n.push({type:"mcp-config-invalid",…validationError:qe==="host-only"?…})`; render `case"mcp-config-invalid":return\`MCP server ${…} invalid: ${…}\`` |
+| CC-5 | Claude has its own case of "the client will not run this server type". Under `CLAUDE_CODE_SKIP_PLUGIN_LOCAL_MCP_SERVERS`, a plugin's stdio servers are skipped with a debug-log line only (`only sse, http and ws servers load while … is set`), and the plugin stays enabled. So upstream's pattern for a server it will not run is to skip the server and keep the plugin. Claude never refuses the install. | binary string quoted |
+| CC-6 | `bareElicitationCapability` exists only as a workaround for servers that reject Claude's elicitation capability object: `This server (Java MCP SDK 0.17.0 or older) rejected Claude Code's elicitation capability. Set "bareElicitationCapability": true…` | binary string quoted |
+| CC-7 | Claude's OAuth redirect URI is `http://localhost:<port>/callback`, and its dynamic client registration sends `client_name: "Claude Code (<serverName>)"`. | `clientMetadata(){let e={client_name:\`Claude Code (${this.serverName})\`,redirect_uris:[this.redirectUri]…` |
+| CC-8 | Tool names are `mcp__<normalized server>__<tool>`, and plugin servers are named `plugin:<plugin>:<server>`. The normalization replaces characters outside `[A-Za-z0-9_-]` with `_`, so **`-` is kept**. Hook matchers and agent `tools:` entries address `mcp__plugin_<plugin>_<server>__<tool>`. | binary `\`mcp__${En(n)}__\``; existing record ANAME-01/02 in `docs/mcp-compatibility.md` (2.1.291) |
+| CC-9 | A config with `headersHelper` runs the helper only in a trusted workspace (`headersHelper not run — this workspace has no persisted trust`). | binary string quoted |
+| CC-10 | Plugin load errors surface as `… error(s) during load. Run /plugin for details.` in the reload summary. | binary string; MEDIUM: the call site is minified |
 
-**Observation tiers.** `MF` = model-free: RPC `get_commands`, the probe extension (`pi.getAllTools()`, `pi.getCommands()`), companion slash commands, a hook recorder file, the stub MCP server log, the workflow engine's `.events.jsonl`, `/claude:plugin` output. `FX` = needs a faux-model turn (spike 028 `faux-extension.ts`). `RM` = needs a real model; out of scope this milestone. `TUI` = only the interactive TUI shows it (the `features/lib/pi-tui.ts` PTY driver).
+### Pi 1.5.0 built-in MCP facts (beyond the brief)
 
----
+| # | Fact | Evidence |
+|---|------|----------|
+| PI-1 | **Pi expands variables only in `env`, `headers` and `oauth.clientSecret`.** `url`, `command` and `args` are used verbatim. | `dist/extensions/mcp/runtime.js` `createDefaultTransport`: `resolveHeadersOrThrow(config.headers)`, `resolveConfigValueOrThrow` per env value; `command: expandHome(config.command)` |
+| PI-2 | Pi's template syntax is `${NAME}` **and bare `$NAME`**. It has no `${NAME:-default}`: a `${…}` body that is not a plain name stays literal. A value that starts with `!` runs a shell command. `$$` escapes `$`, and `$!` escapes `!`. A variable that is unset **or empty** makes the value unresolved, and the `…OrThrow` call fails the connection. | `dist/core/resolve-config-value.js` `parseConfigValueTemplate`, `resolveEnvConfigValue` (`env?.[name] \|\| process.env[name] \|\| undefined`) |
+| PI-3 | A leading `~`, `~/` (and `~\` on Windows) in `command`, `args` and `cwd` becomes the home directory. | `runtime.js` `expandHome` |
+| PI-4 | `validateMcpServerConfig` rejects `type: "sse"` (`legacy SSE transport is not supported; use the streamable HTTP URL`) and a url that is not http/https. It passes unknown keys through. | `dist/core/mcp-servers.js` |
+| PI-5 | HTTP servers use OAuth unless they have an `Authorization` header (in any case) or `auth`. This is Claude's rule, natively. | `runtime.js` `usesOAuth` |
+| PI-6 | `auth: { provider }` sends a Pi `/login` provider token to `url`. It is a Pi-only power that a plugin must never set. | `mcp-servers.d.ts` `McpHttpServerConfig.auth` |
+| PI-7 | `timeout` is in **seconds**, a positive number, and resets on progress. The default is 60. | `mcp-servers.d.ts` |
+| PI-8 | Tool names are `mcp__<server>__<tool>` with `[^A-Za-z0-9_]`→`_`. **A name over 64 characters is cut and gets an 8-hex hash.** Tools whose names collide after sanitizing also get the hash. | `dist/extensions/mcp/tools.js` `createMcpToolName`, `MAX_TOOL_NAME_LENGTH = 64` |
+| PI-9 | The client announces only `roots`. It announces no elicitation and no sampling, and it does not handle prompts. It does offer resources (`list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`). | `dist/extensions/mcp/runtime.js` `new McpClient({name:"pi",…roots})`; pi-mcp `dist/client.js` initialize; `docs/mcp.md` "Use resources" |
+| PI-10 | Pi connects every enabled server in the background at session start and keeps it connected. A dropped connection reconnects on the next call. Pi turns `tool_search` on by itself when a `deferred` server exists. | `docs/mcp.md` "Diagnose connection problems", "Control tool exposure" |
+| PI-11 | Handling `mcp_servers_change` "marks an extension as the one that connects registered servers". The extension must never subscribe to it. | `dist/core/extensions/types.d.ts` `McpServersChangeEvent` doc |
+| PI-12 | Pi exposes no status channel. `getAllTools()` returns `name, description, parameters, exposure, namespace{name, aliases:[server]}, sourceInfo`, but not the tool `label` (`<server>/<original tool>`). Withdrawn and disabled tools are re-registered as `exposure: "hidden"`. | `dist/core/agent-session.js` `getAllTools`; `mcp/index.js` `hideTools` |
+| PI-13 | Built-in MCP reads `~/.pi/agent/mcp.json` and `<project>/.pi/mcp.json`. **These are the same files that pre-AMIG releases of this extension wrote plugin servers into.** An `mcp.json` server whose namespace equals a registration wins, and the registration shows as overridden. | `docs/mcp.md`; `mcp/index.js` `registeredServers` |
+| PI-14 | The extension set is computed from settings **before** any extension code runs. The only exception is the interactive project-trust pre-pass. So removing `-builtin:mcp` in session N loads built-in MCP from session N+1 on. | `dist/core/resource-loader.js` `reload()`, `dist/main.js` `shouldResolveProjectTrust` |
+| PI-15 | `/mcp` changes to the enabled state or exposure of a registered server apply to the current session only. | `docs/mcp.md` "Add servers from extensions" |
+| PI-16 | pi-subagents 0.84.0 already resolves `mcp:<server>[/<tool>]` against built-in MCP when the adapter is absent. Detection: `/mcp` with `sourceInfo.path === "builtin:mcp"`. Tool names are taken as the server reports them, and the server part may use `-` or `_`. A server registered by an extension works only in background children, because the registering extension loads there too. | `docs/agents.md` line 573; `src/runs/shared/mcp-direct-tool-allowlist.js` |
+| PI-17 | The adapter's onboarding state is `<agentDir>/mcp-onboarding.json`. `piBuiltinMcpHandledVersion` records the adapter version that "last turned off, **or found configured**," built-in MCP. | pi-mcp-adapter 7.0.0 `onboarding-state.ts`, `pi-builtin-mcp.ts` |
 
-## Decisions Needed (gaps, contradictions, edge cases)
+## Three-column verdict table
 
-These have no recorded license. Each one blocks or shapes at least one scenario. The kind sections below give the evidence. Suggested owner = the component phase whose discuss step should settle it.
+Verdict vocabulary: **supported** (written as is), **translated** (written in the implementation's own form), **blocked** (the server is left out and the plugin is `(partially-available)` / `(partially-installed)` with `{unsupported mcp}` and `(unsupported <feature>)`), and **dropped-with-note** (the field is not written, the server runs, and the note or warning says what is lost). The Claude Code column states what upstream does with a plugin server.
 
-| ID | Kind | Finding | Upstream (evidence) | Extension today (evidence) | Suggested question to the user | Conf |
-|----|------|---------|--------------------|---------------------------|--------------------------------|------|
-| FG-01 | commands | **CONTRA/GAP: positional arguments are 0-based upstream, 1-based in Pi.** A Claude command written `$1` gets the *second* argument upstream and the *first* under Pi. | `$N` = `$ARGUMENTS[N]`, 0-based; `$0` is the first argument; a missing index stays literal [bin: `T2e`, `/\$(\d+)(?!\w)/` -> `G(N)`; doc:skills "String substitutions"] | Commands pass through byte-identical; Pi `substituteArgs` uses `args[N-1]`, and a missing index becomes `""` [pi: `dist/core/prompt-templates.js`; repo: `bridges/commands/stage.ts`] | Rewrite placeholders at install time (`$0`->`$1`, `$N`->`$(N+1)`, `$ARGUMENTS[N]`->`$(N+1)`), or record a Pi-gap divergence? | HIGH |
-| FG-02 | commands | **GAP: arguments are dropped when the body has no placeholder.** | Appends `\n\nARGUMENTS: <args>` when nothing was substituted [bin: `T2e` tail `!Se&&r&&n`; doc:skills] | Pi substitutes only; it adds nothing, so `/plugin:cmd foo` loses `foo` [pi: `substituteArgs`] | Append `ARGUMENTS: $ARGUMENTS` at install time to bodies with no placeholder? | HIGH |
-| FG-03 | commands, skills | **GAP: other substitution forms.** `$ARGUMENTS[N]`, named `$name` from `arguments:`, `\$` escape, `${CLAUDE_SESSION_ID}`, `${CLAUDE_EFFORT}`. Pi-only `${1:-x}`, `$@`, `${@:N}` expand under Pi but stay literal upstream. | [bin: `T2e`; `ARGUMENTS: ... ${CLAUDE_SESSION_ID} ... ${CLAUDE_EFFORT}` strings; doc:skills] | None substituted; Pi turns `$ARGUMENTS[0]` into all arguments plus a literal `[0]` [pi] | Which forms to translate at install; record the rest as divergences | HIGH |
-| FG-04 | skills | **GAP: skill arguments are not substituted.** | Same substitution as commands, with `ARGUMENTS:` appended when no placeholder [doc:skills] | Pi appends the raw text after the `<skill>` block and substitutes nothing [pi 1.4.0 `agent-session.js` "Expand skill commands"] | Transform `/skill:` input in the existing `input` handler (`edge/skill-aliases.ts`), or record a Pi gap? | HIGH |
-| FG-05 | skills, commands | **GAP: dynamic context injection `` !`cmd` `` and ` ```! ` blocks never run.** Common in real plugins, for example `!`git status``. | Runs the shell command before the content reaches the model; a failure aborts the invocation; `shell:` selects bash or powershell [doc:skills "Dynamic context injection"; bin: `e.includes("!`")`] | Literal text reaches the model; no code handles it [repo: no match outside `bridges/mcp/adapter-escape.ts`] | Implement (input transform plus a spawn chokepoint), or record a Pi gap? Needs a security review either way | HIGH |
-| FG-06 | skills, commands | **CONTRA: description fallback.** D-86-06 (SKILL-02) followed the older "first paragraph" docs. | First non-empty line; a `#` heading yields its text without the hashes; cut at 100 chars (97 + `...`) [bin: `A2e(content,"Plugin skill"/"Plugin command")`; doc:skills "first non-empty line"] | Skills: first prose paragraph, headings skipped, no length cut [repo: `bridges/skills/frontmatter-degrade.ts::firstBodyParagraph`]. Commands: Pi's own fallback, first non-empty line cut at 60 chars, `#` kept [pi] | Re-align skills to `A2e`? Synthesize a command `description` at install so the 60-char Pi rule never applies? | HIGH |
-| FG-07 | skills | **GAP: frontmatter `name` is ignored for the generated name.** | In a plugin, frontmatter `name` replaces the directory name: `skills/review/SKILL.md` with `name: fancy` gives `/my-plugin:fancy` [doc:skills "Namespacing"] | The name comes from the directory basename, and SK-3 rewrites `name` [repo: `bridges/skills/discover.ts:119`] | Derive from frontmatter `name` when present? (Verify first with `claude plugin details`) | MEDIUM |
-| FG-08 | skills | **CONTRA: skill/command clash on one qualified name.** SK-6 gives the command or prompt template priority. | A skill wins over a command of the same name [doc:skills "Namespacing and precedence"; stated for `.claude/`, not verified for one plugin] | `edge/skill-aliases.ts:91-94`: a non-skill command with the name wins | Probe upstream with one plugin that has `skills/x` and `commands/x.md`, then decide | MEDIUM |
-| FG-09 | skills | **EDGE: the `/plugin:skill` alias works only in interactive input.** RPC and print `/plugin:skill` falls through to Pi. | `/plugin:skill` is the only name [doc:skills] | `event.source !== "interactive"` returns `continue` [repo: `edge/skill-aliases.ts:82`] | Accept (and test through the TUI) or extend to RPC? | HIGH |
-| FG-10 | skills, commands | **GAP: frontmatter fields dropped silently.** v1.15 recorded only `allowed-tools`, `disallowed-tools`, `model`, `context: fork` as out of scope, without a decision ID. Also unrecorded: `effort`, `agent`, `background`, skill-scoped `hooks`, `paths`, `shell`, `arguments`. Agents warn about dropped fields; skills and commands say nothing. | All are honored [bin: skill schema `PEo`/`MEo` describe strings; doc:skills table] | Passed through byte-identical; Pi reads only `name`, `description`, `argument-hint`, `disable-model-invocation` [pi 1.4.0] | One divergence ID licensed by the Pi gap; should install warn per field as agents do? | HIGH |
-| FG-11 | commands | **GAP: commands are model-invocable upstream.** | Commands were merged into skills; the model may run them through the Skill tool unless `disable-model-invocation` [doc:skills "Commands have been merged into skills"; bin: plugin commands load through the same skill loader `XK`] | Pi prompt templates are user-only | Record a Pi gap, or also stage commands as skills? | HIGH |
-| FG-12 | commands | **GAP: `user-invocable: false` on commands.** The 2026-10-31 decision covers skills only. | Hidden from `/` and refused on `/name` [doc:skills invocation table] | Listed and runnable | Extend the skills divergence ID to commands | HIGH |
-| FG-13 | commands | **GAP: the object-map `commands` form makes the plugin unavailable.** | `commands` may be `{name: {source|content, description, argumentHint, model, allowedTools}}` [doc:plugins-reference "commands"] | Non-string element -> `component path ... is not a string` note [repo: `domain/component-paths.ts:62-73`] | Support the map (`content` needs a synthesized file), or record an unsupported form? | HIGH (code), HIGH (doc) |
-| FG-14 | commands, agents, workflows | **CONTRA/EDGE: replace vs union.** Upstream replaces the default dir for `commands`, `agents`, `workflows` and adds for `skills`. D-07 unions all of them. PROJECT.md "Out of Scope" says "explicit declaration replaces the default", which contradicts D-07. | [doc:plugins-reference "How each key combines with its default location"] | Union [repo: `docs/workflows-compatibility.md`; D-07 / COMP-01] | Confirm D-07 still stands, fix the PROJECT.md bullet, pin the union in a scenario | HIGH |
-| FG-15 | agents | **GAP: nested agent files are ignored.** | `agents/review/security.md` registers as `my-plugin:review:security` [doc:sub-agents "Plugin naming"; doc:plugins-reference "Subfolders are part of the agent name"] | Flat, non-recursive [repo: `bridges/agents/discover.ts:3`] | Recurse and colon-join, as CM-4 does for commands? | MEDIUM-HIGH |
-| FG-16 | agents | **EDGE: preloading a `disable-model-invocation` skill.** | Not preloaded: "skills can't be preloaded" [doc:sub-agents "Skills preloading"] | No check in `bridges/agents/` | Skip and warn? | MEDIUM |
-| FG-17 | agents | **GAP: fields with a pi-subagents near-analog are dropped.** `background` (pi-subagents `async`), `memory` (pi-subagents `memory`), `maxTurns`, `isolation`, `color`, `omitClaudeMd`, `autoCompactWindow`, `initialPrompt` (upstream ignores it for plugins). | [bin: agent schema list `...maxTurns,autoCompactWindow,skills,initialPrompt,memory,background,omitClaudeMd,isolation`; doc:sub-agents] | Recorded in `droppedFields` with a warning [repo: `bridges/agents/convert.ts` `SUPPORTED_SOURCE_FIELDS`]; pi-subagents 0.84 reads `async`, `memory`, `maxSubagentDepth`, `toolBudget` | Map `background`->`async`, `memory`->`memory`? Record the rest | MEDIUM |
-| FG-18 | agents | **EDGE: the `--map-model` table is stale.** No `fable` alias; full model IDs are not passed through; targets `claude-opus-4-7`/`claude-sonnet-4-6`. | Aliases `sonnet`, `opus`, `haiku`, `fable`, full IDs, `inherit` [doc:sub-agents "Model field"] | `MODEL_MAP` [repo: `bridges/agents/convert.ts:43-47`] | Refresh the table and pass full `claude-*` IDs through? | MEDIUM |
-| FG-19 | hooks | **BUG: exec-form `${CLAUDE_PLUGIN_ROOT}` is not substituted.** A hook `{"command":"node","args":["${CLAUDE_PLUGIN_ROOT}/x.js"]}` receives the literal string. | "Path placeholders like ${CLAUDE_PLUGIN_ROOT} are substituted per-element" [bin: hook `args` describe string]; "Anywhere in `command` and `args`" [doc:plugins-reference "Where each variable resolves"] | `planSpawn` copies `args` and `command` verbatim; no `substituteClaudeVars` in `bridges/hooks/` [repo: `bridges/hooks/spawn-helpers.ts:33-42`] | None needed: fix in the hooks phase under the bug policy | HIGH |
-| FG-20 | hooks | **GAP: the SessionEnd `reason` mapping beyond `new`->`clear`.** | Closed set `clear`, `resume`, `logout`, `prompt_input_exit`, `other` [bin: `_xi=[...]`] | D-60-04 passes Pi `quit`/`reload`/`new`/`resume`/`fork` through; matcher closed set empty [repo: `domain/components/hook-events.ts:262-265`] | Map `quit`->`prompt_input_exit`? `reload`/`fork`->`other`? Admit which matchers? | HIGH |
-| FG-21 | hooks | **GAP: SessionStart on Pi `reload`.** | No `reload` value; enum `startup`/`resume`/`clear`/`compact`/`fork` [bin: `source:U([...])`] | Sends `source: "reload"` [repo: `bridges/hooks/payloads/session-start.ts:34`] | Send `startup`, suppress, or keep `reload` as a Pi-gap divergence? | HIGH (facts), upstream behavior for a reload unknown |
-| FG-22 | hooks | **GAP: new handler fields.** `once: true` (run once, then remove) and `onFailure: "continue"|"block"` (`block` turns a crash, timeout, or other exit code into exit 2). | [bin: command-hook schema `once`, `onFailure` describe strings] | `once` is tolerated in the schema and not implemented; `onFailure` is not modeled [repo: `domain/components/hooks/schema.ts:44-45`] | Implement both (small), or record them? | HIGH |
-| FG-23 | hooks | **EDGE: new events and a doc contradiction.** `DirectoryAdded`, `PreModelSwitch`, `PostModelSwitch` exist (HKMS-01 covers the model-switch pair). PROJECT.md says the inapplicable events are "silently dropped ... debug-logged only", but the partition drops every non-admitted event as `{unsupported hooks}`. | [bin: hook event tuple] | `domain/components/hooks/partition.ts` (`kind: "event"`) | Record `DirectoryAdded`; correct PROJECT.md or the code | MEDIUM |
-| FG-24 | hooks | **GAP: the manifest `hooks` field is never installed.** A path, an array, or an inline object is read only to detect a hooks module; only `hooks/hooks.json` installs. The rest is dropped silently. | Merges with `hooks/hooks.json`; also inline objects and the marketplace-entry form [doc:plugins-reference "hooks"] | [repo: `domain/hooks-resolution.ts:65-75,140-152`] | Implement the merge, or classify it unsupported so it is not silent? | HIGH |
-| FG-25 | hooks | **EDGE: doc drift.** `docs/hooks-compatibility.md` and the `hook-events.ts` header say Pi compact events "carry no trigger field" and that only match-all is supported. The code admits `manual`/`auto` (PDEF-08). Pi 1.3/1.4 carry `reason: manual|threshold|overflow`. | -- | `NON_TOOL_EVENT_CLOSED_SETS.PreCompact` | None: fix the docs; pin it with a scenario | HIGH |
-| FG-26 | hooks | **EDGE: `systemMessage` is dropped as "no Pi surface".** Pi has `ctx.ui.notify`. | Shown to the user [doc:hooks] | Silent drop [repo: `docs/hooks-compatibility.md`] | Surface it through the notify chokepoint? | MEDIUM |
-| FG-27 | mcp | **CONTRA: `mcpServers` sources merge upstream; MC-1 picks the first.** | `.mcp.json` loads first, then each declared shape; a server name declared later replaces an earlier one; arrays and `.mcpb` bundles are accepted [doc:plugins-reference "mcpServers"] | MC-1: entry > manifest > `.mcp.json`, first match wins, no merge [repo: `docs/prd` MC-1] | Re-decide MC-1 for parity, or record it with an ID | HIGH |
-| FG-28 | mcp | **EDGE: one malformed server.** Upstream skips that server only; the extension makes the whole plugin `(unavailable) {malformed mcp}`. | [doc:mcp; `docs/mcp-compatibility.md` "Invalid server configs"] | Documented, but no decision ID found | Confirm the license ID, or align | MEDIUM |
-| FG-29 | mcp | **PIGAP to note for the harness: project-scope servers in headless sessions.** pi-mcp-adapter skips an unapproved project server unless user-global `settings.projectServers: "allow"`; upstream never asks for plugin servers. | [`docs/mcp-compatibility.md` "Project-scope servers"] | Adapter-owned trust | The harness must configure the adapter, or project-scope MCP scenarios cannot connect | HIGH |
-| FG-30 | mcp | **EDGE: adapter 7.x.** Every MCP doc row was measured on 5.0/5.2 (`toolPrefix`, `directTools`, `auth: "oauth"`, `mcp-adapter.json`, `pi-mcp-adapter/status/v1`). The milestone raises the floor to 7.x. | -- | -- | Re-measure in the harness phase; a break is fixed there | MEDIUM |
-| FG-31 | workflows | **PIGAP to record: no run approval.** Upstream asks before running a plugin workflow by name (manual mode) or relies on permission rules (`-p`); the engine runs at once. | [doc:workflows "Approve the plan before it runs"] | Engine-owned | Record it as a Pi gap with an ID | HIGH |
-| FG-32 | workflows | **EDGE: typed arguments.** Upstream: the model passes `args` as structured data; there is no stated rule for text typed after `/plugin:name`. The engine gives `{_, _raw, key=value}`. | [doc:workflows "Pass input to a saved workflow"] | `docs/workflows-compatibility.md` "Script semantics" | Accept the engine's shape (no upstream position) and pin it | MEDIUM |
-| FG-33 | all | **EDGE: the user-invocable decision has no ID yet.** Spike 028 took the decision on 2026-10-31, but it has no ID in PROJECT.md. | -- | -- | Assign IDs to the four 2026-10-31 decisions (user-invocable, compact, fork, new->clear) | HIGH |
+### Transports and sources
 
-Existing scenario impact: `features/plugin/session-start-hooks.feature` expects `source new`. The recorded `new`->`clear` change makes both scenarios fail. The hooks phase must update them as the scenario that fails without the change.
+| Claude field / transport | Claude Code 2.1.318 | pi-mcp-adapter 7.0.0 | Pi 1.5.0 built-in |
+|---|---|---|---|
+| `type` absent or `stdio` | runs | supported | supported |
+| `type: "http"` / `"streamable-http"` | runs | supported (Streamable HTTP; falls back to SSE on 404/405/406/415) | supported (Streamable HTTP only; retries transient errors twice) |
+| `type: "sse"` | runs | translated: `httpTransport: "sse"` | **blocked, `(unsupported sse)`**. Pi rejects SSE (PI-4). New feature token, licensed by a Pi gap |
+| `type: "ws"` | runs | blocked `(unsupported ws)` | blocked `(unsupported ws)` |
+| `sse-ide`, `ws-ide`, `sdk`, `claudeai-proxy` | dropped at load with a plugin error; the plugin stays (CC-4) | blocked | blocked |
+| `mcpServers` path to `.mcpb` / `.dxt` | unpacks and runs | blocked | blocked |
 
----
+### Stdio fields
+
+| Field | Claude Code | Adapter | Built-in |
+|---|---|---|---|
+| `command` | `${…}` expanded at load | translated (variable rewrite into adapter syntax, AVAR-01..03) | **translated**: Pi expands nothing here (PI-1), so the extension expands `${NAME}` / `${NAME:-default}` itself, with Claude's rules, at registration |
+| `args` | expanded | translated | translated (as `command`) |
+| `env` | expanded | translated (split tokens, `!`→`!!`) | translated: escape `$`→`$$` and a leading `!`→`$!` (PI-2). Unset with no default → Claude's literal `${NAME}`, written `$${NAME}` |
+| `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` added to `env` | yes | translated | translated |
+| leading `~` in `command` / `args` | kept literal | blocked `(unsupported command ~)` / `(unsupported args ~)` | blocked, same tokens (PI-3) |
+| `cwd` | **not a Claude field** (CC-1); stripped | dropped | dropped. Never written; Pi's default is the session directory. Corrects the brief, which listed `cwd` as a built-in gain |
+
+### Remote fields
+
+| Field | Claude Code | Adapter | Built-in |
+|---|---|---|---|
+| `url` | expanded | translated | **translated**: the extension expands it, since Pi does not (PI-1) |
+| `headers` | expanded | translated | translated (escaped as `env`) |
+| OAuth beside headers without `Authorization` | OAuth stays on | translated: `auth: "oauth"` when every value is clean (D-08-04) | **supported natively** (PI-5). No field is written, and the D-08-04 residual gap does not exist here |
+| `headersHelper` | runs (trusted workspace only, CC-9) | blocked | blocked. Pi has no helper; `!cmd` works per header and cannot produce header names |
+| `oauth.clientId` | used | supported | supported |
+| `oauth.callbackPort` | redirect `http://localhost:<port>/callback` (CC-7) | translated → `redirectUri` | **translated → `callbackUrl: "http://localhost:<port>/callback"`**. With `callbackPort` alone, Pi would use `127.0.0.1`, which a client registered for Claude Code rejects |
+| `oauth.authServerMetadataUrl` | https only | supported | supported (Claude's stricter https check stays the malformed rule) |
+| `oauth.scopes` | used | translated → `scope` | translated → `scope` |
+| truthy `oauth.xaa` | cross-app access | blocked | blocked |
+| any other `oauth` key (`clientSecret`, …) | not in the schema (CC-2) | dropped | dropped; never pass `clientSecret`, `clientName`, `clientRegistration`, `callbackUrl` from a plugin |
+| `timeout` (ms, hard limit) | used | translated → `requestTimeoutMs` (≥1000, capped) | translated → `timeout: ms / 1000` seconds (≥1000 ms rule kept). Same gap: resets on progress, 60 s default |
+| `request_timeout_ms` | stands in for `timeout`, capped at 300000 | via the timeout rule | via the timeout rule |
+| `tools[].permission_policy`, `toolPermissions` | accepted; enforcement for plugin servers unknown | dropped-with-note: `MCP server tool rules not enforced.` (ANAME-07) | dropped-with-note, same warning (MVP). A differentiator below maps deny rules to `toolExposure: "hidden"` |
+| `discoveryCache`, `role`, `displayName` | internal | dropped silently | dropped silently |
+
+### Common fields and capabilities
+
+| Field / capability | Claude Code | Adapter | Built-in |
+|---|---|---|---|
+| `alwaysLoad: true` | tools always in the prompt | translated → `directTools: true` | translated → `exposure: "direct"` (decision 2) |
+| `alwaysLoad` other / absent | deferred behind tool search | translated → `directTools: "search"` | translated → `exposure: "deferred"` (decision 2) |
+| `_meta["anthropic/alwaysLoad"]` per tool | honored | gap (entry written before the tool list is known) | gap (same reason; `toolExposure` exists but needs tool names up front) |
+| `bareElicitationCapability: true` | sends a bare capability (CC-6) | blocked (adapter always announces form+url) | **supported**. Built-in announces no elicitation at all (PI-9), so the handshake the flag protects cannot fail. Recommendation, see Dubious Choices |
+| plugin `description` (extension-owned) | -- | written as `description` | written as `description`; Pi also lists it in the system prompt and ranks tool search by it |
+| Pi-only powers a plugin must never set | -- | dropped: `auth`, `approveTools`, `lifecycle`, … | dropped: `auth.provider` (PI-6), `enabled`, `exposure`, `toolExposure`, `cwd`, `oauth.clientName`/`clientRegistration`/`callbackUrl`/`clientSecret` |
+| tools | yes | yes | yes |
+| resources | yes | yes (`server-manager.ts` `readResource`) | yes (PI-9) |
+| prompts as `/mcp__<server>__<prompt>` | yes | yes (`prompts.ts`) | **no**. Pi gap; the server still runs, no verdict |
+| elicitation | form + url | form + url | **no** (Pi gap) |
+| sampling | not checked | yes (`init.ts`) | no |
+| connection lifecycle | connect at start, keep | lazy (ANAME-05) | connect at start, keep (PI-10). The ANAME-05 divergence disappears |
+| project-scope approval | never asked for plugin servers | per-server approval (D-CF6-03) | none. Registered only when `ctx.isProjectTrusted()`; closer to Claude |
+| tool-name length | no limit | no limit | **cut to 64 with a hash** (PI-8). New divergence, Pi gap |
+| name sanitizing | `-` kept (CC-8) | `-` kept in tool names | `-`→`_` (PI-8). Brief's divergence, Pi gap |
+| persisted `/mcp` choices | per project in `~/.claude.json` | `mcp-adapter.json` user overrides kept (D-08-01/02) | **session only** (PI-15). Pi gap |
+
+The read-time verdict rule: a server is blocked when the **active** implementation cannot run it. When no implementation is active, blocked means "neither implementation can run it", and the soft-dependency marker says why nothing runs (see below).
+
+## User-visible behavior per implementation
+
+### Detection (one snapshot per command run)
+
+| Active | Condition at `session_start` | Source |
+|---|---|---|
+| `adapter` | `/mcp-adapter` loaded (today's `hasLoadedPiMcpAdapter`) | `platform/pi-api.ts` |
+| `builtin` | not adapter, and `/mcp`'s `sourceInfo.path === "builtin:mcp"` | the same test pi-subagents uses (PI-16) |
+| `none` | neither, e.g. `-builtin:mcp` in settings, `--no-mcp`, `--no-extensions` | -- |
+
+### list / install / update / enable rows
+
+| Situation | adapter | builtin | none |
+|---|---|---|---|
+| Plugin with a stdio server, installed | `● demo v1.0.0 (installed)` | `● demo v1.0.0 (installed)` | `● demo v1.0.0 (installed) {requires mcp support}` |
+| Not installed, with an `sse` server | `(available)` | `⊖ … (partially-available) {unsupported mcp}` | `(available) {requires mcp support}`: the union rule, since the adapter could run it |
+| `install` of that plugin without `--partial` | installs | refused at error severity, `(partially-available) {unsupported mcp}` + `Re-run with --partial to install the supported components.` | installs with the marker |
+| That plugin installed earlier, after a switch to built-in | -- | `◉ … (partially-installed) {unsupported mcp}`. The state is derived, never persisted (FSTAT-02 already works this way) | -- |
+| Plugin installed `--partial` under the adapter only for `bareElicitationCapability` | `◉ (partially-installed)` | `● (installed)`: the full record now serves every server | marker |
+
+Soft-dependency marker: **`requires mcp support`**, in place of `requires pi-mcp-adapter`, and only when `none` is active. The style guide (D-16-15) keeps reason tokens lowercase. Every `requires …` marker names what is missing, and the package name no longer fits here, because either implementation satisfies the plugin. The marker keeps the agents → mcp → workflows order inside the brace. `{requires pi-mcp-adapter}` leaves the REASONS closed set, or stays unused there (a breaking JSON-output change, so record it in the CHANGELOG).
+
+### `info`
+
+```text
+● community-mp [user] <no autoupdate>
+  ● analytics v1.0.0 (installed)
+    mcp: plugin:analytics:api (connected; withheld ANTHROPIC_API_KEY)
+    requires: builtin:mcp
+```
+
+- `mcp:` keeps Claude's name, `plugin:<plugin>:<server>`, under every implementation, and so do the `unset`/`withheld` lists (AVAR-04/05).
+- `requires:` names the implementation that serves the servers: `pi-mcp-adapter`, or `builtin:mcp` (Pi's own name for the extension, in settings and in `sourceInfo`), or `mcp support (missing)` under `none`. JSON: `{"companion":"builtin:mcp","missing":false}`. The `Companion` union widens. The catalog sentence "Pi's built-in MCP client does not count as pi-mcp-adapter" goes.
+- Status tokens:
+
+| Token | adapter (unchanged, ASTAT-01) | builtin (derived from `getMcpServers` + `getAllTools` + the scope's `mcp.json` files) |
+|---|---|---|
+| `connected` | yes | a non-hidden tool under the server's namespace alias |
+| `cached, connects on first use` | yes | never (Pi connects eagerly) |
+| `not connected` | yes | registered, no tools yet (connecting, failed, or needs sign-in, which Pi does not tell apart; Pi reports sign-in and failures itself once after start) |
+| `needs authentication`, `failed`, `pending approval` | yes | not derivable (PI-12) |
+| `disabled` | yes | every tool of the server is `hidden` |
+| `project not trusted` | -- | **new**: a project-scope server held back because the project is untrusted |
+| `overridden by mcp.json` | -- | **new**: an `mcp.json` server with the same namespace wins (PI-13). Follows Claude's "overridden by" wording, as `overridden by project scope` does |
+| `overridden by project scope` | yes | yes (register the project record and skip the user one) |
+| `not loaded` | yes | only if installs register at the next load and not at once (see D2) |
+| `status unknown` | adapter absent or no report | also under `none` |
+
+### The switch (installing or uninstalling the adapter, then `/reload`)
+
+**Built-in → adapter** (`pi install npm:pi-mcp-adapter`, `/reload`):
+1. The adapter loads, takes `/mcp`, and writes `-builtin:mcp` once per version. The adapter reports that write itself.
+2. The extension detects `adapter`, registers nothing, and reconciles `mcp-adapter.json` from the install records. Entries already exist when every install also writes them; a server the adapter blocks is removed or kept out.
+3. It re-materializes generated agents: `mcp:plugin_<p>_<s>_/<tool>`.
+4. Output: nothing for a clean switch. Each plugin the adapter runs only partly shows `◉ (partially-installed) {unsupported mcp}` in `list`/`info`, plus one load-time warning row per such plugin (recommended, see Gaps item 4).
+
+**Adapter → built-in** (`pi remove pi-mcp-adapter`, start Pi or `/reload`):
+1. Load N: the adapter is absent, but `-builtin:mcp` is still in `~/.pi/agent/settings.json`, so built-in MCP did not load (PI-14). Active = `none`.
+2. If `mcp-onboarding.json` holds a `piBuiltinMcpHandledVersion` **and** the user settings' `extensions` hold exactly `-builtin:mcp`, the extension removes that one entry atomically (decision 1). It never touches `+builtin:mcp`, never touches a project `settings.json`, and never writes `mcp-onboarding.json`.
+3. The extension **notifies**. Recommended standalone info message, through the notify chokepoint:
+   `Turned Pi's built-in MCP back on: removed "-builtin:mcp", which pi-mcp-adapter had added, from ~/.pi/agent/settings.json.` followed by the `/reload to pick up changes` trailer. Reason to notify: the extension changed a user-owned settings file. The adapter reports its own write of the same line, and silence would leave rows showing `{requires mcp support}` with no explanation.
+4. Load N+1 (`/reload`): active = `builtin`. The extension registers the servers and re-materializes the agents (`mcp:plugin_<p>_<s>/<tool>`). No output for a clean switch.
+
+The extra `/reload` in step 4 conflicts with "a switch must never require action from the user." Pi's capability gap (PI-14) licenses it, with the same shape as the existing AMIG "one more `/reload`" divergence. Phase research should still test removing the line from the extension factory during the interactive trust pre-pass, where it would take effect at once.
 
 ## Feature Landscape
 
-### Table Stakes (each component phase must cover these)
+### Table Stakes (Users Expect These)
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Listing and naming per kind, model-free | A Claude user knows `/plugin:name`, `plugin:agent`, `mcp__plugin_p_s__tool` | LOW | `get_commands`, the probe extension, companion surfaces (spike 028) |
-| Frontmatter and field variants per kind | These are the upstream contract fields a plugin author relies on | MEDIUM | Pin each MATCH and each DIV; a GAP waits for its decision |
-| Invocation through the faux model | Shows that what reaches the model matches upstream | MEDIUM | Faux records the system prompt, the user message, and tool calls |
-| Companion-missing degradation (agents, MCP, workflows) | Core Value: degradation never blocks the install | LOW | `{requires pi-subagents}` / `{requires pi-mcp-adapter}` / `{requires pi-dynamic-workflows}`; recovery = load the companion, then `/reload`, with no reinstall |
-| Removal and replacement through uninstall, disable, enable, update | Lifecycle parity | MEDIUM | Observe through the host after `new_session` (spike: it reloads resources) |
-| Hook parity fixes (`new`->`clear`, `compact`, `fork`) | Recorded milestone target | MEDIUM | Each needs a scenario that fails without the change |
-| FG-19 exec-form placeholder fix | Bug policy | LOW | One hooks scenario |
+| # | Feature | Why Expected | Complexity | Depends on existing code |
+|---|---|---|---|---|
+| T1 | Pi 1.5.0: dev deps, peer floor `>=1.5.0`, lockfile | `registerMcpServer` exists since 1.4, but the 1.5.0 OAuth fix, tool-search ranking and argument coercion are what users get | LOW | `package.json`, `platform/pi-api.ts` (pi-schema move: unaffected per brief) |
+| T2 | Active-implementation snapshot (`adapter`/`builtin`/`none`) taken once per run | Every verdict, marker and materialization keys on it | LOW | `platform/pi-api.ts` `softDepStatus`, `SoftDepStatus`, `shared/notify-reasons.ts` |
+| T3 | Implementation-neutral install records: every declared server in its Claude-shaped form after plugin-variable substitution, plus a backfill for existing records that hold only names | Read-time verdicts and built-in registration need the full config; existing installs must work under built-in with no reinstall | HIGH | `persistence/state-io.ts` (`mcpServers: string[]` today), `domain/mcp-resolution.ts`, migration path (NFR-1, APL-D1 interaction) |
+| T4 | Read-time verdicts per implementation on `list`, `info`, `install`, `update`, `enable`, `pending`, `apply` | "A plugin's state depends on the active implementation" (brief) | HIGH | `domain/mcp-server-features.ts` `classifyMcpServer` splits into per-implementation tables; resolver `partially-available`; FSTAT-02 derived state |
+| T5 | Built-in verdict table: `sse` blocked (new `(unsupported sse)`), `bareElicitationCapability` supported, everything else as the adapter | Truthful `{unsupported mcp}` per implementation | MEDIUM | `McpUnsupportedFeature` union, output catalog |
+| T6 | Built-in translation table (the verdict table above): extension-side expansion for `url`/`command`/`args`, `$$`/`$!` escaping in `env`/`headers`, seconds `timeout`, `callbackUrl` on localhost, `scope`, `description`, `exposure` | Servers must receive what Claude gives them | HIGH | `bridges/mcp/substitute.ts`, `adapter-escape.ts` (adapter-only), deny-lists (AVAR-05) reused |
+| T7 | Built-in materialization: `pi.registerMcpServer` at `session_start` for every enabled record, project scope only when trusted, the project record winning over the user record, never under `adapter`/`none`, never handling `mcp_servers_change` (PI-11), registration errors reported as rows | "Materialize correctly on startup and /reload" | MEDIUM | `index.ts` `session_start`, notify chokepoint |
+| T8 | Built-in naming: server `plugin_<plugin>_<server>` by ANAME-01 (keeps `-`); collision check against both scopes' `mcp.json` by namespace (`-`≡`_`) and against other extensions' registrations | Claude names wherever Pi allows; refuse a collision as ANAME-03 does | MEDIUM | `bridges/mcp/collision-*.ts` |
+| T9 | Marker and `requires:` per implementation (`requires mcp support`; `requires: pi-mcp-adapter` / `builtin:mcp` / `mcp support (missing)`) | Today's `{requires pi-mcp-adapter}` lies under built-in | LOW | `shared/concerns/soft-dep.ts`, `notification-types.ts` REASONS, output catalog, JSON docs |
+| T10 | Built-in status reader for `info` | `info` shows server state today | MEDIUM | `platform/mcp-status.ts` gains a sibling |
+| T11 | Agent grants per implementation, re-materialized on load (`mcp:plugin_<p>_<s>_/<t>` vs `mcp:plugin_<p>_<s>/<t>`) | A generated agent must launch with its tools after a switch | MEDIUM | `bridges/agents/convert.ts`; **APL-D1 says a load changes no installation state, so this needs a recorded amendment** (like AMIG-01's load-time move) |
+| T12 | Adapter `mcp-adapter.json` reconciled from the records on load or apply | Built-in → adapter switch; servers recorded while built-in was active | MEDIUM | `bridges/mcp/stage.ts`, AMIG-01 precedent for load-time writes |
+| T13 | `-builtin:mcp` cleanup with a notice (decision 1) | Without it, uninstalling the adapter leaves no MCP | MEDIUM | new settings writer; NFR-10 amendment; `shared/atomic-json.ts` |
+| T14 | Hooks under built-in: direct calls fire `PreToolUse`/`PostToolUse` with no adapter `mcp`-proxy special case; codemode-nested calls also fire | Hook parity on MCP tools (ANAME-02) | LOW | `bridges/hooks/dispatch.ts` `MCP_PROXY_TOOL` becomes adapter-only |
+| T15 | Every MCP cucumber scenario runs under `@adapter` and `@builtin` profiles, with shared steps and implementation-specific expectations in their own scenarios | Brief requirement and the behavioral-test rule | HIGH | `features/mcp-server/*`, `features/lib/companions.ts`, `cucumber.json` (one `default` profile today) |
+| T16 | `docs/mcp-compatibility.md` built-in column, output catalog, README, CHANGELOG | Parity reference | MEDIUM | docs |
 
-### Differentiators (where this suite goes beyond earlier milestones)
+### Differentiators (Competitive Advantage)
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Tool-use hooks driven by scripted faux tool calls | Proves PreToolUse/PostToolUse exit codes and JSON decisions end-to-end without a key | MEDIUM | Spike: RPC `bash` does not fire PreToolUse; only a model tool call does |
-| Agent runs with the child prompt recorded | Proves body conversion, `${CLAUDE_*}` substitution, preloads, tools | MEDIUM | `async: false` only (spike gotcha) until the 0.84 floor is proven |
-| MCP calls through the adapter, logged by the stub | Proves naming, variable expansion, env, arguments end-to-end | MEDIUM | Spike: go through the `mcp` proxy; direct tools are not active by default (`directTools: "search"`) |
-| Workflow runs read from `.events.jsonl` | Proves `meta.name`, args parsing, result | LOW | Results are not delivered over RPC (spike gotcha) |
-| Cross-kind: hook on a plugin MCP tool, agent granted a plugin MCP tool | The kinds work together as upstream promises | MEDIUM | Needs both fixtures from the harness phase |
+| # | Feature | Value Proposition | Complexity | Notes |
+|---|---|---|---|---|
+| D1 | **Hook `tool_name` server-segment restoration under built-in**: map `mcp__plugin_my_plugin_api__x` back to `mcp__plugin_my-plugin_api__x` before matching and before the hook gets its input | Most real plugin names contain `-`. Without this, hook matchers break under built-in for most plugins | MEDIUM | The extension owns the server half of the mapping, so the Pi gap licenses only the **tool** segment (Pi does not expose the original tool name, PI-12). **Parity question, see Gaps item 1** |
+| D2 | Register and unregister at once on `install`/`uninstall`/`enable`/`disable` under built-in (Pi connects later registrations right away) | The MCP part needs no `/reload` | MEDIUM | The rest of the plugin still needs `/reload`, so the trailer stays; `not loaded` disappears under built-in |
+| D3 | `tools[].permission_policy: "always_deny"` and `toolPermissions: "blocked"` → `toolExposure: "hidden"` | Built-in can enforce deny rules the adapter cannot | LOW | Ask rules stay unenforced with the warning; first establish whether Claude enforces them for plugin servers |
+| D4 | Claude-literal variable semantics under built-in: unset `${NAME}` stays literal, empty stays empty, no split tokens, no install-time-only defaults | Removes six adapter-licensed divergences in the Variables section | (part of T6) | Keep set non-empty references as `${NAME}` for Pi to expand, so secrets stay out of `getMcpServers()` copies |
+| D5 | pi-subagents bug A (`directTools: "search"` rejected) does not apply under built-in | Background agents may really get plugin MCP tools under built-in | LOW (verify) | Re-test MCPBG-01 under `@builtin` |
 
-### Anti-Features
+### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Asserting on files the bridge wrote | Easy to check | Milestone rule: observe through Pi or a companion only. It also duplicates the unit tests | Probe extension, `get_commands`, companion surfaces |
-| Testing model auto-selection of skills or agents | Upstream headline behavior | Needs a real model (RM) | Assert the description reaches the model's system prompt (FX) |
-| Workflows whose scripts call `agent()` | Real workflows do | Needs the faux model reachable from the engine's agents; not tried (spike) | Defer to a real-provider milestone |
-| Background (`async: true`) agent runs | Upstream default for some agents | pi-subagents 0.74 failed on host packages; unproven at 0.84 | Use `async: false`; add one async scenario only if the harness phase proves it |
-| Pinning a GAP behavior before the user decides | Keeps phases moving | Locks in an unlicensed divergence | The discuss step of each phase settles the FG items first |
-
-## Per-Kind Contracts
-
-### 1. Skills
-
-| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
-|---|-------------------|-----------------|-----------|-------------|------|
-| S1 | Plugin skills are invoked as `/plugin:skill` | doc:skills, HIGH | `/skill:<plugin>-<skill>` (SK-1/SK-2); `/plugin:skill` alias in interactive input only (SK-6) | DIV(SK-2, Pi name validator `a-z0-9-`) + **FG-09** | MF (`get_commands`), TUI (alias) |
-| S2 | `<plugin>-` prefix | upstream: no elision | Elided (SK-2) | DIV(SK-2/RN-1) | MF |
-| S3 | Name from frontmatter `name` | doc:skills, MEDIUM | Directory basename | **FG-07** | MF |
-| S4 | `description` fallback | bin `A2e`, HIGH | First paragraph | **FG-06** | MF |
-| S5 | `when_to_use` appended; 1,536-char cut | doc:skills, HIGH | WTU-01/02 | MATCH | MF (description in `get_commands`) |
-| S6 | Unparseable frontmatter | upstream: skill loads, debug-only message | SKILL-01: placeholder, `disable-model-invocation: true`, install warning (WARN-01) | DIV(SKILL-01/WARN-01) | MF |
-| S7 | `disable-model-invocation: true` hides the skill from the model; `/name` still works | doc:skills, HIGH | Pi-native, passed through | MATCH | FX (absent from the system prompt), MF (listed) |
-| S8 | `user-invocable: false` hides it from `/` and refuses `/name` | bin + doc, HIGH | Listed and runnable | DIV(2026-10-31 Pi-gap decision; **FG-33** ID) | MF |
-| S9 | `$ARGUMENTS`, `$N`, `ARGUMENTS:` append | bin `T2e`, HIGH | Raw append by Pi | **FG-04** | FX |
-| S10 | `` !`cmd` `` injection | doc:skills, HIGH | Literal | **FG-05** | FX |
-| S11 | `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_SKILL_DIR}`, `${CLAUDE_PROJECT_DIR}` | doc:skills, plugins-reference, HIGH | Install-time substitution; PROJECT_DIR at project scope only (SK-4, SUB-01/02) | MATCH / DIV(SUB-02 at user scope) | FX |
-| S12 | `${CLAUDE_SESSION_ID}`, `${CLAUDE_EFFORT}` | bin, HIGH | Literal | **FG-03** | FX |
-| S13 | `allowed-tools`, `disallowed-tools`, `model`, `effort`, `context: fork`, `agent`, `background`, `hooks`, `paths`, `shell`, `arguments` | bin schema, HIGH | Ignored silently | Partly recorded (v1.15 Out of Scope, no ID) + **FG-10** | n/a (pin "still invocable") |
-| S14 | `skills` manifest key adds to `skills/` | doc:plugins-reference, HIGH | Union (D-07) | MATCH | MF |
-| S15 | Same-plugin references | -- | Rewritten to Pi invocations (SK-7, D-142) | Pi-name necessity | FX (body as the model sees it) |
-| S16 | Skill vs command clash | doc, MEDIUM | Command wins | **FG-08** | TUI |
-| S17 | Enable/disable/uninstall take effect | upstream: `/reload-plugins` | After `/reload` (NFR-2) | DIV(NFR-2) | MF |
-
-### 2. Commands
-
-| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
-|---|-------------------|-----------------|-----------|-------------|------|
-| C1 | `/plugin:cmd`; nested dirs colon-joined | bin (path join in `XK` caller), doc, HIGH | CM-1/CM-4 | MATCH | MF |
-| C2 | No prefix elision | bin, HIGH | `<plugin>-` elided | DIV(CM-2, D-141-01/02) | MF |
-| C3 | Dotfile entries registered | measured 2.1.228 | Skipped | DIV(CM-4) | MF |
-| C4 | Description fallback | bin `A2e`, HIGH | Pi rule (60 chars, `#` kept) | **FG-06** | MF |
-| C5 | `argument-hint` | doc, HIGH | Pi-native | MATCH | TUI or probe (`get_commands` omits it) |
-| C6 | `$ARGUMENTS` | bin, HIGH | Pi-native | MATCH | FX |
-| C7 | `$N` 0-based; missing index stays literal | bin, HIGH | 1-based; missing becomes empty | **FG-01** | FX |
-| C8 | `ARGUMENTS:` append with no placeholder | bin, HIGH | Dropped | **FG-02** | FX |
-| C9 | `$ARGUMENTS[N]`, `$name`, `\$` | bin, HIGH | Not supported | **FG-03** | FX |
-| C10 | Shell-quoted arguments (`"a b"` = one) | bin `Ck` shell-quote, doc, HIGH | Pi `parseCommandArgs` quotes | MATCH (verify escapes) | FX |
-| C11 | Model-invocable through the Skill tool | doc, HIGH | User-only | **FG-11** | RM to prove upstream; pin a negative FX |
-| C12 | `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `effort`, `context`, `agent` | doc, HIGH | Ignored | **FG-10/FG-12** | MF |
-| C13 | Malformed frontmatter | upstream loads | CMD-01 neutralizes plus warning | MATCH + DIV(WARN-01) | MF |
-| C14 | `${CLAUDE_*}` in the body | doc, HIGH | CM-3, SUB-02 | MATCH | FX |
-| C15 | `commands` object map | doc, HIGH | Plugin unavailable | **FG-13** | MF |
-| C16 | `commands` key replaces `commands/` | doc, HIGH | Union | DIV(D-07) + **FG-14** | MF |
-| C17 | `!`cmd`` | doc, HIGH | Literal | **FG-05** | FX |
-
-### 3. Agents (pi-subagents)
-
-| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
-|---|-------------------|-----------------|-----------|-------------|------|
-| A1 | Named `plugin:agent` | doc:sub-agents, plugins-reference, HIGH | Frontmatter name `plugin:agent` (AG-1a), file `pi-claude-marketplace-<plugin>-<agent>.md` (AG-1/AG-5), flat alias | MATCH | FX (`subagent {action:"list"}`), MF (`/subagents-doctor` count) |
-| A2 | Nested `agents/x/y.md` -> `plugin:x:y` | doc, MEDIUM-HIGH | Not discovered | **FG-15** | FX |
-| A3 | `description` required | doc, HIGH | Fallback text plus warning (AG-7) | DIV(AG-7) | FX + MF warning |
-| A4 | `tools` omitted inherits all | doc, HIGH | No allowlist -> pi-subagents defaults (#179) | MATCH | FX (child tool list) |
-| A5 | Tool names | -- | `Read/Bash/Edit/Write/Grep/LS` 1:1, `Glob`->`find`; others silently dropped (AG-7) | DIV(AG-7) | FX |
-| A6 | Zero resolvable tools: refuse the launch | doc, HIGH | Install throws (AG-11) | DIV(AG-11: install-time instead of launch-time) | MF |
-| A7 | `disallowedTools` | doc, HIGH | Filtered, or emitted as `excludeTools` when `tools` is omitted | MATCH | FX |
-| A8 | MCP tools in `tools` | doc, HIGH | `mcp:plugin_<p>_<s>_[/<tool>]` (ANAME-02) | MATCH | FX (needs the MCP stub) |
-| A9 | `model` (aliases, `inherit`, full ID) | doc, HIGH | Omitted by default; `--map-model` maps 3 aliases | DIV(AG-7) + **FG-18** | FX (child model), MF (info) |
-| A10 | `skills` preload: full content injected | doc, HIGH | Resolved to `<plugin>-<skill>`; unknown dropped with a warning | MATCH + **FG-16** | FX (child prompt holds the skill) |
-| A11 | `hooks`, `mcpServers`, `permissionMode` ignored for plugin agents | doc, HIGH | Dropped with guidance (#179) | MATCH | MF (install warning) |
-| A12 | `effort` | doc, HIGH | Mapped to `thinking` through an allowlist | MATCH (approx.) | FX |
-| A13 | `maxTurns`, `memory`, `background`, `isolation`, `color`, `omitClaudeMd`, `autoCompactWindow` | bin, HIGH | `droppedFields` warning | **FG-17** | MF |
-| A14 | Body = system prompt; `${CLAUDE_*}` substituted | doc, HIGH | PI-10 | MATCH | FX |
-| A15 | Lower priority than user/project agents | doc, HIGH | Cross-plugin ownership refusal (AG-9); pi-subagents order | EDGE (user agent with the same name: not modeled) | FX |
-| A16 | `SubagentStart`/`SubagentStop` hooks | doc, HIGH | Not supported | DIV(recorded deferral, hooks-compatibility) | -- |
-| A17 | pi-subagents absent | -- | `{requires pi-subagents}`; info `(missing)`; recovery by `/reload` | DIV(soft-degrade decision) | MF |
-
-### 4. Hooks
-
-| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
-|---|-------------------|-----------------|-----------|-------------|------|
-| H1 | SessionStart `source` | bin, HIGH | Milestone decision: `new`->`clear`, `session_compact`->`compact`, admit the `clear`/`compact`/`fork` matchers | Target; **FG-21** (reload) | MF (startup, new, resume, fork); FX (compact) |
-| H2 | SessionEnd `reason` | bin, HIGH | Pass-through; empty matcher set | **FG-20** | MF |
-| H3 | UserPromptSubmit fires; exit 2 blocks the prompt; no matcher | doc, HIGH | Matched; matcher refused | MATCH | MF (fires), FX (block keeps the prompt from the model) |
-| H4 | PreToolUse/PostToolUse/PostToolUseFailure tool matchers, pipe-OR | doc, HIGH | Tool map; regex -> partial | MATCH / DIV(Out of Scope: regex) | FX |
-| H5 | Exit 2 blocks with stderr to the model; other codes non-blocking | doc, HIGH | Matched | MATCH | FX |
-| H6 | JSON `permissionDecision`, `updatedInput`, `updatedToolOutput`, `continue:false`, `suppressOutput` | doc, HIGH | Corrected 2026-11-02: before component-features Phase 5 a deny needed exit 0, `updatedInput` merged instead of replacing, `continue: false` did not end a PreToolUse turn, and `updatedToolOutput` never reached the model. D-CF5-11 fixed all four; `defer` stays ignored (Pi gap) | MATCH | FX |
-| H7 | `additionalContext` on every event | doc, HIGH | SessionStart and Stop only | DIV(hooks-compat, no ID) **EDGE** | FX |
-| H8 | `systemMessage` | doc, HIGH | Dropped | **FG-26** | MF |
-| H9 | `if` field | doc, HIGH | Compiler with fall-open | MATCH | FX |
-| H10 | Stop/StopFailure, block re-entry, `stop_hook_active`, 8-block cap | doc, HIGH | v1.16 | MATCH (extra turn boundary, not observable by the hook) | FX |
-| H11 | PreCompact/PostCompact `trigger` and matchers | bin, HIGH | `manual`/`auto` admitted (PDEF-08) | MATCH + **FG-25** docs | FX (`/compact` summarization uses the model) |
-| H12 | Exec-form `${CLAUDE_PLUGIN_ROOT}` | bin, HIGH | Literal | **FG-19 BUG** | MF (SessionStart exec-form hook) |
-| H13 | Env: `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`, `CLAUDE_PROJECT_DIR`, `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_ENV_FILE` (read back) | doc, HIGH | All set; `CLAUDE_ENV_FILE` not sourced back | MATCH / DIV(env-vars.md) | MF |
-| H14 | `timeout` seconds, defaults | doc, HIGH | Matched, SessionEnd per-hook budget (HKTO-01 backlog) | MATCH / recorded backlog | MF |
-| H15 | `async`, `asyncRewake` | doc, HIGH | Matched (not on Stop) | MATCH | MF |
-| H16 | `once`, `onFailure` | bin, HIGH | Not implemented | **FG-22** | MF |
-| H17 | Handler types `http`, `prompt`, `agent`, `mcp_tool` | doc, HIGH | Partial drop `{unsupported hooks}` | DIV(hooks-compat) | MF (install output) |
-| H18 | Unsupported events | bin, HIGH | Partial drop | DIV + **FG-23** | MF |
-| H19 | Manifest `hooks` field merge | doc, HIGH | Ignored | **FG-24** | MF |
-| H20 | Hooks on plugin MCP tools by Claude name; the proxy `mcp({tool})` reaches hooks as `mcp` | doc, HIGH | ANAME-02. Corrected 2026-11-02: before D-CF5-12 the proxy fired match-all hooks twice (as `mcp` and under the real name). Since D-CF5-12 the outer proxy call runs no hook and the nested call fires once under the real name | MATCH / PIGAP | FX |
-| H21 | `${user_config.*}` / `CLAUDE_PLUGIN_OPTION_*` | doc, HIGH | Not supported | DIV(USRCFG-01 backlog) | -- |
-| H22 | Duplicate `session_start` on RPC `new_session` | -- | Deduplicated (#294, SSDEDUP-01) | MATCH | MF |
-
-### 5. MCP servers (pi-mcp-adapter)
-
-| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
-|---|-------------------|-----------------|-----------|-------------|------|
-| M1 | Tool names `mcp__plugin_<p>_<s>__<tool>` | bin/doc, HIGH | Key `plugin_<p>_<s>_` + `toolPrefix: "mcp"` (ANAME-01) | MATCH | MF (`getAllTools()` after an activating search -- FX -- or with `alwaysLoad`) |
-| M2 | Tools deferred behind tool search; `alwaysLoad` keeps them in the prompt | doc, HIGH | `directTools: "search"` / `true` (ANAME-04); per-tool `_meta` ignored | MATCH / DIV(doc) | FX (faux records the request's tool list) |
-| M3 | Connects at session start, stays connected | doc, HIGH | Adapter `lazy` lifecycle (ANAME-05) | DIV(ANAME-05) | MF (stub log: initialize, tools/list) |
-| M4 | stdio `command`/`args`/`env`; `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_PROJECT_DIR}` | doc, HIGH | AVAR-01..05 | MATCH | MF (stub argv/env log) |
-| M5 | `${VAR:-default}`; plain `${VAR}` | doc, HIGH | Default resolved at install; plain left for the adapter | MATCH (install-time snapshot) | MF |
-| M6 | Credential deny-list | doc, HIGH | Withheld plus warning | MATCH | MF |
-| M7 | `http`/`sse` with `url`, `headers` | doc, HIGH | `httpTransport: "sse"` for sse | MATCH | MF (loopback HTTP stub) |
-| M8 | OAuth unless an `Authorization` header | doc, HIGH | `auth: "oauth"` rule (D-08-04) | MATCH | MF (entry effect visible only on connect; a full OAuth flow is out of scope) |
-| M9 | `timeout`, `request_timeout_ms` | doc, HIGH | `requestTimeoutMs` | DIV(doc: progress resets) | MF |
-| M10 | `ws`, `headersHelper`, `oauth.xaa`, leading `~` | bin, HIGH | `(partially-available) {unsupported mcp}` | DIV(doc) | MF |
-| M11 | One malformed server is skipped | doc, HIGH | Whole plugin unavailable | **FG-28** | MF |
-| M12 | Sources merge | doc, HIGH | First match | **FG-27** | MF |
-| M13 | Collisions (same key, `-`/`_` fold) | -- | Refused, rolled back (ANAME-03) | DIV(ANAME-03) | MF |
-| M14 | Plugin servers need no approval | doc, HIGH | Adapter project trust | PIGAP **FG-29** | MF |
-| M15 | Tool permission fields | bin, HIGH | Not enforced plus warning (ANAME-07) | DIV(ANAME-07) | MF |
-| M16 | User overrides survive | -- | D-08-01/02, AFILE-06 | Pi-only feature | MF (adapter `/mcp` view or probe) |
-| M17 | Adapter absent | -- | `{requires pi-mcp-adapter}`, info `(missing)` (MC-8, D-01-01) | DIV(soft-degrade) | MF |
-| M18 | `info` status | -- | `pi-mcp-adapter/status/v1` events (MC-11) | Pi-only | MF |
-
-### 6. Workflows (pi-dynamic-workflows)
-
-| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
-|---|-------------------|-----------------|-----------|-------------|------|
-| W1 | `/plugin:<meta.name>` | doc:workflows, bin 2.1.267, HIGH | WNAM-01/06 | MATCH | MF (`get_commands` source extension) |
-| W2 | No prefix elision | doc, HIGH | Elided | DIV(WNAM-06/RN-1) | MF |
-| W3 | Non-literal `meta.name`, no `meta` -> skipped | doc, HIGH | Skipped with a warning | MATCH | MF |
-| W4 | `meta` not first, non-`const`, no description | doc, HIGH | Installed with a caveat; the engine refuses at run | DIV(admit-vs-run, documented) | MF (run fails in the events file) |
-| W5 | Determinism blocklist | doc, HIGH | Per-file refusal | MATCH | MF |
-| W6 | Syntax error | doc: reported at run | Refused at install | DIV(documented) | MF |
-| W7 | Size cap 524,288 | bin 2.1.267 | Per-file skip | MATCH | MF |
-| W8 | Dotfiles, symlinks | upstream admits | Refused (D-14) | DIV(D-14) | MF |
-| W9 | `workflows` key replaces `workflows/` | doc, HIGH | Union (D-07) | DIV + **FG-14** | MF |
-| W10 | Run approval | doc, HIGH | None | **FG-31** | -- |
-| W11 | `args` | doc, MEDIUM | `{_, _raw, k=v}` | **FG-32** | MF (events file) |
-| W12 | Engine absent | -- | Envelope written; `{requires pi-dynamic-workflows}`; warning severity on standalone install, manual update, standalone enable (WDEP-02) | DIV(WDEP-02) | MF |
-| W13 | Uninstalled command lingers until `/reload` | -- | Notice (WLIF-06) | PIGAP(no `unregisterCommand`) | MF |
-| W14 | `agent()` inside scripts | doc | Engine | RM / out of scope | RM |
-
----
+|---|---|---|---|
+| A `/claude:plugin mcp use adapter\|builtin` switch or setting | Explicit control | The brief forbids it; the trigger is installing or uninstalling the adapter | Detection at `session_start` |
+| One registration path for both (`registerMcpServer` + the adapter's `applyPiMcpServers`) | Less code | The adapter drops `directTools`, so `alwaysLoad` is lost (brief) | Separate materialization per implementation |
+| Writing plugin servers into Pi's `mcp.json` for built-in | Persistent, with `/mcp` choices that persist | It edits a user-owned file outside NFR-10, an `mcp.json` entry outranks every registration, and it re-creates the legacy entries that AMIG-01 had to move out | Session registrations from the records |
+| Handling `mcp_servers_change` | Status tracking | It marks the extension as the connector (PI-11) | Read `getAllTools` on demand |
+| Writing `mcp-onboarding.json` or `mcp-project-approvals.json` | Clean state after cleanup | Adapter-owned files (NFR-10, D-CF6-03) | Read only |
+| Turning on `tool_search`/`codemode` in settings | Make tools findable | Built-in turns `tool_search` on itself for `deferred` servers (PI-10) | Nothing to do |
+| `exposure: "codemode"` for plugin servers | Pi's default | Decision 2 chose `deferred`/`direct`, the closest to Claude's tool search | Keep decision 2 |
+| A load notice on every switch | Visibility | Claude has no switch; the noise repeats every session | Notice only for the settings cleanup and for plugins that become partial |
+| Refusing or disabling a plugin that becomes partial after a switch, or asking for `--partial` again | Consent purity | Breaks "never require action"; upstream skips a server it will not run and keeps the plugin (CC-4, CC-5) | Derived `(partially-installed)` plus the warning row |
+| Expanding every variable into the registration | Simpler | Copies secrets into a structure every extension can read through `getMcpServers()` | Expand only what Pi cannot or must not expand |
+| Persisting `/mcp` disable choices for built-in plugin servers in an extension store | Parity with adapter overrides | New store and new UX surface for a session-only Pi feature | Document the gap; revisit if Pi adds persistence |
+| `oauth.clientName: "Claude Code (<server>)"` under built-in | Servers that allow only Claude clients would sign in | It presents Pi as Claude Code to third-party authorization servers, and setting it turns CIMD off | User question (see Gaps item 2) |
 
 ## Feature Dependencies
 
 ```
-Harness phase (faux provider, companion Pi, MCP stub, hook recorder, probe extension, fixture builders, shared steps, version raise)
-    └──required by──> every kind phase below
-
-Decision gate per kind (FG items) ──blocks──> scenarios that pin the gap behavior
-
-Skills fixture builder ──enhances──> Agents (A10 skills preload)
-MCP stub ──required by──> Agents (A8 MCP grants), Hooks (H20 MCP tool matcher)
-Faux tool-call scripting ──required by──> Hooks tool-use, MCP tool calls, Agent runs
-pi-subagents 0.84 floor ──required by──> any async agent scenario (anti-feature until proven)
-pi-mcp-adapter 7.x re-measure (FG-30) ──required by──> MCP phase
-Workflow engine >= 3.15 (honors PI_CODING_AGENT_DIR) ──required by──> Workflows phase
+T1 Pi 1.5.0
+ └─> T2 detection snapshot
+      ├─> T9 markers / requires:
+      ├─> T4 read-time verdicts ──requires──> T3 Claude-shaped records (+ backfill)
+      │                         └─requires──> T5 built-in verdict table
+      ├─> T7 built-in materialization ──requires──> T3, T6 translation, T8 naming
+      │     ├─> T10 status reader
+      │     ├─> T14 hooks (proxy case adapter-only) ──enhanced by──> D1
+      │     └─> D2 immediate registration
+      ├─> T12 adapter reconcile from records ──requires──> T3
+      ├─> T11 agent grants per implementation ──requires──> T8 naming, APL-D1 amendment
+      └─> T13 settings cleanup (independent of T3; needs only T2)
+T15 cucumber profiles ──requires──> T2 + harness Pi with and without the adapter (+ a `none` arrangement)
+T16 docs ──requires──> T5, T6 frozen
 ```
 
-### Dependency Notes
-
-- **The harness phase owns every shared file** (`features/support/**`, `features/lib/**`, the shared step modules) under `.agents/skills/cucumber/rules/layout.md` "Parallel work". Kind phases add only their own feature files and verb step modules.
-- **Cross-kind scenarios (H20, A8, A10)** use the stub and fixtures that the harness provides. Each one lives in the consuming kind's phase, so no stream edits another stream's file.
-- **`features/plugin/session-start-hooks.feature`** belongs to the `plugin` function. The hooks stream needs to change its expected `new` to `clear`. Either the harness phase moves the file to `features/hook/` first, or the hooks phase edits it with explicit ownership.
-
-## Scenario Plan (feature files that can be written independently)
-
-Paths follow `features/<function>/<capability>.feature`, titled `Feature: <Function> <capability>`. Functions use the singular, as `plugin` and `marketplace` do. Within a kind, each file is independent of the others, so a phase can give one file to each executor in a wave. `[G]` marks a scenario whose expected outcome waits for the FG decision named.
-
-### features/skill/ (skills phase)
-
-- **listing.feature** (MF): listed as `/skill:<plugin>-<skill>` with its description; `<plugin>-` elided, and a name equal to the plugin gives `/skill:<plugin>`; `when_to_use` folded and cut at 1,536; missing description [G FG-06]; frontmatter `name` differs from the directory [G FG-07]; unparseable frontmatter still listed with an install warning; two directories eliding to one name keep the first with a warning; a declared `skills` path loads beside `skills/`; `user-invocable: false` still listed (DIV); skills of both scopes.
-- **invocation.feature** (FX): `/skill:x` sends the body in a `<skill>` block; `${CLAUDE_PLUGIN_ROOT}`/`DATA`/`SKILL_DIR` replaced; `${CLAUDE_PROJECT_DIR}` replaced at project scope and literal at user scope; same-plugin reference rewritten to `/skill:`; arguments after the command [G FG-04]; `` !`cmd` `` [G FG-05]; a model-invocable skill appears in the system-prompt skill list; a `disable-model-invocation` skill does not appear and still runs on `/skill:`.
-- **qualified-name.feature** (TUI): `/plugin:skill` runs the skill interactively; autocomplete offers it; a command with the same qualified name [G FG-08]; RPC behavior [G FG-09].
-- **lifecycle.feature** (MF): uninstall, disable, enable, update (renamed or removed skill), reinstall -- each observed on a new session.
-
-### features/command/ (commands phase)
-
-- **listing.feature** (MF): `/<plugin>:<cmd>` with source `prompt`; nested `build/web.md` -> `plugin:build:web`; `acme-lint` -> `acme:lint`; dotfile skipped; malformed frontmatter neutralized with a warning; description fallback [G FG-06]; `user-invocable: false` [G FG-12]; object-map `commands` [G FG-13]; declared path plus `commands/` union (D-07) [G FG-14].
-- **arguments.feature** (FX): `$ARGUMENTS`; quoted argument stays one; `$1` [G FG-01]; no placeholder [G FG-02]; `$ARGUMENTS[0]`, `$name`, `\$1` [G FG-03]; `${1:-x}` Pi-only form [G FG-03]; `argument-hint` via the probe or TUI.
-- **content.feature** (FX): plugin path variables substituted; same-plugin reference rewriting; `` !`cmd` `` [G FG-05].
-- **lifecycle.feature** (MF): as for skills.
-
-### features/agent/ (agents phase)
-
-- **listing.feature** (FX list call + MF doctor): `plugin:agent` listed with description and alias; missing description fallback with a warning; duplicate source names keep the first; agent owned by another plugin refused at install (MF); nested agent [G FG-15].
-- **conversion.feature** (FX child run + MF warnings): `Read, Grep` -> `read,grep`; `Glob` -> `find`; unmapped tool dropped; omitted `tools` -> default tools; `disallowedTools` -> `excludeTools`; empty mapped `tools` refused at install; `hooks`/`mcpServers`/`permissionMode` dropped with guidance; `model: sonnet` omitted without `--map-model` (child on the session model); with `--map-model` mapped [G FG-18]; `effort` -> `thinking`; other fields [G FG-17].
-- **invocation.feature** (FX, `async: false`): child system prompt holds the converted body with path variables substituted; skill preload content present [G FG-16 for a `disable-model-invocation` skill]; plugin MCP tool grant reaches the child (MCP stub).
-- **companion.feature** (MF): pi-subagents absent -> `{requires pi-subagents}` row and info `(missing)`; companion loaded later plus `/reload` lists the agent with no reinstall.
-- **lifecycle.feature** (FX list): uninstall, disable, update remove or replace the agent.
-
-### features/hook/ (hooks phase)
-
-- **session-start.feature** (MF; compact FX): startup; `/new` sends `clear` (changed); resume; fork; compaction fires `compact`; matchers `startup`/`resume`/`clear`/`compact`/`fork` each run only on their source; reload [G FG-21]; one run per RPC `new_session`; `additionalContext` reaches the model (FX). Migrates the two existing scenarios.
-- **session-end.feature** (MF): `/new` sends `clear`; quit/reload/fork reasons [G FG-20]; non-empty matcher [G FG-20]; 1.5 s default budget.
-- **user-prompt-submit.feature** (MF + FX): fires with a Claude-shaped stdin; exit 2 keeps the prompt from the model; matcher refused at install.
-- **tool-use.feature** (FX): PreToolUse on a faux `bash` call with `tool_name: "Bash"`; `Edit|Write` matcher; an unmapped alternative dropped while the rest fire; exit 2 blocks with stderr reaching the model; `permissionDecision: deny`; `updatedInput`; PostToolUse `tool_response`; PostToolUseFailure; `if: "Bash(git *)"` filters; MCP tool matcher on a direct call fires, through the `mcp` proxy it does not (PIGAP).
-- **stop.feature** (FX): Stop fires once per settle; `decision: block` re-enters with the reason; `stop_hook_active`; 8-block cap; StopFailure on an error ending (if the faux provider can end in error).
-- **compact.feature** (FX): PreCompact/PostCompact with `trigger: manual`; `manual` and `auto` matchers.
-- **process.feature** (MF): env variables; shell form; exec-form `${CLAUDE_PLUGIN_ROOT}` (BUG FG-19); timeout kills; `async` does not block; `once`/`onFailure` [G FG-22].
-- **configuration.feature** (MF install/info): unsupported event, regex matcher, `http` handler -> partial with `--partial`; malformed `hooks.json` -> unavailable; manifest `hooks` field [G FG-24]; `DirectoryAdded` [G FG-23].
-- **lifecycle.feature** (MF): uninstall and disable stop the hook; update replaces it.
-
-### features/mcp-server/ (MCP phase)
-
-- **connection.feature** (MF): stub spawned with `${CLAUDE_PLUGIN_ROOT}`-expanded args and the default-expanded env; `CLAUDE_PLUGIN_ROOT`/`DATA` in its env; tools named `mcp__plugin_<p>_<s>__<tool>`; `/mcp` lists the server; `info` shows a status.
-- **tool-calls.feature** (FX): `mcp` search then call returns the stub reply; `alwaysLoad: true` sends the tool directly in the first request; default deferral.
-- **remote.feature** (MF, loopback HTTP stub): `http` connects with expanded `url` and `headers`; `sse`; `ws` partial.
-- **configuration.feature** (MF): wrapped and unwrapped `.mcp.json`; source precedence [G FG-27]; one malformed server [G FG-28]; key collision refused and rolled back; withheld credential warning; unset variable warning; tool permission rules warning; user override kept across update and disable.
-- **companion.feature** (MF): adapter absent -> `{requires pi-mcp-adapter}` and `(missing)`; adapter loaded plus `/reload` connects with no reinstall.
-- **project-scope.feature** (MF): a project-scope server in a headless session under the harness's adapter setting (FG-29).
-- **lifecycle.feature** (MF): uninstall removes the tools after reload; disable keeps the user choice in `serverChoices`; update replaces the entry.
-
-### features/workflow/ (workflows phase)
-
-- **listing.feature** (MF): `/<plugin>:<meta.name>` registered; the filename plays no part; prefix elided (DIV); missing `meta` skipped; non-literal name skipped; determinism refusal; syntax refusal; size cap; dotfile and symlink skipped; declared path union [G FG-14].
-- **runs.feature** (MF, events file): `/kit:demo hello who=Ada` completes with `{"_":"hello","who":"Ada",...}` [G FG-32]; a script installed with a caveat fails at the engine with its refusal.
-- **companion.feature** (MF): engine absent -> `{requires pi-dynamic-workflows}` at warning severity on install, info severity on `list`; engine loaded plus `/reload` registers the command with no reinstall.
-- **lifecycle.feature** (MF): uninstall reports the lingering command (WLIF-06) and it is gone after `/reload`; disable and enable; update runs the new script.
+- **T4 requires T3.** A server the adapter blocked was dropped at install and is not in today's record, so no read-time verdict can bring it back without the full config.
+- **T11 conflicts with APL-D1** until a decision lets a load rewrite generated agent files, as AMIG-01 lets a load rewrite `mcp-adapter.json`.
+- **T13 is independent.** It can ship in its own parallel phase.
 
 ## MVP Definition
 
-### Launch With (this milestone)
+### Launch With
 
-- [ ] Harness phase: the faux model, companions at the raised floors, the stub, the recorder, the probe -- prerequisite for everything
-- [ ] Per kind: listing, invocation (FX), companion degradation, lifecycle files -- the milestone goal
-- [ ] Hook parity fixes (`clear`, `compact`, `fork`) and the FG-19 bug fix -- recorded target and the bug policy
-- [ ] Decisions on FG-01..FG-05 (arguments and `` !`cmd` ``), the largest real-plugin impact
-- [ ] Every FG item either decided or explicitly deferred, with an ID
+- [ ] T1–T16. The brief makes each one a requirement. The only build choice is order.
 
 ### Add After Validation
 
-- [ ] Async agent runs -- once pi-subagents 0.84 is proven in the harness
-- [ ] Remote MCP OAuth flow end-to-end -- needs an OAuth stand-in
-- [ ] StopFailure scenarios -- if the faux provider cannot end a turn in error, add a provider stub
+- [ ] D1 hook server-segment restoration: P1 if the user rules that parity applies (the default under the upstream-parity constraint)
+- [ ] D2 immediate registration: when users report needing `/reload` just for MCP
+- [ ] D5 re-test of background agents under built-in: alongside MCPBG-01
 
 ### Future Consideration
 
-- [ ] Real-provider milestone: model auto-selection of skills and agents, commands through the Skill tool (FG-11), workflows calling `agent()`
+- [ ] D3 deny rules → `hidden`: after establishing whether Claude enforces them for plugin servers
+- [ ] Persisted built-in choices: only if Pi persists registration overrides
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Command argument parity (FG-01/02) | HIGH | LOW (install-time rewrite) | P1 |
-| `` !`cmd` `` injection (FG-05) | HIGH | HIGH (runtime spawn, security) | P1 decision, implementation P2 |
-| Exec-form hook placeholders (FG-19) | HIGH | LOW | P1 |
-| Hook `clear`/`compact`/`fork` | MEDIUM | LOW | P1 (recorded) |
-| Manifest `hooks` merge (FG-24) | MEDIUM | MEDIUM | P2 |
-| MCP source merge (FG-27) | MEDIUM | MEDIUM | P2 |
-| Nested agents (FG-15) | MEDIUM | LOW | P2 |
-| Object-map `commands` (FG-13) | LOW-MEDIUM | MEDIUM | P2 |
-| Description fallback (FG-06) | LOW | LOW | P2 |
-| Agent field near-analogs (FG-17), `--map-model` refresh (FG-18) | LOW | LOW | P3 |
+|---|---|---|---|
+| T2, T7, T6, T8 (built-in actually runs servers) | HIGH | MEDIUM–HIGH | P1 |
+| T3 records + backfill | HIGH | HIGH | P1 |
+| T4, T5, T9 read-time verdicts and markers | HIGH | HIGH | P1 |
+| T13 settings cleanup | HIGH | MEDIUM | P1 |
+| T11 agents, T12 adapter reconcile | MEDIUM | MEDIUM | P1 |
+| T10 status | MEDIUM | MEDIUM | P1 |
+| T15 dual-profile cucumber | HIGH (gate) | HIGH | P1 |
+| D1 hook restoration | HIGH | MEDIUM | P1/P2 (user ruling) |
+| D2 immediate registration | MEDIUM | MEDIUM | P2 |
+| D3 deny rules | LOW | LOW | P3 |
+
+## Parity flags (every behavior where Claude parity is unavailable)
+
+| Behavior under built-in | Claude Code | License |
+|---|---|---|
+| Model-visible tool names turn `-` into `_` | keeps `-` | Pi gap (PI-8). Covers names the model and agents see |
+| Hook matchers containing `-` in the **server** segment do not match | match | **Not licensed.** The extension can restore the segment (D1). The gap covers only the tool segment |
+| Tool names over 64 characters are cut with a hash | no limit | Pi gap (PI-8), new |
+| SSE servers left out (`unsupported sse`) | runs | Pi gap (PI-4) |
+| `headersHelper`, `ws`, `xaa`, bundles, leading `~` left out | runs | Pi gap (same as adapter) |
+| No MCP prompts as slash commands; no elicitation | yes | Pi gap (PI-9) |
+| Timeout resets on progress; 60 s default | hard limit, ~28 h default | Pi gap |
+| `_meta["anthropic/alwaysLoad"]` ignored | honored | Pi gap |
+| `/mcp` choices for plugin servers last one session | persisted per project | Pi gap (PI-15) |
+| Project-scope servers need project trust | Claude's workspace trust gates project settings too | Matches, no license needed |
+| One extra `/reload` after uninstalling the adapter | no counterpart | Pi gap (PI-14) |
+| A plugin that becomes partial after a switch keeps loading, with no `--partial` consent | Claude skips unrunnable servers and keeps the plugin (CC-4, CC-5) | Matches upstream; the project's own `--partial` refusal still applies to an explicit install |
+| OAuth client name `pi` (or CIMD), not `Claude Code (<server>)` | `Claude Code (<server>)` | **Not licensed yet.** Parity is possible with `clientName`; user question |
+| Deny rules not enforced (MVP) | unknown | Project decision ANAME-07, extended to built-in |
+| Under the adapter, every existing divergence stays as recorded | -- | existing IDs |
+
+## Cucumber-observable outcomes per implementation
+
+Shared fixtures should use a plugin and server name with no `-` (`demo`/`stub`), so that the tool name `mcp__plugin_demo_stub__echo` is identical under both profiles and the steps can be shared. Implementation-specific scenarios carry the differences:
+
+| Scenario family | `@adapter` expectation | `@builtin` expectation |
+|---|---|---|
+| Listing / search | `mcp({search})` result `found mcp__plugin_demo_stub__echo…`, then the tool is offered | `tool_search` call loads `mcp__plugin_demo_stub__echo`, then the tool is offered; first request offers `tool_search`, not `mcp` |
+| `alwaysLoad: true` | tool offered in call 1 (`directTools: true`) | tool offered in call 1 (`exposure: "direct"`) |
+| Stub `initialize` params | `clientInfo.name: "pi-mcp-plugin_demo_stub_"`, capabilities with elicitation, sampling, roots, ui extension | `clientInfo: {name:"pi", version:"1.5.0"}`, capabilities `{roots:{}}` only |
+| Stub `tools/call` | `_meta` with `pi-mcp-adapter/toolCallId` and `progressToken` | no adapter `_meta` (assert exact params from a run) |
+| Server start count | lazy: one start for listing, a second for the call | one start at session start, kept |
+| Invocation through a proxy | `mcp({tool:…})` reaches the server | adapter-only scenario |
+| Variables (`configuration.feature`) | as today, including the empty-header gap | unset `${NAME}` in a header reaches the server **literally** (Claude parity); `$`/`!` literals arrive unchanged |
+| OAuth beside headers | `auth: "oauth"` in `mcp-adapter.json` | nothing written; connects with no sign-in |
+| SSE server | installs and answers | `(partially-available) {unsupported mcp}`; info `(unsupported sse)` |
+| `bareElicitationCapability: true` | `(partially-available)` | installs and answers |
+| Project scope | approval rules (`pending approval`) | trusted: answers with no approval; untrusted: not registered, info `project not trusted` |
+| Lifecycle disable/uninstall/enable/update | adapter no longer offers / offers the server | server not registered after `/reload` (or at once with D2) |
+| User's disabled choice survives | adapter-only scenarios | none (PI-15) |
+| Hook on an MCP tool | fires for the nested call under the `mcp` proxy and for direct calls | fires for the direct call; plugin `my-plugin` matcher with `-` fires only with D1 |
+| `none` | arranged with `-builtin:mcp` in the sandbox user settings and no adapter onboarding state, or `--no-mcp` | -- |
+| Switch built-in → adapter | install under built-in, start with the adapter: answers with no reinstall | -- |
+| Switch adapter → built-in | -- | sandbox settings hold `-builtin:mcp` and `mcp-onboarding.json` a handled version; first start shows the cleanup notice and `{requires mcp support}`; the settings file loses only that entry; the next start answers through built-in |
+| Cleanup refusal | -- | `-builtin:mcp` with no onboarding state, or `+builtin:mcp`: file unchanged, no notice |
+| `info` | `requires: pi-mcp-adapter`, adapter status tokens | `requires: builtin:mcp`, built-in tokens (`connected`, `overridden by mcp.json`, …) |
+
+## Gaps and Open Questions (for requirements)
+
+1. **D1 parity ruling.** The brief records `-` in hook matchers as a divergence licensed by a Pi gap. The extension can restore the server segment, so under AGENTS.md's parity rule only the tool segment is licensed. Ask the user whether D1 is table stakes.
+2. **OAuth client name.** Claude sends `Claude Code (<server>)`. Built-in sends `pi` or uses CIMD. Should the extension set `oauth.clientName` for parity? Neither license covers leaving it unset, so this goes to the user.
+3. **Cleanup ambiguity.** `piBuiltinMcpHandledVersion` also records "found configured" (PI-17). A `-builtin:mcp` that the user wrote before installing the adapter is indistinguishable from one the adapter wrote, so decision 1's "shows the adapter wrote it" cannot be proven from the adapter's state alone. Ask whether to accept that, or to have the extension record its own evidence while the adapter is present (for example, the user settings' `extensions` as seen at a session start before the adapter's first write).
+4. **Warning row when a switch makes a plugin partial.** Recommended: a load-time warning row for each enabled plugin that the active implementation runs only partly. It would be shown each load, as Claude lists plugin errors each reload (CC-10). The alternative is to rely on `list`/`info` alone. This needs a messaging decision.
+5. **Verdict under `none`.** Recommended: the union rule (blocked only if neither implementation runs the server), so an install in a session with no MCP is not refused for a server the adapter could run.
+6. **APL-D1 amendment** for load-time agent rewrites (T11) and load-time `mcp-adapter.json` reconcile (T12).
+7. **Legacy `mcp.json` entries** (AMIG "entries that stay") are read by built-in MCP too (PI-13), with adapter-only syntax (`{env:PI_CLAUDE_MARKETPLACE_EMPTY}` split tokens, `directTools`). Under built-in they can run beside the registration under another name, or receive mangled values. The AMIG notice may need a built-in variant.
+8. **Built-in status precision.** `needs authentication` and `failed` cannot be told apart from `not connected` (PI-12). Confirm the reduced token set with the user, or look for a Pi API in a later release.
+9. **Removal timing (PI-14).** A phase spike should test whether removal in the extension factory during the interactive trust pre-pass takes effect in the same session.
 
 ## Competitor Feature Analysis
 
-| Feature | Claude Code 2.1.316 | Pi native | Our approach |
-|---------|---------------------|-----------|--------------|
-| Plugin skill name | `/plugin:skill` | `/skill:name` | `/skill:<plugin>-<skill>` plus an interactive alias |
-| Command arguments | `$ARGUMENTS`, 0-based `$N`, `ARGUMENTS:` append | `$ARGUMENTS`, 1-based `$N`, `${N:-d}` | Today pass-through (FG-01..03) |
-| Agents | Native subagents | pi-subagents | Converted files plus an index |
-| MCP | Native client | pi-mcp-adapter | Translated `mcp-adapter.json` entries |
-| Workflows | Native runtime | pi-dynamic-workflows | Saved envelopes |
+| Feature | Claude Code 2.1.318 | pi-mcp-adapter 7.0.0 path | Built-in path (recommended) |
+|---|---|---|---|
+| Server a client will not run | skipped, plugin stays, error in `/plugin` (CC-4/5) | blocked, `--partial`, derived partial state | same as adapter, per active implementation |
+| Tool discovery | ToolSearch, `alwaysLoad` | `mcp` proxy + deferred tools | Pi `tool_search` (auto-on) + `direct` |
+| Trust | workspace trust | per-server approval | project trust only |
+| Status | `/mcp` | status channel | derived from tool registry |
 
 ## Sources
 
-- Claude Code 2.1.316 binary `/opt/claude-code/bin/claude`, grepped 2026-10-31: skill frontmatter schema (`PEo`/`MEo`), argument substitution `T2e`, description fallback `A2e`, agent field list, hook event tuple, `source`/SessionEnd reason enums, hook `args`/`once`/`onFailure` describe strings, MCP server schemas. HIGH.
-- https://code.claude.com/docs/en/skills (retrieved 2026-10-31) -- frontmatter, substitutions, invocation control, namespacing, `` !`cmd` ``, `context: fork`. HIGH.
-- https://code.claude.com/docs/en/sub-agents (2026-10-31) -- fields, plugin restrictions, naming, model, tools, preload. HIGH.
-- https://code.claude.com/docs/en/plugins-reference (2026-10-31) -- replace/add/merge per key, `commands` map, `hooks`/`mcpServers` merge, variables per component. HIGH.
-- https://code.claude.com/docs/en/workflows (2026-10-31) -- naming, approval, `args`, `meta` rules. HIGH.
-- Pi 1.3.0 `node_modules/@earendil-works/pi-coding-agent` (`docs/prompt-templates.md`, `docs/skills.md`, `docs/rpc-commands.md`, `substituteArgs`) and Pi 1.4.0 (`dist/core/extensions/types.d.ts`, `agent-session.js`); pi-subagents 0.84.0 `src/agents/agents.js`. HIGH.
-- Repo: `docs/hooks-compatibility.md`, `docs/mcp-compatibility.md`, `docs/workflows-compatibility.md`, `docs/prd/pi-claude-marketplace-prd.md` (SK/CM/AG/MC), `.planning/milestones/v1.15-REQUIREMENTS.md`, `.planning/milestones/ws-workflows-2026-09-27/milestones/workflows-REQUIREMENTS.md`, `.planning/spikes/028-model-free-harness/README.md`, and the bridge sources cited per row.
+- Claude Code 2.1.318 binary `/opt/claude-code/bin/claude`, strings extracted 2026-11-04 (CC-1..CC-10). HIGH.
+- `@earendil-works/pi-coding-agent@1.5.0`: `docs/mcp.md`, `docs/extensions.md` (MCP Servers, `getAllTools`), `dist/core/mcp-servers.{d.ts,js}`, `dist/core/resolve-config-value.js`, `dist/extensions/mcp/{runtime,index,tools,config}.js`, `dist/core/resource-loader.js`, `dist/main.js`, `dist/core/agent-session.js`. HIGH.
+- `@earendil-works/pi-mcp@1.5.0` `dist/client.js` (initialize capabilities). HIGH.
+- `pi-mcp-adapter@7.0.0`: `pi-builtin-mcp.ts`, `onboarding-state.ts`, `prompts.ts`, `server-manager.ts`, `init.ts`. HIGH.
+- `pi-subagents@0.84.0`: `docs/agents.md`, `docs/extension-api.md`, `src/runs/shared/mcp-direct-tool-allowlist.js`. HIGH.
+- Repo: `docs/mcp-compatibility.md`, `docs/output-catalog.md` (ADET-01, ASTAT-01/02, FSTAT-02), `docs/messaging-style-guide.md` (D-16-15), `domain/mcp-server-features.ts`, `shared/concerns/soft-dep.ts`, `platform/pi-api.ts`, `persistence/state-io.ts`, `features/mcp-server/*.feature`, `features/lib/companions.ts`, `.planning/PROJECT.md` (APL-D1, D-CF6-03, D-CF6-10).
 
 ---
-*Feature research for: component-features (component behavioral tests)*
-*Researched: 2026-10-31*
+*Feature research for: mcp-builtin (Pi built-in MCP as an equal alternative to pi-mcp-adapter)*
+*Researched: 2026-11-04*
