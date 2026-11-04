@@ -520,5 +520,22 @@ emits.
 
 ## CI timings
 
-<!-- The parent session fills this section after its CI run (01-CI-HANDOFF.md):
-run id, date, head sha, each leg's job and step durations, and the timeout kept or raised. -->
+Measured by the parent session on 2026-11-04, CI run
+[41812979607](https://github.com/acolomba/pi-claude-marketplace/actions/runs/41812979607),
+head `8d03f4efe86dff6b2ad24c044debb4ecd1ba67a8`. Every job concluded `success`.
+
+| Leg | Job | Cucumber step | Scenarios |
+| --- | --- | --- | --- |
+| `behavioral tests, adapter lifecycle (Node 24)` | 3 min 24 s | 3 min 2 s | 1168 |
+| `behavioral tests, adapter components (Node 24)` | 4 min 8 s | 3 min 47 s | 390 |
+| `behavioral tests, builtin all (Node 24)` | 1 min 19 s | 55 s | 39 |
+
+The slowest leg takes 4 min 8 s, under 10 minutes, so `timeout-minutes` stays
+at 15 (D-CF1-16).
+
+Earlier attempts at heads 797fb43 (run 41803929872, two attempts) and 863d8f3
+(run 41807247663) each lost one terminal-UI scenario in the adapter components
+leg to the TUI readiness wait. The cause was a cold jiti cache: the
+adapter-profile shared Pi had its own TMPDIR and no longer warmed `/tmp/jiti`,
+which TMPDIR-less terminal Pis use. Commit 8d03f4e links the shared Pi's
+`jiti` directory to `/tmp/jiti` and keeps the 15-second wait (P1-DC-40).
