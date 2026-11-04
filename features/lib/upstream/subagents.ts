@@ -56,8 +56,12 @@ const UNSET_PATTERN = /\b(?:default|ambient|inherits?)\b/iu;
 // name or selector it wrote for Pi's built-in MCP
 // (`plugin_<plugin>_<server>[/<tool>]`, MGRT-01). The built-in alternative
 // comes after the adapter one, so an adapter selector keeps its trailing `_`.
+// It matches only a whole name that starts the text or follows a space, `(`,
+// `:`, or `,`, and that no name character or `/` continues. So an adapter
+// whole-server key `plugin_<plugin>_<server>_` and a path piece such as
+// `/x/plugin_cache/y` project nothing, as they did before MGRT-01.
 const OWNED_ERROR_VALUE_PATTERN =
-  /\b(?:[a-z0-9-]+\/claude-[A-Za-z0-9.[\]-]*[A-Za-z0-9\]]|plugin_[A-Za-z0-9_-]*_\/[A-Za-z0-9_-]+|plugin_[A-Za-z0-9_-]*[A-Za-z0-9-](?:\/[A-Za-z0-9_-]+)?)/gu;
+  /\b(?:[a-z0-9-]+\/claude-[A-Za-z0-9.[\]-]*[A-Za-z0-9\]]|plugin_[A-Za-z0-9_-]*_\/[A-Za-z0-9_-]+|(?<=^|[\s(:,])plugin_[A-Za-z0-9_-]*[A-Za-z0-9-](?:\/[A-Za-z0-9_-]+)?(?![A-Za-z0-9_/-]))/gu;
 
 // The sources an agent of this extension is listed under: the scopes the
 // agents bridge stages into.
