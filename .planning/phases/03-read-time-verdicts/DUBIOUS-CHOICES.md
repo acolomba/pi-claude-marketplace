@@ -413,3 +413,38 @@ The planner's choices, numbered here. Each is Low unless marked.
   worktrees.
 - **P3-DC-62 (Low): the browse loader's implementation wiring has no dedicated
   unit test**; it is proven through the shared payload builder.
+
+### Wave 2 (03-02 structured MCP dependency, 03-03 info and fetch verdicts)
+
+- **P3-DC-63 (Medium): a warm git installed plugin under a partially-available
+  view keeps the existing `components: not resolved` fallback (D-78-04)**, so
+  under built-in an installed github plugin with an sse server reads
+  `(partially-installed) {unsupported mcp}` without its server lines.
+  Alternative: list the warm tree's components as not-installed git rows do
+  (also changes today's `lspServers` git rows).
+- **P3-DC-64 (Low): `info` reads the record verdict for every installed
+  block**, also path rows that resolve fresh (a legacy record pays one extra
+  offline resolve). Alternative: read lazily in the three record arms.
+- **P3-DC-65 (Low): a hand-edited record with a malformed recorded config
+  writes every recorded server in `info`** instead of falling back to the
+  staged names.
+- **P3-DC-66 (Low): the built-in info scenario pins `status unknown` for the
+  written stub**; Phase 2's status reader will change that cell (fixed at the
+  merge).
+- **P3-DC-67 (Low): info unit tests seed the neutral record through a local
+  helper**, not the shared seed outside the plan's files.
+- **P3-DC-68 (Medium): interim `requires pi-mcp-adapter` for a plugin whose
+  only server is bare-elicitation** (a test pins it) until 03-04 switches the
+  rule.
+- **P3-DC-69 (Low): the declared-row MCP dependency is read inside the state
+  lock** and carried on the `"declared"` outcome (the caller after the lock has
+  no marketplace record).
+- **P3-DC-70 (Low): a redundant `marketplaceRecord === undefined` guard** only
+  narrows the type in `promoteDependencyRecord` and `declareInstalledPlugin`.
+- **P3-DC-71 (Low): a Task 3 ws case uses a hand-made legacy record**; a second
+  realistic case covers bare elicitation under built-in.
+- **P3-DC-72 (Low): `execute.test.ts`'s table column renamed to `mcp`** to
+  satisfy the plan's acceptance grep.
+- **P3-DC-73 (Low): `false as const` in two test files.**
+- **P3-DC-74 (Low): `isMcpDependency` checks `typeof === "object"`**, relying on
+  `McpDependency` staying the union's only object member.
