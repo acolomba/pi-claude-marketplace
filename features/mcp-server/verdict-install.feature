@@ -111,7 +111,7 @@ Feature: MCP server verdict install
       | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp, requires pi-mcp-adapter | project | 1.0.0   |
 
   @own-implementation
-  Scenario: Enabling a plugin installed under pi-mcp-adapter needs no --partial when pi runs its built-in MCP instead (MREC-06, D-MB-06)
+  Scenario: Enabling under Pi's built-in MCP a plugin with an sse server, installed without --partial, needs no --partial (MREC-06, D-MB-06)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

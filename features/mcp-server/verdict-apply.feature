@@ -7,7 +7,7 @@ Feature: MCP server verdict apply
   points at a loopback port that nothing listens on.
 
   @own-implementation
-  Scenario: Apply after pi switches from pi-mcp-adapter to its built-in MCP moves a plugin with an sse server to its new version partially, without asking (MREC-06)
+  Scenario: Apply under Pi's built-in MCP moves a plugin with an sse server, installed without --partial, to its new version partially, without asking (MREC-06)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -39,7 +39,7 @@ Feature: MCP server verdict apply
       | demo@fixtures | 1.1.0   | true    |
 
   @own-implementation
-  Scenario: A second apply after a switch from pi-mcp-adapter to Pi's built-in MCP has nothing to change (MREC-06)
+  Scenario: A second apply under Pi's built-in MCP of a plugin with an sse server, installed without --partial, has nothing to change (MREC-06)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

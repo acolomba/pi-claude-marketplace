@@ -57,7 +57,7 @@ Feature: MCP server verdict list
       | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp, requires pi-mcp-adapter | project | 1.0.0   |
 
   @own-implementation
-  Scenario: A plugin installed under pi-mcp-adapter lists as partially installed when pi runs its built-in MCP instead, with no reinstall (MREC-03)
+  Scenario: A plugin with an sse server, installed without --partial, lists as partially installed under Pi's built-in MCP, with no reinstall (MREC-03)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
