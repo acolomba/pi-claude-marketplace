@@ -24,6 +24,11 @@ export {
   removeProjectDisableStubs,
 } from "./legacy.ts";
 export { unstageMcpServers } from "./unstage.ts";
+export { readBuiltinServerDescription } from "./builtin-description.ts";
+export { builtinServerConfig } from "./builtin-entry.ts";
+export { readMcpJsonServerNamespaces } from "./builtin-overrides.ts";
+export { syncBuiltinRegistrations } from "./builtin-registration.ts";
+export type { McpSubstitutionContext } from "./substitute.ts";
 export type {
   LegacyMcpOwner,
   McpReplacement,

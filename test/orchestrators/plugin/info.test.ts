@@ -8267,7 +8267,7 @@ for (const { implementation, inventory, readerAsked, requiresLine, status } of [
       await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
       const mcpStatus = statusReaders({
         adapter: statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]),
-        builtin: statusSnapshot([{ name: "plugin_alpha_srv_", status: "failed" }]),
+        builtin: statusSnapshot([{ name: "plugin_alpha_srv", status: "failed" }]),
       });
       const { ctx, run, notifications } = makeCtx(1, inventory);
 
