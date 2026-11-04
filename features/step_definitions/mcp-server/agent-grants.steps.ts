@@ -8,6 +8,8 @@
  *
  * MGRT-01: a profile Pi with pi-subagents and the profile's MCP launch shows
  * the grant form of the active implementation in what pi-subagents reports.
+ * An agents index rewritten as a release before MGRT-01 wrote it plays an
+ * agent that release installed.
  *
  * MGRT-02 / D-MB-12: a profile Pi started with pi-subagents' child marker,
  * `PI_SUBAGENT_CHILD=1`, plays a pi-subagents background child. pi-subagents
@@ -17,9 +19,15 @@
 
 import assert from "node:assert/strict";
 import { readFile, rm } from "node:fs/promises";
+import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
+import {
+  holdsAgentGrantForms,
+  readAgentIndexRows,
+  stripAgentGrantForms,
+} from "../../lib/mcp-agent-earlier-index.ts";
 import { mcpImplementationLaunch } from "../../lib/mcp-implementation.ts";
 import { publishMcpServerAgent } from "../../lib/mcp-server-files.ts";
 import {
@@ -69,6 +77,21 @@ Given(
       companions: ["pi-subagents", ...launch.companions],
       extraExtensions: launch.extraExtensions,
     });
+  },
+);
+
+// MGRT-01 / P4-DC-06: a release before MGRT-01 recorded no grant form on an
+// agent's row, and its agent files hold pi-mcp-adapter's form. The step checks
+// what the index holds afterwards, not how many rows changed, so it passes
+// where the rows already hold no forms.
+Given(
+  "the agents index of the user scope holds the rows an earlier release wrote",
+  async function (this: ScenarioWorld) {
+    const file = path.join(this.scopeRoot("user"), "pi-claude-marketplace", "agents-index.json");
+    await stripAgentGrantForms(file);
+    const rows = await readAgentIndexRows(file);
+    assert.notStrictEqual(rows.length, 0, `${file} holds no agent`);
+    assert.deepStrictEqual(rows.filter(holdsAgentGrantForms), []);
   },
 );
 

@@ -380,3 +380,116 @@ Feature: MCP server agent grants
       | fixtures         | project           | demo@fixtures | demo | will install |         | project |
       | fixtures         | project           | demo@fixtures | demo | will install |         | project |
     Then the project scope has no installed plugins
+
+  @own-implementation
+  Scenario: A new session after a switch to Pi's built-in MCP gives an agent the built-in grant and keeps an agent without one (MGRT-01, D-MB-03)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "runner" granted the mcp tool "mcp__plugin_demo_stub__echo"
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file      | name   | description                  | tools | body                           |
+      | helper.md | helper | Reads the files it is given. | Read  | Read the files the task names. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user's pi settings turn off pi's built-in mcp
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the scripted model plays these steps:
+      | reply                 | tool     | arguments                              |
+      |                       | subagent | {"action":"get","agent":"demo:runner"} |
+      |                       | subagent | {"action":"get","agent":"demo:helper"} |
+      | The agents are shown. |          |                                        |
+    When the user restarts pi with pi's built-in mcp turned on
+    Then the session reports no results
+    When the user prompts "show the agents"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                    |
+      | 1    | user        | show the agents                                                                                                                                                                                                                                                                                                                                                         |
+      | 2    | user        | show the agents                                                                                                                                                                                                                                                                                                                                                         |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:runner"}                                                                                                                                                                                                                                                                                                               |
+      | 2    | tool result | subagent returned: agent demo:runner\npath {agent dir}/agents/pi-claude-marketplace-demo-runner.md\ndescription Calls the tools the task names.\naliases pi-claude-marketplace-demo-runner\ntools mcp:plugin_demo_stub/echo\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nasync true\nsystem prompt:\nCall the tools the task names. |
+      | 3    | user        | show the agents                                                                                                                                                                                                                                                                                                                                                         |
+      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:runner"}                                                                                                                                                                                                                                                                                                               |
+      | 3    | tool result | subagent returned: agent demo:runner\npath {agent dir}/agents/pi-claude-marketplace-demo-runner.md\ndescription Calls the tools the task names.\naliases pi-claude-marketplace-demo-runner\ntools mcp:plugin_demo_stub/echo\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nasync true\nsystem prompt:\nCall the tools the task names. |
+      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:helper"}                                                                                                                                                                                                                                                                                                               |
+      | 3    | tool result | subagent returned: agent demo:helper\npath {agent dir}/agents/pi-claude-marketplace-demo-helper.md\ndescription Reads the files it is given.\naliases pi-claude-marketplace-demo-helper\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nasync false\nsystem prompt:\nRead the files the task names.                        |
+
+  @own-implementation
+  Scenario: A session with no mcp implementation keeps the grant an agent holds (MGRT-01)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "runner" granted the mcp tool "mcp__plugin_demo_stub__echo"
+    Given the marketplace "fixtures" is added to the user scope
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the scripted model plays these steps:
+      | reply               | tool     | arguments                              |
+      |                     | subagent | {"action":"get","agent":"demo:runner"} |
+      | The agent is shown. |          |                                        |
+    When the user restarts pi with no mcp
+    Then the session reports no results
+    When the user prompts "show the runner"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                    |
+      | 1    | user        | show the runner                                                                                                                                                                                                                                                                                                                                                         |
+      | 2    | user        | show the runner                                                                                                                                                                                                                                                                                                                                                         |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:runner"}                                                                                                                                                                                                                                                                                                               |
+      | 2    | tool result | subagent returned: agent demo:runner\npath {agent dir}/agents/pi-claude-marketplace-demo-runner.md\ndescription Calls the tools the task names.\naliases pi-claude-marketplace-demo-runner\ntools mcp:plugin_demo_stub/echo\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nasync true\nsystem prompt:\nCall the tools the task names. |
+
+  @own-implementation
+  Scenario: An agent an earlier release installed gets Pi's built-in grant at its first built-in session (MGRT-01)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "runner" granted the mcp tool "mcp__plugin_demo_stub__echo"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the agents index of the user scope holds the rows an earlier release wrote
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given the scripted model plays these steps:
+      | reply               | tool     | arguments                              |
+      |                     | subagent | {"action":"get","agent":"demo:runner"} |
+      | The agent is shown. |          |                                        |
+    When the user prompts "show the runner"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                    |
+      | 1    | user        | show the runner                                                                                                                                                                                                                                                                                                                                                         |
+      | 2    | user        | show the runner                                                                                                                                                                                                                                                                                                                                                         |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:runner"}                                                                                                                                                                                                                                                                                                               |
+      | 2    | tool result | subagent returned: agent demo:runner\npath {agent dir}/agents/pi-claude-marketplace-demo-runner.md\ndescription Calls the tools the task names.\naliases pi-claude-marketplace-demo-runner\ntools mcp:plugin_demo_stub/echo\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nasync true\nsystem prompt:\nCall the tools the task names. |
+
+  @own-implementation
+  Scenario: A pi-subagents background child leaves an agent's grant in the form it holds (MGRT-02)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "runner" granted the mcp tool "mcp__plugin_demo_stub__echo"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and pi-subagents as a pi-subagents background child
+    Given the scripted model plays these steps:
+      | reply               | tool     | arguments                              |
+      |                     | subagent | {"action":"get","agent":"demo:runner"} |
+      | The agent is shown. |          |                                        |
+    When the user prompts "show the runner"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                     |
+      | 1    | user        | show the runner                                                                                                                                                                                                                                                                                                                                                          |
+      | 2    | user        | show the runner                                                                                                                                                                                                                                                                                                                                                          |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:runner"}                                                                                                                                                                                                                                                                                                                |
+      | 2    | tool result | subagent returned: agent demo:runner\npath {agent dir}/agents/pi-claude-marketplace-demo-runner.md\ndescription Calls the tools the task names.\naliases pi-claude-marketplace-demo-runner\ntools mcp:plugin_demo_stub_/echo\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nasync true\nsystem prompt:\nCall the tools the task names. |
