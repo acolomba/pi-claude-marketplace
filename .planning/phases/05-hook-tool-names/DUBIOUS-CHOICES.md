@@ -357,3 +357,51 @@ choice. The planner's choices follow.
 - **Alternatives:** proceed past the blocking gate.
 - **Why dubious:** a format edit to a discuss artifact after planning.
 - **Recorded in:** `05-CONTEXT.md`.
+
+## Execution wave 1 (plan 05-01, gsd-executor, 2026-11-04)
+
+### P5-DC-28: The `if` field reads the Claude-form event from Task 1 on
+
+- **Phase / source:** plan 05-01 (executor P5-01-DC-01).
+- **Severity:** Low. **Status:** open.
+- **Choice:** Task 1 already passes the hook event with the Claude-form name
+  to the `if` check, so Task 2's mid-plan red run showed only the `after` row
+  missing, not `iffed` too as the plan predicted. The red proof against the
+  Phase 1 code shows both missing.
+- **Alternatives:** give `ifFires` Pi's event in Task 1, so the `if` compares
+  another name than the one on the hook's stdin.
+- **Why dubious:** a plan's expected intermediate RED did not hold.
+- **Recorded in:** `05-01-SUMMARY.md`.
+
+### P5-DC-29: Dispatch unit cases written after the code; RED from restored sources
+
+- **Phase / source:** plan 05-01 (executor P5-01-DC-02).
+- **Severity:** Low. **Status:** open.
+- **Choice:** the dispatch unit cases came after the implementation; RED
+  evidence came from restoring the previous sources before each commit.
+- **Alternatives:** strict test-first, as the plan ordered.
+- **Why dubious:** a process deviation; the evidence is equivalent.
+- **Recorded in:** `05-01-SUMMARY.md`.
+
+### P5-DC-30: The call step takes single-quoted JSON
+
+- **Phase / source:** plan 05-01 (executor P5-01-DC-03).
+- **Severity:** Low. **Status:** open.
+- **Choice:** the new call step takes its arguments as a single-quoted Gherkin
+  string (`'{"text": "ping"}'`), the suite's first single-quoted `{string}`.
+- **Alternatives:** escaped double quotes, or a data table.
+- **Why dubious:** a new step-text style; `check:features` and both profiles
+  accept it.
+- **Recorded in:** `features/step_definitions/hook/tool-use.steps.ts`.
+
+### P5-DC-31: Small typing choices in the view
+
+- **Phase / source:** plan 05-01 (executor P5-01-DC-04, P5-01-DC-05).
+- **Severity:** Low. **Status:** open.
+- **Choice:** `createHookToolView`'s parameter already includes `getCommands`
+  (used by 05-02); an explicit `namespace === undefined` check narrows the type
+  and has a unit row. Task 1 also changed one line of `toolResultCompositeHandler`
+  that Task 2 later replaced, because the new matcher signature forced it.
+- **Alternatives:** `Pick<"getAllTools">` widened later; a non-null assertion.
+- **Why dubious:** minor scope and typing deviations.
+- **Recorded in:** `05-01-SUMMARY.md`.
