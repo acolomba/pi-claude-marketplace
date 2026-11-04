@@ -1,10 +1,9 @@
 Feature: MCP server project scope
 
-  A project-scope plugin server runs only while the project is trusted. Under pi-mcp-adapter it also
-  needs the adapter's approval or the user's allow setting (D-CF6-03); under Pi's built-in MCP, Pi's
-  trust alone admits it, as Claude Code asks no approval (BLT-03, D-MB-09). The info status of an
-  untrusted project's server is in builtin-status.feature. A stdio stub, a scripted model, and a
-  local marketplace stand in.
+  A project-scope plugin server runs only in a trusted project. pi-mcp-adapter also asks for its
+  approval or the user's allow setting (D-CF6-03); Pi's built-in MCP asks only for trust, as Claude
+  Code asks no approval (BLT-03, D-MB-09), and builtin-status.feature shows an untrusted server's info.
+  A stdio stub, a scripted model, and a local marketplace stand in.
 
   @adapter-only
   Scenario: An allowed project-scope plugin server connects and answers a scripted call
@@ -142,6 +141,30 @@ Feature: MCP server project scope
       | 3    | assistant   | tool call mcp {}                                                            |
       | 3    | tool result | mcp returned: server plugin_demo_stub_ blocked                              |
     Then no stub mcp server receives a message
+
+  @builtin-only
+  Scenario: An untrusted project registers no project-scope plugin server while a user-scope one connects (BLT-03, D-MB-09)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | demo  | 1.0.0   |
+      | other | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "other" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has run "/claude:plugin install other@fixtures --scope user", which did not fail
+    Given the project holds a pi settings file
+    Given pi runs with the scripted model in an untrusted project
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "other"
+    When the user lists the mcp tools pi offers
+    Then pi lists these registered mcp servers:
+      | name              |
+      | plugin_other_stub |
+    Then pi offers these plugin mcp tools:
+      | tool                         | active |
+      | mcp__plugin_other_stub__echo | no     |
 
   @adapter-only
   Scenario: Plugin info shows a blocked project-scope server as pending approval
