@@ -614,3 +614,57 @@ copies every item here. Phase 6 merges this file into the root log.
   `extraKnownMarketplaces`; five whole-record test files outside the plan
   gained `mcpServerConfigs: []`.
 - **Recorded in:** `01-08-SUMMARY.md`.
+
+### P1-DC-35: Plan 01-12 executor choices (recorded servers)
+
+- **Severity:** Low to Medium. **Status:** open.
+- (Medium) No RED-only commits (P1-DC-28 precedent).
+- (Low) Added a typed `LegacyServersUnreadableError` (reasons
+  `not-in-manifest`, `unavailable`, `root-mismatch`) in
+  `recorded-servers.ts`, not `shared/errors.ts`.
+- (Low) A legacy git record without `resolvedSha` passes `resolvedSha: ""`
+  in the synthetic materialized result (the resolver reads only the root).
+- (Low) `LegacyServersSource.marketplace` is a `Pick` of the marketplace
+  record; the root check is strict string equality with `resolvedSource`
+  (a moved marketplace reads as `unreadable`).
+- (Low) `.fallowrc.json`: one `entry` line and a seven-name `ignoreExports`
+  block for this module.
+- **Recorded in:** `01-12-SUMMARY.md`.
+
+### P1-DC-36: Plan 01-13 executor choices (tag rules, CI profile axis)
+
+- **Severity:** Medium. **Status:** open.
+- (Medium) CI behavioral job names changed to `behavioral tests, <profile>
+  <shard> (Node 24)`. A branch protection rule naming the old checks would
+  wait forever; check required status checks before the PR merges.
+- (Low) The builtin leg's shard is named `all`.
+- (Low) The MCP-scenario match is the word `\bmcp\b` (case-insensitive), so
+  a bare tool name like `mcp__plugin_demo_stub__echo` does not count.
+- (Low) The tag-reason rule accepts any ID-shaped word and does not check
+  that the ID exists.
+- (Low) "A non-MCP scenario carries no implementation tag" (features.md) is
+  not gated; no scenario violates it today.
+- (Low) `classifyMcpImplementation` passes no `sourceInfo.source` (the RPC
+  `ListedCommand` lacks it); the command-name arm decides in the harness.
+- (Low) The skill's layout table now differs from ROADMAP's ownership table
+  in two cells (the `invocation` step module rename and agent-grants).
+- (Low) The @mcp inventory found exactly research's 25 scenarios; all pass
+  under builtin, so nothing moved to `verdict-markers.feature`.
+- **Recorded in:** `01-13-SUMMARY.md`.
+
+### P1-DC-37: Plan 01-11 executor choices (status readers)
+
+- **Severity:** Medium. **Status:** open.
+- (Medium) One code commit for two tasks: the hook type-checks the whole
+  tree, so Task 2's caller updates went into Task 1's commit.
+- (Medium) No RED-only commit (P1-DC-28 precedent).
+- (Low) The info handler test proves the `isProjectTrusted()` read through
+  the strict mock; a constant `true` would not fail it (no visible effect
+  yet).
+- (Low) `noStatusReaders()` uses two adapter-style trackers, not the
+  built-in seed; a new `@ts-expect-error` pin rejects a single reader as
+  `mcpStatus`.
+- (Low) One adapter cucumber step timed out (30 s, marketplace add, under
+  load) and passed on a targeted rerun; `test/integration/
+  mcp-status-conformance.test.ts` edited outside the plan (direct caller).
+- **Recorded in:** `01-11-SUMMARY.md`.
