@@ -318,7 +318,7 @@ changes their names or shapes.
   (`features/mcp-server/implementation-switch.feature`) and Phase 2's `info`
   status scenarios under both profiles, then run Phase 6.
 
-- [ ] **Phase 1: Foundation and Pi 1.5.0** - Pi 1.5.0, the active-implementation snapshot, the pure profiles, records that keep every declared server, and the dual-profile cucumber harness, with every shared file and interface frozen and no visible change
+- [x] **Phase 1: Foundation and Pi 1.5.0** - Pi 1.5.0, the active-implementation snapshot, the pure profiles, records that keep every declared server, and the dual-profile cucumber harness, with every shared file and interface frozen and no visible change (completed 2026-11-04)
 - [ ] **Phase 2: Built-in Materialization** - Recorded servers connect through Pi's built-in MCP on startup and `/reload` with Claude's values and names, trust gating, status in `info`, and a switch that needs no plugin action
 - [ ] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records
 - [ ] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child
@@ -355,7 +355,7 @@ changes their names or shapes.
 | 3 | Wiring | `orchestrators/mcp/{session-materialize,recorded-servers,builtin-registration-step,agent-grants-step}.ts`, the `platform/mcp-builtin-status.ts` seed, `EdgeDeps.mcpStatus` in `edge/{types,register}.ts` and `edge/handlers/plugin/info.ts`, the status call in `orchestrators/plugin/info.ts`, `index.ts`, the factory-time probe ban |
 | 4 | Phase gate | `npm run check`, both cucumber profiles, `npm run test:modules`, the CI timing measurement, the frozen-file record, the parent lines |
 
-**Plans:** 14/14 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the snapshot and the session steps move to wave 2, the record producer to wave 3, the status pair and `recorded-servers.ts` to wave 4 after the producer, and the harness splits into four plans across waves 2-4)
+**Plans:** 14/14 plans complete in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the snapshot and the session steps move to wave 2, the record producer to wave 3, the status pair and `recorded-servers.ts` to wave 4 after the producer, and the harness splits into four plans across waves 2-4)
 
 Plans:
 **Wave 1**
@@ -479,7 +479,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Foundation and Pi 1.5.0 | 14/14 | In Progress | - |
+| 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
 | 2. Built-in Materialization | 0/TBD | Not started | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
 | 4. Agent Grants | 0/TBD | Not started | - |

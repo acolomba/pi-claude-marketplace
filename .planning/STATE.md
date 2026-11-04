@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
-current_phase: 01
-current_phase_name: Foundation and Pi 1.5.0
-status: executing
-stopped_at: mcp-builtin roadmap created; Phase 1 ready to plan
-last_updated: "2026-11-04T03:50:30.636Z"
+current_phase: 2
+current_phase_name: Built-in Materialization
+status: verifying
+stopped_at: Phase 01 complete, ready to verify Phase 2
+last_updated: "2026-11-04T10:34:36.589Z"
 last_activity: 2026-11-04
-last_activity_desc: Phase 01 execution started
-state_head: d8bba1bf9dc76655ad930f6c20177121a61319c3
+last_activity_desc: Phase 01 complete, transitioned to Phase 2
+state_head: 7c19bbba31fc9431af48b7b0b4703ecfe3f3ffb1
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 14
-  completed_plans: 0
-  percent: 0
+  completed_plans: 14
+  percent: 17
 ---
 
 # Project State
@@ -34,12 +34,12 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 
 ## Current Position
 
-Phase: 01 (Foundation and Pi 1.5.0) — EXECUTING
-Plan: 1 of 14
-Status: Executing Phase 01
-Last activity: 2026-11-04 — Phase 01 execution started
+Phase: 2 — Built-in Materialization
+Plan: 2
+Status: Phase complete — ready for verification
+Last activity: 2026-11-04 — Phase 01 complete, transitioned to Phase 2
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 17%
 
 
 ### mcp-4 closeout
@@ -901,5 +901,5 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 ## Session Continuity
 
 Last session: 2026-11-04T00:54:44Z
-Stopped at: mcp-builtin roadmap created; Phase 1 ready to plan
+Stopped at: Phase 01 complete, ready to verify Phase 2
 Resume file: None

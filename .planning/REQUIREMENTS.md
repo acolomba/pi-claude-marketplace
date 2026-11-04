@@ -75,20 +75,20 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 
 ### Pi 1.5.0
 
-- [ ] **PI15-01**: `package.json` declares `@earendil-works/pi-coding-agent` peer `>=1.5.0` and dev `^1.5.0`, `@earendil-works/pi-tui` dev `^1.5.0`, and `@earendil-works/pi-ai` dev at exactly `1.5.0`; `package-lock.json` matches and `npm run check` passes
-- [ ] **PI15-02**: The floor tests (`test/architecture/peer-floor.test.ts`, `test/e2e/pi-peer-floor`, `test/e2e/pi-json-output.test.ts`) prove Pi 1.5.0, and the README, `README.es.md`, the compatibility docs, `AGENTS.md`, `.planning/codebase/STACK.md`, and the PROJECT.md Pi API constraint name it
-- [ ] **PI15-03**: Whatever Pi 1.5.0 breaks (the pi-schema validation move, the `isProjectTrusted()` fix, the `oauth.clientRegistration` `"auto"` default) is fixed in the same phase, and the whole unit, integration, and cucumber suites pass on 1.5.0
+- [x] **PI15-01**: `package.json` declares `@earendil-works/pi-coding-agent` peer `>=1.5.0` and dev `^1.5.0`, `@earendil-works/pi-tui` dev `^1.5.0`, and `@earendil-works/pi-ai` dev at exactly `1.5.0`; `package-lock.json` matches and `npm run check` passes
+- [x] **PI15-02**: The floor tests (`test/architecture/peer-floor.test.ts`, `test/e2e/pi-peer-floor`, `test/e2e/pi-json-output.test.ts`) prove Pi 1.5.0, and the README, `README.es.md`, the compatibility docs, `AGENTS.md`, `.planning/codebase/STACK.md`, and the PROJECT.md Pi API constraint name it
+- [x] **PI15-03**: Whatever Pi 1.5.0 breaks (the pi-schema validation move, the `isProjectTrusted()` fix, the `oauth.clientRegistration` `"auto"` default) is fixed in the same phase, and the whole unit, integration, and cucumber suites pass on 1.5.0
 
 ### Implementation selection
 
-- [ ] **MSEL-01**: Each command run, load, and session sees one active MCP implementation: pi-mcp-adapter when `/mcp-adapter` is loaded, built-in when `/mcp` comes from `builtin:mcp`, otherwise none; nothing reads it before every extension has loaded
+- [x] **MSEL-01**: Each command run, load, and session sees one active MCP implementation: pi-mcp-adapter when `/mcp-adapter` is loaded, built-in when `/mcp` comes from `builtin:mcp`, otherwise none; nothing reads it before every extension has loaded
 - [ ] **MSEL-02**: After the active implementation changes (the user installs or uninstalls pi-mcp-adapter, or turns Pi's built-in MCP on or off) and runs `/reload` or starts Pi again, every installed plugin's MCP servers run through the new active implementation with no reinstall, `apply`, or other plugin action. Turning built-in MCP back on after the adapter turned it off is the user's step (D-MB-01)
 - [ ] **MSEL-03**: The extension never registers a server with Pi while the adapter is active or while no implementation is active, so Pi reports no extension error for an unconnected registration
 - [ ] **MSEL-04**: Adapter entries keep being written at install whatever the active implementation, so a switch from built-in to the adapter serves every server without rewriting `mcp-adapter.json` at load
 
 ### Records and verdicts
 
-- [ ] **MREC-01**: Install, update, reinstall, enable, and import record every declared MCP server in its Claude form before plugin-variable substitution (D-MB-04), including servers the active implementation cannot run; `state.json` still holds no absolute paths
+- [x] **MREC-01**: Install, update, reinstall, enable, and import record every declared MCP server in its Claude form before plugin-variable substitution (D-MB-04), including servers the active implementation cannot run; `state.json` still holds no absolute paths
 - [ ] **MREC-02**: A plugin installed before this milestone, whose record lists no servers, materializes correctly under either implementation with no reinstall
 - [ ] **MREC-03**: `list`, `info`, `install`, `update`, `pending`, and `apply` compute a plugin's available or partially available state against the active implementation, so one installed plugin can be available under one implementation and partially available under the other
 - [ ] **MREC-04**: `info` shows each server's verdict for the active implementation with that implementation's reason tokens (for example, an `sse` server is blocked under built-in and runs under the adapter)
@@ -117,16 +117,16 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 
 ### Dual-profile behavioral tests
 
-- [ ] **DUAL-01**: The cucumber suite has an adapter profile and a built-in profile; every MCP feature runs under both with shared step definitions, and implementation-specific expectations live in their own tagged scenarios
-- [ ] **DUAL-02**: Each profile's Pi proves which implementation is active, and an architecture test fails when an MCP scenario runs under only one profile without an implementation tag
-- [ ] **DUAL-03**: CI runs both profiles within the behavioral job timeouts
+- [x] **DUAL-01**: The cucumber suite has an adapter profile and a built-in profile; every MCP feature runs under both with shared step definitions, and implementation-specific expectations live in their own tagged scenarios
+- [x] **DUAL-02**: Each profile's Pi proves which implementation is active, and an architecture test fails when an MCP scenario runs under only one profile without an implementation tag
+- [x] **DUAL-03**: CI runs both profiles within the behavioral job timeouts
 - [ ] **DUAL-04**: A switch scenario installs a plugin and reaches its server under the adapter; after the adapter is removed it shows `{requires mcp}` while built-in MCP is off; after built-in MCP is on it reaches the server under built-in; and after the adapter is added again it reaches the server under the adapter, with no plugin command in between
 
 ### Documentation and decisions
 
 - [ ] **MDOC-01**: `docs/mcp-compatibility.md` has a built-in column, and each built-in statement cites a scenario or the Pi 1.5.0 source
 - [ ] **MDOC-02**: CHANGELOG, README, `README.es.md`, and `docs/hooks-compatibility.md` describe built-in MCP support, the three `requires` markers, and the naming divergence; the docs say to turn on built-in MCP or install pi-mcp-adapter, and list what the adapter adds
-- [ ] **MDEC-01**: D-MB-01 to D-MB-07 and the defaults above carry IDs in PROJECT.md Key Decisions, and the APL-D1 and Current Milestone text reflect them
+- [x] **MDEC-01**: D-MB-01 to D-MB-07 and the defaults above carry IDs in PROJECT.md Key Decisions, and the APL-D1 and Current Milestone text reflect them
 
 ## v2 Requirements
 
@@ -149,14 +149,14 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PI15-01 | Phase 1 | Pending |
-| PI15-02 | Phase 1 | Pending |
-| PI15-03 | Phase 1 | Pending |
-| MSEL-01 | Phase 1 | Pending |
+| PI15-01 | Phase 1 | Complete |
+| PI15-02 | Phase 1 | Complete |
+| PI15-03 | Phase 1 | Complete |
+| MSEL-01 | Phase 1 | Complete |
 | MSEL-02 | Phase 2 | Pending |
 | MSEL-03 | Phase 2 | Pending |
 | MSEL-04 | Phase 2 | Pending |
-| MREC-01 | Phase 1 | Pending |
+| MREC-01 | Phase 1 | Complete |
 | MREC-02 | Phase 2 | Pending |
 | MREC-03 | Phase 3 | Pending |
 | MREC-04 | Phase 3 | Pending |
@@ -173,13 +173,13 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 | MGRT-02 | Phase 4 | Pending |
 | MHK-01 | Phase 5 | Pending |
 | MHK-02 | Phase 5 | Pending |
-| DUAL-01 | Phase 1 | Pending |
-| DUAL-02 | Phase 1 | Pending |
-| DUAL-03 | Phase 1 | Pending |
+| DUAL-01 | Phase 1 | Complete |
+| DUAL-02 | Phase 1 | Complete |
+| DUAL-03 | Phase 1 | Complete |
 | DUAL-04 | Phase 6 | Pending |
 | MDOC-01 | Phase 2 | Pending |
 | MDOC-02 | Phase 6 | Pending |
-| MDEC-01 | Phase 1 | Pending |
+| MDEC-01 | Phase 1 | Complete |
 
 **Coverage:**
 
