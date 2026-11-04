@@ -444,11 +444,11 @@ Plans:
 - Wave 2: `orchestrators/mcp/agent-grants-step.ts` with child detection, and `agent-grants.feature` (MGRT-01 switch side, MGRT-02).
 - Wave 3: parent lines and the phase gate.
 
-**Plans**: 2/6 plans executed
+**Plans**: 4/6 plans executed
 - [x] 04-01-PLAN.md
 - [x] 04-02-PLAN.md
-- [ ] 04-03-PLAN.md
-- [ ] 04-04-PLAN.md
+- [x] 04-03-PLAN.md
+- [x] 04-04-PLAN.md
 - [ ] 04-05-PLAN.md
 - [ ] 04-06-PLAN.md
 
@@ -488,7 +488,7 @@ Plans:
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
 | 2. Built-in Materialization | 0/TBD | Not started | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
-| 4. Agent Grants | 2/6 | In Progress | - |
+| 4. Agent Grants | 4/6 | In Progress | - |
 | 5. Hook Tool Names | 0/TBD | Not started | - |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
 
