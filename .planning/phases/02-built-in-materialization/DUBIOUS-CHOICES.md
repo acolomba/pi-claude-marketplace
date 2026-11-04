@@ -495,3 +495,59 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Choice:** Outcome-dependent plan branches: 02-03's bundle-scenario tag, 02-01's description-drop branch, 02-03's probe run in a Then.
 - **Alternatives:** Fix them at planning time.
 - **Why dubious:** Executors decide.
+
+## Plan revision step (gsd-planner revision 1, 2026-11-04)
+
+### P2-DC-46: A same-name registration by another extension is a recorded gap
+
+- **Phase / source:** Phase 2 plan revision (checker warning on 02-04).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** When another extension registered `plugin_<plugin>_<server>`
+  first, Pi refuses ours (debug log only) and `info`'s built-in row shows the
+  other extension's server state. Documented in the docs, COVERAGE.md, and a
+  BACKLOG parent line.
+- **Alternatives:** Widen the frozen status-reader parameter (parent line); a
+  module-level own-path cell set by the step; match on our own tool's
+  `sourceInfo` (path not guaranteed to match).
+- **Why dubious:** BLT-04 says "never silent"; this case is only debug-logged.
+
+### P2-DC-47: Plan split shape: 02-01 keeps the calls step and one twin, 02-09 takes the rest of the listing lift
+
+- **Phase / source:** Phase 2 plan revision.
+- **Severity:** Low. **Status:** open.
+- **Choice:** 02-01 still lists 22 files; the listing lift moves to new plan
+  02-09 in Wave 2 (no renumbering, no new wave).
+- **Alternatives:** The checker's split (a new wave for five plans);
+  renumbering.
+- **Why dubious:** 02-01 stays above the 15-file threshold, and plan numbers
+  no longer follow wave order. P2-DC-28 now means seven Wave 2 plans and
+  P2-DC-41's matrix has 27 rows.
+
+### P2-DC-48: The 02-08 gate edits one cell of a Phase 3 file in the working tree and restores it
+
+- **Phase / source:** Phase 2 plan revision.
+- **Severity:** Low. **Status:** open.
+- **Choice:** To prove the one tolerated failure, the gate command changes the
+  `companion-missing.feature` cell to `not loaded`, reruns, and restores the
+  file in the same command.
+- **Alternatives:** Parse the assertion diff; read the output by hand.
+- **Why dubious:** a temporary edit to a sibling's file; an interrupted call
+  leaves it changed (the plan says how to restore it).
+
+### P2-DC-49: The server-less `@mcp` listing scenario uses a control plugin
+
+- **Phase / source:** Phase 2 plan revision.
+- **Severity:** Low. **Status:** open.
+- **Choice:** It drops the header-only tables so the scenario can fail against
+  the seed.
+- **Alternatives:** Keep the earlier shape with no red proof.
+- **Why dubious:** departs from the earlier plan wording; no registry table.
+
+### P2-DC-50: An extra reversed-precedence red run in 02-05
+
+- **Phase / source:** Phase 2 plan revision.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The trusted both-scope scenario gets a reversed-precedence red
+  run, since forcing trust cannot change it.
+- **Alternatives:** Seed red run only.
+- **Why dubious:** one red run beyond the checker's hint.

@@ -9,6 +9,7 @@ The surface is what `@earendil-works/pi-coding-agent` 1.5.0 offers an extension 
 | `pi.registerMcpServer(name, config)` | INTEGRATE | |
 | `pi.unregisterMcpServer(name)` | INTEGRATE | |
 | `pi.getMcpServers()` (sync compare and status) | INTEGRATE | |
+| `RegisteredMcpServer.extensionPath` (the owner of a listed registration) | OPT-OUT | not reachable: Pi 1.5.0 gives an extension no reliable way to learn the `extensionPath` it records for the extension's own registrations, and the status reader's parameter is frozen, so info cannot tell a same-name registration by another extension from this extension's (P2-DC-46); a BACKLOG parent line carries the fix |
 | `pi.getAllTools()` tool `namespace` and `exposure` (status in info) | INTEGRATE | |
 | `ctx.isProjectTrusted()` (project trust gate) | INTEGRATE | |
 | `mcp_servers_change` event handler | OPT-OUT | explicitly out of scope: a handler would make this extension the connector in place of Pi's built-in MCP (PI-11) |
