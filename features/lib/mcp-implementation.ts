@@ -17,10 +17,16 @@
  * seeds that file so the adapter leaves the sandbox settings alone, and waits
  * for it when a scenario needs the adapter's real write.
  *
- * Every file this module reads or writes lies under the run's root, which
- * `support/pi-process.ts` makes in the temp directory; a location outside it
- * is refused, so no helper touches the user's own Pi settings or the
- * repository (T-01-14).
+ * A profile Pi runs the profile's implementation through what
+ * `mcpImplementationLaunch()` loads: pi-mcp-adapter, or the built-in stand-in
+ * beside Pi's built-in MCP. The listing wait then reads the stub's log and
+ * Pi's registry, which each implementation fills in its own way, so a
+ * scenario waits the same way under both profiles.
+ *
+ * Every settings or onboarding file this module reads or writes lies under
+ * the run's root, which `support/pi-process.ts` makes in the temp directory;
+ * a location outside it is refused, so no helper touches the user's own Pi
+ * settings or the repository (T-01-14).
  */
 
 import assert from "node:assert/strict";
@@ -28,10 +34,18 @@ import { readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 
-import { stubPidFiles } from "./mcp-stub-server.ts";
+import { profileFor } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
+
+import { BUILTIN_MCP_STAND_IN_EXTENSION } from "./builtin-mcp-stand-in/servers.ts";
+import { listedTools, readStubRequests, stubPidFiles } from "./mcp-stub-server.ts";
+import { readRegistrySnapshot, REGISTRY_PROBE_COMMAND } from "./pi-registry-probe/snapshot.ts";
 import { isRunning } from "./turn-records.ts";
 
+import type { CompanionName } from "./companions.ts";
+import type { PiProcess } from "./pi-process.ts";
+import type { RegistrySnapshot } from "./pi-registry-probe/snapshot.ts";
 import type { ListedCommand } from "../../test/e2e/_rpc.ts";
 
 /** A cucumber profile, which names the MCP implementation its shared Pi runs (DUAL-01). */
@@ -66,6 +80,26 @@ const BUILTIN_SOURCE_PATH = "builtin:mcp";
 const ADAPTER_COMMAND_NAME = /^mcp-adapter(?::\d+)?$/u;
 
 const POLL_MS = 50;
+
+// Starting Node on the stub and listing one tool takes well under a second;
+// the margin covers a loaded CI runner and stays below the step timeout.
+const TOOL_LISTING_TIMEOUT_MS = 15_000;
+
+// pi-mcp-adapter closes its listing connection before it registers the
+// listed tools with Pi, and it reports nothing a step can wait on between the
+// two. So the probe reads the registry until two reports this far apart
+// agree, which outlasts that gap on a loaded runner, and fails at the
+// listing deadline.
+const REGISTRY_QUIET_MS = 250;
+
+/**
+ * What a profile Pi loads for the MCP implementation of a profile, beside the
+ * real extension, the scripted model, and the registry probe.
+ */
+export interface McpImplementationLaunch {
+  readonly companions: readonly CompanionName[];
+  readonly extraExtensions: readonly string[];
+}
 
 function isMissing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
@@ -106,6 +140,19 @@ export function classifyMcpImplementation(commands: readonly ListedCommand[]): M
   }
 
   return "none";
+}
+
+/**
+ * Returns what a profile Pi loads to run the MCP implementation of `profile`
+ * (DUAL-01): pi-mcp-adapter under the adapter profile, and under the builtin
+ * profile no companion and the built-in stand-in (P1-DC-05). A step that
+ * needs other companions adds them to these; the stand-in stays the last
+ * extension, so its `session_start` handler runs after the real extension's.
+ */
+export function mcpImplementationLaunch(profile: McpProfile): McpImplementationLaunch {
+  return profile === "adapter"
+    ? { companions: ["pi-mcp-adapter"], extraExtensions: [] }
+    : { companions: [], extraExtensions: [BUILTIN_MCP_STAND_IN_EXTENSION] };
 }
 
 /** Returns the MCP implementation that `launch` implies (P1-DC-14). */
@@ -344,6 +391,103 @@ export async function waitUntilProcessesExit(
 
     if (Date.now() >= deadline) {
       assert.fail(`these processes still run after ${timeoutMs} ms: ${running.join(", ")}`);
+    }
+
+    await delay(POLL_MS);
+  }
+}
+
+// D-CF6-05: one probe report of every tool Pi has. Pi runs the probe's
+// command to completion before it answers, with no dialog and no error.
+async function probedRegistry(pi: PiProcess): Promise<RegistrySnapshot> {
+  const { response, entries, extensionErrors, dialogs } = await pi.request({
+    type: "prompt",
+    message: `/${REGISTRY_PROBE_COMMAND}`,
+  });
+  assert.deepStrictEqual(
+    [response.data, extensionErrors, dialogs],
+    [{ disposition: "handled" }, [], []],
+  );
+  return readRegistrySnapshot(entries);
+}
+
+/**
+ * Returns the registry probe's report from the profile Pi `pi` once two
+ * reports taken a quiet interval apart agree, and fails when the registry
+ * does not settle before the listing deadline.
+ */
+export async function settledRegistry(pi: PiProcess): Promise<RegistrySnapshot> {
+  const deadline = Date.now() + TOOL_LISTING_TIMEOUT_MS;
+  let previous = await probedRegistry(pi);
+  for (;;) {
+    await delay(REGISTRY_QUIET_MS);
+    const current = await probedRegistry(pi);
+    if (isDeepStrictEqual(current, previous)) {
+      return current;
+    }
+
+    if (Date.now() > deadline) {
+      assert.fail(`pi's tool registry did not settle: ${JSON.stringify([previous, current])}`);
+    }
+
+    previous = current;
+  }
+}
+
+// Whether `implementation` finished listing the tools of the stub. The
+// adapter lists them over a connection that it closes, so it is done once the
+// stub logged a tools/list and no stub runs. Pi's built-in MCP keeps the
+// connection, so it is done once the stub logged a tools/list and Pi has a
+// tool in the server's built-in namespace. `plugin` is the argument the stub
+// logs: a stub started with the plugin root is named by that path, whose last
+// segment is the plugin's name.
+async function listingDone(
+  implementation: McpProfile,
+  pi: PiProcess,
+  harness: string,
+  plugin: string,
+  server: string,
+): Promise<boolean> {
+  if (!listedTools(await readStubRequests(harness), plugin, server)) {
+    return false;
+  }
+
+  if (implementation === "adapter") {
+    return (await stubPidFiles(harness)).length === 0;
+  }
+
+  const prefix = profileFor("builtin").toolNamePrefix(path.basename(plugin), server);
+  const { allTools } = await probedRegistry(pi);
+  return allTools.some((tool) => tool.name.startsWith(prefix));
+}
+
+/**
+ * Waits until the MCP implementation `implementation` of the profile Pi `pi`
+ * has listed the tools of the stub `server` started for `plugin`, whose
+ * stand-ins log into `harness`, and fails with the stubs' log after the
+ * listing deadline.
+ */
+export async function waitForStubListing(
+  implementation: McpProfile,
+  pi: PiProcess,
+  harness: string,
+  plugin: string,
+  server: string,
+): Promise<void> {
+  const deadline = Date.now() + TOOL_LISTING_TIMEOUT_MS;
+  for (;;) {
+    if (await listingDone(implementation, pi, harness, plugin, server)) {
+      return;
+    }
+
+    if (Date.now() > deadline) {
+      const [requests, running] = await Promise.all([
+        readStubRequests(harness),
+        stubPidFiles(harness),
+      ]);
+      assert.fail(
+        `the ${implementation} mcp implementation did not finish listing the tools of ${plugin}/${server}: ${JSON.stringify({ requests, running })}`,
+      );
     }
 
     await delay(POLL_MS);

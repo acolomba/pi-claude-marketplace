@@ -4,8 +4,9 @@
  * without a model (D-CF1-17, HAR-04).
  *
  * Every profile Pi loads this file with `--extension`. Its command appends
- * one entry with every tool, the active tool names, and every slash command,
- * each projected to plain JSON records in Pi's order. It filters nothing and
+ * one entry with every tool, the active tool names, every slash command, and
+ * every MCP server an extension registered, each projected to plain JSON
+ * records in Pi's order. It filters nothing and
  * removes no duplicate, so a step sees exactly what Pi offers.
  */
 
@@ -28,13 +29,14 @@ function snapshotOf(pi: ExtensionAPI): RegistrySnapshot {
       source: command.source,
       path: command.sourceInfo.path,
     })),
+    mcpServers: pi.getMcpServers().map((server) => ({ name: server.name })),
   };
 }
 
 // fallow-ignore-next-line unused-export -- Pi's --extension loader reads this default.
 export default function registryProbe(pi: ExtensionAPI): void {
   pi.registerCommand(REGISTRY_PROBE_COMMAND, {
-    description: "Report Pi's tools and slash commands for the behavioral tests.",
+    description: "Report Pi's tools, slash commands, and MCP servers for the behavioral tests.",
     handler: () => {
       pi.appendEntry(REGISTRY_PROBE_ENTRY, snapshotOf(pi));
       return Promise.resolve();
