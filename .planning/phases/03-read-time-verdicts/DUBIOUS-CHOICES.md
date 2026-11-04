@@ -276,3 +276,86 @@ precedent). Each is recorded in `03-CONTEXT.md`.
   implementation for consistency.
 - **Alternatives:** leave them on the stored verdict.
 - **Why dubious:** scope widening.
+
+## Plan step: planner (2026-11-04)
+
+The planner's choices, numbered here. Each is Low unless marked.
+
+- **P3-DC-26 (Low): five waves instead of the ROADMAP's three.** The
+  `Dependency` type change (wave 2) and the marker rule (wave 3) get their
+  own waves so same-wave plans own disjoint files. Alternative: three waves of
+  larger, overlapping plans. Adds two gates to the critical path.
+- **P3-DC-27 (Low): `declaresMcp` keeps its name, typed `McpDependency | false`.**
+  Alternative: rename to `mcpDependency`. Keeps ~340 `false` literals; the name
+  now reads like a boolean.
+- **P3-DC-28 (Low): 03-06 imports `readRecordMcpVerdict` directly** in the
+  update modules, relying on fallow 3.35 not counting type-only edges as
+  cycles. Alternative: inject a reader port. A fallow upgrade could change it.
+- **P3-DC-29 (Low): `InstallLedgerOptions.consentView` is required**, `"none"`
+  at enable, re-enable, and promotion. Alternatives: optional with a default;
+  `partial: true` there.
+- **P3-DC-30 (Medium): 03-05 edits `toInstallLedgerSummary` in
+  `install-outcome.ts`**, beyond the consent gate the ownership table names.
+  Alternative: project the view at every consumer. Possible merge friction
+  with Phase 4.
+- **P3-DC-31 (Low): convergence asks only for kinds the candidate's active view
+  drops and the record's effective view does not; `move.partial =
+  !effective.installable`.** Alternative: compare with the stored neutral
+  verdict. A record already partial after a switch moves without asking.
+- **P3-DC-32 (Low): the AMIG-01 dropped-server write uses the `none` view plus
+  the basis, keeps `supported` and `notes`, and writes only on change.**
+  Alternative: always rewrite.
+- **P3-DC-33 (Low): `info` carries the MCP dependency through a required
+  `InfoBlock.mcpDependency`** and row builders returning `{ row, mcpDependency }`.
+  Alternatives: a wire field (frozen closed set), or recompute from rows
+  (impossible). Touches ~7 builders in a 3,362-line file.
+- **P3-DC-34 (Low): `requires:` entries sort by code-unit companion name**, so
+  `builtin mcp` and `mcp` come before the `pi-` names. Alternative: keep the
+  MCP entry's old position. Visible order change.
+- **P3-DC-35 (Low): 03-08 refactors 03-04's `mcpDependencyMarker`** so the
+  marker and `requires:` share one name table (ADET-01). Alternative: a second
+  table.
+- **P3-DC-36 (Medium): 03-08 edits one cell of Phase 2's
+  `features/mcp-server/project-scope.feature`** (`plugin requires` becomes
+  `[{"companion":"mcp","missing":false}]`) before the merge, to keep the wave 4
+  gate green. Alternatives: accept a red wave gate; move the `requires:` change
+  after the merge. A sibling-file edit and a likely merge conflict.
+- **P3-DC-37 (Low): 03-08's new `requires:` scenarios use not-installed
+  plugins** to stay independent of 03-05 in the same wave. Alternative:
+  installed plugins with `--partial`.
+- **P3-DC-38 (Low): the e2e foreign-tool case also turns off built-in MCP** so
+  it still proves ADET-02.
+- **P3-DC-39 (Low): the e2e marker tests move to 03-08 (wave 4);** 03-09 reruns
+  `npm run test:e2e` after the merge.
+- **P3-DC-40 (Medium): 03-09 retags `invalid-configs.feature`'s two tool-call
+  scenarios `@mcp`** (if Phase 2 merged), proving the skipped server with the
+  frozen `pi lists these registered mcp servers:` step. Alternatives: keep
+  `@adapter-only` with an ID; add `@mcp` twins. The proof moves from "answers
+  a call" to "is registered".
+- **P3-DC-41 (Medium): 03-09 continues if a sibling has not merged yet**,
+  records the missing phase as a wait, and runs the gate. Alternative: stop
+  with BLOCKED.md. The parent re-verifies after the last merge.
+- **P3-DC-42 (Medium): wave 5 (03-09, the milestone merge) runs in the main
+  checkout, not an executor worktree** (orchestrator decision), because the
+  worktree deletions guard would block sibling deletions the plan cannot
+  declare. Alternative: worktree with listed paths.
+- **P3-DC-43 (Low): 03-09's conflict policy**: frozen files take the
+  milestone side; owned files keep Phase 3's functions and the milestone's
+  others; sibling files take the milestone side with Phase 3's rules
+  re-applied; STATE.md and ROADMAP.md keep both sides. Alternative: `-X ours`
+  or `-X theirs`.
+- **P3-DC-44 (Low): the merge commit title is
+  `chore: merge the parallel component work`**, with no branch, milestone, or
+  phase name. Alternative: git's default message.
+- **P3-DC-45 (Low): commit trailers use the brief's
+  `Claude-Session: https://claude.ai/code/session_01EDUMG7S9uXh4o5dikBwum8`**
+  (orchestrator decision: the brief is the user's contract and says "exactly
+  these two lines"), although this child session's own URL is
+  `session_01EDUMG5p4jHecGXqAFGi3Do`. Alternative: the child's own URL.
+- **P3-DC-46 (Low): ROADMAP.md's Phase 3 plan list is filled on this branch.**
+  Alternative: leave "TBD". Possible merge conflict with siblings.
+- **P3-DC-47 (Low): 03-04 tags the two `companion-missing` info scenarios
+  `@builtin-only` for one wave** before 03-08 rewrites them.
+- **P3-DC-48 (Low): the two concurrency edge probes are
+  `verification: backstop`**, resting on the existing state lock; no
+  concurrency test.
