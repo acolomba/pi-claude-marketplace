@@ -340,3 +340,15 @@ Each entry: severity; choice; alternatives; why dubious. Recorded in the named p
 - **P4-DC-66 (Low):** README and README.es get no agent-grants sentence now (a conditional sentence is drafted as parent line 6).
 - **P4-DC-67 (Medium):** parent line 2 asks for a new `@builtin-only` autoupdate or apply-convergence scenario with the repoint after Phase 3 merges: post-merge work no plan schedules.
 - **P4-DC-68 (Low):** the plan's "phase DUBIOUS-CHOICES.md unchanged against PHASE_BASE" check was read as "no executor edited it" (the session logs each wave there).
+
+## Code review and fix (2026-11-04)
+
+Review: 0 critical, 6 warnings, 5 info (`04-REVIEW.md`); fixed WR-01, WR-02, WR-04, WR-05, WR-06, IN-01, IN-02; skipped WR-03 (recorded P4-DC-13/60), IN-03, IN-04, IN-05 (`04-REVIEW-FIX.md`). One fix pass, no re-review loop.
+
+- **P4-DC-69 (Medium, reviewer):** WR-03 (cascade updates write the adapter form under built-in) rated Warning, not Blocker, because P4-DC-13 records it and the next `/reload` heals it.
+- **P4-DC-70 (Medium, fixer):** the unlocked needs-check is silent about why it leaves a row (edited, missing, foreign, malformed): nothing on the debug channel explains a row that never converges. Alt: one debug line per left row per load.
+- **P4-DC-71 (Medium, fixer):** the tightened built-in error projection (WR-04) has no unit cases (`features/lib` has no unit-test location); checked by scratch script and cucumber runs.
+- **P4-DC-72 (Medium, fixer):** the background-child step resets the launch environment to `{}` after its Pi starts, so later restarts are not children, and the child grants scenario now observes through a no-MCP restart (WR-05). Alt: a helper in the unowned `pi-launch-environment.ts`.
+- **P4-DC-73 (Low, fixer):** WR-01 and WR-06 fixed in one commit (switch to `withExistingScopeLock` with `assertLockHeld`; `state.json` is no longer read by the rewrite).
+- **P4-DC-74 (Low, fixer):** the malformed-form debug line wording changed.
+- **P4-DC-75 (Low, orchestrator):** one fix pass instead of the autonomous fix+re-review loop (up to 3); the phase gate and the verifier run after it.
