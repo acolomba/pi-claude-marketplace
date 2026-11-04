@@ -609,3 +609,36 @@ orchestrator decided each finding before the fix:
   adding an explicit adapter Pi.
 - **P3-DC-121 (Low): IN-02's style-guide rule lists reinstall rows too**
   (`reinstall.messaging.ts` calls `companionSeverity`).
+
+### Review iteration 2 (2026-11-04)
+
+The re-review found three new issues from the fixes (WR-04, WR-05, IN-04)
+and kept WR-03 open.
+
+- **P3-DC-122 (Medium): WR-03 decision reversed to D-P3-15's literal text.**
+  `pending` previews a declared fresh install under the active implementation
+  again (an sse plugin under built-in previews `(will install)` with
+  `partial: true`), while `apply` refuses that install (`(failed)
+  {unsupported mcp}`). The mismatch predates Phase 3 for every partially
+  available kind; it is accepted here with a BACKLOG parent line ("apply
+  refuses a declared install pending previews as will partially install;
+  choose one behavior for both"). Supersedes P3-DC-117. Alternatives: preview
+  the neutral view (iteration 1); let apply install partially.
+- **P3-DC-123 (Low): WR-04: an unreadable legacy record (no basis) read
+  under the adapter counts as readable**, so its new drops are not excused;
+  under built-in or none the excuse stays.
+- **P3-DC-124 (Medium): WR-05: AMIG-01 writes the verdict, basis, configs, and
+  bundle flag only from the recorded version's servers** (through the frozen
+  `recordedMcpServers`, which refuses `version-mismatch`); otherwise the record
+  stays fully legacy (adapter verdict, no basis, no configs), while staging
+  keeps using the current checkout (reinstall parity). Alternative: a separate
+  version check on the migration's resolve (misses tag-pinned path sources).
+- **P3-DC-125 (Low): an existing AMIG-01 integration test deletes the install's
+  `mcpServerConfigs` before the reload** so its record looks like a released
+  build's.
+- **P3-DC-126 (Low): IN-04: a dependency move admits a candidate without
+  `--partial` only when it drops `mcpServers` alone**; any other dropped kind
+  keeps the `--partial` rule, even one the record already drops (no scenario,
+  it restores the earlier behavior).
+- **P3-DC-127 (Low): `03-REVIEW-FIX.md` lists iteration 2 first** and keeps
+  iteration 1's outcomes under an `iteration_1:` key.
