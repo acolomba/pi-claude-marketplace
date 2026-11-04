@@ -320,7 +320,7 @@ changes their names or shapes.
 
 - [x] **Phase 1: Foundation and Pi 1.5.0** - Pi 1.5.0, the active-implementation snapshot, the pure profiles, records that keep every declared server, and the dual-profile cucumber harness, with every shared file and interface frozen and no visible change (completed 2026-11-04)
 - [x] **Phase 2: Built-in Materialization** - Recorded servers connect through Pi's built-in MCP on startup and `/reload` with Claude's values and names, trust gating, status in `info`, and a switch that needs no plugin action (completed 2026-11-04)
-- [ ] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records
+- [x] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records (completed 2026-11-04)
 - [x] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child (completed 2026-11-04)
 - [x] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter (completed 2026-11-04)
 - [ ] **Phase 6: Release Docs and Combined Tree** - The CHANGELOG and READMEs describe built-in MCP support, closed sets are clean, and the combined tree passes under both profiles
@@ -440,7 +440,7 @@ Plans:
 - Wave 2, in parallel: the server verdicts in `info.ts` (MREC-04); markers, `requires:`, severity, and the marker rows in `features/plugin/*` and `features/marketplace/update.feature` (MREC-05 marker, MREC-07); the consent split and convergence (`install-outcome.ts` gate, `update-preflight.ts`, the `partial` functions, `reconcile/convergence.ts`, `import/execute.ts`), with `mcp-migration.ts` made explicit about the adapter profile (MREC-03 install side, MREC-05 consent, MREC-06).
 - Wave 3: merge the milestone branch (Phases 5, 4, and 2), re-run every owned row under both profiles, parent lines, and the phase gate.
 
-**Plans:** 9/9 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the `Dependency` type change gets its own wave before the marker rule, and the consent split, convergence, and the `requires:` line run in parallel after the rule)
+**Plans:** 9/9 plans complete in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the `Dependency` type change gets its own wave before the marker rule, and the consent split, convergence, and the `requires:` line run in parallel after the rule)
 
 Plans:
 **Wave 1**
@@ -534,7 +534,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
 | 2. Built-in Materialization | 9/9 | Complete    | 2026-11-04 |
-| 3. Read-Time Verdicts | 9/9 | In Progress | - |
+| 3. Read-Time Verdicts | 9/9 | Complete    | 2026-11-04 |
 | 4. Agent Grants | 6/6 | Complete    | 2026-11-04 |
 | 5. Hook Tool Names | 4/4 | Complete    | 2026-11-04 |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
