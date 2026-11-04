@@ -158,3 +158,121 @@ precedent). Each is recorded in `03-CONTEXT.md`.
 - **Alternatives:** keep the pairs with identical bodies.
 - **Why dubious:** P1-DC-16 moved them as pairs on the expectation that they
   differ; folding loses that history.
+
+## Plan step: research (2026-11-04)
+
+### P3-DC-14: Standard research ran despite the ROADMAP's "no `--research-phase`"; decisions numbered D-P3-NN
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** plan-phase's default research step ran (the ROADMAP flag rules
+  out only a research-only run); the CONTEXT decisions got IDs D-P3-01..23 so
+  the decision-coverage gate can track them.
+- **Alternatives:** skip research and plan from CONTEXT and the survey.
+- **Why dubious:** costs time on the critical path.
+
+### P3-DC-15: The resolver's top-level verdict becomes the neutral view; views come from `effectiveMcpCompatibility`
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** `resolveStrict` keeps its two-argument signature (frozen
+  `recorded-servers.ts` calls it); its top-level verdict is the neutral view,
+  and a pure `resolutionFor(resolved, active)` derives each implementation's
+  view with the frozen `effectiveMcpCompatibility`. Refines D-P3-03.
+- **Alternatives:** an option argument on `resolveStrict` (breaks the frozen
+  caller); both views stored on the result.
+- **Why dubious:** a call site that forgets `resolutionFor` silently reads the
+  `none` view.
+
+### P3-DC-16: `mcpServers` kind ordering follows `effectiveMcpCompatibility`
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** when only one implementation blocks, the `mcpServers` kind goes
+  last in `unsupported`, so the adapter reason order changes for a
+  bare-elicitation plugin that also has other unsupported kinds.
+- **Alternatives:** keep the resolver's order and accept install/list drift.
+- **Why dubious:** a byte change in a rare adapter row.
+
+### P3-DC-17: Record reads split into a pure helper and an I/O helper to avoid import cycles
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** `mcp-verdict.ts` (pure) and `mcp-verdict-read.ts` (I/O, imported
+  only by cycle-safe modules); the update swap and rows get the record verdict
+  as data from `materialize-latest.ts`, because the frozen
+  `recorded-servers.ts` imports `install-outcome.ts`.
+- **Alternatives:** direct imports (fallow cycle failure).
+- **Why dubious:** data threading through more parameters.
+
+### P3-DC-18: Legacy records with no MCP trace skip the offline re-resolve
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** a wrapped legacy reader answers "no servers" without I/O for a
+  legacy record with no MCP trace (no `resources.mcpServers`, no
+  `mcpServers` kind), so `list` does not re-resolve every old plugin.
+- **Alternatives:** always re-resolve (may hash whole plugin trees per list).
+- **Why dubious:** a legacy record whose servers were all adapter-blocked
+  with no stored kind would read as no servers; the stored kind covers that.
+
+### P3-DC-19: The `"mcp"` dependency becomes `{ kind: "mcp", runEvery }`
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** `Dependency` gains `McpDependency { kind: "mcp", runEvery:
+  McpImplementationId[] }` in place of the `"mcp"` literal; catalog fixtures
+  use `runEvery: ["adapter"]` so the frozen catalog counters keep their bytes.
+- **Alternatives:** keep `"mcp"` as adapter-only and add a new arm.
+- **Why dubious:** every emit site and fixture changes shape.
+
+### P3-DC-20: Record-driven consent gates read the `none` view; fresh import/apply installs read the active view
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** enable, re-enable, promotion, and promoting import gate on the
+  `none` view (never asks because of a switch, safe for legacy adapter
+  records); a fresh import or apply install (no record) gates on the active
+  implementation.
+- **Alternatives:** active view everywhere; `none` everywhere.
+- **Why dubious:** a fresh import under built-in of an `sse` plugin asks for
+  consent that the same import under the adapter does not.
+
+### P3-DC-21: The update intent mark keeps the old record's basis
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** `markUpdateInProgress` keeps the old basis instead of forcing
+  `"neutral"`, because it changes only the notes of the old verdict.
+- **Alternatives:** force `"neutral"` as D-P3-02's list says.
+- **Why dubious:** departs from the literal D-P3-02 list.
+
+### P3-DC-22: Completions stay on the stored verdict (parent line)
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** the completion resolver has no run (frozen `edge/register.ts`)
+  and its cache keys only scope and marketplace, so completions keep reading
+  the stored verdict; a parent line asks for a run in the completion path.
+- **Alternatives:** probe the implementation inside completion (forbidden
+  before every extension loads), or edit the frozen file.
+- **Why dubious:** `update --partial` completion candidates may differ from
+  `list` after a switch.
+
+### P3-DC-23: Phase 3 edits files the ownership table does not name
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** `edge/handlers/tools.ts`, `edge/handlers/plugin/browse.ts`,
+  `orchestrators/types.ts`, `orchestrators/plugin/fetch.ts`, and
+  `reconcile/{pending,read-pass,apply,notify}.ts` change to carry the new
+  marker data and views; no sibling owns them.
+- **Alternatives:** parent lines.
+- **Why dubious:** widens the merge surface with siblings.
+
+### P3-DC-24: An unreadable record read falls back to the stored adapter reading for markers
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** with no readable recorded servers, markers use the stored
+  verdict as the adapter's (frozen rule 1).
+- **Alternatives:** no marker.
+- **Why dubious:** under built-in, an unreadable legacy record may show the
+  adapter marker.
+
+### P3-DC-25: `fetch` rows switch to the active view
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** `fetch` rows (not named by MREC-03) follow the active
+  implementation for consistency.
+- **Alternatives:** leave them on the stored verdict.
+- **Why dubious:** scope widening.
