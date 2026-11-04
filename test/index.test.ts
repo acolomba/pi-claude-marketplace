@@ -1622,8 +1622,11 @@ test("AAP-03 / NFR-2: an autoapply load whose apply throws reports the abort and
     "utf8",
   );
   const promptPath = await seedPrompt(scope.cwd, "kept.md");
+  // Two emissions, the abort and the read-only fallback's pending block, and
+  // one mode read before each of them and each load stage: a skipped stage
+  // leaves a stated read unmet.
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
-    1,
+    2,
     PROBES_PER_DISCOVER,
   );
 
@@ -1635,6 +1638,11 @@ test("AAP-03 / NFR-2: an autoapply load whose apply throws reports the abort and
     {
       message: "reconcile aborted: PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is not a valid URL.",
       severity: "error",
+    },
+    {
+      message:
+        "● tools [user] (will add)\n\n" +
+        "Reconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
     },
   ]);
   assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [promptPath] });
