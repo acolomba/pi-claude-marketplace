@@ -943,6 +943,7 @@ test("does not rewrite an unchanged disabled pin", async (t) => {
   assert.ok(record !== undefined);
   record.resolvedSource = seed.pluginRoot;
   record.mcpServerConfigs = [];
+  record.compatibilityBasis = "neutral";
   await saveState(seed.locations.extensionRoot, state);
   const before = await readFile(seed.locations.stateJsonPath, "utf8");
 
@@ -963,7 +964,7 @@ test("does not rewrite an unchanged disabled pin", async (t) => {
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
 
-test("MREC-01: a disabled update rewrites a pin whose only change is a neutral basis and removes the basis", async (t) => {
+test("D-P3-02: a disabled update rewrites a legacy pin whose only change is the neutral basis", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("2.0.0", false) });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
@@ -972,7 +973,6 @@ test("MREC-01: a disabled update rewrites a pin whose only change is a neutral b
   assert.ok(record !== undefined);
   record.resolvedSource = seed.pluginRoot;
   record.mcpServerConfigs = [];
-  record.compatibilityBasis = "neutral";
   await saveState(seed.locations.extensionRoot, state);
 
   // act
@@ -987,6 +987,7 @@ test("MREC-01: a disabled update rewrites a pin whose only change is a neutral b
       refreshed: {
         ...pluginRecord("2.0.0", false),
         resolvedSource: seed.pluginRoot,
+        compatibilityBasis: "neutral",
         mcpServerConfigs: [],
         updatedAt: refreshed?.updatedAt,
       },
@@ -1013,6 +1014,7 @@ test("MREC-01: a disabled legacy record without recorded MCP servers gains them 
       refreshed: {
         ...pluginRecord("2.0.0", false),
         resolvedSource: seed.pluginRoot,
+        compatibilityBasis: "neutral",
         mcpServerConfigs: [],
         updatedAt: refreshed?.updatedAt,
       },
@@ -2785,6 +2787,7 @@ test("does not rewrite a concurrently converged disabled pin", async (t) => {
   record.resolvedSource = seed.pluginRoot;
   record.resolvedSha = sha;
   record.compatibility = { installable: true, notes: [], supported: ["skills"], unsupported: [] };
+  record.compatibilityBasis = "neutral";
   record.mcpServerConfigs = [];
   record.updatedAt = "concurrent-writer";
   await saveState(seed.locations.extensionRoot, state);

@@ -191,6 +191,7 @@ test("swaps the offered version in and records it in cascade mode", async (t) =>
   const state = await loadState(base.locations.extensionRoot);
   assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello, {
     ...recordedPlugin("1.1.0", pluginRoot),
+    compatibilityBasis: "neutral",
     mcpServerConfigs: [],
     updatedAt: "2026-01-02T00:00:00.001Z",
   });
@@ -233,6 +234,7 @@ test("REI-01: a policy that does not skip the recorded revision restores its del
   const state = await loadState(base.locations.extensionRoot);
   assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello, {
     ...recordedPlugin("1.0.0", pluginRoot),
+    compatibilityBasis: "neutral",
     mcpServerConfigs: [],
     updatedAt: "2026-01-02T00:00:00.001Z",
   });

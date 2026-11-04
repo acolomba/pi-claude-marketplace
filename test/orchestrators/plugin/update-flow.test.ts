@@ -1281,6 +1281,7 @@ test("PROV-02/PROV-03: update never promotes a dependency record's provenance", 
       version: "1.0.1",
       resolvedSource: path.join(cwd, "mp-src", "plugins", "hello"),
       compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+      compatibilityBasis: "neutral",
       resources: {
         skills: ["hello-tool"],
         prompts: [],

@@ -257,6 +257,7 @@ async function assertAgentsMigrated(params: {
     version: "2.0.0",
     resolvedSource: pluginRoot,
     compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
+    compatibilityBasis: "neutral",
     mcpServerConfigs: [],
     resources: {
       skills: [],
@@ -503,7 +504,7 @@ test("MREC-01 / D-MB-04: an all-success swap records the new version's declared 
         { name: "live", config: { type: "ws", url: "wss://mcp.example.com/ws" } },
       ],
       mcpBundle: true,
-      hasCompatibilityBasis: false,
+      hasCompatibilityBasis: true,
     },
   );
 });
@@ -700,13 +701,13 @@ test("MREC-01: a failed swap keeps the previous MCP servers beside the intent ma
   );
 });
 
-test("MREC-01: an all-success swap removes a neutral basis with the compatibility it replaces", async (t) => {
+test("D-P3-02: an all-success swap of a legacy record records the neutral verdict with its basis", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-basis-");
   const args = await seedMcpRecordUpdate(
     cwd,
-    { compatibilityBasis: "neutral" },
-    { mcpJson: { server1: { command: "node", args: ["s.js"] } } },
+    {},
+    { mcpJson: { asker: { command: "node", bareElicitationCapability: true } } },
   );
   const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
   assert.ok(!("partition" in preflight));
@@ -720,39 +721,54 @@ test("MREC-01: an all-success swap removes a neutral basis with the compatibilit
     {
       partition: outcome.partition,
       version: record?.version,
-      hasCompatibilityBasis: record !== undefined && Object.hasOwn(record, "compatibilityBasis"),
+      compatibility: record?.compatibility,
+      compatibilityBasis: record?.compatibilityBasis,
     },
-    { partition: "updated", version: "2.0.0", hasCompatibilityBasis: false },
-  );
-});
-
-test("MREC-01: a failed swap removes a neutral basis beside the intent mark", async (t) => {
-  // arrange
-  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-basis-failure-");
-  const args = await seedMcpRecordUpdate(
-    cwd,
-    { compatibilityBasis: "neutral" },
-    { mcpJson: { server1: { command: "node", args: ["s.js"] } } },
-  );
-  await mkdir(args.locations.skillsTargetDir, { recursive: true });
-  await writeFile(path.join(args.locations.skillsTargetDir, "hello-tool"), "old-resource-tree");
-  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
-  assert.ok(!("partition" in preflight));
-
-  // act
-  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
-
-  // assert
-  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
-  assert.deepStrictEqual(
     {
-      partition: outcome.partition,
-      notes: record?.compatibility.notes,
-      hasCompatibilityBasis: record !== undefined && Object.hasOwn(record, "compatibilityBasis"),
+      partition: "updated",
+      version: "2.0.0",
+      compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+      compatibilityBasis: "neutral",
     },
-    { partition: "failed", notes: ["update-in-progress"], hasCompatibilityBasis: false },
   );
 });
+
+for (const { previous, kept } of [
+  { previous: { compatibilityBasis: "neutral" }, kept: "neutral" },
+  { previous: {}, kept: undefined },
+] as const) {
+  test(`D-P3-02: a failed swap keeps ${kept === undefined ? "no basis on a legacy record" : "the neutral basis"} beside the intent mark`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-basis-failure-");
+    const args = await seedMcpRecordUpdate(cwd, previous, {
+      mcpJson: { server1: { command: "node", args: ["s.js"] } },
+    });
+    await mkdir(args.locations.skillsTargetDir, { recursive: true });
+    await writeFile(path.join(args.locations.skillsTargetDir, "hello-tool"), "old-resource-tree");
+    const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+    assert.ok(!("partition" in preflight));
+
+    // act
+    const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+    // assert
+    const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+    assert.deepStrictEqual(
+      {
+        partition: outcome.partition,
+        notes: record?.compatibility.notes,
+        compatibilityBasis: record?.compatibilityBasis,
+        hasCompatibilityBasis: record !== undefined && Object.hasOwn(record, "compatibilityBasis"),
+      },
+      {
+        partition: "failed",
+        notes: ["update-in-progress"],
+        compatibilityBasis: kept,
+        hasCompatibilityBasis: kept !== undefined,
+      },
+    );
+  });
+}
 
 /** Same-revision knobs (a reinstall's): neither the version nor the sha moves. */
 const SAME_REVISION_POLICY = {
@@ -1070,6 +1086,7 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
     version: "2.0.0",
     resolvedSource: pluginRoot,
     compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
+    compatibilityBasis: "neutral",
     mcpServerConfigs: [],
     updatedAt: "2026-01-02T00:00:00.001Z",
   });

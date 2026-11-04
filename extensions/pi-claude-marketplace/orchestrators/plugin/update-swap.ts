@@ -730,7 +730,10 @@ async function markUpdateInProgress(
 
       sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
 
-      // MREC-01: the intent mark is no neutral verdict, so it clears the basis.
+      // MREC-01 / D-P3-02: the intent mark changes only the notes of the
+      // verdict it carries forward, so the record keeps its basis: a neutral
+      // record stays neutral, and a legacy record keeps no basis.
+      const basis = sRecord.compatibilityBasis;
       replaceCompatibility(sRecord, {
         installable: false,
         notes: [UPDATE_IN_PROGRESS_NOTE],
@@ -740,6 +743,9 @@ async function markUpdateInProgress(
         supported: [...sRecord.compatibility.supported],
         unsupported: [...sRecord.compatibility.unsupported],
       });
+      if (basis !== undefined) {
+        sRecord.compatibilityBasis = basis;
+      }
 
       // CR-02: `resources.workflows` is the ONE inventory this window widens, to
       // the union of the names already recorded and the names about to be
@@ -889,14 +895,16 @@ function applyPerBridgeResources(
 function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: PluginPreflight): void {
   const { installable, toVersion, resolvedSha } = preflight;
   sRecord.version = toVersion;
-  // MREC-01: the swap records the adapter's verdict for `toVersion`, so it
-  // clears the basis.
+  // MREC-01 / D-P3-02: the swap records the neutral verdict for `toVersion`,
+  // and `replaceCompatibility` clears the basis, so the basis is set after it
+  // in the same locked save.
   replaceCompatibility(sRecord, {
     installable: installable.state === "installable",
     notes: [...installable.notes],
     supported: [...installable.supported],
     unsupported: [...installable.unsupported],
   });
+  sRecord.compatibilityBasis = "neutral";
   // MREC-01 / D-MB-04: the declared MCP servers of `toVersion`, written
   // beside `compatibility` so a failed update keeps the previous servers next
   // to the intent mark.

@@ -227,8 +227,12 @@ test("MREC-01: an update records the new version's servers, dropping and adding 
 
     // assert
     assert.deepStrictEqual(
-      { version: record.version, mcpServerConfigs: record.mcpServerConfigs },
-      { version: "2.0.0", mcpServerConfigs: VERSION_2_RECORDED },
+      {
+        version: record.version,
+        mcpServerConfigs: record.mcpServerConfigs,
+        hasCompatibilityBasis: Object.hasOwn(record, "compatibilityBasis"),
+      },
+      { version: "2.0.0", mcpServerConfigs: VERSION_2_RECORDED, hasCompatibilityBasis: true },
     );
   });
 });
@@ -277,8 +281,14 @@ test("MREC-01: updating a disabled plugin records the new version's servers with
         enabled: record.enabled,
         version: record.version,
         mcpServerConfigs: record.mcpServerConfigs,
+        hasCompatibilityBasis: Object.hasOwn(record, "compatibilityBasis"),
       },
-      { enabled: false, version: "2.0.0", mcpServerConfigs: VERSION_2_RECORDED },
+      {
+        enabled: false,
+        version: "2.0.0",
+        mcpServerConfigs: VERSION_2_RECORDED,
+        hasCompatibilityBasis: true,
+      },
     );
   });
 });
@@ -296,7 +306,13 @@ test("MREC-01: a reinstall records the servers on a record that lacked them", as
     const record = await savedRecord(cwd);
 
     // assert
-    assert.deepStrictEqual(record.mcpServerConfigs, CLEAN_1_RECORDED);
+    assert.deepStrictEqual(
+      {
+        mcpServerConfigs: record.mcpServerConfigs,
+        hasCompatibilityBasis: Object.hasOwn(record, "compatibilityBasis"),
+      },
+      { mcpServerConfigs: CLEAN_1_RECORDED, hasCompatibilityBasis: true },
+    );
   });
 });
 

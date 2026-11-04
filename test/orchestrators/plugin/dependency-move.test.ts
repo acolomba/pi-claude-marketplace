@@ -570,6 +570,7 @@ describe("runDependencyMove", () => {
     const state = await loadState(context.locations.extensionRoot);
     assert.deepStrictEqual(state.marketplaces.mp?.plugins.zcore, {
       ...recordedPlugin("2.0.0", pluginRoot),
+      compatibilityBasis: "neutral",
       mcpServerConfigs: [],
       updatedAt: "2026-01-02T00:00:00.001Z",
     });

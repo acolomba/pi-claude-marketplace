@@ -809,6 +809,9 @@ function nextDisabledPin(preflight: PreparedPluginUpdate): {
         resolvedVersion: preflight.resolvedVersion,
       }),
       compatibility,
+      // D-P3-02: the refresh writes the neutral basis, so a record that
+      // already holds it projects the same and is not rewritten.
+      compatibilityBasis: "neutral",
       mcpServerConfigs,
       ...(mcpBundle && { mcpBundle: true }),
     }),
@@ -872,9 +875,11 @@ async function refreshDisabledRecord(
         record.resolvedVersion = preflight.resolvedVersion;
       }
 
-      // MREC-01: the refresh writes the adapter's verdict, so a neutral
-      // basis left from the old version goes.
+      // MREC-01 / D-P3-02: the refresh writes the neutral verdict, and
+      // `replaceCompatibility` clears the basis, so the basis is set after it
+      // in the same locked save.
       replaceCompatibility(record, next.compatibility);
+      record.compatibilityBasis = "neutral";
       // MREC-01: the declared MCP servers of the version the record now names.
       record.mcpServerConfigs = next.mcpServerConfigs;
       if (next.mcpBundle) {
