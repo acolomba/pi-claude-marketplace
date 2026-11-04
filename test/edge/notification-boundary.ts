@@ -63,9 +63,10 @@ export interface NotificationBoundary {
  * and `commands`. A notification run takes one `softDepStatus(pi)` snapshot
  * when it opens (D-05), and this is the one place that says how many Pi reads
  * one snapshot makes: three `getAllTools()` reads (one per companion target)
- * and one `getCommands()` read (the pi-mcp-adapter command arm). A change to
- * the probe's read shape breaks here once (WR-08). A `probes` of 0 states nothing,
- * because `times(0)` is no limit.
+ * and one `getCommands()` read, which serves both MCP arms (the pi-mcp-adapter
+ * command arm and the built-in MCP arm, MSEL-01). A change to the probe's read
+ * shape breaks here once (WR-08). A `probes` of 0 states nothing, because
+ * `times(0)` is no limit.
  */
 export function expectSoftDepProbes(
   pi: PiInventory,

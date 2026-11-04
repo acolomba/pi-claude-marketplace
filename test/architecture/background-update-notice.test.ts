@@ -61,7 +61,12 @@ const CATALOG_ROWS: readonly {
 function loadRun(): NotificationRun {
   return {
     origin: { kind: "load" },
-    softDeps: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
+    softDeps: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
+      workflowEngineLoaded: false,
+    },
     entrySink: {
       appendEntry(): never {
         throw new Error("A text-mode load run cannot append entries");

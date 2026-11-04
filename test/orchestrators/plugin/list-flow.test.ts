@@ -152,6 +152,7 @@ function makeCtx(
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
     ...options.softDeps,
   });

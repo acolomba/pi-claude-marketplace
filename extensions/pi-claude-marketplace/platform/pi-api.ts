@@ -5,13 +5,16 @@
 // import Pi API types from here so peer-version bumps are auditable.
 //
 // The soft-dependency probes (`hasLoadedPiSubagents` /
-// `hasLoadedPiMcpAdapter` / `hasLoadedWorkflowEngine` / `softDepStatus`) live
-// here because they inspect `pi.getAllTools()` and `pi.getCommands()`, which
-// belong to the external Pi API surface. `softDepStatus` is the probe that
-// `openNotificationRun` takes once per run (D-05). The run's `SoftDepStatus`
-// snapshot decides whether a plugin row whose `dependencies` declare a kind
-// carries the `requires pi-subagents` / `requires pi-mcp-adapter` /
-// `requires pi-dynamic-workflows` marker.
+// `hasLoadedPiMcpAdapter` / `hasLoadedBuiltinMcp` / `hasLoadedWorkflowEngine` /
+// `softDepStatus`) live here because they inspect `pi.getAllTools()` and
+// `pi.getCommands()`, which belong to the external Pi API surface.
+// `softDepStatus` is the probe that `openNotificationRun` takes once per run
+// (D-05). It reads `pi.getCommands()` once and hands that one list to both MCP
+// arms, the adapter's and the built-in's, so a snapshot makes the same reads
+// it made before the run gained its active MCP implementation (MSEL-01). The
+// run's `SoftDepStatus` snapshot decides whether a plugin row whose
+// `dependencies` declare a kind carries the `requires pi-subagents` /
+// `requires pi-mcp-adapter` / `requires pi-dynamic-workflows` marker.
 
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -167,7 +170,13 @@ export type StopReason = AssistantMessage["stopReason"];
 
 export interface SoftDepStatus {
   piSubagentsLoaded: boolean;
+  /** Equals `mcpImplementation === "adapter"`; kept for the current readers. */
   piMcpAdapterLoaded: boolean;
+  /**
+   * MSEL-01: the run's active MCP implementation, with the precedence adapter,
+   * then Pi's built-in MCP, then none.
+   */
+  mcpImplementation: ActiveMcpImplementation;
   workflowEngineLoaded: boolean;
 }
 
@@ -188,11 +197,11 @@ export interface ToolInventoryItem {
   readonly sourceInfo?: { readonly source?: unknown };
 }
 
-/** The slash-command metadata inspected by the pi-mcp-adapter probe. */
+/** The slash-command metadata inspected by the MCP implementation probes. */
 export interface CommandInventoryItem {
   readonly name?: unknown;
   readonly source?: unknown;
-  readonly sourceInfo?: { readonly source?: unknown };
+  readonly sourceInfo?: { readonly source?: unknown; readonly path?: unknown };
 }
 
 /**
@@ -275,28 +284,89 @@ function probeArm(arm: () => boolean): boolean {
 }
 
 /**
- * ADET-02: pi-mcp-adapter is loaded iff `pi.getCommands()` lists an extension
- * command named `mcp-adapter`, or the `sourceInfo.source` of an extension
- * command or of a tool contains "pi-mcp-adapter". The command is present with
+ * The snapshot's one `pi.getCommands()` read, shared by both MCP arms. A read
+ * that throws reads as an empty inventory, so neither arm sees a command.
+ */
+function readCommands(pi: PiInventory): readonly CommandInventoryItem[] {
+  try {
+    return pi.getCommands();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * ADET-02: pi-mcp-adapter is loaded iff `commands` lists an extension command
+ * named `mcp-adapter`, or the `sourceInfo.source` of an extension command or
+ * of a tool contains "pi-mcp-adapter". The command is present with
  * `disableProxyTool` and in a fork. A bare tool named `mcp` does not count,
  * and neither does Pi's built-in MCP (`mcp__*` tools and an `mcp` command from
  * `builtin:mcp`). Each arm is guarded on its own and both always run, so one
  * snapshot makes the same reads in every state and a throwing arm leaves the
  * other one deciding.
  */
-function hasLoadedPiMcpAdapter(pi: PiInventory): boolean {
-  const viaCommands = probeArm(() => pi.getCommands().some((command) => isAdapterCommand(command)));
+function hasLoadedPiMcpAdapter(
+  pi: PiInventory,
+  commands: readonly CommandInventoryItem[],
+): boolean {
+  const viaCommands = probeArm(() => commands.some((command) => isAdapterCommand(command)));
   const viaTools = probeArm(() =>
     pi.getAllTools().some((tool) => isAdapterSource(tool.sourceInfo?.source)),
   );
   return viaCommands || viaTools;
 }
 
-/** Snapshots which optional companion extensions Pi has loaded. */
+// MSEL-01: Pi marks each of its own built-in extensions with the source path
+// `builtin:<name>`. A third extension that registers `/mcp` makes Pi leave the
+// built-in out, and its command carries that extension's own path, so it does
+// not read as the built-in.
+function isBuiltinMcpCommand(command: CommandInventoryItem): boolean {
+  return (
+    command.source === "extension" &&
+    command.name === "mcp" &&
+    command.sourceInfo?.path === "builtin:mcp"
+  );
+}
+
+/**
+ * MSEL-01: Pi's built-in MCP is loaded iff `commands` lists the extension
+ * command `mcp` whose `sourceInfo.path` is exactly `builtin:mcp`. A prompt
+ * template or skill named `mcp` does not count.
+ */
+function hasLoadedBuiltinMcp(commands: readonly CommandInventoryItem[]): boolean {
+  return probeArm(() => commands.some((command) => isBuiltinMcpCommand(command)));
+}
+
+/** MSEL-01: the adapter wins over Pi's built-in MCP; with neither, none. */
+function activeMcpImplementation(
+  adapterLoaded: boolean,
+  builtinLoaded: boolean,
+): ActiveMcpImplementation {
+  if (adapterLoaded) {
+    return "adapter";
+  }
+
+  if (builtinLoaded) {
+    return "builtin";
+  }
+
+  return "none";
+}
+
+/**
+ * Snapshots which optional companion extensions Pi has loaded and which MCP
+ * implementation the run uses. One snapshot reads `pi.getCommands()` once and
+ * `pi.getAllTools()` three times, whatever Pi has loaded, in the order the
+ * snapshot read them before it named the MCP implementation.
+ */
 export function softDepStatus(pi: PiInventory): SoftDepStatus {
+  const piSubagentsLoaded = hasLoadedPiSubagents(pi);
+  const commands = readCommands(pi);
+  const adapterLoaded = hasLoadedPiMcpAdapter(pi, commands);
   return {
-    piSubagentsLoaded: hasLoadedPiSubagents(pi),
-    piMcpAdapterLoaded: hasLoadedPiMcpAdapter(pi),
+    piSubagentsLoaded,
+    piMcpAdapterLoaded: adapterLoaded,
+    mcpImplementation: activeMcpImplementation(adapterLoaded, hasLoadedBuiltinMcp(commands)),
     workflowEngineLoaded: hasLoadedWorkflowEngine(pi),
   };
 }

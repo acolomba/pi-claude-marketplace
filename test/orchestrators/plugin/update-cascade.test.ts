@@ -657,6 +657,7 @@ test("D-05: stamps warning and composes the agents marker from one unloaded snap
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: true,
+    mcpImplementation: "adapter",
     workflowEngineLoaded: true,
   });
   const outcomes: readonly UpdateCascadeOutcome[] = [
@@ -698,6 +699,7 @@ test("D-05: stamps info and composes no marker from one loaded snapshot", () => 
   const run = runWithSoftDeps({
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
   });
   const outcomes: readonly UpdateCascadeOutcome[] = [

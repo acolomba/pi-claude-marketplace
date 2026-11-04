@@ -45,11 +45,13 @@ const PROBE_BOTH_LOADED: SoftDepStatus = {
   workflowEngineLoaded: false,
   piSubagentsLoaded: true,
   piMcpAdapterLoaded: true,
+  mcpImplementation: "adapter",
 };
 const PROBE_NO_AGENTS: SoftDepStatus = {
   workflowEngineLoaded: false,
   piSubagentsLoaded: false,
   piMcpAdapterLoaded: true,
+  mcpImplementation: "adapter",
 };
 
 /** One captured emission: the composed body plus the severity argument. */
