@@ -667,6 +667,11 @@ export class ScenarioWorld extends World {
     return readSession(this.pi);
   }
 
+  /** Whether a profile Pi started in this scenario, so a step that must precede it can refuse. */
+  get profilePiStarted(): boolean {
+    return this.profileHarnessDirectory !== undefined;
+  }
+
   /**
    * Returns the harness directory of this scenario's profile Pi, where the
    * scripted model reads its script and the stand-ins keep their logs.
