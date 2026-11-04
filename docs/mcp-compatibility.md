@@ -18,6 +18,15 @@ With pi-mcp-adapter, this extension needs pi-mcp-adapter 7.0.0 or a later 7.x re
 
 This extension picks the implementation from what Pi loads. When Pi loads pi-mcp-adapter, pi-mcp-adapter runs the plugin servers. When Pi does not load pi-mcp-adapter and runs its built-in MCP, Pi's built-in MCP runs them. When Pi runs neither, no plugin server runs. The same installed plugin works under each, with no plugin command in between (`features/mcp-server/implementation-switch.feature`).
 
+Each install writes the `mcp-adapter.json` entries and records the servers of the plugin, whatever implementation runs at that time. So you can switch at any time (MSEL-02, MSEL-04):
+
+- To move from pi-mcp-adapter to Pi's built-in MCP, remove pi-mcp-adapter from the packages that Pi loads. Also remove the `-builtin:mcp` entry that pi-mcp-adapter added to the `extensions` of your user Pi settings, `~/.pi/agent/settings.json`. Then start Pi again. Pi's built-in MCP runs the plugin servers (`features/mcp-server/implementation-switch.feature`).
+- To move back, add pi-mcp-adapter again, then start Pi again. pi-mcp-adapter runs the entries that the install wrote, also for a plugin that you installed while Pi's built-in MCP ran (`features/mcp-server/implementation-switch.feature`).
+
+This extension never edits your Pi settings (D-MB-01). If you remove pi-mcp-adapter but keep its `-builtin:mcp` entry, Pi runs no MCP. No plugin server runs, and this extension registers nothing, so Pi reports no error (MSEL-03, `features/mcp-server/implementation-switch.feature`). While pi-mcp-adapter runs, this extension also registers nothing with Pi's built-in MCP (MSEL-03, `features/mcp-server/listing.feature`).
+
+A plugin that an earlier release of this extension installed runs under Pi's built-in MCP too, with no reinstall. Its record holds no copy of its servers, so this extension reads them from the plugin source that the record names (MREC-02, `features/mcp-server/implementation-switch.feature`).
+
 ## Server and tool names
 
 Claude Code registers a plugin server under the name `plugin:<plugin>:<server>`. The model sees each tool of that server as `mcp__plugin_<plugin>_<server>__<tool>`. To make a name, Claude Code replaces every character outside `A-Z`, `a-z`, `0-9`, `_` and `-` with `_` (ANAME-01).
@@ -125,7 +134,11 @@ On pi-mcp-adapter 7.0.0, the stub server logs one start for the listing at a ses
 
 Thus the first call to a tool of a stopped server waits while the server starts. A server that keeps data in memory loses that data when the adapter stops it. You can change the mode of one server: set `lifecycle` on its entry yourself. pi-mcp-adapter 7.0.0 accepts `lazy`, `lazy-keep-alive`, `keep-alive`, and `eager`. With `lazy-keep-alive`, the server starts on its first use, as with `lazy`, and then stays running for the session. This extension keeps that field when it updates or reinstalls the plugin.
 
+Pi's built-in MCP has no lazy mode for plugin servers. It connects every registered server when the session starts and keeps the connection, as Claude Code does. See [When the servers register](#when-the-servers-register).
+
 ## Project-scope servers
+
+This section describes pi-mcp-adapter. Pi's built-in MCP asks for no approval. See [Project trust under Pi's built-in MCP](#project-trust-under-pis-built-in-mcp).
 
 A project-scope plugin writes its servers into `<project>/.pi/mcp-adapter.json`. pi-mcp-adapter treats every server from a project file as a project server, and it owns the trust rules for these servers:
 
@@ -157,7 +170,56 @@ For the file layout and the settings of pi-mcp-adapter, see its [configuration d
 
 ## Pi's built-in MCP
 
-When Pi does not load pi-mcp-adapter, Pi's built-in MCP runs the plugin servers. This extension registers each server of each enabled plugin with it, under the name `plugin_<plugin>_<server>` (`features/mcp-server/listing.feature`).
+When Pi does not load pi-mcp-adapter, Pi's built-in MCP runs the plugin servers. This extension registers each server of each enabled plugin with it, under the name `plugin_<plugin>_<server>` (`features/mcp-server/listing.feature`). The entries in `mcp-adapter.json` stay in place for pi-mcp-adapter, and Pi's built-in MCP does not read them.
+
+### When the servers register
+
+This extension registers the servers at each session start and at each `/reload`. It registers them again after the load applies changes to the installed plugins, for example when `autoapply` installs a plugin (D-MB-10, `features/mcp-server/lifecycle.feature`). A plugin command does not register or remove a server at once. So an install, an enable, or an update takes effect at the next `/reload`. A plugin that you disable or uninstall keeps its server until the next `/reload` or session (BLT-06, `features/mcp-server/lifecycle.feature`). A published change to a server reaches Pi only after the plugin updates (`features/mcp-server/lifecycle.feature`).
+
+The registrations live only in the Pi session. Pi starts each session with no registration, and this extension writes no file for Pi's built-in MCP (`dist/core/extensions/loader.js`). Pi connects every registered server when the session starts, and keeps the connection for the session, as Claude Code does. A stub server logs one `initialize` for the whole session (`dist/extensions/mcp/index.js`, `features/mcp-server/lifecycle.feature`).
+
+If Pi refuses a registration, for example a `url` that is not an `http` or `https` URL, this extension writes the refusal to its debug log and registers the other servers. `/claude:plugin info` shows `not loaded` for the refused server (`dist/core/mcp-servers.js`, `features/mcp-server/builtin-status.feature`).
+
+### Variables under Pi's built-in MCP
+
+Pi's built-in MCP has its own variable rules. In `env` and `headers` values, it expands `$NAME` and `${NAME}`, and it runs a value that starts with `!` as a shell command. It has no `${NAME:-default}`, and it does not connect a server whose variable is not set (`dist/core/resolve-config-value.js`). These are not the rules of Claude Code. So this extension resolves every variable itself when it registers the server, with the rule of Claude Code, from the environment of the Pi session (P2-DC-02, `features/mcp-server/configuration.feature`). A variable that you set before Pi starts reaches the server with no reinstall (`features/mcp-server/invocation.feature`). `${CLAUDE_PROJECT_DIR}` becomes the working directory of the session, in both scopes (P2-DC-03).
+
+In `env` and `headers` values, the fields that Pi expands, this extension writes each `$` as `$$` and a leading `!` as `$!`. Pi turns them back into `$` and `!`, so the server gets the value byte for byte, and no command runs (`dist/core/resolve-config-value.js`, `features/mcp-server/configuration.feature`). A variable that is not set and has no default keeps the literal `${NAME}` text, as in Claude Code (AVAR-02, `features/mcp-server/configuration.feature`). In a `url`, such a literal is not a valid URL, so Pi refuses the server, and info shows `not loaded` (`features/mcp-server/builtin-status.feature`). The [withheld credentials](#withheld-credentials) apply as they do for pi-mcp-adapter. A conformance test runs each expansion case through the resolver of Pi 1.5.0 and compares the result with the value of Claude Code (`test/integration/mcp-builtin-encoding-conformance.test.ts`).
+
+The resolved values are not private to the server. Pi gives the config of every registered server, resolved values and secrets included, to every extension in the same Pi process (P2-DC-02, D-MB-04, `dist/core/extensions/loader.js`). The probe extension of `features/mcp-server/builtin-values.feature` reads them this way. These extensions can already read the same values from the environment of the Pi process. This extension writes none of the resolved values to a file.
+
+### Project trust under Pi's built-in MCP
+
+Pi's built-in MCP has no approval step. A project-scope plugin server registers only while Pi trusts the project. It then runs with no approval and no allow setting (BLT-03, D-MB-09, `features/mcp-server/project-scope.feature`). In a project that Pi does not trust, this extension registers no project-scope server, and info shows `project not trusted` for it (`features/mcp-server/project-scope.feature`, `features/mcp-server/builtin-status.feature`). Claude Code also asks for no approval of a plugin server.
+
+For a plugin installed in both scopes, while Pi trusts the project, each project-scope server replaces the user-scope server with the same name. While Pi does not trust the project, the user-scope servers run (P2-DC-07, P2-DC-14, `features/mcp-server/builtin-trust.feature`).
+
+### Servers in mcp.json
+
+Pi's built-in MCP also reads your `~/.pi/agent/mcp.json` and, in a trusted project, `<project>/.pi/mcp.json` (`dist/extensions/mcp/config.js`). A server in these files wins over a registered server when the two names are equal after every `-` becomes `_` (`dist/extensions/mcp/index.js`). For a plugin server, `/claude:plugin info` then shows `overridden by mcp.json`, and Pi's `/mcp` lists the override (P2-DC-08, `features/mcp-server/builtin-status.feature`). Info counts an `mcp.json` entry when it has a `command` or a `url`, so an entry that Pi refuses for another reason also shows as an override (P2-DC-15).
+
+Claude Code also lets a server that you configured win over a plugin server. It matches the two servers by their command or URL, not by their names, and `/plugin` reports the skipped plugin server (P2-DC-15). This extension shows no notice at load for an overridden server. Info and Pi's `/mcp` report it (P2-DC-08).
+
+### A name that another extension registered
+
+Another extension can register a server under the name `plugin_<plugin>_<server>` before this extension does. Pi then refuses the registration of this extension, because each name has one owner (`dist/core/extensions/loader.js`). The refusal reaches only the debug log. Info then shows the state of the other extension's server on the plugin server's row. Pi 1.5.0 gives an extension no reliable way to learn the path that Pi records for its own registrations, so info cannot tell the two servers apart (P2-DC-46).
+
+### Tool search and /mcp
+
+Pi's built-in MCP registers each plugin tool as a deferred tool and turns on Pi's `tool_search` tool. The model searches with `tool_search`, then calls the tool directly by its Claude Code name. No `mcp` proxy tool exists (`features/mcp-server/invocation.feature`, `dist/extensions/tool-search/tool.js`). A search that matches no plugin tool loads none, and the server gets no call (`features/mcp-server/listing.feature`). A server with `alwaysLoad: true` offers its tools from the first request, and the model calls them with no search (`features/mcp-server/builtin-direct.feature`).
+
+Pi's `/mcp` manager can turn a plugin server off, but only for the current session. Pi saves no choice for a server that an extension registered (`dist/extensions/mcp/index.js`). Info then shows `disabled` (`features/mcp-server/builtin-status.feature`). The [user overrides](#user-overrides) in `mcp-adapter.json` apply only to pi-mcp-adapter.
+
+### Legacy mcp.json entries
+
+Releases before AMIG-01 wrote plugin servers into `mcp.json` under the server name that the plugin declares. Pi's built-in MCP reads `mcp.json` at its own session start, before the load of this extension moves those entries out (`dist/extensions/mcp/index.js`). So in the first session after such an upgrade, Pi runs each legacy entry once more under its old name, beside the registered server. In that session, Pi reads the values of the entry with its own `$` and `!` rules, which the entry was not written for (`dist/core/resolve-config-value.js`). The same load moves the entries out of `mcp.json`, so the next session runs only the registered servers (P2-DC-11). See [Upgrading](#upgrading).
+
+### Other gaps
+
+- Pi starts a stdio server in the working directory of the session (`dist/extensions/mcp/runtime.js`). Claude Code 2.1.318 starts it in the project root that it resolves, which can differ from the launch directory. This extension writes no `cwd`, because a plugin cannot set one in Claude Code either, and it drops a `cwd` that the plugin sets (P2-DC-04, P2-DC-21, `features/mcp-server/builtin-values.feature`).
+- The `timeout` of Pi starts again on progress, and it is 60 seconds when the plugin sets none. See [Translated fields](#translated-fields) (P2-DC-05).
+- Pi receives the `description` of the plugin, as pi-mcp-adapter does (P2-DC-23, `features/mcp-server/builtin-values.feature`).
+- The withheld credentials follow the deny-lists of Claude Code 2.1.291, as for pi-mcp-adapter. Claude Code 2.1.318 can withhold more (P2-DC-22).
 
 ## Translated fields
 
@@ -266,7 +328,7 @@ A server config that the schema of Claude Code rejects is malformed. Examples ar
 
 ## User overrides
 
-You can change a plugin server's entry in `mcp-adapter.json` yourself. This extension keeps your values of these fields: `disabled`, `approveTools`, `includeTools`, `excludeTools`, `lifecycle`, `idleTimeout`, `requestTimeoutMs`, `debug`, `searchKeywords`, `openUi`, `trace`, `appendStructuredContent`, and `roots`. pi-mcp-adapter 5.4.0 added the last two: `appendStructuredContent: false` shows the model only the `content` of a tool result, and `roots: false` stops the adapter from sending the session folder to the server (D-CF1-14). Your values survive an update, a reinstall, a plugin disable then enable, and an uninstall then reinstall (D-08-01, D-08-02).
+You can change a plugin server's entry in `mcp-adapter.json` yourself. Only pi-mcp-adapter reads these values. Pi's built-in MCP does not. This extension keeps your values of these fields: `disabled`, `approveTools`, `includeTools`, `excludeTools`, `lifecycle`, `idleTimeout`, `requestTimeoutMs`, `debug`, `searchKeywords`, `openUi`, `trace`, `appendStructuredContent`, and `roots`. pi-mcp-adapter 5.4.0 added the last two: `appendStructuredContent: false` shows the model only the `content` of a tool result, and `roots: false` stops the adapter from sending the session folder to the server (D-CF1-14). Your values survive an update, a reinstall, a plugin disable then enable, and an uninstall then reinstall (D-08-01, D-08-02).
 
 The scenarios in `features/mcp-server/lifecycle.feature` measured this for `disabled: true` on pi-mcp-adapter 7.0.0. After an update, after a disable then enable, and after an uninstall then install, the server does not start, and `mcp({})` returns `MCP: 0/0 servers, 0 tools (1 disabled)`, with the line `⊘ plugin_demo_stub_ (disabled)`.
 
@@ -320,7 +382,7 @@ An override replaces the same field in the generated frontmatter. An `mcp:<key>`
 
 ## Variables
 
-A plugin server can reference environment variables as `${NAME}` or `${NAME:-default}`. Claude Code expands them when it loads the server. pi-mcp-adapter expands variables too, but with different rules. This extension rewrites each value at install time, so that pi-mcp-adapter gives the server the value that Claude Code gives it (AVAR-01, AVAR-02, AVAR-03). The install writes no environment value into `mcp-adapter.json`.
+A plugin server can reference environment variables as `${NAME}` or `${NAME:-default}`. Claude Code expands them when it loads the server. pi-mcp-adapter expands variables too, but with different rules. This extension rewrites each value at install time, so that pi-mcp-adapter gives the server the value that Claude Code gives it (AVAR-01, AVAR-02, AVAR-03). The install writes no environment value into `mcp-adapter.json`. This section describes pi-mcp-adapter. For Pi's built-in MCP, this extension resolves the values itself at each registration. See [Variables under Pi's built-in MCP](#variables-under-pis-built-in-mcp).
 
 ### Where variables expand
 
@@ -404,6 +466,8 @@ Earlier releases of this extension wrote each plugin server into the `mcp.json` 
 
 On that first start, pi-mcp-adapter can also warn that `mcp.json` holds an ignored `_piClaudeMarketplace` setting. The adapter read the old entries before the move. The warning does no harm.
 
+Under Pi's built-in MCP, the first session after the upgrade also runs the old entries once, under their old names. See [Legacy mcp.json entries](#legacy-mcpjson-entries).
+
 A moved server keeps its declared name in `/claude:plugin info`, for example `plugin:acme:github`. Its key becomes `plugin_<plugin>_<server>_`, and its tools become `mcp__plugin_<plugin>_<server>__<tool>`. See [Server and tool names](#server-and-tool-names).
 
 ### What the new names cost
@@ -449,7 +513,7 @@ The notice lists each removed entry with its reason. See [Plugin MCP servers rem
 
 ## Server status in info
 
-On an installed plugin, `/claude:plugin info` shows the state of each server that this extension wrote. The state is the one that pi-mcp-adapter last reported on its status channel, the `pi-mcp-adapter/status/v1` event. Info does not connect a server to get it (ASTAT-01). The state comes first inside the parentheses after the server name, for example `plugin:deploy-tools:deploys (pending approval)`.
+On an installed plugin, `/claude:plugin info` shows the state of each server that this extension wrote. Under pi-mcp-adapter, the state is the one that pi-mcp-adapter last reported on its status channel, the `pi-mcp-adapter/status/v1` event. Under Pi's built-in MCP, info reads the state from the servers and tools that Pi lists when info runs, because Pi gives an extension no connection state (P2-DC-10, `features/mcp-server/builtin-status.feature`). Info does not connect a server to get it (ASTAT-01). The state comes first inside the parentheses after the server name, for example `plugin:deploy-tools:deploys (pending approval)`.
 
 | Shown text                      | Meaning under pi-mcp-adapter                                                                                                                                                                                                                                                                                  | Meaning under Pi's built-in MCP                                                                                                                                                                                               |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -487,10 +551,10 @@ The behaviors below differ from Claude Code. Each item names its reason: a recor
 
 ### Loading
 
-- Servers start lazily. pi-mcp-adapter stops a server when it is not in use, and Claude Code keeps it connected for the session. Reason: a project decision (ANAME-05). This extension leaves `lifecycle` to you, so you can change it for each server.
-- Pi's `tool_search` is off by default. The model finds plugin tools through the `mcp` tool of pi-mcp-adapter. Reason: a Pi capability gap. Pi turns `tool_search` on only from your settings, and this extension does not write outside its own files.
+- Under pi-mcp-adapter, servers start lazily. pi-mcp-adapter stops a server when it is not in use, and Claude Code keeps it connected for the session. Reason: a project decision (ANAME-05). This extension leaves `lifecycle` to you, so you can change it for each server. Pi's built-in MCP keeps each server connected, as Claude Code does.
+- Under pi-mcp-adapter, Pi's `tool_search` is off by default. The model finds plugin tools through the `mcp` tool of pi-mcp-adapter. Reason: a Pi capability gap. Pi turns `tool_search` on only from your settings, and this extension does not write outside its own files. Pi's built-in MCP turns `tool_search` on itself.
 - The timeouts differ. The timeout of pi-mcp-adapter starts again on progress, and its default is 60 seconds instead of about 28 hours. Reason: a Pi capability gap. This extension writes only the values that the plugin declares (ANAME-07), so it writes no default.
-- Project-scope plugin servers wait for the approval of pi-mcp-adapter. Claude Code never asks for approval of a plugin server. Reason: a Pi capability gap and a project decision (D-CF6-03, NFR-10). pi-mcp-adapter owns project trust and offers no way for another extension to approve a server, and this extension never writes its approval files. See [Project-scope servers](#project-scope-servers).
+- Under pi-mcp-adapter, project-scope plugin servers wait for the approval of pi-mcp-adapter. Claude Code never asks for approval of a plugin server. Reason: a Pi capability gap and a project decision (D-CF6-03, NFR-10). pi-mcp-adapter owns project trust and offers no way for another extension to approve a server, and this extension never writes its approval files. See [Project-scope servers](#project-scope-servers).
 - An `mcpServers` path without `./`, such as `servers.json`, still loads. Claude Code refuses a `plugin.json` with such a path. Reason: a project decision (D-CF6-01). Plugins that install today keep installing. See [Server sources](#server-sources).
 - An `mcpServers` path that passes through a symbolic link whose real target is outside the plugin root makes the plugin `(unavailable)` with `{malformed mcp}`. Claude Code 2.1.316 reads the file through the link, wherever the link points. Reason: a project decision (MCPR-04, which applies the D-14 refusal of symbolic links to these paths, amended on 2026-11-02 so that a link whose real target is inside the plugin root is read, and NFR-10). The `.mcp.json` at the plugin root is not held to this rule. It is read through a link, as Claude Code reads it. See [Server sources](#server-sources).
 - An agent that runs plugin MCP tools launches in the background (`async: true`), even with `background: false`, because it cannot call them in a foreground launch. pi-subagents 0.84.0 refuses a foreground launch with `Unresolved MCP direct-tool selectors: ...`, and a foreground child without `tools:` gets no MCP tool. Claude Code runs such a subagent in the foreground with the tool. Reason: a Pi capability gap in the pi-subagents companion (D-CF6-10, MCP-07). pi-subagents gives MCP tools only to background children, and in pi-subagents 0.84.0 two bugs can keep a background child from getting them too (`directTools: "search"` rejected; `${VAR:-default}` cache keys). See [Customizing generated agents](#customizing-generated-agents).
@@ -525,6 +589,21 @@ The behaviors below differ from Claude Code. Each item names its reason: a recor
 ### Status
 
 - `/claude:plugin info` shows `failed` for a server in the failure backoff of pi-mcp-adapter. The status text of Claude Code says `not connected` for a failed server. Reason: a project decision (ASTAT-01). pi-mcp-adapter keeps a failure apart from a server that it never discovered, and `failed` is the word of the `/mcp` panel of Claude Code. See [Server status in info](#server-status-in-info).
+
+### Pi's built-in MCP
+
+- Under Pi's built-in MCP, a `-` in a server name or a tool name becomes `_` in the tool name, for example `mcp__plugin_demo_my_db__echo` for the server `my-db`. Claude Code keeps the `-`. Reason: a Pi capability gap. Pi builds every MCP tool name from `A-Z`, `a-z`, `0-9` and `_` only (`dist/extensions/mcp/tools.js`, `features/mcp-server/listing.feature`).
+- Under Pi's built-in MCP, a tool name longer than 64 characters is cut to 55 characters, with `_` and a hash added. Claude Code does not shorten tool names. Reason: a Pi capability gap. Pi keeps every tool name within the 64 characters that some providers accept (`dist/extensions/mcp/tools.js`, `features/mcp-server/listing.feature`). See [Name length](#name-length).
+- Under Pi's built-in MCP, the first session after an upgrade from a release before AMIG-01 runs each old `mcp.json` entry once more, under its old name, with Pi's `$` and `!` rules. Reason: a Pi capability gap (P2-DC-11). Pi's built-in MCP reads `mcp.json` at its own session start, which no extension can precede (`dist/extensions/mcp/index.js`). See [Legacy mcp.json entries](#legacy-mcpjson-entries).
+- Under Pi's built-in MCP, a stdio server starts in the working directory of the session, and Claude Code starts it in the project root that it resolves. Reason: a Pi capability gap and a project decision (P2-DC-04, P2-DC-21). A plugin cannot set `cwd` in Claude Code, so this extension writes none (`dist/extensions/mcp/runtime.js`, `features/mcp-server/builtin-values.feature`).
+- Under Pi's built-in MCP, the timeout of a call starts again on progress, and it is 60 seconds when the plugin sets none. In Claude Code it is a hard limit, about 28 hours by default. Reason: a Pi capability gap (P2-DC-05). Pi has no hard limit for a call (`dist/extensions/mcp/runtime.js`, `dist/extensions/mcp/tools.js`).
+- Under Pi's built-in MCP, a server in your `mcp.json` wins over a plugin server with the same name after every `-` becomes `_`. Claude Code skips a plugin server that has the command or URL of a server you configured. Reason: a Pi capability gap, because Pi gives `mcp.json` the precedence by name (`dist/extensions/mcp/index.js`), and a project decision for the report: info shows `overridden by mcp.json`, and no notice shows at load (P2-DC-08, `features/mcp-server/builtin-status.feature`).
+- Under Pi's built-in MCP, a server that another extension registered first under the name `plugin_<plugin>_<server>` keeps that name. Pi refuses the registration of this extension, only the debug log records it, and info shows the other server's state. Reason: a Pi capability gap (P2-DC-46). Pi gives each name one owner (`dist/core/extensions/loader.js`), and Pi 1.5.0 gives an extension no reliable way to learn the path that it records for its own registrations.
+- Under Pi's built-in MCP, the plugin tools cannot be reached when you turn `tool_search` off. Reason: a Pi capability gap. Pi offers a deferred tool only through `tool_search` (`dist/extensions/mcp/index.js`).
+- Under Pi's built-in MCP, info shows `not connected` for a server that is connecting, failed, waits for a sign-in, or offers no tool. Reason: a Pi capability gap (P2-DC-10). Pi gives an extension no connection state (`features/mcp-server/builtin-status.feature`).
+- Under Pi's built-in MCP, the resolved values of each server, secrets included, are in the Pi session, where every extension of the same Pi process can read them. Reason: a project decision (P2-DC-02, which amends D-MB-04). Pi expands variables with rules that are not the rules of Claude Code, so this extension resolves them itself (`dist/core/extensions/loader.js`, `dist/core/resolve-config-value.js`). See [Variables under Pi's built-in MCP](#variables-under-pis-built-in-mcp).
+- Under Pi's built-in MCP, a remote server with an `oauth.clientId` and no `oauth.callbackPort` signs in with the redirect address `http://127.0.0.1:<port>/callback`. Claude Code uses `localhost`. Reason: a project decision (P2-DC-20). This extension writes `callbackUrl` only for a port that the plugin names (`dist/extensions/mcp/oauth.js`).
+- Under pi-mcp-adapter and Pi's built-in MCP, the withheld credentials follow the deny-lists of Claude Code 2.1.291, not 2.1.318. Reason: a project decision (P2-DC-22). The lists are pinned until a later release checks them again (`test/integration/mcp-builtin-encoding-conformance.test.ts`).
 
 ## Further reading
 
