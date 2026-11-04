@@ -95,6 +95,7 @@ import {
 import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { mcpServerConfigsOf } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CleanupContextError,
@@ -883,6 +884,16 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
     supported: [...installable.supported],
     unsupported: [...installable.unsupported],
   };
+  // MREC-01 / D-MB-04: the declared MCP servers of `toVersion`, written
+  // beside `compatibility` so a failed update keeps the previous servers next
+  // to the intent mark.
+  sRecord.mcpServerConfigs = mcpServerConfigsOf(installable.declaredMcpServers);
+  if (installable.mcpBundle === true) {
+    sRecord.mcpBundle = true;
+  } else {
+    delete sRecord.mcpBundle;
+  }
+
   sRecord.resolvedSource = installable.pluginRoot;
   // PURL-06 / D-78-01: write the git-source commit identity so the
   // post-commit GC and the next update read the swapped sha. Undefined for

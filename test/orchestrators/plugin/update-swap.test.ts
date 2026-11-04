@@ -254,6 +254,7 @@ async function assertAgentsMigrated(params: {
     version: "2.0.0",
     resolvedSource: pluginRoot,
     compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
+    mcpServerConfigs: [],
     resources: {
       skills: [],
       prompts: [],
@@ -414,6 +415,153 @@ test("D-18-06: a partially available candidate's swap records the plugin as not 
     supported: ["skills"],
     unsupported: ["themes"],
   });
+});
+
+const PREVIOUS_MCP_SERVER_CONFIGS = [{ name: "old", config: { command: "old-server" } }];
+
+/**
+ * MREC-01: seeds `hello` 1.0.0 -> 2.0.0, gives the 1.0.0 record the given
+ * MCP fields, and writes the 2.0.0 declaration's `.mcp.json` and manifest
+ * servers.
+ */
+async function seedMcpRecordUpdate(
+  cwd: string,
+  previous: { readonly mcpBundle?: true },
+  declaration: { readonly mcpJson: object; readonly manifestServers?: unknown },
+): Promise<ThreePhaseArgsBase & { readonly cascade: true }> {
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  await writeFile(
+    path.join(pluginRoot, ".mcp.json"),
+    JSON.stringify({ mcpServers: declaration.mcpJson }),
+  );
+  if (declaration.manifestServers !== undefined) {
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "hello", version: "2.0.0", mcpServers: declaration.manifestServers }),
+    );
+  }
+
+  const args = cascadeSwapArgs(cwd);
+  const state = await loadState(args.locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record !== undefined);
+  record.mcpServerConfigs = PREVIOUS_MCP_SERVER_CONFIGS;
+  if (previous.mcpBundle === true) {
+    record.mcpBundle = true;
+  }
+
+  await saveState(args.locations.extensionRoot, state);
+  return args;
+}
+
+test("MREC-01 / D-MB-04: an all-success swap records the new version's declared MCP servers and its bundle flag", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-records-");
+  const args = await seedMcpRecordUpdate(
+    cwd,
+    {},
+    {
+      mcpJson: { srv: { command: "${CLAUDE_PLUGIN_ROOT}/bin/server" } },
+      manifestServers: ["server.mcpb", { live: { type: "ws", url: "wss://mcp.example.com/ws" } }],
+    },
+  );
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args, partial: true });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      mcpServerConfigs: record?.mcpServerConfigs,
+      mcpBundle: record?.mcpBundle,
+      hasCompatibilityBasis: record !== undefined && Object.hasOwn(record, "compatibilityBasis"),
+    },
+    {
+      partition: "updated",
+      mcpServerConfigs: [
+        { name: "srv", config: { command: "${CLAUDE_PLUGIN_ROOT}/bin/server" } },
+        { name: "live", config: { type: "ws", url: "wss://mcp.example.com/ws" } },
+      ],
+      mcpBundle: true,
+      hasCompatibilityBasis: false,
+    },
+  );
+});
+
+test("MREC-01: a swap to a version without a bundle drops the recorded bundle flag", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-bundle-drop-");
+  const args = await seedMcpRecordUpdate(
+    cwd,
+    { mcpBundle: true },
+    { mcpJson: { server1: { command: "node", args: ["s.js"] } } },
+  );
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      mcpServerConfigs: record?.mcpServerConfigs,
+      hasBundleFlag: record !== undefined && Object.hasOwn(record, "mcpBundle"),
+    },
+    {
+      partition: "updated",
+      mcpServerConfigs: [{ name: "server1", config: { command: "node", args: ["s.js"] } }],
+      hasBundleFlag: false,
+    },
+  );
+});
+
+test("MREC-01: a failed swap keeps the previous MCP servers beside the intent mark", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-records-failure-");
+  const args = await seedMcpRecordUpdate(
+    cwd,
+    { mcpBundle: true },
+    { mcpJson: { server1: { command: "node", args: ["s.js"] } } },
+  );
+  await mkdir(args.locations.skillsTargetDir, { recursive: true });
+  await writeFile(path.join(args.locations.skillsTargetDir, "hello-tool"), "old-resource-tree");
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      notes: record?.compatibility.notes,
+      mcpServerConfigs: record?.mcpServerConfigs,
+      mcpBundle: record?.mcpBundle,
+    },
+    {
+      partition: "failed",
+      notes: ["update-in-progress"],
+      mcpServerConfigs: PREVIOUS_MCP_SERVER_CONFIGS,
+      mcpBundle: true,
+    },
+  );
 });
 
 /** Same-revision knobs (a reinstall's): neither the version nor the sha moves. */
@@ -732,6 +880,7 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
     version: "2.0.0",
     resolvedSource: pluginRoot,
     compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
+    mcpServerConfigs: [],
     updatedAt: "2026-01-02T00:00:00.001Z",
   });
 });

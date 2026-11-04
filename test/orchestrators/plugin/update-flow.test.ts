@@ -1293,6 +1293,7 @@ test("PROV-02/PROV-03: update never promotes a dependency record's provenance", 
       provenance: "dependency",
       installedAt: seededRecord.installedAt,
       updatedAt: record.updatedAt,
+      mcpServerConfigs: [],
     });
   });
 });

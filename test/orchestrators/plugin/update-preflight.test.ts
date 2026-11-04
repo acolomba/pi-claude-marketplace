@@ -934,6 +934,7 @@ test("does not rewrite an unchanged disabled pin", async (t) => {
   const record = state.marketplaces.mp?.plugins.hello;
   assert.ok(record !== undefined);
   record.resolvedSource = seed.pluginRoot;
+  record.mcpServerConfigs = [];
   await saveState(seed.locations.extensionRoot, state);
   const before = await readFile(seed.locations.stateJsonPath, "utf8");
 
@@ -952,6 +953,116 @@ test("does not rewrite an unchanged disabled pin", async (t) => {
     declaresWorkflows: false,
   });
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
+});
+
+test("MREC-01: a disabled legacy record without recorded MCP servers gains them on its next update", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    installed: (pluginRoot) => ({ ...pluginRecord("2.0.0", false), resolvedSource: pluginRoot }),
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const outcome = await prepare(seed);
+
+  // assert
+  const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.deepStrictEqual(
+    { partition: "partition" in outcome ? outcome.partition : undefined, refreshed },
+    {
+      partition: "unchanged",
+      refreshed: {
+        ...pluginRecord("2.0.0", false),
+        resolvedSource: seed.pluginRoot,
+        mcpServerConfigs: [],
+        updatedAt: refreshed?.updatedAt,
+      },
+    },
+  );
+});
+
+test("MREC-01: a disabled update writes a declaration-only MCP change at an unchanged version, then writes nothing", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    installed: (pluginRoot) => ({ ...pluginRecord("2.0.0", false), resolvedSource: pluginRoot }),
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const mcpJsonPath = path.join(seed.pluginRoot, ".mcp.json");
+  await writeFile(mcpJsonPath, JSON.stringify({ mcpServers: { srv: { command: "node" } } }));
+  await prepare(seed);
+  const converged = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  await writeFile(
+    mcpJsonPath,
+    JSON.stringify({ mcpServers: { srv: { command: "node", args: ["--v2"] } } }),
+  );
+
+  // act
+  const changedOutcome = await prepare(seed);
+  const changedBytes = await readFile(seed.locations.stateJsonPath, "utf8");
+  const settledOutcome = await prepare(seed);
+  const settledBytes = await readFile(seed.locations.stateJsonPath, "utf8");
+
+  // assert
+  const refreshed = JSON.parse(changedBytes) as {
+    marketplaces: { mp: { plugins: { hello: unknown } } };
+  };
+  assert.deepStrictEqual(
+    {
+      changedPartition: "partition" in changedOutcome ? changedOutcome.partition : undefined,
+      settledPartition: "partition" in settledOutcome ? settledOutcome.partition : undefined,
+      record: refreshed.marketplaces.mp.plugins.hello,
+      settledUnchanged: settledBytes === changedBytes,
+    },
+    {
+      changedPartition: "unchanged",
+      settledPartition: "unchanged",
+      record: {
+        ...converged,
+        mcpServerConfigs: [{ name: "srv", config: { command: "node", args: ["--v2"] } }],
+        updatedAt: (refreshed.marketplaces.mp.plugins.hello as { updatedAt: string }).updatedAt,
+      },
+      settledUnchanged: true,
+    },
+  );
+});
+
+test("MREC-01: a disabled update records a bundle flag and drops it when the bundle goes", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    installed: (pluginRoot) => ({
+      ...pluginRecord("2.0.0", false),
+      resolvedSource: pluginRoot,
+      compatibility: { installable: false, notes: [], supported: ["skills"], unsupported: [] },
+    }),
+    pluginJson: { mcpServers: "server.mcpb" },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  await prepare(seed);
+  const bundled = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  await writeFile(
+    path.join(seed.pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "2.0.0" }),
+  );
+  await prepare(seed);
+  const unbundled = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      bundledFlag: bundled?.mcpBundle,
+      bundledServers: bundled?.mcpServerConfigs,
+      unbundledHasFlag: unbundled !== undefined && Object.hasOwn(unbundled, "mcpBundle"),
+      unbundledServers: unbundled?.mcpServerConfigs,
+    },
+    {
+      bundledFlag: true,
+      bundledServers: [],
+      unbundledHasFlag: false,
+      unbundledServers: [],
+    },
+  );
 });
 
 test("admits a partial candidate only with explicit partial permission", async (t) => {
@@ -2578,6 +2689,7 @@ test("does not rewrite a concurrently converged disabled pin", async (t) => {
   record.resolvedSource = seed.pluginRoot;
   record.resolvedSha = sha;
   record.compatibility = { installable: true, notes: [], supported: ["skills"], unsupported: [] };
+  record.mcpServerConfigs = [];
   record.updatedAt = "concurrent-writer";
   await saveState(seed.locations.extensionRoot, state);
   const converged = await readFile(seed.locations.stateJsonPath, "utf8");
