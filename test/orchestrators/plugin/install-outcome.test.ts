@@ -526,6 +526,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
   assert.equal(ledgerOutcome.kind, "installed");
   assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins.empty, {
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    compatibilityBasis: "neutral",
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -2154,7 +2155,7 @@ test("MREC-01 / D-MB-04: records every declared server in its Claude form and le
         { name: "live", config: declaredServers.live },
       ],
       mcpBundle: undefined,
-      compatibilityBasis: undefined,
+      compatibilityBasis: "neutral",
       stagedMcpServerNames: ["local"],
       resolvedDeclared: declaredServers,
       resolvedSupported: { local: declaredServers.local },
@@ -2225,7 +2226,7 @@ test("MREC-01: a bundle reference records the bundle flag beside no recorded ser
     {
       mcpServerConfigs: [],
       mcpBundle: true,
-      compatibilityBasis: undefined,
+      compatibilityBasis: "neutral",
       unsupported: ["mcpServers"],
     },
   );

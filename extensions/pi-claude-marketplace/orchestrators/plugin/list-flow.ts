@@ -96,6 +96,7 @@ import {
 } from "./list-orphan-fold.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -177,13 +178,17 @@ export interface PluginListPayloadOptions {
    *  not-installed git source with no materialized clone. Joins the PL-1 filter
    *  family (`--installed` / `--available` / `--unavailable` / `--partial`). */
   readonly remote?: boolean;
+  /** MREC-03 / D-P3-05: the active MCP implementation, whose view each row
+   *  shows. A caller with a run passes `run.softDeps.mcpImplementation`. */
+  readonly mcpImplementation: ActiveMcpImplementation;
 }
 
 /**
  * Options bag for {@link listPlugins}. The edge layer constructs this
- * from `/claude:plugin list` argv parsing.
+ * from `/claude:plugin list` argv parsing; the MCP implementation comes from
+ * the run.
  */
-export interface ListPluginsOptions extends PluginListPayloadOptions {
+export interface ListPluginsOptions extends Omit<PluginListPayloadOptions, "mcpImplementation"> {
   /**
    * D-05: the command run. Resolve composes each row's soft-dependency
    * markers from `PluginInstalledMessage.dependencies` and the run's snapshot.
@@ -361,9 +366,11 @@ async function enumerateMarketplacePlugins(args: {
       marketplaceRoot: mpRecord.marketplaceRoot,
       marketplaceSource: mpRecord.source,
       marketplaceName: mpName,
+      manifestPath: mpRecord.manifestPath,
       record,
       lookup: manifestLookupFor(scopedManifest, pluginName),
       cwd: opts.cwd,
+      mcpImplementation: opts.mcpImplementation,
     });
     // Installed-inventory rows are matched on render status; the resolver
     // bucket is not consulted for them (D-67-01).
@@ -849,7 +856,10 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     // WR-01: loadPluginListPayload is typed to `MarketplaceRows<ListMsg>`, so the
     // annotation holds without a cast -- every plugin row it emits is a ListMsg
     // member by construction.
-    const marketplaces: Plural<MarketplaceRows<ListMsg>> = await loadPluginListPayload(opts);
+    const marketplaces: Plural<MarketplaceRows<ListMsg>> = await loadPluginListPayload({
+      ...opts,
+      mcpImplementation: run.softDeps.mcpImplementation,
+    });
     // notify call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; list-flow.ts substitutes the
     // list-surface plugin variants (available / unavailable / upgradable

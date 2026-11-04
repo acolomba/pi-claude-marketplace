@@ -57,7 +57,12 @@ import { pluginVersion } from "../../shared/notification-types.ts";
 import { redactCredentials } from "../../shared/redact-credentials.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
-import type { ExtensionAPI, ExtensionContext, PiTextContentBlock } from "../../platform/pi-api.ts";
+import type {
+  ActiveMcpImplementation,
+  ExtensionAPI,
+  ExtensionContext,
+  PiTextContentBlock,
+} from "../../platform/pi-api.ts";
 import type { CascadeNotificationMessage } from "../../shared/notification-types.ts";
 
 // ─── LLM tool parameter schemas (TypeBox) ─────────────────────────────────
@@ -332,7 +337,8 @@ async function marketplaceExists(params: {
 
 /**
  * Builds the tool's list payload. The payload builder takes no notification
- * run; the tool resolves the rows it keeps afterwards, under its own run.
+ * run, only the run's MCP implementation; the tool resolves the rows it keeps
+ * afterwards, under the same run.
  */
 async function loadToolPluginPayload(
   params: {
@@ -341,10 +347,12 @@ async function loadToolPluginPayload(
   },
   ctx: ExtensionContext,
   buckets: ToolFilterBuckets,
+  mcpImplementation: ActiveMcpImplementation,
 ): Promise<Awaited<ReturnType<typeof loadPluginListPayload>>> {
   return loadPluginListPayload({
     ctx,
     cwd: ctx.cwd,
+    mcpImplementation,
     ...(params.scope !== undefined && { scope: params.scope }),
     ...(params.marketplace !== undefined && { marketplace: params.marketplace }),
     // PL-1: narrow only when the caller narrowed, and carry each tool bucket's
@@ -497,8 +505,11 @@ async function buildPluginListResult(
   // Delegate to the payload loader for the data layer; we render text
   // ourselves in the LLM-tool line format. The orchestrator's
   // PluginListPayload carries enough structure to support both this
-  // line format AND `details.marketplaces`.
-  const payload = await loadToolPluginPayload(params, ctx, buckets);
+  // line format AND `details.marketplaces`. D-05 / MREC-03: one
+  // soft-dependency snapshot per call names the MCP implementation whose
+  // view the rows show, and later resolves the rows.
+  const run = openNotificationSnapshot(pi);
+  const payload = await loadToolPluginPayload(params, ctx, buckets, run.softDeps.mcpImplementation);
   const { lines, marketplaces } = renderPluginPayload(payload, buckets);
 
   // `marketplaces` is populated only from inside `renderPluginPayload`'s
@@ -514,7 +525,6 @@ async function buildPluginListResult(
   // LLMT-01 / D-09: the details are the wire blocks of the kept rows,
   // resolved under the list command's row policies and this invocation's
   // soft-dependency snapshot, so each row keeps its verbatim status.
-  const run = openNotificationSnapshot(pi);
   const listMessage: CascadeNotificationMessage = {
     marketplaces,
     label: PLUGIN_LIST_CONTEXT.Messaging.label,

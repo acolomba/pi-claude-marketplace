@@ -473,6 +473,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    compatibilityBasis: "neutral",
     resources: {
       skills: [],
       prompts: [],
@@ -826,6 +827,7 @@ test("setPluginEnabled(false) unstages the artifacts, flips durable state and dr
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    compatibilityBasis: "neutral",
     resources: {
       skills: [],
       prompts: [],

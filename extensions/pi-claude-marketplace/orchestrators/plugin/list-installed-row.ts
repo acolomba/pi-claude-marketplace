@@ -1,3 +1,4 @@
+import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { declaredVersionWithPin, isSameVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -5,10 +6,12 @@ import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import { resolveListCandidate } from "./list-candidate-version.ts";
+import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
 import { classifyInstalledRecord } from "./plugin-state-classifier.ts";
 
 import type { UpgradeCandidate } from "./plugin-state-classifier.ts";
 import type { ManifestLookup, ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
@@ -35,9 +38,13 @@ export interface ComposeInstalledListRowOptions {
   readonly marketplaceRoot: string;
   readonly marketplaceName: string;
   readonly marketplaceSource: unknown;
+  /** The marketplace's cached `marketplace.json`, which a legacy record re-resolves against. */
+  readonly manifestPath: string;
   readonly record: PluginInstallRecord;
   readonly lookup: ManifestLookup;
   readonly cwd: string;
+  /** D-P3-05: the run's active MCP implementation, whose view the row shows. */
+  readonly mcpImplementation: ActiveMcpImplementation;
 }
 
 function dependenciesFromRecord(record: PluginInstallRecord): readonly Dependency[] {
@@ -60,11 +67,24 @@ function dependenciesFromRecord(record: PluginInstallRecord): readonly Dependenc
 }
 
 function partiallyInstalledReasons(
-  record: PluginInstallRecord,
+  effectiveUnsupported: readonly string[],
   notInManifest: boolean,
 ): PluginPartiallyInstalledMessage["reasons"] {
-  const unsupported = narrowUnsupportedKinds(record.compatibility.unsupported);
+  const unsupported = narrowUnsupportedKinds(effectiveUnsupported);
   return notInManifest ? ["not in manifest", ...unsupported] : unsupported;
+}
+
+/**
+ * D-P3-03: the candidate as the active implementation sees it, so a newer
+ * version degrades the row only when that implementation cannot run it.
+ */
+function candidateFor(
+  candidate: UpgradeCandidate,
+  active: ActiveMcpImplementation,
+): UpgradeCandidate {
+  return candidate.upgradable && candidate.resolved !== undefined
+    ? { upgradable: true, resolved: resolutionFor(candidate.resolved, active) }
+    : candidate;
 }
 
 function disabledReasonsField(notInManifest: boolean): Pick<PluginDisabledMessage, "reasons"> {
@@ -85,10 +105,12 @@ function catalogVersion(entry: ManifestPluginEntry, marketplaceName: string): st
  * when no candidate resolves (a cold git source, a throw, or a tree with no
  * version). The resolved verdict travels only when the row is upgradable; a
  * cold candidate or a throw carries none (the CR-01 "could not assert" degrade).
+ * The verdict is the resolver's neutral one (D-P3-01); the list row takes the
+ * active implementation's view of it.
  */
 export async function upgradeCandidate(
   manifestEntry: ManifestPluginEntry,
-  options: ComposeInstalledListRowOptions,
+  options: Omit<ComposeInstalledListRowOptions, "manifestPath" | "mcpImplementation">,
 ): Promise<UpgradeCandidate> {
   const candidate = await resolveListCandidate(
     manifestEntry,
@@ -135,18 +157,39 @@ export async function composeInstalledListRow(
     };
   }
 
-  const candidate: UpgradeCandidate =
+  // D-P3-04 / D-P3-05: the record's MCP verdict for the active
+  // implementation, read offline, decides the row, so a switch needs no
+  // reinstall.
+  const { effective } = await readRecordMcpVerdict(
+    record,
+    {
+      marketplaceName: options.marketplaceName,
+      marketplace: {
+        manifestPath: options.manifestPath,
+        marketplaceRoot: options.marketplaceRoot,
+        source: options.marketplaceSource,
+      },
+      pluginName,
+    },
+    options.mcpImplementation,
+  );
+  const candidate = candidateFor(
     manifestEntry === undefined
       ? { upgradable: false }
-      : await upgradeCandidate(manifestEntry, options);
+      : await upgradeCandidate(manifestEntry, options),
+    options.mcpImplementation,
+  );
   const candidateResolved = candidate.upgradable ? candidate.resolved : undefined;
-  const status = classifyInstalledRecord(record, candidate);
+  const status = classifyInstalledRecord(
+    { enabled: record.enabled, compatibility: { unsupported: effective.unsupported } },
+    candidate,
+  );
 
   if (status === "partially-installed" || status === "partially-installed-upgradable") {
     return {
       status: "partially-installed",
       name: pluginName,
-      reasons: partiallyInstalledReasons(record, notInManifest),
+      reasons: partiallyInstalledReasons(effective.unsupported, notInManifest),
       version: record.version,
       ...scopeField,
       ...descriptionField,

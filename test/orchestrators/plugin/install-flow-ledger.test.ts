@@ -14703,6 +14703,7 @@ test("install forwards explicit map-model and version-pin entrypoint options", a
           .plain,
         {
           compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+          compatibilityBasis: "neutral",
           enabled: true,
           provenance: "explicit",
           installedAt: (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp

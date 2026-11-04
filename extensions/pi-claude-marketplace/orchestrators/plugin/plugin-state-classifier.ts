@@ -64,9 +64,12 @@ export type ManifestEntryClassification =
  * reads. Both `ExtensionState[...]plugins[...]` and the bucketizer's state
  * record satisfy this by construction.
  *
- * - `compatibility.unsupported` is the install-time degrade signal (FSTAT-01 /
- *   D-66-01): non-empty means one or more components were dropped, so the row
- *   derives `partially-installed`.
+ * - `compatibility.unsupported` is the degrade signal (FSTAT-01 / D-66-01):
+ *   non-empty means one or more components cannot run, so the row derives
+ *   `partially-installed`. The `list` row passes the record's effective kinds
+ *   for the active MCP implementation (D-P3-05), so a switch of
+ *   implementation changes the row with no reinstall. The completion path in
+ *   `edge-deps.ts` passes the stored kinds, because it has no run.
  * - `enabled` is the recorded-but-disabled axis on its own (ENBL-05 -- the
  *   single `persistence/state-io.ts::isRecordedButDisabled`): a record with
  *   `enabled: false` was explicitly disabled and is version-frozen, so the

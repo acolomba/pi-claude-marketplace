@@ -342,8 +342,10 @@ async function seedUrlSourceMarketplace(cwd: string, name: string, raw: string):
  * case's path reads it: the marketplace existence check and the payload load
  * take one read each, and a path that short-circuits before the load takes one
  * in total. `probes` soft-dependency probes are promised, each finding no
- * companion loaded: each tool's notification run takes one on its non-empty
- * path, and every other path never probes.
+ * companion loaded: the marketplace tool's notification run takes one on its
+ * non-empty path, the plugin tool's run takes one on every path that loads the
+ * payload (MREC-03: the run names the MCP implementation the rows follow), and
+ * every other path never probes.
  *
  * `ctx.ui` carries no expectation on purpose, so an attempt to notify fails
  * where it happens -- a tool returns its result and never reaches the
@@ -1433,10 +1435,14 @@ describe("registerListPluginsTool", () => {
   test("reports no marketplaces configured when neither scope holds a record", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "plugin-empty");
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      1,
+    );
     const expectedResult = {
       content: [{ type: "text", text: "No marketplaces configured." }],
       details: { marketplaces: [] },
@@ -1688,10 +1694,14 @@ describe("registerListPluginsTool", () => {
     await seedScope(scope.cwd, "project", [{ name: "broken-mp", plugins: [] }]);
     const locations = locationsFor("project", scope.cwd);
     await writeFile(locations.stateJsonPath, JSON.stringify({ schemaVersion: 4 }), "utf8");
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      1,
+    );
     const expectedResult = {
       content: [
         {
@@ -1716,10 +1726,14 @@ describe("registerListPluginsTool", () => {
     // arrange
     const scope = await createHermeticScope(t, "plugin-load-credential");
     await seedUrlSourceMarketplace(scope.cwd, "payload-mp", FTP_SOURCE_WITH_TOKEN);
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      1,
+    );
     const expectedResult = {
       content: [
         {
