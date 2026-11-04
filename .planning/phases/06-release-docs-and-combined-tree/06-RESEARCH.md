@@ -697,13 +697,13 @@ Every-companion (plugin-info.ts:113-117):
 | A4 | Optional elicitation wording in hooks-compatibility.md:33/:101 | §1.1 | Wording only |
 | A5 | Every caller of `readRecordMcpVerdict`/`readRecordMcpDependency` can reach `ScopedLocations` cheaply | §5.6 | UF-1 grows; consider the scoped-down variant |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Is `/claude:plugin list` a "plugin command" under DUAL-04?** Recommendation: no (read-only, NFR-5). Add a comment and consider retitling. User review.
-2. **The 7 extra `requires: pi-mcp-adapter` catalog blocks.** Recommendation: change them to `mcp` in the same commit (−77 more bytes).
-3. **Mint D-MB IDs for P2-DC-03/07/11/15/21/22/23 too?** Recommendation: yes, D-MB-23..29, so the docs cite no review-log ID.
-4. **CI timeout rule: D-CF1-16 (1.5×) or D-P6-16 (80%)?** Recommendation: D-CF1-16.
-5. **The 02-08 item 5 catalog example blocks as new catalog states?** Recommendation: prose and table only.
+1. **Is `/claude:plugin list` a "plugin command" under DUAL-04?** Recommendation: no (read-only, NFR-5). Add a comment and consider retitling. User review. RESOLVED: D-P6-18 (one read-only `list` read for the `{requires mcp}` row).
+2. **The 7 extra `requires: pi-mcp-adapter` catalog blocks.** Recommendation: change them to `mcp` in the same commit (−77 more bytes). RESOLVED: D-P6-19.
+3. **Mint D-MB IDs for P2-DC-03/07/11/15/21/22/23 too?** Recommendation: yes, D-MB-23..29, so the docs cite no review-log ID. RESOLVED: D-P6-24.
+4. **CI timeout rule: D-CF1-16 (1.5×) or D-P6-16 (80%)?** Recommendation: D-CF1-16. RESOLVED: D-P6-25.
+5. **The 02-08 item 5 catalog example blocks as new catalog states?** Recommendation: prose and table only. RESOLVED: D-P6-26.
 
 ## Environment Availability
 
