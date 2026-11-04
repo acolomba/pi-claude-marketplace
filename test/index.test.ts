@@ -1,6 +1,7 @@
 // Owner suite for the extension entry point: the async factory Pi's loader
 // awaits, the `resources_discover` handler it installs, and the `session_start`
-// handler that refreshes the Claude-Code session environment.
+// handler that refreshes the Claude-Code session environment and runs the MCP
+// session steps.
 //
 // Registration is data, not behavior. Every event name, the command name and
 // both tool names are written out by hand as exact arguments; only the callback
@@ -101,6 +102,9 @@ type BridgeSessionStartListener = (
   ctx: ExtensionContext,
 ) => Promise<void>;
 
+/** This extension's own session-start listener, which awaits the MCP session steps. */
+type SessionStartListener = (event: SessionStartEvent, ctx: ExtensionContext) => Promise<void>;
+
 /** The hook-bridge listener whose return value can deny a tool call. */
 type ToolCallListener = (
   event: ToolCallEvent,
@@ -144,7 +148,7 @@ interface LoadedExtension {
   readonly pi: ExtensionAPI;
   readonly bridgeSessionStart: BridgeSessionStartListener;
   readonly discover: DiscoverListener;
-  readonly sessionEnv: EventListener<SessionStartEvent>;
+  readonly sessionEnv: SessionStartListener;
   readonly backgroundInput: BackgroundInputListener;
   readonly backgroundShutdown: BackgroundShutdownListener;
   readonly toolCall: ToolCallListener;
@@ -190,8 +194,20 @@ const CWD_READS_PER_DISCOVER = 4;
  */
 const PROBES_PER_DISCOVER = 1;
 
-/** `ctx.mode` reads per `resources_discover` pass: one before each load stage. */
-const MODE_READS_PER_DISCOVER = 3;
+/**
+ * `ctx.mode` reads per `resources_discover` pass: one before each load stage,
+ * the built-in MCP resync included (D-MB-10).
+ */
+const MODE_READS_PER_DISCOVER = 4;
+
+/**
+ * Soft-dependency probes per `session_start`: the MCP session steps share one
+ * notification run, and the run takes one snapshot (D-05, D-MB-10).
+ */
+const PROBES_PER_SESSION_START = 1;
+
+/** `ctx.mode` reads per `session_start`: one before the session env, one before the MCP session steps. */
+const MODE_READS_PER_SESSION_START = 2;
 
 /** Trust reads per `resources_discover` pass: the load preparation reads once, the discovery once (D-LOC-01). */
 const TRUST_READS_PER_DISCOVER = 2;
@@ -452,7 +468,7 @@ async function loadExtension(
   })
     .thenReturn()
     .times(1);
-  const sessionEnvListener = It.willCapture<EventListener<SessionStartEvent>>("session env");
+  const sessionEnvListener = It.willCapture<SessionStartListener>("session env");
   when(() => {
     pi.on("session_start", sessionEnvListener);
   })
@@ -1240,7 +1256,7 @@ for (const failure of ["mode", "inventory"] as const) {
   });
 }
 
-for (const unsupportedRead of [2, 3]) {
+for (const unsupportedRead of [2, 4]) {
   test(`rechecks live mode before load mutation stage ${unsupportedRead}`, async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "live-load-mode");
@@ -1280,6 +1296,51 @@ for (const unsupportedRead of [2, 3]) {
     loaded.verifyBoundary();
   });
 }
+
+test("NFR-2 / D-MB-10: a live mode that fails before the built-in MCP resync skips only the resync, and the plugin PATH work still runs", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "resync-mode");
+  const resolvedSource = path.join(scope.cwd, "plugin");
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
+  const promptPath = await seedPrompt(scope.cwd, "kept.md");
+  const capture = createJsonCapture();
+  const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0, undefined, 0);
+  let reads = 0;
+  const ctx = {
+    isProjectTrusted: () => true,
+    get mode(): string {
+      reads += 1;
+      if (reads === 3) {
+        throw new Error("stale mode");
+      }
+
+      return "json";
+    },
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const binDir = path.join(resolvedSource, "bin");
+  process.env.PATH = "/usr/bin";
+  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+
+  // act
+  const discovered: unknown = await Reflect.apply(loaded.discover, undefined, [
+    discoverEvent(scope.cwd),
+    ctx,
+  ]);
+
+  // assert
+  assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [promptPath] });
+  assert.deepStrictEqual(
+    [process.env.PATH, process.env.PI_CLAUDE_MARKETPLACE_PATH],
+    [`/usr/bin${path.delimiter}${binDir}`, binDir],
+  );
+  assert.strictEqual(reads, MODE_READS_PER_DISCOVER);
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
+  loaded.verifyBoundary();
+});
 
 test("a refused load append leaves install state untouched and still runs the independent PATH work", async (t) => {
   // arrange
@@ -1333,8 +1394,8 @@ test("a refused load append leaves install state untouched and still runs the in
   loaded.verifyBoundary();
 });
 
-for (const failure of ["unknown-mode", "mode", "sessionManager"] as const) {
-  test(`session environment survives ${failure} context without changes`, async (t) => {
+for (const failure of ["unknown-mode", "mode"] as const) {
+  test(`session environment and the MCP session steps survive ${failure} context without changes`, async (t) => {
     // arrange
     await createHermeticScope(t, "session-mode");
     const loaded = await loadExtension(0, 0);
@@ -1346,7 +1407,7 @@ for (const failure of ["unknown-mode", "mode", "sessionManager"] as const) {
           throw new Error("stale mode");
         }
 
-        return failure === "unknown-mode" ? "unknown" : "rpc";
+        return "unknown";
       },
       get sessionManager(): never {
         reads.push("sessionManager");
@@ -1356,7 +1417,7 @@ for (const failure of ["unknown-mode", "mode", "sessionManager"] as const) {
     const original = SESSION_ENV_KEYS.map((key) => process.env[key]);
 
     // act
-    Reflect.apply(loaded.sessionEnv, undefined, [
+    await Reflect.apply(loaded.sessionEnv, undefined, [
       { type: "session_start", reason: "startup" },
       ctx,
     ]);
@@ -1366,10 +1427,40 @@ for (const failure of ["unknown-mode", "mode", "sessionManager"] as const) {
       SESSION_ENV_KEYS.map((key) => process.env[key]),
       original,
     );
-    assert.deepStrictEqual(reads, failure === "sessionManager" ? ["sessionManager"] : []);
+    assert.deepStrictEqual(reads, []);
     loaded.verifyBoundary();
   });
 }
+
+test("NFR-2 / D-MB-10: a session manager that cannot be read leaves the session variables alone and still runs the MCP session steps on one snapshot", async (t) => {
+  // arrange
+  await createHermeticScope(t, "session-manager-refused");
+  const loaded = await loadExtension(0, PROBES_PER_SESSION_START, undefined, 0, undefined, 0);
+  const reads: string[] = [];
+  const ctx = {
+    isProjectTrusted: () => true,
+    mode: "rpc",
+    get sessionManager(): never {
+      reads.push("sessionManager");
+      throw new Error("stale session manager");
+    },
+  };
+  const original = SESSION_ENV_KEYS.map((key) => process.env[key]);
+
+  // act
+  await Reflect.apply(loaded.sessionEnv, undefined, [
+    { type: "session_start", reason: "startup" },
+    ctx,
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    SESSION_ENV_KEYS.map((key) => process.env[key]),
+    original,
+  );
+  assert.deepStrictEqual(reads, ["sessionManager"]);
+  loaded.verifyBoundary();
+});
 
 test("registers the slash command and the two read-only tools alongside the bridge surface", async (t) => {
   // arrange
@@ -2051,7 +2142,7 @@ test("reports an aborted reconcile as one raw error line and still answers (NFR-
     0,
     PROBES_PER_DISCOVER,
     undefined,
-    5,
+    MODE_READS_PER_DISCOVER + 2,
   );
   const recorded: Notification[] = [];
   let attempts = 0;
@@ -2084,7 +2175,7 @@ test("still answers when the last-ditch reconcile notification is also refused (
     0,
     PROBES_PER_DISCOVER,
     undefined,
-    5,
+    MODE_READS_PER_DISCOVER + 2,
   );
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
@@ -2110,7 +2201,7 @@ test("still answers when the plugin PATH warning notification is refused (NFR-2)
     0,
     PROBES_PER_DISCOVER,
     undefined,
-    6,
+    MODE_READS_PER_DISCOVER + 3,
   );
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
@@ -2154,7 +2245,7 @@ test("attempts every skipped-scope PATH warning when every host notification thr
     0,
     2 * PROBES_PER_DISCOVER,
     undefined,
-    10,
+    2 * MODE_READS_PER_DISCOVER + 4,
   );
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
@@ -2206,15 +2297,17 @@ test("applies the three Claude-Code session variables from the session id (SENV-
   const scope = await createHermeticScope(t, "session-env");
   const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
     0,
-    0,
+    PROBES_PER_SESSION_START,
     { value: scope.cwd, reads: 1 },
-    1,
+    MODE_READS_PER_SESSION_START,
+    undefined,
+    0,
   );
   const sessionCtx = contextWithSessionId(ctx, () => "session-1");
   const expectedSessionEnv = ["1", "session-1", "session-1"];
 
   // act
-  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+  await sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
 
   // assert
   assert.deepStrictEqual(
@@ -2229,9 +2322,11 @@ test("leaves the session variables alone when the session id cannot be read (WR-
   const scope = await createHermeticScope(t, "session-env-refused");
   const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
     0,
-    0,
+    PROBES_PER_SESSION_START,
     { value: scope.cwd, reads: 1 },
-    1,
+    MODE_READS_PER_SESSION_START,
+    undefined,
+    0,
   );
   const sessionCtx = contextWithSessionId(ctx, () => {
     throw new Error("session id refused");
@@ -2243,7 +2338,7 @@ test("leaves the session variables alone when the session id cannot be read (WR-
   const expectedSessionEnv = [undefined, undefined, undefined];
 
   // act
-  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+  await sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
 
   // assert
   assert.deepStrictEqual(
@@ -2258,9 +2353,11 @@ test("leaves the session variables alone when there is no session manager (WR-02
   const scope = await createHermeticScope(t, "session-env-absent");
   const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
     0,
-    0,
+    PROBES_PER_SESSION_START,
     { value: scope.cwd, reads: 1 },
-    1,
+    MODE_READS_PER_SESSION_START,
+    undefined,
+    0,
   );
   const sessionCtx = contextWithoutSessionManager(ctx);
   for (const key of SESSION_ENV_KEYS) {
@@ -2270,7 +2367,7 @@ test("leaves the session variables alone when there is no session manager (WR-02
   const expectedSessionEnv = [undefined, undefined, undefined];
 
   // act
-  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+  await sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
 
   // assert
   assert.deepStrictEqual(
@@ -2303,16 +2400,18 @@ test("AVAR-01: session_start refreshes CLAUDE_PROJECT_DIR from the session's cwd
   const scope = await createHermeticScope(t, "adapter-env-session");
   const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
     0,
-    0,
+    PROBES_PER_SESSION_START,
     { value: scope.cwd, reads: 1 },
-    1,
+    MODE_READS_PER_SESSION_START,
+    undefined,
+    0,
   );
   const sessionCtx = contextWithSessionId(ctx, () => "session-1");
   process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
   process.env.CLAUDE_PROJECT_DIR = "/work/stale";
 
   // act
-  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+  await sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
 
   // assert
   assert.deepStrictEqual(
@@ -2327,16 +2426,18 @@ test("AVAR-01: session_start removes CLAUDE_PROJECT_DIR for a working directory 
   await createHermeticScope(t, "adapter-env-marker");
   const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
     0,
-    0,
+    PROBES_PER_SESSION_START,
     { value: "/work/{env:SECRET}", reads: 1 },
-    1,
+    MODE_READS_PER_SESSION_START,
+    undefined,
+    0,
   );
   const sessionCtx = contextWithSessionId(ctx, () => "session-1");
   process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
   process.env.CLAUDE_PROJECT_DIR = "/work/previous";
 
   // act
-  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+  await sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
 
   // assert
   assert.deepStrictEqual(
@@ -2349,13 +2450,20 @@ test("AVAR-01: session_start removes CLAUDE_PROJECT_DIR for a working directory 
 test("NFR-2 / AVAR-01: a session context whose cwd cannot be read still empties the reserved variable, removes CLAUDE_PROJECT_DIR and does not throw", async (t) => {
   // arrange
   await createHermeticScope(t, "adapter-env-refused");
-  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, undefined, 1);
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
+    0,
+    PROBES_PER_SESSION_START,
+    undefined,
+    MODE_READS_PER_SESSION_START,
+    undefined,
+    0,
+  );
   const sessionCtx = contextRefusingCwdRead(contextWithSessionId(ctx, () => "session-1"));
   process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
   process.env.CLAUDE_PROJECT_DIR = "/work/previous";
 
   // act
-  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+  await sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
 
   // assert
   assert.deepStrictEqual(
