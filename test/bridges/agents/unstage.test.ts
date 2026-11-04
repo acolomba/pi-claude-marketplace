@@ -524,3 +524,92 @@ test("surfaces an exact corrupt-row warning without normalizing an unmatched ind
   });
   assert.strictEqual(retainedBytes, storedBytes);
 });
+
+test("MGRT-01: removes a row with grant forms and keeps another plugin's row with its forms verbatim", async (t) => {
+  // arrange
+  const locations = await createScope(t, "agents-unstage-grant-forms-");
+  const ownedTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
+  const otherTarget = path.join(locations.agentsDir, "pi-claude-marketplace-other-bot.md");
+  const ownedBytes =
+    "---\nname: acme:bot\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\n\nOwned.\n";
+  const otherBytes =
+    "---\nname: other:bot\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\n\nOther.\n";
+  const ownedEntry: AgentsIndexEntry = {
+    plugin: "acme",
+    marketplace: "catalog",
+    sourceAgent: "bot",
+    generatedName: "pi-claude-marketplace-acme-bot",
+    sourcePath: "/plugins/acme/agents/bot.md",
+    targetPath: ownedTarget,
+    sourceHash: "acme-hash",
+    droppedFields: [],
+    droppedTools: [],
+    warnings: ["builtin warning"],
+    mcpImplementation: "builtin",
+    mcpForms: {
+      builtin: {
+        frontmatter: "---\nacme builtin\n---\n",
+        warnings: ["builtin warning"],
+        droppedTools: [],
+      },
+      adapter: {
+        frontmatter: "---\nacme adapter\n---\n",
+        warnings: ["adapter warning"],
+        droppedTools: [],
+      },
+    },
+  };
+  const otherEntry: AgentsIndexEntry = {
+    plugin: "other",
+    marketplace: "catalog",
+    sourceAgent: "bot",
+    generatedName: "pi-claude-marketplace-other-bot",
+    sourcePath: "/plugins/other/agents/bot.md",
+    targetPath: otherTarget,
+    sourceHash: "other-hash",
+    droppedFields: [],
+    droppedTools: ["mcp__plugin_other_web__get"],
+    warnings: [],
+    mcpImplementation: "adapter",
+    mcpForms: {
+      adapter: {
+        frontmatter: "---\nother adapter\n---\n",
+        warnings: ["adapter warning"],
+        droppedTools: [],
+      },
+      builtin: {
+        frontmatter: "---\nother builtin\n---\n",
+        warnings: [],
+        droppedTools: ["mcp__plugin_other_web__get"],
+      },
+    },
+  };
+  const expectedIndexBytes = `${JSON.stringify({ schemaVersion: 1, agents: [otherEntry] }, null, 2)}\n`;
+  await mkdir(locations.agentsDir, { recursive: true });
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await writeFile(ownedTarget, ownedBytes);
+  await writeFile(otherTarget, otherBytes);
+  await writeFile(
+    locations.agentsIndexPath,
+    JSON.stringify({ schemaVersion: 1, agents: [ownedEntry, otherEntry] }),
+  );
+
+  // act
+  const unstagedAgents = await unstagePluginAgents({
+    locations,
+    marketplaceName: "catalog",
+    pluginName: "acme",
+  });
+  const agentFiles = await readdir(locations.agentsDir);
+  const indexBytes = await readFile(locations.agentsIndexPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(unstagedAgents, {
+    removedNames: ["pi-claude-marketplace-acme-bot"],
+    failed: [],
+    warnings: [],
+  });
+  assert.deepStrictEqual(agentFiles, ["pi-claude-marketplace-other-bot.md"]);
+  assert.strictEqual(await readFile(otherTarget, "utf8"), otherBytes);
+  assert.strictEqual(indexBytes, expectedIndexBytes);
+});
