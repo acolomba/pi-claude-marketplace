@@ -21,6 +21,72 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
+## Current Milestone: mcp-builtin -- MCP Built-in (branch: features/mcp-builtin, started 2026-11-04)
+
+**Goal:** A plugin's MCP servers run through pi-mcp-adapter when it is
+installed and through Pi's built-in MCP when it is not. The two are equal
+implementations, and a switch between them never needs action from the user.
+
+**Target features:**
+
+- Pi 1.5.0: the dev dependencies and the peer floor `>=1.5.0`, with
+  `package-lock.json` updated. Whatever the new version breaks is fixed in
+  the same phase.
+- An `McpImplementation` seam with two implementations, adapter and builtin.
+  Each owns its translation table, its verdict table (supported, blocked,
+  malformed), its materialization, its status reader, its naming, and its
+  agent-grant form. Design as if either could be the richer one.
+- Install records every declared server in its Claude-shaped form, after
+  plugin-variable substitution, instead of dropping the servers one
+  implementation cannot run. Verdicts, the partial state, and the list,
+  info and soft-dependency markers are computed at read time against the
+  active implementation.
+- The active implementation is chosen at `session_start`: the adapter when
+  `/mcp-adapter` is loaded, built-in when `/mcp` comes from `builtin:mcp`,
+  otherwise none, with a marker that names the missing MCP support.
+- Materialization for the active implementation on every startup and
+  `/reload`: adapter entries in `mcp-adapter.json` as today; built-in
+  servers through `pi.registerMcpServer` from the install records, with
+  `exposure: "deferred"` (or `"direct"` for `alwaysLoad: true`), and
+  project-scope servers only when Pi trusts the project. Generated agents'
+  MCP grants are re-materialized for the active implementation.
+- The adapter's `-builtin:mcp` entry in `~/.pi/agent/settings.json` is
+  removed only when the adapter is absent and its onboarding state shows
+  that the adapter wrote it (amends NFR-10 and the rule that the extension
+  never edits Pi settings).
+- Every MCP behavioral test runs against both implementations, through
+  `@adapter` and `@builtin` cucumber profiles with shared step definitions.
+- `docs/mcp-compatibility.md` gains a built-in column; CHANGELOG and README
+  are updated.
+
+**Decisions already made (user, 2026-11-04):**
+
+1. Remove `-builtin:mcp` from the user's Pi settings only when both hold:
+   the adapter is absent, and the adapter's onboarding state
+   (`piBuiltinMcpHandledVersion`) shows the adapter wrote it. Never touch a
+   `builtin:mcp` entry the user set. Amends NFR-10 and the "never edit Pi
+   settings" rule.
+2. Built-in exposure: plugin servers get `exposure: "deferred"`, found
+   through `tool_search` and called directly; a server with
+   `alwaysLoad: true` gets `"direct"`.
+3. Run this as a GSD milestone.
+
+**Key context:** The user's brief, with the verified Pi 1.5.0 and
+pi-mcp-adapter 7.0.0 findings, is kept verbatim in
+`.planning/inputs/mcp-builtin/BRIEF.md`. The adapter's
+`applyPiMcpServers` consumes Pi registrations only as proxy-only servers and
+drops `directTools`, so no single registration path serves both
+implementations. Registered servers bypass Pi's project-trust gate, and a
+registration nothing connects is reported as an extension error, so the
+extension never registers while the adapter is active. Built-in tool names
+are `mcp__<server>__<tool>` with every character outside `[A-Za-z0-9_]`
+replaced by `_`: the server name `plugin_<plugin>_<server>` keeps Claude
+Code's names except that `-` becomes `_`, a divergence licensed by a Pi
+capability gap. The roadmap is planned for maximum session parallelism: one
+child session per independent phase, each in its own worktree and allowed
+to push its own `features/mcp-builtin-*` branch to GitHub; the parent merges
+the branches into `features/mcp-builtin`.
+
 ## Previous Milestone: component-features -- Component Behavioral Tests (branch: claude/quirky-planck-hhm592, started 2026-10-31, first closed 2026-11-02, reopened, completed 2026-11-03, PR [#295](https://github.com/acolomba/pi-claude-marketplace/pull/295), not yet merged, no npm release yet)
 
 **Goal:** The cucumber suite checks every bridged component kind -- skills,
@@ -868,7 +934,8 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-No milestone is active. The 62 component-features requirements are validated
+Milestone mcp-builtin is active; its requirements are in
+[REQUIREMENTS.md](REQUIREMENTS.md). Earlier milestones: the 62 component-features requirements are validated
 and archived in
 [milestones/component-features-REQUIREMENTS.md](milestones/component-features-REQUIREMENTS.md);
 the 64
@@ -2155,3 +2222,5 @@ _Last updated: 2026-11-02 after the project locality decision (DC-41). D-LOC-01 
 _Last updated: 2026-11-02 after the component-features milestone was reopened for further work (locality redesign, hook output parity, possible new phases)._
 
 _Last updated: 2026-11-03 after the component-features milestone closed again. 62/62 requirements validated (LOC-01..04 added by Phase 8); D-LOC-01 reworded as scope locality and extended to autoapply (DC-45); all requirements archived._
+
+_Last updated: 2026-11-04 after starting the mcp-builtin milestone._

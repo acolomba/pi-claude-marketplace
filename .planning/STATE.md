@@ -1,19 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: component-features
-status: Awaiting next milestone
-stopped_at: Milestone component-features completed and archived 2026-11-03 (8 phases, 65 plans, 62/62 requirements)
-last_updated: "2026-11-03T11:38:09.234Z"
-last_activity: 2026-11-03
-last_activity_desc: Milestone component-features completed and archived
-state_head: 5de5e65a9b1bf1fb1e73040eadf49278601f6051
+milestone: mcp-builtin
+milestone_name: MCP Built-in
+status: planning
+last_updated: "2026-11-04T00:11:07.328Z"
+last_activity: 2026-11-04
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 65
-  completed_plans: 65
-  percent: 100
-milestone_name: Component Behavioral Tests
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -29,10 +26,11 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: Milestone component-features complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-03 — Milestone component-features completed and archived
+Status: Defining requirements
+Last activity: 2026-11-04 — Milestone mcp-builtin started
+
 
 ### mcp-4 closeout
 
