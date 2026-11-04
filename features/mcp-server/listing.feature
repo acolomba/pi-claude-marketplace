@@ -161,8 +161,8 @@ Feature: MCP server listing
       | tool                        | active |
       | mcp__plugin_demo_stub__echo | no     |
 
-  @adapter-only
-  Scenario: Each server of a plugin gets tools named after the plugin and the server
+  @mcp
+  Scenario: Each server of a plugin gets tools named after the plugin and the server (BLT-01, BLT-04, D-MB-13)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -172,17 +172,53 @@ Feature: MCP server listing
       {"mcpServers": {"api": {"stub": {}}, "my.db": {"stub": {}}}}
       """
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given pi runs with the scripted model and these companions:
-      | companion      |
-      | pi-mcp-adapter |
-    Given pi-mcp-adapter has listed the tools of the stub mcp server "api" of the plugin "demo"
-    Given pi-mcp-adapter has listed the tools of the stub mcp server "my.db" of the plugin "demo"
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "api" of the plugin "demo"
+    Given the mcp implementation has listed the tools of the stub mcp server "my.db" of the plugin "demo"
     When the user lists the mcp tools pi offers
     Then pi offers these plugin mcp tools:
       | tool                         | active |
       | mcp__plugin_demo_api__echo   | no     |
       | mcp__plugin_demo_my_db__echo | no     |
+
+  @builtin-only
+  Scenario: A server name with a hyphen keeps it in Pi's registry while its tools fold it to an underscore, a Pi capability gap (BLT-04, D-MB-13)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "my-db"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "my-db" of the plugin "demo"
+    When the user lists the mcp tools pi offers
+    Then pi lists these registered mcp servers:
+      | name              |
+      | plugin_demo_my-db |
+    Then pi offers these plugin mcp tools:
+      | tool                         | active |
+      | mcp__plugin_demo_my_db__echo | no     |
+
+  @builtin-only
+  Scenario: A server whose tool names pass Pi's 64-character limit gets Pi's cut tool names, a Pi capability gap (BLT-04, D-MB-13)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "a-server-whose-name-runs-well-past-the-limit"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "a-server-whose-name-runs-well-past-the-limit" of the plugin "demo"
+    When the user lists the mcp tools pi offers
+    Then pi lists these registered mcp servers:
+      | name                                                     |
+      | plugin_demo_a-server-whose-name-runs-well-past-the-limit |
+    Then pi offers these plugin mcp tools:
+      | tool                                                             | active |
+      | mcp__plugin_demo_a_server_whose_name_runs_well_past_the_ca340f16 | no     |
 
   @adapter-only
   Scenario: A plugin without MCP servers adds no server to pi-mcp-adapter
@@ -207,6 +243,24 @@ Feature: MCP server listing
       | 2    | assistant   | tool call mcp {}         |
       | 2    | tool result | mcp returned: no servers |
     Then no stub mcp server receives a message
+
+  @mcp
+  Scenario: A plugin without MCP servers adds no tool beside a plugin whose server Pi offers (BLT-01)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | demo  | 1.0.0   |
+      | other | 1.0.0   |
+    Given the published plugin "other" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user has run "/claude:plugin install other@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "other"
+    When the user lists the mcp tools pi offers
+    Then pi offers these plugin mcp tools:
+      | tool                         | active |
+      | mcp__plugin_other_stub__echo | no     |
 
   @adapter-only
   Scenario: A search that matches no tool activates none
@@ -236,3 +290,35 @@ Feature: MCP server listing
       | call | tools                                                         |
       | 1    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
       | 2    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
+
+  @builtin-only
+  Scenario: A search that matches no tool loads none and sends the server no call (BLT-01)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    Given the scripted model plays these steps:
+      | reply | tool        | arguments            |
+      |       | tool_search | {"query": "nothing"} |
+      | Done. |             |                      |
+    When the user prompts "find a tool"
+    Then the model receives these calls, with each tool search reduced to the tools it loads:
+      | call | role        | text                                      |
+      | 1    | user        | find a tool                               |
+      | 2    | user        | find a tool                               |
+      | 2    | assistant   | tool call tool_search {"query":"nothing"} |
+      | 2    | tool result | tool_search returned: found no tools      |
+    Then the model calls are offered these marketplace tools:
+      | call | tools                                                         |
+      | 1    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
+      | 2    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
+    Then the stub mcp server "stub" of the plugin "demo" receives these messages:
+      | kind         | method                    | params                                                                                                    |
+      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.0"}} |
+      | notification | notifications/initialized |                                                                                                           |
+      | request      | tools/list                |                                                                                                           |
