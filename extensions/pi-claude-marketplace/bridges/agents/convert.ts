@@ -17,7 +17,7 @@ import { resolveSkillReference, rewriteMarkdownReferences } from "../../domain/s
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
-import { emitGeneratedAgentFile } from "./frontmatter.ts";
+import { emitGeneratedAgentFile, emitGeneratedAgentFrontmatter } from "./frontmatter.ts";
 import { mcpAsyncWarning } from "./mcp-async-warning.ts";
 
 import type { GeneratedToolsFields } from "./frontmatter.ts";
@@ -985,8 +985,10 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
 
   // 8. Hand off to the frontmatter emitter for final assembly. From here on,
   //    parser-safety (YAML quote-flipping, newline normalization, field
-  //    ordering) lives behind a single seam.
-  const fileContent = emitGeneratedAgentFile({
+  //    ordering) lives behind a single seam. The frontmatter block comes
+  //    from the same fields, so the file is that block followed by the body
+  //    (MGRT-01).
+  const emitted = {
     frontmatter: {
       name: declaredName,
       description,
@@ -1007,6 +1009,9 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
       droppedTools: toolsResult.dropped,
       warnings,
     },
+  };
+  const fileContent = emitGeneratedAgentFile({
+    ...emitted,
     body: bodyWithPreloads(convertedBody, skillsResult.inline),
   });
 
@@ -1015,6 +1020,7 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
     generatedName,
     sourcePath,
     fileContent,
+    frontmatter: emitGeneratedAgentFrontmatter(emitted),
     sourceHash,
     droppedFields,
     droppedTools: toolsResult.dropped,

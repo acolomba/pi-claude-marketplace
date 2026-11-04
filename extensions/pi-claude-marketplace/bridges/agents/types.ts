@@ -60,6 +60,13 @@ export interface ConvertedAgent {
   readonly sourceHash: string;
   /** Ready-to-write file content (frontmatter, including provenance keys, + body). */
   readonly fileContent: string;
+  /**
+   * MGRT-01 / D-MB-03: the file's frontmatter block, from the opening `---`
+   * line through the closing `---` line and its newline; `fileContent` is
+   * this block followed by the body. The stage records it per MCP
+   * implementation, so a load can swap one grant form for the other.
+   */
+  readonly frontmatter: string;
   /** Original `model:` field from source if present (for index/provenance). */
   readonly originalModel?: string;
   /** Frontmatter fields dropped because unsupported. */

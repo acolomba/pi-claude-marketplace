@@ -300,11 +300,7 @@ describe("convertAgent", () => {
   ]) {
     test(`converts supported ${label} into the complete agent contract`, () => {
       // arrange
-      const expectedAgent = {
-        sourceName: "reviewer",
-        generatedName: "pi-claude-marketplace-acme-reviewer",
-        sourcePath: "/plugins/acme/agents/reviewer.md",
-        fileContent: `---
+      const expectedFrontmatter = `---
 name: acme:reviewer
 description: Reviews files
 aliases: pi-claude-marketplace-acme-reviewer
@@ -322,9 +318,15 @@ ${expectedModelProvenance}  droppedFields: []
   droppedTools: []
   warnings: []
 ---
-
+`;
+      const expectedAgent = {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: "/plugins/acme/agents/reviewer.md",
+        fileContent: `${expectedFrontmatter}
 Review files.
 `,
+        frontmatter: expectedFrontmatter,
         sourceHash: "converted-hash",
         droppedFields: [],
         droppedTools: [],
@@ -357,11 +359,7 @@ Review files.
 
   test("converts the complete mapped agent contract into independently pinned bytes", () => {
     // arrange
-    const expectedAgent = {
-      sourceName: "changes-reviewer",
-      generatedName: "pi-claude-marketplace-spec-tree-changes-reviewer",
-      sourcePath: "/plugins/spec-tree/agents/changes-reviewer.md",
-      fileContent: `---
+    const expectedFrontmatter = `---
 name: spec-tree:changes-reviewer
 description: Reviews changes
 aliases: pi-claude-marketplace-spec-tree-changes-reviewer
@@ -390,11 +388,17 @@ provenance:
     - unknown skill reference "phantom" -- dropped
     - agent-level \`hooks\` is not converted -- dropped (Claude Code ignores it for plugin agents too; plugin-level hooks/hooks.json still installs).
 ---
-
+`;
+    const expectedAgent = {
+      sourceName: "changes-reviewer",
+      generatedName: "pi-claude-marketplace-spec-tree-changes-reviewer",
+      sourcePath: "/plugins/spec-tree/agents/changes-reviewer.md",
+      fileContent: `${expectedFrontmatter}
 Review /plugins/spec-tree and /data/spec-tree for /workspace.
 Use /skill:spec-tree-review-changes.
 Keep \${CLAUDE_SKILL_DIR} literal.
 `,
+      frontmatter: expectedFrontmatter,
       sourceHash: "converted-hash",
       droppedFields: ["color", "hooks"],
       droppedTools: [],
@@ -445,11 +449,7 @@ Keep \${CLAUDE_SKILL_DIR} literal.
 
   test("omits model provenance when model mapping is disabled", () => {
     // arrange
-    const expectedAgent = {
-      sourceName: "reviewer",
-      generatedName: "pi-claude-marketplace-acme-reviewer",
-      sourcePath: "/plugins/acme/agents/reviewer.md",
-      fileContent: `---
+    const expectedFrontmatter = `---
 name: acme:reviewer
 description: Reviews files
 aliases: pi-claude-marketplace-acme-reviewer
@@ -468,9 +468,15 @@ provenance:
   droppedTools: []
   warnings: []
 ---
-
+`;
+    const expectedAgent = {
+      sourceName: "reviewer",
+      generatedName: "pi-claude-marketplace-acme-reviewer",
+      sourcePath: "/plugins/acme/agents/reviewer.md",
+      fileContent: `${expectedFrontmatter}
 Review files.
 `,
+      frontmatter: expectedFrontmatter,
       sourceHash: "converted-hash",
       droppedFields: [],
       droppedTools: [],
@@ -2926,5 +2932,99 @@ describe("MGRT-01 grant form per MCP implementation", () => {
 
     // assert
     assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+});
+
+describe("MGRT-01 converted frontmatter block", () => {
+  for (const { mcpImplementation, selector, asyncWarning } of [
+    {
+      mcpImplementation: "adapter",
+      selector: "mcp:plugin_acme_db_/query",
+      asyncWarning: MCP_ASYNC_WARNING,
+    },
+    {
+      mcpImplementation: "builtin",
+      selector: "mcp:plugin_acme_db/query",
+      asyncWarning: BUILTIN_MCP_ASYNC_WARNING,
+    },
+  ] as const) {
+    test(`MGRT-01: the ${mcpImplementation} form's block holds its warnings and dropped tools, and the block followed by the body is the file`, () => {
+      // arrange
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: `tools: read,${selector}`,
+        inheritSkills: false,
+        async: true,
+        droppedTools: ["WebFetch"],
+        warnings: [asyncWarning],
+      });
+      const body = "\nBody content.\n";
+
+      // act
+      const agent = convertMcpAgent(
+        { description: "d", tools: "Read, WebFetch, mcp__plugin_acme_db__query" },
+        ["db"],
+        mcpImplementation,
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        { frontmatter: agent.frontmatter, fileContent: agent.fileContent },
+        {
+          frontmatter: expectedFileContent.slice(0, -body.length),
+          fileContent: expectedFileContent,
+        },
+      );
+    });
+  }
+
+  test("MGRT-01: a body holding a --- line leaves the block unchanged", () => {
+    // arrange
+    const expectedFrontmatter = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+`;
+
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw: { description: "d", tools: "Read" },
+        body: "Before.\n---\nname: injected\n---\nAfter.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { frontmatter: agent.frontmatter, fileContent: agent.fileContent },
+      {
+        frontmatter: expectedFrontmatter,
+        fileContent: `${expectedFrontmatter}\nBefore.\n---\nname: injected\n---\nAfter.\n`,
+      },
+    );
   });
 });
