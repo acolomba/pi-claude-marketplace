@@ -484,3 +484,67 @@ copies every item here. Phase 6 merges this file into the root log.
   tool prefix reuses `foldedMcpServerKey`; `PiMcpRegistry` uses method
   signatures like the rest of `pi-api.ts`.
 - **Recorded in:** `01-03-SUMMARY.md`, commit 3def844.
+
+### P1-DC-29: Plan 01-05 executor choices (snapshot field)
+
+- **Severity:** Low to Medium. **Status:** open.
+- (Medium) No RED-only commit (hook typecheck refused it); RED evidence in
+  the SUMMARY, as in P1-DC-28.
+- (Low) A throwing `getCommands()` reads as an empty list (plan said
+  undefined); same result.
+- (Low) The old probe read order is kept, because
+  `test/edge/command-run.test.ts` pins it.
+- (Low) Partial test helpers default `mcpImplementation` to `none`; every
+  caller that sets `piMcpAdapterLoaded: true` now also sets `adapter`.
+- (Low) The whole `test:modules` was not re-run after the read-order fix;
+  the hook's all-pairs direct coverage ran every paired test.
+- (Low) Title `ADET-01 does not count Pi's built-in MCP alone` kept while it
+  now expects `mcpImplementation: "builtin"`.
+- (Low) The commit ran in background mode once (all-pairs coverage).
+- **Recorded in:** `01-05-SUMMARY.md`.
+
+### P1-DC-30: Plan 01-06 executor choices (session steps)
+
+- **Severity:** Medium. **Status:** open.
+- (Medium) `materializeMcpSession` is composed in `index.ts` from
+  `createMcpSessionMaterializer`, not exported from
+  `session-materialize.ts`: fallow fails an export only tests use, and
+  `ignoreExports` is for exports a later phase consumes.
+- (Low-Medium) A mode check runs before the session steps at
+  `session_start` (not asked for; every other mutating stage checks it, and
+  `session-materialize.ts` is frozen).
+- (Low-Medium) The resync's mode check sits inside its own try/catch, so a
+  mode failure skips only the resync (and the catch is reachable for
+  coverage).
+- (Low) No RED-only commit (P1-DC-28 precedent).
+- (Medium, follow-up) The existing test `AAP-03 / NFR-2: an autoapply load
+  whose apply throws ...` in `test/index.test.ts` states too few mode reads
+  and UI emissions; a strong-mock miss silently skips later stages (now the
+  PATH stage and the resync). Its assertions still hold. Left for the code
+  review step.
+- (Low) The architecture test casts its Proxy fakes once; the session_start
+  read is asserted as "at least one".
+- **Recorded in:** `01-06-SUMMARY.md`.
+
+### P1-DC-31: Plan 01-07 executor choices (cucumber profiles)
+
+- **Severity:** Medium. **Status:** open.
+- (Medium) CI still runs `npm run test:cucumber -- $SHARD_PATHS`; with the
+  two-profile chain the paths reach only the builtin run, so each shard runs
+  the whole adapter suite until plan 01-13 switches CI to
+  `test:cucumber:profile`.
+- (Low) Files outside the plan: `test/e2e/adapter-detection-rpc.test.ts`
+  (projects `ListedCommand.source`), `features/lib/turn-records.ts`
+  (exports `isRunning` for reuse), `.fallowrc.json` (`ignoreExports` for
+  three lib exports 01-09 uses).
+- (Low) `adapterOnboardingSeedText` is not exported though the plan lists it.
+- (Low) Every restart waits for the adapter's onboarding write when the
+  stopped Pi loaded the adapter (contract names it for `without-adapter`
+  only).
+- (Low) `readBuiltinTurnedOff` reads project settings regardless of trust
+  (Pi 1.5.0 ignores untrusted project settings).
+- (Low) The run-root check repeats the `pi-cm-features-` mkdtemp prefix.
+- (Low) Seeds repeat their Givens instead of a Background; the
+  `@own-implementation` flag is set by a tagged Before hook; the settings-off
+  release removes `{agent dir}/settings.json`; the seed is compact JSON.
+- **Recorded in:** `01-07-SUMMARY.md`.
