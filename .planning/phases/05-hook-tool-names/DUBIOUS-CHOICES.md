@@ -541,3 +541,25 @@ fixed (`05-REVIEW.md`, `05-REVIEW-FIX.md`).
 - **Alternatives:** keep the defensive check; leave three constants.
 - **Why dubious:** removing a defensive check; a new export.
 - **Recorded in:** `05-REVIEW-FIX.md`.
+
+## Verification and transition step (child session, 2026-11-04)
+
+The verifier passed the phase 6/6; the security audit closed 17/17 threats;
+the Nyquist audit found no gap.
+
+### P5-DC-42: Orchestration shortcuts in the GSD workflows
+
+- **Phase / source:** Phase 5 execute, verify, and transition; child session.
+- **Severity:** Low. **Status:** open.
+- **Choice:** (1) executor prompts told each executor to Read the GSD
+  execution files (~150 KB) instead of inlining them verbatim; (2) the code
+  review and fix ran before the verify:post security and Nyquist steps, so
+  those audited the fixed code; (3) the transition ran in post-completion mode
+  and skipped `evolve_project`, because a child never edits PROJECT.md (its
+  lines are parent lines in `05-04-SUMMARY.md`); (4) the regression gate reused
+  the post-fix `npm run check` and `npm run test:modules` run, which hold every
+  Phase 1 suite; (5) worktree cleanup for wave 1 failed on a missing `.git`
+  file and was finished by hand (`rm -rf`, `git worktree prune`, branch delete).
+- **Alternatives:** the workflows' literal order and embeds.
+- **Why dubious:** process deviations from the GSD text; outcomes are the same.
+- **Recorded in:** this file.
