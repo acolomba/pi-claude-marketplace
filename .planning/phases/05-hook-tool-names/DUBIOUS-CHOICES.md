@@ -465,3 +465,22 @@ choice. The planner's choices follow.
   also compare runs; state the exact rule.
 - **Why dubious:** small precision and scope choices.
 - **Recorded in:** `05-03-SUMMARY.md`, `docs/hooks-compatibility.md`.
+
+## Execution wave 3 (plan 05-04 gate, gsd-executor, 2026-11-04)
+
+### P5-DC-37: Gate-plan shortcuts and drafted parent lines
+
+- **Phase / source:** plan 05-04 (executor P5-04-DC-01..05).
+- **Severity:** Low. **Status:** open.
+- **Choice:** (1) after the red sweep restored HEAD, only the two hook feature
+  files were re-run under both profiles, not the whole 17-minute gate (same
+  inputs, gates.md); (2) the 20 untagged `tool-use.feature` rows are proven by
+  the run total, not a per-scenario list; (3) `/tmp/jiti` was not cleared before
+  the sweep, since every run that had to fail failed; (4) the parent lines are
+  drafts in the executor's words; (5) the post-Phase-2 re-run note asks that
+  Phase 2 keep Pi's namespace alias equal to the registered name, a condition no
+  frozen interface states.
+- **Alternatives:** a full gate rerun; a JSON formatter; clearing the cache;
+  verbatim decision text.
+- **Why dubious:** process shortcuts and an unfrozen cross-phase assumption.
+- **Recorded in:** `05-04-SUMMARY.md`.
