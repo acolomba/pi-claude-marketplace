@@ -484,3 +484,60 @@ choice. The planner's choices follow.
   verbatim decision text.
 - **Why dubious:** process shortcuts and an unfrozen cross-phase assumption.
 - **Recorded in:** `05-04-SUMMARY.md`.
+
+## Code review and fix step (gsd-code-reviewer + gsd-code-fixer, 2026-11-04)
+
+The review found no Critical issue, 1 Warning, and 5 Info items; all six are
+fixed (`05-REVIEW.md`, `05-REVIEW-FIX.md`).
+
+### P5-DC-38: A folded tool segment does not fire on a hashed name
+
+- **Phase / source:** code review WR-01.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** the docs and the contract now say a matcher with the tool
+  segment folded fires only when Pi did not hash the name; a name over 64
+  characters, or one that another tool of the server already sanitizes to,
+  fires only on Claude's full name (with `-`). The behavior cannot change: a
+  folded segment cannot recover the hash of the original name. P5-DC-04 is
+  narrowed accordingly.
+- **Alternatives:** none that Pi's information allows.
+- **Why dubious:** a hook written with the folded name silently never fires on
+  such tools.
+- **Recorded in:** `docs/hooks-compatibility.md`, `builtin-mcp-tool-names.ts`.
+
+### P5-DC-39: A server-prefix matcher compares the server name exactly under built-in
+
+- **Phase / source:** code review IN-02.
+- **Severity:** Low. **Status:** open.
+- **Choice:** under built-in MCP, `mcp__<S>__.*` fires only when `<S>` is the
+  registered server name; for a server named `a__b`, `mcp__a__.*` fires in Claude
+  Code and under pi-mcp-adapter (a plain prefix test) but not under built-in.
+  Documented only.
+- **Alternatives:** a plain prefix test on the Claude-form name.
+- **Why dubious:** a parity gap for server names containing `__`.
+- **Recorded in:** `docs/hooks-compatibility.md`.
+
+### P5-DC-40: The first proxy-rule answer is kept per generation, even a failed read
+
+- **Phase / source:** code review IN-01.
+- **Severity:** Low. **Status:** open.
+- **Choice:** documented, not changed: if the first read fails under
+  pi-mcp-adapter, the view keeps `false` until `/reload`, so proxy calls run
+  their hooks twice. `softDepStatus` reports a failed read as "not loaded", so
+  the view cannot tell the two apart.
+- **Alternatives:** re-read on every proxy-shaped call.
+- **Why dubious:** an unlikely failure has a session-long effect.
+- **Recorded in:** `mcp-tool-view.ts`, `docs/hooks-compatibility.md`.
+
+### P5-DC-41: Review cleanups (unreachable check removed, shared prefix constant)
+
+- **Phase / source:** code review IN-03..IN-05.
+- **Severity:** Low. **Status:** open.
+- **Choice:** removed the empty-tool-segment check that both literal parsers
+  already make unreachable (two bare-prefix unit rows kept); `MCP_TOOL_PREFIX`
+  is exported from the domain module and imported by `dispatch.ts` and
+  `mcp-tool-view.ts` (the `matcher.ts` and `if-field` literals left as they
+  were); a stale `matchValue` comment fixed.
+- **Alternatives:** keep the defensive check; leave three constants.
+- **Why dubious:** removing a defensive check; a new export.
+- **Recorded in:** `05-REVIEW-FIX.md`.
