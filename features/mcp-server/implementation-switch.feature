@@ -21,3 +21,28 @@ Feature: MCP server implementation switch
     Then pi offers these plugin mcp tools:
       | tool                        | active |
       | mcp__plugin_demo_stub__echo | no     |
+
+  @own-implementation
+  Scenario: A plugin installed under pi's built-in mcp runs through pi-mcp-adapter after a restart, with no rewrite at load (MSEL-04)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given pi runs with the scripted model
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                          |
+      |       | mcp  | {"tool": "mcp__plugin_demo_stub__echo", "args": {"text": "ping"}} |
+      | Done. |      |                                                                    |
+    When the user restarts pi with pi-mcp-adapter
+    Then the session reports no results
+    Then pi-mcp-adapter lists the tools of the stub mcp server "stub" of the plugin "demo"
+    When the user prompts "call the stub"
+    Then the model receives these calls:
+      | call | role        | text                                                                        |
+      | 1    | user        | call the stub                                                               |
+      | 2    | user        | call the stub                                                               |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: echo:ping                                                     |
