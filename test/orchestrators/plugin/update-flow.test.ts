@@ -13513,7 +13513,7 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
           message:
             "A plugin operation needs attention.\n\n" +
             "● mp [project]\n" +
-            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires pi-mcp-adapter}\n\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires mcp}\n\n" +
             "/reload to pick up changes",
           severity: "warning",
         },
@@ -13855,7 +13855,7 @@ test("AFILE-04: update over a commented mcp-adapter.json shows the comments-remo
           message:
             "A plugin operation needs attention.\n\n" +
             "● mp [project]\n" +
-            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires mcp}\n\n" +
             "/reload to pick up changes",
           severity: "warning",
         },
@@ -14063,7 +14063,7 @@ for (const { label, env, notices } of [
             message:
               "A plugin operation needs attention.\n\n" +
               "● mp [project]\n" +
-              "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+              "  ● hello v1.0.0 → v1.0.1 (updated) {requires mcp}\n\n" +
               "/reload to pick up changes",
             severity: "warning",
           },
@@ -14191,7 +14191,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
           message:
             "A plugin operation needs attention.\n\n" +
             "● mp [project]\n" +
-            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires mcp}\n\n" +
             "Plugin update: 1 warning, 1 updated\n\n" +
             "/reload to pick up changes",
           severity: "warning",
@@ -14296,7 +14296,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later marketplace sync st
           message:
             "A plugin operation needs attention.\n\n" +
             "● mp [project]\n" +
-            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires mcp}\n\n" +
             "Plugin update: 1 warning, 1 updated\n\n" +
             "/reload to pick up changes",
           severity: "warning",

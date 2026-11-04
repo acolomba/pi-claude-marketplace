@@ -586,7 +586,7 @@ for (const orchestrated of [false, true]) {
         orchestrated
           ? []
           : [
-              'A plugin operation needs attention.\n\n● mp [project]\n  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}\n    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"\n  ● app v1.0.0 (installed)\n  ● zzz@mp v1.0.0 (installed) {requires pi-mcp-adapter}\n\n/reload to pick up changes',
+              'A plugin operation needs attention.\n\n● mp [project]\n  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}\n    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"\n  ● app v1.0.0 (installed)\n  ● zzz@mp v1.0.0 (installed) {requires mcp}\n\n/reload to pick up changes',
               "MCP config comments removed.\n\nThe project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
             ],
       );

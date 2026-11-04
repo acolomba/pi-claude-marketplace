@@ -1,6 +1,10 @@
 import { type Reason } from "../notification-types.ts";
 
-import type { McpImplementationId, SoftDepStatus } from "../../platform/pi-api.ts";
+import type {
+  ActiveMcpImplementation,
+  McpImplementationId,
+  SoftDepStatus,
+} from "../../platform/pi-api.ts";
 
 /**
  * shared/concerns/soft-dep.ts -- the soft-dep marker injection concern (D-01).
@@ -9,6 +13,10 @@ import type { McpImplementationId, SoftDepStatus } from "../../platform/pi-api.t
  * `SoftDepStatus` snapshot to the soft-dep markers to append. It also owns the
  * companion package names and `companionRequirements`, the same mapping shaped
  * for the info `requires:` line (ADET-01).
+ *
+ * D-MB-07: the MCP marker names an implementation, not a package:
+ * `mcpDependencyMarker` reads the active implementation from the snapshot and
+ * the implementations that run every server from the row's `McpDependency`.
  *
  * Resolve calls `softDepMarkers` with the command run's snapshot (D-05, D-12),
  * and plugin info calls `companionRequirements` with it; this module never
@@ -83,10 +91,73 @@ const COMPANION_MCP = "pi-mcp-adapter" satisfies Companion;
  */
 const COMPANION_WORKFLOWS = "pi-dynamic-workflows" satisfies Companion;
 
-/** Soft-dep marker literals -- all three are REASONS members (closed set). */
+// D-MB-07: the two MCP companions that name an implementation rather than a
+// package -- either implementation, or Pi's built-in MCP alone.
+const COMPANION_ANY_MCP = "mcp" satisfies Companion;
+const COMPANION_BUILTIN_MCP = "builtin mcp" satisfies Companion;
+
+/** Soft-dep marker literals -- every one is a REASONS member (closed set). */
 const SOFT_DEP_MARKER_AGENTS: Reason = `requires ${COMPANION_AGENTS}`;
 const SOFT_DEP_MARKER_MCP: Reason = `requires ${COMPANION_MCP}`;
+const SOFT_DEP_MARKER_ANY_MCP: Reason = `requires ${COMPANION_ANY_MCP}`;
+const SOFT_DEP_MARKER_BUILTIN_MCP: Reason = `requires ${COMPANION_BUILTIN_MCP}`;
 const SOFT_DEP_MARKER_WORKFLOWS: Reason = `requires ${COMPANION_WORKFLOWS}`;
+
+/**
+ * D-MB-07: which implementations run every server of an `McpDependency`.
+ * `split` is the empty `runEvery`: each implementation runs some server the
+ * other cannot.
+ */
+type RunEveryShape = "both" | "adapter" | "builtin" | "split";
+
+/**
+ * D-P3-06 / D-MB-07: the MCP marker per `runEvery` shape and active
+ * implementation; an absent entry means no marker. With no active
+ * implementation the marker names what would run every server (`requires mcp`
+ * when either would, or when neither runs them all). With an active
+ * implementation that runs every server there is no marker; with one that
+ * cannot, the marker names the other implementation.
+ */
+const MCP_MARKER_RULE: Readonly<
+  Record<RunEveryShape, Readonly<Partial<Record<ActiveMcpImplementation, Reason>>>>
+> = {
+  both: { none: SOFT_DEP_MARKER_ANY_MCP },
+  adapter: { builtin: SOFT_DEP_MARKER_MCP, none: SOFT_DEP_MARKER_MCP },
+  builtin: { adapter: SOFT_DEP_MARKER_BUILTIN_MCP, none: SOFT_DEP_MARKER_BUILTIN_MCP },
+  split: {
+    adapter: SOFT_DEP_MARKER_BUILTIN_MCP,
+    builtin: SOFT_DEP_MARKER_MCP,
+    none: SOFT_DEP_MARKER_ANY_MCP,
+  },
+};
+
+function runEveryShape(runEvery: readonly McpImplementationId[]): RunEveryShape {
+  const runsAdapter = runEvery.includes("adapter");
+  const runsBuiltin = runEvery.includes("builtin");
+  if (runsAdapter && runsBuiltin) {
+    return "both";
+  }
+
+  if (runsAdapter) {
+    return "adapter";
+  }
+
+  return runsBuiltin ? "builtin" : "split";
+}
+
+/**
+ * D-P3-06 / D-MB-07: the MCP soft-dep marker of a row, or `undefined` for
+ * none. `false` (no server any implementation runs) never gets one. The
+ * snapshot's active implementation decides it, through `MCP_MARKER_RULE`.
+ */
+export function mcpDependencyMarker(
+  declaresMcp: McpDependency | false,
+  probe: SoftDepStatus,
+): Reason | undefined {
+  return declaresMcp === false
+    ? undefined
+    : MCP_MARKER_RULE[runEveryShape(declaresMcp.runEvery)][probe.mcpImplementation];
+}
 
 /**
  * SNM-06: the dependencies a plugin's declares-flags select, in canonical order.
@@ -122,8 +193,7 @@ export function declaredDependencies(flags: {
  * `{<r1>, <r2>}` brace join).
  *
  *  - Appends `SOFT_DEP_MARKER_AGENTS` iff `declaresAgents && !probe.piSubagentsLoaded`.
- *  - Appends `SOFT_DEP_MARKER_MCP` iff `declaresMcp` is an `McpDependency` and
- *    `!probe.piMcpAdapterLoaded`, whatever its `runEvery` holds (D-MB-07).
+ *  - Appends the MCP marker `mcpDependencyMarker` returns, if any (D-MB-07).
  *  - Appends `SOFT_DEP_MARKER_WORKFLOWS` iff `declaresWorkflows && !probe.workflowEngineLoaded`.
  */
 export function softDepMarkers(
@@ -138,8 +208,9 @@ export function softDepMarkers(
     markers.push(SOFT_DEP_MARKER_AGENTS);
   }
 
-  if (declaresMcp !== false && !probe.piMcpAdapterLoaded) {
-    markers.push(SOFT_DEP_MARKER_MCP);
+  const mcpMarker = mcpDependencyMarker(declaresMcp, probe);
+  if (mcpMarker !== undefined) {
+    markers.push(mcpMarker);
   }
 
   // Appended LAST: the brace join is byte-critical and this order is what the

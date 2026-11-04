@@ -1,3 +1,4 @@
+import { mcpDependencyMarker } from "./concerns/soft-dep.ts";
 import { type Reason } from "./notification-types.ts";
 
 import type { SoftDepStatus } from "../platform/pi-api.ts";
@@ -79,14 +80,15 @@ export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "
  * SEV-01: per-producer severity for an otherwise-successful install/update row,
  * classified from the plugin's DECLARED soft-dep companions and the host's
  * companion-loaded probe. A declared `agents` kind requires `pi-subagents`; a
- * declared `mcp` kind requires `pi-mcp-adapter`; a declared `workflows` kind
- * requires the host workflow engine. When a declared companion is unloaded the
- * clean operation is silently degraded -> `warning`; otherwise (companion
- * present, or none declared) -> `info`. The caller passes the command run's
- * snapshot (D-05), the same snapshot resolve reads for the `{requires pi-...}`
- * marker, so severity and marker never disagree. The row bytes stay the same;
- * only the desired-state severity moves. D-P3-10: an `McpDependency` counts as
- * a declared `mcp` kind, and `false` as none.
+ * declared `workflows` kind requires the host workflow engine. When a declared
+ * companion is unloaded the clean operation is silently degraded -> `warning`;
+ * otherwise (companion present, or none declared) -> `info`. D-P3-09 /
+ * D-MB-07: the MCP term raises to `warning` exactly when `mcpDependencyMarker`
+ * shows a marker for the row's `McpDependency`, so an MCP dependency the
+ * active implementation runs keeps `info`. The caller passes the command
+ * run's snapshot (D-05), the same snapshot resolve reads for the markers, so
+ * severity and marker never disagree. The row bytes stay the same; only the
+ * desired-state severity moves.
  */
 export function companionSeverity(
   {
@@ -101,7 +103,7 @@ export function companionSeverity(
   probe: SoftDepStatus,
 ): "info" | "warning" {
   return (declaresAgents && !probe.piSubagentsLoaded) ||
-    (declaresMcp !== false && !probe.piMcpAdapterLoaded) ||
+    mcpDependencyMarker(declaresMcp, probe) !== undefined ||
     (declaresWorkflows && !probe.workflowEngineLoaded)
     ? "warning"
     : "info";
