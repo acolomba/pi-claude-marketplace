@@ -307,3 +307,37 @@ item here. The milestone parent merges this file into the root log in Phase 6.
   `description` and records the gap.
 - **Alternatives:** A record field (frozen `state-io.ts`).
 - **Why dubious:** a fourth manifest reader, or a lost tool-search hint.
+
+## Pattern mapping step (gsd-pattern-mapper, 2026-11-04)
+
+### P2-DC-24: The Phase 2 config probe loads through `usePiWithProfile` with explicit `extraExtensions`
+
+- **Phase / source:** Phase 2 pattern map (mapper DC 1).
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Scenarios that pin registered values start their Pi with
+  `usePiWithProfile({ companions: [], extraExtensions: [probe] })`, as
+  `listing.steps.ts` already does, rather than through the frozen launch list.
+- **Alternatives:** A parent line adding the probe to `world.ts`'s launch;
+  drop the value scenarios.
+- **Why dubious:** that launch differs from the shared-profile launch, and the
+  probe's default export adds one `fallow-ignore` `unused-export` marker.
+
+### P2-DC-25: The registration sync takes an injected log callback
+
+- **Phase / source:** Phase 2 pattern map (mapper DC 2).
+- **Severity:** Low. **Status:** open.
+- **Choice:** `syncBuiltinRegistrations` receives its debug log as a
+  parameter, so its failure paths are tested without a log capture.
+- **Alternatives:** Call `hookDebugLog` directly, as the rest of the module
+  does.
+- **Why dubious:** a parameter that exists only to observe logging.
+
+### P2-DC-26: The synchronous `mcp.json` override reader lives in `bridges/mcp`
+
+- **Phase / source:** Phase 2 pattern map (mapper DC 3).
+- **Severity:** Low. **Status:** open.
+- **Choice:** A new synchronous reader in the owned built-in bridge files
+  serves `info`'s override stamp.
+- **Alternatives:** `persistence/`; a synchronous variant in `adapter-doc.ts`.
+- **Why dubious:** the extension's first synchronous file read; possible
+  clone of `readMcpConfigDoc`.
