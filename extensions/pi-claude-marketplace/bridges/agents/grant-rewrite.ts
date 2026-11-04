@@ -13,7 +13,12 @@
 // Invariants:
 //   1. `needsAgentGrantRewrite` reads without the state lock and writes
 //      nothing, so a scope with nothing to rewrite never takes the lock and
-//      a scope with no index stays absent.
+//      a scope with no index stays absent. It reads each candidate's file and
+//      counts the row only when the locked pass would change it: the file
+//      passes containment and starts with a stored block, or is a legacy file
+//      that translates. A row the locked pass leaves (an edited, missing, or
+//      foreign file, a malformed stored form, or any row of an index with a
+//      corrupt row) would otherwise take the lock again at every load.
 //   2. `rewriteAgentGrantForms` runs under the caller's state lock (this
 //      bridge cannot take it) and calls the caller's `assertLockHeld` before
 //      each rename and before the index save, so a lock lost on the way
@@ -110,25 +115,30 @@ function isCandidate(row: AgentsIndexEntry, active: McpImplementationId): boolea
   return storedSwap(row, active) !== undefined || isLegacyCandidate(row, active);
 }
 
-/**
- * MGRT-01: true when some row of the scope's agents index records another
- * grant form than `active` and stores the active one, or is a legacy row a
- * built-in session translates (P4-DC-06). Reads without the lock; a missing
- * index is no work, and nothing is created.
- */
-export async function needsAgentGrantRewrite(
-  locations: ScopedLocations,
-  active: McpImplementationId,
-): Promise<boolean> {
-  const index = await loadAgentsIndex(locations);
-  return index.agents.some((row) => isCandidate(row, active));
-}
-
 /** AG-4: a block this bridge wrote opens and closes with `---` and carries the marker. */
 function isGeneratedBlock(block: string): boolean {
   return (
     block.startsWith("---\n") && block.endsWith("\n---\n") && block.includes(GENERATED_AGENT_MARKER)
   );
+}
+
+/**
+ * What a candidate file starts with, against the row's stored forms: the
+ * recorded block (AG-5), the active block, neither, or a stored active form
+ * that is not a generated block (AG-4).
+ */
+type HeldForm = "recorded" | "active" | "neither" | "malformed";
+
+function heldForm(swap: FormSwap, text: string): HeldForm {
+  if (!isGeneratedBlock(swap.active.frontmatter)) {
+    return "malformed";
+  }
+
+  if (text.startsWith(swap.recorded.frontmatter)) {
+    return "recorded";
+  }
+
+  return text.startsWith(swap.active.frontmatter) ? "active" : "neither";
 }
 
 /** NFR-10: the row's target lies in the scope's agents folder under its own name. */
@@ -140,6 +150,73 @@ async function assertRowContained(
   if (path.basename(row.targetPath) !== `${row.generatedName}.md`) {
     throw new Error(`agent target ${row.targetPath} is not named ${row.generatedName}.md`);
   }
+}
+
+/** T-04-13: an index with a corrupt row is left whole, so no row of it is rewritten. */
+function hasCorruptRow(locations: ScopedLocations, corruptions: readonly string[]): boolean {
+  if (corruptions.length === 0) {
+    return false;
+  }
+
+  hookDebugLog(
+    `agent grants of ${locations.scope} scope left: the agents index has a corrupt row`,
+    "mcp",
+  );
+  return true;
+}
+
+/**
+ * Whether the locked pass changes this candidate's row given its file text:
+ * a file that starts with a stored block, or a legacy file that translates.
+ */
+function changesRow(row: AgentsIndexEntry, active: McpImplementationId, text: string): boolean {
+  const swap = storedSwap(row, active);
+  if (swap === undefined) {
+    return deriveLegacyGrantForms(text, row) !== undefined;
+  }
+
+  const held = heldForm(swap, text);
+  return held === "recorded" || held === "active";
+}
+
+/** Whether the locked pass changes `row`; read without the lock, so a failure is no work. */
+async function isRewritable(
+  locations: ScopedLocations,
+  row: AgentsIndexEntry,
+  active: McpImplementationId,
+): Promise<boolean> {
+  if (!isCandidate(row, active)) {
+    return false;
+  }
+
+  try {
+    await assertRowContained(locations, row);
+    return changesRow(row, active, await readFile(row.targetPath, "utf8"));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * MGRT-01: true when the locked pass would change some row of the scope's
+ * agents index: a row that records another grant form than `active`, stores
+ * the active one, and whose file starts with a stored block, or a legacy row
+ * whose file a built-in session translates (P4-DC-06). Reads without the
+ * lock; a missing index is no work, and nothing is created.
+ */
+export async function needsAgentGrantRewrite(
+  locations: ScopedLocations,
+  active: McpImplementationId,
+): Promise<boolean> {
+  const index = await loadAgentsIndex(locations);
+  if (hasCorruptRow(locations, index.corruptions)) {
+    return false;
+  }
+
+  const rewritable = await Promise.all(
+    index.agents.map((row) => isRewritable(locations, row, active)),
+  );
+  return rewritable.includes(true);
 }
 
 /**
@@ -183,17 +260,20 @@ async function swapFile(
   swap: FormSwap,
   text: string,
 ): Promise<AgentsIndexEntry> {
-  if (!isGeneratedBlock(swap.active.frontmatter)) {
+  const held = heldForm(swap, text);
+  if (held === "malformed") {
     hookDebugLog(`agent ${row.generatedName}: the stored ${run.active} form is malformed`, "mcp");
     return row;
   }
 
-  if (text.startsWith(swap.recorded.frontmatter)) {
-    const body = text.slice(swap.recorded.frontmatter.length);
-    await replaceAgentFile(run, row, swap.active.frontmatter + body);
-  } else if (!text.startsWith(swap.active.frontmatter)) {
+  if (held === "neither") {
     hookDebugLog(`agent ${row.generatedName}: the file holds neither stored form`, "mcp");
     return row;
+  }
+
+  if (held === "recorded") {
+    const body = text.slice(swap.recorded.frontmatter.length);
+    await replaceAgentFile(run, row, swap.active.frontmatter + body);
   }
 
   return rowForActive(row, run.active, swap.active);
@@ -284,11 +364,7 @@ export async function rewriteAgentGrantForms(
   assertLockHeld: () => void,
 ): Promise<void> {
   const index = await loadAgentsIndex(locations);
-  if (index.corruptions.length > 0) {
-    hookDebugLog(
-      `agent grants of ${locations.scope} scope left: the agents index has a corrupt row`,
-      "mcp",
-    );
+  if (hasCorruptRow(locations, index.corruptions)) {
     return;
   }
 

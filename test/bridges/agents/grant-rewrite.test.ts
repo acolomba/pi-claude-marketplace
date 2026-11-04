@@ -67,7 +67,47 @@ describe("needsAgentGrantRewrite", () => {
     await assert.rejects(stat(locations.extensionRoot), { code: "ENOENT" });
   });
 
-  test("MGRT-01: is true when a row records the other form and stores the active one", async (t) => {
+  test("MGRT-01: is true when a row records the other form, stores the active one, and its file holds the recorded block", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    await writeAgent(agentPath(locations), adapterBlock() + BODY);
+    await writeIndex(locations, [storedRow(agentPath(locations), "adapter")]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, true);
+  });
+
+  test("NFR-3: is true when the file already holds the active block, so only the row is fixed", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    await writeAgent(agentPath(locations), builtinBlock() + BODY);
+    await writeIndex(locations, [storedRow(agentPath(locations), "adapter")]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, true);
+  });
+
+  test("AG-5: is false when the only candidate's file holds neither stored form", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const edited = adapterBlock().replace("Helps with", "Edited by hand,") + BODY;
+    await writeAgent(agentPath(locations), edited);
+    await writeIndex(locations, [storedRow(agentPath(locations), "adapter")]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, false);
+  });
+
+  test("MGRT-01: is false when the only candidate's file is missing", async (t) => {
     // arrange
     const locations = await userScope(t);
     await writeIndex(locations, [storedRow(agentPath(locations), "adapter")]);
@@ -76,7 +116,60 @@ describe("needsAgentGrantRewrite", () => {
     const needed = await needsAgentGrantRewrite(locations, "builtin");
 
     // assert
-    assert.strictEqual(needed, true);
+    assert.strictEqual(needed, false);
+  });
+
+  test("NFR-10: is false when the only candidate's target leaves the agents folder or has another name", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const outside = path.join(path.dirname(locations.agentsDir), "elsewhere", `${NAME}.md`);
+    const renamed = agentPath(locations, OTHER_NAME);
+    await writeAgent(outside, adapterBlock() + BODY);
+    await writeAgent(renamed, adapterBlock() + BODY);
+    await writeIndex(locations, [storedRow(outside, "adapter"), storedRow(renamed, "adapter")]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, false);
+  });
+
+  test("AG-4: is false when the only candidate's stored active form is malformed", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    const stored = storedRow(target, "adapter");
+    const malformed = builtinBlock().slice("---\n".length);
+    await writeAgent(target, adapterBlock() + BODY);
+    await writeIndex(locations, [
+      {
+        ...stored,
+        mcpForms: {
+          ...stored.mcpForms,
+          builtin: { frontmatter: malformed, warnings: [], droppedTools: [] },
+        },
+      },
+    ]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, false);
+  });
+
+  test("T-04-13: is false when the index holds a corrupt row, whatever its other rows hold", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    await writeAgent(agentPath(locations), adapterBlock() + BODY);
+    await writeIndex(locations, [storedRow(agentPath(locations), "adapter"), { plugin: "demo" }]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, false);
   });
 
   test("MGRT-01: is false when every row already records the active form", async (t) => {
@@ -122,6 +215,7 @@ describe("needsAgentGrantRewrite", () => {
   test("P4-DC-06: a legacy row holding the adapter async warning is a candidate under Pi's built-in MCP", async (t) => {
     // arrange
     const locations = await userScope(t);
+    await writeAgent(agentPath(locations), adapterBlock() + BODY);
     await writeIndex(locations, [legacyRow(agentPath(locations), [ADAPTER_ASYNC])]);
 
     // act
@@ -135,6 +229,20 @@ describe("needsAgentGrantRewrite", () => {
     // arrange
     const locations = await userScope(t);
     await writeIndex(locations, [legacyRow(agentPath(locations), ["a warning that stays"])]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, false);
+  });
+
+  test("P4-DC-06: a legacy row whose file is not a generated agent is not a candidate", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const text = adapterBlock().replace("  generatedBy: pi-claude-marketplace\n", "") + BODY;
+    await writeAgent(agentPath(locations), text);
+    await writeIndex(locations, [legacyRow(agentPath(locations), [ADAPTER_ASYNC])]);
 
     // act
     const needed = await needsAgentGrantRewrite(locations, "builtin");
