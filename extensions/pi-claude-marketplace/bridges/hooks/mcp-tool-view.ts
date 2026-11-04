@@ -85,7 +85,12 @@ function hookToolFor(piName: string, tool: PiTool | undefined): HookTool {
  * keeps its answer. The set of loaded extensions changes only on `/reload` or
  * in a new Pi, and each one registers a new bridge generation with a new view.
  * The snapshot is the notification run's (D-JO-01), so the view makes the
- * same reads as every other soft-dependency check and never throws.
+ * same reads as every other soft-dependency check and never throws. The view
+ * keeps the first answer even when a read failed: `softDepStatus` reports a
+ * read that throws as not loaded, so the answer stays `false` until
+ * `/reload`, and under pi-mcp-adapter each proxy call then runs its hooks on
+ * the outer call and again on the nested call. At `tool_call` time the
+ * session is bound, so these reads are not expected to throw.
  */
 export function createHookToolView(
   pi: Pick<ExtensionAPI, "getAllTools" | "getCommands"> | undefined,
