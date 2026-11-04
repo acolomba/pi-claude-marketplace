@@ -3158,7 +3158,7 @@ Same as above, but each dependency carries the constraint its manifest declared,
 
 ### Success -- a companion the plugin needs is missing (ADET-01)
 
-The plugin has agents and MCP servers, so it needs two companion extensions: pi-subagents runs its agents, and pi-mcp-adapter runs its MCP servers. The `requires:` line names both, sorted by package name. The probe finds pi-subagents loaded but does not find pi-mcp-adapter, so only pi-mcp-adapter carries the `(missing)` tag. Pi's built-in MCP client does not count as pi-mcp-adapter. The tag does not change the severity. With pi-mcp-adapter absent, the `github` server's state is `status unknown`. Severity `info`; no reload-hint (read-only surface).
+The plugin has agents and MCP servers, so it needs two companions: pi-subagents runs its agents, and either MCP implementation runs its stdio `github` server, so the line names `mcp`. The `requires:` line names both, sorted by name. The probe finds pi-subagents loaded and finds no MCP implementation: pi-mcp-adapter is absent, and the user's Pi settings turn off Pi's built-in MCP. So only `mcp` carries the `(missing)` tag. The tag does not change the severity. With no MCP implementation, the `github` server's state is `status unknown`. Severity `info`; no reload-hint (read-only surface).
 
 <!-- catalog-state: installed-with-missing-companion -->
 
@@ -3168,12 +3168,12 @@ The plugin has agents and MCP servers, so it needs two companion extensions: pi-
     Helpful git commit commands for everyday use.
     agents: review-bot
     mcp: plugin:commit-commands:github (status unknown)
-    requires: pi-mcp-adapter (missing), pi-subagents
+    requires: mcp (missing), pi-subagents
 ```
 
 ### Success -- every companion, one of them missing (ADET-01)
 
-The plugin has agents, MCP servers and workflow scripts, so it needs all three companion extensions. The `requires:` line lists them in package-name order: pi-dynamic-workflows, pi-mcp-adapter, pi-subagents. The probe finds pi-subagents and pi-mcp-adapter loaded but does not find the host workflow engine, so only pi-dynamic-workflows carries the `(missing)` tag. The adapter's last snapshot lists the `github` server as connected. Severity `info`; no reload-hint (read-only surface).
+The plugin has agents, MCP servers and workflow scripts, so it needs all three companions. Either MCP implementation runs its stdio `github` server, so the line names `mcp`. The `requires:` line lists them in name order: mcp, pi-dynamic-workflows, pi-subagents. The probe finds pi-subagents and an MCP implementation, pi-mcp-adapter, loaded but does not find the host workflow engine, so only pi-dynamic-workflows carries the `(missing)` tag. The adapter's last snapshot lists the `github` server as connected. Severity `info`; no reload-hint (read-only surface).
 
 <!-- catalog-state: installed-with-every-companion -->
 
@@ -3184,7 +3184,7 @@ The plugin has agents, MCP servers and workflow scripts, so it needs all three c
     agents: review-bot
     mcp: plugin:commit-commands:github (connected)
     workflows: commit-commands:changelog
-    requires: pi-dynamic-workflows (missing), pi-mcp-adapter, pi-subagents
+    requires: mcp, pi-dynamic-workflows (missing), pi-subagents
 ```
 
 ### Success -- installed from the installation record (INFO-09)
@@ -3424,7 +3424,7 @@ The plugin declares two MCP servers. The `live` server uses the `ws` transport, 
   ⊖ db-tools v1.0.0 (partially-available) {unsupported mcp}
     Database tools for everyday queries.
     mcp: plugin:db-tools:db, plugin:db-tools:live (unsupported ws)
-    requires: pi-mcp-adapter
+    requires: mcp
 ```
 
 ### Installed -- an MCP server's variables (AVAR-04, AVAR-05)
@@ -3438,7 +3438,7 @@ The plugin's `api` server reads variables in its `url` and `headers`. Info compu
   ● analytics v1.0.0 (installed)
     Product analytics tools.
     mcp: plugin:analytics:api (needs authentication; unset ANALYTICS_TOKEN; withheld ANTHROPIC_API_KEY)
-    requires: pi-mcp-adapter
+    requires: mcp
 ```
 
 ### Partially installed -- each MCP server's state (ASTAT-01)
@@ -3452,7 +3452,7 @@ The plugin was installed with `--partial`, so its `live` server, which uses the 
   ◉ ops-tools v1.0.0 (partially-installed) {unsupported mcp}
     Operations tools for everyday use.
     mcp: plugin:ops-tools:alerts (cached, connects on first use), plugin:ops-tools:builds (failed), plugin:ops-tools:live (unsupported ws), plugin:ops-tools:logs (not connected), plugin:ops-tools:metrics (disabled)
-    requires: pi-mcp-adapter
+    requires: mcp
 ```
 
 ### Installed -- an MCP server waits for project approval (ASTAT-01)
@@ -3466,7 +3466,7 @@ The plugin is installed in the project scope. pi-mcp-adapter blocks a project se
   ● deploy-tools v1.0.0 (installed)
     Deployment tools for this project.
     mcp: plugin:deploy-tools:deploys (pending approval)
-    requires: pi-mcp-adapter
+    requires: mcp
 ```
 
 ### Installed -- the adapter has not loaded an MCP server (ASTAT-02)
@@ -3480,7 +3480,7 @@ The plugin was installed in this session. The adapter's last snapshot is usable,
   ● ticket-tools v1.0.0 (installed)
     Ticket tools for everyday use.
     mcp: plugin:ticket-tools:tickets (not loaded)
-    requires: pi-mcp-adapter
+    requires: mcp
 ```
 
 ### Multi-scope fan-out -- both scopes hold the plugin
@@ -3510,12 +3510,12 @@ The same `plugin@marketplace` is installed in both scopes. Both `mcp-adapter.jso
 ● mp [project] <no autoupdate>
   ● ops-tools v1.0.0 (installed)
     mcp: plugin:ops-tools:alerts (connected)
-    requires: pi-mcp-adapter
+    requires: mcp
 
 ● mp [user] <no autoupdate>
   ● ops-tools v1.0.0 (installed)
     mcp: plugin:ops-tools:alerts (overridden by project scope)
-    requires: pi-mcp-adapter
+    requires: mcp
 ```
 
 ### Multi-scope fan-out -- the record is in both scopes and in no manifest (INFO-09)
