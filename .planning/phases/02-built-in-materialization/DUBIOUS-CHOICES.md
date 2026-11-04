@@ -716,3 +716,45 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Choice:** The bundle scenario runs under both implementations: neither has a bundle runner (Pi rests on its 1.5.0 validator).
 - **Alternatives:** Keep it adapter-only with the old wording.
 - **Why dubious:** No Claude Code probe was run.
+
+## Wave 2 (plan 02-04 executor, 2026-11-04)
+
+### P2-DC-69: A row counts as a project row by its `marketplaceScope`
+
+- **Phase / source:** Phase 2 plan 02-04 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** A row counts as a project row by its `marketplaceScope`.
+- **Alternatives:** The record's scope.
+- **Why dubious:** Matches how info already splits rows.
+
+### P2-DC-70: The terminal `/mcp` disable scenario reads the stub's log to wait for tool listing before opening the manager
+
+- **Phase / source:** Phase 2 plan 02-04 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The terminal `/mcp` disable scenario reads the stub's log to wait for tool listing before opening the manager.
+- **Alternatives:** A fixed delay.
+- **Why dubious:** Couples the step to the stub log.
+
+### P2-DC-71: The up arrow wraps to Disable in Pi's `/mcp` manager
+
+- **Phase / source:** Phase 2 plan 02-04 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The up arrow wraps to Disable in Pi's `/mcp` manager.
+- **Alternatives:** Navigate by label.
+- **Why dubious:** Depends on Pi's menu order.
+
+### P2-DC-72: An `mcp.json` entry counts as an override only if it has a string `command` or `url`
+
+- **Phase / source:** Phase 2 plan 02-04 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** An `mcp.json` entry counts as an override only if it has a string `command` or `url`.
+- **Alternatives:** Any JSON object (P2-DC-15's wording).
+- **Why dubious:** Narrows P2-DC-15; an entry Pi accepts by another shape would not be reported.
+
+### P2-DC-73: An untrusted project row skips the `mcp.json` reads
+
+- **Phase / source:** Phase 2 plan 02-04 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** An untrusted project row skips the `mcp.json` reads.
+- **Alternatives:** Read them anyway.
+- **Why dubious:** No override can matter when nothing registers.
