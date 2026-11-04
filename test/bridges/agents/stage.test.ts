@@ -25,12 +25,19 @@ import {
   commitPreparedAgents,
   prepareStagePluginAgents,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/stage.ts";
+import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+
+const ADAPTER_ASYNC_WARNING =
+  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails";
+
+const BUILTIN_ASYNC_WARNING =
+  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before Pi's built-in MCP has listed the server's tools still fails";
 
 async function createStageTree(t: TestContext, prefix: string) {
   const scopeRoot = await realpath(await mkdtemp(path.join(tmpdir(), prefix)));
@@ -160,6 +167,78 @@ describe("prepareStagePluginAgents", () => {
       },
       { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_acme_web__get" },
     ]);
+  });
+
+  test("MGRT-01: a built-in staging writes the built-in form and records both forms on a row the loader keeps", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-grant-forms-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "bot.md");
+    const sourceBytes =
+      "---\nname: bot\ndescription: Bot\ntools: Read, mcp__plugin_acme_db__query\n---\n\nBody.\n";
+    await writeFile(sourcePath, sourceBytes);
+    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
+    const frontmatterFor = (selector: string, asyncWarning: string): string =>
+      `---\nname: acme:bot\ndescription: Bot\naliases: pi-claude-marketplace-acme-bot\ntools: read,${selector}\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - ${asyncWarning}\n---\n`;
+    const builtinFrontmatter = frontmatterFor("mcp:plugin_acme_db/query", BUILTIN_ASYNC_WARNING);
+    const adapterFrontmatter = frontmatterFor("mcp:plugin_acme_db_/query", ADAPTER_ASYNC_WARNING);
+    const expectedRow = {
+      plugin: "acme",
+      marketplace: "catalog",
+      sourceAgent: "bot",
+      generatedName: "pi-claude-marketplace-acme-bot",
+      sourcePath,
+      targetPath,
+      sourceHash: createHash("sha256").update(sourceBytes).digest("hex"),
+      droppedFields: [],
+      droppedTools: [],
+      warnings: [BUILTIN_ASYNC_WARNING],
+      mcpImplementation: "builtin",
+      mcpForms: {
+        builtin: {
+          frontmatter: builtinFrontmatter,
+          warnings: [BUILTIN_ASYNC_WARNING],
+          droppedTools: [],
+        },
+        adapter: {
+          frontmatter: adapterFrontmatter,
+          warnings: [ADAPTER_ASYNC_WARNING],
+          droppedTools: [],
+        },
+      },
+    };
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      mcpServerNames: ["db"],
+      mcpGrantForms: { active: "builtin", declaredMcpServers: { db: { command: "node" } } },
+    });
+    const leak = await commitPreparedAgents(createRemovalOps(), prepared);
+
+    // assert
+    assert.strictEqual(leak, undefined);
+    assert.deepStrictEqual(prepared.result.warnings, [
+      { kind: "hygiene", message: `[bot] ${BUILTIN_ASYNC_WARNING}` },
+    ]);
+    assert.strictEqual(await readFile(targetPath, "utf8"), `${builtinFrontmatter}\nBody.\n`);
+    assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
+      schemaVersion: 1,
+      agents: [expectedRow],
+    });
+    assert.deepStrictEqual(await loadAgentsIndex(locations), {
+      schemaVersion: 1,
+      agents: [expectedRow],
+      corruptions: [],
+    });
   });
 
   test("returns a frozen no-op result when no agents component is declared", async (t) => {

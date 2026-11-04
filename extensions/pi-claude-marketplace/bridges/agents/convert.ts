@@ -883,6 +883,35 @@ export interface ConvertAgentInput {
  * the user can correct upstream.
  */
 export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
+  const conversion = convertAgentOrEmpty(input);
+  if (conversion.kind === "empty-tools") {
+    throw emptyToolListError(input.discovered.raw, input.discovered.sourceName, input.pluginName);
+  }
+
+  return conversion.agent;
+}
+
+/**
+ * MGRT-01 / AG-11 per form: the conversion `convertAgent` performs, or
+ * `undefined` where `convertAgent` refuses with AG-11 because an explicit
+ * `tools:` list maps to nothing in this form. The stage renders the grant
+ * form the file does not get through it, so that form's empty list leaves
+ * the form out instead of failing the staging.
+ */
+export function convertAgentForm(input: ConvertAgentInput): ConvertedAgent | undefined {
+  const conversion = convertAgentOrEmpty(input);
+  return conversion.kind === "converted" ? conversion.agent : undefined;
+}
+
+/**
+ * The outcome of one conversion: the converted agent, or the AG-11 case of
+ * an explicit `tools:` list that maps to nothing. Each export decides what
+ * the empty case means for its caller.
+ */
+type AgentConversion =
+  { readonly kind: "converted"; readonly agent: ConvertedAgent } | { readonly kind: "empty-tools" };
+
+function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
   const {
     pluginName,
     pluginRoot,
@@ -932,7 +961,10 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
     raw.disallowedTools,
     buildMcpGrants(pluginName, mcpServerNames, mcpImplementation),
   );
-  assertMappedToolsNonEmpty(toolsResult, { raw, sourceName, pluginName });
+  if (!hasMappedTools(toolsResult)) {
+    return { kind: "empty-tools" };
+  }
+
   warnings.push(...toolsResult.warnings);
   const backgroundForMcp = runsMcpTools(toolsResult, mcpServerNames);
   if (backgroundForMcp) {
@@ -1028,7 +1060,7 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
     ...(modelResult.originalModel !== undefined && { originalModel: modelResult.originalModel }),
   };
 
-  return result;
+  return { kind: "converted", agent: result };
 }
 
 /**
@@ -1068,9 +1100,17 @@ function optionalModel(model: string | undefined): { model?: string } {
 }
 
 /**
- * AG-11: rejects an explicit `tools:` declaration whose mapped list is empty
- * -- pi-subagents reads an empty allowlist as "no tools", which has no safe
- * representation. The message includes source values so the user can correct
+ * AG-11: whether a tool mapping is representable -- an omitted `tools:`, or
+ * an explicit one that maps to at least one entry. pi-subagents reads an
+ * empty allowlist as "no tools", which has no safe representation.
+ */
+function hasMappedTools(toolsResult: ToolMappingResult): toolsResult is ValidatedToolMapping {
+  return toolsResult.omitted || toolsResult.mapped.length > 0;
+}
+
+/**
+ * AG-11: the error for an explicit `tools:` declaration whose mapped list is
+ * empty. The message includes source values so the user can correct
  * upstream. AGSK-03 / D-83.1-02 (#86): Skill is silently excluded from
  * classification (it maps to inheritSkills, not a Pi tool), so a
  * `tools: Skill`-only agent would otherwise see one declared tool produce
@@ -1078,21 +1118,17 @@ function optionalModel(model: string | undefined): { model?: string } {
  * Skill was among the raw source tokens. The `?? "(omitted)"` label covers a
  * malformed `raw.tools` accessor whose value disappears between reads
  * (pinned by the malformed-accessor test); a genuinely omitted `tools:`
- * never reaches the throw (#179).
+ * never reaches the error (#179).
  */
-function assertMappedToolsNonEmpty(
-  toolsResult: ToolMappingResult,
-  input: { raw: RawAgentFrontmatter; sourceName: string; pluginName: string },
-): asserts toolsResult is ValidatedToolMapping {
-  const { raw, sourceName, pluginName } = input;
-  if (toolsResult.omitted || toolsResult.mapped.length > 0) {
-    return;
-  }
-
+function emptyToolListError(
+  raw: RawAgentFrontmatter,
+  sourceName: string,
+  pluginName: string,
+): Error {
   const skillNote = splitToolList(raw.tools).some(isSkillToken)
     ? " Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list."
     : "";
-  throw new Error(
+  return new Error(
     `Cannot convert agent "${sourceName}" in plugin "${pluginName}": ` +
       `the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). ` +
       `Source tools: ${raw.tools ?? "(omitted)"}; ` +
@@ -1106,7 +1142,7 @@ function assertMappedToolsNonEmpty(
  * grants its default builtin tools, with disallowedTools narrowing that
  * set via excludeTools. The GeneratedToolsFields return type is what keeps
  * the two lines from ever rendering together. The validated mapping carries
- * the nonempty explicit list proved by assertMappedToolsNonEmpty, so the
+ * the nonempty explicit list proved by hasMappedTools, so the
  * emitter does not need a second runtime check.
  */
 function toolsFields(result: ValidatedToolMapping): GeneratedToolsFields {

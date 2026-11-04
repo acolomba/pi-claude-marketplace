@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 
 import {
   convertAgent,
+  convertAgentForm,
   GUIDED_DROPPED_FIELDS,
   preloadedSkillNames,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
@@ -3026,5 +3027,80 @@ provenance:
         fileContent: `${expectedFrontmatter}\nBefore.\n---\nname: injected\n---\nAfter.\n`,
       },
     );
+  });
+});
+
+describe("convertAgentForm", () => {
+  test("AG-11: returns nothing for an explicit tools list that maps to nothing", () => {
+    // arrange
+    const raw = { description: "d", tools: "mcp__plugin_acme_web__get, WebFetch" };
+
+    // act
+    const agent = convertAgentForm({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw,
+        body: "Body content.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+      mcpServerNames: [],
+      mcpImplementation: "builtin",
+    });
+
+    // assert
+    assert.strictEqual(agent, undefined);
+  });
+
+  test("MGRT-01: returns the converted agent of a form whose tools list maps", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read,mcp:plugin_acme_db/query",
+      inheritSkills: false,
+      async: true,
+      droppedTools: ["WebFetch"],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+    });
+    const body = "\nBody content.\n";
+
+    // act
+    const agent = convertAgentForm({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw: { description: "d", tools: "Read, WebFetch, mcp__plugin_acme_db__query" },
+        body: "Body content.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+      mcpServerNames: ["db"],
+      mcpImplementation: "builtin",
+    });
+
+    // assert
+    assert.deepStrictEqual(agent, {
+      sourceName: "bot",
+      generatedName: "pi-claude-marketplace-acme-bot",
+      sourcePath: "/abs/path/source.md",
+      fileContent: expectedFileContent,
+      frontmatter: expectedFileContent.slice(0, -body.length),
+      sourceHash: "abc",
+      droppedFields: [],
+      droppedTools: ["WebFetch"],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+    } satisfies ConvertedAgent);
   });
 });
