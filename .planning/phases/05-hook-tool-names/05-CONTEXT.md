@@ -42,7 +42,7 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
 
 ### What Pi tells the hooks bridge about a built-in tool
 
-- **D-P5-01 (built-in tool identity).** A tool call is a built-in MCP tool call
+- **D-P5-01:** (built-in tool identity) A tool call is a built-in MCP tool call
   when the tool that `pi.getAllTools()` lists under the event's tool name has
   `sourceInfo.path === "builtin:mcp"` and a `namespace` with at least one
   alias. Pi 1.5.0 registers each MCP tool with
@@ -55,7 +55,7 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   the bucket check, never at factory time (MSEL-01,
   `test/architecture/no-factory-time-probe.test.ts`). A read that throws, a
   missing tool, or a tool from another source leaves the name as it is today.
-- **D-P5-02 (the Claude-form name).** A built-in tool's Claude-form name is
+- **D-P5-02:** (the Claude-form name) A built-in tool's Claude-form name is
   `mcp__<alias>__<rest>`, where `<rest>` is Pi's tool name after the
   namespace prefix `<namespace name>__` (Pi's namespace name already starts
   with `mcp__`, research Q1). The tool segment keeps Pi's
@@ -65,11 +65,11 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   prefix and the hook sees Pi's name unchanged (a recorded gap). The rule
   covers every built-in server, plugin or `mcp.json`, because Claude Code
   names every server's tools `mcp__<server>__<tool>` with `-` kept.
-- **D-P5-03 (where the name shows).** The Claude-form name is the tool name
+- **D-P5-03:** (where the name shows) The Claude-form name is the tool name
   everywhere a hook sees one: the `tool_name` of the PreToolUse, PostToolUse,
   and PostToolUseFailure stdin, the `PreToolUse:<tool>` notice label
   (D-CF5-14), the matcher, and the `if` field.
-- **D-P5-04 (matching a built-in tool).** An MCP literal `mcp__<S>__<T>` in a
+- **D-P5-04:** (matching a built-in tool) An MCP literal `mcp__<S>__<T>` in a
   matcher or an `if` field fires on a built-in tool when `<S>` is the tool's
   alias and Pi 1.5.0's `createMcpToolName(S, T)` names the event's tool: the
   sanitized name, the 55-character cut with the 8-hex sha256 of `S\0T` for a
@@ -79,13 +79,13 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   because the two cannot be told apart; a matcher whose server segment is
   folded does not fire. A server prefix `mcp__<S>__.*` (and the `if` forms
   `mcp__<S>` and `mcp__<S>__*`) fires when `<S>` is the alias.
-- **D-P5-05 (every other tool).** A tool pi-mcp-adapter serves keeps today's
+- **D-P5-05:** (every other tool) A tool pi-mcp-adapter serves keeps today's
   comparison against Pi's name, which already is Claude's form (ANAME-01).
   So does every non-MCP tool and every `mcp__` tool from another source.
 
 ### The adapter's proxy rule (MHK-02)
 
-- **D-P5-06 (proxy rule scope).** The D-CF5-12 rule (a call to `mcp` or to a
+- **D-P5-06:** (proxy rule scope) The D-CF5-12 rule (a call to `mcp` or to a
   namespace proxy `mcp__<server>` with a string `tool` and no `action` runs no
   hook) applies only when the active MCP implementation is the adapter, as
   `softDepStatus(pi).mcpImplementation === "adapter"` defines it (MSEL-01,
@@ -93,7 +93,7 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   caller of `softDepStatus` (D-JO-01). Under built-in or none, no call is a proxy call, so a built-in
   tool whose cut name has no second `__` and whose input holds a string
   `tool` still fires its hooks.
-- **D-P5-07 (when the bridge reads it).** The bridge reads the active
+- **D-P5-07:** (when the bridge reads it) The bridge reads the active
   implementation lazily, at the first proxy-shaped call of a bridge
   generation, and keeps the answer for that generation: the set of loaded
   extensions changes only on `/reload` or a new Pi, and either one registers
@@ -102,7 +102,7 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
 
 ### Behavioral scenarios
 
-- **D-P5-08 (shared scenario).** A new `features/hook/mcp-tool-names.feature`
+- **D-P5-08:** (shared scenario) A new `features/hook/mcp-tool-names.feature`
   holds an `@mcp` scenario that runs under both profiles: the plugin
   `hook-demo` holds hooks and the hooks' stub server `stub-server`; a literal
   PreToolUse matcher, a server-prefix PreToolUse matcher, and a PostToolUse
@@ -113,7 +113,7 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   pi-mcp-adapter does. A new profile-aware step in the `hook/tool-use` step
   module scripts the call: the `mcp` proxy under the adapter, `tool_search`
   then the direct call under built-in.
-- **D-P5-09 (tool-segment fold).** An `@builtin-only` scenario (MHK-01)
+- **D-P5-09:** (tool-segment fold) An `@builtin-only` scenario (MHK-01)
   pins the one divergence: a server that Pi's `mcp.json` configures, with a
   `-` in its name and a tool with a `-` in its name, served by a Phase 5 stub
   library with `direct` exposure. A matcher with Claude's full name fires, and
@@ -121,12 +121,12 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   The frozen stub offers only `echo`, and the extension's own registration
   (Phase 2) merges after this phase, so a plugin server cannot carry such a
   tool here.
-- **D-P5-10 (proxy-shaped built-in name).** An `@builtin-only` scenario
+- **D-P5-10:** (proxy-shaped built-in name) An `@builtin-only` scenario
   (MHK-02) installs a plugin whose name is long enough that Pi cuts the tool
   name inside the namespace, so the name has no second `__`; the model calls
   it with a string `tool` in its input. A `*` hook and a Claude-form literal
   hook fire. The hook sees Pi's cut name (D-P5-02 gap).
-- **D-P5-11 (the Phase 1 tag).** The `@adapter-only` scenario Phase 1 left in
+- **D-P5-11:** (the Phase 1 tag) The `@adapter-only` scenario Phase 1 left in
   `features/hook/tool-use.feature` ("A hook on a plugin MCP tool runs once per
   call under the real tool name") becomes an `@adapter-only` and
   `@builtin-only` pair in that file. The adapter half keeps the proxy de-dup
@@ -137,7 +137,7 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   move to the plugin `hook-demo` and the server `stub-server`, so the built-in
   half fails on the Phase 1 tree (D-P5-12).
   The feature description's "until MHK-01, MHK-02 lift its tag" goes.
-- **D-P5-12 (red proof).** Each new scenario fails on the Phase 1 tree under
+- **D-P5-12:** (red proof) Each new scenario fails on the Phase 1 tree under
   each profile where it applies, and the plan SUMMARY records the failing run
   per profile. The shared scenario applies to the behavior change under
   built-in only; under the adapter it is a parity guard and passes on the
@@ -145,7 +145,7 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
 
 ### Code placement and documentation
 
-- **D-P5-13 (modules).** The pure Pi-name computation goes in a new module
+- **D-P5-13:** (modules) The pure Pi-name computation goes in a new module
   under `domain/components/hooks/` (with its unit pair), and the dispatch-time
   tool lookup in a new module under `bridges/hooks/`. The frozen profile's
   private `builtinToolName` in `domain/mcp-implementation.ts` takes a plugin
@@ -153,7 +153,7 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   and is not reused; both cite Pi 1.5.0 `createMcpToolName`. The translators,
   the label, the matcher check, and the `if` check read one per-event tool
   identity computed once per event.
-- **D-P5-14 (docs).** `docs/hooks-compatibility.md` gains the built-in tool
+- **D-P5-14:** (docs) `docs/hooks-compatibility.md` gains the built-in tool
   names, the tool-segment fold, the cut-name gap, and the proxy rule's scope.
   The CHANGELOG and README lines go to the parent (Phase 6, MDOC-02).
 

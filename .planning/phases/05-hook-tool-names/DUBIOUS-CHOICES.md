@@ -243,3 +243,117 @@ session copies every item here. Phase 6 merges this file into the root log.
 - **Alternatives:** red proofs from a temporary edit inside `features/`.
 - **Why dubious:** not a documented harness use; it writes no repo file.
 - **Recorded in:** `05-RESEARCH.md` Validation Architecture.
+
+## Planning step (gsd-planner + gsd-plan-checker, 2026-11-04)
+
+The plan checker passed the four plans with no issue and reported no dubious
+choice. The planner's choices follow.
+
+### P5-DC-18: Red proofs restore the Phase 1 product files in place
+
+- **Phase / source:** Phase 5 planning.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** after a task commits, the executor restores `bridges/hooks` and
+  `domain/components/hooks` from `6404197` (the Phase 1 product code) into its
+  working tree only, runs the scenario, restores from `HEAD`, and requires an
+  empty `git status`. Plan 05-04 repeats the sweep on the final scenarios.
+- **Alternatives:** a second worktree at the base plus `npm ci`; or the red
+  run inside each task before its product change.
+- **Why dubious:** it rewrites tracked files for a few minutes; guarded by
+  commit-first and empty-status checks.
+- **Recorded in:** `05-01-PLAN.md` to `05-04-PLAN.md`.
+
+### P5-DC-19: The hook tool view is a defaulted handler parameter
+
+- **Phase / source:** Phase 5 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** `tools: HookToolView = createHookToolView(pi)` on both composite
+  handlers, as the existing `executor` default.
+- **Alternatives:** a required parameter, editing about 74 test call sites.
+- **Why dubious:** the unit-test rules say not to default a parameter to a
+  live boundary; the view only wraps the injected `pi` and reads nothing when
+  created.
+- **Recorded in:** `05-01-PLAN.md`.
+
+### P5-DC-20: The cut-name scenario sits in `tool-use.feature`
+
+- **Phase / source:** Phase 5 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** D-P5-10's scenario lives beside the D-P5-11 proxy pair in
+  `tool-use.feature`, not in `mcp-tool-names.feature`.
+- **Alternatives:** the new feature file, as research suggested.
+- **Why dubious:** layout only; it lets wave 2 run on disjoint files.
+- **Recorded in:** `05-02-PLAN.md`.
+
+### P5-DC-21: The shared scenario also pins a folded-server hook that must not run, and an `if` hook
+
+- **Phase / source:** Phase 5 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** beyond D-P5-08's three hooks, the scenario adds a hook whose
+  matcher folds the server segment (expected not to run) and an `if` hook.
+- **Alternatives:** only the three hooks D-P5-08 names.
+- **Why dubious:** it pins the strict server segment (D-P5-04) in a scenario.
+- **Recorded in:** `05-01-PLAN.md`.
+
+### P5-DC-22: The fold scenario pins that the folded-tool literal fires
+
+- **Phase / source:** Phase 5 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** D-P5-09's scenario also asserts that `mcp__echo-server__echo_text`
+  fires (the P5-DC-04 divergence).
+- **Alternatives:** assert only the Claude-name hook.
+- **Why dubious:** it makes a known divergence a tested contract.
+- **Recorded in:** `05-03-PLAN.md`.
+
+### P5-DC-23: The PreToolUse notice label gets its own `@mcp` scenario
+
+- **Phase / source:** Phase 5 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** a scenario pins the `PreToolUse:<Claude-form name>` label.
+- **Alternatives:** unit coverage only (research called it optional).
+- **Why dubious:** one more slow scenario.
+- **Recorded in:** `05-03-PLAN.md`.
+
+### P5-DC-24: No behavioral scenario for the no-implementation proxy case
+
+- **Phase / source:** Phase 5 planning.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** MHK-02's "none" case is covered by unit rows only.
+- **Alternatives:** a harness extension registering a proxy-shaped tool with
+  no MCP implementation, which needs a new stand-in.
+- **Why dubious:** a part of MHK-02's wording has no cucumber scenario.
+- **Recorded in:** `05-02-PLAN.md`.
+
+### P5-DC-25: No identity cache; a failed tool read is debug-logged
+
+- **Phase / source:** Phase 5 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** one `getAllTools()` read per MCP tool event that has hooks, not
+  cached (tools re-register on reconnect); a throwing read goes to
+  `hookDebugLog`.
+- **Alternatives:** a per-generation cache; a silent fallback.
+- **Why dubious:** a small per-call cost; the log goes beyond D-P5-01's text.
+- **Recorded in:** `05-01-PLAN.md`.
+
+### P5-DC-26: Plan shape (four plans, dedicated gate plan, docs in wave 2, adapter half keeps its hook steps)
+
+- **Phase / source:** Phase 5 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** 05-04 is a gate-only plan (01-14 precedent); the docs are written
+  in wave 2 beside the MHK-02 code; the tracer task touches 9 files; the
+  adapter half of the pair keeps the hook module's pi-mcp-adapter listing
+  step; the view's `pi` type is `Pick<ExtensionAPI, "getAllTools" |
+  "getCommands">` from the start; a `COVERAGE.md` declares no external API.
+- **Alternatives:** fewer plans; docs after the code; split the tracer.
+- **Why dubious:** process choices a reviewer may reverse cheaply.
+- **Recorded in:** `05-01-PLAN.md` to `05-04-PLAN.md`, `COVERAGE.md`.
+
+### P5-DC-27: CONTEXT decision bullets reformatted for the coverage gate
+
+- **Phase / source:** Phase 5 planning; child session.
+- **Severity:** Low. **Status:** open.
+- **Choice:** `- **D-P5-NN (title).**` became `- **D-P5-NN:** (title)`, the
+  only shape GSD's decision-coverage gate parses; the text is unchanged.
+- **Alternatives:** proceed past the blocking gate.
+- **Why dubious:** a format edit to a discuss artifact after planning.
+- **Recorded in:** `05-CONTEXT.md`.
