@@ -300,3 +300,8 @@ Each entry: severity; choice; alternatives; why dubious. Recorded in the named p
 - **P4-DC-42 (Low):** the gate plan declares `files_modified: []`; a combined-tree fix would touch unnamed files.
 - **P4-DC-43 (Low):** switch scenarios use two `When` steps (restart, then prompt).
 - **P4-DC-44 (Low):** the planner left ROADMAP.md's Phase 4 `Plans: TBD` for the tools to fill.
+
+## Plan check (gsd-plan-checker, 2026-11-04)
+
+- **P4-DC-45 (Low):** the checker's warning 1 is fixed in 04-01 (the adapter keeps the verbatim Claude token for per-tool `excludeTools`; only built-in uses `toolName`). Its two scope warnings (04-01 has 12 files; 04-01/03/04/05 estimates 115k-160k over a 100k budget, low confidence) are accepted without re-slicing. Alt: split 04-01's index task and 04-05's Task 3 into own plans. Why: larger executor contexts.
+- **P4-DC-46 (Medium):** the checker accepted P4-DC-13 (autoupdate and apply convergence stage the adapter form under built-in until the next load) as INFO, though success criterion 1 names "updating". Alt: treat as scope reduction and thread the implementation through unowned update files.
