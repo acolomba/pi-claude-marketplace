@@ -324,3 +324,12 @@ Each entry: severity; choice; alternatives; why dubious. Recorded in the named p
 - **P4-DC-57 (Low, 04-04):** the legacy warning translation applies to every `    - ` list line of the block, not only `warnings:` items (only the two exact sentences change).
 - **P4-DC-58 (Low, 04-04):** the swap reads and writes UTF-8 strings; invalid UTF-8 in a body would become U+FFFD (the bridge only writes UTF-8).
 - **P4-DC-59 (Low, 04-04):** added `test/bridges/agents/agent-grant-seeds.ts` outside `files_modified` to avoid a fallow clone between two tests.
+
+## Wave 3 (executor 04-05, 2026-11-04)
+
+- **P4-DC-60 (High, carries P4-DC-13):** autoupdate and apply convergence carry no run snapshot, so their update staging writes the adapter form under built-in until the next session rewrites it; until a reload the user sees the adapter warning text and a grant pi-subagents cannot resolve. Parent line: point `updateAgentImplementation` at Phase 3's `ThreePhaseArgs` field after it lands.
+- **P4-DC-61 (Medium):** the four `@adapter-only` verb scenarios (install, update, reinstall, enable) pass on the pre-phase tree: regression pins with no red proof, since nothing visible changed under the adapter.
+- **P4-DC-62 (Medium):** the built-in D-CF6-10 refusal twin checks only the model calls (`error naming plugin_demo_stub`), not the stub's messages, so it does not prove that no `tools/call` reached the server.
+- **P4-DC-63 (Low):** the agent-grants.feature description runs ten lines (the cucumber skill says two or three).
+- **P4-DC-64 (Low):** the update unit cases have no separate unit red run; their red rests on the cucumber red runs.
+- Parent's Pi `new_session` stand-in leak heads-up: not applicable; no `@builtin-only` scenario starts a new session, nothing retagged.
