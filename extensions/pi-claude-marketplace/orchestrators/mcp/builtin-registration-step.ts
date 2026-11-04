@@ -1,23 +1,72 @@
 /**
- * The built-in MCP registration step and its resync, both seeds that do
- * nothing yet.
+ * The built-in MCP registration step and its resync.
  *
  * Their names, input, and call sites are fixed: `session-materialize.ts` runs
  * `builtinRegistrationStep` at every `session_start`, and the extension runs
- * `resyncBuiltinRegistrations` after each load reconcile (D-MB-10). The
- * built-in registration fills both bodies in place: it registers each
- * recorded plugin MCP server with Pi's own MCP for the session (D-MB-02), a
- * project-scope server only while Pi trusts the project (D-MB-09), and a
- * background child registers for its own session and writes nothing
- * (D-MB-12).
+ * `resyncBuiltinRegistrations` after each load reconcile (D-MB-10). Both run
+ * one sync: they register each runnable MCP server of each enabled plugin
+ * record with Pi's own MCP for the session, under Claude Code's server name
+ * (D-MB-02, D-MB-13), and unregister the plugin servers no record wants any
+ * more. A server's values are resolved here from the session environment
+ * (BLT-02); nothing is written to a file (D-MB-04).
  *
- * MSEL-03: no body may register a server while pi-mcp-adapter is the active
- * implementation, or while no implementation is active. Pi reports such a
- * registration as an extension error.
+ * The user scope's records register first, then, only while Pi trusts the
+ * project on this call, the project scope's (D-MB-09). A project server
+ * replaces the user server of the same name in place (P2-DC-14), so a user
+ * server the project lacks still registers. A background child runs the same
+ * steps for its own session (D-MB-12).
+ *
+ * MSEL-03: under pi-mcp-adapter, or with no implementation active, both steps
+ * return before they read the context, the state, or Pi's registry. Pi reports
+ * a registration nothing connects as an extension error, and the adapter
+ * would proxy a duplicate.
+ *
+ * UF-1 / NFR-10: a record's plugin root must lie inside its own clone root
+ * before any of its files is read or its root reaches `${CLAUDE_PLUGIN_ROOT}`:
+ * a git record's own `plugin-clones/<key>/` entry, any other record's
+ * marketplace root, which for a cloned marketplace must itself lie inside the
+ * scope's `sources/<marketplace>/` checkout.
+ *
+ * NFR-2: neither step throws. Every skipped record, scope, or server is
+ * debug-logged on the `mcp` channel with its name and the error message, never
+ * a config value; each absolute path in the line is cut to its last segment,
+ * since state, data-directory, and Pi registry errors name absolute paths.
+ * The frozen legacy reader logs its own refusals. The steps never handle
+ * `mcp_servers_change`, which would make this extension the connector (PI-11).
  */
 
-import type { ExtensionContext, PiMcpRegistry } from "../../platform/pi-api.ts";
+import path from "node:path";
+
+import {
+  builtinServerConfig,
+  readBuiltinServerDescription,
+  syncBuiltinRegistrations,
+} from "../../bridges/mcp/index.ts";
+import { profileFor } from "../../domain/mcp-implementation.ts";
+import { locationsFor } from "../../persistence/locations.ts";
+import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import {
+  noteBuiltinServerOwners,
+  noteFreshBuiltinRegistration,
+  noteReplacedBuiltinRegistration,
+} from "../../platform/mcp-builtin-status.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
+import { assertPathInside } from "../../shared/path-safety.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { SCOPES } from "../../shared/types.ts";
+
+import { createLegacyServersReader, recordedMcpServers } from "./recorded-servers.ts";
+
+import type { McpSubstitutionContext } from "../../bridges/mcp/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { RecordedMcpServer } from "../../domain/mcp-implementation.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
+import type { BuiltinServerOwner } from "../../platform/mcp-builtin-status.ts";
+import type { ExtensionContext, McpServerConfig, PiMcpRegistry } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { Scope } from "../../shared/types.ts";
 
 /** What the registration step and its resync receive. */
 export interface BuiltinRegistrationStepInput {
@@ -28,15 +77,269 @@ export interface BuiltinRegistrationStepInput {
   readonly snapshot: NotificationRun;
 }
 
-/** D-MB-10: registers the built-in MCP servers at `session_start`. A seed: it does nothing yet. */
-export function builtinRegistrationStep(_input: BuiltinRegistrationStepInput): Promise<void> {
-  return Promise.resolve();
+/** One enabled plugin record with the marketplace record that lists it. */
+interface RecordSource {
+  readonly marketplaceName: string;
+  readonly marketplace: ExtensionState["marketplaces"][string];
+  readonly pluginName: string;
+  readonly record: PluginInstallRecord;
+}
+
+/** What every record of one session reads besides its own state. */
+interface SessionFacts {
+  /** The session's working directory: `${CLAUDE_PROJECT_DIR}` for both scopes. */
+  readonly cwd: string;
+  readonly env: ClaudeEnv;
+}
+
+type Registration = readonly [name: string, config: McpServerConfig, owner: BuiltinServerOwner];
+
+const BUILTIN_PROFILE = profileFor("builtin");
+
+// P2-DC-10: the status reader reads a replaced server's hidden tools as a
+// reconnect, not a `/mcp` disable.
+const REGISTRATION_NOTES = {
+  replaced: noteReplacedBuiltinRegistration,
+  fresh: noteFreshBuiltinRegistration,
+};
+
+function debugLog(detail: string): void {
+  hookDebugLog(redactAbsolutePaths(detail), "mcp");
+}
+
+function enabledRecords(state: ExtensionState): RecordSource[] {
+  const sources: RecordSource[] = [];
+  for (const [marketplaceName, marketplace] of Object.entries(state.marketplaces)) {
+    for (const [pluginName, record] of Object.entries(marketplace.plugins)) {
+      if (!isRecordedButDisabled(record) && record.dependencyDisabled !== true) {
+        sources.push({ marketplaceName, marketplace, pluginName, record });
+      }
+    }
+  }
+
+  return sources;
+}
+
+/** `pluginCloneKey` (`<12hex>-<sha12>`) and `pluginMirrorKey` (`<12hex>`) outputs. */
+const CLONE_KEY = /^[0-9a-f]{12}(?:-[0-9a-f]{12})?$/;
+
+/**
+ * D-PL2-23: the `plugin-clones/` entry that owns a record, or `undefined` when
+ * the record runs in place in its marketplace. Records carry no source kind,
+ * so `plugin-clones/` owns one only when it has `resolvedSha` and its root
+ * lies under `plugin-clones/`.
+ */
+function cloneKeyOf(record: PluginInstallRecord, pluginClonesDir: string): string | undefined {
+  const relative = path.relative(pluginClonesDir, record.resolvedSource);
+  if (
+    record.resolvedSha === undefined ||
+    relative === "" ||
+    relative.startsWith("..") ||
+    path.isAbsolute(relative)
+  ) {
+    return undefined;
+  }
+
+  return relative.split(path.sep)[0];
+}
+
+/** A `dir` or `file` marketplace, whose root is the user's own directory. */
+function isPathMarketplace(source: unknown): boolean {
+  return (
+    typeof source === "object" && source !== null && "kind" in source && source.kind === "path"
+  );
 }
 
 /**
- * D-MB-10: brings the built-in registrations in line with the records after
- * the load reconcile. A seed: it does nothing yet.
+ * UF-1 / NFR-10: the one clone root a record's plugin root must lie in. A
+ * cloned marketplace's root is taken from the same state file as the record,
+ * so it must itself lie inside the scope's checkout of that marketplace.
+ * Throws when the record names no such root.
  */
-export function resyncBuiltinRegistrations(_input: BuiltinRegistrationStepInput): Promise<void> {
-  return Promise.resolve();
+async function owningRoot(source: RecordSource, locations: ScopedLocations): Promise<string> {
+  const cloneKey = cloneKeyOf(source.record, locations.pluginClonesDir);
+  if (cloneKey !== undefined) {
+    if (!CLONE_KEY.test(cloneKey)) {
+      throw new Error(`plugin root is not inside a plugin clone: ${cloneKey}`);
+    }
+
+    return locations.pluginCloneDir(cloneKey);
+  }
+
+  const { marketplace } = source;
+  if (!isPathMarketplace(marketplace.source)) {
+    const checkout = await locations.sourceCloneDir(source.marketplaceName);
+    await assertPathInside(checkout, marketplace.marketplaceRoot, "marketplace root");
+  }
+
+  return marketplace.marketplaceRoot;
+}
+
+async function isContained(source: RecordSource, locations: ScopedLocations): Promise<boolean> {
+  try {
+    const root = await owningRoot(source, locations);
+    await assertPathInside(root, source.record.resolvedSource, "plugin root");
+    return true;
+  } catch {
+    // Any refusal, a traversal, a path outside, a symlinked segment, or a
+    // root the record cannot own, leaves the plugin root uncontained.
+    return false;
+  }
+}
+
+/**
+ * The servers of one plugin that the built-in profile runs, named and built in
+ * the record's server order. The install-time verdict does not filter: a
+ * server only pi-mcp-adapter blocks registers here (P2-DC-06). A server whose
+ * resolved config Pi would run differently, such as a variable that resolved
+ * to a leading `~`, is skipped and logged.
+ */
+function serverRegistrations(
+  pluginName: string,
+  servers: readonly RecordedMcpServer[],
+  ctx: McpSubstitutionContext,
+  description: string | undefined,
+  owner: BuiltinServerOwner,
+): Registration[] {
+  return servers
+    .filter(({ config }) => BUILTIN_PROFILE.classify(config).kind === "supported")
+    .flatMap(({ name, config }): Registration[] => {
+      const serverName = BUILTIN_PROFILE.serverName(pluginName, name);
+      const built = builtinServerConfig(config, ctx, description);
+      if (built === undefined) {
+        debugLog(
+          `MCP server ${serverName} not registered: Pi would not run it as Claude Code does`,
+        );
+        return [];
+      }
+
+      return [[serverName, built, owner]];
+    });
+}
+
+async function recordRegistrations(
+  source: RecordSource,
+  locations: ScopedLocations,
+  session: SessionFacts,
+): Promise<Registration[]> {
+  const plugin = `${source.pluginName}@${source.marketplaceName}`;
+  if (!(await isContained(source, locations))) {
+    debugLog(`MCP servers of ${plugin} not registered: its plugin root is outside its sources`);
+    return [];
+  }
+
+  // MREC-02: a record without `mcpServerConfigs` is re-resolved read-only
+  // against its own marketplace record.
+  const recorded = await recordedMcpServers(source.record, createLegacyServersReader(source));
+  if (recorded.kind === "unreadable") {
+    debugLog(`MCP servers of ${plugin} not registered: its servers are unreadable`);
+    return [];
+  }
+
+  if (recorded.servers.length === 0) {
+    return [];
+  }
+
+  const [pluginData, description] = await Promise.all([
+    locations.pluginDataDir(source.marketplaceName, source.pluginName),
+    readBuiltinServerDescription({
+      manifestPath: source.marketplace.manifestPath,
+      marketplaceRoot: source.marketplace.marketplaceRoot,
+      pluginName: source.pluginName,
+      pluginRoot: source.record.resolvedSource,
+      pin: source.record.resolvedSha,
+    }),
+  ]);
+  const ctx: McpSubstitutionContext = {
+    pluginRoot: source.record.resolvedSource,
+    pluginData,
+    projectDir: session.cwd,
+    env: session.env,
+  };
+  return serverRegistrations(source.pluginName, recorded.servers, ctx, description, {
+    scope: locations.scope,
+    marketplace: source.marketplaceName,
+    plugin: source.pluginName,
+  });
+}
+
+/** One record's registrations; a record that fails registers nothing and is logged. */
+async function guardedRecordRegistrations(
+  source: RecordSource,
+  locations: ScopedLocations,
+  session: SessionFacts,
+): Promise<Registration[]> {
+  try {
+    return await recordRegistrations(source, locations, session);
+  } catch (error: unknown) {
+    const plugin = `${source.pluginName}@${source.marketplaceName}`;
+    debugLog(`MCP servers of ${plugin} not registered: ${errorMessage(error)}`);
+    return [];
+  }
+}
+
+/** The registrations of one scope's enabled records, in record order. */
+async function scopeRegistrations(scope: Scope, session: SessionFacts): Promise<Registration[]> {
+  const locations = locationsFor(scope, session.cwd);
+  let state: ExtensionState;
+  try {
+    state = await loadState(locations.extensionRoot, { persistMigration: false });
+  } catch (error: unknown) {
+    debugLog(`MCP servers of the ${scope} scope not registered: ${errorMessage(error)}`);
+    return [];
+  }
+
+  const perRecord = await Promise.all(
+    enabledRecords(state).map((source) => guardedRecordRegistrations(source, locations, session)),
+  );
+  return perRecord.flat();
+}
+
+/**
+ * D-MB-09: the project scope counts only while Pi trusts the project. The
+ * user registrations come first; a later registration of the same name
+ * replaces an earlier one in its place (P2-DC-14).
+ */
+async function desiredRegistrations(
+  session: SessionFacts,
+  projectTrusted: boolean,
+): Promise<Registration[]> {
+  const scopes: readonly Scope[] = projectTrusted ? SCOPES : ["user"];
+  const perScope = await Promise.all(scopes.map((scope) => scopeRegistrations(scope, session)));
+  return perScope.flat();
+}
+
+async function syncSession({ pi, ctx, snapshot }: BuiltinRegistrationStepInput): Promise<void> {
+  if (snapshot.softDeps.mcpImplementation !== "builtin") {
+    return;
+  }
+
+  try {
+    // The composition root: the only read of the process environment. Trust
+    // is asked on every call, since the user can trust a project mid-session.
+    const desired = await desiredRegistrations(
+      { cwd: ctx.cwd, env: process.env },
+      ctx.isProjectTrusted(),
+    );
+    // P2-DC-14: info reads which record each name belongs to from here.
+    noteBuiltinServerOwners(new Map(desired.map(([name, , owner]) => [name, owner])));
+    syncBuiltinRegistrations(
+      pi,
+      new Map(desired.map(([name, config]) => [name, config])),
+      debugLog,
+      REGISTRATION_NOTES,
+    );
+  } catch (error: unknown) {
+    debugLog(`MCP built-in registration skipped: ${errorMessage(error)}`);
+  }
+}
+
+/** D-MB-10: registers the built-in MCP servers at `session_start`. */
+export function builtinRegistrationStep(input: BuiltinRegistrationStepInput): Promise<void> {
+  return syncSession(input);
+}
+
+/** D-MB-10: brings the built-in registrations in line with the records after the load reconcile. */
+export function resyncBuiltinRegistrations(input: BuiltinRegistrationStepInput): Promise<void> {
+  return syncSession(input);
 }

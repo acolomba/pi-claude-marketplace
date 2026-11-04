@@ -34,8 +34,9 @@ import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { discoveryWarning, hygieneWarning } from "../../shared/staging-warnings.ts";
 
-import { convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
+import { GUIDED_DROPPED_FIELDS } from "./convert.ts";
 import { discoverPluginAgents } from "./discover.ts";
+import { convertAgentGrantForms } from "./grant-forms.ts";
 import { assertAgentNamesUnclaimed, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
 import { readSkillPreloads } from "./skill-preload.ts";
@@ -119,24 +120,31 @@ export async function prepareStagePluginAgents(
     },
   });
 
-  // Step 2: convert (AG-7 + AG-11). AG-11 throws here if mapped tools is empty.
-  // `mapModel` defaults to false: the omit-by-default behavior is the
-  // contract; only explicit `--map-model` on install/update flips it on.
-  const converted: ConvertedAgent[] = discovered.map((d) =>
-    convertAgent({
-      pluginName,
-      pluginRoot,
-      pluginDataDir,
-      knownSkills: knownSkills ?? [],
-      referenceNames: input.referenceNames,
-      discovered: d,
-      sourceHash: d.sourceHash,
-      mapModel: mapModel ?? false,
-      projectDir,
-      mcpServerNames: input.mcpServerNames,
-      skillPreloads,
-    }),
+  // Step 2: convert (AG-7 + AG-11). AG-11 throws here if the file's form maps
+  // an explicit tools list to nothing. `mapModel` defaults to false: the
+  // omit-by-default behavior is the contract; only explicit `--map-model` on
+  // install/update flips it on. MGRT-01: each agent renders in the grant form
+  // of the active MCP implementation, and its row records both forms when
+  // they differ.
+  const conversions = discovered.map((d) =>
+    convertAgentGrantForms(
+      {
+        pluginName,
+        pluginRoot,
+        pluginDataDir,
+        knownSkills: knownSkills ?? [],
+        referenceNames: input.referenceNames,
+        discovered: d,
+        sourceHash: d.sourceHash,
+        mapModel: mapModel ?? false,
+        projectDir,
+        mcpServerNames: input.mcpServerNames,
+        skillPreloads,
+      },
+      input.mcpGrantForms,
+    ),
   );
+  const converted: ConvertedAgent[] = conversions.map((c) => c.agent);
 
   // Step 3: load + partition (AG-3).
   const loaded = await loadAgentsIndex(locations);
@@ -213,7 +221,7 @@ export async function prepareStagePluginAgents(
   try {
     await assertPathInside(locations.agentsStagingDir, stagingDir, "agents staging dir");
 
-    for (const c of converted) {
+    for (const { agent: c, recorded: grantForms } of conversions) {
       const stagedFile = path.join(stagingDir, c.generatedName + ".md");
       // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await assertPathInside(stagingDir, stagedFile, "staged agent file");
@@ -238,6 +246,7 @@ export async function prepareStagePluginAgents(
         droppedFields: [...c.droppedFields],
         droppedTools: [...c.droppedTools],
         warnings: [...c.warnings],
+        ...grantForms,
       };
       newEntries.push(entry);
     }

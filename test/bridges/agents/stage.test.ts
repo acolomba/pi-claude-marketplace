@@ -25,12 +25,63 @@ import {
   commitPreparedAgents,
   prepareStagePluginAgents,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/stage.ts";
+import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
-import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+import type {
+  AgentsIndex,
+  AgentsIndexEntry,
+} from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+
+const ADAPTER_ASYNC_WARNING =
+  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails";
+
+const BUILTIN_ASYNC_WARNING =
+  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before Pi's built-in MCP has listed the server's tools still fails";
+
+const BOT_QUERY_SOURCE =
+  "---\nname: bot\ndescription: Bot\ntools: Read, mcp__plugin_acme_db__query\n---\n\nBody.\n";
+
+const BOT_QUERY_SOURCE_HASH = createHash("sha256").update(BOT_QUERY_SOURCE).digest("hex");
+
+/** The frontmatter block of `BOT_QUERY_SOURCE` in one MCP implementation's grant form. */
+function botQueryFrontmatter(sourcePath: string, form: "adapter" | "builtin"): string {
+  const selector = form === "builtin" ? "mcp:plugin_acme_db/query" : "mcp:plugin_acme_db_/query";
+  const asyncWarning = form === "builtin" ? BUILTIN_ASYNC_WARNING : ADAPTER_ASYNC_WARNING;
+  return `---\nname: acme:bot\ndescription: Bot\naliases: pi-claude-marketplace-acme-bot\ntools: read,${selector}\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - ${asyncWarning}\n---\n`;
+}
+
+/** An agents-index row of another plugin that records both grant forms (MGRT-01). */
+function otherPluginRowWithForms(targetPath: string): AgentsIndexEntry {
+  return {
+    plugin: "other",
+    marketplace: "catalog",
+    sourceAgent: "bot",
+    generatedName: "pi-claude-marketplace-other-bot",
+    sourcePath: "/plugins/other/agents/bot.md",
+    targetPath,
+    sourceHash: "other-hash",
+    droppedFields: [],
+    droppedTools: ["mcp__plugin_other_web__get"],
+    warnings: [],
+    mcpImplementation: "builtin",
+    mcpForms: {
+      builtin: {
+        frontmatter: "---\nother builtin\n---\n",
+        warnings: [],
+        droppedTools: ["mcp__plugin_other_web__get"],
+      },
+      adapter: {
+        frontmatter: "---\nother adapter\n---\n",
+        warnings: ["other adapter warning"],
+        droppedTools: [],
+      },
+    },
+  };
+}
 
 async function createStageTree(t: TestContext, prefix: string) {
   const scopeRoot = await realpath(await mkdtemp(path.join(tmpdir(), prefix)));
@@ -160,6 +211,139 @@ describe("prepareStagePluginAgents", () => {
       },
       { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_acme_web__get" },
     ]);
+  });
+
+  test("MGRT-01: a built-in staging writes the built-in form and records both forms on a row the loader keeps", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-grant-forms-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "bot.md");
+    await writeFile(sourcePath, BOT_QUERY_SOURCE);
+    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
+    const builtinFrontmatter = botQueryFrontmatter(sourcePath, "builtin");
+    const expectedRow = {
+      plugin: "acme",
+      marketplace: "catalog",
+      sourceAgent: "bot",
+      generatedName: "pi-claude-marketplace-acme-bot",
+      sourcePath,
+      targetPath,
+      sourceHash: BOT_QUERY_SOURCE_HASH,
+      droppedFields: [],
+      droppedTools: [],
+      warnings: [BUILTIN_ASYNC_WARNING],
+      mcpImplementation: "builtin",
+      mcpForms: {
+        builtin: {
+          frontmatter: builtinFrontmatter,
+          warnings: [BUILTIN_ASYNC_WARNING],
+          droppedTools: [],
+        },
+        adapter: {
+          frontmatter: botQueryFrontmatter(sourcePath, "adapter"),
+          warnings: [ADAPTER_ASYNC_WARNING],
+          droppedTools: [],
+        },
+      },
+    };
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      mcpServerNames: ["db"],
+      mcpGrantForms: { active: "builtin", declaredMcpServers: { db: { command: "node" } } },
+    });
+    const leak = await commitPreparedAgents(createRemovalOps(), prepared);
+
+    // assert
+    assert.strictEqual(leak, undefined);
+    assert.deepStrictEqual(prepared.result.warnings, [
+      { kind: "hygiene", message: `[bot] ${BUILTIN_ASYNC_WARNING}` },
+    ]);
+    assert.strictEqual(await readFile(targetPath, "utf8"), `${builtinFrontmatter}\nBody.\n`);
+    assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
+      schemaVersion: 1,
+      agents: [expectedRow],
+    });
+    assert.deepStrictEqual(await loadAgentsIndex(locations), {
+      schemaVersion: 1,
+      agents: [expectedRow],
+      corruptions: [],
+    });
+  });
+
+  test("MGRT-01: a built-in staging reports the built-in async warning and the built-in form's dropped tools", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-grant-forms-warnings-",
+    );
+    await writeFile(
+      path.join(agentsSourceDir, "bot.md"),
+      "---\nname: bot\ndescription: Bot\ntools: Read, mcp__plugin_acme_db__query, mcp__plugin_acme_web__get\n---\n\nBody.\n",
+    );
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      mcpServerNames: ["db", "web"],
+      mcpGrantForms: {
+        active: "builtin",
+        declaredMcpServers: {
+          db: { command: "node" },
+          web: { type: "sse", url: "https://web.example/sse" },
+        },
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.warnings, [
+      { kind: "hygiene", message: `[bot] ${BUILTIN_ASYNC_WARNING}` },
+      { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_acme_web__get" },
+    ]);
+  });
+
+  test("AS-9: stays a no-op with grant forms when no agent is discovered", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-grant-forms-noop-",
+    );
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      mcpServerNames: ["db"],
+      mcpGrantForms: { active: "builtin", declaredMcpServers: { db: { command: "node" } } },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared, {
+      kind: "noop",
+      result: { stagedNames: [], recorded: [], warnings: [], failed: [] },
+    });
+    assert.strictEqual(await exists(locations.agentsStagingDir), false);
+    assert.strictEqual(await exists(locations.agentsIndexPath), false);
   });
 
   test("returns a frozen no-op result when no agents component is declared", async (t) => {
@@ -1492,6 +1676,220 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
           droppedFields: [],
           droppedTools: [],
           warnings: [],
+        },
+      ],
+    });
+  });
+
+  test("AG-3: keeps another plugin's row with grant forms verbatim through a stage", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-commit-other-forms-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "bot.md");
+    await writeFile(sourcePath, BOT_QUERY_SOURCE);
+    const otherRow = otherPluginRowWithForms(
+      path.join(locations.agentsDir, "pi-claude-marketplace-other-bot.md"),
+    );
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(
+      locations.agentsIndexPath,
+      JSON.stringify({ schemaVersion: 1, agents: [otherRow] }),
+    );
+    const expectedIndex: AgentsIndex = {
+      schemaVersion: 1,
+      agents: [
+        otherRow,
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "bot",
+          generatedName: "pi-claude-marketplace-acme-bot",
+          sourcePath,
+          targetPath: path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md"),
+          sourceHash: BOT_QUERY_SOURCE_HASH,
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [ADAPTER_ASYNC_WARNING],
+          mcpImplementation: "adapter",
+          mcpForms: {
+            adapter: {
+              frontmatter: botQueryFrontmatter(sourcePath, "adapter"),
+              warnings: [ADAPTER_ASYNC_WARNING],
+              droppedTools: [],
+            },
+            builtin: {
+              frontmatter: botQueryFrontmatter(sourcePath, "builtin"),
+              warnings: [BUILTIN_ASYNC_WARNING],
+              droppedTools: [],
+            },
+          },
+        },
+      ],
+    };
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      mcpServerNames: ["db"],
+      mcpGrantForms: { active: "adapter", declaredMcpServers: { db: { command: "node" } } },
+    });
+
+    // act
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared);
+
+    // assert
+    assert.strictEqual(cleanupLeak, undefined);
+    assert.strictEqual(
+      await readFile(locations.agentsIndexPath, "utf8"),
+      `${JSON.stringify(expectedIndex, null, 2)}\n`,
+    );
+  });
+
+  test("AG-5: keeps the grant forms of this plugin's row whose file a user edited", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-commit-foreign-forms-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "reviewer.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: reviewer\ndescription: Reviews files\ntools: Read\n---\n\nReview.\n",
+    );
+    const editedTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
+    const editedBytes = "---\nname: bot\n---\nEdited by hand.\n";
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(editedTarget, editedBytes);
+    const editedRow: AgentsIndexEntry = {
+      ...otherPluginRowWithForms(editedTarget),
+      plugin: "acme",
+      generatedName: "pi-claude-marketplace-acme-bot",
+      sourcePath: "/previous/bot.md",
+    };
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(
+      locations.agentsIndexPath,
+      JSON.stringify({ schemaVersion: 1, agents: [editedRow] }),
+    );
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      mcpServerNames: ["db"],
+      mcpGrantForms: { active: "builtin", declaredMcpServers: { db: { command: "node" } } },
+    });
+
+    // act
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared);
+
+    // assert
+    assert.strictEqual(cleanupLeak, undefined);
+    assert.deepStrictEqual(prepared.result.failed, [
+      {
+        generatedName: "pi-claude-marketplace-acme-bot",
+        targetPath: editedTarget,
+        reason: `target ${editedTarget} is missing the generated marker`,
+      },
+    ]);
+    assert.strictEqual(await readFile(editedTarget, "utf8"), editedBytes);
+    assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "reviewer",
+          generatedName: "pi-claude-marketplace-acme-reviewer",
+          sourcePath,
+          targetPath: path.join(locations.agentsDir, "pi-claude-marketplace-acme-reviewer.md"),
+          sourceHash: "ed65c8a92ce122561217d7cdffbedd53f95f22e25f77f4514bf4af266b16c92d",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+        editedRow,
+      ],
+    });
+  });
+
+  test("MGRT-01: a re-stage under the adapter replaces the row's grant forms with the new staging's", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-commit-restage-forms-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "bot.md");
+    await writeFile(sourcePath, BOT_QUERY_SOURCE);
+    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
+    const stageInput = {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      mcpServerNames: ["db"],
+    };
+    const declaredMcpServers = { db: { command: "node" } };
+    await commitPreparedAgents(
+      createRemovalOps(),
+      await prepareStagePluginAgents(createRemovalOps(), {
+        ...stageInput,
+        mcpGrantForms: { active: "builtin", declaredMcpServers },
+      }),
+    );
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      ...stageInput,
+      mcpGrantForms: { active: "adapter", declaredMcpServers },
+    });
+
+    // act
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared);
+
+    // assert
+    assert.strictEqual(cleanupLeak, undefined);
+    assert.strictEqual(
+      await readFile(targetPath, "utf8"),
+      `${botQueryFrontmatter(sourcePath, "adapter")}\nBody.\n`,
+    );
+    assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "bot",
+          generatedName: "pi-claude-marketplace-acme-bot",
+          sourcePath,
+          targetPath,
+          sourceHash: BOT_QUERY_SOURCE_HASH,
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [ADAPTER_ASYNC_WARNING],
+          mcpImplementation: "adapter",
+          mcpForms: {
+            adapter: {
+              frontmatter: botQueryFrontmatter(sourcePath, "adapter"),
+              warnings: [ADAPTER_ASYNC_WARNING],
+              droppedTools: [],
+            },
+            builtin: {
+              frontmatter: botQueryFrontmatter(sourcePath, "builtin"),
+              warnings: [BUILTIN_ASYNC_WARNING],
+              droppedTools: [],
+            },
+          },
         },
       ],
     });

@@ -499,7 +499,32 @@ export function emitGeneratedAgentFile(input: {
   provenance: GeneratedProvenanceFields;
   body: string;
 }): string {
-  const { frontmatter, provenance, body } = input;
+  const { body } = input;
+
+  // Body: ensure exactly one leading blank line and a trailing newline so
+  // the generated file has deterministic separators around the frontmatter
+  // and the body.
+  const bodyWithLeadingBlank = body.startsWith("\n") ? body : "\n" + body;
+  const bodyFinal = bodyWithLeadingBlank.endsWith("\n")
+    ? bodyWithLeadingBlank
+    : bodyWithLeadingBlank + "\n";
+
+  return emitGeneratedAgentFrontmatter(input) + bodyFinal;
+}
+
+/**
+ * MGRT-01 / D-MB-03: the frontmatter block of the file `emitGeneratedAgentFile`
+ * writes, from the opening `---` line through the closing `---` line and its
+ * newline. The provenance, with its warnings and dropped tools, sits inside
+ * the block, so two grant forms of one agent differ only here and the stage
+ * can record each form's block without searching the file text, whose body
+ * may hold a `---` line of its own.
+ */
+export function emitGeneratedAgentFrontmatter(input: {
+  frontmatter: GeneratedFrontmatterFields;
+  provenance: GeneratedProvenanceFields;
+}): string {
+  const { frontmatter, provenance } = input;
 
   // Frontmatter block in deterministic order. systemPromptMode /
   // inheritProjectContext are extension-side defaults and intentionally
@@ -577,17 +602,7 @@ export function emitGeneratedAgentFile(input: {
   pushProvenanceList(provenanceLines, "droppedTools", provenance.droppedTools);
   pushProvenanceList(provenanceLines, "warnings", provenance.warnings);
   lines.push(...provenanceLines);
-  const generatedFrontmatter = "---\n" + lines.join("\n") + "\n---\n";
-
-  // Body: ensure exactly one leading blank line and a trailing newline so
-  // the generated file has deterministic separators around the frontmatter
-  // and the body.
-  const bodyWithLeadingBlank = body.startsWith("\n") ? body : "\n" + body;
-  const bodyFinal = bodyWithLeadingBlank.endsWith("\n")
-    ? bodyWithLeadingBlank
-    : bodyWithLeadingBlank + "\n";
-
-  return generatedFrontmatter + bodyFinal;
+  return "---\n" + lines.join("\n") + "\n---\n";
 }
 
 /**

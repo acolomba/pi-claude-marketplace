@@ -131,7 +131,7 @@ Feature: MCP server companion missing
       | marketplace name               | fixtures                                                |
       | marketplace scope              | user                                                    |
       | needs reload                   | false                                                   |
-      | plugin components mcp          | [{"name":"plugin:demo:stub","status":"status unknown"}] |
+      | plugin components mcp          | [{"name":"plugin:demo:stub","status":"not loaded"}]     |
       | plugin components resolved     | true                                                    |
       | plugin components skills       | demo-skill                                              |
       | plugin id                      | demo@fixtures                                           |

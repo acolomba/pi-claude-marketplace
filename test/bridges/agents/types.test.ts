@@ -55,6 +55,7 @@ const convertedAgent: ConvertedAgent = {
   sourcePath: "/plugin/agents/reviewer.md",
   sourceHash: "source-hash",
   fileContent: "---\nname: pi-claude-marketplace-acme-reviewer\n---\nReview the change.\n",
+  frontmatter: "---\nname: pi-claude-marketplace-acme-reviewer\n---\n",
   originalModel: "sonnet",
   droppedFields: ["thinking"],
   droppedTools: ["WebFetch"],
@@ -167,10 +168,23 @@ const convertedAgentWithoutWarnings: ConvertedAgent = {
   sourcePath: "/plugin/agents/reviewer.md",
   sourceHash: "source-hash",
   fileContent: "Review the change.\n",
+  frontmatter: "",
   droppedFields: [],
   droppedTools: [],
 };
 void convertedAgentWithoutWarnings;
+// @ts-expect-error a converted agent always records its frontmatter block
+const convertedAgentWithoutFrontmatter: ConvertedAgent = {
+  generatedName: "pi-claude-marketplace-acme-reviewer",
+  sourceName: "reviewer",
+  sourcePath: "/plugin/agents/reviewer.md",
+  sourceHash: "source-hash",
+  fileContent: "Review the change.\n",
+  droppedFields: [],
+  droppedTools: [],
+  warnings: [],
+};
+void convertedAgentWithoutFrontmatter;
 // @ts-expect-error a stage input always carries the install cwd
 const stageAgentsInputWithoutCwd: StageAgentsInput = {
   locations: undefined!,

@@ -24,6 +24,15 @@
 // scopes, so the routing table and the warnings are rebuilt and the pending
 // block lists what the apply step did not make.
 //
+// MGRT-02 / D-MB-12: a pi-subagents background child (`isSubagentChild`, read
+// from the environment when the load runs, since the marker may be set after
+// this extension's factory) runs only the read-only pass below, for both
+// scopes. It never runs the autoapply apply step, and its AMIG-01 MCP move is a
+// no-op, so a child that loads this extension changes no installation state.
+// The MIG-01 config migration and `loadState`'s legacy migration still run:
+// both are idempotent, and the parent's load runs them before any child
+// exists. The child still prints pending's block.
+//
 // What still runs, per scope, project first (MSG-GR-3):
 //   - the shared locked read pass (`read-pass.ts`): the MIG-01 first-run
 //     config migration, the legacy state migration inside `loadState`, the
@@ -54,6 +63,7 @@
 
 import { effectiveAutoapply, loadAutoapplyFiles } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
+import { isSubagentChild } from "../../platform/subagent-child.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyMcpMigration, notifyReconcileAborted } from "../../shared/notification-dispatch.ts";
@@ -65,6 +75,7 @@ import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
 import type { ApplyReconcileOptions, McpMigrationStep } from "./types.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { SubagentChildEnv } from "../../platform/subagent-child.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -90,6 +101,9 @@ export interface LoadReconcileOptions {
 }
 
 const SCOPES: readonly Scope[] = ["project", "user"];
+
+/** MGRT-02 / AMIG-01: the MCP move of a pi-subagents background child, which moves nothing. */
+const NO_MCP_MOVE: McpMigrationStep = () => Promise.resolve();
 
 /**
  * AAP-02 / D-LOC-01: runs the apply step when the configs turn autoapply on,
@@ -157,6 +171,18 @@ async function loadReconcileWithReader(
     return;
   }
 
+  await readOnlyPass(reader, scopes, opts);
+}
+
+/**
+ * The read-only pass over `scopes`, project first, then the migration notice,
+ * pending's block and the warnings. The MCP move is `opts.migrateMcpEntries`.
+ */
+async function readOnlyPass(
+  reader: ReconcileStateReader,
+  scopes: readonly Scope[],
+  opts: LoadReconcileOptions,
+): Promise<void> {
   const accumulators: ScopePassAccumulators = {
     outcomes: [],
     migration: { rows: [], notices: [] },
@@ -205,12 +231,21 @@ async function loadReconcileWithReader(
  * composition lives in the extension entry point, which binds `loadState` and
  * its apply operation once per extension load and hands the step to its
  * `resources_discover` handler.
+ *
+ * MGRT-02: `env` is read on every load, never copied, so a child marker set
+ * after this call still makes the next load a child load.
  */
 export function createLoadReconcile(
   reader: ReconcileStateReader,
   applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
+  env: SubagentChildEnv = process.env,
 ): (opts: LoadReconcileOptions) => Promise<void> {
   return async function loadReconcile(opts: LoadReconcileOptions): Promise<void> {
+    if (isSubagentChild(env)) {
+      await readOnlyPass(reader, SCOPES, { ...opts, migrateMcpEntries: NO_MCP_MOVE });
+      return;
+    }
+
     await loadReconcileWithReader(reader, applyReconcile, opts);
   };
 }

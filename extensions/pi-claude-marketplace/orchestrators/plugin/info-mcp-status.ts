@@ -1,24 +1,23 @@
 // orchestrators/plugin/info-mcp-status.ts
 //
-// ASTAT-01 / ASTAT-02: stamps each written MCP server's state on an installed
-// or partially installed info block. The command determines the state and the
-// renderer only formats it (IL-2).
+// ASTAT-01 / ASTAT-02 / BLT-05: stamps each written MCP server's state on an
+// installed or partially installed info block. The command determines the
+// state and the renderer only formats it (IL-2).
 //
 // NFR-5: network-free. This module is outside `NETWORK_SEAMS` and names no git
 // surface.
 //
-// The status lookup key is `generatedMcpServerKey(plugin, server)`, an exact
-// string match, because pi-mcp-adapter reports raw config keys. MSEL-01: info
-// hands in the reader of the run's active implementation as part of an
-// `McpStatusLookup`; the key stays the adapter's under every implementation,
-// so the built-in seed reader, which answers `no-snapshot`, leaves every
-// built-in row at `status unknown` until BLT-05 picks the naming by
-// `lookup.implementation`. Only the
-// servers the installation record lists get a state: the manifest arm lists
-// the current declaration, which can differ from what install wrote. A
-// disabled record's servers are out of the adapter configuration (ENBL-08),
-// so a `(disabled)` row gets no state.
+// MSEL-01: info hands in the reader of the run's active implementation as
+// part of an `McpStatusLookup`, and `lookup.implementation` picks the arm.
+// Only the servers the installation record lists get a state: the manifest
+// arm lists the current declaration, which can differ from what install
+// wrote. A disabled record's servers are out of every implementation's
+// configuration (ENBL-08), so a `(disabled)` row gets no state.
 //
+// Under `adapter` and `none` the lookup key is
+// `generatedMcpServerKey(plugin, server)`, an exact string match, because
+// pi-mcp-adapter reports raw config keys, and the stamped servers are the
+// record's `resources.mcpServers`, the servers written to the adapter file.
 // ASTAT-01: the same plugin installed in both scopes writes one key into both
 // scopes' adapter files, pi-mcp-adapter loads the project file last, and its
 // snapshot names no source. So a user row's server that the plugin's enabled
@@ -26,9 +25,40 @@
 // project record writes no adapter entry (ENBL-08) and does not override. With
 // no usable snapshot every row reads `status unknown` first. A project row is
 // never overridden.
+//
+// Under `builtin` (D-MB-13) the lookup key is the registered built-in name,
+// `profileFor("builtin").serverName(plugin, server)`, which has no trailing
+// `_`, and the stamped servers are the names in the record's
+// `mcpServerConfigs`: every server the registration step reads, the ones the
+// adapter blocks included. A record that predates that key falls back to
+// `resources.mcpServers`, because the call is synchronous and the
+// asynchronous legacy reader is out of reach.
+//
+// BLT-05: under `builtin` the stamps run in a fixed order. A project row
+// reads `project not trusted` while Pi does not trust the project (D-MB-09).
+// Then a server reads `overridden by mcp.json` when a server of Pi's
+// `mcp.json` files holds its namespace (BLT-04, P2-DC-08): the user's file,
+// and the project's only while trusted, read synchronously through the bridge
+// (P2-DC-26). Then a server whose registered name the registration step's
+// last sync gave to another record does not read that record's state: a user
+// row reads `overridden by project scope` when a project record owns the name
+// (ASTAT-01, P2-DC-14), and any other row reads `not loaded`. The owner is the
+// step's own decision, so a project server the step skipped, as blocked,
+// malformed, outside its clone root, or unreadable, overrides nothing, and
+// the owner's marketplace and plugin count, because the registered name does
+// not name the marketplace and can fold two plugins together. Otherwise the
+// server reads the reader's answer.
 
-import { generatedMcpServerKey, mcpServerDisplayName } from "../../domain/name.ts";
+import { readMcpJsonServerNamespaces } from "../../bridges/mcp/index.ts";
+import { profileFor } from "../../domain/mcp-implementation.ts";
+import {
+  foldedMcpServerKey,
+  generatedMcpServerKey,
+  mcpServerDisplayName,
+} from "../../domain/name.ts";
+import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { builtinServerOwner } from "../../platform/mcp-builtin-status.ts";
 
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type {
@@ -83,8 +113,7 @@ function stampEntries(
   plugin: string,
   entries: readonly McpServerSummaryEntry[],
   recordedServers: readonly string[],
-  overridden: ReadonlySet<string>,
-  reader: McpStatusReader,
+  statusOf: (server: string) => McpServerStatus,
 ): McpServerSummaryEntry[] {
   const recordedByName = new Map(
     recordedServers.map((server) => [mcpServerDisplayName(plugin, server), server]),
@@ -95,22 +124,107 @@ function stampEntries(
       return entry;
     }
 
-    const answer = reader.lookup(generatedMcpServerKey(plugin, server));
-    const status: McpServerStatus =
-      answer !== "no-snapshot" && overridden.has(server)
-        ? "overridden by project scope"
-        : statusToken(answer);
-    return { ...entry, status };
+    return { ...entry, status: statusOf(server) };
   });
+}
+
+function stampAdapterEntries(
+  block: PluginInfoMessage,
+  entries: readonly McpServerSummaryEntry[],
+  record: PluginInstallRecord,
+  lookup: McpStatusLookup,
+  projectRecord: PluginInstallRecord | undefined,
+): McpServerSummaryEntry[] {
+  const plugin = block.plugin.name;
+  const overridden = projectOverrides(block, projectRecord);
+  return stampEntries(plugin, entries, record.resources.mcpServers, (server) => {
+    const answer = lookup.reader.lookup(generatedMcpServerKey(plugin, server));
+    return answer !== "no-snapshot" && overridden.has(server)
+      ? "overridden by project scope"
+      : statusToken(answer);
+  });
+}
+
+// MREC-02: the servers a record lists for Pi's built-in MCP, by declared name.
+function builtinRecordedServers(record: PluginInstallRecord): readonly string[] {
+  return record.mcpServerConfigs?.map(({ name }) => name) ?? record.resources.mcpServers;
+}
+
+// D-MB-09: Pi reads the project's `mcp.json` only while it trusts the project.
+function mcpJsonFiles(lookup: McpStatusLookup): readonly string[] {
+  const user = locationsFor("user", lookup.cwd).mcpJsonPath;
+  return lookup.projectTrusted ? [user, locationsFor("project", lookup.cwd).mcpJsonPath] : [user];
+}
+
+/**
+ * ASTAT-01 / P2-DC-14: the state of a server whose registered name another
+ * record owns, or `undefined` when the row's own record owns it or no record
+ * does.
+ */
+function ownedElsewhere(block: PluginInfoMessage, name: string): McpServerStatus | undefined {
+  const owner = builtinServerOwner(name);
+  if (
+    owner === undefined ||
+    (owner.scope === block.marketplaceScope &&
+      owner.marketplace === block.marketplaceName &&
+      owner.plugin === block.plugin.name)
+  ) {
+    return undefined;
+  }
+
+  return owner.scope === "project" && block.marketplaceScope === "user"
+    ? "overridden by project scope"
+    : "not loaded";
+}
+
+/**
+ * BLT-05: one server's built-in state, in a fixed order: an `mcp.json`
+ * server that holds its namespace (BLT-04, T-02-19), so a same-named
+ * `mcp.json` server never reads as the plugin's; then a name another record
+ * owns; then the reader's answer under the registered name.
+ */
+function builtinStatus(
+  block: PluginInfoMessage,
+  server: string,
+  configured: ReadonlySet<string>,
+  reader: McpStatusReader,
+): McpServerStatus {
+  const name = profileFor("builtin").serverName(block.plugin.name, server);
+  if (configured.has(foldedMcpServerKey(name))) {
+    return "overridden by mcp.json";
+  }
+
+  return ownedElsewhere(block, name) ?? statusToken(reader.lookup(name));
+}
+
+function stampBuiltinEntries(
+  block: PluginInfoMessage,
+  entries: readonly McpServerSummaryEntry[],
+  record: PluginInstallRecord,
+  lookup: McpStatusLookup,
+): McpServerSummaryEntry[] {
+  const plugin = block.plugin.name;
+  const recorded = builtinRecordedServers(record);
+  // D-MB-09: the extension registers no project server while Pi does not
+  // trust the project, so a project row reads `project not trusted` first.
+  if (block.marketplaceScope === "project" && !lookup.projectTrusted) {
+    return stampEntries(plugin, entries, recorded, () => "project not trusted");
+  }
+
+  const configured = readMcpJsonServerNamespaces(mcpJsonFiles(lookup));
+  return stampEntries(plugin, entries, recorded, (server) =>
+    builtinStatus(block, server, configured, lookup.reader),
+  );
 }
 
 /**
  * Returns `block` with each MCP server its installation record lists as
- * written stamped with the state `lookup.reader` last reported. Only
+ * written stamped with the state `lookup.reader` reports for it. Only
  * `(installed)` and `(partially-installed)` rows with resolved components are
  * stamped. `projectRecord` is the same plugin's installation record in the
- * project scope; on a user row it decides which servers the project entry
- * overrides. The input is never mutated, and the row status, reasons and
+ * project scope; under pi-mcp-adapter it decides which servers of a user row
+ * the project entry overrides. Under Pi's built-in MCP the registration
+ * step's own decision does. The input is never mutated, and the row status, reasons and
  * severity are left as they are.
  */
 export function withMcpServerStatus(
@@ -130,12 +244,9 @@ export function withMcpServerStatus(
     return block;
   }
 
-  const mcp = stampEntries(
-    plugin.name,
-    entries,
-    record.resources.mcpServers,
-    projectOverrides(block, projectRecord),
-    lookup.reader,
-  );
+  const mcp =
+    lookup.implementation === "builtin"
+      ? stampBuiltinEntries(block, entries, record, lookup)
+      : stampAdapterEntries(block, entries, record, lookup, projectRecord);
   return { ...block, plugin: { ...plugin, components: { ...plugin.components, mcp } } };
 }

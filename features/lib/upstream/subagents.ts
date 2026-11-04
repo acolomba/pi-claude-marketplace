@@ -19,8 +19,10 @@
  * - an agent detail: one `<field> <value>` line per field this extension
  *   writes, in a fixed order, then `system prompt:` and the body;
  * - a run: the child's final text alone;
- * - an error: `error`, or `error naming <value>, <value>` with each model id
- *   or MCP tool selector that this extension wrote and the error names.
+ * - an error: `error`, or `error naming <value>, <value>` with each value
+ *   that this extension wrote and the error names: a model id, an adapter
+ *   selector `plugin_<plugin>_<server>_/<tool>`, or a built-in server or
+ *   selector `plugin_<plugin>_<server>[/<tool>]`.
  *
  * Headings, counts, hints, the run's budget and mission lines, and every
  * field pi-subagents fills in itself are dropped. Each reader anchors on the
@@ -49,10 +51,17 @@ const FIELD_PATTERN = /^([A-Za-z][A-Za-z -]*):\s*(.*)$/u;
 const UNSET_PATTERN = /\b(?:default|ambient|inherits?)\b/iu;
 
 // The values an error can name that this extension wrote into an agent: a
-// model id its model mapping produced, and an MCP tool selector of a server
-// key it wrote (`plugin_<plugin>_<server>_/<tool>`).
+// model id its model mapping produced, an MCP tool selector of a server key it
+// wrote for pi-mcp-adapter (`plugin_<plugin>_<server>_/<tool>`), and a server
+// name or selector it wrote for Pi's built-in MCP
+// (`plugin_<plugin>_<server>[/<tool>]`, MGRT-01). The built-in alternative
+// comes after the adapter one, so an adapter selector keeps its trailing `_`.
+// It matches only a whole name that starts the text or follows a space, `(`,
+// `:`, or `,`, and that no name character or `/` continues. So an adapter
+// whole-server key `plugin_<plugin>_<server>_` and a path piece such as
+// `/x/plugin_cache/y` project nothing, as they did before MGRT-01.
 const OWNED_ERROR_VALUE_PATTERN =
-  /\b(?:[a-z0-9-]+\/claude-[A-Za-z0-9.[\]-]*[A-Za-z0-9\]]|plugin_[A-Za-z0-9_-]*_\/[A-Za-z0-9_-]+)/gu;
+  /\b(?:[a-z0-9-]+\/claude-[A-Za-z0-9.[\]-]*[A-Za-z0-9\]]|plugin_[A-Za-z0-9_-]*_\/[A-Za-z0-9_-]+|(?<=^|[\s(:,])plugin_[A-Za-z0-9_-]*[A-Za-z0-9-](?:\/[A-Za-z0-9_-]+)?(?![A-Za-z0-9_/-]))/gu;
 
 // The sources an agent of this extension is listed under: the scopes the
 // agents bridge stages into.

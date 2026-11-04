@@ -5,17 +5,17 @@ milestone_name: MCP Built-in
 current_phase: 3
 current_phase_name: Read-Time Verdicts
 status: executing
-stopped_at: Phase 01 complete, ready to verify Phase 2
-last_updated: "2026-11-04T13:02:49.097Z"
+stopped_at: Phases 5, 4, and 2 merged into features/mcp-builtin; Phase 3 merging it
+last_updated: "2026-11-04T18:00:00.000Z"
 last_activity: 2026-11-04
-last_activity_desc: Phase 3 execution started
-state_head: 3a514735b45f3403d5989b903837da4832411e75
+last_activity_desc: Phase 3 merged the milestone branch (Phases 5, 4, and 2)
+state_head: 7802eecb10c4405eb30b5de0feeea57d85e67f68
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 23
-  completed_plans: 14
-  percent: 17
+  completed_phases: 4
+  total_plans: 42
+  completed_plans: 41
+  percent: 33
 ---
 
 # Project State
@@ -27,7 +27,9 @@ See: `.planning/PROJECT.md` (updated 2026-11-04 after mcp-builtin Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 3 — Read-Time Verdicts
+**Current focus:** Phase 3 — Read-Time Verdicts. Phases 5, 4, and 2 are
+merged into `features/mcp-builtin`, and Phase 3 (critical path) has merged that
+branch; Phase 6 follows in the parent session.
 Phase 6 closes on the milestone branch. Still open from component-features:
 the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 `acolomba/pi` and `acolomba/pi-subagents`.
@@ -35,11 +37,11 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 ## Current Position
 
 Phase: 3 (Read-Time Verdicts) — EXECUTING
-Plan: 1 of 9
+Plan: 9 of 9
 Status: Executing Phase 3
-Last activity: 2026-11-04 — Phase 3 execution started
+Last activity: 2026-11-04 — Phase 3 merged the milestone branch (Phases 5, 4, and 2)
 
-Progress: [██░░░░░░░░] 17%
+Progress: [███░░░░░░░] 33%
 
 
 ### mcp-4 closeout
@@ -417,6 +419,7 @@ archived milestone artifacts.
 | Phase 11 P06 | 42min | 3 tasks | 13 files |
 | Phase 11 P09 | 15min | 3 tasks | 7 files |
 | Phase 11 P13 | 47min | 3 tasks | 11 files |
+| Phase 4 P06 | 11min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -631,6 +634,7 @@ archived milestone artifacts.
 - [Phase 11]: Keep transaction composition and architecture-gated call sites in the main install ledger; extracted owners receive narrow typed inputs.
 - [Phase 11]: Preserve the exact five-operation planning port and one-way imports, including type-only edges.
 - [Phase 11]: Give each extracted install-flow owner one compact direct-coverage suite with fixture-level doubles and no cross-test imports.
+- [Phase 4]: Phase 4 gate reused the orchestrator's 8e801f4 results for 8c95f25 (planning-only diff) and ran test:modules; only the P4-DC-23 verdict-markers row fails under builtin
 
 ### mcp-4 decisions
 
@@ -900,6 +904,6 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 
 ## Session Continuity
 
-Last session: 2026-11-04T00:54:44Z
-Stopped at: Phase 01 complete, ready to verify Phase 2
+Last session: 2026-11-04T18:00:00Z
+Stopped at: Phases 5, 4, and 2 merged; Phase 3 to merge
 Resume file: None

@@ -319,10 +319,10 @@ changes their names or shapes.
   status scenarios under both profiles, then run Phase 6.
 
 - [x] **Phase 1: Foundation and Pi 1.5.0** - Pi 1.5.0, the active-implementation snapshot, the pure profiles, records that keep every declared server, and the dual-profile cucumber harness, with every shared file and interface frozen and no visible change (completed 2026-11-04)
-- [ ] **Phase 2: Built-in Materialization** - Recorded servers connect through Pi's built-in MCP on startup and `/reload` with Claude's values and names, trust gating, status in `info`, and a switch that needs no plugin action
+- [x] **Phase 2: Built-in Materialization** - Recorded servers connect through Pi's built-in MCP on startup and `/reload` with Claude's values and names, trust gating, status in `info`, and a switch that needs no plugin action (completed 2026-11-04)
 - [ ] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records
-- [ ] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child
-- [ ] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter
+- [x] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child (completed 2026-11-04)
+- [x] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter (completed 2026-11-04)
 - [ ] **Phase 6: Release Docs and Combined Tree** - The CHANGELOG and READMEs describe built-in MCP support, closed sets are clean, and the combined tree passes under both profiles
 
 ## Phase Details
@@ -402,7 +402,23 @@ Plans:
 - Wave 2, in parallel, one feature file and step module each: configuration and source variants with the `substitute.ts` encoder parameter (BLT-02); project trust (BLT-03); naming, collisions, overrides, and status in `info-mcp-status.ts` and `platform/mcp-builtin-status.ts` (BLT-04, BLT-05); lifecycle (BLT-06); invocation through `tool_search` and direct `alwaysLoad` calls (BLT-01); the switch and legacy records in `implementation-switch.feature` (MSEL-02, MSEL-04, MREC-02; Phase 6 adds the `{requires mcp}` step for DUAL-04).
 - Wave 3: the built-in column in `docs/mcp-compatibility.md` (MDOC-01), decision rows, parent lines, and the phase gate.
 
-**Plans**: TBD
+**Plans**: 9/9 plans complete in 3 waves (the suggested waves; Wave 2 splits into seven plans with disjoint files, the registration's `description` reader moves into Wave 1 so that only one Wave 2 plan edits the `bridges/mcp` barrel, and the rest of the `listing.feature` lift moves out of the Wave 1 tracer plan into its own Wave 2 plan)
+
+Plans:
+**Wave 1**
+- [x] 02-01-PLAN.md — Wave 1: the built-in translation table, the encoder port with both encoders, the idempotent sync, the registration step (gate, trust, containment, legacy records, description), the `tool_search` projection with its first listing twin, and `listing.feature` under both profiles (BLT-01, BLT-02, BLT-04, MSEL-03, MREC-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 02-02-PLAN.md — Wave 2: `configuration.feature` and `invocation.feature` lifted, with built-in twins for variables, `$` and `!`, headers, and IN-02 (BLT-02, BLT-01)
+- [x] 02-03-PLAN.md — Wave 2: `sources.feature` lifted, the registry config probe, `builtin-values.feature` (OAuth, timeout, exposure, description), `builtin-direct.feature`, and the Pi resolver conformance test (BLT-02, BLT-01)
+- [x] 02-04-PLAN.md — Wave 2: the built-in status reader, the `mcp.json` override read, the built-in `info` arm, and `builtin-status.feature` (BLT-05, BLT-04)
+- [x] 02-05-PLAN.md — Wave 2: `project-scope.feature` lifted and `builtin-trust.feature` (BLT-03)
+- [x] 02-06-PLAN.md — Wave 2: `lifecycle.feature` lifted, next-session effects, a new session, and the autoapply resync (BLT-06, BLT-01)
+- [x] 02-07-PLAN.md — Wave 2: `implementation-switch.feature` with the switch, the install under built-in, and the earlier-release record (MSEL-02, MSEL-03, MSEL-04, MREC-02)
+- [x] 02-09-PLAN.md — Wave 2: the remaining `listing.feature` twins: a search that matches nothing, per-server names under both implementations, the hyphen fold and the 64-character cut, and a plugin without servers (BLT-01, BLT-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 02-08-PLAN.md — Wave 3: the built-in column and sections of `docs/mcp-compatibility.md`, the phase gate, and the parent lines (MDOC-01)
 
 ### Phase 3: Read-Time Verdicts
 **Goal**: A plugin's available or partially available state, each server's verdict, the markers, and `--partial` consent follow the active implementation, computed at read time from neutral records, so a switch never asks the user for anything and a Pi with no MCP support tells the user what to turn on.
@@ -464,7 +480,13 @@ Plans:
 - Wave 2: `orchestrators/mcp/agent-grants-step.ts` with child detection, and `agent-grants.feature` (MGRT-01 switch side, MGRT-02).
 - Wave 3: parent lines and the phase gate.
 
-**Plans**: TBD
+**Plans**: 6/6 plans complete
+- [x] 04-01-PLAN.md
+- [x] 04-02-PLAN.md
+- [x] 04-03-PLAN.md
+- [x] 04-04-PLAN.md
+- [x] 04-05-PLAN.md
+- [x] 04-06-PLAN.md
 
 ### Phase 5: Hook Tool Names
 **Goal**: Plugin hooks on plugin MCP tools fire under built-in with Claude's server segment, and the adapter's proxy rule applies only while the adapter is active.
@@ -477,7 +499,18 @@ Plans:
   2. The pi-mcp-adapter `mcp` proxy special case in hook dispatch applies only while the adapter is active; under built-in or with no implementation, no call is treated as a proxy call (MHK-02).
   3. `docs/hooks-compatibility.md` states the built-in tool names and the divergence, and every MCP scenario in `features/hook/` runs under both profiles or carries an implementation tag.
 
-**Plans**: TBD
+**Plans:** 4/4 plans complete in 3 waves
+
+Plans:
+**Wave 1**
+- [x] 05-01-PLAN.md — Wave 1: the per-event built-in tool identity end to end: Claude-form matchers, `if` fields, stdin, and labels, with the shared `@mcp` scenario (MHK-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 05-02-PLAN.md — Wave 2: the proxy rule only under pi-mcp-adapter, one read per bridge generation, the D-P5-11 pair, and the cut-name scenario (MHK-02)
+- [x] 05-03-PLAN.md — Wave 2: the tool-segment fold scenario on a Pi `mcp.json` server, the notice-label scenario, and `docs/hooks-compatibility.md` (MHK-01, MHK-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 05-04-PLAN.md — Wave 3: phase gate with both profiles, `test:modules`, the red sweep, the ownership check, and the parent lines (MHK-01, MHK-02)
 
 ### Phase 6: Release Docs and Combined Tree
 **Goal**: The combined milestone tree is ready to ship: the CHANGELOG and READMEs describe built-in MCP support, the three `requires` markers, and the naming divergence; closed sets hold no unused entry; and every MCP feature and the switch scenario pass under both profiles after the last merge.
@@ -500,10 +533,10 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
-| 2. Built-in Materialization | 0/TBD | Not started | - |
+| 2. Built-in Materialization | 9/9 | Complete    | 2026-11-04 |
 | 3. Read-Time Verdicts | 8/9 | In Progress | - |
-| 4. Agent Grants | 0/TBD | Not started | - |
-| 5. Hook Tool Names | 0/TBD | Not started | - |
+| 4. Agent Grants | 6/6 | Complete    | 2026-11-04 |
+| 5. Hook Tool Names | 4/4 | Complete    | 2026-11-04 |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
 
 ## Carried Forward

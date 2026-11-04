@@ -413,24 +413,11 @@ async function prepareUpdateHandles(
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });
-    handles.agents = await prepareStagePluginAgents(ops, {
-      locations,
-      marketplaceName: marketplace,
-      pluginName: plugin,
-      pluginRoot: installable.pluginRoot,
+    handles.agents = await prepareUpdateAgents(ops, args, preflight, {
       pluginDataDir,
       agentsDirs,
-      knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
-      skillSources: handles.skills.result.recorded,
       referenceNames,
-      // AG-7 opt-in: forward the direct-path `--map-model` setting. The
-      // cascade entrypoint never sets `args.mapModel`, so cascade re-
-      // installs always resolve to false (omit `model:`).
-      mapModel: args.mapModel ?? false,
-      // ANAME-02: the servers this update writes, mapped in agent tool lists.
-      mcpServerNames: Object.keys(installable.mcpServers),
-      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
-      cwd,
+      skills: handles.skills,
     });
     handles.mcp = await prepareStageMcpServers({
       locations,
@@ -462,6 +449,69 @@ async function prepareUpdateHandles(
   }
 
   return handles as PrepHandles;
+}
+
+/**
+ * MGRT-01 / P4-DC-13: the MCP implementation whose grant form the update
+ * stages: a direct run's snapshot, else the snapshot of the command a
+ * dependency move runs for, else `none`, which stages pi-mcp-adapter's form.
+ * The marketplace autoupdate cascade and `apply`'s convergence carry neither
+ * snapshot, so they stage that form; the agents index row stores both forms,
+ * and the next load rewrites the file for the active implementation
+ * (D-MB-03). When the update arguments carry the active implementation
+ * themselves, a parent line repoints this function at that field.
+ */
+function updateAgentImplementation(args: ThreePhaseArgs): ActiveMcpImplementation {
+  if (!args.cascade) {
+    return args.run.softDeps.mcpImplementation;
+  }
+
+  return args.preflightNotification?.run.softDeps.mcpImplementation ?? "none";
+}
+
+/** What the agents staging of an update reads from the handles prepared before it. */
+interface UpdateAgentsInputs {
+  readonly pluginDataDir: string;
+  readonly agentsDirs: readonly string[];
+  readonly referenceNames: InstalledReferenceNames;
+  readonly skills: PreparedSkillsStaging;
+}
+
+/**
+ * The agents staging of an update: the new revision's agents, granted the MCP
+ * tools of the servers it writes in the form of the active implementation,
+ * with both forms recorded on each agent's index row (MGRT-01).
+ */
+async function prepareUpdateAgents(
+  ops: RemovalOps,
+  args: ThreePhaseArgs,
+  preflight: PluginPreflight,
+  inputs: UpdateAgentsInputs,
+): Promise<PreparedAgentsStaging> {
+  const { installable } = preflight;
+  return prepareStagePluginAgents(ops, {
+    locations: args.locations,
+    marketplaceName: args.marketplace,
+    pluginName: args.plugin,
+    pluginRoot: installable.pluginRoot,
+    pluginDataDir: inputs.pluginDataDir,
+    agentsDirs: inputs.agentsDirs,
+    knownSkills: inputs.skills.result.recorded.map((record) => record.generatedName),
+    skillSources: inputs.skills.result.recorded,
+    referenceNames: inputs.referenceNames,
+    // AG-7 opt-in: forward the direct-path `--map-model` setting. The
+    // cascade entrypoint never sets `args.mapModel`, so cascade re-
+    // installs always resolve to false (omit `model:`).
+    mapModel: args.mapModel ?? false,
+    // ANAME-02: the servers this update writes, mapped in agent tool lists.
+    mcpServerNames: Object.keys(installable.mcpServers),
+    mcpGrantForms: {
+      active: updateAgentImplementation(args),
+      declaredMcpServers: installable.declaredMcpServers,
+    },
+    // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+    cwd: args.cwd,
+  });
 }
 
 /**
