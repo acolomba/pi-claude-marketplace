@@ -60,6 +60,7 @@ function resolvedPlugin(
     notes: [],
     componentPaths: { skills: [], commands: [], agents: [], workflows: [...workflows] },
     mcpServers: {},
+    declaredMcpServers: {},
     defaultEnabled: true,
   };
 }

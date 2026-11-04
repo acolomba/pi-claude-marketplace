@@ -71,6 +71,12 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
         args: ["--data", "${CLAUDE_PLUGIN_DATA}"],
       },
     },
+    declaredMcpServers: {
+      local: {
+        command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
+        args: ["--data", "${CLAUDE_PLUGIN_DATA}"],
+      },
+    },
   };
   const expectedBytes = `{
   "mcpServers": {

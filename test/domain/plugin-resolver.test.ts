@@ -114,6 +114,7 @@ function installableLocal(localRoot: string, description?: string): ResolvedPlug
     notes: [],
     componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
+    declaredMcpServers: {},
     defaultEnabled: true,
     ...(description !== undefined && { description }),
   };
@@ -435,6 +436,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -494,6 +496,7 @@ describe("resolveStrict", () => {
       notes: ["contains mod"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -527,6 +530,7 @@ describe("resolveStrict", () => {
       notes: ["contains mod"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       hooksConfigPath: path.join("hooks", "hooks.json"),
       defaultEnabled: true,
     });
@@ -559,6 +563,7 @@ describe("resolveStrict", () => {
       notes: ["contains mod"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -593,6 +598,7 @@ describe("resolveStrict", () => {
       notes: ["contains mod"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -625,6 +631,7 @@ describe("resolveStrict", () => {
       notes: ["contains binaries"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -657,6 +664,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -1418,6 +1426,10 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: { local: { command: "node" } },
+      declaredMcpServers: {
+        live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        local: { command: "node" },
+      },
       droppedMcpServers: [{ server: "live", feature: "ws" }],
       defaultEnabled: true,
     });
@@ -1451,7 +1463,39 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: { local: { command: "node", args: ["server.js"] } },
+      declaredMcpServers: {
+        home: { command: "node", args: ["~/bin/server.js"] },
+        local: { command: "node", args: ["server.js"] },
+      },
       droppedMcpServers: [{ server: "home", feature: "args ~" }],
+      defaultEnabled: true,
+    });
+  });
+
+  test("MREC-01: a bundle reference makes the plugin partially available and flags the bundle", async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+    // act
+    const resolvedPlugin = await resolveStrict(
+      pluginEntry({ source: "./local", mcpServers: "server.mcpb" }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "partially-available",
+      installable: true,
+      name: "p1",
+      pluginRoot: localRoot,
+      supported: [],
+      unsupported: ["mcpServers"],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+      mcpServers: {},
+      declaredMcpServers: {},
+      mcpBundle: true,
       defaultEnabled: true,
     });
   });
@@ -1810,6 +1854,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -1839,6 +1884,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -1919,6 +1965,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -2014,6 +2061,7 @@ describe("resolveStrict", () => {
         notes: [],
         componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
         mcpServers: {},
+        declaredMcpServers: {},
         defaultEnabled: true,
       });
     } finally {
@@ -2043,6 +2091,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -2096,6 +2145,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -3665,6 +3715,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -3691,6 +3742,7 @@ describe("resolveStrict", () => {
       notes: ["contains themes"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -3745,6 +3797,7 @@ describe("resolveStrict", () => {
         workflows: [],
       },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -3843,6 +3896,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: false,
     });
   });
@@ -3874,6 +3928,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: false,
     });
   });
@@ -4033,6 +4088,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: { srv: { command: "node" } },
+      declaredMcpServers: { srv: { command: "node" } },
       defaultEnabled: true,
     });
   });
@@ -4340,6 +4396,7 @@ describe("resolveStrict", () => {
         notes: [],
         componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
         mcpServers: {},
+        declaredMcpServers: {},
         defaultEnabled: true,
       });
     });
@@ -4373,6 +4430,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });

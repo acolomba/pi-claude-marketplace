@@ -37,6 +37,7 @@ function resolvedPlugin(
       ...(commandMap !== undefined && { commandMap: [...commandMap] }),
     },
     mcpServers: {},
+    declaredMcpServers: {},
     defaultEnabled: true,
   };
 }
