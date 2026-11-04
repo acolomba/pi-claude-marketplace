@@ -13,6 +13,7 @@ Feature: Plugin apply
       | beta  | 1.0.0   |
       | gamma | 1.0.0   |
 
+  @mcp
   Scenario: Apply reports the rollback phases and leaks of a failed enable
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -321,6 +322,7 @@ Feature: Plugin apply
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  @mcp
   Scenario: Apply that cannot finish the rollback of a failed install names the rollback phase
     Given the marketplace "fixtures" is added to the project scope
     Given a config in scope project and layer base, with these plugins:
@@ -341,6 +343,7 @@ Feature: Plugin apply
       | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                  | cause truncated | leaks      | rollback partial                                                                                            |
       | fixtures         | project           | demo@fixtures | demo | failed | rollback partial | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
 
+  @mcp
   Scenario: Apply that cannot finish the rollback of a failed dependency reports the dependency's own row
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
@@ -367,6 +370,7 @@ Feature: Plugin apply
       | tools            | project           | app@tools | app  | failed | dependency failed | project |                                                              |                 |           |                                                                                                             |
       | tools            | project           | lib@tools | lib  | failed | rollback partial  | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
 
+  @mcp
   Scenario: Apply that cannot finish the rollback of a dependency two plugins share reports that dependency once
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
@@ -396,6 +400,7 @@ Feature: Plugin apply
       | tools            | project           | server@tools | server | failed | dependency failed | project |                                                              |                 |           |                                                                                                             |
       | tools            | project           | web@tools    | web    | failed | dependency failed | project |                                                              |                 |           |                                                                                                             |
 
+  @mcp
   Scenario: Apply shows the phase detail of a partially rolled back missing dependency
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

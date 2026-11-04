@@ -1,3 +1,4 @@
+@mcp
 Feature: Plugin update rollback
 
   An update failure keeps the installed version, skills, and record.

@@ -42,6 +42,10 @@ const implementationTags = new Set([
   "@own-implementation",
 ]);
 const localKinds = new Set(["dir", "file"]);
+// DUAL-02: a scenario is an MCP scenario when a step's text has the word mcp, or when a doc string
+// or a table cell of a step names one of these.
+const mcpStepWord = /\bmcp\b/i;
+const mcpArgumentNames = ["mcpServers", ".mcp.json"];
 
 function createCollection() {
   return {
@@ -49,13 +53,34 @@ function createCollection() {
     pickleSteps: new Map(),
     testCases: [],
     stepLines: new Map(),
+    scenarioLines: new Map(),
+    pickles: [],
     documents: [],
     parseErrors: [],
     undefinedParameterTypes: [],
   };
 }
 
+function argumentValues(argument) {
+  if (argument?.docString !== undefined) {
+    return [argument.docString.content];
+  }
+
+  return argument?.dataTable?.rows.flatMap((row) => row.cells.map((cell) => cell.value)) ?? [];
+}
+
 function collectPickle(collection, pickle) {
+  collection.pickles.push({
+    uri: pickle.uri,
+    name: pickle.name,
+    astNodeId: pickle.astNodeIds[0],
+    tags: pickle.tags.map((tag) => tag.name),
+    steps: pickle.steps.map((step) => ({
+      text: step.text,
+      values: argumentValues(step.argument),
+    })),
+  });
+
   for (const step of pickle.steps) {
     collection.pickleSteps.set(step.id, {
       uri: pickle.uri,
@@ -75,8 +100,22 @@ function gherkinSteps(children) {
   });
 }
 
+function gherkinScenarios(children) {
+  return children.flatMap((child) => {
+    if (child.rule !== undefined) {
+      return gherkinScenarios(child.rule.children);
+    }
+
+    return child.scenario === undefined ? [] : [child.scenario];
+  });
+}
+
 function collectGherkinDocument(collection, document) {
   collection.documents.push(document);
+
+  for (const scenario of gherkinScenarios(document.feature?.children ?? [])) {
+    collection.scenarioLines.set(scenario.id, scenario.location.line);
+  }
 
   for (const step of gherkinSteps(document.feature?.children ?? [])) {
     collection.stepLines.set(step.id, step.location.line);
@@ -503,6 +542,49 @@ function documentFindings(document) {
   return [...findings, ...feature.children.flatMap((child) => childFindings(uri, child))];
 }
 
+function isMcpPickle(pickle) {
+  return pickle.steps.some(
+    (step) =>
+      mcpStepWord.test(step.text) ||
+      step.values.some((value) => mcpArgumentNames.some((name) => value.includes(name))),
+  );
+}
+
+// DUAL-01, DUAL-02: every MCP scenario runs under the profiles its one implementation tag selects,
+// so an untagged MCP scenario would run under the adapter profile only, unnoticed.
+function implementationTagProblem(pickle) {
+  const tags = pickle.tags.filter((tag) => implementationTags.has(tag));
+
+  if (tags.length > 1) {
+    return `the scenario carries ${tags.length} MCP implementation tags, ${tags.join(" and ")}; keep exactly one`;
+  }
+
+  if (tags.length === 0 && isMcpPickle(pickle)) {
+    return `the MCP scenario carries no MCP implementation tag: add exactly one of ${[...implementationTags].join(", ")}`;
+  }
+
+  return undefined;
+}
+
+const pickleRules = [implementationTagProblem];
+
+function pickleFindings(collection) {
+  const findings = new Map();
+
+  for (const pickle of collection.pickles) {
+    const line = collection.scenarioLines.get(pickle.astNodeId) ?? 0;
+
+    for (const problem of pickleRules.map((rule) => rule(pickle, collection))) {
+      if (problem !== undefined) {
+        const message = `${problem} (${featuresRule})`;
+        findings.set(`${pickle.uri}:${line}:${message}`, { path: pickle.uri, line, message });
+      }
+    }
+  }
+
+  return [...findings.values()];
+}
+
 function byLocation(left, right) {
   return left.path.localeCompare(right.path) || left.line - right.line;
 }
@@ -515,6 +597,7 @@ async function main() {
     ...patternFindings(collection),
     ...matchFindings(collection),
     ...collection.documents.flatMap(documentFindings),
+    ...pickleFindings(collection),
     ...layoutFindings(),
   ].sort(byLocation);
 
