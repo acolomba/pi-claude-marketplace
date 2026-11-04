@@ -220,6 +220,12 @@ None. No external service configuration is required.
 - The snapshot plan (01-05) can switch to `ActiveMcpImplementation` from `platform/pi-api.ts`. This plan did not touch `SoftDepStatus`.
 - Phase 6 removes the `ignoreExports` entries once the frozen exports have consumers.
 
+## Self-Check: PASSED
+
+- The created files exist: `domain/mcp-implementation.ts`, `domain/mcp-builtin-features.ts`, and both new test files.
+- `dbd8970` and `dae0b30` are ancestors of HEAD.
+- The plan verification passed: `npm run check:static` exited 0, direct coverage was 100% for `mcp-server-features.ts`, `mcp-builtin-features.ts`, `mcp-implementation.ts`, and `name.ts`, and `test:unpaired` and `test:modules` passed.
+
 ---
 *Phase: 01-foundation-and-pi-1-5-0*
 *Completed: 2026-11-04*
