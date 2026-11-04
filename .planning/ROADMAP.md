@@ -355,7 +355,7 @@ changes their names or shapes.
 | 3 | Wiring | `orchestrators/mcp/{session-materialize,recorded-servers,builtin-registration-step,agent-grants-step}.ts`, the `platform/mcp-builtin-status.ts` seed, `EdgeDeps.mcpStatus` in `edge/{types,register}.ts` and `edge/handlers/plugin/info.ts`, the status call in `orchestrators/plugin/info.ts`, `index.ts`, the factory-time probe ban |
 | 4 | Phase gate | `npm run check`, both cucumber profiles, `npm run test:modules`, the CI timing measurement, the frozen-file record, the parent lines |
 
-**Plans:** 4/14 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the snapshot and the session steps move to wave 2, the record producer to wave 3, the status pair and `recorded-servers.ts` to wave 4 after the producer, and the harness splits into four plans across waves 2-4)
+**Plans:** 7/14 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the snapshot and the session steps move to wave 2, the record producer to wave 3, the status pair and `recorded-servers.ts` to wave 4 after the producer, and the harness splits into four plans across waves 2-4)
 
 Plans:
 **Wave 1**
@@ -365,9 +365,9 @@ Plans:
 - [x] 01-04-PLAN.md — Wave 1: closed set in one commit: `requires mcp`, `requires builtin mcp`, the two built-in status tokens, and the companions, none emitted (MDEC-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-05-PLAN.md — Wave 2: `SoftDepStatus.mcpImplementation` and `hasLoadedBuiltinMcp` in the run snapshot with unchanged probe counts (MSEL-01)
-- [ ] 01-06-PLAN.md — Wave 2: no-op session step seeds, `session-materialize.ts`, the `index.ts` wiring, and the factory-time probe ban (MSEL-01)
-- [ ] 01-07-PLAN.md — Wave 2: cucumber profiles, the implementation probe, the restart steps, and `--no-mcp` (DUAL-01, DUAL-02)
+- [x] 01-05-PLAN.md — Wave 2: `SoftDepStatus.mcpImplementation` and `hasLoadedBuiltinMcp` in the run snapshot with unchanged probe counts (MSEL-01)
+- [x] 01-06-PLAN.md — Wave 2: no-op session step seeds, `session-materialize.ts`, the `index.ts` wiring, and the factory-time probe ban (MSEL-01)
+- [x] 01-07-PLAN.md — Wave 2: cucumber profiles, the implementation probe, the restart steps, and `--no-mcp` (DUAL-01, DUAL-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-08-PLAN.md — Wave 3: record producer: `declaredMcpServers`, `mcpServerConfigs`, `mcpBundle`, and `compatibilityBasis` (MREC-01)
@@ -479,7 +479,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Foundation and Pi 1.5.0 | 4/14 | In Progress | - |
+| 1. Foundation and Pi 1.5.0 | 7/14 | In Progress | - |
 | 2. Built-in Materialization | 0/TBD | Not started | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
 | 4. Agent Grants | 0/TBD | Not started | - |
