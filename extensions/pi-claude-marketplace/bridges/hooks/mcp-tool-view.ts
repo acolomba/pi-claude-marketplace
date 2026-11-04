@@ -9,12 +9,14 @@
 //
 // The view reads nothing when it is created, so a bridge generation can make
 // one at registration (MSEL-01), and nothing for a tool whose name is not an
-// MCP name. It keeps no cache across events: a server that reconnects
-// registers its tools again.
+// MCP name. It keeps no tool cache across events: a server that reconnects
+// registers its tools again. It keeps one answer for its generation: whether
+// pi-mcp-adapter's proxy rule applies (MHK-02, D-P5-06, D-P5-07).
 
 import { claudeFormToolName } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { openNotificationSnapshot } from "../../shared/notification-run.ts";
 
 import type { McpToolIdentity } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import type { ExtensionAPI } from "../../platform/pi-api.ts";
@@ -41,6 +43,12 @@ export interface HookTool extends McpToolIdentity {
 export interface HookToolView {
   /** The tool the event names `piName`, read from Pi's tool list once per call. */
   identify(piName: string): HookTool;
+  /**
+   * MHK-02, D-P5-06: whether pi-mcp-adapter is the active MCP implementation,
+   * so that its proxy rule (D-CF5-12) applies. Under Pi's built-in MCP, or
+   * with none, there is no proxy and the answer is false.
+   */
+  proxyRuleApplies(): boolean;
 }
 
 function asPiNames(piName: string): HookTool {
@@ -72,11 +80,23 @@ function hookToolFor(piName: string, tool: PiTool | undefined): HookTool {
  * there is no Pi API or the name is not an MCP name; otherwise it reads the
  * tool list once. A read that throws keeps Pi's name, with a debug line
  * (OBS-01), and never fails the event.
+ *
+ * D-P5-07: `proxyRuleApplies` takes the run snapshot at its first call and
+ * keeps its answer. The set of loaded extensions changes only on `/reload` or
+ * in a new Pi, and each one registers a new bridge generation with a new view.
+ * The snapshot is the notification run's (D-JO-01), so the view makes the
+ * same reads as every other soft-dependency check and never throws.
  */
 export function createHookToolView(
   pi: Pick<ExtensionAPI, "getAllTools" | "getCommands"> | undefined,
 ): HookToolView {
+  let proxyRule: boolean | undefined;
   return {
+    proxyRuleApplies() {
+      proxyRule ??=
+        pi !== undefined && openNotificationSnapshot(pi).softDeps.mcpImplementation === "adapter";
+      return proxyRule;
+    },
     identify(piName) {
       if (pi === undefined || !piName.startsWith(MCP_TOOL_PREFIX)) {
         return asPiNames(piName);

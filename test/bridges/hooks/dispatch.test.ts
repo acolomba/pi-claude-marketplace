@@ -3180,37 +3180,103 @@ describe("hook dedupe (D-CF5-10)", () => {
   });
 });
 
-describe("mcp proxy calls (D-CF5-12)", () => {
+/**
+ * A view whose proxy rule gives `applies`, recording each read in `log`, so a
+ * case can pin which reads a call makes and in what order (D-P5-07).
+ */
+function createProxyRuleView(applies: boolean, log: string[]): HookToolView {
+  return {
+    identify: (piName) => {
+      log.push(`identify ${piName}`);
+      return { piName, name: piName, builtinServer: undefined };
+    },
+    proxyRuleApplies: () => {
+      log.push("proxyRuleApplies");
+      return applies;
+    },
+  };
+}
+
+interface ProxyCase {
+  readonly name: string;
+  readonly toolName: string;
+  readonly input: Readonly<Record<string, unknown>>;
+  readonly proxyShaped: boolean;
+}
+
+interface ProxyRuleRow {
+  readonly title: (claudeEvent: "PreToolUse" | "PostToolUse") => string;
+  readonly toolName: string;
+  readonly input: Readonly<Record<string, unknown>>;
+  readonly applies: boolean;
+  /** One element when the hook runs, none when it does not. */
+  readonly runs: readonly true[];
+  /** The view reads the call makes, in order. */
+  readonly reads: readonly string[];
+}
+
+/**
+ * MHK-02, D-P5-06: each call under a view whose proxy rule applies and under
+ * one whose rule does not. Only a proxy-shaped call reads the rule, and only a
+ * call that runs its hooks reads its tool (D-P5-07).
+ */
+function proxyRuleRows(cases: readonly ProxyCase[]): ProxyRuleRow[] {
+  return cases.flatMap(({ name, toolName, input, proxyShaped }) =>
+    [
+      { rule: "the proxy rule applies (pi-mcp-adapter)", applies: true },
+      { rule: "the proxy rule does not apply (built-in MCP or none)", applies: false },
+    ].map(({ rule, applies }) => {
+      const runs = !(proxyShaped && applies);
+      const verb = runs ? "runs" : "runs no";
+      return {
+        title: (claudeEvent: "PreToolUse" | "PostToolUse") =>
+          `${verb} ${claudeEvent} hook for ${name} when ${rule}`,
+        toolName,
+        input,
+        applies,
+        runs: runs ? [true] : [],
+        reads: [
+          ...(proxyShaped ? ["proxyRuleApplies"] : []),
+          ...(runs ? [`identify ${toolName}`] : []),
+        ],
+      };
+    }),
+  );
+}
+
+describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
   const PROXY_CASES = [
     {
       name: "a call through the mcp proxy",
       toolName: "mcp",
       input: { tool: "mcp__plugin_demo_stub__echo", args: { text: "ping" } },
-      runs: false,
+      proxyShaped: true,
     },
     {
       name: "a call through a namespace proxy",
       toolName: "mcp__stub",
       input: { tool: "echo", args: { text: "ping" } },
-      runs: false,
+      proxyShaped: true,
     },
-    { name: "an mcp proxy search", toolName: "mcp", input: { search: "x" }, runs: true },
+    { name: "an mcp proxy search", toolName: "mcp", input: { search: "x" }, proxyShaped: false },
     {
       name: "an mcp proxy describe action",
       toolName: "mcp",
       input: { tool: "mcp__plugin_demo_stub__echo", action: "describe" },
-      runs: true,
+      proxyShaped: false,
     },
     {
       name: "a real mcp tool whose input names a tool",
       toolName: "mcp__plugin_demo_stub__echo",
       input: { tool: "echo" },
-      runs: true,
+      proxyShaped: false,
     },
   ] as const;
 
-  for (const { name, toolName, input, runs } of PROXY_CASES) {
-    test(`${runs ? "runs" : "runs no"} PreToolUse hook for ${name}`, async () => {
+  for (const { title, toolName, input, applies, runs, reads: expectedReads } of proxyRuleRows(
+    PROXY_CASES,
+  )) {
+    test(title("PreToolUse"), async () => {
       // arrange
       const runtime = createHooksRuntime();
       runtime.advanceGeneration();
@@ -3223,12 +3289,14 @@ describe("mcp proxy calls (D-CF5-12)", () => {
         }),
       ]);
       const calls: RecordedCall[] = [];
+      const reads: string[] = [];
       const handler = compositeHandlerFor(
         runtime,
         "PreToolUse",
         runtime.currentGeneration(),
         undefined,
         createRecordingExecutor({ any: { kind: "noop" } }, calls),
+        createProxyRuleView(applies, reads),
       );
 
       // act
@@ -3241,11 +3309,12 @@ describe("mcp proxy calls (D-CF5-12)", () => {
       assert.strictEqual(output, undefined);
       assert.deepStrictEqual(
         calls.map(({ pluginId }) => pluginId),
-        runs ? ["any"] : [],
+        runs.map(() => "any"),
       );
+      assert.deepStrictEqual(reads, expectedReads);
     });
 
-    test(`${runs ? "runs" : "runs no"} PostToolUse hook for ${name}`, async () => {
+    test(title("PostToolUse"), async () => {
       // arrange
       const runtime = createHooksRuntime();
       runtime.advanceGeneration();
@@ -3258,11 +3327,13 @@ describe("mcp proxy calls (D-CF5-12)", () => {
         }),
       ]);
       const calls: RecordedCall[] = [];
+      const reads: string[] = [];
       const handler = toolResultCompositeHandler(
         runtime,
         runtime.currentGeneration(),
         undefined,
         createRecordingExecutor({ after: { kind: "noop" } }, calls),
+        createProxyRuleView(applies, reads),
       );
 
       // act
@@ -3275,10 +3346,60 @@ describe("mcp proxy calls (D-CF5-12)", () => {
       assert.strictEqual(output, undefined);
       assert.deepStrictEqual(
         calls.map(({ pluginId }) => pluginId),
-        runs ? ["after"] : [],
+        runs.map(() => "after"),
       );
+      assert.deepStrictEqual(reads, expectedReads);
     });
   }
+
+  test("reads neither the proxy rule nor the tool for a proxy-shaped call when the PreToolUse bucket is empty", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const reads: string[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({}, []),
+      createProxyRuleView(true, reads),
+    );
+
+    // act
+    const output = await handler(
+      createToolCallEvent("mcp", { tool: "mcp__plugin_demo_stub__echo" }),
+      createExtensionContext("/workspace/proxy-empty"),
+    );
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(reads, []);
+  });
+
+  test("reads neither the proxy rule nor the tool for a proxy-shaped result when the bucket is empty", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const reads: string[] = [];
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({}, []),
+      createProxyRuleView(true, reads),
+    );
+
+    // act
+    const output = await handler(
+      { ...createToolResultEvent(true, "mcp"), input: { tool: "mcp__plugin_demo_stub__echo" } },
+      createExtensionContext("/workspace/proxy-result-empty"),
+    );
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(reads, []);
+  });
 });
 
 describe("routing-order fold of mutations", () => {
@@ -4047,6 +4168,7 @@ function createBuiltinToolView(identified: string[]): HookToolView {
       identified.push(piName);
       return BUILTIN_TOOLS[piName] ?? { piName, name: piName, builtinServer: undefined };
     },
+    proxyRuleApplies: () => false,
   };
 }
 
