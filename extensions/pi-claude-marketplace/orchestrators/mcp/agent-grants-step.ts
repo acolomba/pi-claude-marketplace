@@ -16,8 +16,11 @@
  * - It handles the user scope, then the project scope only while Pi trusts
  *   the project (D-LOC-01).
  * - Per scope, an unlocked read of the agents index decides whether any row
- *   needs a rewrite; only then does it take the scope's state lock, with no
- *   migration save and no `tx.save()`, so `state.json` stays untouched.
+ *   needs a rewrite; only then does it take the scope's state lock. It takes
+ *   the lock alone, with no `state.json` read: the rewrite never reads that
+ *   file, so a `state.json` that does not load blocks nothing, and the file
+ *   stays untouched. The rewrite checks the lock is still held before each
+ *   write (D-06).
  * - It reports nothing to the user (RECON-05). A held lock skips the scope
  *   until the next load, any other failure is debug-logged on the `mcp`
  *   channel, and the step never rejects (NFR-2).
@@ -29,7 +32,7 @@ import { isSubagentChild } from "../../platform/subagent-child.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
 import { createRemovalOps } from "../../shared/fs-utils.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 
 import type { McpImplementationId } from "../../domain/mcp-implementation.ts";
 import type { ExtensionContext, PiInventory } from "../../platform/pi-api.ts";
@@ -54,11 +57,11 @@ async function rewriteScope(scope: Scope, cwd: string, active: McpImplementation
       return;
     }
 
-    await withLockedStateTransaction(
-      locations,
-      () => rewriteAgentGrantForms(locations, active, createRemovalOps()),
-      { persistMigration: false },
-    );
+    // The index the unlocked read found lies in the extension root, so the
+    // lock-only primitive, which creates no directory, can take the lock.
+    await withExistingScopeLock(locations, async (assertLockHeld) => {
+      await rewriteAgentGrantForms(locations, active, createRemovalOps(), assertLockHeld);
+    });
   } catch (err) {
     const reason = err instanceof StateLockHeldError ? "its state lock is held" : errorMessage(err);
     hookDebugLog(`agent grants of the ${scope} scope skipped: ${reason}`, "mcp");

@@ -15,9 +15,11 @@
 //      nothing, so a scope with nothing to rewrite never takes the lock and
 //      a scope with no index stays absent.
 //   2. `rewriteAgentGrantForms` runs under the caller's state lock (this
-//      bridge cannot take it). It re-reads the index and saves nothing when
-//      the re-read drops a corrupt row: a save would lose that row and orphan
-//      its file (T-04-13).
+//      bridge cannot take it) and calls the caller's `assertLockHeld` before
+//      each rename and before the index save, so a lock lost on the way
+//      writes nothing more (D-06). It re-reads the index and saves nothing
+//      when the re-read drops a corrupt row: a save would lose that row and
+//      orphan its file (T-04-13).
 //   3. A row is rewritten only after containment (NFR-10): its target lies
 //      inside `<scopeRoot>/agents/` and is named `<generatedName>.md`. The
 //      active form must carry the `---` frame and the generated marker before
@@ -44,7 +46,7 @@ import path from "node:path";
 
 import { loadAgentsIndex, saveAgentsIndex } from "../../persistence/agents-index-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { errorMessage, StateLockCompromisedError } from "../../shared/errors.ts";
 import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
@@ -58,6 +60,16 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 
 type McpForm = NonNullable<NonNullable<AgentsIndexEntry["mcpForms"]>["adapter"]>;
+
+/** One locked rewrite pass over a scope's agents index. */
+interface RewriteRun {
+  readonly locations: ScopedLocations;
+  /** This pass's folder under `agents-staging/`. */
+  readonly stagingDir: string;
+  readonly active: McpImplementationId;
+  /** D-06: throws StateLockCompromisedError once the caller's state lock is lost. */
+  readonly assertLockHeld: () => void;
+}
 
 /** The two forms a candidate row swaps between. */
 interface FormSwap {
@@ -130,16 +142,20 @@ async function assertRowContained(
   }
 }
 
-/** NFR-1: writes `content` under the staging folder and renames it over the row's target. */
+/**
+ * NFR-1: writes `content` under the staging folder and renames it over the
+ * row's target while the state lock is still held (D-06).
+ */
 async function replaceAgentFile(
-  stagingDir: string,
+  run: RewriteRun,
   row: AgentsIndexEntry,
   content: string,
 ): Promise<void> {
-  await mkdir(stagingDir, { recursive: true });
-  const staged = path.join(stagingDir, `${row.generatedName}.md`);
-  await assertPathInside(stagingDir, staged, "staged agent file");
+  await mkdir(run.stagingDir, { recursive: true });
+  const staged = path.join(run.stagingDir, `${row.generatedName}.md`);
+  await assertPathInside(run.stagingDir, staged, "staged agent file");
   await writeFile(staged, content, "utf8");
+  run.assertLockHeld();
   await rename(staged, row.targetPath);
 }
 
@@ -162,26 +178,25 @@ function rowForActive(
  * save; the row itself when the file is left.
  */
 async function swapFile(
-  stagingDir: string,
+  run: RewriteRun,
   row: AgentsIndexEntry,
-  active: McpImplementationId,
   swap: FormSwap,
   text: string,
 ): Promise<AgentsIndexEntry> {
   if (!isGeneratedBlock(swap.active.frontmatter)) {
-    hookDebugLog(`agent ${row.generatedName}: the stored ${active} form is malformed`, "mcp");
+    hookDebugLog(`agent ${row.generatedName}: the stored ${run.active} form is malformed`, "mcp");
     return row;
   }
 
   if (text.startsWith(swap.recorded.frontmatter)) {
     const body = text.slice(swap.recorded.frontmatter.length);
-    await replaceAgentFile(stagingDir, row, swap.active.frontmatter + body);
+    await replaceAgentFile(run, row, swap.active.frontmatter + body);
   } else if (!text.startsWith(swap.active.frontmatter)) {
     hookDebugLog(`agent ${row.generatedName}: the file holds neither stored form`, "mcp");
     return row;
   }
 
-  return rowForActive(row, active, swap.active);
+  return rowForActive(row, run.active, swap.active);
 }
 
 /**
@@ -190,7 +205,7 @@ async function swapFile(
  * form only, so the row is not a candidate again.
  */
 async function translateLegacyFile(
-  stagingDir: string,
+  run: RewriteRun,
   row: AgentsIndexEntry,
   text: string,
 ): Promise<AgentsIndexEntry> {
@@ -206,70 +221,67 @@ async function translateLegacyFile(
     return recorded;
   }
 
-  return swapFile(stagingDir, recorded, "builtin", swap, text);
+  return swapFile(run, recorded, swap, text);
 }
 
 /** Rewrites one candidate row after containment; throws when containment or the read fails. */
-async function rewriteCandidate(
-  locations: ScopedLocations,
-  stagingDir: string,
-  row: AgentsIndexEntry,
-  active: McpImplementationId,
-): Promise<AgentsIndexEntry> {
-  await assertRowContained(locations, row);
+async function rewriteCandidate(run: RewriteRun, row: AgentsIndexEntry): Promise<AgentsIndexEntry> {
+  await assertRowContained(run.locations, row);
   const text = await readFile(row.targetPath, "utf8");
-  const swap = storedSwap(row, active);
-  return swap === undefined
-    ? translateLegacyFile(stagingDir, row, text)
-    : swapFile(stagingDir, row, active, swap, text);
+  const swap = storedSwap(row, run.active);
+  return swap === undefined ? translateLegacyFile(run, row, text) : swapFile(run, row, swap, text);
 }
 
-/** One row's outcome: rewritten, fixed, or left; a failure leaves the row. */
-async function rewriteRow(
-  locations: ScopedLocations,
-  stagingDir: string,
-  row: AgentsIndexEntry,
-  active: McpImplementationId,
-): Promise<AgentsIndexEntry> {
-  if (!isCandidate(row, active)) {
+/**
+ * One row's outcome: rewritten, fixed, or left; a failure leaves the row. A
+ * lost state lock ends the pass instead (D-06).
+ */
+async function rewriteRow(run: RewriteRun, row: AgentsIndexEntry): Promise<AgentsIndexEntry> {
+  if (!isCandidate(row, run.active)) {
     return row;
   }
 
   try {
-    return await rewriteCandidate(locations, stagingDir, row, active);
+    return await rewriteCandidate(run, row);
   } catch (err) {
+    if (err instanceof StateLockCompromisedError) {
+      throw err;
+    }
+
     hookDebugLog(`agent ${row.generatedName}: grant rewrite skipped: ${errorMessage(err)}`, "mcp");
     return row;
   }
 }
 
-/** Rewrites every candidate row, then saves the index last when a row changed. */
-async function rewriteRows(
-  locations: ScopedLocations,
-  stagingDir: string,
-  rows: readonly AgentsIndexEntry[],
-  active: McpImplementationId,
-): Promise<void> {
+/**
+ * Rewrites every candidate row, then saves the index last when a row changed
+ * and the state lock is still held (D-06).
+ */
+async function rewriteRows(run: RewriteRun, rows: readonly AgentsIndexEntry[]): Promise<void> {
   const next: AgentsIndexEntry[] = [];
   for (const row of rows) {
     // eslint-disable-next-line no-await-in-loop -- one rename at a time, each settled before the index save
-    next.push(await rewriteRow(locations, stagingDir, row, active));
+    next.push(await rewriteRow(run, row));
   }
 
   if (next.some((row, i) => row !== rows[i])) {
-    await saveAgentsIndex(locations, { schemaVersion: 1, agents: next });
+    run.assertLockHeld();
+    await saveAgentsIndex(run.locations, { schemaVersion: 1, agents: next });
   }
 }
 
 /**
  * MGRT-01 / D-MB-03: swaps each candidate agent file's frontmatter block for
  * the `active` form and saves the index last. The caller holds the scope's
- * state lock. Reports nothing to the user; skips are debug-logged.
+ * state lock and passes its `assertLockHeld`, which this calls before each
+ * rename and before the save; a lost lock rejects with its error (D-06).
+ * Reports nothing to the user; skips are debug-logged.
  */
 export async function rewriteAgentGrantForms(
   locations: ScopedLocations,
   active: McpImplementationId,
   ops: RemovalOps,
+  assertLockHeld: () => void,
 ): Promise<void> {
   const index = await loadAgentsIndex(locations);
   if (index.corruptions.length > 0) {
@@ -282,7 +294,7 @@ export async function rewriteAgentGrantForms(
 
   const stagingDir = path.join(locations.agentsStagingDir, randomUUID());
   try {
-    await rewriteRows(locations, stagingDir, index.agents, active);
+    await rewriteRows({ locations, stagingDir, active, assertLockHeld }, index.agents);
   } finally {
     const leak = await cleanupStaging(ops, stagingDir, "agents staging directory");
     if (leak !== undefined) {

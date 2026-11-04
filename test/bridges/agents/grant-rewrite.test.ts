@@ -8,6 +8,7 @@ import {
   rewriteAgentGrantForms,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/grant-rewrite.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { StateLockCompromisedError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
@@ -35,6 +36,18 @@ import type { AgentsIndexEntry } from "../../../extensions/pi-claude-marketplace
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { RemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import type { TestContext } from "node:test";
+
+/** The caller's lock check while the state lock is held. */
+function lockHeld(): void {
+  // The lock is held, so the check passes.
+}
+
+/** The caller's lock check once proper-lockfile reported the lock compromised. */
+function lockLost(locations: ScopedLocations): () => void {
+  return () => {
+    throw new StateLockCompromisedError(locations.scope, locations.stateLockFile);
+  };
+}
 
 async function userScope(t: TestContext): Promise<ScopedLocations> {
   const environment = await createHermeticEnvironment(t, "grant-rewrite-");
@@ -154,7 +167,7 @@ describe("rewriteAgentGrantForms", () => {
     await writeIndex(locations, [plain, row]);
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(target, "utf8"), builtinBlock() + BODY);
@@ -172,7 +185,7 @@ describe("rewriteAgentGrantForms", () => {
     await writeIndex(locations, [row]);
 
     // act
-    await rewriteAgentGrantForms(locations, "adapter", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "adapter", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(target, "utf8"), adapterBlock() + BODY);
@@ -189,7 +202,7 @@ describe("rewriteAgentGrantForms", () => {
     const before = await stat(target);
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // assert
     const after = await stat(target);
@@ -211,7 +224,7 @@ describe("rewriteAgentGrantForms", () => {
     await writeIndex(locations, [editedRow, row]);
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(edited, "utf8"), editedText);
@@ -227,7 +240,7 @@ describe("rewriteAgentGrantForms", () => {
     const indexBefore = await readFile(indexPath(locations), "utf8");
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(indexPath(locations), "utf8"), indexBefore);
@@ -246,7 +259,7 @@ describe("rewriteAgentGrantForms", () => {
     await writeIndex(locations, [outsideRow, row]);
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(outside, "utf8"), adapterBlock() + BODY);
@@ -267,7 +280,7 @@ describe("rewriteAgentGrantForms", () => {
     const indexBefore = await readFile(indexPath(locations), "utf8");
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(target, "utf8"), adapterBlock() + BODY);
@@ -296,7 +309,7 @@ describe("rewriteAgentGrantForms", () => {
       const indexBefore = await readFile(indexPath(locations), "utf8");
 
       // act
-      await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+      await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
       // assert
       assert.strictEqual(await readFile(target, "utf8"), adapterBlock() + BODY);
@@ -313,7 +326,7 @@ describe("rewriteAgentGrantForms", () => {
     const indexBefore = await readFile(indexPath(locations), "utf8");
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(target, "utf8"), adapterBlock() + BODY);
@@ -330,11 +343,55 @@ describe("rewriteAgentGrantForms", () => {
     const ops = { rm: () => Promise.reject(new Error("rm refused")) } satisfies RemovalOps;
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", ops);
+    await rewriteAgentGrantForms(locations, "builtin", ops, lockHeld);
 
     // assert
     assert.strictEqual(await readFile(target, "utf8"), builtinBlock() + BODY);
     assert.deepStrictEqual(await readIndexRows(locations), [swappedRow(row, "builtin")]);
+  });
+
+  test("D-06: a lock lost before the rename writes no file and saves nothing", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    await writeAgent(target, adapterBlock() + BODY);
+    await writeIndex(locations, [storedRow(target, "adapter")]);
+    const indexBefore = await readFile(indexPath(locations), "utf8");
+
+    // act
+    const rewrite = rewriteAgentGrantForms(
+      locations,
+      "builtin",
+      createRemovalOps(),
+      lockLost(locations),
+    );
+
+    // assert
+    await assert.rejects(rewrite, StateLockCompromisedError);
+    assert.strictEqual(await readFile(target, "utf8"), adapterBlock() + BODY);
+    assert.strictEqual(await readFile(indexPath(locations), "utf8"), indexBefore);
+    assert.deepStrictEqual(await readdir(locations.agentsStagingDir), []);
+  });
+
+  test("D-06: a lock lost before the index save leaves the index as it was", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    await writeAgent(target, builtinBlock() + BODY);
+    await writeIndex(locations, [storedRow(target, "adapter")]);
+    const indexBefore = await readFile(indexPath(locations), "utf8");
+
+    // act
+    const rewrite = rewriteAgentGrantForms(
+      locations,
+      "builtin",
+      createRemovalOps(),
+      lockLost(locations),
+    );
+
+    // assert
+    await assert.rejects(rewrite, StateLockCompromisedError);
+    assert.strictEqual(await readFile(indexPath(locations), "utf8"), indexBefore);
   });
 
   test("P4-DC-06: a legacy agent gets the translated built-in block and its row stores both forms", async (t) => {
@@ -346,7 +403,7 @@ describe("rewriteAgentGrantForms", () => {
     await writeIndex(locations, [row]);
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(target, "utf8"), builtinBlock() + BODY);
@@ -370,10 +427,10 @@ describe("rewriteAgentGrantForms", () => {
     const row = legacyRow(target, [ADAPTER_ASYNC]);
     await writeAgent(target, adapterBlock() + BODY);
     await writeIndex(locations, [row]);
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // act
-    await rewriteAgentGrantForms(locations, "adapter", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "adapter", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(target, "utf8"), adapterBlock() + BODY);
@@ -401,7 +458,7 @@ describe("rewriteAgentGrantForms", () => {
     await writeIndex(locations, [row]);
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(target, "utf8"), block + BODY);
@@ -425,7 +482,7 @@ describe("rewriteAgentGrantForms", () => {
     const indexBefore = await readFile(indexPath(locations), "utf8");
 
     // act
-    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
 
     // assert
     assert.strictEqual(await readFile(target, "utf8"), text);

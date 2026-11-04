@@ -155,6 +155,25 @@ test("MGRT-01 / D-MB-03: under pi-mcp-adapter, rewrites the built-in form back t
   verify(ctx);
 });
 
+test("D-06: a user state.json that does not load blocks no rewrite and stays as it is", async (t) => {
+  // arrange
+  const { cwd, user } = await scopes(t);
+  const userRow = await seedAgent(user, "adapter");
+  await writeFile(user.stateJsonPath, "{ not json", "utf8");
+  const pi = inventory();
+  const ctx = contextFor(cwd, false);
+
+  // act
+  await agentGrantsStep({ pi, ctx, snapshot: runFor("builtin") }, NOT_A_CHILD);
+
+  // assert
+  assert.strictEqual(await readFile(agentPath(user), "utf8"), builtinBlock() + BODY);
+  assert.deepStrictEqual(await readIndexRows(user), [swappedRow(userRow, "builtin")]);
+  assert.strictEqual(await readFile(user.stateJsonPath, "utf8"), "{ not json");
+  verify(pi);
+  verify(ctx);
+});
+
 test("D-LOC-01: in a project Pi does not trust, rewrites only the user scope", async (t) => {
   // arrange
   const { cwd, user, project } = await scopes(t);
