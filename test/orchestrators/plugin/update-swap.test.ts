@@ -36,7 +36,11 @@ import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketpl
 import { PluginUpdateConcurrencyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+import {
+  runWithAllLoaded,
+  runWithNothingLoaded,
+  runWithSoftDeps,
+} from "../../shared/notification-run-seeds.ts";
 
 // The flow suite supplies the real bridge, filesystem, rollback, and
 // state-ledger fixtures while this mirrored owner pair proves they execute
@@ -2577,24 +2581,37 @@ const BUILTIN_GRANT = {
   ],
 };
 
-test("MGRT-01: a direct swap under Pi's built-in MCP restages the agent with the built-in grant", async (t) => {
+test("MGRT-01 / D-MB-03: a direct swap whose arguments name Pi's built-in MCP restages the agent with the built-in grant", async (t) => {
   // act
   const swapped = await swapGrantedAgent(t, "update-swap-grant-direct-", (cwd) => ({
     ...directSwapArgs(cwd),
     run: builtinRun(),
+    mcpImplementation: "builtin",
   }));
 
   // assert
   assert.deepStrictEqual(swapped, BUILTIN_GRANT);
 });
 
-test("MGRT-01: a cascade swap reads the built-in MCP of the command it runs for", async (t) => {
+test("MGRT-01 / D-MB-03: a cascade swap whose arguments name Pi's built-in MCP restages the agent with the built-in grant", async (t) => {
+  // act
+  const swapped = await swapGrantedAgent(t, "update-swap-grant-cascade-builtin-", (cwd) => ({
+    ...cascadeSwapArgs(cwd),
+    mcpImplementation: "builtin",
+  }));
+
+  // assert
+  assert.deepStrictEqual(swapped, BUILTIN_GRANT);
+});
+
+test("MGRT-01 / D-MB-03: a cascade swap stages the implementation its arguments name over the run of the command it runs for", async (t) => {
   // act
   const swapped = await swapGrantedAgent(t, "update-swap-grant-notification-", (cwd) => ({
     ...cascadeSwapArgs(cwd),
+    mcpImplementation: "builtin",
     preflightNotification: {
       ctx: { mode: "tui", ui: { notify: () => undefined } },
-      run: builtinRun(),
+      run: runWithAllLoaded(),
     },
   }));
 
@@ -2602,7 +2619,7 @@ test("MGRT-01: a cascade swap reads the built-in MCP of the command it runs for"
   assert.deepStrictEqual(swapped, BUILTIN_GRANT);
 });
 
-test("MGRT-01 / P4-DC-13: a cascade swap with no run snapshot restages pi-mcp-adapter's grant", async (t) => {
+test("MGRT-01 / D-MB-03: a swap whose arguments name no MCP implementation restages pi-mcp-adapter's grant", async (t) => {
   // act
   const swapped = await swapGrantedAgent(t, "update-swap-grant-cascade-", cascadeSwapArgs);
 
