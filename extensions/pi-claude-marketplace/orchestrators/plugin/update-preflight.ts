@@ -726,20 +726,24 @@ function widensPartialGate(record: PluginStateRecord): boolean {
   return isRecordedButDisabled(record) && !record.compatibility.installable;
 }
 
-// The record fields a disabled-plugin update writes. MREC-01: the declared
-// MCP servers and the bundle flag are among them, so a declaration-only
-// change writes, and a legacy record without `mcpServerConfigs` reads as
-// changed and gains the field.
-type DisabledPin = Pick<
-  PluginStateRecord,
-  | "version"
-  | "resolvedSource"
-  | "resolvedSha"
-  | "resolvedVersion"
-  | "compatibility"
-  | "mcpServerConfigs"
-  | "mcpBundle"
->;
+/**
+ * The record fields a disabled-plugin update writes, besides `updatedAt`.
+ * MREC-01: the declared MCP servers and the bundle flag are among them, so a
+ * declaration-only change writes, and a legacy record without
+ * `mcpServerConfigs` reads as changed and gains the field. `apply` restores
+ * the same fields when a deferred enable fails (`reconcile/apply.ts`).
+ */
+export const DISABLED_PIN_FIELDS = [
+  "version",
+  "resolvedSource",
+  "resolvedSha",
+  "resolvedVersion",
+  "compatibility",
+  "mcpServerConfigs",
+  "mcpBundle",
+] as const satisfies readonly (keyof PluginStateRecord)[];
+
+type DisabledPin = Pick<PluginStateRecord, (typeof DISABLED_PIN_FIELDS)[number]>;
 
 function disabledPinProjection(pin: DisabledPin): string {
   return JSON.stringify([

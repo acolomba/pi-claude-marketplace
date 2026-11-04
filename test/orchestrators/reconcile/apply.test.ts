@@ -9818,6 +9818,70 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("MREC-01: a held-down record whose enable fails after its pin refresh gets back its own MCP servers and bundle flag", async (t) => {
+    // arrange -- `widget` 1.1.0 declares the `echo` server; the record names another
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "deferred-mcp-restore",
+      {
+        ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+        trees: { widget: { skill: "clean", mcpServer: true }, zcore: { skill: "clean" } },
+      },
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const seeded = await loadState(project.extensionRoot);
+    const seededWidget = seeded.marketplaces.mp?.plugins.widget;
+    assert.ok(seededWidget !== undefined);
+    seededWidget.mcpServerConfigs = [{ name: "old", config: { command: "old" } }];
+    seededWidget.mcpBundle = true;
+    await saveState(project.extensionRoot, seeded);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const before = await recordFor(project, "mp", "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordFor(project, "mp", "widget"), before);
+    verifyBoundary();
+  });
+
+  test("MREC-01: a legacy held-down record whose enable fails after its pin refresh stays without recorded MCP servers", async (t) => {
+    // arrange -- `widget` 1.1.0 declares the `echo` server; the record predates the field
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "deferred-mcp-legacy", {
+      ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+      trees: { widget: { skill: "clean", mcpServer: true }, zcore: { skill: "clean" } },
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const before = await recordFor(project, "mp", "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordFor(project, "mp", "widget"), before);
+    verifyBoundary();
+  });
+
   test("a failed enable after a catalog move keeps its rollback details on the failed move row", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(

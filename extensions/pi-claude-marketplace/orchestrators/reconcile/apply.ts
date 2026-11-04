@@ -121,6 +121,7 @@ import {
 import { degradationFromEnable } from "../plugin/shared.ts";
 import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 import { UninstallRefusedError } from "../plugin/uninstall.ts";
+import { DISABLED_PIN_FIELDS } from "../plugin/update-preflight.ts";
 
 import {
   carriedMcpConfigNotices,
@@ -180,7 +181,7 @@ import type {
   ScopeReadResult,
 } from "./types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { IndexFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
@@ -1926,14 +1927,35 @@ async function enableStep(
   return outcomes.every((outcome) => outcome.kind === "plugin-enabled");
 }
 
-/** The record fields a pin refresh rewrites (`update-preflight.ts::refreshDisabledRecord`). */
-const PIN_FIELDS: ReadonlySet<string> = new Set([
-  "version",
-  "resolvedSource",
-  "resolvedSha",
-  "compatibility",
-  "updatedAt",
-]);
+/**
+ * The record fields a pin refresh rewrites
+ * (`update-preflight.ts::refreshDisabledRecord`). The list comes from the
+ * refresh's own, so a field the refresh starts to write is restored too.
+ */
+const PIN_FIELDS: readonly (keyof PluginInstallRecord)[] = [...DISABLED_PIN_FIELDS, "updatedAt"];
+
+/** The pin fields `record` holds, without the ones it lacks. */
+function pinOf(record: PluginInstallRecord): Partial<PluginInstallRecord> {
+  return Object.fromEntries(
+    PIN_FIELDS.filter((field) => Object.hasOwn(record, field)).map((field) => [
+      field,
+      record[field],
+    ]),
+  );
+}
+
+/**
+ * MREC-01: puts back each pin field of `pin` and removes each pin field `pin`
+ * lacks, so an optional field absent before the refresh, such as a legacy
+ * record's `mcpServerConfigs`, stays absent.
+ */
+function restorePinFields(record: PluginInstallRecord, pin: Partial<PluginInstallRecord>): void {
+  for (const field of PIN_FIELDS) {
+    Reflect.deleteProperty(record, field);
+  }
+
+  Object.assign(record, pin);
+}
 
 /**
  * Puts back the pin a deferred record had before its move refreshed it,
@@ -1946,20 +1968,19 @@ async function restorePin(
   key: string,
   before: ExtensionState,
 ): Promise<void> {
-  const pins = new Map(
-    Object.values(before.marketplaces).flatMap((mp) =>
-      Object.entries(mp.plugins).map(([plugin, record]) => [
-        `${plugin}@${mp.name}`,
-        Object.fromEntries(Object.entries(record).filter(([field]) => PIN_FIELDS.has(field))),
-      ]),
-    ),
+  // Zero or one saved pin: a key the scope did not record before has none.
+  const pins = Object.values(before.marketplaces).flatMap((mp) =>
+    Object.entries(mp.plugins)
+      .filter(([plugin]) => `${plugin}@${mp.name}` === key)
+      .map(([, record]) => pinOf(record)),
   );
   await withStateGuard(locationsFor(scope, opts.cwd), (fresh) => {
     for (const mp of Object.values(fresh.marketplaces)) {
       for (const [plugin, record] of Object.entries(mp.plugins)) {
         if (`${plugin}@${mp.name}` === key) {
-          delete record.resolvedSha;
-          Object.assign(record, pins.get(key));
+          pins.forEach((pin) => {
+            restorePinFields(record, pin);
+          });
         }
       }
     }
