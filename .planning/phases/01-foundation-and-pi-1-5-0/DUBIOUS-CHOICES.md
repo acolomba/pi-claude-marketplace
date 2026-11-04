@@ -687,3 +687,18 @@ copies every item here. Phase 6 merges this file into the root log.
 - (Low) No WINDOWS.md entry and no requirements marking (DUAL-03 waits on
   the parent's CI run).
 - **Recorded in:** `01-14-SUMMARY.md`.
+
+### P1-DC-39: Validation and security audits
+
+- **Severity:** Low to Medium. **Status:** open.
+- (Low) Nyquist: one gap fixed (commit 7fb00f3): the AAP-03 autoapply-abort
+  test now asserts the read-only fallback's second notification and exact
+  mode reads (P1-DC-30). PI15-03 was marked green from per-suite runs.
+- (Medium) Security: UF-1 reported as an advisory finding instead of opening
+  T-01-27: the legacy reader trusts the recorded `resolvedSource` for git and
+  tag-pinned records, so nothing re-checks it against its clone root
+  (NFR-10). Unreachable in Phase 1; Phase 2 adds the containment check when
+  it wires the reader in (parent line for the Phase 2 child).
+- (Low) Accept-disposition threats were closed from the plan registers; the
+  auditor re-ran `npm view` for the Pi 1.5.0 trio over the network.
+- **Recorded in:** `01-VALIDATION.md`, `01-SECURITY.md`.
