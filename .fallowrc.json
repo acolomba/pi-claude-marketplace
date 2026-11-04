@@ -23,7 +23,15 @@
     },
     {
       "file": "extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts",
-      "exports": ["LegacyServers", "LegacyServersReader", "recordedMcpServers"]
+      "exports": [
+        "LegacyServers",
+        "LegacyServersReader",
+        "LegacyServersSource",
+        "LegacyServersUnreadableError",
+        "LegacyServersUnreadableReason",
+        "createLegacyServersReader",
+        "recordedMcpServers"
+      ]
     },
     {
       "file": "extensions/pi-claude-marketplace/platform/pi-api.ts",
