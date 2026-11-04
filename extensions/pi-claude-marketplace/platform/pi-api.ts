@@ -57,6 +57,8 @@ export type {
   ExtensionContext,
   InputEvent,
   InputEventResult,
+  McpServerConfig,
+  RegisteredMcpServer,
   SessionBeforeCompactEvent,
   SessionCompactEvent,
   SessionShutdownEvent,
@@ -71,11 +73,37 @@ export type { AutocompleteProvider } from "@earendil-works/pi-tui";
 import type {
   AgentEndEvent,
   ExtensionContext,
+  McpServerConfig,
+  RegisteredMcpServer,
   ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 
 /** Pi's mode union, derived from its context because the root omits the alias. */
 export type ExtensionMode = ExtensionContext["mode"];
+
+/**
+ * MSEL-01: the MCP implementations a plugin's MCP servers can run under:
+ * pi-mcp-adapter, or Pi's own built-in MCP.
+ */
+export type McpImplementationId = "adapter" | "builtin";
+
+/**
+ * MSEL-01: the MCP implementation a run uses, decided once per run snapshot
+ * (D-05). `none` means the extension can name neither implementation as
+ * active.
+ */
+export type ActiveMcpImplementation = McpImplementationId | "none";
+
+/**
+ * Consumer-owned view of the Pi API that registers built-in MCP servers for
+ * the session. Registrations are not saved; a server of the same name in
+ * `mcp.json` takes precedence.
+ */
+export interface PiMcpRegistry {
+  registerMcpServer(name: string, config: McpServerConfig): void;
+  unregisterMcpServer(name: string): void;
+  getMcpServers(): readonly RegisteredMcpServer[];
+}
 
 /**
  * Structural `text` content block -- mirrors `pi-ai`'s `TextContent`

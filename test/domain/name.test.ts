@@ -5,6 +5,7 @@ import {
   addedMarketplaceNameRefusal,
   assertRecordedMarketplaceName,
   assertSafeName,
+  builtinMcpServerName,
   catalogMarketplaceNameRefusal,
   declaredAgentName,
   generatedAgentName,
@@ -1455,6 +1456,46 @@ describe("generatedMcpServerKey", () => {
 
     // assert
     assert.throws(generateServerKey, (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.constructor, Error);
+      assert.strictEqual(error.message, 'Name "a/b" must not contain path separators.');
+      return true;
+    });
+  });
+});
+
+describe("builtinMcpServerName", () => {
+  for (const { plugin, server, expectedName } of [
+    { plugin: "demo", server: "stub", expectedName: "plugin_demo_stub" },
+    { plugin: "my-plugin", server: "api", expectedName: "plugin_my-plugin_api" },
+    { plugin: "acme", server: "my-db", expectedName: "plugin_acme_my-db" },
+    { plugin: "acme", server: "a.b c/d", expectedName: "plugin_acme_a_b_c_d" },
+    // An astral character is two UTF-16 code units, so it becomes two `_`.
+    { plugin: "acme", server: "a\u{1F600}b", expectedName: "plugin_acme_a__b" },
+  ]) {
+    test(`D-MB-13: names ${plugin} + ${JSON.stringify(server)} as ${expectedName}`, () => {
+      // arrange
+      const pluginName = plugin;
+      const serverName = server;
+
+      // act
+      const registeredName = builtinMcpServerName(pluginName, serverName);
+
+      // assert
+      assert.strictEqual(registeredName, expectedName);
+    });
+  }
+
+  test("D-MB-13: rejects an unsafe plugin name with the shared name rules", () => {
+    // arrange
+    const plugin = "a/b";
+    const server = "db";
+
+    // act
+    const nameServer = () => builtinMcpServerName(plugin, server);
+
+    // assert
+    assert.throws(nameServer, (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.strictEqual(error.constructor, Error);
       assert.strictEqual(error.message, 'Name "a/b" must not contain path separators.');

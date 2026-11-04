@@ -1,7 +1,30 @@
 {
-  "entry": ["extensions/pi-claude-marketplace/index.ts"],
+  "entry": [
+    "extensions/pi-claude-marketplace/index.ts",
+    "extensions/pi-claude-marketplace/domain/mcp-implementation.ts"
+  ],
   "rulePacks": ["rule-packs/architecture.json"],
   "ignorePatterns": [".pi/**", ".planning/**"],
+  "ignoreExports": [
+    {
+      "file": "extensions/pi-claude-marketplace/domain/mcp-implementation.ts",
+      "exports": [
+        "ActiveMcpImplementation",
+        "EffectiveMcpCompatibility",
+        "McpImplementationId",
+        "McpImplementationProfile",
+        "RecordedMcpServer",
+        "RecordedMcpServers",
+        "StoredMcpCompatibility",
+        "effectiveMcpCompatibility",
+        "profileFor"
+      ]
+    },
+    {
+      "file": "extensions/pi-claude-marketplace/platform/pi-api.ts",
+      "exports": ["McpServerConfig", "PiMcpRegistry", "RegisteredMcpServer"]
+    }
+  ],
   "production": {
     "deadCode": true,
     "health": false,
