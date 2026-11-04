@@ -15,9 +15,19 @@
 // So a registered server answers:
 //
 // - `connected` when a tool of its namespace is not hidden;
-// - `disabled` when every tool of its namespace is hidden;
+// - `disabled` when every tool of its namespace is hidden, unless the
+//   server's last registration replaced another config;
 // - `not-connected` when its namespace has no tool: still connecting, failed,
 //   waiting for sign-in, or offering no tool, which Pi does not tell apart.
+//
+// Pi also hides every tool of a server that an extension registers again
+// with a changed config: it drops the old connection and starts a new one
+// (Pi 1.5.0 `mcp_servers_change` handler). Until the new connection lists its
+// tools, and for the session when it fails, nothing in the registry or the
+// tool list tells that apart from a `/mcp` disable. So the registration sync
+// notes each name whose registration replaced another config, and such a
+// name with only hidden tools answers `not-connected`. A replaced server that
+// the user then disables in `/mcp` also answers `not-connected`.
 //
 // A name Pi does not list answers `unlisted` (rendered `not loaded`), even
 // when hidden tools of an earlier registration in the session remain.
@@ -58,6 +68,22 @@ function isHidden(tool: ToolInventoryItem): boolean {
   return "exposure" in tool && tool.exposure === "hidden";
 }
 
+// The names whose last registration in this Pi process replaced a listed
+// config of another shape. A fresh registration or a removal clears a name,
+// and Pi starts each session with no registration, so a name from an earlier
+// session is cleared when it registers again.
+const replacedRegistrations = new Set<string>();
+
+/** Notes that the sync registered `serverName` in place of a listed config of another shape. */
+export function noteReplacedBuiltinRegistration(serverName: string): void {
+  replacedRegistrations.add(serverName);
+}
+
+/** Notes that the sync registered `serverName` fresh, or removed it. */
+export function noteFreshBuiltinRegistration(serverName: string): void {
+  replacedRegistrations.delete(serverName);
+}
+
 /**
  * Returns the built-in MCP status reader for one extension load. Building it
  * reads nothing from `pi`.
@@ -77,7 +103,11 @@ export function createBuiltinMcpStatusReader(
         return "not-connected";
       }
 
-      return tools.every(isHidden) ? "disabled" : "connected";
+      if (!tools.every(isHidden)) {
+        return "connected";
+      }
+
+      return replacedRegistrations.has(serverName) ? "not-connected" : "disabled";
     },
   };
 }

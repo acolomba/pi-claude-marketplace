@@ -21,6 +21,24 @@ function listed(name: string, config: McpServerConfig): RegisteredMcpServer {
   return { name, config, extensionPath: "/extensions/owner.ts" };
 }
 
+/** Registration notes that record each `[serverName, replaced]` they receive. */
+function noteRecorder(): {
+  readonly notes: {
+    readonly replaced: (serverName: string) => void;
+    readonly fresh: (serverName: string) => void;
+  };
+  readonly noted: [string, boolean][];
+} {
+  const noted: [string, boolean][] = [];
+  return {
+    notes: {
+      replaced: (serverName) => noted.push([serverName, true]),
+      fresh: (serverName) => noted.push([serverName, false]),
+    },
+    noted,
+  };
+}
+
 test("BLT-01: registers each desired server Pi does not list", () => {
   // arrange
   const registry = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
@@ -36,11 +54,16 @@ test("BLT-01: registers each desired server Pi does not list", () => {
     ["plugin_demo_a", stdioConfig("a")],
     ["plugin_demo_b", stdioConfig("b")],
   ]);
+  const { notes, noted } = noteRecorder();
 
-  // act & assert
-  assert.doesNotThrow(() => {
-    syncBuiltinRegistrations(registry, desired, log);
-  });
+  // act
+  syncBuiltinRegistrations(registry, desired, log, notes);
+
+  // assert
+  assert.deepStrictEqual(noted, [
+    ["plugin_demo_a", false],
+    ["plugin_demo_b", false],
+  ]);
   verify(registry);
   verify(log);
 });
@@ -60,11 +83,13 @@ test("MSEL-02: skips a server whose listed config has the same JSON and replaces
     ["plugin_demo_same", stdioConfig("same")],
     ["plugin_demo_changed", stdioConfig("new")],
   ]);
+  const { notes, noted } = noteRecorder();
 
-  // act & assert
-  assert.doesNotThrow(() => {
-    syncBuiltinRegistrations(registry, desired, log);
-  });
+  // act
+  syncBuiltinRegistrations(registry, desired, log, notes);
+
+  // assert
+  assert.deepStrictEqual(noted, [["plugin_demo_changed", true]]);
   verify(registry);
   verify(log);
 });
@@ -79,10 +104,13 @@ test("MSEL-02: re-registers a config whose keys Pi lists in another order", () =
     registry.registerMcpServer("plugin_demo_a", stdioConfig("a"));
   }).thenReturn(undefined);
 
-  // act & assert
-  assert.doesNotThrow(() => {
-    syncBuiltinRegistrations(registry, new Map([["plugin_demo_a", stdioConfig("a")]]), log);
-  });
+  const { notes, noted } = noteRecorder();
+
+  // act
+  syncBuiltinRegistrations(registry, new Map([["plugin_demo_a", stdioConfig("a")]]), log, notes);
+
+  // assert
+  assert.deepStrictEqual(noted, [["plugin_demo_a", true]]);
   verify(registry);
   verify(log);
 });
@@ -99,10 +127,13 @@ test("BLT-06: unregisters a listed plugin server the desired set lacks and leave
     registry.unregisterMcpServer("plugin_gone_s");
   }).thenReturn(undefined);
 
-  // act & assert
-  assert.doesNotThrow(() => {
-    syncBuiltinRegistrations(registry, new Map(), log);
-  });
+  const { notes, noted } = noteRecorder();
+
+  // act
+  syncBuiltinRegistrations(registry, new Map(), log, notes);
+
+  // assert
+  assert.deepStrictEqual(noted, [["plugin_gone_s", false]]);
   verify(registry);
   verify(log);
 });
@@ -128,14 +159,26 @@ test("BLT-06: unregisters before it registers, then registers in desired order",
     ["plugin_demo_b", stdioConfig("b")],
   ]);
 
+  const notes = {
+    replaced: (serverName: string): void => {
+      calls.push(`replaced ${serverName}`);
+    },
+    fresh: (serverName: string): void => {
+      calls.push(`fresh ${serverName}`);
+    },
+  };
+
   // act
-  syncBuiltinRegistrations(registry, desired, log);
+  syncBuiltinRegistrations(registry, desired, log, notes);
 
   // assert
   assert.deepStrictEqual(calls, [
     "unregister plugin_old-s",
+    "fresh plugin_old-s",
     "register plugin_old_s",
+    "fresh plugin_old_s",
     "register plugin_demo_b",
+    "fresh plugin_demo_b",
   ]);
   verify(registry);
   verify(log);
@@ -163,11 +206,13 @@ test("D-MB-12: a refused registration is logged with its name and Pi's message a
     ["plugin_demo_a", stdioConfig("a")],
     ["plugin_demo_b", stdioConfig("b")],
   ]);
+  const { notes, noted } = noteRecorder();
 
-  // act & assert
-  assert.doesNotThrow(() => {
-    syncBuiltinRegistrations(registry, desired, log);
-  });
+  // act
+  syncBuiltinRegistrations(registry, desired, log, notes);
+
+  // assert
+  assert.deepStrictEqual(noted, [["plugin_demo_b", false]]);
   verify(registry);
   verify(log);
 });

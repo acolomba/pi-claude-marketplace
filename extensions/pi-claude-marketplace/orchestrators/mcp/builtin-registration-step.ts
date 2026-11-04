@@ -42,6 +42,10 @@ import {
 import { profileFor } from "../../domain/mcp-implementation.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import {
+  noteFreshBuiltinRegistration,
+  noteReplacedBuiltinRegistration,
+} from "../../platform/mcp-builtin-status.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
@@ -85,6 +89,13 @@ interface SessionFacts {
 type Registration = readonly [name: string, config: McpServerConfig];
 
 const BUILTIN_PROFILE = profileFor("builtin");
+
+// P2-DC-10: the status reader reads a replaced server's hidden tools as a
+// reconnect, not a `/mcp` disable.
+const REGISTRATION_NOTES = {
+  replaced: noteReplacedBuiltinRegistration,
+  fresh: noteFreshBuiltinRegistration,
+};
 
 function debugLog(detail: string): void {
   hookDebugLog(detail, "mcp");
@@ -299,7 +310,7 @@ async function syncSession({ pi, ctx, snapshot }: BuiltinRegistrationStepInput):
       { cwd: ctx.cwd, env: process.env },
       ctx.isProjectTrusted(),
     );
-    syncBuiltinRegistrations(pi, desired, debugLog);
+    syncBuiltinRegistrations(pi, desired, debugLog, REGISTRATION_NOTES);
   } catch (error: unknown) {
     debugLog(`MCP built-in registration skipped: ${errorMessage(error)}`);
   }

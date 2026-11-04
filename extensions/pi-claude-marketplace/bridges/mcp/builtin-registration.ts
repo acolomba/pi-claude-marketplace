@@ -18,30 +18,44 @@ const PLUGIN_SERVER_PREFIX = "plugin_";
 /**
  * Unregisters each listed `plugin_` server that `desired` lacks, then
  * registers each desired server whose config differs from the one Pi lists,
- * in `desired` order. A `registerMcpServer` throw (another extension's name, a
- * `-`/`_` clash, a config Pi refuses) goes to `log` with the server name and
- * Pi's message, never a config value, and the other servers still register.
+ * in `desired` order. Each change Pi accepts goes to `notes`: `replaced` for
+ * a registration in place of a listed config of another shape, `fresh` for
+ * any other registration or a removal (P2-DC-10). A
+ * `registerMcpServer` throw (another extension's name, a `-`/`_` clash, a
+ * config Pi refuses) goes to `log` with the server name and Pi's message,
+ * never a config value, and the other servers still register.
  */
 export function syncBuiltinRegistrations(
   registry: PiMcpRegistry,
   desired: ReadonlyMap<string, McpServerConfig>,
   log: (detail: string) => void,
+  notes: {
+    readonly replaced: (serverName: string) => void;
+    readonly fresh: (serverName: string) => void;
+  },
 ): void {
   const listed = new Map<string, string>();
   for (const server of registry.getMcpServers()) {
     listed.set(server.name, JSON.stringify(server.config));
     if (server.name.startsWith(PLUGIN_SERVER_PREFIX) && !desired.has(server.name)) {
       registry.unregisterMcpServer(server.name);
+      notes.fresh(server.name);
     }
   }
 
   for (const [name, config] of desired) {
-    if (listed.get(name) === JSON.stringify(config)) {
+    const previous = listed.get(name);
+    if (previous === JSON.stringify(config)) {
       continue;
     }
 
     try {
       registry.registerMcpServer(name, config);
+      if (previous === undefined) {
+        notes.fresh(name);
+      } else {
+        notes.replaced(name);
+      }
     } catch (error: unknown) {
       log(`MCP server ${name} not registered: ${errorMessage(error)}`);
     }

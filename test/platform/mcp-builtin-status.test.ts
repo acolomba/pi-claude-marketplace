@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createBuiltinMcpStatusReader } from "../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
+import {
+  createBuiltinMcpStatusReader,
+  noteFreshBuiltinRegistration,
+  noteReplacedBuiltinRegistration,
+} from "../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
 
 import type { McpStatusReader } from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import type {
@@ -171,4 +175,70 @@ test("BLT-05: the built-in status reader reads Pi again at every lookup", () => 
 
   // assert
   assert.deepStrictEqual([before, after], ["not-connected", "connected"]);
+});
+
+test("P2-DC-10: a server whose registration replaced another config answers not-connected while its tools are hidden", (t) => {
+  // arrange
+  t.after(() => {
+    noteFreshBuiltinRegistration("plugin_alpha_api");
+  });
+  const reader = createBuiltinMcpStatusReader(
+    piWith(["plugin_alpha_api"], [mcpTool("mcp__plugin_alpha_api", "hidden")]),
+  );
+  noteReplacedBuiltinRegistration("plugin_alpha_api");
+
+  // act
+  const status = reader.lookup("plugin_alpha_api");
+
+  // assert
+  assert.strictEqual(status, "not-connected");
+});
+
+test("P2-DC-10: a replaced server that connects again answers connected", (t) => {
+  // arrange
+  t.after(() => {
+    noteFreshBuiltinRegistration("plugin_alpha_api");
+  });
+  const reader = createBuiltinMcpStatusReader(
+    piWith(["plugin_alpha_api"], [mcpTool("mcp__plugin_alpha_api", "deferred")]),
+  );
+  noteReplacedBuiltinRegistration("plugin_alpha_api");
+
+  // act
+  const status = reader.lookup("plugin_alpha_api");
+
+  // assert
+  assert.strictEqual(status, "connected");
+});
+
+test("P2-DC-10: a fresh registration after a replacement makes hidden tools read disabled again", () => {
+  // arrange
+  const reader = createBuiltinMcpStatusReader(
+    piWith(["plugin_alpha_api"], [mcpTool("mcp__plugin_alpha_api", "hidden")]),
+  );
+  noteReplacedBuiltinRegistration("plugin_alpha_api");
+  noteFreshBuiltinRegistration("plugin_alpha_api");
+
+  // act
+  const status = reader.lookup("plugin_alpha_api");
+
+  // assert
+  assert.strictEqual(status, "disabled");
+});
+
+test("P2-DC-10: a replacement of one server leaves another server's hidden tools disabled", (t) => {
+  // arrange
+  t.after(() => {
+    noteFreshBuiltinRegistration("plugin_alpha_db");
+  });
+  const reader = createBuiltinMcpStatusReader(
+    piWith(["plugin_alpha_api"], [mcpTool("mcp__plugin_alpha_api", "hidden")]),
+  );
+  noteReplacedBuiltinRegistration("plugin_alpha_db");
+
+  // act
+  const status = reader.lookup("plugin_alpha_api");
+
+  // assert
+  assert.strictEqual(status, "disabled");
 });
