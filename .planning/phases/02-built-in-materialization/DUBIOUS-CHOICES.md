@@ -642,3 +642,77 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Alternatives:** All seven at once, as the workflow dispatches a wave.
 - **Why dubious:** a longer wave; a batch-two plan forks from the same base
   as batch one, so the post-merge gate runs once for the whole wave.
+
+## Wave 2, first batch (plan executors 02-07, 02-03, 2026-11-04)
+
+### P2-DC-60: The switch scenario's last-leg adapter listing wait can return early after a restart, since the stub log already holds earlier `tools/list` lines
+
+- **Phase / source:** Phase 2 plan 02-07 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The switch scenario's last-leg adapter listing wait can return early after a restart, since the stub log already holds earlier `tools/list` lines.
+- **Alternatives:** Clear or offset the stub log per leg.
+- **Why dubious:** The model's call and the empty registry check still prove the adapter serves the plugin.
+
+### P2-DC-61: Empty results are stated with header-only tables, following existing precedent
+
+- **Phase / source:** Phase 2 plan 02-07 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Empty results are stated with header-only tables, following existing precedent.
+- **Alternatives:** A dedicated `reports nothing` step.
+- **Why dubious:** Header-only tables read oddly.
+
+### P2-DC-62: Model-call numbers continue across restarts (3-5 built-in leg, 6-7 last adapter leg), because the frozen calls steps number by the harness log
+
+- **Phase / source:** Phase 2 plan 02-07 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Model-call numbers continue across restarts (3-5 built-in leg, 6-7 last adapter leg), because the frozen calls steps number by the harness log.
+- **Alternatives:** Reset numbering per Pi.
+- **Why dubious:** Readers must know numbering spans restarts.
+
+### P2-DC-63: The earlier-record rewrite drops `mcpServerConfigs` but leaves `compatibilityBasis` in place
+
+- **Phase / source:** Phase 2 plan 02-07 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The earlier-record rewrite drops `mcpServerConfigs` but leaves `compatibilityBasis` in place.
+- **Alternatives:** Also drop `compatibilityBasis`.
+- **Why dubious:** A real pre-milestone record has neither field.
+
+### P2-DC-64: The record lib checks the state file root by wrapping it as the one member of a holder, to avoid a fallow clone of the frozen `earlier-version-state.ts` guard
+
+- **Phase / source:** Phase 2 plan 02-07 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The record lib checks the state file root by wrapping it as the one member of a holder, to avoid a fallow clone of the frozen `earlier-version-state.ts` guard.
+- **Alternatives:** A local `jsonObject` guard plus a clone marker.
+- **Why dubious:** Reads indirectly.
+
+### P2-DC-65: The Pi resolver conformance test runs through `builtinServerConfig` (table, walk, encoder) instead of the bare walk
+
+- **Phase / source:** Phase 2 plan 02-03 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The Pi resolver conformance test runs through `builtinServerConfig` (table, walk, encoder) instead of the bare walk.
+- **Alternatives:** Test the walk alone.
+- **Why dubious:** A failing case points less directly at the encoder.
+
+### P2-DC-66: Source twins use a full-tool-name search that loads every echo tool of the plugin, so the expected row depends on Pi's search ranking
+
+- **Phase / source:** Phase 2 plan 02-03 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Source twins use a full-tool-name search that loads every echo tool of the plugin, so the expected row depends on Pi's search ranking.
+- **Alternatives:** Find a query that loads exactly one tool (none found).
+- **Why dubious:** Tied to Pi's search output; the call's tag still proves which declaration won.
+
+### P2-DC-67: `auth.provider` is dropped-proven on a stdio stub, not a remote server
+
+- **Phase / source:** Phase 2 plan 02-03 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** `auth.provider` is dropped-proven on a stdio stub, not a remote server.
+- **Alternatives:** A second remote scenario.
+- **Why dubious:** The remote case, where a token would be sent, is unit-tested only.
+
+### P2-DC-68: The bundle scenario runs under both implementations: neither has a bundle runner (Pi rests on its 1.5.0 validator)
+
+- **Phase / source:** Phase 2 plan 02-03 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The bundle scenario runs under both implementations: neither has a bundle runner (Pi rests on its 1.5.0 validator).
+- **Alternatives:** Keep it adapter-only with the old wording.
+- **Why dubious:** No Claude Code probe was run.
