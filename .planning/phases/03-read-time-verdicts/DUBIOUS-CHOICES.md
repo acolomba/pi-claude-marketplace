@@ -448,3 +448,29 @@ The planner's choices, numbered here. Each is Low unless marked.
 - **P3-DC-73 (Low): `false as const` in two test files.**
 - **P3-DC-74 (Low): `isMcpDependency` checks `typeof === "object"`**, relying on
   `McpDependency` staying the union's only object member.
+
+### Wave 3 (03-04, the D-MB-07 marker rule)
+
+- **P3-DC-75 (Medium): the "settings unchanged" step's expected text includes
+  Pi's own `"retry": {"enabled": false}`**, which Pi saves to the same user
+  settings file when the harness turns auto-retry off over RPC; the step
+  compares the whole text. Alternatives: compare only `extensions`; snapshot
+  the file after Pi starts (needs world state or a frozen-file change).
+- **P3-DC-76 (Low): a `When pi-mcp-adapter finishes listing the tools of the
+  stub mcp server ...` wait step** follows the restart `When`, because the only
+  listing wait is a `Given` in a frozen module. Alternative: a parent line for a
+  `When` form in the frozen module.
+- **P3-DC-77 (Low): the kept `companion-missing` info scenarios' setup reads
+  `which did not fail`** (a stdio install under built-in no longer warns).
+- **P3-DC-78 (Low): a partially-installed row carries its MCP dependency even
+  when an implementation runs every server**, so an lsp-degraded plugin with a
+  stdio server reads `{lsp, requires mcp}` with no implementation active.
+  Alternative: carry it only when the MCP kind is unsupported.
+- **P3-DC-79 (Low): "split" names an empty `runEvery`.**
+- **P3-DC-80 (Low): feature descriptions longer than the two or three lines
+  the cucumber rules ask for** (verdict-markers 6, companion-missing 8,
+  verdict-list 4); `check:features` does not count them.
+- **P3-DC-81 (Low): the 03-04 executor ran pre-commit with
+  `SKIP=npm-check,trufflehog`** because its worktree guard refused the
+  `env -u` form; the orchestrator re-ran trufflehog on the merged files (it
+  reports Skipped for file runs).
