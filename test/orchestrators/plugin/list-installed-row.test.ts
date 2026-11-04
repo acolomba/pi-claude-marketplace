@@ -769,6 +769,7 @@ test("MREC-03 / D-P3-05: lists the same record as partially installed under Pi's
     status: "partially-installed",
     name: "alpha",
     reasons: ["unsupported mcp"],
+    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
     version: "1.0.0",
     description: "Alpha plugin.",
   });
@@ -922,5 +923,123 @@ test("D-P3-10 / D-MB-07: an installed row under Pi's built-in MCP carries the se
     description: "Alpha plugin.",
     severity: "info",
     needsReload: false,
+  });
+});
+
+test("D-P3-07 / D-MB-07: a partially-installed row under pi-mcp-adapter carries the server only Pi's built-in MCP runs", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord(),
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [
+      { name: "asker", config: { command: "node", bareElicitationCapability: true } },
+    ],
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record,
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "partially-installed",
+    name: "alpha",
+    reasons: ["unsupported mcp"],
+    dependencies: [{ kind: "mcp", runEvery: ["builtin"] }],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+  });
+});
+
+test("MREC-07: a partially-installed row over a ws server neither implementation runs carries no dependency", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord({
+      compatibility: {
+        installable: false,
+        notes: ["unsupported mcpServers"],
+        supported: [],
+        unsupported: ["mcpServers"],
+      },
+    }),
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [{ name: "live", config: { type: "ws", url: "ws://127.0.0.1:9/" } }],
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    mcpImplementation: "builtin",
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record,
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "partially-installed",
+    name: "alpha",
+    reasons: ["unsupported mcp"],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+  });
+});
+
+test("D-P3-07: a partially-installed row carries only its MCP dependency, never agents or workflows", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord({
+      compatibility: {
+        installable: false,
+        notes: ["unsupported lspServers"],
+        supported: [],
+        unsupported: ["lspServers"],
+      },
+      resources: {
+        agents: ["bot"],
+        hooks: [],
+        mcpServers: ["tools"],
+        prompts: [],
+        skills: [],
+        workflows: ["flow"],
+      },
+    }),
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [{ name: "tools", config: { command: "node" } }],
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    mcpImplementation: "none",
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record,
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "partially-installed",
+    name: "alpha",
+    reasons: ["lsp"],
+    dependencies: [{ kind: "mcp", runEvery: ["adapter", "builtin"] }],
+    version: "1.0.0",
+    description: "Alpha plugin.",
   });
 });

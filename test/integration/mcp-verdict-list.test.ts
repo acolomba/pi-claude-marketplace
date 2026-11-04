@@ -125,6 +125,8 @@ test("MREC-03 / D-P3-04: list shows one sse install per implementation and write
           status: "partially-installed",
           name: "hello",
           reasons: ["unsupported mcp"],
+          // D-P3-07: the row carries its MCP dependency for its marker.
+          dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
           version: "1.0.0",
         },
       ],

@@ -118,7 +118,7 @@ test("AVAR-03: --partial installs the plugin without the server whose args start
         message:
           "A plugin operation needs attention.\n\n" +
           "● mp [project]\n" +
-          "  ◉ hello v1.0.0 (partially-installed) {unsupported mcp, requires pi-mcp-adapter}\n\n" +
+          "  ◉ hello v1.0.0 (partially-installed) {unsupported mcp, requires mcp}\n\n" +
           "/reload to pick up changes",
       },
     ]);

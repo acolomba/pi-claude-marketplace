@@ -363,7 +363,7 @@ test("AMIG-04: when claude-plugins.json declares the owner, the reload installs 
       [
         [
           "● mp [project]",
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}",
+          "  ● hello v1.0.0 (installed) {requires mcp}",
           "",
           "Reconcile: 1 success",
           "",
