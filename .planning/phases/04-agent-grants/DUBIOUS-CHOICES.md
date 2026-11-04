@@ -361,3 +361,9 @@ Status `passed`, 3/3 must-haves; three accepted gaps listed as warnings (cascade
 - **P4-DC-77 (Low):** the verifier relied on the phase gate logs and re-ran only the feature under both profiles, focused unit suites, and two red experiments.
 - **P4-DC-78 (Low):** the verifier briefly edited `subagent-child.ts` and `agent-grants-step.ts` in the main checkout for red proofs and restored them with `git checkout --`.
 - **P4-DC-79 (Low, nyquist auditor):** `nyquist_compliant: true` although the accepted gaps (cascade updates, some legacy cases, untrusted leg) stay untested.
+
+## Security audit and Nyquist validation (2026-11-04)
+
+- **P4-DC-80 (Medium, orchestrator):** the security auditor found a pre-existing injection path (UF-1 / T-04-01): a plugin agent's `tools:` token with an unclosed `(` and a line break could start a new frontmatter key in the generated file. Fixed in Phase 4's own `convert.ts` (`matchMcpGrant` drops a tool part holding whitespace or `,`), commit 16b53bf, with a red-then-green unit case. Alt: leave it as an open medium threat, since the code predates the phase.
+- **P4-DC-81 (Low, auditor):** ASVS 1 and block-on-high defaults (config sets neither); T-04-SC rows grouped into one register line; the auditor wrote SECURITY.md itself.
+- **P4-DC-82 (Low, auditor):** UF-2 advisory: the rewrite reads then renames with no second read, so an editor save in that window would be lost (the state lock stops other Pi processes, not editors). No change.
