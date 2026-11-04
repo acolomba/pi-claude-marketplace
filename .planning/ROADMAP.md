@@ -528,7 +528,7 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 06-01-PLAN.md — Wave 1 (tracer): the switch scenario's DUAL-04 reads, `{requires mcp}` while no MCP implementation runs, with a red proof on `d1711fd` (DUAL-04)
+- [ ] 06-01-PLAN.md — Wave 1 (tracer): the switch scenario's DUAL-04 read, `{requires mcp}` while no MCP implementation runs, with a red proof on `d1711fd` (DUAL-04)
 - [ ] 06-02-PLAN.md — Wave 1: an apply or autoupdate catalog move stages the active implementation's agent grant, with an `@builtin-only` apply scenario and its adapter twin (P4-DC-13, P4-DC-60; MGRT-01)
 - [ ] 06-03-PLAN.md — Wave 1: completions follow the active MCP implementation: the per-lookup snapshot, the stamped completion cache, and the installed-row verdict (P3-DC-22, D-P6-22; MREC-03)
 - [ ] 06-04-PLAN.md — Wave 1: the required MCP field encoder, the MANF-01 half for the built-in description reader, and the `tool_search` projection in `features/lib/upstream/` (BLT-01, BLT-02)

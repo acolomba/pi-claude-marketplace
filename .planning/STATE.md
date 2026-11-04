@@ -3,19 +3,19 @@ gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
 current_phase: 6
-current_phase_name: Release Docs and Combined Tree
-status: verifying
+current_phase_name: Release docs and combined tree
+status: executing
 stopped_at: Phase 3 complete, ready to verify Phase 6
-last_updated: "2026-11-04T20:31:03.538Z"
+last_updated: "2026-11-04T23:09:15.975Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 3 complete, transitioned to Phase 6
-state_head: 721d699230a0f178ede22634039a225b50059c41
+state_head: 835ef3120d6e9a1ff571061985595c8eff6a71ad
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 42
+  total_plans: 55
   completed_plans: 42
-  percent: 83
+  percent: 76
 ---
 
 # Project State
@@ -36,12 +36,12 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 
 ## Current Position
 
-Phase: 6 — Release Docs and Combined Tree
+Phase: 6 (Release docs and combined tree) — READY TO EXECUTE
 Plan: 4
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-11-04 — Phase 3 complete, transitioned to Phase 6
 
-Progress: [████████░░] 83%
+Progress: [████████░░] 76%
 
 
 ### mcp-4 closeout
