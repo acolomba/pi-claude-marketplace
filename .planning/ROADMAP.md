@@ -457,7 +457,7 @@ Plans:
   2. The pi-mcp-adapter `mcp` proxy special case in hook dispatch applies only while the adapter is active; under built-in or with no implementation, no call is treated as a proxy call (MHK-02).
   3. `docs/hooks-compatibility.md` states the built-in tool names and the divergence, and every MCP scenario in `features/hook/` runs under both profiles or carries an implementation tag.
 
-**Plans:** 3/4 plans executed in 3 waves
+**Plans:** 4/4 plans executed in 3 waves
 
 Plans:
 **Wave 1**
@@ -468,7 +468,7 @@ Plans:
 - [x] 05-03-PLAN.md — Wave 2: the tool-segment fold scenario on a Pi `mcp.json` server, the notice-label scenario, and `docs/hooks-compatibility.md` (MHK-01, MHK-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 05-04-PLAN.md — Wave 3: phase gate with both profiles, `test:modules`, the red sweep, the ownership check, and the parent lines (MHK-01, MHK-02)
+- [x] 05-04-PLAN.md — Wave 3: phase gate with both profiles, `test:modules`, the red sweep, the ownership check, and the parent lines (MHK-01, MHK-02)
 
 ### Phase 6: Release Docs and Combined Tree
 **Goal**: The combined milestone tree is ready to ship: the CHANGELOG and READMEs describe built-in MCP support, the three `requires` markers, and the naming divergence; closed sets hold no unused entry; and every MCP feature and the switch scenario pass under both profiles after the last merge.
@@ -494,7 +494,7 @@ Plans:
 | 2. Built-in Materialization | 0/TBD | Not started | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
 | 4. Agent Grants | 0/TBD | Not started | - |
-| 5. Hook Tool Names | 3/4 | In Progress | - |
+| 5. Hook Tool Names | 4/4 | In Progress | - |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
 
 ## Carried Forward
