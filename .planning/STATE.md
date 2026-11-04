@@ -2,14 +2,14 @@
 gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
-current_phase: 6
-current_phase_name: Release docs and combined tree
+current_phase: 06
+current_phase_name: Release Docs and Combined Tree
 status: executing
 stopped_at: Phase 3 complete, ready to verify Phase 6
-last_updated: "2026-11-04T23:09:15.975Z"
+last_updated: "2026-11-04T23:10:49.299Z"
 last_activity: 2026-11-04
-last_activity_desc: Phase 3 complete, transitioned to Phase 6
-state_head: 835ef3120d6e9a1ff571061985595c8eff6a71ad
+last_activity_desc: Phase 06 execution started
+state_head: de488c701ca5b674746af6633845dba136fc717e
 progress:
   total_phases: 6
   completed_phases: 5
@@ -27,19 +27,17 @@ See: `.planning/PROJECT.md` (updated 2026-11-04 after mcp-builtin Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 3 — Read-Time Verdicts. Phases 5, 4, and 2 are
-merged into `features/mcp-builtin`, and Phase 3 (critical path) has merged that
-branch; Phase 6 follows in the parent session.
+**Current focus:** Phase 06 — Release Docs and Combined Tree
 Phase 6 closes on the milestone branch. Still open from component-features:
 the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 `acolomba/pi` and `acolomba/pi-subagents`.
 
 ## Current Position
 
-Phase: 6 (Release docs and combined tree) — READY TO EXECUTE
-Plan: 4
-Status: Ready to execute
-Last activity: 2026-11-04 — Phase 3 complete, transitioned to Phase 6
+Phase: 06 (Release Docs and Combined Tree) — EXECUTING
+Plan: 1 of 13
+Status: Executing Phase 06
+Last activity: 2026-11-04 — Phase 06 execution started
 
 Progress: [████████░░] 76%
 
