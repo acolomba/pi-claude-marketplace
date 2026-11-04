@@ -811,3 +811,45 @@ item here. The milestone parent merges this file into the root log in Phase 6.
   (a Phase 3 marker), so the twin uses the lenient step.
 - **Alternatives:** Pin the warning row (Phase 3's row).
 - **Why dubious:** the scenario no longer pins the enable output.
+
+## Wave 2 (plan 02-02 executor, 2026-11-04)
+
+### P2-DC-79: The IN-02 notice step reads the notice's scope from the command's `--scope` flag
+
+- **Phase / source:** Phase 2 plan 02-02 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The IN-02 notice step reads the notice's scope from the command's `--scope` flag.
+- **Alternatives:** Pass the scope explicitly.
+- **Why dubious:** Couples the step to the command text.
+
+### P2-DC-80: The IN-02 step fixes `file: mcp-adapter.json` and `commandId: plugin install`
+
+- **Phase / source:** Phase 2 plan 02-02 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The IN-02 step fixes `file: mcp-adapter.json` and `commandId: plugin install`.
+- **Alternatives:** Parameterize them.
+- **Why dubious:** Usable only for installs.
+
+### P2-DC-81: Built-in twins with no launch variable use the frozen MCP-implementation step, which loads the idle Phase 1 stand-in
+
+- **Phase / source:** Phase 2 plan 02-02 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Built-in twins with no launch variable use the frozen MCP-implementation step, which loads the idle Phase 1 stand-in.
+- **Alternatives:** A launch without the stand-in.
+- **Why dubious:** The stand-in is present but unused, as in earlier twins.
+
+### P2-DC-82: Two Pi 1.5.0 client details are pinned: `progressToken` 3 and one event-stream `GET`
+
+- **Phase / source:** Phase 2 plan 02-02 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Two Pi 1.5.0 client details are pinned: `progressToken` 3 and one event-stream `GET`.
+- **Alternatives:** Mask them.
+- **Why dubious:** A Pi release could change them.
+
+### P2-DC-83: The seed red runs fail at the listing wait; the escaping mutation run does not cover the plugin-directory rows
+
+- **Phase / source:** Phase 2 plan 02-02 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The seed red runs fail at the listing wait; the escaping mutation run does not cover the plugin-directory rows.
+- **Alternatives:** A mutation per row.
+- **Why dubious:** Those rows rest on the seed red run only.
