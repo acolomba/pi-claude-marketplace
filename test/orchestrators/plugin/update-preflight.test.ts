@@ -1254,6 +1254,40 @@ test("D-P3-13: refuses without partial permission a candidate whose sse drop the
   });
 });
 
+test("D-MB-06: refuses without partial permission a candidate that also drops a non-MCP kind the installed record already drops", async (t) => {
+  // arrange
+  const seed = await seedSseCandidate(t);
+  await writeFile(
+    path.join(seed.pluginRoot, ".lsp.json"),
+    JSON.stringify({ ts: { command: "ts" } }),
+  );
+
+  // act
+  const outcome = await prepare(
+    seed,
+    {
+      cascadeGate: {
+        readRecordDegradeBaseline: () =>
+          Promise.resolve({ unsupported: ["lspServers", "mcpServers"], readable: true }),
+      },
+    },
+    "builtin",
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ['Plugin "hello" is no longer installable: contains lspServers'],
+    reasons: ["lsp", "unsupported mcp"],
+    partialUpgradable: true,
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+});
+
 test("D-P3-13: reads no record baseline for a candidate the active implementation runs whole", async (t) => {
   // arrange
   const seed = await seedSseCandidate(t);

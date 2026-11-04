@@ -475,7 +475,9 @@ interface UpdateCandidateResolution {
  * D-MB-06 / D-P3-13: whether a candidate the active implementation sees as
  * partially available drops nothing the installed record does not drop
  * under the same implementation, so the gate admits it without `--partial`.
- * Only a caller that passes the baseline reader (a cascade) gets this.
+ * Only a caller that passes the baseline reader (a cascade) gets this, and
+ * only for a candidate that drops MCP servers alone: a drop of any other kind
+ * keeps the `--partial` rule it had before the MCP implementations split.
  */
 async function dropsNothingNew(
   view: ResolvedPlugin,
@@ -492,7 +494,8 @@ async function dropsNothingNew(
   if (
     view.state !== "partially-available" ||
     neutral.state === "unavailable" ||
-    gate.readRecordDegradeBaseline === undefined
+    gate.readRecordDegradeBaseline === undefined ||
+    view.unsupported.some((kind) => kind !== "mcpServers")
   ) {
     return false;
   }
