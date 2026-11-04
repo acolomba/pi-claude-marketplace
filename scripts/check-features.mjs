@@ -33,6 +33,14 @@ const catchAllNames = new Set([
   "parameter-types",
 ]);
 const sourceTags = new Set(["@url", "@github"]);
+// The MCP implementation tags may sit on a Feature, a Rule, a scenario, or an Examples block
+// (DUAL-01); the source tags stay on Examples blocks only.
+const implementationTags = new Set([
+  "@mcp",
+  "@adapter-only",
+  "@builtin-only",
+  "@own-implementation",
+]);
 const localKinds = new Set(["dir", "file"]);
 
 function createCollection() {
@@ -330,16 +338,20 @@ function titleFindings(uri, feature) {
 }
 
 function misplacedTagFindings(uri, node) {
-  return node.tags.map((tag) =>
-    gherkinFinding(uri, tag, `tag ${tag.name} is not on an Examples block`),
-  );
+  return node.tags
+    .filter((tag) => !implementationTags.has(tag.name))
+    .map((tag) => gherkinFinding(uri, tag, `tag ${tag.name} is not on an Examples block`));
 }
 
 function examplesTagFindings(uri, examples) {
   return examples.tags
-    .filter((tag) => !sourceTags.has(tag.name))
+    .filter((tag) => !sourceTags.has(tag.name) && !implementationTags.has(tag.name))
     .map((tag) =>
-      gherkinFinding(uri, tag, `tag ${tag.name} on an Examples block is not @url or @github`),
+      gherkinFinding(
+        uri,
+        tag,
+        `tag ${tag.name} on an Examples block is not @url, @github, or an MCP implementation tag`,
+      ),
     );
 }
 

@@ -491,9 +491,10 @@ export function promptDisposition(response: RpcResponseRecord | undefined): stri
   return stringField(response.data, "disposition");
 }
 
-/** One `get_commands` entry: the command name and its `sourceInfo.path`. */
+/** One `get_commands` entry: the command name, its `source`, and its `sourceInfo.path`. */
 export interface ListedCommand {
   readonly name: string;
+  readonly source: string | undefined;
   readonly sourcePath: string | undefined;
 }
 
@@ -518,6 +519,6 @@ export function listedCommands(response: RpcResponseRecord | undefined): readonl
     const sourcePath = isRecord(command.sourceInfo)
       ? stringField(command.sourceInfo, "path")
       : undefined;
-    return [{ name, sourcePath }];
+    return [{ name, source: stringField(command, "source"), sourcePath }];
   });
 }
