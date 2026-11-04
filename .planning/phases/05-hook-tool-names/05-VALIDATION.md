@@ -52,6 +52,21 @@ Filled by the planner per task (`<automated>` with `<fails_when>`). Requirement 
 | MHK-02 (D-P5-10, D-P5-11) | cucumber | `npx cucumber-js --profile builtin features/hook/tool-use.feature` (and `--profile adapter`) | ✅ edit | ⬜ pending |
 | tags | static | `npm run check:features` | ✅ | ⬜ pending |
 
+Per task (each runnable command in the plan carries a `<fails_when>`; `npm` commands run with the nondac prefix):
+
+| Task | Wave | Requirement / Decision | Test Type | Automated Command | File Exists | Status |
+|------|------|------------------------|-----------|-------------------|-------------|--------|
+| 05-01 T1 | 1 | MHK-01; D-P5-01, -02, -03, -04, -05, -08, -13 | unit + cucumber | `node --test test/domain/components/hooks/builtin-mcp-tool-names.test.ts test/bridges/hooks/mcp-tool-view.test.ts test/bridges/hooks/dispatch.test.ts`; `npm run test:coverage:direct -- <the three sources>`; `npm run test:cucumber:profile -- --profile builtin features/hook/mcp-tool-names.feature` (and `--profile adapter` with `features/hook/tool-use.feature`); `npm run check:static` | ❌ W0 (created by the task) | ⬜ pending |
+| 05-01 T2 | 1 | MHK-01; D-P5-03, -04, -08 | unit + cucumber | `node --test test/bridges/hooks/if-field/index.test.ts test/bridges/hooks/dispatch.test.ts`; coverage of `if-field/index.ts` and `dispatch.ts`; both profiles on `features/hook/mcp-tool-names.feature`; `npm run check:static` | ✅ extend | ⬜ pending |
+| 05-02 T1 | 2 | MHK-02; D-P5-06, -07, -10 | unit + cucumber | `node --test test/bridges/hooks/mcp-tool-view.test.ts test/bridges/hooks/dispatch.test.ts`; coverage; both profiles on `features/hook/tool-use.feature`; `npm run check:static` | ✅ extend | ⬜ pending |
+| 05-02 T2 | 2 | MHK-02; D-P5-07, -11 | unit + cucumber | `node --test test/bridges/hooks/event-router.test.ts test/architecture/no-factory-time-probe.test.ts test/index.test.ts`; coverage; both profiles on `features/hook/tool-use.feature`; `npm run check:static` | ✅ extend | ⬜ pending |
+| 05-03 T1 | 2 | MHK-01; D-P5-09 | cucumber | `npm run test:cucumber:profile -- --profile builtin features/hook/mcp-tool-names.feature`; `npm run check:static` | ❌ W0 (stub created by the task) | ⬜ pending |
+| 05-03 T2 | 2 | MHK-01, MHK-02; D-P5-03, -14 | cucumber + docs | both profiles on `features/hook/mcp-tool-names.feature`; `pre-commit run --files docs/hooks-compatibility.md ...`; `npm run check:features` | ✅ extend | ⬜ pending |
+| 05-04 T1 | 3 | MHK-01, MHK-02; D-P5-12 | full gate + red sweep | the `npm run check` parts, `npm run test:modules`, the red sweep on the Phase 1 product code, the ownership check | ✅ | ⬜ pending |
+| 05-04 T2 | 3 | D-P5-12, D-P5-14 | record | `grep -c '^## Parent lines'` and the other section checks on 05-04-SUMMARY.md | ❌ (created by the task) | ⬜ pending |
+
+Red proofs (D-P5-12) run after each scenario task's commit against the Phase 1 product code (`git restore --source=640419724c48a60c7bb469acf0fde6f3a6ea7852 --worktree -- extensions/pi-claude-marketplace/bridges/hooks extensions/pi-claude-marketplace/domain/components/hooks`, then back to `HEAD`); 05-04 repeats the sweep on the final scenario texts.
+
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
 ---
