@@ -1,6 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 
-import { softDepMarkers } from "./concerns/soft-dep.ts";
+import { isMcpDependency, softDepMarkers } from "./concerns/soft-dep.ts";
 import { hookDebugLog } from "./debug-log.ts";
 import { errorMessage, manualRecoveryLeaks, serializeCauseChain } from "./errors.ts";
 import { isLeftRow, isMovedRow, isRemovedRow, mcpConfigNoticeLine } from "./notification-mcp.ts";
@@ -431,7 +431,8 @@ function redactRowName(name: string): string {
 
 /**
  * Composes a row's content reasons, then the markers `dependencies` call for.
- * `dependencies` is empty when the row's marker policy is off.
+ * `dependencies` is empty when the row's marker policy is off. D-P3-10: the
+ * MCP marker reads the row's `McpDependency`, in whatever list position.
  */
 function composeRowReasons(
   content: readonly Reason[],
@@ -442,7 +443,7 @@ function composeRowReasons(
     ...content,
     ...softDepMarkers(
       dependencies.includes("agents"),
-      dependencies.includes("mcp"),
+      dependencies.find(isMcpDependency) ?? false,
       dependencies.includes("workflows"),
       snapshot,
     ),

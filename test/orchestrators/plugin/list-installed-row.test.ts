@@ -115,7 +115,7 @@ test("composes a same-scope installed row with exact dependencies and descriptio
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "alpha",
-    dependencies: ["agents", "mcp", "workflows"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }, "workflows"],
     version: "1.0.0",
     description: "Alpha plugin.",
     severity: "info",
@@ -740,7 +740,7 @@ test("MREC-03: lists a neutral sse record as installed under pi-mcp-adapter", as
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "alpha",
-    dependencies: ["mcp"],
+    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
     version: "1.0.0",
     description: "Alpha plugin.",
     severity: "info",

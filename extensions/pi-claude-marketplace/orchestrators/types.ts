@@ -769,10 +769,10 @@ export type PluginConvergeFn = (target: PluginConvergeTarget) => Promise<PluginU
  *
  * SNM-04 / D-15-02: the `"installed"` variant carries REQUIRED
  * `dependencies: readonly Dependency[]` (the closed-set
- * `"agents" | "mcp" | "workflows"` per SNM-04). The orchestrator derives the
- * array at the success-return site from
- * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`),
- * `installCtx.stagedMcpServerNames.length > 0` (-> `"mcp"`) and
+ * `"agents" | McpDependency | "workflows"` per SNM-04). The orchestrator
+ * derives the array at the success-return site from
+ * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`), the
+ * `McpDependency` of the resolution's declared servers (itself, D-P3-10), and
  * `installCtx.stagedWorkflowNames.length > 0` (-> `"workflows"`); the
  * `declaresAgents`/`declaresMcp`/`declaresWorkflows` predicates on
  * `InstallPluginOutcome`

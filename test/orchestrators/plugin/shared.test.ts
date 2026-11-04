@@ -388,7 +388,7 @@ describe("enableRowDependencies", () => {
     const dependencies = enableRowDependencies(signals);
 
     // assert
-    assert.deepStrictEqual(dependencies, ["agents", "mcp"]);
+    assert.deepStrictEqual(dependencies, ["agents", { kind: "mcp", runEvery: ["adapter"] }]);
   });
 
   test("WDEP-02: returns the workflows dependency when the ledger staged a workflow", () => {
@@ -414,7 +414,11 @@ describe("enableRowDependencies", () => {
     const dependencies = enableRowDependencies(signals);
 
     // assert
-    assert.deepStrictEqual(dependencies, ["agents", "mcp", "workflows"]);
+    assert.deepStrictEqual(dependencies, [
+      "agents",
+      { kind: "mcp", runEvery: ["adapter"] },
+      "workflows",
+    ]);
   });
 
   test("WDEP-02: a ledger that staged no workflow declares no host-engine dependency", () => {

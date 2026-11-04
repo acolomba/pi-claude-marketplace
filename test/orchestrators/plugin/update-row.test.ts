@@ -44,7 +44,7 @@ test("composes agent and MCP dependencies in declared display order", () => {
 
   // assert
   assert.deepStrictEqual(row, {
-    dependencies: ["agents", "mcp"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
     from: "1.0.0",
     name: "alpha",
     needsReload: true,
@@ -110,7 +110,7 @@ test("composes MCP-only dependencies without an agent marker", () => {
 
   // assert
   assert.deepStrictEqual(row, {
-    dependencies: ["mcp"],
+    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
     from: "3.0.0",
     name: "gamma",
     needsReload: true,
@@ -176,7 +176,11 @@ test("WDEP-02: composes the workflows dependency LAST behind agents and MCP", ()
   const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(row.dependencies, ["agents", "mcp", "workflows"]);
+  assert.deepStrictEqual(row.dependencies, [
+    "agents",
+    { kind: "mcp", runEvery: ["adapter"] },
+    "workflows",
+  ]);
 });
 
 test("WDEP-02: an update that declares no workflow carries no host-engine dependency", () => {
@@ -266,7 +270,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial row", (
 
   // assert
   assert.deepStrictEqual(row, {
-    dependencies: ["agents", "mcp"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
     name: "zeta",
     needsReload: true,
     reasons: [
@@ -494,7 +498,7 @@ test("D-10-15: all four written axes emit in the documented order on one row", (
   // line, as the clean form does.
   assert.deepStrictEqual(row, {
     cause: new Error('constrained to the combined range (^1.0.0) -- required by "alpha@mp"'),
-    dependencies: ["agents", "mcp"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
     name: "shared-lib",
     needsReload: true,
     reasons: [

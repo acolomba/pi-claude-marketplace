@@ -16,7 +16,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { Dependency } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
+import type { McpDependency } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
 import type {
   RowPolicyMap,
   ResolvedEnvelope,
@@ -36,6 +36,10 @@ import type {
   PluginPathSkippedSurface,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+// D-P3-10: the MCP dependency a `mcp` row maps to; it renders the
+// `requires pi-mcp-adapter` marker.
+const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
 
 void ({
   status: "failed",
@@ -1516,7 +1520,7 @@ describe("resolveRows", () => {
       expectedReasons: ["orphan rewake"],
     },
   ] as const satisfies readonly {
-    dependency: Dependency;
+    dependency: "agents" | "mcp" | "workflows";
     policy: "on" | "off";
     companion: "loaded" | "missing";
     snapshot: SoftDepStatus;
@@ -1529,7 +1533,7 @@ describe("resolveRows", () => {
         severity: "info",
         needsReload: true,
         name: "alpha",
-        dependencies: [dependency],
+        dependencies: [dependency === "mcp" ? ADAPTER_MCP : dependency],
         reasons: ["orphan rewake"],
       } satisfies PluginNotificationMessage;
       const markers = { installed: { markers: policy === "on", contentReasons: true } };
@@ -1560,7 +1564,7 @@ describe("resolveRows", () => {
         name: "alpha",
         from: "1.0.0",
         to: "2.0.0",
-        dependencies: ["workflows", "mcp", "agents"],
+        dependencies: ["workflows", { kind: "mcp", runEvery: ["adapter"] }, "agents"],
         reasons: ["orphan rewake", "malformed skill"],
       },
       markers: { updated: { markers: true, contentReasons: true } },
@@ -1581,11 +1585,34 @@ describe("resolveRows", () => {
       },
     },
     {
+      title:
+        "D-P3-10: finds the McpDependency among agents and workflows and renders the markers in canonical order",
+      row: {
+        status: "installed",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        dependencies: ["workflows", { kind: "mcp", runEvery: ["builtin"] }, "agents"],
+      },
+      markers: { installed: { markers: true, contentReasons: true } },
+      expectedRow: {
+        status: "installed",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        reasons: [
+          "requires pi-subagents",
+          "requires pi-mcp-adapter",
+          "requires pi-dynamic-workflows",
+        ],
+      },
+    },
+    {
       title: "PMOD-01: keeps duplicate content reasons ahead of the markers",
       row: {
         status: "partially-installed",
         name: "alpha",
-        dependencies: ["mcp"],
+        dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
         reasons: ["lsp", "lsp"],
       },
       markers: { "partially-installed": { markers: true, contentReasons: true } },
@@ -1673,7 +1700,7 @@ describe("resolveRows", () => {
       name: "same",
       scope: "project",
       reasons: ["lsp", "lsp"],
-      dependencies: ["workflows", "mcp", "agents"],
+      dependencies: ["workflows", { kind: "mcp", runEvery: ["adapter"] }, "agents"],
     } as const;
     const marketplaces = [
       { name: "z-last", scope: "user", plugins: [row, row, { ...row, scope: "user" }] },

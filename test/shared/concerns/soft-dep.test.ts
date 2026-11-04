@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   companionRequirements,
   declaredDependencies,
+  isMcpDependency,
   softDepMarkers,
   type Dependency,
   type McpDependency,
@@ -13,10 +14,12 @@ import {
 const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
 
 void ("agents" satisfies Dependency);
-void ("mcp" satisfies Dependency);
+void ({ kind: "mcp", runEvery: ["builtin"] } satisfies Dependency);
 void ("workflows" satisfies Dependency);
 // @ts-expect-error Dependency excludes unknown companion targets
 void ("hooks" satisfies Dependency);
+// @ts-expect-error D-P3-10: the MCP member is the McpDependency, not a literal
+void ("mcp" satisfies Dependency);
 
 const markerCases = [
   {
@@ -49,7 +52,7 @@ const markerCases = [
   {
     title: "returns the MCP marker when only MCP is declared and unavailable",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
@@ -62,7 +65,7 @@ const markerCases = [
   {
     title: "returns agents before MCP when both dependencies are declared and unavailable",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
@@ -101,7 +104,7 @@ const markerCases = [
   {
     title: "returns no markers when only MCP is declared and loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
@@ -114,7 +117,7 @@ const markerCases = [
   {
     title: "returns the agents marker when both dependencies are declared and only MCP is loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
@@ -153,7 +156,7 @@ const markerCases = [
   {
     title: "returns the MCP marker when only MCP is declared and only agents are loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
@@ -166,7 +169,7 @@ const markerCases = [
   {
     title: "returns the MCP marker when both dependencies are declared and only agents are loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
@@ -205,7 +208,7 @@ const markerCases = [
   {
     title: "returns no markers when only MCP is declared and both companions are loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
@@ -218,7 +221,7 @@ const markerCases = [
   {
     title: "returns no markers when both dependencies are declared and both companions are loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
@@ -275,7 +278,7 @@ const markerCases = [
     // exact array rather than as membership.
     title: "returns agents, then MCP, then the host engine when all three are declared and absent",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: false,
@@ -406,7 +409,7 @@ for (const { kind, declaresAgents, declaresMcp, declaresWorkflows, companion } o
   {
     kind: "mcp",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: ADAPTER_MCP,
     declaresWorkflows: false,
     companion: "pi-mcp-adapter",
   },
@@ -429,7 +432,7 @@ for (const { kind, declaresAgents, declaresMcp, declaresWorkflows, companion } o
     const markers = softDepMarkers(declaresAgents, declaresMcp, declaresWorkflows, NOTHING_LOADED);
     const requirements = companionRequirements(
       declaresAgents,
-      declaresMcp,
+      declaresMcp !== false,
       declaresWorkflows,
       NOTHING_LOADED,
     );
@@ -474,7 +477,7 @@ describe("declaredDependencies", () => {
     const dependencies = declaredDependencies(outcome);
 
     // assert
-    assert.deepStrictEqual(dependencies, ["mcp"]);
+    assert.deepStrictEqual(dependencies, [ADAPTER_MCP]);
   });
 
   test("WDEP-02: returns workflows when only workflows are declared", () => {
@@ -496,7 +499,7 @@ describe("declaredDependencies", () => {
     const dependencies = declaredDependencies(outcome);
 
     // assert
-    assert.deepStrictEqual(dependencies, ["agents", "mcp"]);
+    assert.deepStrictEqual(dependencies, ["agents", ADAPTER_MCP]);
   });
 
   test("WDEP-02: returns workflows last when all three are declared", () => {
@@ -507,6 +510,37 @@ describe("declaredDependencies", () => {
     const dependencies = declaredDependencies(outcome);
 
     // assert
-    assert.deepStrictEqual(dependencies, ["agents", "mcp", "workflows"]);
+    assert.deepStrictEqual(dependencies, ["agents", ADAPTER_MCP, "workflows"]);
   });
 });
+
+test("D-P3-10: isMcpDependency picks the McpDependency out of a mixed list", () => {
+  // arrange
+  const dependencies: readonly Dependency[] = ["agents", "workflows", ADAPTER_MCP];
+
+  // act
+  const picked = dependencies.filter((dependency) => isMcpDependency(dependency));
+
+  // assert
+  assert.deepStrictEqual(picked, [ADAPTER_MCP]);
+});
+
+for (const runEvery of [["builtin"], [], ["adapter", "builtin"]] as const) {
+  test(`D-MB-07: the MCP marker follows only the adapter probe for runEvery [${runEvery.join(", ")}]`, () => {
+    // arrange
+    const dependency: McpDependency = { kind: "mcp", runEvery };
+
+    // act
+    const markers = {
+      absent: softDepMarkers(false, dependency, false, NOTHING_LOADED),
+      loaded: softDepMarkers(false, dependency, false, {
+        ...NOTHING_LOADED,
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      }),
+    };
+
+    // assert
+    assert.deepStrictEqual(markers, { absent: ["requires pi-mcp-adapter"], loaded: [] });
+  });
+}

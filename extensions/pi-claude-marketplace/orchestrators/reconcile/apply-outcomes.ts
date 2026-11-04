@@ -113,9 +113,10 @@ export interface MpRemovePartialOutcome extends OutcomeBase {
 /**
  * Plugin install success outcome. `version` mirrors the resolved install
  * version (when known); `dependencies` is the closed-set `Dependency[]`
- * derived from `InstallPluginOutcome.declaresAgents` / `declaresMcp` /
- * `declaresWorkflows` so the renderer's `PluginInstalledMessage` arm fires
- * soft-dep markers correctly when companion extensions are unloaded.
+ * derived from `InstallPluginOutcome.declaresAgents` / `declaresMcp` (the
+ * `McpDependency` itself, D-P3-10) / `declaresWorkflows` so the renderer's
+ * `PluginInstalledMessage` arm fires soft-dep markers correctly when companion
+ * extensions are unloaded.
  *
  * WR-04: the two ledger-degradation signals are INHERITED from the shared shape
  * rather than re-declared here, so all three ledger-driven arms (install,

@@ -680,7 +680,7 @@ describe("composeCascadeMemberRow", () => {
     assert.deepStrictEqual(row, {
       status: "installed",
       name: "formatter@tools",
-      dependencies: ["mcp"],
+      dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
       version: "2.1.0",
       reasons: ["dependency current copy"],
       severity: "info",

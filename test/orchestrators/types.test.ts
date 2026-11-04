@@ -841,7 +841,7 @@ void ({
   resourcesChanged: false,
   status: "installed",
   // @ts-expect-error install outcomes do not carry rendered-row dependencies
-  dependencies: ["agents", "mcp"],
+  dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
 } satisfies InstallPluginOutcome);
 
 void ({

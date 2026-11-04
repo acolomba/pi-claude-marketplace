@@ -931,8 +931,8 @@ export function planListNeedsApply(plans: readonly ReconcilePlan[]): boolean {
 // `enabled` is NOT a member of PLUGIN_STATUSES (only `disabled` is). A
 // successful enable re-materializes the plugin via installPlugin, so the
 // projection emits the `installed` row, deriving its `dependencies` from the
-// ledger's staged-count signals exactly as the install arm derives its own
-// (SEV-01 / WR-06). The reverse asymmetry (a successful disable maps to
+// ledger's signals (the staged counts, and the `McpDependency` of the declared
+// servers, D-P3-10) exactly as the install arm derives its own (SEV-01 / WR-06). The reverse asymmetry (a successful disable maps to
 // `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES. This
 // belongs to the token mapping above rather than to either row builder below:
 // it is the asymmetry BETWEEN them, and as a `/** */` block stacked above
@@ -998,10 +998,10 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * `plugin-installed` / `plugin-backfilled` arms.
  *
  * SEV-01 / WDEP-02 / WR-06: `dependencies` is DERIVED on both arms from the
- * ledger's staged-agent / staged-MCP / staged-workflow verdicts through the
+ * ledger's staged-agent / MCP-dependency / staged-workflow verdicts through the
  * same `enableRowDependencies` seam the standalone enable row uses, so the
- * `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
- * `{requires pi-dynamic-workflows}` markers fire on a projected re-enable
+ * `{requires pi-subagents}` / MCP / `{requires pi-dynamic-workflows}` markers
+ * fire on a projected re-enable
  * exactly as they do on the sibling install arm. A re-enable that staged none
  * of the three composes an empty array, which elides the brace entirely
  * (NREG-01).
@@ -1409,8 +1409,8 @@ function applyPluginOutcomeToBlock(
       // enable branch re-materializes via runInstallLedger so the realized
       // outcome IS an install -- `(installed)` is the truthful surface row.
       // No dependencies plumbed from EnableDisablePluginOutcome (the orchestrator
-      // doesn't expose declaresAgents / declaresMcp on the enabled arm); the
-      // empty dependencies array suppresses soft-dep markers, which is the
+      // doesn't expose declaresAgents / the MCP dependency on the enabled arm);
+      // the empty dependencies array suppresses soft-dep markers, which is the
       // safe default for a re-materialization that wouldn't change the
       // companion-extension surface.
       //

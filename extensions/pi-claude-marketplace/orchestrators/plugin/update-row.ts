@@ -268,7 +268,8 @@ export function withCommits(commits: VersionCommits | undefined): {
 }
 
 /**
- * Derive the v2 Dependency[] tuple from the outcome's declared kinds. File-
+ * Derive the v2 Dependency[] tuple from the outcome's declared kinds; the MCP
+ * entry is the outcome's `McpDependency` (D-P3-10). File-
  * private: both row forms take it from the one composer above, so no caller can
  * hand-derive a third spelling of the same tuple (IN-05).
  *
@@ -282,7 +283,7 @@ function outcomeDependencies(
 ): readonly Dependency[] {
   return [
     ...(declaresAgents ? (["agents"] as const) : []),
-    ...(declaresMcp ? (["mcp"] as const) : []),
+    ...(declaresMcp === false ? [] : [declaresMcp]),
     ...(declaresWorkflows ? (["workflows"] as const) : []),
   ];
 }

@@ -217,11 +217,14 @@ function sortRows(rows: readonly CascadeMsg[], scope: Scope): readonly CascadeMs
   );
 }
 
-/** The soft-dependency kinds a materialized member staged, in probe order. */
+/**
+ * The soft-dependency kinds a materialized member staged, in probe order; the
+ * MCP entry is the member's `McpDependency` (D-P3-10).
+ */
 function stagedDependencies(member: CascadeInstalledRow): readonly Dependency[] {
   return [
     ...(member.declaresAgents ? (["agents"] as const) : []),
-    ...(member.declaresMcp ? (["mcp"] as const) : []),
+    ...(member.declaresMcp === false ? [] : [member.declaresMcp]),
     ...(member.declaresWorkflows ? (["workflows"] as const) : []),
   ];
 }

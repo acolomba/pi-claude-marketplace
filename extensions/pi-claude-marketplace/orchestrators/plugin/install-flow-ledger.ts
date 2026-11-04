@@ -446,15 +446,15 @@ function composeInstalledRow(installCtx: InstallLedgerSummary, probe: SoftDepSta
   const declaresWorkflows = installCtx.stagedWorkflowNames.length > 0;
 
   // The renderer emits the per-row soft-dep markers (`{requires
-  // pi-subagents}`, `{requires pi-mcp-adapter}`, `{requires pi-dynamic-workflows}`)
-  // from this list automatically.
+  // pi-subagents}`, the MCP marker, `{requires pi-dynamic-workflows}`) from
+  // this list automatically; the MCP entry is the `McpDependency` (D-P3-10).
   const dependencies: Dependency[] = [];
   if (declaresAgents) {
     dependencies.push("agents");
   }
 
-  if (declaresMcp) {
-    dependencies.push("mcp");
+  if (declaresMcp !== false) {
+    dependencies.push(declaresMcp);
   }
 
   // WDEP-02: a staged workflow declares the host engine. The envelope is

@@ -174,9 +174,10 @@ export function degradationFromEnable(
 
 /**
  * SEV-01 / D-98-02: derive the closed-set `Dependency[]` an enable row declares
- * from the ledger's staged-count signals -- the same derivation `install-flow.ts`
- * runs off `installCtx.stagedAgentNames` / `stagedMcpServerNames` /
- * `stagedWorkflowNames` for the same ledger run. Shared by the standalone
+ * from the ledger's signals -- the same derivation `install-flow.ts` runs off
+ * `installCtx.stagedAgentNames` / `stagedWorkflowNames` and the declared
+ * servers' `McpDependency` (D-P3-10), which this list carries itself, for the
+ * same ledger run. Shared by the standalone
  * enable row and the reconcile enable projection so the two row composers
  * cannot drift.
  *
@@ -206,7 +207,7 @@ export function enableRowDependencies(
   }
 
   if (signals.stagedMcpServers !== undefined) {
-    dependencies.push("mcp");
+    dependencies.push(signals.stagedMcpServers);
   }
 
   if (signals.stagedWorkflows === true) {

@@ -246,7 +246,7 @@ test("projects a clean updated outcome with dependency order and optional reason
     scope: "user",
     from: "1.0.0",
     to: "1.1.0",
-    dependencies: ["agents", "mcp"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
     severity: "info",
     needsReload: true,
   });
@@ -420,7 +420,7 @@ test("projects a newly degraded partial update with warning severity", () => {
     scope: "user",
     from: "4.0.0",
     version: "4.1.0",
-    dependencies: ["mcp"],
+    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
     reasons: ["lsp"],
     severity: "warning",
     needsReload: true,
@@ -493,7 +493,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial update"
     scope: "project",
     from: "6.0.0",
     version: "6.1.0",
-    dependencies: ["agents", "mcp"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
     reasons: [
       "orphan rewake",
       "malformed skill",

@@ -23,7 +23,7 @@ test("list preserves partial content while suppressing dependency markers", () =
           name: "alpha",
           version: "1.0.0",
           reasons: ["lsp"],
-          dependencies: ["agents", "mcp", "workflows"],
+          dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }, "workflows"],
         },
       ],
     },

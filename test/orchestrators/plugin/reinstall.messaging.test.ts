@@ -173,7 +173,7 @@ test("reinstalledRowFromOutcome projects an MCP-only dependency", () => {
   assert.deepStrictEqual(row, {
     status: "reinstalled",
     name: "mcp-only",
-    dependencies: ["mcp"],
+    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
     version: "1.0.0",
     severity: "info",
     needsReload: true,
@@ -204,7 +204,7 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
   assert.deepStrictEqual(row, {
     status: "reinstalled",
     name: "both",
-    dependencies: ["agents", "mcp"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
     version: "1.0.0",
     severity: "info",
     needsReload: true,
@@ -235,7 +235,7 @@ test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", 
   assert.deepStrictEqual(row, {
     status: "reinstalled",
     name: "all-three",
-    dependencies: ["agents", "mcp", "workflows"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }, "workflows"],
     version: "1.0.0",
     severity: "info",
     needsReload: true,
@@ -261,7 +261,7 @@ for (const { companion, declares, dependency, loaded } of [
       declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
       declaresWorkflows: false,
     },
-    dependency: "mcp",
+    dependency: { kind: "mcp", runEvery: ["adapter"] },
     loaded: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
