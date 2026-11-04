@@ -291,7 +291,7 @@ ask, and log every questionable choice. Phase 1's log is
 `01-RESEARCH.md` measured facts that change the decisions above. Where they
 conflict, these amendments win.
 
-- **D-MB-11 reversed in part.** Pi 1.5.0 turns CIMD off whenever
+- **D-MB-11 (amended, reversed in part):** Pi 1.5.0 turns CIMD off whenever
   `oauth.clientName` is set (`dist/extensions/mcp/oauth.js`
   `offersClientMetadataDocument`), so the extension writes neither
   `clientName` nor `clientRegistration`. Pi then does what Claude Code

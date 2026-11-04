@@ -312,3 +312,54 @@ copies every item here. Phase 6 merges this file into the root log.
   `platform/` or `shared/` and be re-exported from `domain/`, because
   `platform/` may not import `domain/`; the planner picks the home.
 - **Recorded in:** `01-PATTERNS.md`.
+
+## Planning step (gsd-planner, 2026-11-04)
+
+### P1-DC-21: Package legitimacy check runs unattended
+
+- **Severity:** High. **Status:** open.
+- The three Pi 1.5.0 packages flagged `[SUS]` (age only) are installed after
+  an automated `npm view` comparison with 1.4.0 (repository, maintainers,
+  scripts, integrity), not a blocking human checkpoint. The planner protocol
+  says legitimacy checkpoints are never auto-approved; the unattended run
+  overrides it.
+- **Recorded in:** `01-01-PLAN.md`.
+
+### P1-DC-22: Plan shape and frozen-interface width
+
+- **Severity:** Medium. **Status:** open.
+- (Low) 14 plans in 5 waves, not the ROADMAP's 9 in 4: same-wave plans must
+  own disjoint files.
+- (Medium) `McpImplementationId`, `ActiveMcpImplementation`, and
+  `PiMcpRegistry` live in `platform/pi-api.ts` (01-03, wave 1);
+  `domain/mcp-implementation.ts` re-exports them. A 1.5.0 type break in
+  `pi-api.ts` would land in 01-05, not 01-01.
+- (Medium) Frozen interfaces are wider than ROADMAP: `agentGrantsStep` takes
+  `{pi, ctx, snapshot}`; `McpStatusLookup` carries `projectTrusted` and
+  `cwd`; `McpImplementationProfile` adds `toolName(plugin, server, tool)`.
+- (Medium) All three D-CF6-10 agent scenarios move to `agent-grants.feature`
+  and `invocation.steps.ts` is renamed to `agent-grants.steps.ts`; Phase 2
+  recreates the `mcp-server/invocation` step module.
+- (Medium) Unreached frozen exports go under fallow `entry` plus per-file
+  `ignoreExports` (no source markers); Phase 6 removes them (parent line).
+- (Medium) If 01-14 runs in a worktree, its push lands the gate commit on
+  remote `features/mcp-builtin` before the local worktree merge.
+- (Low) New Phase-1 files and steps: `implementation-profiles.feature`,
+  `verdict-markers.feature`, the neutral `the user has run {string}, which
+  did not fail`, the built-in-off step, `pi lists these registered mcp
+  servers:`.
+- (Low) 01-14 also edits the PROJECT.md D-CF1-16 row and the fallow-entry
+  sentences in `.planning/codebase/{CONVENTIONS,STACK,ARCHITECTURE}.md`.
+- (Low) Smaller rules: malformed recorded config falls back to the stored
+  verdict; the scanner reports `sse` before field features; the
+  update-in-progress note literal is a private domain constant (TR-04); a
+  tag reason may cite an ID in title or description; the probe in 01-13
+  calls the product's `softDepStatus`, so harness code imports product
+  code; the closed-set commit maps to MDEC-01.
+- (Medium/Low) One-way doors settled without a checkpoint: built-in names
+  and the profile interface (01-03), the closed-set entries (01-04), the
+  `state.json` fields (01-08). "Costly" ratings are flagged only.
+- (Low) Orchestrator: the CONTEXT.md amendment bullet was reworded to
+  `**D-MB-11 (amended, reversed in part):**` so the decision-coverage gate
+  parses it (7/7 covered).
+- **Recorded in:** the 01-01..01-14 plans.
