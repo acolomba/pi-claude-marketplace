@@ -1,7 +1,9 @@
 /**
  * @fileoverview Steps about the configuration a plugin gives its MCP servers
- * and what the servers receive: a loopback HTTP server with headers, and a
- * stub server that echoes its environment (MCP-03, D-CF6-06).
+ * and what the servers receive: a loopback HTTP server with headers, a stub
+ * server that echoes its environment, a Pi with built-in MCP started with a
+ * variable the user set, and an install that warns of an unset variable
+ * (MCP-03, D-CF6-06, BLT-02, IN-02).
  *
  * pi-mcp-adapter's MCP client sends its JSON-RPC requests over HTTP one after
  * another, and opens its optional event stream with a `GET` beside them. The
@@ -10,18 +12,28 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
+import { profileFor } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import { MCP_SERVER_ENVIRONMENT_PRELOAD } from "../../lib/mcp-server-environment.ts";
 import { McpHttpServer, readMcpHttpRequests } from "../../lib/mcp-server-http.ts";
 import { MCP_STUB_SERVER } from "../../lib/mcp-stub-server.ts";
+import { runCommandPayloads } from "../../lib/pi-commands.ts";
+import {
+  PI_LAUNCH_ENVIRONMENT_EXTENSION,
+  readAppliedLaunchEnvironments,
+  writeLaunchEnvironment,
+} from "../../lib/pi-launch-environment.ts";
 import { writePublishedPluginFile } from "../../lib/published-marketplace.ts";
+import { expandTokens } from "../../lib/run-tokens.ts";
+import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { McpHttpRequest } from "../../lib/mcp-server-http.ts";
-import type { ScenarioWorld } from "../../support/world.ts";
+import type { NotificationPayload } from "../../lib/pi-commands.ts";
+import type { PiProfile, ScenarioWorld } from "../../support/world.ts";
 
 // Listing one tool over loopback takes well under a second; the margin
 // covers a loaded CI runner and stays below the step timeout, as the stub
@@ -79,6 +91,28 @@ function requestHeaders(table: DataTable): string[] {
   return headers;
 }
 
+// The scope a setup command names with `--scope`, which the config notices
+// of its install name too.
+const SCOPE_FLAG_PATTERN = /--scope\s+(\S+)/u;
+
+function commandScope(command: string): string {
+  const scope = SCOPE_FLAG_PATTERN.exec(command)?.[1];
+  if (scope === undefined) {
+    assert.fail(`the setup command names no scope: ${command}`);
+  }
+
+  return scope;
+}
+
+// A config notice result with its invocation id dropped, since the id is
+// drawn for each run.
+function noticeResult(payload: NotificationPayload): Readonly<Record<string, unknown>> {
+  const { origin, ...fields } = payload;
+  const kept =
+    origin.kind === "command" ? { kind: origin.kind, commandId: origin.commandId } : origin;
+  return { ...fields, origin: kept };
+}
+
 // The server starts before the plugin's `.mcp.json` names its URL, because
 // the install writes that URL into pi-mcp-adapter's config. Its release runs
 // after the profile Pi stops, so no request reaches a closed server.
@@ -120,6 +154,69 @@ Given(
       env: { STUB_TAG_FROM: `${first},${second}` },
     };
     await publishMcpFile(this, plugin, name, { [server]: entry });
+  },
+);
+
+// IN-02: the install of a plugin whose server reads a variable the run never
+// sets. Every result but the MCP config notices must be info, and the
+// notices must be exactly one `variables-missing` section naming that server,
+// by its key in pi-mcp-adapter's config, and that variable (AVAR-04), so an
+// install that stops warning fails here.
+Given(
+  "the user has run {string}, which warned that the mcp server {string} of the plugin {string} reads the unset variable {string}",
+  async function (
+    this: ScenarioWorld,
+    command: string,
+    server: string,
+    plugin: string,
+    variable: string,
+  ) {
+    const payloads = await runCommandPayloads(this.pi, expandTokens(command, this.tokens));
+    assert.deepStrictEqual(
+      payloads.filter(({ kind, severity }) => kind !== "mcp-config-notices" && severity !== "info"),
+      [],
+    );
+    const notices = payloads.filter(({ kind }) => kind === "mcp-config-notices");
+    assert.deepStrictEqual(notices.map(noticeResult), [
+      {
+        schemaVersion: 1,
+        kind: "mcp-config-notices",
+        origin: { kind: "command", commandId: "plugin install" },
+        severity: "warning",
+        needsReload: false,
+        notices: [
+          {
+            kind: "variables-missing",
+            scope: commandScope(command),
+            file: "mcp-adapter.json",
+            plugin,
+            server: profileFor("adapter").serverName(plugin, server),
+            names: [variable],
+          },
+        ],
+      },
+    ]);
+  },
+);
+
+// BLT-02, D-MB-04: a profile Pi's environment is fixed when it starts, so a
+// variable the user sets after an install reaches only a Pi started after
+// it. This Pi loads no companion, so Pi's built-in MCP serves the plugin's
+// servers, and the extension reads the variable when it registers them.
+Given(
+  "pi runs with the scripted model, pi's built-in mcp, and the environment variable {string} set to {string}",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld, variable: string, value: string) {
+    const variables = { [variable]: value };
+    const launch: PiProfile = {
+      companions: [],
+      extraExtensions: [PI_LAUNCH_ENVIRONMENT_EXTENSION],
+    };
+    const file = await writeLaunchEnvironment(this.tokens.home, variables);
+    this.onRelease(() => rm(file, { force: true }));
+    await this.usePiWithProfile(launch);
+    const applied = await readAppliedLaunchEnvironments(this.profileHarness());
+    assert.deepStrictEqual(applied, [variables]);
   },
 );
 
