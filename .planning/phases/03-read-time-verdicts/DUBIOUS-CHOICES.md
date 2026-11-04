@@ -359,3 +359,20 @@ The planner's choices, numbered here. Each is Low unless marked.
 - **P3-DC-48 (Low): the two concurrency edge probes are
   `verification: backstop`**, resting on the existing state lock; no
   concurrency test.
+
+## Plan step: revision (2026-11-04)
+
+- **P3-DC-49 (Low): 03-02 stays one plan of three green commits** (field type,
+  then vocabulary, then producer pins), still about 225k tokens. Alternative:
+  two plans, which pushes 03-04 and 03-08 one wave later.
+- **P3-DC-50 (Low): `mcpDependencyOfResolution` is dropped** (fallow rejects
+  an export used only by its own file); producers call
+  `mcpDependencyOf(Object.values(<resolution>.declaredMcpServers))`; one phrase
+  of 03-08 changed to match.
+- **P3-DC-51 (Low): the 03-02 executor reads line ranges** of CONTEXT,
+  RESEARCH, and FROZEN, not whole files.
+- **P3-DC-52 (Low): `update-cascade.ts` and `reinstall-record.ts` dropped from
+  03-02's files** by reading, not by a compile.
+- **P3-DC-53 (Low): interim marker between 03-02 and 03-04**: a plugin whose
+  only servers are bare-elicitation servers shows `requires pi-mcp-adapter`
+  without the adapter until 03-04 lands; no test covers the interim.
