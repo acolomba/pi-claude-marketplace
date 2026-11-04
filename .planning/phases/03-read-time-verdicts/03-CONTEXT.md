@@ -32,14 +32,14 @@ change is a parent line.
 
 ### A. Neutral records and the effective read (MREC-03)
 
-- **Neutral verdict = the `none` view.** The stored compatibility is the
+- **D-P3-01:** **Neutral verdict = the `none` view.** The stored compatibility is the
   verdict that holds under every implementation: a server counts as blocked
   only when both profiles block it (`ws`, host-only types, a leading `~`,
   `headersHelper`, truthy `oauth.xaa`), and a `.mcpb`/`.dxt` bundle blocks.
   `sse` (built-in only) and `bareElicitationCapability` (adapter only) never
   enter the stored verdict. `installable` and `unsupported` are computed from
   that view plus the non-MCP kinds. (P3-DC-01)
-- **Every writer of a new or replaced compatibility writes the neutral verdict
+- **D-P3-02:** **Every writer of a new or replaced compatibility writes the neutral verdict
   and sets `compatibilityBasis: "neutral"`**: install (`statePhase` writes the
   basis on the new record), the update swap's final write, the update intent
   mark, the disabled pin refresh (`refreshDisabledRecord`), and the AMIG-01
@@ -50,7 +50,7 @@ change is a parent line.
   the edit to a Phase 1-owned function as a dubious choice if it must touch
   it. A legacy record (no basis) keeps the adapter reading, as P1-DC-02
   froze. (P3-DC-02)
-- **The resolver computes per-implementation verdicts.** Phase 3 owns
+- **D-P3-03:** **The resolver computes per-implementation verdicts.** Phase 3 owns
   `domain/{mcp-resolution,plugin-resolver,resolver-types}.ts` state and
   verdicts. The resolver classifies each merged server under both profiles
   once, and exposes the resolution's `state`, `unsupported`, and
@@ -63,7 +63,7 @@ change is a parent line.
   (an option argument, or both views on the result); every caller passes the
   run's active implementation explicitly, never a default, so no surface
   silently keeps the adapter table. (P3-DC-03)
-- **One effective-read helper.** A new orchestrator module (Phase 3 prefix,
+- **D-P3-04:** **One effective-read helper.** A new orchestrator module (Phase 3 prefix,
   for example `orchestrators/plugin/mcp-verdict-read.ts`) joins a record with
   `recordedMcpServers(record, createLegacyServersReader(source))` and
   `effectiveMcpCompatibility(record, recorded, active)`. It is offline (the
@@ -72,14 +72,14 @@ change is a parent line.
   (`edge-deps.ts`), `pending`, `apply`'s convergence, the update preflight,
   and the promotion and re-enable gates read through it. When the read is
   `unreadable`, the stored verdict stands (frozen rule 1). (P3-DC-04)
-- `classifyInstalledRecord` and `derivePersistedInstalledStatus` take the
+- **D-P3-05:** `classifyInstalledRecord` and `derivePersistedInstalledStatus` take the
   effective `unsupported` instead of `record.compatibility.unsupported`, so
   one installed `sse` plugin is `installed` under the adapter and
   `partially-installed` under built-in with no reinstall.
 
 ### B. Markers, `requires:`, and severity (MREC-05, MREC-07)
 
-- **Which marker.** For a plugin's MCP servers, let R be the servers at least
+- **D-P3-06:** **Which marker.** For a plugin's MCP servers, let R be the servers at least
   one profile runs (non-malformed and not blocked by both), and I the
   implementations that run every server in R:
   - R empty (no MCP server, or every server blocked by both): no MCP
@@ -90,7 +90,7 @@ change is a parent line.
   - I empty (servers split: one only the adapter runs, one only built-in
     runs): with no active implementation, `requires mcp`; with an active one,
     the other implementation's name. (P3-DC-05)
-- **When it shows.** With no active implementation and R not empty, every
+- **D-P3-07:** **When it shows.** With no active implementation and R not empty, every
   plugin row with markers shows the marker (installed rows stay `installed`,
   D-MB-01). With an active implementation in I, no marker. With an active
   implementation not in I, the marker sits beside `{unsupported mcp}` after
@@ -100,19 +100,19 @@ change is a parent line.
   row, in the MCP slot of the soft-dependency order (agents, mcp, workflows).
   This includes `partially-installed` list rows, which today carry no
   dependencies. (D-MB-07, P3-DC-06)
-- **`info`'s `requires:` line** names the marker of I with `(missing)` when
+- **D-P3-08:** **`info`'s `requires:` line** names the marker of I with `(missing)` when
   the active implementation is not in I (or none is active), and without it
   when the active implementation runs every server. So a stdio plugin reads
   `requires: mcp` under the adapter and under built-in, and
   `requires: mcp (missing)` with none; JSON
   `{"companion":"mcp","missing":false}`. Today's adapter output
   `{"companion":"pi-mcp-adapter","missing":false}` changes. (P3-DC-07)
-- **Severity.** `companionSeverity` raises warning exactly when an MCP marker
+- **D-P3-09:** **Severity.** `companionSeverity` raises warning exactly when an MCP marker
   shows, which is today's `requires pi-mcp-adapter` rule (D-MB-07); reconcile
   rows keep applying no companion severity. Phase 3 edits only the MCP arm of
   `shared/concerns/soft-dep.ts` and of `companionSeverity`, and the MCP
   wording in `notify-reasons.ts`; the closed sets already hold every token.
-- **Inputs.** The `Dependency` passed to the markers carries the two
+- **D-P3-10:** **Inputs.** The `Dependency` passed to the markers carries the two
   per-profile verdict lists (or R and I) instead of today's bare
   `declaresMcp`; each emit site (the ~30 sites the survey found: install,
   cascade, update, reinstall, enable, import, apply, dependency moves, list,
@@ -121,18 +121,18 @@ change is a parent line.
 
 ### C. `--partial` consent (MREC-05, MREC-06)
 
-- **User-run install and update ask against the active implementation**:
+- **D-P3-11:** **User-run install and update ask against the active implementation**:
   the preflight gate uses the resolution's view for
   `run.softDeps.mcpImplementation`. With no active implementation, the view
   is `none`, so only servers both profiles block (and non-MCP drops) need
   `--partial` (D-MB-05); an `sse` plugin installs without consent and shows
   `{requires pi-mcp-adapter}`. (P3-DC-09)
-- **A user-run update asks only for a new degrade**: the candidate's view is
+- **D-P3-12:** **A user-run update asks only for a new degrade**: the candidate's view is
   compared with the installed record's effective view under the same active
   implementation; the classifier's `partially-upgradable` split reads the
   effective record. A record that is already partial because of a switch is
   `partially-installed`(-upgradable), which keeps today's rules.
-- **Enable, apply, reinstall, import, autoupdate, promotion, and cascades
+- **D-P3-13:** **Enable, apply, reinstall, import, autoupdate, promotion, and cascades
   never ask because of a switch**: their gates read the neutral stored
   `installable` (or pass `partial: true`, as reinstall and autoupdate do
   today), which no implementation changes. Apply's convergence move needs
@@ -142,14 +142,14 @@ change is a parent line.
 
 ### D. Load, pending, apply, and AMIG-01 after a switch
 
-- **No load warning row for a switch.** A switch changes no record, and
+- **D-P3-14:** **No load warning row for a switch.** A switch changes no record, and
   APL-D1 keeps the load to `pending`'s block; `list` and `info` show the new
   state. (P3-DC-11)
-- **`pending` and `apply` show nothing for a state that changed only because
+- **D-P3-15:** **`pending` and `apply` show nothing for a state that changed only because
   the implementation changed** (there is nothing to apply). Their forced-
   install preview (`(will partially install)`) and their rows read the active
   implementation like every other surface.
-- **AMIG-01 stays explicit about the adapter**: it moves legacy `mcp.json`
+- **D-P3-16:** **AMIG-01 stays explicit about the adapter**: it moves legacy `mcp.json`
   entries into `mcp-adapter.json`, an adapter file, under every
   implementation (MSEL-04), so its staging uses the adapter view by name and
   its notice keeps "pi-mcp-adapter cannot run it". Its dropped-server record
@@ -158,7 +158,7 @@ change is a parent line.
 
 ### E. Behavioral tests and red proof
 
-- `features/mcp-server/verdict-markers.feature`: each tag pair whose twins
+- **D-P3-17:** `features/mcp-server/verdict-markers.feature`: each tag pair whose twins
   now agree (a stdio server runs under both, so no marker) folds into one
   `@mcp` scenario; new pairs pin the implementation-specific rows: an `sse`
   plugin (`installed` under the adapter, `partially-installed` with
@@ -169,7 +169,7 @@ change is a parent line.
   only under both). New Phase 3 files may be named
   `features/mcp-server/verdict-*.feature` with `mcp-server/verdict-*` steps
   and `features/lib/mcp-verdict-*.ts` helpers. (P3-DC-13)
-- **No active implementation** is reached with the frozen steps
+- **D-P3-18:** **No active implementation** is reached with the frozen steps
   (`the user's pi settings turn off pi's built-in mcp`,
   `the user restarts pi with no mcp`), in `@own-implementation` scenarios:
   `{requires mcp}`, `{requires pi-mcp-adapter}` (sse), and
@@ -178,9 +178,9 @@ change is a parent line.
   `companion-missing.feature` is rewritten on this model and loses its
   `@builtin-only` tag; `invalid-configs.feature` loses `@adapter-only` and
   runs `@mcp`.
-- **Consent scenarios** (MREC-06): a user-run install and update ask under
+- **D-P3-19:** **Consent scenarios** (MREC-06): a user-run install and update ask under
   the implementation that blocks; enable and `apply` after a switch do not.
-- Each changed behavior records its red proof per profile (the scenario
+- **D-P3-20:** Each changed behavior records its red proof per profile (the scenario
   fails on the Phase 1 tree under that profile). The e2e marker tests
   (`adapter-detection-rpc`, `install-soft-deps`) and the marker/state
   assertions in `test/integration/mcp-*` follow the new rules; new
@@ -188,12 +188,12 @@ change is a parent line.
 
 ### F. Parent lines and process
 
-- CHANGELOG parent lines: the two new reasons (`requires mcp`,
+- **D-P3-21:** CHANGELOG parent lines: the two new reasons (`requires mcp`,
   `requires builtin mcp`), the state that follows the active implementation,
   and the `requires:` change. `docs/json-output.md` already lists the reasons
   (closed set, Phase 1); any wording change there is a parent line.
-- `docs/messaging-style-guide.md` marker text is Phase 3's and is updated.
-- Wave 3 merges `origin/features/mcp-builtin` (Phases 5, 4, 2) before the
+- **D-P3-22:** `docs/messaging-style-guide.md` marker text is Phase 3's and is updated.
+- **D-P3-23:** Wave 3 merges `origin/features/mcp-builtin` (Phases 5, 4, 2) before the
   phase gate and re-runs every owned row under both profiles.
 
 ### Claude's Discretion
