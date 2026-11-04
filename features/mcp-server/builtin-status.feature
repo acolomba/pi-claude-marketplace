@@ -183,3 +183,14 @@ Feature: MCP server builtin status
       | plugin status                  | installed                                                            |
       | plugin version                 | 1.0.0                                                                |
       | severity                       | info                                                                 |
+
+  Scenario: Plugin info shows a server the user disabled for the session in Pi's /mcp manager as disabled (BLT-05)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    When the user disables the mcp server "plugin_demo_stub" for the session in pi's terminal and runs "/claude:plugin info demo@fixtures --scope user"
+    Then pi's terminal shows the mcp server line "mcp: plugin:demo:stub (disabled)"
