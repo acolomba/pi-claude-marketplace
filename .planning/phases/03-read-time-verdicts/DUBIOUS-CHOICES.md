@@ -537,3 +537,26 @@ The planner's choices, numbered here. Each is Low unless marked.
   `partially-installed {unsupported mcp, requires pi-mcp-adapter}` instead of
   `updated {requires pi-mcp-adapter}`; 03-06 had left the runner on the
   neutral view because the target type lived in 03-07's files.
+
+### Wave 5 (03-09, milestone merge and phase gate)
+
+- **P3-DC-105 (Low): the 03-09 executor's commits name its own session in
+  the `Claude-Session` trailer** (`session_01EDUMG5p4jHecGXqAFGi3Do`, the
+  harness attribution) instead of the brief's
+  `session_01EDUMG7S9uXh4o5dikBwum8`; every other commit of the phase uses the
+  brief's. History is not rewritten.
+- **P3-DC-106 (Low): `invalid-configs.feature` keeps `@adapter-only` on its
+  two tool-call scenarios and adds `@builtin-only` twins** proving the skipped
+  server through `pi lists these registered mcp servers:` (that frozen step
+  lists nothing under pi-mcp-adapter). D-P3-18 asked for `@mcp`.
+- **P3-DC-107 (Low): STATE.md frontmatter counters combined by hand** at the
+  merge (the orchestrator recomputes them).
+- **P3-DC-108 (Low): the merge commit body says `companion-missing.feature`
+  took the milestone's `not loaded`; eb4ebf7 restores `status unknown`**,
+  because our rewritten scenario turns Pi's built-in MCP off. The parent's
+  d1711fd expectation is deliberately not re-applied there.
+- **P3-DC-109 (Low): Phase 4's `installGrantedAgent` test helper passes the
+  run's implementation as `consentView`** (compile-forced at the merge).
+- **P3-DC-110 (Low): Phase 2's `builtin-status.feature` `plugin requires`
+  cells (seven) now read `[{"companion":"mcp","missing":false}]`** under our
+  `requires:` rule (state rows are Phase 3's).
