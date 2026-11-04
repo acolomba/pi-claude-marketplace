@@ -61,3 +61,13 @@ copies each entry into the root log.
 - **P6-DC-20 (Low):** the Elicitation rows in `docs/hooks-compatibility.md` may
   be reworded to name Pi's built-in MCP. That wording is not checked against
   a source.
+
+## After pattern mapping (06-PATTERNS.md)
+
+- **P6-DC-21 (Low):** the completion cache keys its file name by the MCP
+  implementation, so the file shape does not change and `schemaVersion`
+  stays 6. The alternative is a new field with a schema bump.
+- **P6-DC-22 (Low):** a containment failure in the legacy reader gets its own
+  internal reason, `uncontained`, if no notification closed set carries the
+  reasons. Otherwise it maps to `root-mismatch`. The planner checks the lock
+  tests.
