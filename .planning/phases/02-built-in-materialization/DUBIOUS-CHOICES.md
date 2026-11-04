@@ -758,3 +758,29 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Choice:** An untrusted project row skips the `mcp.json` reads.
 - **Alternatives:** Read them anyway.
 - **Why dubious:** No override can matter when nothing registers.
+
+## Wave 2 (plan 02-05 executor, 2026-11-04)
+
+### P2-DC-74: The trusted both-scope scenario has two `When` steps (list, then prompt), as the plan asked
+
+- **Phase / source:** Phase 2 plan 02-05 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The trusted both-scope scenario has two `When` steps (list, then prompt), as the plan asked.
+- **Alternatives:** Split into two scenarios.
+- **Why dubious:** Two When steps in one scenario.
+
+### P2-DC-75: A built-in project twin pins Pi's literal `progressToken` 3 from its request counter
+
+- **Phase / source:** Phase 2 plan 02-05 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** A built-in project twin pins Pi's literal `progressToken` 3 from its request counter.
+- **Alternatives:** Mask the token.
+- **Why dubious:** A Pi release could change the counter.
+
+### P2-DC-76: The distrust twin checks the registry, not that the stub got no messages, since no such step exists
+
+- **Phase / source:** Phase 2 plan 02-05 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The distrust twin checks the registry, not that the stub got no messages, since no such step exists.
+- **Alternatives:** Add a no-messages step.
+- **Why dubious:** Indirect evidence the server never started.
