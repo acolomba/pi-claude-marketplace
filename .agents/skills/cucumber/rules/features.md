@@ -60,7 +60,8 @@ A marketplace can be published as one of several source kinds: `dir`, `file`, `u
 
 - An untagged `Examples:` block holds the local kinds, `dir` and `file`. An `@url` block holds the url kind, and an `@github` block holds the github kind. `npm run check:features` fails on a row whose `source kind` does not belong in its block, and on a tagged block with no `source kind` column.
 - The kind reaches the steps through a `<source kind>` column, and the source the user types reaches them through a `<source>` column.
-- Tags appear only on `Examples:` blocks, and the only tags are `@url` and `@github`. A tag on a feature or a scenario would also tag its local rows, so excluding that tag would drop them.
+- The source tags `@url` and `@github` appear only on `Examples:` blocks. A source tag on a feature or a scenario would also tag its local rows, so excluding that tag would drop them.
+- The four MCP implementation tags, `@mcp`, `@adapter-only`, `@builtin-only`, and `@own-implementation`, can sit on a `Feature:`, a `Rule:`, a scenario, or an `Examples:` block. "MCP implementations" below says when a scenario carries one. No other tag exists.
 
 ```gherkin
   Scenario Outline: Adding a marketplace records it in the chosen scope
@@ -93,13 +94,34 @@ A marketplace can be published as one of several source kinds: `dir`, `file`, `u
       | github      | acme/tools |
 ```
 
-`cucumber.json` excludes no tag, so every row runs. The url and github kinds share one stand-in, the run's https git host. The github kind reaches it through `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`. If a new source kind has no stand-in yet, `cucumber.json` excludes its tag, and the work that adds the stand-in removes the exclusion. Removing a tag turns on every row of that kind, with no edit to a feature file.
+`cucumber.json` excludes no source tag, so every row of every source kind runs. The url and github kinds share one stand-in, the run's https git host. The github kind reaches it through `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`. If a new source kind has no stand-in yet, `cucumber.json` excludes its tag, and the work that adds the stand-in removes the exclusion. Removing a tag turns on every row of that kind, with no edit to a feature file.
 
 A behavior that only one kind has lives in a feature file of its own.
 
 A marketplace can also be published as `hosted`: one `marketplace.json` that the git host serves at an https URL, such as `https://{git host}/acme/tools/marketplace.json`. Every later change to the manifest is served again. A hosted marketplace has no branch, no unreadable file, and no source to remove; to make it fail, arm the git host for it. Its scenarios live in feature files of their own and never in a source-kind Outline, and `npm run check:features` rejects `hosted` in the `source kind` column of any `Examples:` block.
 
 A plugin can also come from a git repository on the git host, as a `github`, `url`, or `git-subdir` source. These are the plugin's source kinds, not the marketplace's: any marketplace kind can offer them. An Outline over the plugin source kinds names its column `plugin source kind` and keeps its `Examples:` blocks untagged, because `npm run check:features` reads a `source kind` column, and the `@url` and `@github` tags, as the marketplace's.
+
+## MCP implementations
+
+A plugin's MCP servers run through one of two implementations: pi-mcp-adapter, or Pi's built-in MCP. `cucumber.json` has one profile for each, `adapter` and `builtin`, and each profile sets the world parameter `mcpImplementation` to its own name (DUAL-01). How a profile starts Pi is in `.agents/skills/cucumber/rules/world-and-stand-ins.md`.
+
+An MCP scenario is a scenario with a step whose text has the word `mcp`, or with a doc string or a table cell that names `mcpServers` or `.mcp.json`. Every MCP scenario carries exactly one implementation tag, on the scenario or on a block around it:
+
+- `@mcp`: the scenario expects the same result under both implementations.
+- `@adapter-only`: the expectation holds only under pi-mcp-adapter.
+- `@builtin-only`: the expectation holds only under Pi's built-in MCP.
+- `@own-implementation`: the scenario chooses its own implementation, such as no implementation at all or a switch from one to the other.
+
+A scenario that is not an MCP scenario carries no implementation tag.
+
+The adapter profile runs every scenario except the `@builtin-only` ones (tag expression `not @builtin-only`). It is also the `default` profile, so `npx cucumber-js <file>` keeps working. The builtin profile runs the `@mcp` and `@builtin-only` scenarios except the `@adapter-only` ones (`(@mcp or @builtin-only) and not @adapter-only`). So an `@mcp` scenario runs under both profiles, an `@own-implementation` scenario runs once, under the adapter profile, and a scenario with no implementation tag also runs once, under the adapter profile.
+
+- An `@mcp` scenario never names `pi-mcp-adapter` in its steps, its tables, or its doc strings. It reaches the active implementation through the MCP implementation steps of `world-and-stand-ins.md`.
+- An `@adapter-only` or `@builtin-only` scenario names the requirement or decision ID that licenses the tag, in its title or in its feature description.
+- A scenario whose expectation differs by implementation is a pair in one file: an `@adapter-only` scenario and a `@builtin-only` scenario, each with the expectation of its own implementation. The rows of a D-MB-07 marker are an example.
+
+`npm run check:features` fails on an MCP scenario with no implementation tag or with two, on an `@mcp` scenario that names `pi-mcp-adapter`, and on an `@adapter-only` or `@builtin-only` scenario that names no ID (DUAL-02).
 
 ## Run tokens
 
