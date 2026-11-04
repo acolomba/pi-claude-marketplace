@@ -129,7 +129,7 @@ import type {
   ResolvedPluginUnavailable,
   ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver-types.ts";
-import type { McpStatusReader } from "../../platform/mcp-status.ts";
+import type { McpStatusLookup, McpStatusReaders } from "../../platform/mcp-status.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -152,13 +152,19 @@ export interface GetPluginInfoOptions {
    */
   readonly run: NotificationRun;
   /**
-   * ASTAT-01 / ASTAT-02: the extension load's status tracker. Info reads
-   * pi-mcp-adapter's last snapshot from it and stamps each written server's
-   * state. It never connects a server and never asks the adapter for a
-   * snapshot. Under `--scope user` info also reads the project scope's
-   * installation record, read-only, to mark the servers it overrides.
+   * ASTAT-01 / ASTAT-02 / MSEL-01: the extension load's status readers, one
+   * per MCP implementation. Info reads the last statuses from the reader of
+   * the run's active implementation (pi-mcp-adapter's under `none`) and
+   * stamps each written server's state. It never connects a server and never
+   * asks for a snapshot. Under `--scope user` info also reads the project
+   * scope's installation record, read-only, to mark the servers it overrides.
    */
-  readonly mcpStatus: McpStatusReader;
+  readonly mcpStatus: McpStatusReaders;
+  /**
+   * BLT-05 / D-MB-09: whether Pi trusts the project, which decides the
+   * built-in status `project not trusted`.
+   */
+  readonly projectTrusted: boolean;
   readonly marketplace: string;
   readonly plugin: string;
   /** When omitted, fan-out across BOTH scopes (project-first per INFO-03). */
@@ -3129,17 +3135,28 @@ function withCompanionRequirements(built: InfoBlock, softDeps: SoftDepStatus): I
 }
 
 /**
- * ASTAT-01: stamps the block's written MCP servers with the state
- * pi-mcp-adapter last reported, read against the block's own scope record and
- * the same plugin's project-scope record.
+ * ASTAT-01 / MSEL-01: stamps the block's written MCP servers with the state
+ * the run's active MCP implementation last reported, read against the block's
+ * own scope record and the same plugin's project-scope record. The reader is
+ * the built-in one only under `builtin`; under `adapter` and `none` it is
+ * pi-mcp-adapter's, so with no adapter loaded every row reads
+ * `status unknown`. The lookup carries the project's trust and cwd for the
+ * built-in statuses (BLT-05).
  */
 function withServerStatus(
   built: InfoBlock,
   record: PluginInstallRecord | undefined,
-  mcpStatus: McpStatusReader,
+  opts: GetPluginInfoOptions,
   projectRecord: PluginInstallRecord | undefined,
 ): InfoBlock {
-  return { ...built, block: withMcpServerStatus(built.block, record, mcpStatus, projectRecord) };
+  const implementation = opts.run.softDeps.mcpImplementation;
+  const lookup: McpStatusLookup = {
+    reader: implementation === "builtin" ? opts.mcpStatus.builtin : opts.mcpStatus.adapter,
+    implementation,
+    projectTrusted: opts.projectTrusted,
+    cwd: opts.cwd,
+  };
+  return { ...built, block: withMcpServerStatus(built.block, record, lookup, projectRecord) };
 }
 
 /**
@@ -3256,7 +3273,7 @@ async function getPluginInfoWithReader(
     const built = withServerStatus(
       withCompanionRequirements(soleBlock, opts.run.softDeps),
       ownValue(sole.record.plugins, opts.plugin),
-      opts.mcpStatus,
+      opts,
       projectRecord,
     );
     notify(opts.ctx, opts.run, built.block);
@@ -3296,7 +3313,7 @@ async function getPluginInfoWithReader(
       return withServerStatus(
         withCompanionRequirements(scopeBlock, opts.run.softDeps),
         ownValue(f.record.plugins, opts.plugin),
-        opts.mcpStatus,
+        opts,
         projectRecord,
       );
     }),

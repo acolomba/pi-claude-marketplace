@@ -60,7 +60,7 @@ import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketp
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
+import { noStatusReaders } from "../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -145,7 +145,8 @@ const INVOKERS: Record<string, Invoker> = {
     await getPluginInfo({
       ctx,
       run,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
+      projectTrusted: true,
       marketplace: NAME,
       plugin: "ghost",
       cwd,

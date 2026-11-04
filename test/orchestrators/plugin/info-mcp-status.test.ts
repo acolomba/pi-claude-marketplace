@@ -6,7 +6,11 @@ import { mock, verify, when } from "strong-mock";
 import { withMcpServerStatus } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info-mcp-status.ts";
 
 import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { McpStatusReader } from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
+import type {
+  McpStatusLookup,
+  McpStatusReader,
+} from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
+import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   McpServerStatus,
   McpServerSummaryEntry,
@@ -57,8 +61,16 @@ function installRecord(mcpServers: readonly string[]): PluginInstallRecord {
   } satisfies PluginInstallRecord;
 }
 
-function answering(answer: ReturnType<McpStatusReader["lookup"]>): McpStatusReader {
-  return { lookup: () => answer } satisfies McpStatusReader;
+/** MSEL-01: a status lookup through `reader` under `implementation`. */
+function lookupThrough(
+  reader: McpStatusReader,
+  implementation: ActiveMcpImplementation = "adapter",
+): McpStatusLookup {
+  return { reader, implementation, projectTrusted: true, cwd: "/work/project" };
+}
+
+function answering(answer: ReturnType<McpStatusReader["lookup"]>): McpStatusLookup {
+  return lookupThrough({ lookup: () => answer } satisfies McpStatusReader);
 }
 
 for (const { answer, token } of [
@@ -224,24 +236,31 @@ test("ASTAT-01: a left-out server keeps only its unsupported feature and an unre
   );
 });
 
-test("ANAME-01 / ASTAT-01: the reader is asked for the recorded server's generated adapter key", () => {
-  // arrange
-  const mcpStatus = mock<McpStatusReader>({ exactParams: true, name: "mcp status" });
-  when(() => mcpStatus.lookup("plugin_alpha_my_api_"))
-    .thenReturn("connected")
-    .times(1);
-  const block = infoBlock("installed", [{ name: "plugin:alpha:my.api" }]);
+for (const implementation of ["adapter", "builtin", "none"] as const) {
+  test(`ANAME-01 / ASTAT-01 / MSEL-01: under ${implementation} the lookup's reader is asked for the recorded server's generated adapter key`, () => {
+    // arrange
+    const reader = mock<McpStatusReader>({ exactParams: true, name: "mcp status" });
+    when(() => reader.lookup("plugin_alpha_my_api_"))
+      .thenReturn("connected")
+      .times(1);
+    const block = infoBlock("installed", [{ name: "plugin:alpha:my.api" }]);
 
-  // act
-  const stamped = withMcpServerStatus(block, installRecord(["my.api"]), mcpStatus, undefined);
+    // act
+    const stamped = withMcpServerStatus(
+      block,
+      installRecord(["my.api"]),
+      lookupThrough(reader, implementation),
+      undefined,
+    );
 
-  // assert
-  assert.deepStrictEqual(
-    stamped,
-    infoBlock("installed", [{ name: "plugin:alpha:my.api", status: "connected" }]),
-  );
-  verify(mcpStatus);
-});
+    // assert
+    assert.deepStrictEqual(
+      stamped,
+      infoBlock("installed", [{ name: "plugin:alpha:my.api", status: "connected" }]),
+    );
+    verify(reader);
+  });
+}
 
 test("ASTAT-01: stamping keeps the entry order and the unset and withheld lists, and leaves its input alone", () => {
   // arrange

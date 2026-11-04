@@ -1672,7 +1672,8 @@ test("ASTAT-01: /claude:plugin info shows the status pi-mcp-adapter last publish
   // arrange
   const scope = await createHermeticScope(t, "mcp-status");
   await seedRecordedMcpPlugin(scope.cwd);
-  const first = await loadExtension(2, 2, { value: scope.cwd, reads: 2 }, 6, undefined, 0);
+  // Each info command asks Pi once whether it trusts the project (BLT-05).
+  const first = await loadExtension(2, 2, { value: scope.cwd, reads: 2 }, 6, undefined, 2);
 
   // act
   await first.command.handler("info hello@mp --scope project", first.ctx);
@@ -1681,7 +1682,7 @@ test("ASTAT-01: /claude:plugin info shows the status pi-mcp-adapter last publish
     servers: [{ name: "plugin_hello_srv_", status: "connected" }],
   });
   await first.command.handler("info hello@mp --scope project", first.ctx);
-  const reloaded = await loadExtension(1, 1, { value: scope.cwd, reads: 1 }, 3, undefined, 0);
+  const reloaded = await loadExtension(1, 1, { value: scope.cwd, reads: 1 }, 3, undefined, 1);
   await reloaded.command.handler("info hello@mp --scope project", reloaded.ctx);
 
   // assert

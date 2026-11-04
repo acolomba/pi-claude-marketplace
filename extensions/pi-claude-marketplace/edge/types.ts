@@ -21,7 +21,7 @@ import type {
 import type { GitOps } from "../orchestrators/marketplace/shared.ts";
 import type { ApplyReconcileOptions } from "../orchestrators/reconcile/types.ts";
 import type { PluginUpdateFn, ScopeDependencyInstallFn } from "../orchestrators/types.ts";
-import type { McpStatusReader } from "../platform/mcp-status.ts";
+import type { McpStatusReaders } from "../platform/mcp-status.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
 import type { CompletionCache } from "../shared/completion-cache.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
@@ -29,10 +29,11 @@ import type { NotificationRun } from "../shared/notification-run.ts";
 export interface EdgeDeps {
   readonly completionCache: CompletionCache;
   /**
-   * ASTAT-01: the factory-owned tracker of pi-mcp-adapter's status snapshots,
-   * one per extension load, that the plugin info handler reads.
+   * ASTAT-01 / MSEL-01: the factory-owned status readers, one per MCP
+   * implementation and one pair per extension load, that the plugin info
+   * handler reads.
    */
-  readonly mcpStatus: McpStatusReader;
+  readonly mcpStatus: McpStatusReaders;
   readonly gitOps: GitOps;
   /**
    * Autoupdate-cascade injection seam, allocated per command invocation:

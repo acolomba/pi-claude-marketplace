@@ -23,7 +23,7 @@
 import Type from "typebox";
 import { Compile } from "typebox/compile";
 
-import type { PiEventSource } from "./pi-api.ts";
+import type { ActiveMcpImplementation, PiEventSource } from "./pi-api.ts";
 
 const MCP_STATUS_CHANNEL = "pi-mcp-adapter/status/v1";
 
@@ -55,17 +55,41 @@ function isRuntimeStatus(status: string): status is McpServerRuntimeStatus {
   return Object.hasOwn(RUNTIME_STATUSES, status);
 }
 
-/** Reads the server statuses of the last snapshot pi-mcp-adapter published. */
+/** Reads the server statuses an MCP implementation last reported. */
 export interface McpStatusReader {
   /**
-   * Answers for one adapter config key: the server's status when the last
-   * usable snapshot lists it with a known status; `"unrecognized"` when it
-   * lists it with a status this release does not know; `"unlisted"` when a
-   * usable snapshot does not list it; `"no-snapshot"` when there is no usable
-   * snapshot (nothing published yet in this extension load, an empty
-   * snapshot, or a malformed one).
+   * Answers for one server, named as the implementation names it: the adapter
+   * config key for pi-mcp-adapter, the registered server name for Pi's
+   * built-in MCP. Returns the server's status when the last usable snapshot
+   * lists it with a known status; `"unrecognized"` when it lists it with a
+   * status this release does not know; `"unlisted"` when a usable snapshot
+   * does not list it; `"no-snapshot"` when there is no usable snapshot
+   * (nothing published yet in this extension load, an empty snapshot, or a
+   * malformed one).
    */
-  lookup(key: string): McpServerRuntimeStatus | "unrecognized" | "unlisted" | "no-snapshot";
+  lookup(serverName: string): McpServerRuntimeStatus | "unrecognized" | "unlisted" | "no-snapshot";
+}
+
+/**
+ * MSEL-01: the status readers of the two MCP implementations, built once per
+ * extension load. info picks one by the run's active implementation.
+ */
+export interface McpStatusReaders {
+  readonly adapter: McpStatusReader;
+  readonly builtin: McpStatusReader;
+}
+
+/**
+ * MSEL-01 / BLT-05: what info hands the server-status stamp: the reader of
+ * the run's active implementation, that implementation, and the project's
+ * trust and working directory, which the built-in statuses
+ * `project not trusted` and `overridden by mcp.json` depend on (D-MB-09).
+ */
+export interface McpStatusLookup {
+  readonly reader: McpStatusReader;
+  readonly implementation: ActiveMcpImplementation;
+  readonly projectTrusted: boolean;
+  readonly cwd: string;
 }
 
 // An empty `servers` list is the adapter's session-start and shutdown
@@ -113,12 +137,12 @@ export function createMcpStatusTracker(events: PiEventSource): McpStatusReader {
     }
   });
   return {
-    lookup(key) {
+    lookup(serverName) {
       if (latest === undefined) {
         return "no-snapshot";
       }
 
-      const status = latest.get(key);
+      const status = latest.get(serverName);
       if (status === undefined) {
         return "unlisted";
       }

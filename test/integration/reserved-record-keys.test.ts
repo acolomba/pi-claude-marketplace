@@ -41,7 +41,7 @@ import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shar
 import { makeCtx, makeMockPi } from "../e2e/_helpers.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
+import { noStatusReaders } from "../platform/mcp-status-seed.ts";
 
 import type { NotifyRecord } from "../e2e/_helpers.ts";
 
@@ -106,7 +106,7 @@ function registeredCommand(cwd: string): (args: string) => Promise<NotifyRecord[
     piHost.pi,
     {
       completionCache,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
       gitOps: createGitOpsFake({ boundary: "memory" }).gitOps,
       beginPluginUpdateRun: pluginUpdates.beginPluginUpdateRun,
       applyReconcile: createApplyReconcile({ loadState }),

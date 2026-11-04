@@ -41,7 +41,10 @@ import type {
   PluginUpdateFn,
   ScopeDependencyInstallFn,
 } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
-import type { McpStatusReader } from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
+import type {
+  McpStatusReader,
+  McpStatusReaders,
+} from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 const gitOps = {
@@ -69,7 +72,9 @@ const pluginUpdate = (() =>
 
 const beginPluginUpdateRun = (): PluginUpdateFn => pluginUpdate;
 
-const mcpStatus = { lookup: () => "no-snapshot" } satisfies McpStatusReader;
+const noSnapshot = { lookup: () => "no-snapshot" } satisfies McpStatusReader;
+
+const mcpStatus = { adapter: noSnapshot, builtin: noSnapshot } satisfies McpStatusReaders;
 
 const applyReconcile = (_opts: ApplyReconcileOptions): Promise<void> => Promise.resolve();
 
@@ -149,7 +154,17 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     completionCache,
     gitOps,
     installMissingDependencies,
-    // @ts-expect-error the edge dependency bundle always carries its MCP status reader
+    // @ts-expect-error the edge dependency bundle always carries its MCP status readers
+  } satisfies EdgeDeps);
+
+  void ({
+    applyReconcile,
+    beginPluginUpdateRun,
+    completionCache,
+    gitOps,
+    installMissingDependencies,
+    // @ts-expect-error the MCP status member is the reader pair of both implementations (MSEL-01)
+    mcpStatus: noSnapshot,
   } satisfies EdgeDeps);
 
   void ({
@@ -222,7 +237,7 @@ function proveEdgeDepsReadonly(deps: EdgeDeps, completionCache: CompletionCache)
   deps.beginPluginUpdateRun = beginPluginUpdateRun;
   // @ts-expect-error the injected import hook is readonly
   deps.importClaudeSettings = importClaudeSettings;
-  // @ts-expect-error the injected MCP status reader is readonly
+  // @ts-expect-error the injected MCP status readers are readonly
   deps.mcpStatus = mcpStatus;
   // @ts-expect-error the injected reconcile apply step is readonly
   deps.applyReconcile = applyReconcile;

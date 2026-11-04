@@ -94,8 +94,8 @@ const COMMAND_DESCRIPTION =
  * (`index.ts` is the single call site).
  *
  * `deps.gitOps` and `deps.beginPluginUpdateRun` are threaded into the marketplace
- * add/update/remove handlers per D-04 EdgeDeps. `deps.mcpStatus` is threaded
- * into the plugin info handler (ASTAT-01).
+ * add/update/remove handlers per D-04 EdgeDeps. `deps.mcpStatus`, the status
+ * reader pair, is threaded into the plugin info handler (ASTAT-01, MSEL-01).
  */
 export function registerClaudePluginCommand(
   pi: ExtensionAPI,
