@@ -5,14 +5,25 @@
  *
  * Both write the agent through the MCP server fixture writer, never through
  * the agent fixtures, so the agent's file holds only what these steps name.
+ *
+ * MGRT-02 / D-MB-12: a profile Pi started with pi-subagents' child marker,
+ * `PI_SUBAGENT_CHILD=1`, plays a pi-subagents background child. pi-subagents
+ * 0.84.0 sets the marker in its runner process before any child session
+ * starts, and every ambient extension loads into those sessions.
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 
 import { Given } from "@cucumber/cucumber";
 
 import { publishMcpServerAgent } from "../../lib/mcp-server-files.ts";
+import {
+  PI_LAUNCH_ENVIRONMENT_EXTENSION,
+  readAppliedLaunchEnvironments,
+  writeLaunchEnvironment,
+} from "../../lib/pi-launch-environment.ts";
+import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -40,5 +51,25 @@ Given(
   async function (this: ScenarioWorld, plugin: string, name: string, agent: string) {
     const file = await publishMcpServerAgent(this.requirePublished(name), plugin, agent, undefined);
     assert.deepStrictEqual(await toolsLines(file), []);
+  },
+);
+
+// MGRT-02: the launch environment sets the marker in the profile Pi's own
+// environment before any session starts, as pi-subagents' runner does. The
+// file stays until the scenario ends, because the extension reads it on every
+// start. pi-subagents itself registers nothing in a child.
+Given(
+  "pi runs with the scripted model and pi-subagents as a pi-subagents background child",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    const file = await writeLaunchEnvironment(this.tokens.home, { PI_SUBAGENT_CHILD: "1" });
+    this.onRelease(() => rm(file, { force: true }));
+    await this.usePiWithProfile({
+      companions: ["pi-subagents"],
+      extraExtensions: [PI_LAUNCH_ENVIRONMENT_EXTENSION],
+    });
+    assert.deepStrictEqual(await readAppliedLaunchEnvironments(this.profileHarness()), [
+      { PI_SUBAGENT_CHILD: "1" },
+    ]);
   },
 );
