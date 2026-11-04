@@ -106,7 +106,7 @@ A plugin can also come from a git repository on the git host, as a `github`, `ur
 
 A plugin's MCP servers run through one of two implementations: pi-mcp-adapter, or Pi's built-in MCP. `cucumber.json` has one profile for each, `adapter` and `builtin`, and each profile sets the world parameter `mcpImplementation` to its own name (DUAL-01). How a profile starts Pi is in `.agents/skills/cucumber/rules/world-and-stand-ins.md`.
 
-An MCP scenario is a scenario with a step whose text has the word `mcp`, or with a doc string or a table cell that names `mcpServers` or `.mcp.json`. Every MCP scenario carries exactly one implementation tag, on the scenario or on a block around it:
+An MCP scenario is a scenario with a step whose text has the word `mcp`, or with a doc string or a table cell that names `mcpServers` or `.mcp.json`. The steps of a `Background:` count too. So when a Background installs a plugin with MCP servers, every scenario of the file is an MCP scenario, and the tag goes on the `Feature:`. Every MCP scenario carries exactly one implementation tag, on the scenario or on a block around it:
 
 - `@mcp`: the scenario expects the same result under both implementations.
 - `@adapter-only`: the expectation holds only under pi-mcp-adapter.
@@ -118,10 +118,10 @@ A scenario that is not an MCP scenario carries no implementation tag.
 The adapter profile runs every scenario except the `@builtin-only` ones (tag expression `not @builtin-only`). It is also the `default` profile, so `npx cucumber-js <file>` keeps working. The builtin profile runs the `@mcp` and `@builtin-only` scenarios except the `@adapter-only` ones (`(@mcp or @builtin-only) and not @adapter-only`). So an `@mcp` scenario runs under both profiles, an `@own-implementation` scenario runs once, under the adapter profile, and a scenario with no implementation tag also runs once, under the adapter profile.
 
 - An `@mcp` scenario never names `pi-mcp-adapter` in its steps, its tables, or its doc strings. It reaches the active implementation through the MCP implementation steps of `world-and-stand-ins.md`.
-- An `@adapter-only` or `@builtin-only` scenario names the requirement or decision ID that licenses the tag, in its title or in its feature description.
+- An `@adapter-only` or `@builtin-only` scenario names the requirement or decision ID that licenses the tag, in its title or in its feature description. An ID is an upper-case word, then hyphenated parts, then a number: `BLT-01`, `MREC-04`, `D-MB-07`, or `D-CF6-10`. A phase number is not an ID.
 - A scenario whose expectation differs by implementation is a pair in one file: an `@adapter-only` scenario and a `@builtin-only` scenario, each with the expectation of its own implementation. The rows of a D-MB-07 marker are an example.
 
-`npm run check:features` fails on an MCP scenario with no implementation tag or with two, on an `@mcp` scenario that names `pi-mcp-adapter`, and on an `@adapter-only` or `@builtin-only` scenario that names no ID (DUAL-02).
+`npm run check:features` fails on an MCP scenario with no implementation tag, on any scenario with two, on an `@mcp` scenario that names `pi-mcp-adapter` in a step, a table cell, or a doc string, and on an `@adapter-only` or `@builtin-only` scenario that names no ID (DUAL-02). It reports each finding at the line of the scenario.
 
 ## Run tokens
 

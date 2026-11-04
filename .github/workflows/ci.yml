@@ -116,26 +116,35 @@ jobs:
       - name: Run the integration tests
         run: npm run test:integration
 
-  # D-CF1-16: the behavioral tests run as two path shards, lifecycle and
-  # components, so the component scenarios that start a profile Pi do not
-  # lengthen the lifecycle run. fail-fast is off, so one shard's failure does
-  # not hide the other's result. Each timeout is at least 1.5 times the
-  # shard's run on a hosted runner and never below 15 minutes.
-  # test/architecture/behavioral-shard-coverage.test.ts fails when a feature
-  # file is in no shard or in two, so a new directory cannot drop out of CI.
+  # DUAL-03: the behavioral matrix has a profile axis. Each job runs one
+  # cucumber profile on one path shard: the adapter profile as two shards,
+  # lifecycle and components, so the component scenarios that start a profile
+  # Pi do not lengthen the lifecycle run (D-CF1-16), and the builtin profile,
+  # which runs far fewer scenarios, as one shard of every feature file.
+  # fail-fast is off, so one job's failure does not hide another's result.
+  # Each timeout is at least 1.5 times the job's run on a hosted runner and
+  # never below 15 minutes (D-CF1-16).
+  # test/architecture/behavioral-shard-coverage.test.ts fails when a profile
+  # has no shard, or when a feature file is in no shard of a profile or in
+  # two, so a new directory cannot drop out of CI.
   behavioral:
-    name: behavioral tests, ${{ matrix.shard }} (Node 24)
+    name: behavioral tests, ${{ matrix.profile }} ${{ matrix.shard }} (Node 24)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          - shard: lifecycle
+          - profile: adapter
+            shard: lifecycle
             paths: features/marketplace features/plugin
-          - shard: components
+          - profile: adapter
+            shard: components
             paths: >-
               features/skill features/slash-command features/agent features/hook features/mcp-server features/workflow
+          - profile: builtin
+            shard: all
+            paths: features
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -151,14 +160,18 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      # npm run test:cucumber first runs scripts/install-test-peers.mjs, which
-      # installs the three companions at their declared floors. The shard's
-      # paths reach the shell only through the environment (zizmor template
-      # injection), and the unquoted expansion splits them into arguments.
+      # The single-profile script first runs scripts/install-test-peers.mjs,
+      # which installs the three companions at their declared floors, and then
+      # cucumber with the job's profile and paths. npm passes extra arguments to
+      # the last command of a chain only, so the two-profile test:cucumber
+      # cannot take a shard. The profile and the paths reach the shell only
+      # through the environment (zizmor template injection), and the unquoted
+      # expansion splits the paths into arguments.
       - name: Run the behavioral tests
         env:
+          PROFILE: ${{ matrix.profile }}
           SHARD_PATHS: ${{ matrix.paths }}
-        run: npm run test:cucumber -- $SHARD_PATHS
+        run: npm run test:cucumber:profile -- --profile "$PROFILE" $SHARD_PATHS
 
   sonarcloud:
     needs: [direct-coverage]
