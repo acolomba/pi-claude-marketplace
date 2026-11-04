@@ -115,6 +115,7 @@ import { assertRecordedMarketplaceName } from "../../domain/name.ts";
 import {
   requirePartialInstallable,
   requireInstallable,
+  resolutionFor,
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
@@ -185,6 +186,7 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
@@ -227,6 +229,16 @@ export interface InstallLedgerOptions {
   readonly plugin: string;
   readonly mapModel?: boolean;
   readonly partial?: boolean;
+  /**
+   * D-P3-11 / D-P3-13: the MCP implementation whose view of the resolution the
+   * `--partial` consent gate reads. A user-run install, its cascade members,
+   * and a fresh import or apply install pass the run's implementation, so they
+   * ask only for what that implementation cannot run. A re-materialization of
+   * a kept record (enable, the re-enable cascade member, promotion) passes
+   * `"none"`, so a switch never asks for consent the user already gave. No
+   * default exists: every caller names the view it gates on.
+   */
+  readonly consentView: ActiveMcpImplementation;
   readonly pinVersionOverride?: string;
   /**
    * RESV-03: the commit a constrained dependency's release tag resolved to.
@@ -350,6 +362,11 @@ export interface InstallLedgerSummary {
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
+  /**
+   * MREC-03: the resolution as the run's active MCP implementation sees it,
+   * which every row composer reads. The record stores the neutral verdict
+   * (D-P3-02), so one install reads per implementation at read time.
+   */
   readonly resolved: MaterializablePlugin;
   readonly version: string;
   readonly pluginDataDir: string;
@@ -841,11 +858,21 @@ async function preflightInstallResolve(
   // partially-available arm; the default gate still blocks it. Both gates
   // reject `unavailable` (FORCE-05), so `--partial` never bypasses a hard
   // structural failure.
+  // D-P3-11 / MREC-06: the gate reads the consent view, so a server only the
+  // named implementation blocks needs `--partial` and one only the other
+  // blocks does not (D-MB-05 for `"none"`). The decision is taken here, under
+  // the scope's state lock, from this transaction's own resolution.
+  const consentView = resolutionFor(resolved, opts.consentView);
   if (opts.partial === true) {
-    requirePartialInstallable(resolved, "install");
+    requirePartialInstallable(consentView, "install");
   } else {
-    requireInstallable(resolved, "install");
+    requireInstallable(consentView, "install");
   }
+
+  // D-P3-02: a view is unavailable exactly when the neutral resolution is, so
+  // this cannot throw once the view passed; it narrows the neutral
+  // resolution, which `statePhase` stores unchanged.
+  requirePartialInstallable(resolved, "install");
 
   if (opts.directoryPin !== undefined) {
     await assertDirectoryPinSatisfied(
@@ -1020,7 +1047,10 @@ export async function runInstallLedger(
     return result;
   }
 
-  return { kind: "installed", summary: toInstallLedgerSummary(result.installCtx) };
+  return {
+    kind: "installed",
+    summary: toInstallLedgerSummary(result.installCtx, options.run.softDeps.mcpImplementation),
+  };
 }
 
 /** D-PL1-13: keep a failed ledger's collected warnings, when it has any. */
@@ -1034,14 +1064,21 @@ function captureStagingWarnings(
   }
 }
 
-/** Project the completed ledger context onto its caller-facing summary. */
-function toInstallLedgerSummary(context: InstallLedgerContext): InstallLedgerSummary {
+/**
+ * Project the completed ledger context onto its caller-facing summary. The
+ * summary's resolution is the run's active view (MREC-03); the context keeps
+ * the neutral one that `statePhase` stored.
+ */
+function toInstallLedgerSummary(
+  context: InstallLedgerContext,
+  active: ActiveMcpImplementation,
+): InstallLedgerSummary {
   return {
     locations: context.locations,
     cwd: context.cwd,
     marketplace: context.marketplace,
     plugin: context.plugin,
-    resolved: context.resolved,
+    resolved: resolutionFor(context.resolved, active),
     version: context.version,
     pluginDataDir: context.pluginDataDir,
     frontmatterDegradations: context.frontmatterDegradations,

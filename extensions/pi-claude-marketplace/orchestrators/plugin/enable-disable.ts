@@ -442,6 +442,10 @@ async function materializeEnableRoot(
       ...recordedSourcePin(installed),
       allowExistingRecord: true,
       partial,
+      // D-P3-13 / D-MB-06: enable re-materializes a kept record, so a switch
+      // of MCP implementation never asks for `--partial`; `partial` reads the
+      // stored neutral verdict.
+      consentView: "none",
       // D-08-12: the enable branch reaches the ledger without going through
       // `install-flow.ts`, so it is the second composition root that supplies
       // the required removal port.
@@ -1025,6 +1029,9 @@ function buildEnableCascadeMemberPhase(
             ...recordedSourcePin(record),
             allowExistingRecord: true,
             partial,
+            // D-P3-13 / D-MB-06: a re-enabled member re-materializes its kept
+            // record, so a switch of MCP implementation never asks for consent.
+            consentView: "none",
             removalOps: createRemovalOps(),
             env: opts.env,
           },
