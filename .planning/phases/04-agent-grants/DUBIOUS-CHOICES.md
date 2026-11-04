@@ -306,3 +306,11 @@ Each entry: severity; choice; alternatives; why dubious. Recorded in the named p
 - **P4-DC-45 (Low):** the checker's warning 1 is fixed in 04-01 (the adapter keeps the verbatim Claude token for per-tool `excludeTools`; only built-in uses `toolName`). Its two scope warnings (04-01 has 12 files; 04-01/03/04/05 estimates 115k-160k over a 100k budget, low confidence) are accepted without re-slicing. Alt: split 04-01's index task and 04-05's Task 3 into own plans. Why: larger executor contexts.
 - **P4-DC-46 (Medium):** the checker accepted P4-DC-13 (autoupdate and apply convergence stage the adapter form under built-in until the next load) as INFO, though success criterion 1 names "updating". Alt: treat as scope reduction and thread the implementation through unowned update files.
 - **P4-DC-47 (Low):** the GSD decision-coverage gate could not parse 04-CONTEXT.md (no `D-NN` bullets); planning proceeded on the planner's own source audit, which maps every CONTEXT decision to a plan. Alt: rewrite CONTEXT with D-IDs and rerun.
+
+## Wave 1 (executors 04-01, 04-02, 2026-11-04)
+
+- **P4-DC-48 (Low):** commit trailers carry `Claude-Session: .../session_01EDUMG7S9uXh4o5dikBwum8` (the child brief's value) although this session's harness reminder names `session_01EDUMG87PKcySw33ikhvFmE`; the session's first commit (3685c3e) used the latter. Alt: the harness value. Why: the two sources disagree.
+- **P4-DC-49 (Low, 04-01):** the conformance test reproduces Pi 1.5.0's `createMcpToolName` with node:crypto instead of importing Pi's `dist/extensions/mcp/tools.js` (outside Pi's exports map).
+- **P4-DC-50 (Low, 04-01):** an io test pins TypeBox's error text (`must be equal to constant`) for a bad `mcpImplementation`, like existing tests do.
+- **P4-DC-51 (Low, 04-01):** part of the RED proof is type-level only (the new warning module had no prior failing run; the schema "accepts" cases already passed at runtime because TypeBox keeps extra properties).
+- **P4-DC-52 (Low, 04-02):** the child autoapply scenario's red run fails at the session-report step (the child's startup load already installed during the Given), not at "no installed plugins". Alt: a check right after the child Pi starts.
