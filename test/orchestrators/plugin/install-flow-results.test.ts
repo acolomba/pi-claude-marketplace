@@ -647,6 +647,62 @@ describe("promotion", () => {
     assert.strictEqual(promotion?.version, "1.2.3");
     assert.deepStrictEqual(sink.mcpConfigNotices, []);
   });
+
+  test("D-P3-13 / D-MB-06: re-materializes a disabled dependency with an sse server under Pi's built-in MCP without --partial", async (t) => {
+    // arrange
+    const { cwd, locations } = await tempLocations(t, "install-results-promotion-sse-");
+    const { ctx, run } = makeCtx({ mcpImplementation: "builtin" });
+    const record = pluginRecord({ provenance: "dependency", enabled: false });
+    const marketplaceRoot = path.join(cwd, "market");
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "app");
+    record.resolvedSource = pluginRoot;
+    const marketplace = await seedMarketplaceRecord({
+      cwd,
+      marketplace: "market",
+      plugins: { app: record },
+      scope: "project",
+    });
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+    );
+    const state: ExtensionState = {
+      schemaVersion: 3,
+      marketplaces: { mp: { ...marketplace, name: "mp" } },
+    };
+
+    // act
+    const promotion = await promoteDependencyRecord({
+      opts: { ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "app" },
+      state,
+      locations,
+      orchestrated: true,
+      config: {
+        current: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
+        targetIsLocal: false,
+      },
+      capture: { rollbackPartials: [], version: undefined },
+      transaction: { runPhases, withLockedStateTransaction },
+      sink: { mcpConfigNotices: [] },
+      env: {},
+      removalOps: REMOVAL_OPS,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        materialized: promotion?.materialized.map(({ key }) => key),
+        declaresMcp: promotion?.declaresMcp,
+        installable: state.marketplaces.mp?.plugins.app?.compatibility.installable,
+      },
+      {
+        materialized: ["app@mp"],
+        declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
+        installable: true,
+      },
+    );
+  });
 });
 
 describe("cascade projections", () => {

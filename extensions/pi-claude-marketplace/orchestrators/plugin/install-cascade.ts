@@ -1464,6 +1464,10 @@ function buildReEnableMemberPhase(
           ...(record.resolvedVersion !== undefined && { resolvedVersion: record.resolvedVersion }),
           allowExistingRecord: true,
           partial: !record.compatibility.installable,
+          // D-P3-13 / D-MB-06: a re-enabled member re-materializes its kept
+          // record, so a switch of MCP implementation never asks for consent;
+          // this overrides the run's view the spread carries.
+          consentView: "none",
         },
         options.capture,
         transaction,

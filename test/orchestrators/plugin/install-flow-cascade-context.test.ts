@@ -101,9 +101,9 @@ function emptyCapture(): InstallFailureCapture {
   return { rollbackPartials: [], version: undefined };
 }
 
-test("builds member ledger options from shared and member inputs", () => {
+test("D-P3-11: builds member ledger options from shared and member inputs, gating consent on the run's MCP implementation", () => {
   // arrange
-  const { ctx, run } = makeCtx();
+  const { ctx, run } = makeCtx({ mcpImplementation: "builtin" });
   const credentialOps: CredentialOps = {
     fill: () => Promise.resolve(null),
     approve: () => Promise.resolve(),
@@ -176,6 +176,7 @@ test("builds member ledger options from shared and member inputs", () => {
     provenance: "dependency",
     mapModel: true,
     partial: true,
+    consentView: "builtin",
     pinVersionOverride: "1.2.3",
     cloneCacheSeam,
     cloneCandidates,
@@ -218,6 +219,7 @@ test("builds member ledger options with only the required inputs", () => {
     cwd: "/project",
     marketplace: "mp",
     plugin: "app",
+    consentView: "none",
     cloneProbe: probeInstallClone,
     removalOps: REMOVAL_OPS,
     env: {},
@@ -713,6 +715,7 @@ test("builds a dependency member's ledger options from its pin and directory ran
     resolvedVersion: "1.2.3",
     directoryPin,
     provenance: "dependency",
+    consentView: "none",
     cloneCandidates,
     cloneProbe: probeInstallClone,
     removalOps: REMOVAL_OPS,

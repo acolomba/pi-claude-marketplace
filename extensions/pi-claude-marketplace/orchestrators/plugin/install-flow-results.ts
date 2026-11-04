@@ -525,6 +525,9 @@ async function materializePromotedRecord(
       ...(record.resolvedVersion !== undefined && { resolvedVersion: record.resolvedVersion }),
       allowExistingRecord: true,
       partial: !record.compatibility.installable,
+      // D-P3-13 / D-MB-06: a promotion re-materializes a kept record, so a
+      // switch of MCP implementation never asks for consent.
+      consentView: "none",
       removalOps: args.removalOps,
       env: args.env,
     },
