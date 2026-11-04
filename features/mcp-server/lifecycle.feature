@@ -202,6 +202,37 @@ Feature: MCP server lifecycle
       | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
       | 2    | tool result | mcp returned: v2:echo:ping                                                  |
 
+  @builtin-only
+  Scenario: Updating a plugin registers the new version's server under Pi's built-in MCP (BLT-06)
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"stub": {"stub": {"env": {"STUB_TAG": "v2"}}}}
+      """
+    Given the user has run "/claude:plugin update demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    Given the scripted model plays these steps:
+      | reply | tool                        | arguments         |
+      |       | tool_search                 | {"query": "echo"} |
+      |       | mcp__plugin_demo_stub__echo | {"text": "ping"}  |
+      | Done. |                             |                   |
+    When the user prompts "call the stub"
+    Then the model receives these calls, with each tool search reduced to the tools it loads:
+      | call | role        | text                                                                                  |
+      | 1    | user        | call the stub                                                                         |
+      | 2    | user        | call the stub                                                                         |
+      | 2    | assistant   | tool call tool_search {"query":"echo"}                                                |
+      | 2    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given. |
+      | 3    | user        | call the stub                                                                         |
+      | 3    | assistant   | tool call tool_search {"query":"echo"}                                                |
+      | 3    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given. |
+      | 3    | assistant   | tool call mcp__plugin_demo_stub__echo {"text":"ping"}                                 |
+      | 3    | tool result | mcp__plugin_demo_stub__echo returned: v2:echo:ping                                    |
+
   @adapter-only
   Scenario: A published change to the server reaches no session until the plugin updates
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
@@ -236,6 +267,36 @@ Feature: MCP server lifecycle
       | 2    | user        | call the stub                                                               |
       | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
       | 2    | tool result | mcp returned: echo:ping                                                     |
+
+  @builtin-only
+  Scenario: A published change to the server reaches no built-in session until the plugin updates (BLT-06)
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"stub": {"stub": {"env": {"STUB_TAG": "v2"}}}}
+      """
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    Given the scripted model plays these steps:
+      | reply | tool                        | arguments         |
+      |       | tool_search                 | {"query": "echo"} |
+      |       | mcp__plugin_demo_stub__echo | {"text": "ping"}  |
+      | Done. |                             |                   |
+    When the user prompts "call the stub"
+    Then the model receives these calls, with each tool search reduced to the tools it loads:
+      | call | role        | text                                                                                  |
+      | 1    | user        | call the stub                                                                         |
+      | 2    | user        | call the stub                                                                         |
+      | 2    | assistant   | tool call tool_search {"query":"echo"}                                                |
+      | 2    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given. |
+      | 3    | user        | call the stub                                                                         |
+      | 3    | assistant   | tool call tool_search {"query":"echo"}                                                |
+      | 3    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given. |
+      | 3    | assistant   | tool call mcp__plugin_demo_stub__echo {"text":"ping"}                                 |
+      | 3    | tool result | mcp__plugin_demo_stub__echo returned: echo:ping                                       |
 
   @adapter-only
   Scenario: A user's disabled choice for a plugin server survives an update
@@ -342,3 +403,19 @@ Feature: MCP server lifecycle
     Then pi offers these plugin mcp tools:
       | tool                        | active |
       | mcp__plugin_demo_stub__echo | no     |
+
+  @builtin-only
+  Scenario: A plugin that autoapply installs during a load registers its server in the same session (BLT-01, D-MB-10)
+    Given a config in scope user and layer local, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    When the user lists the mcp tools pi offers
+    Then pi lists these registered mcp servers:
+      | name             |
+      | plugin_demo_stub |
