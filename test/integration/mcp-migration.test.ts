@@ -544,6 +544,7 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
       supported: [],
       unsupported: ["mcpServers"],
     });
+    assert.strictEqual(record.compatibilityBasis, "neutral");
     assert.deepStrictEqual(notifications, [
       {
         message: [

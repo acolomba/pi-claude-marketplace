@@ -95,7 +95,7 @@ import { createNotificationBoundary } from "../../edge/notification-boundary.ts"
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
@@ -10581,6 +10581,52 @@ describe("applyReconcile catalog convergence", () => {
           "\n" +
           "● mp [project]\n" +
           "  ● demo v1.0.0 (partially-upgradable) {lsp}\n" +
+          "    Run update --partial on this plugin to update it with the supported components.\n" +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
+      },
+    ]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
+  test("D-P3-13: a candidate that adds an sse server is declined under Pi's built-in MCP and writes nothing", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "converge-sse-builtin",
+      {
+        trees: { demo: { skill: "clean" } },
+        supported: { demo: ["skills"] },
+        offered: { demo: "1.1.0" },
+      },
+    );
+    await writeUnder(
+      path.join(marketplaceRoot, "plugins", "demo", ".mcp.json"),
+      JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+    );
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const run = runWithSoftDeps({
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      mcpImplementation: "builtin",
+      workflowEngineLoaded: false,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 (partially-upgradable) {unsupported mcp}\n" +
           "    Run update --partial on this plugin to update it with the supported components.\n" +
           "\n" +
           "Reconcile: 1 warning",

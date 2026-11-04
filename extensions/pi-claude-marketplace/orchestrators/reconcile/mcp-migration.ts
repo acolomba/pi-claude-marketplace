@@ -21,8 +21,12 @@
 // AMIG-01: the move also removes what the installed plugin no longer
 // provides, in the same `mcp.json` write. A legacy name the re-staged source
 // no longer declares is removed. A server the source declares with a feature
-// pi-mcp-adapter cannot run is removed and not written, and the record becomes
-// partially installed, as `install --partial` leaves it. A plugin whose MCP
+// pi-mcp-adapter cannot run is removed and not written, because
+// `mcp-adapter.json` is pi-mcp-adapter's file under every implementation
+// (MSEL-04, D-P3-16). The record gets the neutral verdict of the servers the
+// source declares, with its basis (D-P3-02): it becomes partially installed,
+// as `install --partial` leaves it, only for a server no implementation runs.
+// A plugin whose MCP
 // config is malformed has every legacy entry removed and none written, and
 // its record lists no MCP server, as a fresh install refuses it. A disabled
 // plugin's entries are removed with no re-stage and no record change
@@ -74,10 +78,15 @@ import {
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { effectiveMcpCompatibility } from "../../domain/mcp-implementation.ts";
 import { generatedMcpServerKey } from "../../domain/name.ts";
-import { resolveStrict } from "../../domain/plugin-resolver.ts";
+import { resolutionFor, resolveStrict } from "../../domain/plugin-resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, replaceCompatibility } from "../../persistence/state-io.ts";
+import {
+  isRecordedButDisabled,
+  mcpServerConfigsOf,
+  replaceCompatibility,
+} from "../../persistence/state-io.ts";
 import { McpConfigFileError, McpServerCollisionError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
@@ -507,30 +516,49 @@ function applyStagedNames(record: PluginInstallRecord, stagedNames: readonly str
   return true;
 }
 
+function sameKinds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((kind, index) => kind === right[index]);
+}
+
 /**
- * AMIG-01: a moving owner whose source declares a server pi-mcp-adapter
- * cannot run becomes partially installed, as `install --partial` records it:
- * not installable, with `mcpServers` among the unsupported components.
+ * AMIG-01 / D-P3-16: a moving owner's record holds the neutral verdict of the
+ * servers its source declares, with `compatibilityBasis: "neutral"`, so a
+ * migration never puts pi-mcp-adapter's verdict into a record (D-P3-02). A
+ * server no implementation runs makes the record partially installed, as
+ * `install --partial` records it. A record that already holds that verdict
+ * and the basis is not rewritten. Returns whether the record changed.
  */
-function applyDroppedServers(action: OwnerAction): boolean {
-  if (action.arm !== "move" || (action.resolved.droppedMcpServers ?? []).length === 0) {
+function applyNeutralVerdict(action: OwnerAction): boolean {
+  if (action.arm !== "move") {
     return false;
   }
 
-  const compatibility = action.record.compatibility;
-  const listed = compatibility.unsupported.includes("mcpServers");
-  if (!compatibility.installable && listed) {
+  const { record, resolved } = action;
+  const neutral = effectiveMcpCompatibility(
+    record,
+    {
+      kind: "recorded",
+      servers: mcpServerConfigsOf(resolved.declaredMcpServers),
+      bundle: resolved.mcpBundle === true,
+    },
+    "none",
+  );
+  const compatibility = record.compatibility;
+  if (
+    record.compatibilityBasis === "neutral" &&
+    compatibility.installable === neutral.installable &&
+    sameKinds(compatibility.unsupported, neutral.unsupported)
+  ) {
     return false;
   }
 
-  const unsupported = [...compatibility.unsupported];
-  if (!listed) {
-    unsupported.push("mcpServers");
-  }
-
-  // MREC-01: the adapter's dropped servers make an adapter verdict, so the
-  // write clears the basis.
-  replaceCompatibility(action.record, { ...compatibility, installable: false, unsupported });
+  // `replaceCompatibility` clears the basis, so the basis is set after it.
+  replaceCompatibility(record, {
+    ...compatibility,
+    installable: neutral.installable,
+    unsupported: [...neutral.unsupported],
+  });
+  record.compatibilityBasis = "neutral";
   return true;
 }
 
@@ -549,7 +577,7 @@ function recordAction(
   }
 
   const namesChanged = applyStagedNames(action.record, stagedNames);
-  const compatibilityChanged = applyDroppedServers(action);
+  const compatibilityChanged = applyNeutralVerdict(action);
   if (!namesChanged && !compatibilityChanged) {
     return false;
   }
@@ -577,7 +605,11 @@ function removalRow(input: McpMigrationInput, staged: StagedOwner, name: string)
     return { kind: "moved", ...fields, from: name, to: generatedMcpServerKey(fields.plugin, name) };
   }
 
-  const dropped = action.resolved.droppedMcpServers?.find((entry) => entry.server === name);
+  // D-P3-16: `mcp-adapter.json` stages the adapter's subset, so a server it
+  // left out is named with the feature pi-mcp-adapter cannot run.
+  const dropped = resolutionFor(action.resolved, "adapter").droppedMcpServers?.find(
+    (entry) => entry.server === name,
+  );
   return dropped === undefined
     ? { kind: "removed", ...fields, server: name, cause: "not-declared" }
     : {
