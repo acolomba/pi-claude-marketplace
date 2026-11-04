@@ -104,7 +104,7 @@ test("MREC-03 / D-P3-04: list shows one sse install per implementation and write
     const installedRow = {
       status: "installed",
       name: "hello",
-      dependencies: ["mcp"],
+      dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
       version: "1.0.0",
       severity: "info",
       needsReload: false,

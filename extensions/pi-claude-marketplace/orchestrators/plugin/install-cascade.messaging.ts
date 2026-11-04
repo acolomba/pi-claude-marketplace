@@ -30,7 +30,7 @@ import type { InstallMsg } from "./install.messaging.ts";
 import type { LedgerDegradationSignals } from "./shared.ts";
 import type { DependencyClosureResult } from "../../domain/dependency-closure.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { Dependency, McpDependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   ContentReason,
   PluginFailedMessage,
@@ -139,7 +139,7 @@ export interface CascadeInstalledRow extends Pick<
   /** Unsupported kinds omitted by this member's partial installation. */
   readonly unsupported?: readonly string[];
   readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
+  readonly declaresMcp: McpDependency | false;
   readonly declaresWorkflows: boolean;
   /**
    * TAGS-02: whether this member installed the marketplace's current copy
@@ -217,11 +217,14 @@ function sortRows(rows: readonly CascadeMsg[], scope: Scope): readonly CascadeMs
   );
 }
 
-/** The soft-dependency kinds a materialized member staged, in probe order. */
+/**
+ * The soft-dependency kinds a materialized member staged, in probe order; the
+ * MCP entry is the member's `McpDependency` (D-P3-10).
+ */
 function stagedDependencies(member: CascadeInstalledRow): readonly Dependency[] {
   return [
     ...(member.declaresAgents ? (["agents"] as const) : []),
-    ...(member.declaresMcp ? (["mcp"] as const) : []),
+    ...(member.declaresMcp === false ? [] : [member.declaresMcp]),
     ...(member.declaresWorkflows ? (["workflows"] as const) : []),
   ];
 }

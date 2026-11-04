@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import { readRecordMcpVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/mcp-verdict-read.ts";
+import {
+  readRecordMcpDependency,
+  readRecordMcpVerdict,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/mcp-verdict-read.ts";
 
 import type { LegacyServersSource } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -239,3 +242,42 @@ for (const { active, unsupported, blocked } of [
     assert.deepStrictEqual(verdict.effective, { installable: false, unsupported, blocked });
   });
 }
+
+test("P3-DC-24: reads an unreadable legacy record that staged a server as the adapter's dependency", async (t) => {
+  // arrange
+  const marketplace = await marketplaceFixture(t, false);
+  const record = legacyRecord(marketplace.pluginRoot, {
+    resources: {
+      skills: [],
+      prompts: [],
+      agents: [],
+      mcpServers: ["events"],
+      hooks: [],
+      workflows: [],
+    },
+  });
+
+  // act
+  const dependency = await readRecordMcpDependency(record, marketplace.source);
+
+  // assert
+  assert.deepStrictEqual(dependency, { kind: "mcp", runEvery: ["adapter"] });
+});
+
+test("D-P3-10: reads a neutral record's dependency from its recorded servers", async (t) => {
+  // arrange
+  const marketplace = await marketplaceFixture(t, false);
+  const record = legacyRecord(marketplace.pluginRoot, {
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [
+      { name: "events", config: EVENTS },
+      { name: "live", config: LIVE },
+    ],
+  });
+
+  // act
+  const dependency = await readRecordMcpDependency(record, marketplace.source);
+
+  // assert
+  assert.deepStrictEqual(dependency, { kind: "mcp", runEvery: ["adapter"] });
+});

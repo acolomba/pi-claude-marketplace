@@ -1,11 +1,11 @@
 import { type Reason } from "../notification-types.ts";
 
-import type { SoftDepStatus } from "../../platform/pi-api.ts";
+import type { McpImplementationId, SoftDepStatus } from "../../platform/pi-api.ts";
 
 /**
  * shared/concerns/soft-dep.ts -- the soft-dep marker injection concern (D-01).
- * Owns the `Dependency` literal-union, the three soft-dep marker constants, and
- * the pure `softDepMarkers` helper that maps a per-row declares-flags triple + a
+ * Owns the `Dependency` union, the three soft-dep marker constants, and the
+ * pure `softDepMarkers` helper that maps a per-row declares triple + a
  * `SoftDepStatus` snapshot to the soft-dep markers to append. It also owns the
  * companion package names and `companionRequirements`, the same mapping shaped
  * for the info `requires:` line (ADET-01).
@@ -19,15 +19,33 @@ import type { SoftDepStatus } from "../../platform/pi-api.ts";
  */
 
 /**
+ * D-P3-10 / D-MB-07: a plugin's MCP dependency. It exists only when at least
+ * one MCP implementation runs one of the plugin's servers; `runEvery` lists,
+ * in the order adapter then builtin, each implementation that runs every such
+ * server, and is empty when the servers split between the two.
+ */
+export interface McpDependency {
+  readonly kind: "mcp";
+  readonly runEvery: readonly McpImplementationId[];
+}
+
+/**
  * Closed set of dependency probe targets (SNM-06). 3 members, each selecting
  * the snapshot flag behind one soft-dep marker (`requires pi-subagents` /
- * `requires pi-mcp-adapter` / `requires pi-dynamic-workflows` reason emission).
+ * the MCP marker / `requires pi-dynamic-workflows` reason emission).
+ * D-P3-10: the MCP member is the `McpDependency` itself, so a row carries
+ * which implementations run every server.
  *
- * Spelled out as a literal union rather than a runtime `DEPENDENCIES` tuple:
+ * Spelled out as a union rather than a runtime `DEPENDENCIES` tuple:
  * nothing iterates the members at runtime, so the union type alone is the
  * sole declaration site.
  */
-export type Dependency = "agents" | "mcp" | "workflows";
+export type Dependency = "agents" | McpDependency | "workflows";
+
+/** D-P3-10: picks the MCP member out of a row's dependency list. */
+export function isMcpDependency(dependency: Dependency): dependency is McpDependency {
+  return typeof dependency === "object";
+}
 
 /**
  * ADET-01: the companion extension a component kind needs at runtime -- agents
@@ -74,10 +92,12 @@ const SOFT_DEP_MARKER_WORKFLOWS: Reason = `requires ${COMPANION_WORKFLOWS}`;
  * SNM-06: the dependencies a plugin's declares-flags select, in canonical order.
  * WDEP-02: `workflows` comes last, so a row that declares agents and mcp renders
  * the same two-marker brace whether or not it also declares workflows.
+ * D-P3-10: an `McpDependency` fills the mcp slot with itself; `false` leaves
+ * it empty.
  */
 export function declaredDependencies(flags: {
   readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
+  readonly declaresMcp: McpDependency | false;
   readonly declaresWorkflows: boolean;
 }): readonly Dependency[] {
   const deps: Dependency[] = [];
@@ -85,8 +105,8 @@ export function declaredDependencies(flags: {
     deps.push("agents");
   }
 
-  if (flags.declaresMcp) {
-    deps.push("mcp");
+  if (flags.declaresMcp !== false) {
+    deps.push(flags.declaresMcp);
   }
 
   if (flags.declaresWorkflows) {
@@ -102,12 +122,13 @@ export function declaredDependencies(flags: {
  * `{<r1>, <r2>}` brace join).
  *
  *  - Appends `SOFT_DEP_MARKER_AGENTS` iff `declaresAgents && !probe.piSubagentsLoaded`.
- *  - Appends `SOFT_DEP_MARKER_MCP` iff `declaresMcp && !probe.piMcpAdapterLoaded`.
+ *  - Appends `SOFT_DEP_MARKER_MCP` iff `declaresMcp` is an `McpDependency` and
+ *    `!probe.piMcpAdapterLoaded`, whatever its `runEvery` holds (D-MB-07).
  *  - Appends `SOFT_DEP_MARKER_WORKFLOWS` iff `declaresWorkflows && !probe.workflowEngineLoaded`.
  */
 export function softDepMarkers(
   declaresAgents: boolean,
-  declaresMcp: boolean,
+  declaresMcp: McpDependency | false,
   declaresWorkflows: boolean,
   probe: SoftDepStatus,
 ): readonly Reason[] {
@@ -117,7 +138,7 @@ export function softDepMarkers(
     markers.push(SOFT_DEP_MARKER_AGENTS);
   }
 
-  if (declaresMcp && !probe.piMcpAdapterLoaded) {
+  if (declaresMcp !== false && !probe.piMcpAdapterLoaded) {
     markers.push(SOFT_DEP_MARKER_MCP);
   }
 

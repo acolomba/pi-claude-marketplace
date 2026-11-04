@@ -58,7 +58,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
                 needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
-                dependencies: ["agents", "mcp"],
+                dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
               },
             ],
           },

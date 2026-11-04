@@ -115,7 +115,7 @@ test("composes a same-scope installed row with exact dependencies and descriptio
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "alpha",
-    dependencies: ["agents", "mcp", "workflows"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }, "workflows"],
     version: "1.0.0",
     description: "Alpha plugin.",
     severity: "info",
@@ -740,7 +740,7 @@ test("MREC-03: lists a neutral sse record as installed under pi-mcp-adapter", as
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "alpha",
-    dependencies: ["mcp"],
+    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
     version: "1.0.0",
     description: "Alpha plugin.",
     severity: "info",
@@ -849,3 +849,78 @@ for (const { mcpImplementation, expectedRow } of [
     assert.deepStrictEqual(row, expectedRow);
   });
 }
+
+test("D-P3-10: an installed row over a record whose staged server is a ws server carries no MCP dependency", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord({
+      resources: {
+        agents: [],
+        hooks: [],
+        mcpServers: ["live"],
+        prompts: [],
+        skills: [],
+        workflows: [],
+      },
+    }),
+    mcpServerConfigs: [{ name: "live", config: { type: "ws", url: "wss://mcp.example.com/ws" } }],
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record,
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "alpha",
+    dependencies: [],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("D-P3-10 / D-MB-07: an installed row under Pi's built-in MCP carries the server the adapter did not stage", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord(),
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [
+      { name: "asker", config: { command: "node", bareElicitationCapability: true } },
+    ],
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    mcpImplementation: "builtin",
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record,
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "alpha",
+    dependencies: [{ kind: "mcp", runEvery: ["builtin"] }],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+    severity: "info",
+    needsReload: false,
+  });
+});

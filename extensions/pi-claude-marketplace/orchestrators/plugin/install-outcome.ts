@@ -160,6 +160,7 @@ import { WorkflowsUnstageFailureError } from "../marketplace/shared.ts";
 import { materializeMarketplaceTagClone } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone, type InstallCloneCacheSeam } from "./install-clone-probe.ts";
+import { mcpDependencyOf } from "./mcp-verdict.ts";
 import {
   createPackagesPhase,
   DEFAULT_PACKAGE_INSTALL_OPS,
@@ -1752,7 +1753,7 @@ export function installedPluginOutcome(
     version: summary.version,
     resourcesChanged: !landedDisabled && stagedAny,
     declaresAgents: summary.stagedAgentNames.length > 0,
-    declaresMcp: summary.stagedMcpServerNames.length > 0,
+    declaresMcp: mcpDependencyOf(Object.values(summary.resolved.declaredMcpServers)),
     declaresWorkflows: summary.stagedWorkflowNames.length > 0,
     ...(landedDisabled && { landedDisabled: true as const }),
     ...(postCommitWarnings.length > 0 && { postCommitWarnings: [...postCommitWarnings] }),

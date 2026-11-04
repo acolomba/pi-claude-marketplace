@@ -1,6 +1,7 @@
 import { type Reason } from "./notification-types.ts";
 
 import type { SoftDepStatus } from "../platform/pi-api.ts";
+import type { McpDependency } from "./concerns/soft-dep.ts";
 
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
@@ -84,18 +85,23 @@ export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "
  * present, or none declared) -> `info`. The caller passes the command run's
  * snapshot (D-05), the same snapshot resolve reads for the `{requires pi-...}`
  * marker, so severity and marker never disagree. The row bytes stay the same;
- * only the desired-state severity moves.
+ * only the desired-state severity moves. D-P3-10: an `McpDependency` counts as
+ * a declared `mcp` kind, and `false` as none.
  */
 export function companionSeverity(
   {
     declaresAgents,
     declaresMcp,
     declaresWorkflows,
-  }: { declaresAgents: boolean; declaresMcp: boolean; declaresWorkflows: boolean },
+  }: {
+    declaresAgents: boolean;
+    declaresMcp: McpDependency | false;
+    declaresWorkflows: boolean;
+  },
   probe: SoftDepStatus,
 ): "info" | "warning" {
   return (declaresAgents && !probe.piSubagentsLoaded) ||
-    (declaresMcp && !probe.piMcpAdapterLoaded) ||
+    (declaresMcp !== false && !probe.piMcpAdapterLoaded) ||
     (declaresWorkflows && !probe.workflowEngineLoaded)
     ? "warning"
     : "info";

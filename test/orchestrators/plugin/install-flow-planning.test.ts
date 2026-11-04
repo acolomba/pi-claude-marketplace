@@ -773,7 +773,7 @@ describe("createUpdateDependencyResolver", () => {
           {
             status: "installed",
             name: "zcore@mp",
-            dependencies: ["mcp"],
+            dependencies: [{ kind: "mcp", runEvery: ["adapter", "builtin"] }],
             version: "1.0.0",
             severity: "warning",
             needsReload: true,

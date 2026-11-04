@@ -97,6 +97,7 @@ import {
   type EnableCascadeMemberRow,
   type EnableMsg,
 } from "./enable-disable.messaging.ts";
+import { mcpDependencyOf } from "./mcp-verdict.ts";
 import {
   absentTargetReasons,
   applyPartialCascadeFold,
@@ -130,6 +131,7 @@ import type {
   ClosureMember,
   DependencyClosureResult,
 } from "../../domain/dependency-closure.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
@@ -482,9 +484,10 @@ async function materializeEnableRoot(
     ...(degradedKinds.length > 0 && { degradedKinds }),
     // SEV-01 / D-98-02: the LENGTH of the staged-name arrays only. The names
     // themselves must never reach a rendered row -- the row needs the
-    // declaration verdict, nothing more.
+    // declaration verdict, nothing more. D-P3-10: the MCP signal is the
+    // dependency of the declared servers.
     ...(summary.stagedAgentNames.length > 0 && { stagedAgents: true }),
-    ...(summary.stagedMcpServerNames.length > 0 && { stagedMcpServers: true }),
+    ...stagedMcpSignal(resolved),
     ...(summary.stagedWorkflowNames.length > 0 && { stagedWorkflows: true }),
     // WLIF-05 / WLIF-06: the retirement gate, computed here because this is
     // the only place both operands exist. `installed` is the PRE-enable record
@@ -1052,7 +1055,7 @@ function buildEnableCascadeMemberPhase(
         version: summary.version,
         dependencies: enableRowDependencies({
           stagedAgents: summary.stagedAgentNames.length > 0,
-          stagedMcpServers: summary.stagedMcpServerNames.length > 0,
+          ...stagedMcpSignal(summary.resolved),
         }),
         reasons: ["dependency enabled"],
         severity: "info",
@@ -2897,10 +2900,21 @@ function freshOutcomeToTypedResult(
     ...(outcome.degradedKinds !== undefined &&
       outcome.degradedKinds.length > 0 && { degradedKinds: outcome.degradedKinds }),
     ...(outcome.stagedAgents === true && { stagedAgents: true }),
-    ...(outcome.stagedMcpServers === true && { stagedMcpServers: true }),
+    ...(outcome.stagedMcpServers !== undefined && { stagedMcpServers: outcome.stagedMcpServers }),
     ...(outcome.stagedWorkflows === true && { stagedWorkflows: true }),
     ...stagingWarningsMember(stagingWarnings),
   };
+}
+
+/**
+ * D-P3-10: the MCP dependency of a ledger's declared servers as the optional
+ * degradation signal, omitted when no MCP implementation runs any of them.
+ */
+function stagedMcpSignal(
+  resolved: MaterializablePlugin,
+): Pick<LedgerDegradationSignals, "stagedMcpServers"> {
+  const dependency = mcpDependencyOf(Object.values(resolved.declaredMcpServers));
+  return dependency === false ? {} : { stagedMcpServers: dependency };
 }
 
 /** D-PL1-12 / NREG-01: the `stagingWarnings` member, omitted when empty. */
@@ -3163,7 +3177,7 @@ function freshEnableRow(
       : companionSeverity(
           {
             declaresAgents: outcome.stagedAgents === true,
-            declaresMcp: outcome.stagedMcpServers === true,
+            declaresMcp: outcome.stagedMcpServers ?? false,
             declaresWorkflows: outcome.stagedWorkflows === true,
           },
           probe,

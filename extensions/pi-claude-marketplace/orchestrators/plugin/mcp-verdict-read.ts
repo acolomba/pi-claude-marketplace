@@ -23,12 +23,15 @@ import {
   type LegacyServersSource,
 } from "../mcp/recorded-servers.ts";
 
+import { recordMcpDependency } from "./mcp-verdict.ts";
+
 import type {
   ActiveMcpImplementation,
   EffectiveMcpCompatibility,
   RecordedMcpServers,
 } from "../../domain/mcp-implementation.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
+import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 
 /**
  * A legacy record with no MCP trace staged no server and stored no
@@ -60,4 +63,16 @@ export async function readRecordMcpVerdict(
 }> {
   const recorded = await recordedMcpServers(record, legacyReaderFor(source));
   return { effective: effectiveMcpCompatibility(record, recorded, active), recorded };
+}
+
+/**
+ * D-P3-10 / D-MB-07: a plugin record's MCP dependency, read offline from its
+ * recorded servers with the same guarded reader as `readRecordMcpVerdict`. An
+ * unreadable read keeps the stored adapter reading (P3-DC-24).
+ */
+export async function readRecordMcpDependency(
+  record: PluginInstallRecord,
+  source: LegacyServersSource,
+): Promise<McpDependency | false> {
+  return recordMcpDependency(await recordedMcpServers(record, legacyReaderFor(source)), record);
 }

@@ -118,6 +118,7 @@ import {
 } from "../../transaction/with-state-guard.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
+import { mcpDependencyOf } from "./mcp-verdict.ts";
 import {
   assertNoCrossPluginConflicts,
   removePluginRecord,
@@ -1415,8 +1416,8 @@ function composePhase3FailureOutcome(
       msg: f.msg,
       ...(f.cleanupFailures !== undefined && { cleanupFailures: f.cleanupFailures }),
     })),
-    // declaresAgents / declaresMcp / declaresWorkflows are required `boolean`.
-    // `(failed)` rows do not render the soft-dep marker.
+    // declaresAgents / declaresMcp / declaresWorkflows are required; a
+    // `(failed)` row renders no soft-dep marker, so each is `false`.
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
@@ -1610,8 +1611,9 @@ export async function swapPluginUpdate(
   }
 
   // Success: WR-04 fields populated for cascade-side RH-5 composition.
-  // CMC-13: declaresAgents / declaresMcp / declaresWorkflows reflect what
-  // was actually staged, matching reinstall's effective-state contract.
+  // CMC-13: declaresAgents / declaresWorkflows reflect what was actually
+  // staged, matching reinstall's effective-state contract; D-P3-10:
+  // declaresMcp is the MCP dependency of the candidate's declared servers.
   // resolveRows composes `{requires pi-subagents}`, `{requires pi-mcp-adapter}`,
   // and `{requires pi-dynamic-workflows}` from the command run's snapshot under
   // the context's marker policy (D-05, D-12), iff (declares AND unloaded).
@@ -1650,7 +1652,7 @@ export async function swapPluginUpdate(
     stagedAgentNames,
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
-    declaresMcp: stagedMcpServerNames.length > 0,
+    declaresMcp: mcpDependencyOf(Object.values(installable.declaredMcpServers)),
     // D-10-17a: forwarded from the preflight by a plain assignment, never a
     // conditional spread -- the member is required, so its ABSENCE is
     // spelled `undefined`, not an omitted key. This literal is the SINGLE

@@ -199,7 +199,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
                 severity: "info",
                 needsReload: true,
                 name: "dual-plugin",
-                dependencies: ["agents", "mcp"],
+                dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
               },
             ],
           },

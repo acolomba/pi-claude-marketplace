@@ -7,11 +7,15 @@ import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import { resolveListCandidate } from "./list-candidate-version.ts";
 import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
+import { recordMcpDependency } from "./mcp-verdict.ts";
 import { classifyInstalledRecord } from "./plugin-state-classifier.ts";
 
 import type { UpgradeCandidate } from "./plugin-state-classifier.ts";
 import type { ManifestLookup, ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
-import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
+import type {
+  ActiveMcpImplementation,
+  RecordedMcpServers,
+} from "../../domain/mcp-implementation.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
@@ -47,14 +51,22 @@ export interface ComposeInstalledListRowOptions {
   readonly mcpImplementation: ActiveMcpImplementation;
 }
 
-function dependenciesFromRecord(record: PluginInstallRecord): readonly Dependency[] {
+/**
+ * D-P3-10: the row's MCP dependency comes from the record's recorded servers,
+ * not from the staged count, so it names the implementations that run them.
+ */
+function dependenciesFromRecord(
+  record: PluginInstallRecord,
+  recorded: RecordedMcpServers,
+): readonly Dependency[] {
   const dependencies: Dependency[] = [];
   if (record.resources.agents.length > 0) {
     dependencies.push("agents");
   }
 
-  if (record.resources.mcpServers.length > 0) {
-    dependencies.push("mcp");
+  const mcp = recordMcpDependency(recorded, record);
+  if (mcp !== false) {
+    dependencies.push(mcp);
   }
 
   // WDEP-02: `workflows` pushes LAST, so a row that declares agents and mcp
@@ -160,7 +172,7 @@ export async function composeInstalledListRow(
   // D-P3-04 / D-P3-05: the record's MCP verdict for the active
   // implementation, read offline, decides the row, so a switch needs no
   // reinstall.
-  const { effective } = await readRecordMcpVerdict(
+  const { effective, recorded } = await readRecordMcpVerdict(
     record,
     {
       marketplaceName: options.marketplaceName,
@@ -225,7 +237,7 @@ export async function composeInstalledListRow(
   return {
     status: "installed",
     name: pluginName,
-    dependencies: dependenciesFromRecord(record),
+    dependencies: dependenciesFromRecord(record, recorded),
     version: record.version,
     ...scopeField,
     ...descriptionField,

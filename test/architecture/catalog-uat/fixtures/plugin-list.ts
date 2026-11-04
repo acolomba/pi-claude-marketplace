@@ -210,7 +210,7 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
                 needsReload: false,
                 name: "dual",
                 version: "0.5.0",
-                dependencies: ["agents", "mcp"],
+                dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
               },
               {
                 status: "installed",
@@ -226,7 +226,7 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
                 needsReload: false,
                 name: "mcp-tool",
                 version: "2.0.0",
-                dependencies: ["mcp"],
+                dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
               },
             ],
           },
