@@ -474,3 +474,66 @@ The planner's choices, numbered here. Each is Low unless marked.
   `SKIP=npm-check,trufflehog`** because its worktree guard refused the
   `env -u` form; the orchestrator re-ran trufflehog on the merged files (it
   reports Skipped for file runs).
+
+### Wave 4 (03-05 install consent, 03-06 update consent and neutral writes, 03-07 reconcile and AMIG-01, 03-08 `requires:` line)
+
+- **P3-DC-82 (Medium): `summary.resolved` from `toInstallLedgerSummary` is now
+  the active view** for every consumer (03-05). Alternative: a separate member
+  for the active view.
+- **P3-DC-83 (Medium): the enable, update, and apply switch scenarios use a
+  fresh built-in Pi** (install under the adapter-profile Pi, act from a Pi that
+  runs Pi's built-in MCP), as 03-01 did, because the restart without
+  pi-mcp-adapter lands on no implementation where an sse verdict does not
+  change. One load-row scenario turns built-in off in settings, then restarts
+  with it on.
+- **P3-DC-84 (Low): a second `requirePartialInstallable` on the neutral
+  resolution narrows the type only.**
+- **P3-DC-85 (Low): hand-built test options pass `consentView: "none"`.**
+- **P3-DC-86 (Low): the enable cascade member row stays `installed
+  {dependency enabled, requires pi-mcp-adapter}` under built-in** for an sse
+  member (that row never followed its resolution's status).
+- **P3-DC-87 (Medium): 03-06 edits Phase 1's record writers**
+  (`applyAllSuccessRecordFields`, `markUpdateInProgress`,
+  `refreshDisabledRecord`/`nextDisabledPin`) in the narrowest diff (P3-DC-02).
+- **P3-DC-88 (Low): `update-swap.ts` imports `mcp-verdict-read.ts`; fallow
+  reports no cycle** (a later import from `install-outcome.ts` into the update
+  family would close one).
+- **P3-DC-89 (Low): autoupdate with no command notification reads
+  `mcpImplementation ?? "none"`.**
+- **P3-DC-90 (Low): `newlyDegraded` is read at swap start**, before the swap
+  writes.
+- **P3-DC-91 (Low): a missing marketplace in the prepared update state throws
+  marketplace-removed** (defensive; the preflight rules it out).
+- **P3-DC-92 (Low): existing update fixtures name `mcpImplementation: "none"`.**
+- **P3-DC-93 (Low): a `--partial` update under built-in is now a warning row**
+  (the `requires pi-mcp-adapter` marker raises warning); it was info.
+- **P3-DC-94 (Medium): apply holds more moves**: a record already partial for
+  one kind is held when the candidate drops a new kind (D-12 moved it before).
+  Alternative: ask only when the record is installable.
+- **P3-DC-95 (Medium): AMIG-01 converts every moving legacy record to the
+  neutral basis**, so the first reload after an upgrade writes `state.json`
+  even for a plain stdio move. Alternative: write only when the verdict
+  differs (leaves a bare-elicitation record installable under the adapter).
+- **P3-DC-96 (Low): `applyNeutralVerdict` passes the record with its basis**,
+  so an already-neutral record's stored `mcpServers` kind stays a block even if
+  the source no longer declares a blocked server.
+- **P3-DC-97 (Low): the migration suite's default record carries the neutral
+  basis**; a `legacyPluginRecord` covers legacy records.
+- **P3-DC-98 (Low): `applyDroppedServers` renamed `applyNeutralVerdict`.**
+- **P3-DC-99 (Low): `read-pass.test.ts` has only compile-forced edits.**
+- **P3-DC-100 (Medium): the second `companion-missing` info scenario installs
+  while pi-mcp-adapter is active** (the world allows one profile Pi per
+  scenario), so it proves only that a loaded adapter gives an untagged `mcp`.
+- **P3-DC-101 (Low): the e2e foreign-tool case turns Pi's built-in MCP off**,
+  so it no longer shows a foreign `mcp` tool beside the built-in command.
+- **P3-DC-102 (Low): `mcpDependencyOf` reads every declared server**, so an sse
+  plus stdio plugin under built-in reads `requires: pi-mcp-adapter (missing)`
+  (D-P3-08 intent).
+- **P3-DC-103 (Low): a not-installed sse plugin under built-in now shows
+  `requires: pi-mcp-adapter (missing)`**, where it had no requires line.
+- **P3-DC-104 (Medium, orchestrator fix after the merge): apply's catalog move
+  now carries the run's implementation** (`PluginConvergeTarget.mcpImplementation`,
+  commit 1178bd7), so a move to an sse version under built-in reports
+  `partially-installed {unsupported mcp, requires pi-mcp-adapter}` instead of
+  `updated {requires pi-mcp-adapter}`; 03-06 had left the runner on the
+  neutral view because the target type lived in 03-07's files.
