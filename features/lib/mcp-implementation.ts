@@ -5,7 +5,8 @@
  * A Pi runs pi-mcp-adapter when it lists the adapter's `/mcp-adapter`
  * command, else Pi's built-in MCP when it lists an `/mcp` command from
  * `builtin:mcp`, else none: the precedence the extension itself applies
- * (MSEL-01). The harness compares that with what the Pi's launch implies
+ * (MSEL-01), read through the extension's own `softDepStatus` so the harness
+ * cannot drift from it. The harness compares that with what the Pi's launch implies
  * (P1-DC-14): the adapter when the launch loads it, else none when Pi starts
  * with `--no-mcp` or the user or project settings hold `-builtin:mcp`, else
  * built-in.
@@ -37,6 +38,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 
 import { profileFor } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
+import { softDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 import { BUILTIN_MCP_STAND_IN_EXTENSION } from "./builtin-mcp-stand-in/servers.ts";
 import { listedTools, readStubRequests, stubPidFiles } from "./mcp-stub-server.ts";
@@ -73,11 +75,6 @@ const ONBOARDING_FILE = "mcp-onboarding.json";
 
 // The `extensions` entry that turns Pi's built-in MCP off, as pi-mcp-adapter and `pi config` write it.
 const BUILTIN_OFF_ENTRY = "-builtin:mcp";
-
-const BUILTIN_SOURCE_PATH = "builtin:mcp";
-
-// ADET-02: Pi lists a second command of the same name with a `:<n>` suffix.
-const ADAPTER_COMMAND_NAME = /^mcp-adapter(?::\d+)?$/u;
 
 const POLL_MS = 50;
 
@@ -121,25 +118,23 @@ export function parseMcpProfile(value: unknown): McpProfile {
 }
 
 /**
- * Returns the MCP implementation of a Pi from its `get_commands` listing: the
- * adapter when an extension command is named `mcp-adapter`, else built-in
- * when the extension command `mcp` comes from `builtin:mcp`, else none.
+ * Returns the MCP implementation of a Pi from its `get_commands` listing, by
+ * the extension's own rule (DUAL-02): `softDepStatus` over an inventory that
+ * lists those commands, with each command's source and `sourceInfo.path`, and
+ * no tools. The adapter wins when an extension command is named
+ * `mcp-adapter`, else built-in when the extension command `mcp` comes from
+ * `builtin:mcp`, else none.
  */
 export function classifyMcpImplementation(commands: readonly ListedCommand[]): McpImplementation {
-  const extensionCommands = commands.filter((command) => command.source === "extension");
-  if (extensionCommands.some((command) => ADAPTER_COMMAND_NAME.test(command.name))) {
-    return "adapter";
-  }
-
-  if (
-    extensionCommands.some(
-      (command) => command.name === "mcp" && command.sourcePath === BUILTIN_SOURCE_PATH,
-    )
-  ) {
-    return "builtin";
-  }
-
-  return "none";
+  return softDepStatus({
+    getAllTools: () => [],
+    getCommands: () =>
+      commands.map((command) => ({
+        name: command.name,
+        source: command.source,
+        sourceInfo: { path: command.sourcePath },
+      })),
+  }).mcpImplementation;
 }
 
 /**

@@ -46,6 +46,10 @@ const localKinds = new Set(["dir", "file"]);
 // or a table cell of a step names one of these.
 const mcpStepWord = /\bmcp\b/i;
 const mcpArgumentNames = ["mcpServers", ".mcp.json"];
+const adapterName = "pi-mcp-adapter";
+const singleImplementationTags = new Set(["@adapter-only", "@builtin-only"]);
+// A requirement or decision ID, such as BLT-01, MREC-04, D-MB-07, or D-CF6-10.
+const licenseId = /\b[A-Z]+(?:-[A-Z0-9]+)*-\d+\b/;
 
 function createCollection() {
   return {
@@ -54,6 +58,7 @@ function createCollection() {
     testCases: [],
     stepLines: new Map(),
     scenarioLines: new Map(),
+    descriptions: new Map(),
     pickles: [],
     documents: [],
     parseErrors: [],
@@ -112,6 +117,7 @@ function gherkinScenarios(children) {
 
 function collectGherkinDocument(collection, document) {
   collection.documents.push(document);
+  collection.descriptions.set(document.uri, document.feature?.description ?? "");
 
   for (const scenario of gherkinScenarios(document.feature?.children ?? [])) {
     collection.scenarioLines.set(scenario.id, scenario.location.line);
@@ -566,7 +572,37 @@ function implementationTagProblem(pickle) {
   return undefined;
 }
 
-const pickleRules = [implementationTagProblem];
+// An @mcp scenario expects the same result under both implementations, so it reaches the active one
+// through the MCP implementation steps and never names the adapter.
+function adapterLiteralProblem(pickle) {
+  if (!pickle.tags.includes("@mcp")) {
+    return undefined;
+  }
+
+  const named = pickle.steps.some(
+    (step) =>
+      step.text.includes(adapterName) || step.values.some((value) => value.includes(adapterName)),
+  );
+
+  return named
+    ? `the @mcp scenario names ${adapterName}; only an @adapter-only, @builtin-only, or @own-implementation scenario may`
+    : undefined;
+}
+
+// A scenario that runs under one profile only names the requirement or decision ID that licenses
+// the tag, so the work that lifts the tag can find it.
+function tagReasonProblem(pickle, collection) {
+  const tags = pickle.tags.filter((tag) => singleImplementationTags.has(tag));
+  const reason = `${pickle.name}\n${collection.descriptions.get(pickle.uri) ?? ""}`;
+
+  if (tags.length === 0 || licenseId.test(reason)) {
+    return undefined;
+  }
+
+  return `the ${tags.join(" ")} scenario names no requirement or decision ID in its title or its feature description`;
+}
+
+const pickleRules = [implementationTagProblem, adapterLiteralProblem, tagReasonProblem];
 
 function pickleFindings(collection) {
   const findings = new Map();
