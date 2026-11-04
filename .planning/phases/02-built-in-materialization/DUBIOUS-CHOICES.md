@@ -159,6 +159,7 @@ item here. The milestone parent merges this file into the root log in Phase 6.
   `not connected`, and a failed server cannot be told from one still
   connecting or waiting for sign-in.
 - **Recorded in:** `02-CONTEXT.md`.
+- **Amended by:** P2-DC-92 (code review fix).
 
 ### P2-DC-11: Legacy `mcp.json` entries run once more under their old name in the first built-in session
 
@@ -206,6 +207,7 @@ item here. The milestone parent merges this file into the root log in Phase 6.
   plugin); no check.
 - **Why dubious:** it departs from the advisory text; the bound is the owning
   clone root NFR-10 names.
+- **Amended by:** P2-DC-94 (code review fix).
 
 ### P2-DC-14: The project record wins per server name, not per whole record
 
@@ -217,6 +219,7 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Alternatives:** Skip the whole user record (CONTEXT's first wording).
 - **Why dubious:** differs only when the two records declare different server
   sets; matches the adapter's file merge.
+- **Amended by:** P2-DC-93 (code review fix).
 
 ### P2-DC-15: Any JSON-object `mcp.json` entry counts as an override in `info`
 
@@ -923,3 +926,69 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Choice:** The companion-missing tolerance check ran as split commands (the worktree guard refuses compound git commands).
 - **Alternatives:** The plan's one-shot command.
 - **Why dubious:** Same checks, run by hand.
+
+## Code review fix (gsd-code-fixer, 2026-11-04)
+
+### P2-DC-92: WR-03 and WR-04 add process-level state in `platform/mcp-builtin-status.ts` (replaced names, name owners) that the registration step writes
+
+- **Phase / source:** Phase 2 code review fix.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** WR-03 and WR-04 add process-level state in `platform/mcp-builtin-status.ts` (replaced names, name owners) that the registration step writes.
+- **Alternatives:** Only document the gaps; read project state synchronously in info; change the frozen `info.ts`/reader factory.
+- **Why dubious:** The frozen reader takes only `pi` and Pi exposes no disable or owner signal (completion-cache / routing-state precedent). A replaced server the user then disables in `/mcp` reads `not connected`. Amends P2-DC-10.
+
+### P2-DC-93: A built-in row whose name another record owns reads `not loaded`; only a user row owned by a project record reads `overridden by project scope`
+
+- **Phase / source:** Phase 2 code review fix.
+- **Severity:** Low. **Status:** open.
+- **Choice:** A built-in row whose name another record owns reads `not loaded`; only a user row owned by a project record reads `overridden by project scope`.
+- **Alternatives:** `status unknown`; the reader's answer.
+- **Why dubious:** Amends P2-DC-14's info side.
+
+### P2-DC-94: WR-01: a git record is bounded by the clone entry its own root names, checking the key shape but not the URL half against the source URL
+
+- **Phase / source:** Phase 2 code review fix.
+- **Severity:** Low. **Status:** open.
+- **Choice:** WR-01: a git record is bounded by the clone entry its own root names, checking the key shape but not the URL half against the source URL.
+- **Alternatives:** Recompute `pluginCloneKey(url, sha)` from the manifest.
+- **Why dubious:** The manifest is no more trusted than the record, and a tag-pinned `resolvedSha` can differ from the key's sha. Amends P2-DC-13.
+
+### P2-DC-95: WR-01: any non-path marketplace (unknown included) must have its root inside `sources/<mp>/`, failing closed
+
+- **Phase / source:** Phase 2 code review fix.
+- **Severity:** Low. **Status:** open.
+- **Choice:** WR-01: any non-path marketplace (unknown included) must have its root inside `sources/<mp>/`, failing closed.
+- **Alternatives:** List github, url, hosted explicitly.
+- **Why dubious:** Fails closed.
+
+### P2-DC-96: WR-02: a server whose resolved command or arg starts with `~` is refused (not registered), debug-logged; info shows `not loaded`
+
+- **Phase / source:** Phase 2 code review fix.
+- **Severity:** Low. **Status:** open.
+- **Choice:** WR-02: a server whose resolved command or arg starts with `~` is refused (not registered), debug-logged; info shows `not loaded`.
+- **Alternatives:** Register and document Pi's home expansion.
+- **Why dubious:** Pi would run a different command than Claude Code.
+
+### P2-DC-97: No cucumber scenario for WR-03 (needs an unorderable race) or the WR-04 cross-marketplace case (install refuses that state)
+
+- **Phase / source:** Phase 2 code review fix.
+- **Severity:** Low. **Status:** open.
+- **Choice:** No cucumber scenario for WR-03 (needs an unorderable race) or the WR-04 cross-marketplace case (install refuses that state).
+- **Alternatives:** Harness changes.
+- **Why dubious:** Unit tests only.
+
+### P2-DC-98: WR-05: the `Then` reads the probe report from the session record log, not a world field
+
+- **Phase / source:** Phase 2 code review fix.
+- **Severity:** Low. **Status:** open.
+- **Choice:** WR-05: the `Then` reads the probe report from the session record log, not a world field.
+- **Alternatives:** A world field (frozen `world.ts`).
+- **Why dubious:** The record log is state the `When` produced.
+
+### P2-DC-99: IN-01: the shared redaction helper is reused for debug lines
+
+- **Phase / source:** Phase 2 code review fix.
+- **Severity:** Low. **Status:** open.
+- **Choice:** IN-01: the shared redaction helper is reused for debug lines.
+- **Alternatives:** A log-specific redaction.
+- **Why dubious:** Some lines read oddly (`state.json at state.json`).
