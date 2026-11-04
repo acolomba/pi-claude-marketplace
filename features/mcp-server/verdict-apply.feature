@@ -1,10 +1,10 @@
 Feature: MCP server verdict apply
 
-  Apply and pending follow the MCP implementation pi runs, and a switch of
-  implementation alone never asks for consent (MREC-06, D-P3-13) or shows a
-  new row (D-P3-14, D-P3-15, D-P3-19). A local marketplace stands in for a
-  published one, and each sse server points at a loopback port that nothing
-  listens on.
+  Apply follows the MCP implementation pi runs, and a switch of implementation
+  alone never asks for consent (MREC-06, D-P3-13) or shows a new row (D-P3-14,
+  D-P3-15, D-P3-19). Pending promises no partial install that apply will not
+  make. A local marketplace stands in for a published one, and each sse server
+  points at a loopback port that nothing listens on.
 
   @own-implementation
   Scenario: Apply after pi switches from pi-mcp-adapter to its built-in MCP moves a plugin with an sse server to its new version partially, without asking (MREC-06)
@@ -83,36 +83,8 @@ Feature: MCP server verdict apply
       | severity     | info                    |
       | needs reload | false                   |
 
-  @builtin-only
-  Scenario: Pending previews a declared plugin with an sse server as will partially install, under Pi's built-in MCP (D-P3-15)
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
-    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
-      """
-      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}}}
-      """
-    Given the marketplace "fixtures" is added to the user scope
-    Given a config in scope user and layer base, with these plugins:
-      | marketplace | plugin | enabled |
-      | fixtures    | demo   |         |
-    When the user runs "/claude:plugin pending --scope user"
-    Then the result has these fields:
-      | kind                | cascade           |
-      | severity            | info              |
-      | needs reload        | false             |
-      | needs apply         | true              |
-      | tally label         | Reconcile pending |
-      | tally failures      | 0                 |
-      | tally warnings      | 0                 |
-      | tally success count | 1                 |
-    Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status       | reasons | scope | partial |
-      | fixtures         | user              | demo@fixtures | demo | will install |         | user  | true    |
-
-  @adapter-only
-  Scenario: Pending previews a declared plugin with an sse server as will install, under pi-mcp-adapter (D-P3-15)
+  @mcp
+  Scenario: Pending previews a declared plugin with an sse server as will install, under either MCP implementation (D-P3-15)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -138,3 +110,31 @@ Feature: MCP server verdict apply
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status       | reasons | scope |
       | fixtures         | user              | demo@fixtures | demo | will install |         | user  |
+
+  @builtin-only
+  Scenario: Apply does not install a declared plugin with an sse server without --partial, under Pi's built-in MCP (MREC-06)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user runs "/claude:plugin apply --scope user"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile                      |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons         | scope | leaks | rollback partial |
+      | fixtures         | user              | demo@fixtures | demo | failed | unsupported mcp | user  |       |                  |
+    Then the user scope has no installed plugins

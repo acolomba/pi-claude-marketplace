@@ -60,7 +60,7 @@
 // orchestrator detects emptiness BEFORE calling this projection so the
 // advisory takes precedence.
 
-import { resolutionFor, resolveStrict } from "../../domain/plugin-resolver.ts";
+import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -109,7 +109,6 @@ import type { CascadeStep, ConvergencePlan, PlannedMove } from "./convergence.ts
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
-import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { MarketplaceRows } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -631,12 +630,18 @@ function forceInstallKey(scope: Scope, marketplace: string, plugin: string): str
 /**
  * FSTAT-06 / D-66-04 / NFR-5: resolve every planned install candidate
  * no-network via `resolveStrict` and collect the `(scope, marketplace, plugin)`
- * keys whose candidate is `partially-available` under the run's active MCP
- * implementation (D-P3-15) -- the planned install would degrade and proceed
- * under the partial path, so its pending row renders `(will partially install)`. The resolve is the cache/no-network resolver
- * (guarded by BLOCK F in `eslint.config.js`); a probe throw
- * or an unlocatable candidate degrades to NO force (the safe, truthful preview
- * default), never a crash on this read-only surface (IL-2).
+ * keys whose candidate's neutral verdict is `partially-available`, so its
+ * pending row renders `(will partially install)`. The resolve is the
+ * cache/no-network resolver (guarded by BLOCK F in `eslint.config.js`); a
+ * probe throw or an unlocatable candidate degrades to NO force (the safe,
+ * truthful preview default), never a crash on this read-only surface (IL-2).
+ *
+ * D-P3-15 / P3-DC-20: `apply` installs a declared plugin without `--partial`
+ * and asks against the active MCP implementation, so a drop only that
+ * implementation makes refuses the install; such a candidate is not marked,
+ * because the preview must not promise a partial install `apply` will not
+ * make. A kind every implementation drops keeps the mark it had before the
+ * MCP implementations were split, although `apply` refuses that install too.
  *
  * D-66-05: there is deliberately NO `will partially update` analog. The
  * `ReconcilePlan` has no update bucket (install/uninstall/enable/disable/
@@ -647,7 +652,6 @@ function forceInstallKey(scope: Scope, marketplace: string, plugin: string): str
 export async function resolvePendingForceInstalls(
   plans: readonly ReconcilePlan[],
   locate: PendingInstallCandidateLocator,
-  mcpImplementation: ActiveMcpImplementation,
 ): Promise<ReadonlySet<string>> {
   const keys = new Set<string>();
   for (const plan of plans) {
@@ -666,7 +670,8 @@ export async function resolvePendingForceInstalls(
           marketplaceName: install.marketplace,
           marketplaceSource: candidate.marketplaceSource,
         });
-        if (resolutionFor(resolved, mcpImplementation).state === "partially-available") {
+        // The resolution's own verdict is the neutral one (D-P3-01).
+        if (resolved.state === "partially-available") {
           keys.add(forceInstallKey(install.scope, install.marketplace, install.plugin));
         }
       } catch (err) {
