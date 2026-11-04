@@ -57,3 +57,42 @@ export function recordMcpDependency(
 
   return mcpDependencyOf(recorded.servers.map((server) => server.config));
 }
+
+/**
+ * D-P3-12 / D-P3-13: what a candidate's drops are weighed against: the
+ * installed record's effective unsupported kinds under the active
+ * implementation, and whether its MCP servers could be read.
+ */
+export interface RecordDegradeBaseline {
+  readonly unsupported: readonly string[];
+  readonly readable: boolean;
+}
+
+/** The baseline of a record's effective verdict and the servers it was read from. */
+export function degradeBaselineOf(
+  effective: { readonly unsupported: readonly string[] },
+  recorded: Pick<RecordedMcpServers, "kind">,
+): RecordDegradeBaseline {
+  return { unsupported: effective.unsupported, readable: recorded.kind !== "unreadable" };
+}
+
+/**
+ * D-P3-12 / D-P3-13 / D-MB-06: the kinds a candidate drops that the installed
+ * record does not, both read under the active implementation. `view` is the
+ * candidate's view under that implementation and `neutral` its neutral
+ * resolution. A record whose servers cannot be read keeps its stored verdict
+ * (MREC-02), which does not say which servers the active implementation
+ * drops, so an `mcpServers` drop the neutral resolution does not make is not
+ * counted: a switch of implementation alone never makes a new degrade.
+ */
+export function newlyDroppedKinds(
+  view: { readonly unsupported: readonly string[] },
+  neutral: { readonly unsupported: readonly string[] },
+  baseline: RecordDegradeBaseline,
+): readonly string[] {
+  return view.unsupported.filter(
+    (kind) =>
+      !baseline.unsupported.includes(kind) &&
+      (baseline.readable || kind !== "mcpServers" || neutral.unsupported.includes(kind)),
+  );
+}

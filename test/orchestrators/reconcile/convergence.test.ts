@@ -1589,6 +1589,81 @@ test("D-12 / D-P3-13: a record partial for a component Pi cannot load moves with
   assert.deepStrictEqual(plan, { moves: [demoMove({ partial: true })], holds: [], declines: [] });
 });
 
+/**
+ * A record a released build wrote for a plugin that staged `servers`: no
+ * basis and no server configs, so its servers are read by re-resolving the
+ * catalog, which refuses once the catalog version moved (MREC-02).
+ */
+function legacyMcpRecord(servers: readonly string[]): Partial<PluginRecord> {
+  return {
+    resources: {
+      skills: [],
+      prompts: [],
+      agents: [],
+      mcpServers: [...servers],
+      hooks: [],
+      workflows: [],
+    },
+  };
+}
+
+test("D-MB-06 / D-P3-13: an unreadable legacy sse record moves partial without consent under Pi's built-in MCP", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "legacy-sse-builtin");
+  const state = await stageDemo(fixture, "1.1.0", legacyMcpRecord(["events"]));
+  await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+    events: SSE_SERVER,
+  });
+
+  // act
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "builtin",
+  });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [demoMove({ partial: true })],
+    holds: [],
+    declines: [],
+  });
+});
+
+test("D-MB-06 / D-P3-13: an unreadable legacy record still needs consent for a server no implementation runs", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "legacy-ws-builtin");
+  const state = await stageDemo(fixture, "1.1.0", legacyMcpRecord(["tools"]));
+  await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+    tools: STDIO_SERVER,
+    live: { type: "ws", url: "ws://127.0.0.1:9/ws" },
+  });
+
+  // act
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "builtin",
+  });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [],
+    holds: [],
+    declines: [
+      {
+        scope: "project",
+        marketplace: "tools",
+        plugin: "demo",
+        version: "1.0.0",
+        unsupported: ["mcpServers"],
+      },
+    ],
+  });
+});
+
 test("D-P3-14: a record whose catalog changed nothing plans no move after a switch to Pi's built-in MCP", async (t) => {
   // arrange
   const fixture = await createFixture(t, "sse-unchanged-builtin");

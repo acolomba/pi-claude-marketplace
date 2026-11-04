@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  degradeBaselineOf,
   mcpDependencyOf,
+  newlyDroppedKinds,
   recordMcpDependency,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/mcp-verdict.ts";
 
@@ -128,5 +130,79 @@ for (const { title, recorded, staged, dependency } of RECORD_ROWS) {
 
     // assert
     assert.deepStrictEqual(actual, dependency);
+  });
+}
+
+for (const { kind, readable } of [
+  { kind: "recorded", readable: true },
+  { kind: "re-resolved", readable: true },
+  { kind: "unreadable", readable: false },
+] as const) {
+  test(`D-P3-13: a ${kind} read gives a baseline that is ${readable ? "readable" : "unreadable"}`, () => {
+    // act
+    const baseline = degradeBaselineOf({ unsupported: ["lspServers"] }, { kind });
+
+    // assert
+    assert.deepStrictEqual(baseline, { unsupported: ["lspServers"], readable });
+  });
+}
+
+interface DropRow {
+  readonly title: string;
+  readonly view: readonly string[];
+  readonly neutral: readonly string[];
+  readonly recordDrops: readonly string[];
+  readonly readable: boolean;
+  readonly dropped: readonly string[];
+}
+
+const DROP_ROWS: readonly DropRow[] = [
+  {
+    title: "D-P3-12: a kind the record already drops is not new",
+    view: ["mcpServers", "lspServers"],
+    neutral: ["lspServers"],
+    recordDrops: ["mcpServers", "lspServers"],
+    readable: true,
+    dropped: [],
+  },
+  {
+    title:
+      "D-P3-13: an mcpServers drop only the active implementation makes is new for a readable record",
+    view: ["mcpServers"],
+    neutral: [],
+    recordDrops: [],
+    readable: true,
+    dropped: ["mcpServers"],
+  },
+  {
+    title:
+      "D-MB-06: an mcpServers drop only the active implementation makes is not new for an unreadable record",
+    view: ["mcpServers", "lspServers"],
+    neutral: ["lspServers"],
+    recordDrops: [],
+    readable: false,
+    dropped: ["lspServers"],
+  },
+  {
+    title: "D-MB-06: an mcpServers drop every implementation makes is new for an unreadable record",
+    view: ["mcpServers"],
+    neutral: ["mcpServers"],
+    recordDrops: [],
+    readable: false,
+    dropped: ["mcpServers"],
+  },
+];
+
+for (const { title, view, neutral, recordDrops, readable, dropped } of DROP_ROWS) {
+  test(title, () => {
+    // act
+    const newlyDropped = newlyDroppedKinds(
+      { unsupported: view },
+      { unsupported: neutral },
+      { unsupported: recordDrops, readable },
+    );
+
+    // assert
+    assert.deepStrictEqual(newlyDropped, dropped);
   });
 }

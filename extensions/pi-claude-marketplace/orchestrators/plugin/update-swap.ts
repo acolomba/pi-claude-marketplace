@@ -120,7 +120,7 @@ import {
 
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
-import { mcpDependencyOf } from "./mcp-verdict.ts";
+import { degradeBaselineOf, mcpDependencyOf, newlyDroppedKinds } from "./mcp-verdict.ts";
 import {
   assertNoCrossPluginConflicts,
   removePluginRecord,
@@ -1786,10 +1786,12 @@ export function preflightMove(preflight: PreparedPluginUpdate): RevisionMove {
  * implementation runs whole carries nothing (FSTAT-03).
  *
  * SEV-03 / D-69-01 / D-P3-12: `newlyDegraded` is true when the installed
- * record, read under the same implementation, dropped nothing. The autoupdate
- * cascade raises such a row to `warning`; the manual `update --partial` row
- * ignores it. A record that only a switch of implementation made partial is
- * already degraded, so its row stays `info`.
+ * record, read under the same implementation, dropped nothing and the
+ * candidate drops a kind it does not. The autoupdate cascade raises such a row
+ * to `warning`; the manual `update --partial` row ignores it. A record that
+ * only a switch of implementation made partial is already degraded, so its
+ * row stays `info`; so does a record whose servers cannot be read when the
+ * candidate drops `mcpServers` only under the active implementation (D-MB-06).
  */
 async function partialDegradeOf(
   args: ThreePhaseArgs,
@@ -1805,12 +1807,20 @@ async function partialDegradeOf(
     throw new PluginUpdateConcurrencyError("marketplace-removed", args.plugin, args.marketplace);
   }
 
-  const { effective } = await readRecordMcpVerdict(
+  const { effective, recorded } = await readRecordMcpVerdict(
     preflight.record,
     { marketplaceName: args.marketplace, marketplace, pluginName: args.plugin },
     args.mcpImplementation,
   );
-  return { kinds: [...view.unsupported], newlyDegraded: effective.unsupported.length === 0 };
+  const newlyDropped = newlyDroppedKinds(
+    view,
+    preflight.installable,
+    degradeBaselineOf(effective, recorded),
+  );
+  return {
+    kinds: [...view.unsupported],
+    newlyDegraded: effective.unsupported.length === 0 && newlyDropped.length > 0,
+  };
 }
 
 /**

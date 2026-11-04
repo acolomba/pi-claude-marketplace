@@ -44,6 +44,7 @@ import {
 } from "../plugin/dependency-index.ts";
 import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
 import { readRecordMcpVerdict } from "../plugin/mcp-verdict-read.ts";
+import { degradeBaselineOf, newlyDroppedKinds } from "../plugin/mcp-verdict.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "../plugin/shared.ts";
 
 import {
@@ -62,15 +63,8 @@ import type {
 } from "./dependency-verdict.ts";
 import type { PlannedPluginEnable, ReconcilePlan } from "./types.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type {
-  ActiveMcpImplementation,
-  EffectiveMcpCompatibility,
-} from "../../domain/mcp-implementation.ts";
-import type {
-  MaterializablePlugin,
-  ResolveContext,
-  ResolvedPlugin,
-} from "../../domain/resolver-types.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
+import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -81,6 +75,7 @@ import type {
   RecordDeclarations,
 } from "../plugin/dependency-index.ts";
 import type { ListCandidate } from "../plugin/list-candidate-version.ts";
+import type { RecordDegradeBaseline } from "../plugin/mcp-verdict.ts";
 import type { RevisionMove } from "../types.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -412,25 +407,39 @@ async function gitOffer(
   };
 }
 
+/** What a move's candidate drops, when it drops nothing. */
+const NO_DROPS = Object.freeze({ consent: undefined, excused: false });
+
 /**
- * D-12 / D-P3-13: the kinds a move needs consent for, or `undefined`. Both
- * sides are read under the active implementation: the candidate through
- * `resolutionFor`, the record through its effective verdict. Only a kind the
- * candidate drops and the record does not is a new degrade, so a switch of
- * implementation alone never holds a move.
+ * D-12 / D-P3-13: what a move's candidate drops under the active
+ * implementation, against the record read under the same implementation:
+ * `consent` holds the kinds the candidate newly drops, or is `undefined`, and
+ * `excused` says whether the candidate drops a kind that neither the record
+ * nor a new degrade explains. Only a record whose servers cannot be read
+ * excuses a kind (the `mcpServers` drop a switch of implementation alone
+ * makes, D-MB-06), and such a move carries `--partial`, so a switch never
+ * holds a move.
  */
-function newlyDroppedKinds(
-  effective: EffectiveMcpCompatibility,
-  resolved: ResolvedPlugin | undefined,
+function candidateDrops(
+  baseline: RecordDegradeBaseline,
+  resolved: MaterializablePlugin | undefined,
   active: ActiveMcpImplementation,
-): readonly string[] | undefined {
-  const view = resolved === undefined ? undefined : resolutionFor(resolved, active);
-  if (view?.state !== "partially-available") {
-    return undefined;
+): { readonly consent: readonly string[] | undefined; readonly excused: boolean } {
+  if (resolved === undefined) {
+    return NO_DROPS;
   }
 
-  const dropped = view.unsupported.filter((kind) => !effective.unsupported.includes(kind));
-  return dropped.length > 0 ? dropped : undefined;
+  const view = resolutionFor(resolved, active);
+  if (view.state !== "partially-available") {
+    return NO_DROPS;
+  }
+
+  // The resolution's own verdict is the neutral one (D-P3-01).
+  const dropped = newlyDroppedKinds(view, resolved, baseline);
+  const excused = view.unsupported.some(
+    (kind) => !baseline.unsupported.includes(kind) && !dropped.includes(kind),
+  );
+  return { consent: dropped.length > 0 ? dropped : undefined, excused };
 }
 
 /**
@@ -440,7 +449,8 @@ function newlyDroppedKinds(
  * (BFILL-01), weighed on every pass; a growth-only move keeps its version. A
  * `partially-available` candidate carries the kinds it would newly drop; a
  * record partial under the active implementation moves partial (D-12,
- * D-P3-13).
+ * D-P3-13), and so does a record whose unreadable servers excuse a drop
+ * (D-MB-06).
  */
 async function recordMove(
   input: ConvergenceInput,
@@ -476,9 +486,14 @@ async function recordMove(
     return undefined;
   }
 
-  const { effective } = await readRecordMcpVerdict(
+  const { effective, recorded } = await readRecordMcpVerdict(
     record,
     { marketplaceName: mp.name, marketplace: mp, pluginName: plugin },
+    input.mcpImplementation,
+  );
+  const { consent, excused } = candidateDrops(
+    degradeBaselineOf(effective, recorded),
+    resolved,
     input.mcpImplementation,
   );
   const move: PlannedMove = {
@@ -491,9 +506,8 @@ async function recordMove(
     ...(offer.toCommit !== undefined && { toCommit: offer.toCommit }),
     revisionChanged: offer.revisionChanged,
     grew,
-    partial: !effective.installable,
+    partial: !effective.installable || excused,
   };
-  const consent = newlyDroppedKinds(effective, resolved, input.mcpImplementation);
   return { move, ...(consent !== undefined && { consent }) };
 }
 
