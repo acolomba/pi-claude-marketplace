@@ -1,225 +1,166 @@
 ---
 phase: 03-read-time-verdicts
-reviewed: 2026-11-04T18:51:31Z
+reviewed: 2026-11-04T19:40:03Z
 depth: standard
-files_reviewed: 57
+iteration: 2
+files_reviewed: 25
 files_reviewed_list:
   - docs/messaging-style-guide.md
-  - extensions/pi-claude-marketplace/domain/mcp-resolution.ts
-  - extensions/pi-claude-marketplace/domain/plugin-resolver.ts
-  - extensions/pi-claude-marketplace/domain/resolver-types.ts
-  - extensions/pi-claude-marketplace/edge/handlers/plugin/browse.ts
-  - extensions/pi-claude-marketplace/edge/handlers/tools.ts
-  - extensions/pi-claude-marketplace/orchestrators/import/execute.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-results.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-row.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/mcp-verdict-read.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/mcp-verdict.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
-  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts
-  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts
-  - extensions/pi-claude-marketplace/orchestrators/reconcile/load.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts
-  - extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts
-  - extensions/pi-claude-marketplace/orchestrators/types.ts
-  - extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts
-  - extensions/pi-claude-marketplace/shared/notification-resolve.ts
-  - extensions/pi-claude-marketplace/shared/notify-reasons.ts
-  - features/lib/mcp-verdict-git.ts
-  - features/mcp-server/builtin-status.feature
-  - features/mcp-server/companion-missing.feature
-  - features/mcp-server/invalid-configs.feature
-  - features/mcp-server/project-scope.feature
   - features/mcp-server/verdict-apply.feature
-  - features/mcp-server/verdict-fetch.feature
-  - features/mcp-server/verdict-info.feature
   - features/mcp-server/verdict-install.feature
   - features/mcp-server/verdict-list.feature
-  - features/mcp-server/verdict-markers.feature
   - features/mcp-server/verdict-update.feature
-  - features/step_definitions/mcp-server/verdict-fetch.steps.ts
-  - features/step_definitions/mcp-server/verdict-settings.steps.ts
+  - test/integration/mcp-verdict-migration.test.ts
+  - test/orchestrators/plugin/dependency-move.test.ts
+  - test/orchestrators/plugin/mcp-verdict-read.test.ts
+  - test/orchestrators/plugin/mcp-verdict.test.ts
+  - test/orchestrators/plugin/update-preflight.test.ts
+  - test/orchestrators/plugin/update-swap.test.ts
+  - test/orchestrators/reconcile/convergence.test.ts
+  - test/orchestrators/reconcile/mcp-migration.test.ts
+  - test/orchestrators/reconcile/notify.test.ts
+  - test/orchestrators/reconcile/pending.test.ts
+  - .planning/phases/03-read-time-verdicts/03-REVIEW-FIX.md
 findings:
-  critical: 1
+  critical: 0
   warning: 3
-  info: 3
-  total: 7
+  info: 2
+  total: 5
   necessity: 1
 status: issues_found
 ---
 
-# Phase 3: Code Review Report
+# Phase 3: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-11-04T18:51:31Z
+**Reviewed:** 2026-11-04T19:40:03Z
 **Depth:** standard
-**Files Reviewed:** 57
+**Files Reviewed:** 25
 **Status:** issues_found
 
 ## Summary
 
-I reviewed Phase 3's own diff (`git diff 87d3f28 eb9258b` plus the non-merge
-first-parent commits after `7d4246c`) across the 57 scoped files. I checked it
-against D-P3-01..23, the P3-DC dubious-choice log, and `01-FROZEN.md`. No frozen
-file changed in Phase 3's own diff: `domain/mcp-implementation.ts`,
-`persistence/state-io.ts`, `orchestrators/mcp/recorded-servers.ts`,
-`platform/pi-api.ts`, `index.ts`, the edge register/types/info handler, the
-closed sets, `docs/json-output.md`, and the build/CI files are all untouched.
-The `notify-reasons.ts` edit touches only `companionSeverity`, not the reason
-table.
+This review covers the fix commits `git diff 09e6007 edb754e` (20ac944, 3817f22,
+8a7404f, 04f07a0, 224fd7d, 89f72ad). I checked them against 03-CONTEXT.md
+(D-P3-01..23), the P3-DC log (P3-DC-112..121), `01-FROZEN.md`, and AGENTS.md. No
+frozen file changed: the diff touches no file in the frozen list
+(`recorded-servers.ts`, `mcp-implementation.ts`, `state-io.ts`, `index.ts`,
+the edge files, the closed sets, the steps, `cucumber.json`, and the build
+files are all untouched). The new imports (`dependency-move.ts` and
+`update-preflight.ts` to `mcp-verdict*.ts`) close no cycle. `update-preflight.ts`
+takes the record read as an injected port. The new read path stays offline:
+the legacy reader reads the cached manifest and the recorded root, and
+`mcp-verdict-read.ts` imports no git surface. Tags are correct: the
+`@own-implementation` scenario runs only on the adapter/default profiles, the
+folded `@mcp` scenario runs on both, and the `@builtin-only` apply scenario runs
+only on the built-in profile.
 
-These parts are sound:
+Status of the iteration-1 findings:
 
-- The D-MB-07 name table (`soft-dep.ts` `MCP_NAME_TABLE`) matches D-P3-06, D-P3-07 and D-P3-08 in every cell.
-- `resolutionFor` agrees with the frozen effective read: every view is a superset of the neutral drops, so no stale `droppedMcpServers` survives the spread.
-- The install, update, and consent gates name an implementation explicitly, and the neutral record writes set the basis after `replaceCompatibility`.
-- `list`, `info`, and `pending` stay offline.
-
-The main defect: the "no MCP trace" shortcut in `legacyReaderFor` was written for
-adapter-basis legacy records, but AMIG-01 now stamps
-`compatibilityBasis: "neutral"` on legacy records without writing
-`mcpServerConfigs`. Under that combination, a plugin whose only servers
-pi-mcp-adapter blocks reads as having no MCP servers at all (CR-01). That
-defeats the stated purpose of P3-DC-95 and contradicts Phase 2's built-in
-registration, which uses the full reader.
-
-The other gaps:
-
-- Under Pi's built-in MCP, apply holds a catalog move of a legacy unpinned path-source plugin, which breaks D-P3-13 (WR-01).
-- Dependency moves and user updates still ask for `--partial` after a switch, even when the record is already partial under the active implementation (WR-02).
-- A newly added built-in scenario pins a `(will partially install)` pending preview that `apply` does not carry out (WR-03).
-
-## Critical Issues
-
-### CR-01: A neutral legacy record with no staged MCP server reads as having no MCP servers, so adapter-only-blocked servers vanish from list, info, pending, and apply
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/mcp-verdict-read.ts:41-48`, `extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts:531-563`
-
-**Issue:** `legacyReaderFor` skips the offline re-resolve when a record lacks `mcpServerConfigs` and has `resources.mcpServers.length === 0` and no `mcpServers` kind. It then answers `{ servers: [], bundle: false }`. That rule holds only for records that carry the adapter's verdict (no basis): an adapter-blocked server always leaves `mcpServers` in `unsupported`.
-
-`applyNeutralVerdict` (AMIG-01) breaks this assumption. It converts a legacy record to `compatibilityBasis: "neutral"` and never writes `mcpServerConfigs`. Take a pre-milestone install whose only server has `bareElicitationCapability: true`. pi-mcp-adapter blocks that server, and Pi's built-in MCP runs it. The legacy `mcp.json` entry moves, the adapter drops the server, so `stagedNames` is `[]` and `resources.mcpServers` becomes `[]`. The neutral verdict is installable with no `mcpServers` kind, and the basis is set to neutral. From then on `readRecordMcpVerdict` / `readRecordMcpDependency` answer "no servers" under every implementation. I confirmed this with a direct probe of `readRecordMcpVerdict` on such a record: `recorded.servers` is `[]`, and the effective verdict under `adapter` is `installable: true` with `unsupported: []`. The results:
-
-- Under pi-mcp-adapter, `list` shows `(installed)` with no marker instead of `(partially-installed) {unsupported mcp, requires builtin mcp}`.
-- `info` shows no `mcp:` line and no MCP `requires:` entry.
-- `apply`'s convergence treats the record as clean, so a move to a version that still declares the server is held for consent.
-- Under Pi's built-in MCP, `builtin-registration-step.ts:233` calls `recordedMcpServers(record, createLegacyServersReader(source))` without the shortcut, so it registers the server while `info` lists no server for the plugin.
-
-`03-07-SUMMARY.md:246` gives exactly this case ("a legacy record whose bare-elicitation server was dropped would keep reading installable under the adapter") as the reason to write the basis, and that intent is not achieved.
-
-**Fix:** Apply the shortcut only to records whose stored verdict is the adapter's, and make AMIG-01 leave a self-describing record:
-
-```ts
-// mcp-verdict-read.ts
-return (record) =>
-  record.compatibilityBasis === undefined &&
-  record.resources.mcpServers.length === 0 &&
-  !record.compatibility.unsupported.includes("mcpServers")
-    ? Promise.resolve({ servers: [], bundle: false })
-    : reader(record);
-
-// mcp-migration.ts, applyNeutralVerdict, beside the basis write
-record.mcpServerConfigs = mcpServerConfigsOf(resolved.declaredMcpServers);
-if (resolved.mcpBundle === true) { record.mcpBundle = true; } else { delete record.mcpBundle; }
-```
-
-Add a migration integration case and a `@adapter-only` list scenario for a moved bare-elicitation-only legacy plugin.
+- **CR-01:** resolved. The no-trace shortcut now needs `compatibilityBasis === undefined`, and AMIG-01 writes `mcpServerConfigs` and `mcpBundle`. The fix adds a new defect, WR-05 below.
+- **WR-01:** resolved for the switch case. The excuse it adds is too wide and drops a consent hold where no switch happened (WR-04, new).
+- **WR-02:** resolved for cascades through the `readRecordDegradeBaseline` port. A user-run update keeps today's rules by recorded decision (P3-DC-112, D-P3-12 last sentence). The port also widens non-MCP behavior (IN-04, new).
+- **WR-03:** not resolved. The token changed, but `pending` still promises an install that `apply` refuses. It stays open as WR-03.
+- **IN-01:** resolved. The four titles now claim only what their steps show.
+- **IN-02:** resolved. The style-guide sentence is scoped to install, update, reinstall, and enable rows, and every `companionSeverity` caller is one of these.
+- **IN-03:** skipped by decision (P3-DC-91). It is still open and carried below.
 
 ## Warnings
 
-### WR-01: Under Pi's built-in MCP, apply holds the catalog move of a legacy unpinned path-source plugin because of the switch alone (D-P3-13)
+### WR-04: An unreadable record under pi-mcp-adapter excuses a new adapter-only drop, so a real new degrade moves without consent and is not flagged as newly degraded (new, from the WR-01 fix)
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts:422-434, 479-497` (same pattern in `orchestrators/plugin/update-swap.ts:1794-1814`)
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/mcp-verdict.ts:83-110`, `extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts:423-443, 509`, `extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:1825`, `extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:480-502`
 
-**Issue:** `recordMove` reads the record's effective verdict only after the offer shows a changed revision. For a legacy record (no `mcpServerConfigs`) of an unpinned path source, the frozen legacy reader re-resolves the live marketplace directory. That directory is exactly what moved, so `deriveInstallVersion` no longer matches `record.version`. The reader refuses with `version-mismatch`, and the read is `unreadable`, so the stored verdict stands. That stored verdict is either:
+**Issue:** `degradeBaselineOf` sets `readable: recorded.kind !== "unreadable"`. It does not look at the record's basis or the active implementation. `newlyDroppedKinds` then skips every `mcpServers` drop that the neutral resolution does not make. The excuse rests on one idea: an unreadable record's stored verdict cannot say what the *active* implementation drops. That idea is false for a legacy record (`compatibilityBasis === undefined`) under `adapter`. The frozen `effectiveMcpCompatibility` treats that stored verdict as pi-mcp-adapter's own verdict (`domain/mcp-implementation.ts:316`), so no switch happened and the stored verdict is exact.
 
-- the adapter's (no basis), or
-- after AMIG-01, a neutral one without configs.
+A reachable case: a record from a released build with a staged stdio server (no configs, no basis, `resources.mcpServers` not empty, and not migrated by AMIG-01 because its entries already live in `mcp-adapter.json`). Its source is an unpinned path source whose catalog moved, so the legacy reader refuses with `version-mismatch` and the read is `unreadable`. Pi runs pi-mcp-adapter, and the new version adds a server with `bareElicitationCapability: true`:
 
-For an sse plugin both say `installable: true`. Under Pi's built-in MCP, `move.partial` is `false`, the candidate's view drops `mcpServers`, and `newlyDroppedKinds` returns `["mcpServers"]`. So the move is held and the user is told to run `update --partial`. D-P3-13 says "a switch alone never holds a move", but every pre-milestone path-source install with an sse server hits this hold on its first catalog move after the switch. The same `unreadable` fallback makes `partialDegradeOf` report `newlyDegraded: true` for such an update. The frozen MREC-02 rule only says the stored verdict stands for the record. It does not require counting a kind that only the active implementation drops as a new degrade when the record side cannot be read.
+- The view drops `mcpServers`. The baseline (the adapter's stored verdict) does not, `readable` is `false`, and the neutral resolution does not drop it. So `dropped` is `[]` and `excused` is `true`.
+- Convergence: `consent` is `undefined` and `partial` is `true`. Apply moves the plugin and silently drops the new server. Before the fix this move was held for `update --partial` (D-12, D-P3-13: "needs consent only when the candidate drops something the installed record ... does not drop").
+- Update swap: `newlyDegraded` is `false`, so the autoupdate row stays `info` instead of the SEV-03 `warning`.
+- Dependency move: `dropsNothingNew` admits the candidate without `--partial`.
 
-**Fix:** When the record read is `unreadable`, compare the candidate against the neutral baseline, so a kind that only the active implementation drops is not counted as newly dropped. Treat the move as partial for those kinds. For example, have `readRecordMcpVerdict` return `recorded.kind`, and in `recordMove` use:
+None of the new unit cases (`mcp-verdict.test.ts` DROP_ROWS, `convergence.test.ts` legacy cases, `update-swap.test.ts`) runs under `adapter`, so nothing pins this.
+
+**Fix:** Excuse a drop only when a switch could explain it. Treat the stored verdict as readable when it is the active implementation's own verdict:
 
 ```ts
-const baseline = recorded.kind === "unreadable"
-  ? resolutionFor(resolved, "none").unsupported   // what no switch could explain
-  : effective.unsupported;
-const dropped = view.unsupported.filter((k) => !baseline.includes(k) && !effective.unsupported.includes(k));
-// and partial: !effective.installable || view.unsupported.some((k) => !baseline.includes(k))
+export function degradeBaselineOf(
+  effective: { readonly unsupported: readonly string[] },
+  recorded: Pick<RecordedMcpServers, "kind">,
+  record: Pick<PluginInstallRecord, "compatibilityBasis">,
+  active: ActiveMcpImplementation,
+): RecordDegradeBaseline {
+  // A legacy record holds pi-mcp-adapter's verdict, which is exact under the adapter.
+  const storedIsActive = record.compatibilityBasis === undefined && active === "adapter";
+  return {
+    unsupported: effective.unsupported,
+    readable: recorded.kind !== "unreadable" || storedIsActive,
+  };
+}
 ```
 
-Writing `mcpServerConfigs` in AMIG-01 (CR-01) removes the case for records that had legacy `mcp.json` entries.
+Pass `record` and `active` at the three call sites (`convergence.ts` `recordMove`, `update-swap.ts` `partialDegradeOf`, `mcp-verdict-read.ts` `recordDegradeBaselineReader`). Add an `adapter` row to DROP_ROWS and a convergence case: an unreadable legacy record under `adapter` whose candidate adds a bare-elicitation server is declined.
 
-### WR-02: A dependency move and a user-run update after a switch still ask for `--partial` when the record is already partial under the active implementation
+### WR-05: AMIG-01 now writes `mcpServerConfigs` from the live revision, not from the recorded version, which bypasses the frozen MREC-02 version guard (new, from the CR-01 fix)
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:527-538, 1221`, `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts:163-166`, `features/mcp-server/verdict-update.feature:1-7`
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts:540-563` (resolve at `resolveOffline`, ~370-400; header at 58-63)
 
-**Issue:** The candidate gate is `requireInstallable(view)` unless `options.partial` or `widensPartialGate(record)` is set, and `widensPartialGate` covers disabled records only. Nothing compares the candidate's view with the record's effective view. Two cases follow:
+**Issue:** `resolveOffline` resolves a path source from the marketplace's current checkout, with no `pathPluginPin` and no version check. The module header accepts this for *staging* ("a newer plugin version there can stage under the recorded version"). The CR-01 fix now also writes that resolve's `declaredMcpServers` into `record.mcpServerConfigs`. After that, `recordedMcpServers` answers `recorded` with these servers for every read. The frozen legacy reader refuses this exact case on purpose (`recorded-servers.ts`: "the reader never returns the servers of a version the record does not name", `version-mismatch`). The migration now writes around that guard and stores the newer revision's servers on a record that still names the old `version`.
 
-1. An sse dependency installed under pi-mcp-adapter (or with no implementation). The record is partial under Pi's built-in MCP, but `install`/`update` of a dependent that moves the dependency (`moveArgs`, `cascade: true`, `partial` only from the user's flag) is refused under built-in. This contradicts D-P3-13 ("cascades never ask because of a switch").
-2. A direct `update demo` of the same plugin to a version with the same sse server is refused under built-in. Yet `apply` moves it without asking (`verdict-apply.feature:9-39`). D-P3-12's first sentence ("asks only for a new degrade: the candidate's view is compared with the installed record's effective view") is not implemented in the gate. Only the swap's `newlyDegraded` flag reads the record.
+The effects, for a legacy owner whose path-source catalog moved before the first load after the upgrade:
 
-`verdict-update.feature`'s description claims the D-P3-12 behavior ("asks for --partial only when the MCP implementation pi runs now drops a server of the new version that the installed version did not need"), but no scenario covers an already-partial record, so nothing pins the actual behavior.
+- `list` and `info` classify the old version by the new version's servers. For example, a v1.0.0 stdio-only plugin lists `(partially-installed) {unsupported mcp, requires pi-mcp-adapter}` under built-in when v1.1.0 adds an sse server.
+- Apply's convergence baseline already contains the new server. The move to v1.1.0 is not held for the D-12 consent that a real new degrade needs. Before the fix, the read was `unreadable`, and only the neutral kinds came from the newer revision.
+- Phase 2's built-in registration reads the same field and registers the newer revision's servers for the old record.
 
-**Fix:** The callers can read the record (`update-preflight.ts` cannot import `mcp-verdict-read.ts`, which would close a cycle). Have them pass the record's effective `unsupported` kinds as data (for example `recordDrops?: readonly string[]` on `PreparePluginUpdateOptions`). Then admit the candidate when `view.unsupported.every((k) => recordDrops.includes(k))`, at least for `cascade: true` dependency moves. If keeping "today's rules" for a direct update is intended, record that as a decision, fix the feature description, and add the already-partial scenario that pins it.
+A tag-pinned path source (`resolvedSha` set) has the same problem, because `resolveOffline` passes no `pathPluginPin`.
 
-### WR-03: The new built-in pending scenario pins `(will partially install)` for an sse plugin, but `apply` installs without `partial` and refuses it
+**Fix:** Write the configs only when the resolve is the recorded revision. Check the version as the legacy reader does: `deriveInstallVersion` plus `isSameVersion(record.version, version, record.resolvedSha)`, or pin path sources with `pathPluginPin: record.resolvedSha`. On a mismatch, leave `mcpServerConfigs` absent so the read stays `unreadable` and the stored verdict stands (MREC-02). The verdict write has the same problem and predates this fix. If the newer-revision write is meant as reinstall parity, record it as a decision and update the header, because it now changes what every read and the built-in registration see, not only what is staged.
 
-**File:** `features/mcp-server/verdict-apply.feature:86-112`, `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:647-673`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:693-727`
+### WR-03 (carried, not resolved): `pending` still previews an install that `apply` refuses, and the preview no longer reads the active implementation as D-P3-15 requires
 
-**Issue:** `resolvePendingForceInstalls` now marks a planned install as forced when the run's view is `partially-available`. Under Pi's built-in MCP this covers every sse plugin. `applyPluginInstalls` calls `installPlugin` with no `partial`, and `buildInstallLedgerOptions` passes `consentView: run.softDeps.mcpImplementation`. So the actual apply runs `requireInstallable(view)` and fails with a `PluginShapeError` (`partialable: true`), which `installFailureReasonFields` reports as `no longer installable`. The preview says the plugin will partially install, and the apply it advertises refuses. The mismatch predates Phase 3 for non-MCP kinds. Phase 3 makes it reachable for the headline sse case and adds a scenario that freezes the preview without a matching apply scenario.
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:630-680`, `features/mcp-server/verdict-apply.feature:1-8, 87-140`
 
-**Fix:** Make the two surfaces agree. Either pass `partial: true` from `applyPluginInstalls` for a planned install that the read pass marked forced (the FSTAT-06 meaning of "will partially install"), or stop previewing a forced install that apply will refuse. Add an apply scenario under `@builtin-only` that pins the real result.
+**Issue:** `resolvePendingForceInstalls` now reads the neutral verdict, so an sse plugin under built-in previews `(will install)`, with `needs apply true` and a success count of 1. The new `@builtin-only` scenario pins the opposite result for the same input: `apply` fails with `(failed) {unsupported mcp}` at severity `error`. The two surfaces still disagree, and the preview now looks like a clean install. The same mismatch now also happens under pi-mcp-adapter for a bare-elicitation-only plugin. D-P3-15 says the forced-install preview "read[s] the active implementation like every other surface", and the fix moves it to the neutral view. The feature description ("Pending promises no partial install that apply will not make") is true only in a narrow sense, and false for kinds every implementation drops (P3-DC-117). The orchestrator logged this as P3-DC-117, so it is known, but the defect the finding named is still there.
+
+**Fix:** Make the preview match apply's real outcome under the active implementation. Do one of these:
+
+- Have `applyPluginInstalls` pass `partial: true` for a planned install the read pass marked forced, and keep the active-implementation mark from D-P3-15. P3-DC-20 then needs an amendment.
+- Preview such an install as a pending failure or hold (for example a `will not install {unsupported mcp}` row), and do not count it toward `needs apply`.
+
+Either way, restore D-P3-15's active-implementation read, or amend D-P3-15 in 03-CONTEXT.md.
 
 ## Info
 
-### IN-01: The switch scenarios state no implementation in their steps
+### IN-04: The dependency-move port admits any already-dropped kind, not only MCP, so a non-MCP partial dependency now moves without `--partial` (new, from the WR-02 fix)
 
-**File:** `features/mcp-server/verdict-apply.feature:9-62`, `features/mcp-server/verdict-install.feature:112-134`, `features/mcp-server/verdict-list.feature:59-84`
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:480-502, 575-579`, `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts:167-171`
 
-**Issue:** The titles say "installed under pi-mcp-adapter ... when pi runs its built-in MCP instead". The install, though, runs on the profile's shared Pi, and the switch happens inside `Given pi runs with the scripted model` (`companions: []`, so Pi's built-in MCP). No step names either implementation. The result rows prove that Pi's built-in MCP is active at read time. Nothing proves the install ran under pi-mcp-adapter: the neutral record is the same under no implementation. So the "from pi-mcp-adapter" half of each title rests on a harness default the feature text does not show.
+**Issue:** `dropsNothingNew` compares every kind in `view.unsupported` with the record's effective kinds. Take an enabled dependency that was installed with `--partial` for `lspServers`. Before this fix, `widensPartialGate` covers only disabled records, so a cascade move of that dependency asked for `--partial`. Now it moves without asking. That is a user-visible change outside D-MB-06's "a switch" scope. It matches apply's D-12 rule and P3-DC-112's wording ("dependency moves ask only for a new degrade"), but no scenario under `features/plugin/` pins it. The only new scenario is MCP. AGENTS.md asks for a scenario for each user-visible behavior change.
 
-**Fix:** Start the install on an explicit adapter Pi (`pi runs with the scripted model and these companions: | pi-mcp-adapter |`), as `companion-missing.feature:146` does, or reword the titles to claim only the read-time switch.
+**Fix:** Either limit the port to MCP (admit only when the non-MCP kinds of `view.unsupported` are empty or `--partial` is set), or add an `install-dependencies.feature` scenario that pins the non-MCP move and a CHANGELOG line.
 
-### IN-02: The style guide says an MCP marker always raises a warning, but list rows stay `info`
+### IN-03 (carried, skipped by decision P3-DC-91): Impossible-state guard: `partialDegradeOf` throws a concurrency error for a marketplace the preflight already found
 
-**File:** `docs/messaging-style-guide.md:93`
-
-**Issue:** "A row warns for MCP exactly when its marker shows." `companionSeverity` applies only to install, update, and enable rows. The `list` rows with the marker are pinned at `severity info` / `tally warnings 0` (`verdict-markers.feature:375-398`, `verdict-list.feature:59-84`), and the guide itself says reconcile rows apply no companion severity.
-
-**Fix:** Scope the sentence: "An install, update, or enable row warns for MCP exactly when its marker shows."
-
-### IN-03: Impossible-state guard: `partialDegradeOf` throws a concurrency error for a marketplace the preflight already found
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:1803-1806`
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:1805-1811`
 **Category:** necessity
 
-**Issue:** `preflight.record` was read out of `preflight.state.marketplaces[args.marketplace]` by the preflight, so `ownValue(preflight.state.marketplaces, args.marketplace)` cannot be `undefined` there. The guard turns a type-narrowing need into a user-facing `marketplace-removed` failure path that cannot happen. P3-DC-91 calls it "defensive". This finding rests on reading the preflight's code path, not on a type-level proof.
+**Issue:** `preflight.record` was read from `preflight.state.marketplaces[args.marketplace]`, so the `ownValue(...) === undefined` branch, a `marketplace-removed` failure, cannot happen. The orchestrator kept it as a defensive guard (P3-DC-91). The finding rests on reading the preflight's code path, not on a type-level proof.
 
-**Fix:** Carry the marketplace record on `PreparedPluginUpdate` (the preflight already holds it) and pass it to `readRecordMcpVerdict` directly, dropping the branch.
+**Fix:** Carry the marketplace record on `PreparedPluginUpdate` and drop the branch, or leave it as recorded.
 
 ---
 
-_Reviewed: 2026-11-04T18:51:31Z_
+_Reviewed: 2026-11-04T19:40:03Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Iteration: 2_
