@@ -720,6 +720,7 @@ function dropStalePromptContext(runtime: HooksRuntime, event: InputEvent): void 
  * `tools` names a PreToolUse event's tool as the hooks see it (D-P5-01) and
  * says whether pi-mcp-adapter's proxy rule applies (D-P5-06); it defaults to
  * a view over `pi`, which reads nothing until a tool event's bucket has hooks.
+ * The router passes one view to both tool handlers of a generation (D-P5-07).
  */
 export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   runtime: HooksRuntime,
