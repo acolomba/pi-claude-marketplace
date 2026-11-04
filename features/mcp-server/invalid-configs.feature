@@ -1,4 +1,3 @@
-@adapter-only
 Feature: MCP server invalid configs
 
   A plugin whose MCP config holds a server or a file that Claude Code's schema
@@ -6,8 +5,12 @@ Feature: MCP server invalid configs
   loader skips and refuses what Claude Code refuses (D-CF6-02). The stub
   stands in for a real server, a scripted model for a real model, and a local
   marketplace for a published one.
-  They run under pi-mcp-adapter only, until the built-in verdicts (MREC-04) lift the tag.
+  The malformed verdict is one shared shape check, so its rows hold under either
+  MCP implementation (D-P3-18). The scenarios that call a server run under
+  pi-mcp-adapter only: they call through its mcp proxy tool (D-CF6-02), and the
+  built-in invocation path is BLT-01's.
 
+  @adapter-only
   Scenario: A malformed server in .mcp.json is skipped and the plugin's other server answers
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -41,6 +44,7 @@ Feature: MCP server invalid configs
       | 3    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_ok__echo","args":{"text":"ping"}} |
       | 3    | tool result | mcp returned: echo:ping                                                   |
 
+  @mcp
   Scenario: A malformed server written in plugin.json makes the plugin unavailable
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -61,6 +65,7 @@ Feature: MCP server invalid configs
       | marketplace name | marketplace scope | id            | name | status      | reasons       |
       | fixtures         | user              | demo@fixtures | demo | unavailable | malformed mcp |
 
+  @adapter-only
   Scenario Outline: A broken MCP config file contributes no server and the plugin's other sources still load
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -96,6 +101,7 @@ Feature: MCP server invalid configs
       | ["./servers.json", {"good": {"stub": {}}}] | servers.json | not valid JSON     |
       | ["./servers.json", {"good": {"stub": {}}}] | servers.json | readable by nobody |
 
+  @mcp
   Scenario: A malformed server written in the marketplace entry makes the plugin unavailable
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -117,6 +123,7 @@ Feature: MCP server invalid configs
       | marketplace name | marketplace scope | id            | name | status      | reasons       |
       | fixtures         | user              | demo@fixtures | demo | unavailable | malformed mcp |
 
+  @mcp
   Scenario: A server reference outside the plugin root makes the plugin unavailable
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -137,6 +144,7 @@ Feature: MCP server invalid configs
       | marketplace name | marketplace scope | id            | name | status      | reasons       |
       | fixtures         | user              | demo@fixtures | demo | unavailable | malformed mcp |
 
+  @mcp
   Scenario: A server reference that is a symbolic link out of the plugin makes the plugin unavailable, a recorded divergence (MCPR-04)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:

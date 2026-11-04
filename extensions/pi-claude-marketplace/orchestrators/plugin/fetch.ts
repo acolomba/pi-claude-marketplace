@@ -32,6 +32,7 @@
 // the clone seam's, which lives in clone-cache.ts.
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -69,6 +70,7 @@ import { FETCH_CONTEXT, type FetchMsg } from "./fetch.messaging.ts";
 import type { makePresenceProbe } from "./git-source-probe.ts";
 import type { ListCandidate, resolveListCandidate } from "./list-candidate-version.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ResolveContext, ResolvedPlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -384,7 +386,7 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
   let rowRead = false;
   const fetchAndRead = async (): Promise<FetchMsg> => {
     await materializeThroughSeam(gitSource, deps, locations);
-    const row = freshRow(entry, await readCandidate());
+    const row = freshRow(entry, await readCandidate(), deps.run.softDeps.mcpImplementation);
     rowRead = true;
     return row;
   };
@@ -508,11 +510,15 @@ function skippedUpToDate(entry: ManifestEntry, candidate: CandidateRead): FetchM
 /**
  * Derive the FRESH post-fetch status row from the list-rule read of the
  * now-warm tree, as `list-candidate-row.ts::availableRowMessage` does: `cold`
- * (still unmaterialized) is `remote`, a resolved tree takes the resolver's
- * three-way state, and a read that threw is `unavailable` with the narrowed
- * probe-error class.
+ * (still unmaterialized) is `remote`, a resolved tree takes the three-way state
+ * of the run's MCP implementation's view (P3-DC-25), and a read that threw is
+ * `unavailable` with the narrowed probe-error class.
  */
-function freshRow(entry: ManifestEntry, candidate: CandidateRead): FetchMsg {
+function freshRow(
+  entry: ManifestEntry,
+  candidate: CandidateRead,
+  mcpImplementation: ActiveMcpImplementation,
+): FetchMsg {
   const meta = rowMeta(entry, candidate);
   switch (candidate.kind) {
     case "cold":
@@ -525,7 +531,7 @@ function freshRow(entry: ManifestEntry, candidate: CandidateRead): FetchMsg {
         ...meta,
       };
     case "resolved":
-      return resolvedRow(entry.name, candidate.resolved, meta);
+      return resolvedRow(entry.name, resolutionFor(candidate.resolved, mcpImplementation), meta);
   }
 }
 

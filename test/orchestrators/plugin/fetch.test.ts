@@ -23,13 +23,19 @@ import { resolveListCandidate } from "../../../extensions/pi-claude-marketplace/
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+import { softDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import {
+  adapterCommand,
+  builtinMcpCommand,
+  builtinMcpTool,
+} from "../../platform/pi-inventory-seed.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
@@ -2726,3 +2732,70 @@ test("GLK-07: a skipped path row shows the version its plugin.json declares over
     verifyNotifications(boundary);
   });
 });
+
+for (const { implementation, inventory, row } of [
+  {
+    implementation: "adapter",
+    inventory: { commands: [adapterCommand()] },
+    row: "  ○ events v1.0.0 (available)",
+  },
+  {
+    implementation: "none",
+    inventory: {},
+    row: "  ○ events v1.0.0 (available)",
+  },
+  {
+    implementation: "builtin",
+    inventory: { tools: [builtinMcpTool()], commands: [builtinMcpCommand()] },
+    row: "  ⊖ events v1.0.0 (partially-available) {unsupported mcp}",
+  },
+] as const) {
+  test(`P3-DC-25: under ${implementation} a fetched sse-only plugin reads for that implementation`, async () => {
+    await withWorkspace(async ({ cwd }) => {
+      // arrange
+      const eventsUrl = "https://example.com/events";
+      const eventsPin = "cccccccccccccccccccccccccccccccccccccccc";
+      const fixture = path.join(cwd, "fixture");
+      await writePluginTree(fixture, "events", "1.0.0");
+      await writeFile(
+        path.join(fixture, ".mcp.json"),
+        JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+      );
+      const marketplace = await marketplaceRecord({
+        cwd,
+        entries: [{ name: "events", source: { source: "url", url: eventsUrl, sha: eventsPin } }],
+        name: "marketplace",
+        scope: "project",
+      });
+      await saveMarketplaces(cwd, "project", [marketplace]);
+      const git = gitBoundary({ allowedRemoteUrls: [eventsUrl], fixtureSourceDir: fixture });
+      const cache = cacheBoundary(git.gitOps);
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const boundary = notificationBoundary(`${implementation} fetch row`);
+      const run = runWithSoftDeps(
+        softDepStatus({
+          getAllTools: () => ("tools" in inventory ? inventory.tools : []),
+          getCommands: () => inventory.commands ?? [],
+        }),
+      );
+
+      // act
+      await fetchPlugins({
+        cloneCacheSeam: cache.seam,
+        credentialOps: credentials.credentialOps,
+        ctx: boundary.ctx,
+        cwd,
+        run,
+        scope: "project",
+        target: { kind: "plugin", marketplace: "marketplace", plugin: "events" },
+      });
+
+      // assert
+      assert.strictEqual(run.softDeps.mcpImplementation, implementation);
+      assert.deepStrictEqual(boundary.notifications, [
+        { message: ["● marketplace [project]", row].join("\n") },
+      ]);
+      verifyNotifications(boundary);
+    });
+  });
+}
