@@ -1,12 +1,15 @@
-@adapter-only
 Feature: MCP server agent grants
 
   A plugin agent whose tools list grants a plugin MCP tool reaches it through
-  pi-subagents and pi-mcp-adapter. pi-subagents 0.84.0 gives a foreground agent
-  no MCP tool, a recorded companion gap (D-CF6-10), so these scenarios pin that
-  gap. A stdio stub server, a scripted model, and a local marketplace stand in.
-  They run under pi-mcp-adapter only, until the built-in grants (MGRT-01) lift the tag.
+  pi-subagents and the active MCP implementation. pi-subagents 0.84.0 gives a
+  foreground agent no MCP tool, a recorded companion gap (D-CF6-10). The three
+  D-CF6-10 scenarios pin that gap and pi-mcp-adapter's grant form, so they run
+  under pi-mcp-adapter only. A pi-subagents background child that loads this
+  extension changes no installation state (MGRT-02). A Pi started with the
+  marker pi-subagents sets in its runner process plays that child. A stdio stub
+  server, a scripted model, and a local marketplace stand in.
 
+  @adapter-only
   Scenario: A foreground run of an agent granted a plugin MCP tool is refused before the child runs (D-CF6-10)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -38,6 +41,7 @@ Feature: MCP server agent grants
       | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
       | request      | tools/list                |                                                                                                                                                                                                                                                                 |
 
+  @adapter-only
   Scenario: A foreground agent without a tools list runs without the plugin's MCP tools (D-CF6-10)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -76,6 +80,7 @@ Feature: MCP server agent grants
       | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
       | request      | tools/list                |                                                                                                                                                                                                                                                                 |
 
+  @adapter-only
   Scenario: Installing an agent granted a plugin MCP tool stages it to run in the background (D-CF6-10)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -116,3 +121,28 @@ Feature: MCP server agent grants
 
       Call the tools the task names.
       """
+
+  Scenario: A pi-subagents background child with autoapply on installs nothing (MGRT-02)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    Given pi runs with the scripted model and pi-subagents as a pi-subagents background child
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
+      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
+      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
+    Then the project scope has no installed plugins
