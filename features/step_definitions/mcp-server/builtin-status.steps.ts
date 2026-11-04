@@ -6,13 +6,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { Given, Then, When } from "@cucumber/cucumber";
 
 import { MCP_STUB_SERVER, readStubRequests } from "../../lib/mcp-stub-server.ts";
+import { writeScenarioFile } from "../../lib/scenario-file.ts";
 import { harnessDirectory } from "../../lib/turn-records.ts";
 
 import type { PiTuiSession } from "../../lib/pi-tui.ts";
@@ -86,9 +87,7 @@ Given(
       null,
       2,
     )}\n`;
-    await writeFile(file, text, { flag: "wx" });
-    this.onRelease(() => rm(file, { force: true }));
-    assert.strictEqual(await readFile(file, "utf8"), text);
+    await writeScenarioFile(this, file, text);
   },
 );
 

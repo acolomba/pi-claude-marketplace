@@ -23,7 +23,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 
@@ -33,6 +33,7 @@ import { hookMcpCallScript } from "../../lib/hook-mcp-calls.ts";
 import { HOOK_MCP_TOOL_SERVER } from "../../lib/hook-mcp-tool-server.ts";
 import { MCP_STUB_SERVER, readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
+import { writeScenarioFile } from "../../lib/scenario-file.ts";
 import { readModelScript, writeModelScript } from "../../lib/scripted-model/script.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -130,8 +131,6 @@ Given(
     assert.ok(!this.profilePiStarted, "a profile Pi already started in this scenario");
     const file = path.join(this.tokens.agentDir, PI_MCP_FILE);
     const text = piMcpText(server, tool);
-    await writeFile(file, text, { flag: "wx" });
-    this.onRelease(() => rm(file, { force: true }));
-    assert.strictEqual(await readFile(file, "utf8"), text);
+    await writeScenarioFile(this, file, text);
   },
 );
