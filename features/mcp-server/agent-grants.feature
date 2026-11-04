@@ -8,7 +8,8 @@ Feature: MCP server agent grants
   foreground agent its MCP tools under both implementations (D-CF6-10). A
   pi-subagents background child changes no grant and no installation state
   (MGRT-02); a Pi started with the marker pi-subagents sets in its runner plays
-  that child. A stdio stub server, the built-in stand-in, a scripted model, and
+  that child, and a later Pi without the marker and with no MCP shows what the
+  child left. A stdio stub server, the built-in stand-in, a scripted model, and
   a local marketplace stand in.
 
   @adapter-only
@@ -486,6 +487,8 @@ Feature: MCP server agent grants
       | reply               | tool     | arguments                              |
       |                     | subagent | {"action":"get","agent":"demo:runner"} |
       | The agent is shown. |          |                                        |
+    When the user restarts pi with no mcp
+    Then the session reports no results
     When the user prompts "show the runner"
     Then the model receives these calls:
       | call | role        | text                                                                                                                                                                                                                                                                                                                                                                     |

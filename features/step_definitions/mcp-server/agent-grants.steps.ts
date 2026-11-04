@@ -95,15 +95,22 @@ Given(
   },
 );
 
-// MGRT-02: the launch environment sets the marker in the profile Pi's own
-// environment before any session starts, as pi-subagents' runner does. The
-// file stays until the scenario ends, because the extension reads it on every
-// start. pi-subagents itself registers nothing in a child.
+// MGRT-02: the launch-environment extension sets the marker in the profile
+// Pi's own environment before any session starts, as pi-subagents' runner
+// does, and this extension reads it at session start, after every extension
+// loaded. This Pi is not a whole child: the world loads companions before
+// `extraExtensions`, so pi-subagents' factory runs before the marker is set
+// and registers its tools, which pi-subagents 0.84.0 skips in a real child
+// (`src/extension/index.js:225`). So no scenario calls `subagent` in this Pi.
+// Once it started, the step empties the launch environment, which the
+// extension reads at every start, so a restart starts a Pi that is not a
+// child, as the user's next Pi outside pi-subagents is.
 Given(
   "pi runs with the scripted model and pi-subagents as a pi-subagents background child",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld) {
-    const file = await writeLaunchEnvironment(this.tokens.home, { PI_SUBAGENT_CHILD: "1" });
+    const { home } = this.tokens;
+    const file = await writeLaunchEnvironment(home, { PI_SUBAGENT_CHILD: "1" });
     this.onRelease(() => rm(file, { force: true }));
     await this.usePiWithProfile({
       companions: ["pi-subagents"],
@@ -112,5 +119,7 @@ Given(
     assert.deepStrictEqual(await readAppliedLaunchEnvironments(this.profileHarness()), [
       { PI_SUBAGENT_CHILD: "1" },
     ]);
+    await rm(file);
+    assert.strictEqual(await writeLaunchEnvironment(home, {}), file);
   },
 );
