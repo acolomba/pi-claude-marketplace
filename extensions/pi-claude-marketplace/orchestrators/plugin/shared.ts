@@ -76,7 +76,7 @@ import type {
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { Dependency, McpDependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
@@ -133,11 +133,12 @@ export interface LedgerDegradationSignals {
    */
   readonly stagedAgents?: boolean;
   /**
-   * SEV-01 / D-98-02: the ledger staged at least one MCP server, so the row
-   * DECLARES the `pi-mcp-adapter` companion. The MCP counterpart of
-   * `stagedAgents`, driving the `{requires pi-mcp-adapter}` marker and the same raise.
+   * SEV-01 / D-98-02 / D-P3-10: the plugin's MCP dependency, present when an
+   * MCP implementation runs at least one of its declared servers. It names the
+   * implementations that run every such server; the MCP counterpart of
+   * `stagedAgents`, driving the MCP `requires` marker and the same raise.
    */
-  readonly stagedMcpServers?: boolean;
+  readonly stagedMcpServers?: McpDependency;
   /**
    * SEV-01: the ledger staged at least one workflow, so the row DECLARES the
    * host workflow engine. The workflows counterpart of `stagedAgents`, driving
@@ -154,9 +155,9 @@ export interface LedgerDegradationSignals {
  * projected row gains no markers (NREG-01). The `partition?: never` refusal
  * keeps the update and reinstall partitions out, as on `enableRowDependencies`.
  *
- * SEV-01 / D-98-02: the staged-count verdicts ride here too -- they drive the
- * projected row's dependency list, mirroring the install arm's
- * `dependenciesFromInstall` derivation.
+ * SEV-01 / D-98-02: the staged-count verdicts and the MCP dependency
+ * (D-P3-10) ride here too -- they drive the projected row's dependency list,
+ * mirroring the install arm's `dependenciesFromInstall` derivation.
  */
 export function degradationFromEnable(
   result: LedgerDegradationSignals & { readonly partition?: never },
@@ -166,7 +167,7 @@ export function degradationFromEnable(
     ...(result.orphanRewake === true && { orphanRewake: true }),
     ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
     ...(result.stagedAgents === true && { stagedAgents: true }),
-    ...(result.stagedMcpServers === true && { stagedMcpServers: true }),
+    ...(result.stagedMcpServers !== undefined && { stagedMcpServers: result.stagedMcpServers }),
     ...(result.stagedWorkflows === true && { stagedWorkflows: true }),
   };
 }
@@ -204,7 +205,7 @@ export function enableRowDependencies(
     dependencies.push("agents");
   }
 
-  if (signals.stagedMcpServers === true) {
+  if (signals.stagedMcpServers !== undefined) {
     dependencies.push("mcp");
   }
 

@@ -28,7 +28,7 @@ import {
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { Dependency, McpDependency } from "../../shared/concerns/soft-dep.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   PluginUpdateSkippedOutcome,
@@ -277,7 +277,7 @@ export function withCommits(commits: VersionCommits | undefined): {
  */
 function outcomeDependencies(
   declaresAgents: boolean,
-  declaresMcp: boolean,
+  declaresMcp: McpDependency | false,
   declaresWorkflows: boolean,
 ): readonly Dependency[] {
   return [

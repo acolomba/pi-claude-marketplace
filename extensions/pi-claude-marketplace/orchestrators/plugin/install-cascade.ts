@@ -116,6 +116,7 @@ import { cascadeUnstagePlugin, foldUnstageNotices } from "../marketplace/shared.
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { ledgerDegradationSignals, runInstallLedger } from "./install-outcome.ts";
 import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
+import { mcpDependencyOf } from "./mcp-verdict.ts";
 import { applyPartialCascadeFold } from "./shared.ts";
 
 import type {
@@ -143,6 +144,7 @@ import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
+import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
@@ -444,13 +446,14 @@ export interface CascadeMemberOutcome extends Pick<
   readonly unsupported?: readonly string[];
   /**
    * What the member staged, as the three soft-dependency kinds the renderer
-   * probes for. Carried as booleans rather than as the staged name lists so a
+   * probes for; the MCP kind is the member's `McpDependency` from its declared
+   * servers (D-P3-10). Carried as values rather than as the staged name lists so a
    * member row can fire the same `{requires pi-...}` marker and the same SEV-01
    * severity an ordinary install row does, without this module reaching for the
    * presentation vocabulary that decides how.
    */
   readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
+  readonly declaresMcp: McpDependency | false;
   readonly declaresWorkflows: boolean;
   /**
    * Where the member materialized, and the hooks config it declared relative to
@@ -1265,7 +1268,7 @@ function recordMaterializedMember(
     }),
     ...ledgerDegradationSignals(summary),
     declaresAgents: summary.stagedAgentNames.length > 0,
-    declaresMcp: summary.stagedMcpServerNames.length > 0,
+    declaresMcp: mcpDependencyOf(Object.values(summary.resolved.declaredMcpServers)),
     declaresWorkflows: summary.stagedWorkflowNames.length > 0,
     pluginRoot: summary.resolved.pluginRoot,
     hooksConfigPath: summary.resolved.hooksConfigPath,

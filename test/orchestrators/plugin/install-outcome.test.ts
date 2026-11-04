@@ -357,6 +357,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
     ],
     resolved: {
       ...ledgerOutcome.summary.resolved,
+      declaredMcpServers: { server: { command: "node" } },
       orphanRewake: true,
       state: "partially-available" as const,
       unsupported: ["hooks"],
@@ -373,7 +374,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
   });
   assert.deepStrictEqual(installedPluginOutcome(richSummary, ["warning"], true), {
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
     declaresWorkflows: true,
     degradedKinds: ["skill", "command"],
     landedDisabled: true,

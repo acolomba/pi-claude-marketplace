@@ -45,7 +45,7 @@ const REINSTALL_REINSTALLED_CLEAN = {
 
 const REINSTALL_REINSTALLED_FULL = {
   declaresAgents: true,
-  declaresMcp: true,
+  declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   discoveryWarnings: [
@@ -160,7 +160,7 @@ const PLUGIN_UPDATE_UPDATED_FULL = {
     fellBackToCurrentCopy: true,
   },
   declaresAgents: true,
-  declaresMcp: true,
+  declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   fromVersion: "1.0.0",
@@ -204,7 +204,7 @@ const PLUGIN_UPDATE_SKIPPED_CLEAN = {
 
 const PLUGIN_UPDATE_SKIPPED_FULL = {
   declaresAgents: true,
-  declaresMcp: true,
+  declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
   declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
@@ -226,7 +226,7 @@ const PLUGIN_UPDATE_FAILED_CLEAN = {
 const PLUGIN_UPDATE_FAILED_FULL = {
   cause: new Error("permission denied"),
   declaresAgents: true,
-  declaresMcp: true,
+  declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
   declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
@@ -337,7 +337,7 @@ const LEDGER_DEGRADATION_SIGNALS = {
   degradedKinds: ["skill", "command"],
   orphanRewake: true,
   stagedAgents: true,
-  stagedMcpServers: true,
+  stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
   unsupported: ["hooks", "lsp"],
 } satisfies LedgerDegradationSignals;
 
@@ -352,7 +352,7 @@ const INSTALL_INSTALLED_CLEAN = {
 
 const INSTALL_INSTALLED_FULL = {
   declaresAgents: true,
-  declaresMcp: true,
+  declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   landedDisabled: true,

@@ -162,7 +162,7 @@ test("reinstalledRowFromOutcome projects an MCP-only dependency", () => {
     stagedAgentNames: [],
     stagedMcpServerNames: ["docs"],
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
   };
 
@@ -193,7 +193,7 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
     stagedAgentNames: ["reviewer"],
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
   };
 
@@ -224,7 +224,7 @@ test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", 
     stagedAgentNames: ["reviewer"],
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: true,
   };
 
@@ -256,7 +256,11 @@ for (const { companion, declares, dependency, loaded } of [
   },
   {
     companion: "pi-mcp-adapter",
-    declares: { declaresAgents: false, declaresMcp: true, declaresWorkflows: false },
+    declares: {
+      declaresAgents: false,
+      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
+      declaresWorkflows: false,
+    },
     dependency: "mcp",
     loaded: {
       piSubagentsLoaded: true,
@@ -539,7 +543,7 @@ test("SEV-01: the reinstall cascade reports an unloaded declared companion as ne
       stagedAgentNames: ["reviewer"],
       stagedMcpServerNames: ["docs"],
       declaresAgents: true,
-      declaresMcp: true,
+      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
       declaresWorkflows: false,
     },
   ];
@@ -1108,7 +1112,7 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
       stagedAgentNames: ["reviewer"],
       stagedMcpServerNames: ["docs"],
       declaresAgents: true,
-      declaresMcp: true,
+      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
       declaresWorkflows: false,
     },
     {

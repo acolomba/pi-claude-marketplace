@@ -379,7 +379,10 @@ describe("enableRowDependencies", () => {
 
   test("returns agent then MCP dependencies when both companion kinds were staged", () => {
     // arrange
-    const signals = { stagedAgents: true, stagedMcpServers: true } as const;
+    const signals = {
+      stagedAgents: true,
+      stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
+    } as const;
 
     // act
     const dependencies = enableRowDependencies(signals);
@@ -401,7 +404,11 @@ describe("enableRowDependencies", () => {
 
   test("WDEP-02: returns workflows LAST when all three companion kinds were staged", () => {
     // arrange
-    const signals = { stagedAgents: true, stagedMcpServers: true, stagedWorkflows: true } as const;
+    const signals = {
+      stagedAgents: true,
+      stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
+      stagedWorkflows: true,
+    } as const;
 
     // act
     const dependencies = enableRowDependencies(signals);
@@ -3688,7 +3695,7 @@ describe("degradationFromEnable", () => {
       orphanRewake: true,
       degradedKinds: ["skill"],
       stagedAgents: true,
-      stagedMcpServers: true,
+      stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
       stagedWorkflows: true,
     });
 
@@ -3698,7 +3705,7 @@ describe("degradationFromEnable", () => {
       orphanRewake: true,
       degradedKinds: ["skill"],
       stagedAgents: true,
-      stagedMcpServers: true,
+      stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
       stagedWorkflows: true,
     });
   });

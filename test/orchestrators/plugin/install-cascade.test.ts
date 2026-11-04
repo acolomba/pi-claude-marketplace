@@ -428,10 +428,15 @@ test("a materialized member's outcome carries what its own ledger summary report
       hooksConfigPath: "hooks/hooks.json",
     },
   };
+  const fooBase = unmaterializedSummary(locations, environment.cwd, closureMember("foo"));
   const fooSummary: InstallLedgerSummary = {
-    ...unmaterializedSummary(locations, environment.cwd, closureMember("foo")),
+    ...fooBase,
     version: "4.5.6",
     stagedMcpServerNames: ["foo-mcp"],
+    resolved: {
+      ...fooBase.resolved,
+      declaredMcpServers: { "foo-mcp": { type: "sse", url: "https://mcp.example.com/sse" } },
+    },
   };
   const seam: InstallCascadeLedgerSeam = {
     runInstallLedger: (_state, _locations, options) =>
@@ -488,7 +493,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       requiredBy: undefined,
       version: "4.5.6",
       declaresAgents: false,
-      declaresMcp: true,
+      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
       declaresWorkflows: false,
       pluginRoot: path.join(environment.cwd, "unmaterialized"),
       hooksConfigPath: undefined,

@@ -417,6 +417,7 @@ describe("row outcomes", () => {
       scope: "project",
       plugin: "app",
       record,
+      mcpDependency: { kind: "mcp", runEvery: ["builtin"] },
       reason: "already installed in local layer",
     });
 
@@ -426,7 +427,7 @@ describe("row outcomes", () => {
       version: "1.2.3",
       resourcesChanged: false,
       declaresAgents: true,
-      declaresMcp: false,
+      declaresMcp: { kind: "mcp", runEvery: ["builtin"] },
       declaresWorkflows: true,
     });
     assert.match(notifications[0]?.message ?? "", /already installed in local layer/u);
@@ -520,7 +521,7 @@ describe("promotion", () => {
     assert.deepStrictEqual(promotion, {
       version: "1.2.3",
       declaresAgents: true,
-      declaresMcp: true,
+      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
       declaresWorkflows: false,
       materialized: [],
       mcpConfigNotices: [],

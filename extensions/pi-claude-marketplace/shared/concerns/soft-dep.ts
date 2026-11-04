@@ -1,6 +1,6 @@
 import { type Reason } from "../notification-types.ts";
 
-import type { SoftDepStatus } from "../../platform/pi-api.ts";
+import type { McpImplementationId, SoftDepStatus } from "../../platform/pi-api.ts";
 
 /**
  * shared/concerns/soft-dep.ts -- the soft-dep marker injection concern (D-01).
@@ -28,6 +28,17 @@ import type { SoftDepStatus } from "../../platform/pi-api.ts";
  * sole declaration site.
  */
 export type Dependency = "agents" | "mcp" | "workflows";
+
+/**
+ * D-P3-10 / D-MB-07: a plugin's MCP dependency. It exists only when at least
+ * one MCP implementation runs one of the plugin's servers; `runEvery` lists,
+ * in the order adapter then builtin, each implementation that runs every such
+ * server, and is empty when the servers split between the two.
+ */
+export interface McpDependency {
+  readonly kind: "mcp";
+  readonly runEvery: readonly McpImplementationId[];
+}
 
 /**
  * ADET-01: the companion extension a component kind needs at runtime -- agents
@@ -74,10 +85,11 @@ const SOFT_DEP_MARKER_WORKFLOWS: Reason = `requires ${COMPANION_WORKFLOWS}`;
  * SNM-06: the dependencies a plugin's declares-flags select, in canonical order.
  * WDEP-02: `workflows` comes last, so a row that declares agents and mcp renders
  * the same two-marker brace whether or not it also declares workflows.
+ * D-P3-10: an `McpDependency` fills the mcp slot; `false` leaves it empty.
  */
 export function declaredDependencies(flags: {
   readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
+  readonly declaresMcp: McpDependency | false;
   readonly declaresWorkflows: boolean;
 }): readonly Dependency[] {
   const deps: Dependency[] = [];
@@ -85,7 +97,7 @@ export function declaredDependencies(flags: {
     deps.push("agents");
   }
 
-  if (flags.declaresMcp) {
+  if (flags.declaresMcp !== false) {
     deps.push("mcp");
   }
 

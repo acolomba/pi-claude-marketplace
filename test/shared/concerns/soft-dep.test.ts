@@ -6,7 +6,11 @@ import {
   declaredDependencies,
   softDepMarkers,
   type Dependency,
+  type McpDependency,
 } from "../../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
+
+// D-P3-10: an MCP dependency that only pi-mcp-adapter runs every server of.
+const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
 
 void ("agents" satisfies Dependency);
 void ("mcp" satisfies Dependency);
@@ -438,7 +442,11 @@ for (const { kind, declaresAgents, declaresMcp, declaresWorkflows, companion } o
 describe("declaredDependencies", () => {
   test("returns no dependencies when no dependency is declared", () => {
     // arrange
-    const outcome = { declaresAgents: false, declaresMcp: false, declaresWorkflows: false };
+    const outcome = {
+      declaresAgents: false,
+      declaresMcp: false as const,
+      declaresWorkflows: false,
+    };
 
     // act
     const dependencies = declaredDependencies(outcome);
@@ -449,7 +457,7 @@ describe("declaredDependencies", () => {
 
   test("returns agents when only agents are declared", () => {
     // arrange
-    const outcome = { declaresAgents: true, declaresMcp: false, declaresWorkflows: false };
+    const outcome = { declaresAgents: true, declaresMcp: false as const, declaresWorkflows: false };
 
     // act
     const dependencies = declaredDependencies(outcome);
@@ -460,7 +468,7 @@ describe("declaredDependencies", () => {
 
   test("returns mcp when only mcp is declared", () => {
     // arrange
-    const outcome = { declaresAgents: false, declaresMcp: true, declaresWorkflows: false };
+    const outcome = { declaresAgents: false, declaresMcp: ADAPTER_MCP, declaresWorkflows: false };
 
     // act
     const dependencies = declaredDependencies(outcome);
@@ -471,7 +479,7 @@ describe("declaredDependencies", () => {
 
   test("WDEP-02: returns workflows when only workflows are declared", () => {
     // arrange
-    const outcome = { declaresAgents: false, declaresMcp: false, declaresWorkflows: true };
+    const outcome = { declaresAgents: false, declaresMcp: false as const, declaresWorkflows: true };
 
     // act
     const dependencies = declaredDependencies(outcome);
@@ -482,7 +490,7 @@ describe("declaredDependencies", () => {
 
   test("returns agents before mcp when both are declared", () => {
     // arrange
-    const outcome = { declaresAgents: true, declaresMcp: true, declaresWorkflows: false };
+    const outcome = { declaresAgents: true, declaresMcp: ADAPTER_MCP, declaresWorkflows: false };
 
     // act
     const dependencies = declaredDependencies(outcome);
@@ -493,7 +501,7 @@ describe("declaredDependencies", () => {
 
   test("WDEP-02: returns workflows last when all three are declared", () => {
     // arrange
-    const outcome = { declaresAgents: true, declaresMcp: true, declaresWorkflows: true };
+    const outcome = { declaresAgents: true, declaresMcp: ADAPTER_MCP, declaresWorkflows: true };
 
     // act
     const dependencies = declaredDependencies(outcome);

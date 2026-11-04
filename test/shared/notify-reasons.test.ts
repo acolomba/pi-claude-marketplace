@@ -190,7 +190,7 @@ const companionSeverityCases = [
   {
     title: "warns when only MCP is declared and neither companion is loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
@@ -203,7 +203,7 @@ const companionSeverityCases = [
   {
     title: "warns when both companions are declared and neither companion is loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
@@ -242,7 +242,7 @@ const companionSeverityCases = [
   {
     title: "keeps info when only MCP is declared and loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
@@ -255,7 +255,7 @@ const companionSeverityCases = [
   {
     title: "warns when agents are also declared but only MCP is loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
@@ -294,7 +294,7 @@ const companionSeverityCases = [
   {
     title: "warns when only MCP is declared and only agents are loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
@@ -307,7 +307,7 @@ const companionSeverityCases = [
   {
     title: "warns when MCP is also declared but only agents are loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
@@ -346,7 +346,7 @@ const companionSeverityCases = [
   {
     title: "keeps info when only MCP is declared and both companions are loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
@@ -359,7 +359,7 @@ const companionSeverityCases = [
   {
     title: "keeps info when both companions are declared and loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
@@ -402,7 +402,7 @@ const companionSeverityCases = [
     // them: two unloaded companions still reach warning through their own arms.
     title: "raises to warning for two unloaded companions while the host engine is loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: false,

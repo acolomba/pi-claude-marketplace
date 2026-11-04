@@ -386,7 +386,9 @@ describe("composeCascadeMemberRows", () => {
       scope: "user",
       rootKey: ROOT_KEY,
       rootRow: ROOT_ROW,
-      installed: [member({ declaresAgents: true, declaresMcp: true })],
+      installed: [
+        member({ declaresAgents: true, declaresMcp: { kind: "mcp", runEvery: ["adapter"] } }),
+      ],
       alreadyInstalled: [],
       probe: PROBE_NO_AGENTS,
     });
@@ -670,7 +672,7 @@ describe("composeCascadeMemberRow", () => {
   test("UPD-DEP-D1 a member installed from its marketplace's current copy names the fallback", () => {
     // act
     const row = composeCascadeMemberRow(
-      member({ declaresMcp: true, fellBackToCurrentCopy: true }),
+      member({ declaresMcp: { kind: "mcp", runEvery: ["adapter"] }, fellBackToCurrentCopy: true }),
       PROBE_BOTH_LOADED,
     );
 

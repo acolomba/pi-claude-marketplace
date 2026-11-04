@@ -1263,7 +1263,7 @@ describe("buildReconcileAppliedCascade", () => {
         plugin: "cr",
         version: "1.0.0",
         stagedAgents: true,
-        stagedMcpServers: true,
+        stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
       },
     ];
 
@@ -1302,7 +1302,7 @@ describe("buildReconcileAppliedCascade", () => {
         plugin: "cr",
         version: "1.0.0",
         stagedAgents: true,
-        stagedMcpServers: true,
+        stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
         stagedWorkflows: true,
       },
     ];

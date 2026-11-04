@@ -152,7 +152,7 @@ void ({
   orphanRewake: true,
   degradedKinds: ["skill"],
   stagedAgents: true,
-  stagedMcpServers: true,
+  stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
 } satisfies PluginEnabledOutcome);
 void ({
   kind: "plugin-enable-failed",

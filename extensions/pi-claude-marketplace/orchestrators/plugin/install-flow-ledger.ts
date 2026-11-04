@@ -56,6 +56,7 @@ import {
   writeReEnabledCascadeMemberConfigEntries,
 } from "./install-flow-results.ts";
 import { installedPluginOutcome, previewInstall } from "./install-outcome.ts";
+import { mcpDependencyOf } from "./mcp-verdict.ts";
 import {
   loadTargetLayers,
   resolveInstallMarketplaceSource,
@@ -441,7 +442,7 @@ function droppedKindRowReasons(installCtx: InstallLedgerSummary): readonly Conte
 function composeInstalledRow(installCtx: InstallLedgerSummary, probe: SoftDepStatus): InstallMsg {
   const { plugin } = installCtx;
   const declaresAgents = installCtx.stagedAgentNames.length > 0;
-  const declaresMcp = installCtx.stagedMcpServerNames.length > 0;
+  const declaresMcp = mcpDependencyOf(Object.values(installCtx.resolved.declaredMcpServers));
   const declaresWorkflows = installCtx.stagedWorkflowNames.length > 0;
 
   // The renderer emits the per-row soft-dep markers (`{requires
@@ -1242,6 +1243,7 @@ async function installPluginWithTransaction(
         scope,
         plugin,
         record: outcome.record,
+        mcpDependency: outcome.mcpDependency,
         reason: outcome.reason,
       });
       break;
