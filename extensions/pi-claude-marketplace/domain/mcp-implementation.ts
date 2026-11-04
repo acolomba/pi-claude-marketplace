@@ -5,15 +5,23 @@
 // a profile: the verdict it gives a declared server, and the names it gives
 // the server, its tools, and an agent's grant. Both verdicts share one
 // Claude-shape check, so a server is malformed for both or for neither.
+//
+// `effectiveMcpCompatibility` reads a plugin record's stored compatibility for
+// the active implementation, recomputing the MCP part from the recorded
+// servers when the stored verdict was not computed for it.
 
 import { createHash } from "node:crypto";
 
 import { classifyBuiltinMcpServer } from "./mcp-builtin-features.ts";
-import { classifyMcpServer } from "./mcp-server-features.ts";
+import { checkClaudeShape, classifyMcpServer } from "./mcp-server-features.ts";
 import { builtinMcpServerName, foldedMcpServerKey, generatedMcpServerKey } from "./name.ts";
 
-import type { McpServerVerdict } from "./mcp-server-features.ts";
-import type { McpImplementationId } from "../platform/pi-api.ts";
+import type {
+  DroppedMcpServer,
+  McpServerVerdict,
+  McpUnsupportedFeature,
+} from "./mcp-server-features.ts";
+import type { ActiveMcpImplementation, McpImplementationId } from "../platform/pi-api.ts";
 
 export type { ActiveMcpImplementation, McpImplementationId } from "../platform/pi-api.ts";
 
@@ -106,4 +114,183 @@ const PROFILES = {
 /** The frozen profile of one MCP implementation; every call returns the same object. */
 export function profileFor(id: McpImplementationId): McpImplementationProfile {
   return PROFILES[id];
+}
+
+/** One recorded MCP server: its declared name and its Claude config. */
+export interface RecordedMcpServer {
+  readonly name: string;
+  readonly config: unknown;
+}
+
+/** The recorded MCP servers of one plugin record, or why they cannot be read. */
+export type RecordedMcpServers =
+  | {
+      readonly kind: "recorded" | "re-resolved";
+      readonly servers: readonly RecordedMcpServer[];
+      readonly bundle: boolean;
+    }
+  | { readonly kind: "unreadable" };
+
+/**
+ * The structural view of a plugin record that the effective read takes, so a
+ * caller passes the record itself. A stored compatibility without
+ * `compatibilityBasis` carries the adapter's MCP verdict; `"neutral"` means
+ * its `mcpServers` kind stands only for an implementation-independent block.
+ */
+export interface StoredMcpCompatibility {
+  readonly compatibility: {
+    readonly installable: boolean;
+    readonly notes: readonly string[];
+    readonly unsupported: readonly string[];
+  };
+  readonly compatibilityBasis?: "neutral";
+}
+
+/** A record's compatibility for the active MCP implementation. */
+export interface EffectiveMcpCompatibility {
+  readonly installable: boolean;
+  readonly unsupported: readonly string[];
+  readonly blocked: readonly DroppedMcpServer[];
+}
+
+// TR-04: the note `markUpdateInProgress` in orchestrators/plugin/update-swap.ts
+// writes into `compatibility.notes` while an update is in flight. domain/
+// cannot import orchestrators/, so the literal is repeated here.
+const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
+
+// The typed unsupported kind of a blocked MCP server or a bundle (ANAME-07).
+const MCP_SERVERS_KIND = "mcpServers";
+
+type ReadableMcpServers = Extract<RecordedMcpServers, { readonly servers: unknown }>;
+
+function blockedFeature(verdict: McpServerVerdict): McpUnsupportedFeature | undefined {
+  return verdict.kind === "blocked" ? verdict.feature : undefined;
+}
+
+/**
+ * The feature that blocks one recorded config under the active
+ * implementation. With no active implementation a server is blocked only when
+ * both profiles block it, and it reports the adapter profile's feature.
+ */
+function blockingFeature(
+  config: unknown,
+  active: ActiveMcpImplementation,
+): McpUnsupportedFeature | undefined {
+  if (active !== "none") {
+    return blockedFeature(PROFILES[active].classify(config));
+  }
+
+  const adapterFeature = blockedFeature(ADAPTER_PROFILE.classify(config));
+  return blockedFeature(BUILTIN_PROFILE.classify(config)) === undefined
+    ? undefined
+    : adapterFeature;
+}
+
+function blockedServers(
+  servers: readonly RecordedMcpServer[],
+  active: ActiveMcpImplementation,
+): DroppedMcpServer[] {
+  const blocked: DroppedMcpServer[] = [];
+  for (const { name, config } of servers) {
+    const feature = blockingFeature(config, active);
+    if (feature !== undefined) {
+      blocked.push({ server: name, feature });
+    }
+  }
+
+  return blocked;
+}
+
+function storedEffective(
+  stored: StoredMcpCompatibility,
+  blocked: readonly DroppedMcpServer[],
+): EffectiveMcpCompatibility {
+  return {
+    installable: stored.compatibility.installable,
+    unsupported: [...stored.compatibility.unsupported],
+    blocked,
+  };
+}
+
+/** The stored kinds in their order, with `mcpServers` kept, appended, or removed. */
+function withMcpServersKind(unsupported: readonly string[], mcpBlocked: boolean): string[] {
+  if (!mcpBlocked) {
+    return unsupported.filter((kind) => kind !== MCP_SERVERS_KIND);
+  }
+
+  return unsupported.includes(MCP_SERVERS_KIND)
+    ? [...unsupported]
+    : [...unsupported, MCP_SERVERS_KIND];
+}
+
+/**
+ * A stored `installable: false` turns true only when MCP servers alone held
+ * the plugin back: `mcpServers` is the only stored kind, and the record does
+ * not carry the update intent mark.
+ */
+function onlyMcpHeldBack(compatibility: StoredMcpCompatibility["compatibility"]): boolean {
+  return (
+    compatibility.unsupported.length > 0 &&
+    compatibility.unsupported.every((kind) => kind === MCP_SERVERS_KIND) &&
+    !compatibility.notes.includes(UPDATE_IN_PROGRESS_NOTE)
+  );
+}
+
+function recomputedEffective(
+  stored: StoredMcpCompatibility,
+  recorded: ReadableMcpServers,
+  active: ActiveMcpImplementation,
+): EffectiveMcpCompatibility {
+  const { compatibility } = stored;
+  const blocked = blockedServers(recorded.servers, active);
+  // A `.mcpb`/`.dxt` bundle blocks under every implementation, and no recorded
+  // server represents it. A neutral stored `mcpServers` is such a block.
+  const independentBlock =
+    recorded.bundle ||
+    (stored.compatibilityBasis === "neutral" &&
+      compatibility.unsupported.includes(MCP_SERVERS_KIND));
+  const mcpBlocked = independentBlock || blocked.length > 0;
+  return {
+    installable: !mcpBlocked && (compatibility.installable || onlyMcpHeldBack(compatibility)),
+    unsupported: withMcpServersKind(compatibility.unsupported, mcpBlocked),
+    blocked,
+  };
+}
+
+/**
+ * MSEL-01 / MREC-01: a plugin record's compatibility for the active MCP
+ * implementation. The rules apply in order:
+ *
+ * 1. When the recorded servers cannot be read, or a recorded config fails the
+ *    shared Claude-shape check, the stored verdict stands under every
+ *    implementation and nothing is reported blocked.
+ * 2. A stored compatibility without `compatibilityBasis` carries the
+ *    adapter's verdict, so under the adapter it stands exactly; `blocked`
+ *    lists the recorded servers the adapter blocks, in recorded order.
+ * 3. Otherwise the MCP part is recomputed. `blocked` lists the recorded
+ *    servers the active profile blocks (with no active implementation, the
+ *    servers both profiles block, with the adapter's feature). A bundle, or a
+ *    neutral stored `mcpServers`, blocks under every implementation and is
+ *    never lost. The `unsupported` kind list keeps the stored order, with
+ *    `mcpServers` kept, appended, or removed. `installable` is false when MCP
+ *    blocks; otherwise it is the stored value, and a stored false turns true
+ *    only when MCP servers alone held the plugin back.
+ */
+export function effectiveMcpCompatibility(
+  stored: StoredMcpCompatibility,
+  recorded: RecordedMcpServers,
+  active: ActiveMcpImplementation,
+): EffectiveMcpCompatibility {
+  if (
+    recorded.kind === "unreadable" ||
+    recorded.servers.some(({ config }) => checkClaudeShape(config).kind === "malformed")
+  ) {
+    return storedEffective(stored, []);
+  }
+
+  if (active === "adapter" && stored.compatibilityBasis === undefined) {
+    return storedEffective(stored, blockedServers(recorded.servers, "adapter"));
+  }
+
+  return recomputedEffective(stored, recorded, active);
 }

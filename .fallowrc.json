@@ -10,8 +10,13 @@
       "file": "extensions/pi-claude-marketplace/domain/mcp-implementation.ts",
       "exports": [
         "ActiveMcpImplementation",
+        "EffectiveMcpCompatibility",
         "McpImplementationId",
         "McpImplementationProfile",
+        "RecordedMcpServer",
+        "RecordedMcpServers",
+        "StoredMcpCompatibility",
+        "effectiveMcpCompatibility",
         "profileFor"
       ]
     },
