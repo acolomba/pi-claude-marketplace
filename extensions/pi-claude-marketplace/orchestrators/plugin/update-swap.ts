@@ -1794,7 +1794,8 @@ export function preflightMove(preflight: PreparedPluginUpdate): RevisionMove {
  * to `warning`; the manual `update --partial` row ignores it. A record that
  * only a switch of implementation made partial is already degraded, so its
  * row stays `info`; so does a record whose servers cannot be read when the
- * candidate drops `mcpServers` only under the active implementation (D-MB-06).
+ * candidate drops `mcpServers` only under the active implementation, unless
+ * the record's stored verdict is that implementation's own (D-MB-06).
  */
 async function partialDegradeOf(
   args: ThreePhaseArgs,
@@ -1818,7 +1819,7 @@ async function partialDegradeOf(
   const newlyDropped = newlyDroppedKinds(
     view,
     preflight.installable,
-    degradeBaselineOf(effective, recorded),
+    degradeBaselineOf(effective, recorded, preflight.record, args.mcpImplementation),
   );
   return {
     kinds: [...view.unsupported],

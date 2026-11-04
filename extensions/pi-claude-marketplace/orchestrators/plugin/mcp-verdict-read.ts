@@ -82,7 +82,7 @@ export function recordDegradeBaselineReader(
       { marketplaceName: marketplace.name, marketplace, pluginName: plugin },
       active,
     );
-    return degradeBaselineOf(effective, recorded);
+    return degradeBaselineOf(effective, recorded, record, active);
   };
 }
 

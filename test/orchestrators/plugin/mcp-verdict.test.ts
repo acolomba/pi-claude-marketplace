@@ -8,7 +8,10 @@ import {
   recordMcpDependency,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/mcp-verdict.ts";
 
-import type { RecordedMcpServers } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
+import type {
+  ActiveMcpImplementation,
+  RecordedMcpServers,
+} from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { McpDependency } from "../../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
 
@@ -133,19 +136,49 @@ for (const { title, recorded, staged, dependency } of RECORD_ROWS) {
   });
 }
 
-for (const { kind, readable } of [
-  { kind: "recorded", readable: true },
-  { kind: "re-resolved", readable: true },
-  { kind: "unreadable", readable: false },
-] as const) {
-  test(`D-P3-13: a ${kind} read gives a baseline that is ${readable ? "readable" : "unreadable"}`, () => {
+interface BaselineRow {
+  readonly kind: RecordedMcpServers["kind"];
+  readonly basis: string;
+  readonly record: Pick<PluginInstallRecord, "compatibilityBasis">;
+  readonly active: ActiveMcpImplementation;
+  readonly readable: boolean;
+}
+
+const NEUTRAL: Pick<PluginInstallRecord, "compatibilityBasis"> = { compatibilityBasis: "neutral" };
+
+const BASELINE_ROWS: readonly BaselineRow[] = [
+  { kind: "recorded", basis: "neutral", record: NEUTRAL, active: "builtin", readable: true },
+  { kind: "re-resolved", basis: "no", record: {}, active: "builtin", readable: true },
+  { kind: "unreadable", basis: "no", record: {}, active: "builtin", readable: false },
+  { kind: "unreadable", basis: "no", record: {}, active: "none", readable: false },
+  { kind: "unreadable", basis: "neutral", record: NEUTRAL, active: "adapter", readable: false },
+  { kind: "unreadable", basis: "no", record: {}, active: "adapter", readable: true },
+];
+
+for (const { kind, basis, record, active, readable } of BASELINE_ROWS) {
+  test(`D-P3-13: a ${kind} read of a record with ${basis} basis under ${active} gives a ${readable ? "readable" : "unreadable"} baseline`, () => {
     // act
-    const baseline = degradeBaselineOf({ unsupported: ["lspServers"] }, { kind });
+    const baseline = degradeBaselineOf({ unsupported: ["lspServers"] }, { kind }, record, active);
 
     // assert
     assert.deepStrictEqual(baseline, { unsupported: ["lspServers"], readable });
   });
 }
+
+test("D-MB-06: under the adapter, an unreadable legacy record does not excuse an mcpServers drop the neutral resolution does not make", () => {
+  // arrange
+  const baseline = degradeBaselineOf({ unsupported: [] }, { kind: "unreadable" }, {}, "adapter");
+
+  // act
+  const newlyDropped = newlyDroppedKinds(
+    { unsupported: ["mcpServers"] },
+    { unsupported: [] },
+    baseline,
+  );
+
+  // assert
+  assert.deepStrictEqual(newlyDropped, ["mcpServers"]);
+});
 
 interface DropRow {
   readonly title: string;

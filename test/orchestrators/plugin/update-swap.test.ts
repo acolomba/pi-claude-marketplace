@@ -639,6 +639,44 @@ test("D-MB-06: a --partial update of an unreadable legacy sse record under Pi's 
   );
 });
 
+test("D-MB-06 / SEV-03: a --partial update of an unreadable legacy stdio record that adds a server only the adapter blocks reports a new degrade under pi-mcp-adapter", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-view-legacy-adapter-");
+  const args = {
+    ...(await seedMcpRecordUpdate(
+      cwd,
+      {},
+      {
+        mcpJson: {
+          tools: { command: "node" },
+          asker: { command: "node", bareElicitationCapability: true },
+        },
+      },
+    )),
+    mcpImplementation: "adapter" as const,
+  };
+  const state = await loadState(args.locations.extensionRoot);
+  const installed = state.marketplaces.mp?.plugins.hello;
+  assert.ok(installed !== undefined);
+  delete installed.mcpServerConfigs;
+  installed.resources.mcpServers = ["tools"];
+  await saveState(args.locations.extensionRoot, state);
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args, partial: true });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      partialDegrade: "partialDegrade" in outcome ? outcome.partialDegrade : undefined,
+    },
+    { partition: "updated", partialDegrade: { kinds: ["mcpServers"], newlyDegraded: true } },
+  );
+});
+
 test("D-P3-12: a degrading swap whose prepared state no longer records the marketplace fails as removed and writes nothing", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-view-marketplace-gone-");

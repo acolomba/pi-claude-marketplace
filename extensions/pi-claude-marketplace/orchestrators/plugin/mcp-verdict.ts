@@ -14,7 +14,11 @@
 
 import { profileFor } from "../../domain/mcp-implementation.ts";
 
-import type { McpImplementationId, RecordedMcpServers } from "../../domain/mcp-implementation.ts";
+import type {
+  ActiveMcpImplementation,
+  McpImplementationId,
+  RecordedMcpServers,
+} from "../../domain/mcp-implementation.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 
@@ -79,12 +83,24 @@ export type RecordDegradeBaselineReader = (
   plugin: string,
 ) => Promise<RecordDegradeBaseline>;
 
-/** The baseline of a record's effective verdict and the servers it was read from. */
+/**
+ * The baseline of a record's effective verdict, read under `active` from the
+ * servers `recorded` holds. An unreadable record's stored verdict counts as
+ * read when it is the active implementation's own verdict: a record without a
+ * basis holds pi-mcp-adapter's verdict (P1-DC-02), which is exact under the
+ * adapter, so no switch can explain a drop it does not make (D-MB-06).
+ */
 export function degradeBaselineOf(
   effective: { readonly unsupported: readonly string[] },
   recorded: Pick<RecordedMcpServers, "kind">,
+  record: Pick<PluginInstallRecord, "compatibilityBasis">,
+  active: ActiveMcpImplementation,
 ): RecordDegradeBaseline {
-  return { unsupported: effective.unsupported, readable: recorded.kind !== "unreadable" };
+  const storedIsActive = record.compatibilityBasis === undefined && active === "adapter";
+  return {
+    unsupported: effective.unsupported,
+    readable: recorded.kind !== "unreadable" || storedIsActive,
+  };
 }
 
 /**
@@ -92,9 +108,10 @@ export function degradeBaselineOf(
  * record does not, both read under the active implementation. `view` is the
  * candidate's view under that implementation and `neutral` its neutral
  * resolution. A record whose servers cannot be read keeps its stored verdict
- * (MREC-02), which does not say which servers the active implementation
- * drops, so an `mcpServers` drop the neutral resolution does not make is not
- * counted: a switch of implementation alone never makes a new degrade.
+ * (MREC-02). Unless that verdict is the active implementation's own, it does
+ * not say which servers the active implementation drops, so an `mcpServers`
+ * drop the neutral resolution does not make is not counted: a switch of
+ * implementation alone never makes a new degrade.
  */
 export function newlyDroppedKinds(
   view: { readonly unsupported: readonly string[] },

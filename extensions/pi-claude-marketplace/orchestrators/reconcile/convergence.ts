@@ -415,10 +415,11 @@ const NO_DROPS = Object.freeze({ consent: undefined, excused: false });
  * implementation, against the record read under the same implementation:
  * `consent` holds the kinds the candidate newly drops, or is `undefined`, and
  * `excused` says whether the candidate drops a kind that neither the record
- * nor a new degrade explains. Only a record whose servers cannot be read
- * excuses a kind (the `mcpServers` drop a switch of implementation alone
- * makes, D-MB-06), and such a move carries `--partial`, so a switch never
- * holds a move.
+ * nor a new degrade explains. Only a record whose servers cannot be read,
+ * and whose stored verdict is not the active implementation's own, excuses a
+ * kind (the `mcpServers` drop a switch of implementation alone makes,
+ * D-MB-06), and such a move carries `--partial`, so a switch never holds a
+ * move.
  */
 function candidateDrops(
   baseline: RecordDegradeBaseline,
@@ -492,7 +493,7 @@ async function recordMove(
     input.mcpImplementation,
   );
   const { consent, excused } = candidateDrops(
-    degradeBaselineOf(effective, recorded),
+    degradeBaselineOf(effective, recorded, record, input.mcpImplementation),
     resolved,
     input.mcpImplementation,
   );

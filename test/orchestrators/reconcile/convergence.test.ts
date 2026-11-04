@@ -1664,6 +1664,39 @@ test("D-MB-06 / D-P3-13: an unreadable legacy record still needs consent for a s
   });
 });
 
+test("D-MB-06 / D-P3-13: under pi-mcp-adapter, an unreadable legacy record needs consent for a server only the adapter blocks", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "legacy-asker-adapter");
+  const state = await stageDemo(fixture, "1.1.0", legacyMcpRecord(["tools"]));
+  await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+    tools: STDIO_SERVER,
+    asker: { command: "node", bareElicitationCapability: true },
+  });
+
+  // act
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [],
+    holds: [],
+    declines: [
+      {
+        scope: "project",
+        marketplace: "tools",
+        plugin: "demo",
+        version: "1.0.0",
+        unsupported: ["mcpServers"],
+      },
+    ],
+  });
+});
+
 test("D-P3-14: a record whose catalog changed nothing plans no move after a switch to Pi's built-in MCP", async (t) => {
   // arrange
   const fixture = await createFixture(t, "sse-unchanged-builtin");
