@@ -42,6 +42,30 @@ Feature: MCP server lifecycle
       | 3    | tool result | mcp returned: no servers                                                    |
     Then no stub mcp server receives a message
 
+  @builtin-only
+  Scenario: A plugin disabled during a session keeps its server registered until the next session (BLT-06, D-MB-10)
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user"
+    When the user lists the mcp tools pi offers
+    Then pi lists these registered mcp servers:
+      | name             |
+      | plugin_demo_stub |
+
+  @builtin-only
+  Scenario: A plugin disabled during a session has no server in the next session under Pi's built-in MCP (BLT-06, D-MB-10)
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user"
+    Given the user has started a new pi session
+    When the user lists the mcp tools pi offers
+    Then pi lists these registered mcp servers:
+      | name |
+    Then pi offers these plugin mcp tools:
+      | tool | active |
+
   @adapter-only
   Scenario: Uninstalling a plugin removes its server from what pi-mcp-adapter offers
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
@@ -67,6 +91,19 @@ Feature: MCP server lifecycle
       | 3    | assistant   | tool call mcp {}                                                            |
       | 3    | tool result | mcp returned: no servers                                                    |
     Then no stub mcp server receives a message
+
+  @builtin-only
+  Scenario: A plugin uninstalled during a session has no server in the next session under Pi's built-in MCP (BLT-06, D-MB-10)
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope user"
+    Given the user has started a new pi session
+    When the user lists the mcp tools pi offers
+    Then pi lists these registered mcp servers:
+      | name |
+    Then pi offers these plugin mcp tools:
+      | tool | active |
 
   @adapter-only
   Scenario: Enabling a disabled plugin offers its server again
@@ -289,3 +326,19 @@ Feature: MCP server lifecycle
       | 3    | assistant   | tool call mcp {}                                                            |
       | 3    | tool result | mcp returned: server plugin_demo_stub_ disabled                             |
     Then no stub mcp server receives a message
+
+  # Pi 1.5.0's RPC new_session runs session_start twice in the new session,
+  # and Pi's built-in MCP leaves the first of the two connections open, so its
+  # stub outlives the profile Pi and the stand-in check fails the scenario.
+  # The built-in half waits for a harness that tolerates it.
+  @adapter-only
+  Scenario: A new session offers the plugin's tool again (BLT-01)
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    Given the user has started a new pi session
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    When the user lists the mcp tools pi offers
+    Then pi offers these plugin mcp tools:
+      | tool                        | active |
+      | mcp__plugin_demo_stub__echo | no     |
