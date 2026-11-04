@@ -568,3 +568,44 @@ The planner's choices, numbered here. Each is Low unless marked.
   recorded as a load flake, not a Phase 3 regression. Every other part was
   green: static, unpaired, integration, builtin 128/128, direct coverage, and
   the whole `test:modules`. The full gate stands in for GSD's regression gate.
+
+## Code review and fix (2026-11-04)
+
+The review (03-REVIEW.md) found 1 critical, 3 warnings, 3 info. The
+orchestrator decided each finding before the fix:
+
+- **P3-DC-112 (Medium): review decisions.** CR-01 fixed (the no-trace
+  shortcut only for records without a basis; AMIG-01 writes the server
+  configs). WR-01 fixed (an unreadable record never holds a move or flags
+  `newlyDegraded` because of MCP alone). WR-02 fixed for cascades only:
+  dependency moves ask only for a new degrade under the active implementation;
+  a plain user-run `update` keeps today's rules, as D-P3-12 and D-MB-06 allow.
+  WR-03: the `pending` preview no longer promises a partial install that
+  `apply` refuses. IN-03 skipped (P3-DC-91). Alternatives: make a user-run
+  update also ask only for a new degrade; let `apply` install the sse plugin
+  partially (contradicts P3-DC-20).
+- **P3-DC-113 (Medium): no cucumber scenario for CR-01 or WR-01**; no step
+  seeds a released-build legacy record, AMIG-01 never had a scenario, and
+  scenarios must not read bridge-written files. Unit and integration cases
+  carry the proof.
+- **P3-DC-114 (Low): WR-01's rule is narrower than the decision**: an
+  unreadable record's `mcpServers` drop is excused only when the candidate's
+  neutral resolution does not drop it too, so a newly added ws server still
+  asks.
+- **P3-DC-115 (Low): an excused WR-01 record moves with `partial: true`.**
+- **P3-DC-116 (Low): WR-02 uses an injected, lazily read port**
+  (`readRecordDegradeBaseline`), set only by `dependency-move.ts`.
+- **P3-DC-117 (Medium): WR-03 previews `(will install)` for an sse plugin
+  under built-in that `apply` refuses**; a new `@builtin-only` scenario pins
+  apply's `(failed) {unsupported mcp}` row. Alternatives: preview a failed row
+  (changes the pending tally); have apply pass `partial: true`. A kind every
+  implementation drops (lsp, ws) still previews `(will partially install)` and
+  apply still refuses it (predates Phase 3; FSTAT-06 and the frozen catalog).
+- **P3-DC-118 (Low): the agreeing pending twins fold into one `@mcp`
+  scenario.**
+- **P3-DC-119 (Low): CR-01 writes server configs only when the migration
+  rewrites the verdict or basis.**
+- **P3-DC-120 (Low): IN-01 rewords four switch-scenario titles** instead of
+  adding an explicit adapter Pi.
+- **P3-DC-121 (Low): IN-02's style-guide rule lists reinstall rows too**
+  (`reinstall.messaging.ts` calls `companionSeverity`).
