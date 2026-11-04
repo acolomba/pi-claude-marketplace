@@ -7,7 +7,7 @@ Feature: MCP server verdict apply
   listens on.
 
   @own-implementation
-  Scenario: Apply after pi switches from pi-mcp-adapter to its built-in MCP moves a plugin with an sse server to its new version without asking (MREC-06)
+  Scenario: Apply after pi switches from pi-mcp-adapter to its built-in MCP moves a plugin with an sse server to its new version partially, without asking (MREC-06)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -32,8 +32,8 @@ Feature: MCP server verdict apply
       | tally warnings      | 0                         |
       | tally success count | 1                         |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status  | reasons                 | scope | from  | to    |
-      | fixtures         | user              | demo@fixtures | demo | updated | requires pi-mcp-adapter | user  | 1.0.0 | 1.1.0 |
+      | marketplace name | marketplace scope | id            | name | status              | reasons                                  | scope | from  | version |
+      | fixtures         | user              | demo@fixtures | demo | partially-installed | unsupported mcp, requires pi-mcp-adapter | user  | 1.0.0 | 1.1.0   |
     Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.1.0   | true    |

@@ -3941,6 +3941,7 @@ test("D-P3-13: apply's catalog move of a version that adds an sse server lands w
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14488,6 +14489,7 @@ test("D-26: convergePlugin moves a path-source plugin to the catalog version in 
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14543,6 +14545,7 @@ test("APPLY1-01 / WR-3: convergePlugin collects clones through the target's coll
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
         cleanupClones: (target) => {
           collected.push(target.pluginClonesDir);
@@ -14580,6 +14583,7 @@ test("D-26: convergePlugin answers a move at the recorded revision as unchanged 
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14628,6 +14632,7 @@ test("D-10 / D-25: convergePlugin with rematerialize re-materializes the recorde
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: true,
       });
 
@@ -14682,6 +14687,7 @@ test("D-26 / WCONV-01: a partially available candidate is declined when the targ
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14717,6 +14723,7 @@ test("D-26 / WCONV-01: a partially available candidate is moved partially when t
         scope: "project",
         cwd,
         partial: true,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14792,6 +14799,7 @@ for (const { rematerialize, offered } of [
           scope: "project",
           cwd,
           partial: false,
+          mcpImplementation: "none",
           rematerialize,
         });
 
@@ -14832,6 +14840,7 @@ test("D-26 / PUP-9: a throw inside convergePlugin becomes a failed outcome namin
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14886,6 +14895,7 @@ test("GLK-02 / D-PL7-12: a convergePlugin swap that fails with EISDIR reads unre
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14935,6 +14945,7 @@ test("GLK-02: a convergePlugin swap that fails with a missing marketplace reads 
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -15027,6 +15038,7 @@ test("D-13: a source file convergePlugin cannot read fails the move as permissio
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -15063,6 +15075,7 @@ test("GHB-03: convergePlugin rethrows an invalid base", async (t) => {
           scope: "project",
           cwd,
           partial: false,
+          mcpImplementation: "none",
           rematerialize: false,
         }),
       (error: unknown) => {

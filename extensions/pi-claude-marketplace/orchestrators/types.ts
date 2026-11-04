@@ -10,7 +10,7 @@
 import { type ContentReason } from "../shared/notification-types.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
-import type { NotificationContext } from "../platform/pi-api.ts";
+import type { ActiveMcpImplementation, NotificationContext } from "../platform/pi-api.ts";
 import type { McpDependency } from "../shared/concerns/soft-dep.ts";
 import type { CleanupFailure } from "../shared/errors.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
@@ -724,6 +724,11 @@ export interface PluginConvergeTarget {
   readonly scope: Scope;
   readonly cwd: string;
   readonly partial: boolean;
+  /**
+   * D-P3-13: the MCP implementation of the run `apply` planned the move under,
+   * so the runner judges the candidate's MCP servers as the plan did.
+   */
+  readonly mcpImplementation: ActiveMcpImplementation;
   /**
    * D-10 / D-25: a growth-only move re-materializes the recorded revision, so
    * the runner does not skip a candidate at the recorded revision. A plugin

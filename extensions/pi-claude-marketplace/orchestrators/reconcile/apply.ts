@@ -1825,6 +1825,7 @@ async function runStep(
     scope: run.scope,
     cwd: opts.cwd,
     partial: move.partial,
+    mcpImplementation: opts.run.softDeps.mcpImplementation,
     rematerialize,
     // WR-3: a held-down record's clones are collected once its enable is known.
     ...(step.enable !== undefined && { cleanupClones: deferCollection(collect) }),

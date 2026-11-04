@@ -288,13 +288,14 @@ const SCOPE_DEPENDENCY_INSTALL_FN = ((request) => {
 void SCOPE_DEPENDENCY_INSTALL_FN;
 
 // D-26: a catalog move names its scope's cwd, whether a partial candidate is admitted,
-// and whether it re-materializes the recorded revision (D-10 / D-25).
+// the MCP implementation its plan judged it under (D-P3-13), and whether it re-materializes the recorded revision (D-10 / D-25).
 const PLUGIN_CONVERGE_TARGET = {
   plugin: "alpha",
   marketplace: "official",
   scope: "project",
   cwd: "/project",
   partial: false,
+  mcpImplementation: "builtin",
   rematerialize: false,
 } satisfies PluginConvergeTarget;
 

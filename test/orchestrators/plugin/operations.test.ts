@@ -1008,6 +1008,7 @@ test("D-26: convergePlugin moves the plugin to the catalog version in place and 
     scope: "project",
     cwd,
     partial: false,
+    mcpImplementation: "none",
     rematerialize: false,
   });
 

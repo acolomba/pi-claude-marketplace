@@ -846,11 +846,9 @@ function convergePluginWith(
     // D-26 / WCONV-01: only a record already installed partial admits a
     // partial candidate; a clean record's consent guard declines it.
     partial: target.partial,
-    // D-P3-13: `apply`'s plan already judged the move under its run's MCP
-    // implementation and set `partial` from the record's view. The target
-    // carries no implementation, so the runner reads the neutral view, which
-    // holds back nothing that the plan's implementation would admit.
-    mcpImplementation: "none",
+    // D-P3-13: `apply` planned the move under its run's MCP implementation
+    // and set `partial` from the record's view under it.
+    mcpImplementation: target.mcpImplementation,
     cleanupClones: target.cleanupClones ?? collectPluginClonesLocked,
   });
 }
