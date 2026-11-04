@@ -11,6 +11,7 @@ import {
   LegacyServersUnreadableError,
   recordedMcpServers,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
 import type {
   LegacyServersReader,
@@ -164,8 +165,9 @@ describe("recordedMcpServers", () => {
     verify(reader);
   });
 
-  test("MREC-02: reads a legacy reader that rejects as unreadable", async () => {
+  test("MREC-02: reads a legacy reader that rejects as unreadable and logs why", async (t) => {
     // arrange
+    const logged = captureDebugLog(t);
     const record = installRecord();
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
     when(() => reader(installRecord())).thenReject(new Error("manifest gone"));
@@ -175,11 +177,13 @@ describe("recordedMcpServers", () => {
 
     // assert
     assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(logged, ["[mcp] recorded MCP servers unreadable: manifest gone"]);
     verify(reader);
   });
 
-  test("MREC-02: reads a legacy reader that throws as unreadable", async () => {
+  test("MREC-02: reads a legacy reader that throws as unreadable and logs why", async (t) => {
     // arrange
+    const logged = captureDebugLog(t);
     const record = installRecord();
     const reader: LegacyServersReader = () => {
       throw new Error("plugin root gone");
@@ -190,6 +194,7 @@ describe("recordedMcpServers", () => {
 
     // assert
     assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(logged, ["[mcp] recorded MCP servers unreadable: plugin root gone"]);
   });
 });
 

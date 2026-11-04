@@ -17,6 +17,8 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { isSameVersion } from "../../domain/version.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { deriveInstallVersion } from "../plugin/install-outcome.ts";
 
 import type { RecordedMcpServer, RecordedMcpServers } from "../../domain/mcp-implementation.ts";
@@ -39,7 +41,7 @@ export type LegacyServersReader = (record: PluginInstallRecord) => Promise<Legac
  * are the record's own, so a caller must not change them. A record without
  * the field answers `re-resolved` from the legacy reader, and any failure of
  * that reader answers `unreadable`, so the stored compatibility verdict
- * stands.
+ * stands. The failure goes to the `mcp` debug channel.
  */
 export async function recordedMcpServers(
   record: PluginInstallRecord,
@@ -56,8 +58,10 @@ export async function recordedMcpServers(
   try {
     const legacy = await reader(record);
     return { kind: "re-resolved", servers: legacy.servers, bundle: legacy.bundle };
-  } catch {
+  } catch (err) {
     // MREC-02: an unreadable declaration leaves the stored verdict standing.
+    // The debug channel keeps why, since a caller sees only `unreadable`.
+    hookDebugLog(`recorded MCP servers unreadable: ${errorMessage(err)}`, "mcp");
     return { kind: "unreadable" };
   }
 }
