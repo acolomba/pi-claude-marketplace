@@ -26,9 +26,9 @@
 //      when the re-read drops a corrupt row: a save would lose that row and
 //      orphan its file (T-04-13).
 //   3. A row is rewritten only after containment (NFR-10): its target lies
-//      inside `<scopeRoot>/agents/` and is named `<generatedName>.md`. The
-//      active form must carry the `---` frame and the generated marker before
-//      it is written (AG-4).
+//      inside `<scopeRoot>/agents/` and is named `<generatedName>.md`. Both
+//      stored forms must carry the `---` frame and the generated marker before
+//      the recorded one is matched or the active one written (AG-4).
 //   4. A file is rewritten only when it starts with the recorded block byte
 //      for byte; a file that starts with the active block only gets its row
 //      fixed; anything else (edited by the user, missing, foreign) is left
@@ -124,13 +124,14 @@ function isGeneratedBlock(block: string): boolean {
 
 /**
  * What a candidate file starts with, against the row's stored forms: the
- * recorded block (AG-5), the active block, neither, or a stored active form
- * that is not a generated block (AG-4).
+ * recorded block (AG-5), the active block, or neither. A stored form that is
+ * not a generated block is never matched or written (AG-4): an empty recorded
+ * block would match every file and prepend the active block to it.
  */
 type HeldForm = "recorded" | "active" | "neither" | "malformed";
 
 function heldForm(swap: FormSwap, text: string): HeldForm {
-  if (!isGeneratedBlock(swap.active.frontmatter)) {
+  if (!isGeneratedBlock(swap.recorded.frontmatter) || !isGeneratedBlock(swap.active.frontmatter)) {
     return "malformed";
   }
 
@@ -262,7 +263,7 @@ async function swapFile(
 ): Promise<AgentsIndexEntry> {
   const held = heldForm(swap, text);
   if (held === "malformed") {
-    hookDebugLog(`agent ${row.generatedName}: the stored ${run.active} form is malformed`, "mcp");
+    hookDebugLog(`agent ${row.generatedName}: a stored grant form is malformed`, "mcp");
     return row;
   }
 

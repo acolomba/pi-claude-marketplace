@@ -425,6 +425,36 @@ describe("rewriteAgentGrantForms", () => {
     });
   }
 
+  for (const { label, frontmatter } of [
+    { label: "that is empty", frontmatter: "" },
+    {
+      label: "with no generated marker",
+      frontmatter: adapterBlock().replace("  generatedBy: pi-claude-marketplace\n", ""),
+    },
+  ]) {
+    test(`AG-4: a stored recorded form ${label} is never matched, and the row is no candidate`, async (t) => {
+      // arrange
+      const locations = await userScope(t);
+      const target = agentPath(locations);
+      const stored = storedRow(target, "adapter");
+      const row: AgentsIndexEntry = {
+        ...stored,
+        mcpForms: { ...stored.mcpForms, adapter: { frontmatter, warnings: [], droppedTools: [] } },
+      };
+      await writeAgent(target, adapterBlock() + BODY);
+      await writeIndex(locations, [row]);
+      const indexBefore = await readFile(indexPath(locations), "utf8");
+
+      // act
+      await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
+
+      // assert
+      assert.strictEqual(await readFile(target, "utf8"), adapterBlock() + BODY);
+      assert.strictEqual(await readFile(indexPath(locations), "utf8"), indexBefore);
+      assert.strictEqual(await needsAgentGrantRewrite(locations, "builtin"), false);
+    });
+  }
+
   test("T-04-13: a re-read that reports a corrupt row saves nothing and writes no file", async (t) => {
     // arrange
     const locations = await userScope(t);
