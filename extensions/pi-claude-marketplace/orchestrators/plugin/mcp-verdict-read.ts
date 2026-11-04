@@ -12,8 +12,8 @@
 // It imports `recorded-servers.ts`, which imports `install-outcome.ts`, so no
 // module that `install-outcome.ts` reaches may import it, or the two close a
 // cycle: `plugin/shared.ts`, `plugin-state-classifier.ts`,
-// `git-source-probe.ts`, `update-swap.ts`, `update-preflight.ts`,
-// `update-row.ts`, and `update-cascade.ts` take the verdict as data instead.
+// `git-source-probe.ts`, `update-preflight.ts`, `update-row.ts`, and
+// `update-cascade.ts` take the verdict as data instead.
 
 import { effectiveMcpCompatibility } from "../../domain/mcp-implementation.ts";
 import {
