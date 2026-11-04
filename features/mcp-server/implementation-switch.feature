@@ -48,7 +48,7 @@ Feature: MCP server implementation switch
       | 2    | tool result | mcp returned: echo:ping                                                     |
 
   @own-implementation
-  Scenario: A plugin's server moves from pi-mcp-adapter to pi's built-in mcp and back with no plugin command (MSEL-02, MSEL-03, D-MB-01)
+  Scenario: A plugin's server moves from pi-mcp-adapter to pi's built-in mcp and back with no plugin command (MSEL-02, MSEL-03, D-MB-01, DUAL-04)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -79,6 +79,19 @@ Feature: MCP server implementation switch
     When the user restarts pi without pi-mcp-adapter
     Then the session reports no results
     Then pi reports no extension error
+    # /claude:plugin list is read-only: it changes no installation state and uses no network (NFR-5), so DUAL-04 does not count it as a plugin command (D-P6-18).
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons      | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed | requires mcp | user  | 1.0.0   |
     When the user lists the mcp tools pi offers
     Then pi lists these registered mcp servers:
       | name |
