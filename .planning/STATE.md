@@ -22,12 +22,12 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-04 when the mcp-builtin milestone started)
+See: `.planning/PROJECT.md` (updated 2026-11-04 after mcp-builtin Phase 1)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 01 — Foundation and Pi 1.5.0
+**Current focus:** Phases 2-5 in parallel child sessions (Phase 2 Built-in Materialization, Phase 3, Phase 4, Phase 5); Phase 1 complete
 Phase 6 closes on the milestone branch. Still open from component-features:
 the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 `acolomba/pi` and `acolomba/pi-subagents`.

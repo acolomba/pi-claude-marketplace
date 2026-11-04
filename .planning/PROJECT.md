@@ -2015,6 +2015,8 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
+_Last updated: 2026-11-04 after mcp-builtin Phase 1 completed. PI15-01..03, MSEL-01, MREC-01, DUAL-01..03, and MDEC-01 are verified; D-CF1-16 gains the three-leg profile axis and the 2026-11-04 CI measurement (run 41812979607). Phases 2 to 5 now run in parallel child sessions. Prior updates follow._
+
 _Last updated: 2026-11-04 during mcp-builtin Phase 1. Key Decisions gains D-MB-01 to D-MB-13 (D-MB-08 to D-MB-13 pending the user's review), APL-D1 gains D-MB-03, the Current Milestone text records servers before plugin-variable substitution and keeps `-` in the registered built-in name, and the Pi API constraint names the 1.5.0 floor. Prior updates follow._
 
 _Last updated: 2026-10-21 after the marketplace-features milestone was completed and archived. 97/97 requirements validated; audit `tech_debt`, no blockers; carried items are in BACKLOG.md and WINDOWS.md. Prior updates follow._
