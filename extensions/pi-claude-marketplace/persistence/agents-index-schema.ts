@@ -16,12 +16,34 @@ import Type from "typebox";
 import { Compile } from "typebox/compile";
 
 /**
+ * MGRT-01 / D-MB-03: one MCP implementation's grant form of a generated
+ * agent: the file's frontmatter block (from the opening `---` line through
+ * the closing `---` line), and the warnings and dropped tools that form
+ * records. The body is the same under both implementations, so no form
+ * stores it.
+ */
+const AGENTS_INDEX_MCP_FORM_SCHEMA = Type.Object({
+  frontmatter: Type.String(),
+  warnings: Type.Array(Type.String()),
+  droppedTools: Type.Array(Type.String()),
+});
+
+/**
  * AG-2: per-row schema for agents-index.json.
  *
- * Every field except `originalModel` is required so the AG-4 per-row
- * validator can drop malformed rows without crashing the load. String
- * arrays default to empty arrays (not optional) -- the CALLER materializes
- * `[]` rather than relying on schema-level absence.
+ * Every field except `originalModel`, `mcpImplementation`, and `mcpForms` is
+ * required so the AG-4 per-row validator can drop malformed rows without
+ * crashing the load. String arrays default to empty arrays (not optional) --
+ * the CALLER materializes `[]` rather than relying on schema-level absence.
+ *
+ * MGRT-01 / D-MB-03: `mcpImplementation` and `mcpForms` are OPTIONAL and
+ * additive -- NO schemaVersion bump. `mcpImplementation` names the grant form
+ * the agent file holds now; `mcpForms` holds the form of each implementation
+ * that rendered the agent, so a load after a switch can swap the file's
+ * frontmatter block for the active implementation's. The stage writes them
+ * only when the two implementations render the agent differently. A row
+ * without them was written before MGRT-01, or its agent renders the same
+ * under both implementations.
  */
 const AGENTS_INDEX_ENTRY_SCHEMA = Type.Object({
   plugin: Type.String(),
@@ -35,6 +57,13 @@ const AGENTS_INDEX_ENTRY_SCHEMA = Type.Object({
   droppedFields: Type.Array(Type.String()),
   droppedTools: Type.Array(Type.String()),
   warnings: Type.Array(Type.String()),
+  mcpImplementation: Type.Optional(Type.Union([Type.Literal("adapter"), Type.Literal("builtin")])),
+  mcpForms: Type.Optional(
+    Type.Object({
+      adapter: Type.Optional(AGENTS_INDEX_MCP_FORM_SCHEMA),
+      builtin: Type.Optional(AGENTS_INDEX_MCP_FORM_SCHEMA),
+    }),
+  ),
 });
 
 /**

@@ -17,5 +17,6 @@ export {
 export { unstagePluginAgents } from "./unstage.ts";
 export { discoverPluginAgents } from "./discover.ts";
 export { assertAgentTargetsFree } from "./target-check.ts";
+export { needsAgentGrantRewrite, rewriteAgentGrantForms } from "./grant-rewrite.ts";
 
 export type { PreparedAgentsStaging } from "./types.ts";

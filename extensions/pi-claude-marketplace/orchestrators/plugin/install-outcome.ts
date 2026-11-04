@@ -1322,6 +1322,13 @@ async function runInstallLedgerBody(
         // ANAME-02: the servers this install writes. The mcp phase runs
         // later, so the set comes from the resolver, not the mcp stage.
         mcpServerNames: Object.keys(installCtx.resolved.mcpServers),
+        // MGRT-01: the file gets the active implementation's grant form, and
+        // the row stores both forms so a later switch can swap them. The run
+        // snapshot is the only source of the active implementation (D-05).
+        mcpGrantForms: {
+          active: opts.run.softDeps.mcpImplementation,
+          declaredMcpServers: installCtx.resolved.declaredMcpServers,
+        },
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
       });

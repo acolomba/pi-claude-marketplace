@@ -3,12 +3,18 @@ import { describe, test } from "node:test";
 
 import { discoverPluginAgents as definingDiscoverPluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/discover.ts";
 import {
+  needsAgentGrantRewrite as definingNeedsAgentGrantRewrite,
+  rewriteAgentGrantForms as definingRewriteAgentGrantForms,
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/grant-rewrite.ts";
+import {
   abortPreparedAgents,
   assertAgentCommitTargets,
   assertAgentTargetsFree,
   commitPreparedAgents,
   discoverPluginAgents,
+  needsAgentGrantRewrite,
   prepareStagePluginAgents,
+  rewriteAgentGrantForms,
   unstagePluginAgents,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
 import {
@@ -114,6 +120,19 @@ describe("discoverPluginAgents", () => {
   });
 });
 
+describe("needsAgentGrantRewrite", () => {
+  test("re-exports the defining binding", () => {
+    // arrange
+    const expectedNeedsAgentGrantRewrite = definingNeedsAgentGrantRewrite;
+
+    // act
+    const agentsNeedsAgentGrantRewrite = needsAgentGrantRewrite;
+
+    // assert
+    assert.strictEqual(agentsNeedsAgentGrantRewrite, expectedNeedsAgentGrantRewrite);
+  });
+});
+
 describe("prepareStagePluginAgents", () => {
   test("re-exports the defining binding", () => {
     // arrange
@@ -124,6 +143,19 @@ describe("prepareStagePluginAgents", () => {
 
     // assert
     assert.strictEqual(agentsPrepareStagePluginAgents, expectedPrepareStagePluginAgents);
+  });
+});
+
+describe("rewriteAgentGrantForms", () => {
+  test("re-exports the defining binding", () => {
+    // arrange
+    const expectedRewriteAgentGrantForms = definingRewriteAgentGrantForms;
+
+    // act
+    const agentsRewriteAgentGrantForms = rewriteAgentGrantForms;
+
+    // assert
+    assert.strictEqual(agentsRewriteAgentGrantForms, expectedRewriteAgentGrantForms);
   });
 });
 

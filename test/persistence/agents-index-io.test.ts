@@ -448,6 +448,87 @@ describe("loadAgentsIndex", () => {
   });
 });
 
+describe("agents index MCP grant forms", () => {
+  const row = {
+    plugin: "demo",
+    marketplace: "tools",
+    sourceAgent: "runner",
+    generatedName: "pi-claude-marketplace-demo-runner",
+    sourcePath: "/plugins/demo/agents/runner.md",
+    targetPath: "/project/agents/pi-claude-marketplace-demo-runner.md",
+    sourceHash: "hash-runner",
+    droppedFields: [],
+    droppedTools: [],
+    warnings: ["builtin warning"],
+  };
+  const mcpForms = {
+    adapter: {
+      frontmatter: "---\ntools: mcp:plugin_demo_stub_/echo\n---\n",
+      warnings: ["adapter warning"],
+      droppedTools: [],
+    },
+    builtin: {
+      frontmatter: "---\ntools: mcp:plugin_demo_stub/echo\n---\n",
+      warnings: ["builtin warning"],
+      droppedTools: ["mcp__plugin_demo_events__watch"],
+    },
+  };
+
+  test("MGRT-01: a save then a load returns a row's implementation and both forms unchanged", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "agents-index-mcp-forms-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const locations = locationsFor("project", directory);
+    const index: AgentsIndex = {
+      schemaVersion: 1,
+      agents: [{ ...row, mcpImplementation: "builtin", mcpForms }],
+    };
+    const expectedIndex: LoadedAgentsIndex = {
+      schemaVersion: 1,
+      agents: [{ ...row, mcpImplementation: "builtin", mcpForms }],
+      corruptions: [],
+    };
+
+    // act
+    await saveAgentsIndex(locations, index);
+    const loadedIndex = await loadAgentsIndex(locations);
+
+    // assert
+    assert.deepStrictEqual(loadedIndex, expectedIndex);
+  });
+
+  test("MGRT-01: a load drops only a row whose implementation is none", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "agents-index-mcp-none-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const locations = locationsFor("project", directory);
+    const indexPath = path.join(locations.extensionRoot, "agents-index.json");
+    const keptRow = { ...row, mcpImplementation: "adapter" as const, mcpForms };
+    const expectedIndex: LoadedAgentsIndex = {
+      schemaVersion: 1,
+      agents: [keptRow],
+      corruptions: [
+        `${indexPath}.agents[1]: row failed schema validation (entry dropped) -- /mcpImplementation: must be equal to constant`,
+      ],
+    };
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(
+      indexPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        agents: [keptRow, { ...row, generatedName: "none-row", mcpImplementation: "none" }],
+      }),
+      "utf8",
+    );
+
+    // act
+    const index = await loadAgentsIndex(locations);
+
+    // assert
+    assert.deepStrictEqual(index, expectedIndex);
+  });
+});
+
 describe("saveAgentsIndex", () => {
   test("atomically writes exact JSON bytes and creates the parent tree", async (t) => {
     // arrange
