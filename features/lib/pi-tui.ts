@@ -23,7 +23,9 @@ import type { Readable, Writable } from "node:stream";
 const PTY_BRIDGE = fileURLToPath(new URL("./pi-tui-pty.py", import.meta.url));
 const READY_PREFIX = "PI_TUI_PTY_READY";
 const READY_TEXT = "Warning: No models available.";
-const DEFAULT_READY_MS = 15_000;
+// A hosted 4-CPU runner with 8 cucumber workers started a Pi 1.5.0 terminal
+// in more than 15 s; 25 s leaves room inside the 30 s step timeout.
+const DEFAULT_READY_MS = 25_000;
 const DEFAULT_STOP_MS = 5_000;
 
 /**
