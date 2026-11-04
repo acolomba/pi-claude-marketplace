@@ -6,12 +6,15 @@
 // Claude reads. Claude expands five of them: stdio `command`, `args` elements
 // and `env` values, which use the plain deny-list, and remote `url` and
 // `headers` values, which use the remote-sink deny-list. Each goes through
-// Claude's rule in `domain/claude-mcp-variables.ts` and is written in
-// pi-mcp-adapter's encoding by `adapter-escape.ts`. The `env` values under
-// `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` and every `oauth` value are
-// written as literal text. Every other field, every key and every non-string
-// value is copied unchanged. Bridge-local by design: shared/vars.ts owns
-// content substitution, a different variable set.
+// Claude's rule in `domain/claude-mcp-variables.ts`, and the `McpFieldEncoder`
+// of the implementation that runs the server writes the result in that
+// implementation's encoding: `ADAPTER_FIELD_ENCODER` below, over
+// `adapter-escape.ts`, for pi-mcp-adapter, and `builtin-escape.ts` for Pi's
+// built-in MCP. The `env` values under `CLAUDE_PLUGIN_ROOT` and
+// `CLAUDE_PLUGIN_DATA` and every `oauth` value go through the encoder as
+// literal text. Every other field, every key and every non-string value is
+// copied unchanged. Bridge-local by design: shared/vars.ts owns content
+// substitution, a different variable set.
 
 import { expandClaudeValue } from "../../domain/claude-mcp-variables.ts";
 
@@ -19,7 +22,35 @@ import { serializeLiteral, serializeSegments } from "./adapter-escape.ts";
 import { isPlainObject } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
-import type { ClaudeBuiltins, ClaudeEnv, FieldClass } from "../../domain/claude-mcp-variables.ts";
+import type {
+  ClaudeBuiltins,
+  ClaudeEnv,
+  FieldClass,
+  Segment,
+} from "../../domain/claude-mcp-variables.ts";
+
+/**
+ * How one MCP implementation writes the values of the expanded fields.
+ * `secret` marks a field the implementation itself resolves at connect time
+ * (`env` and `headers` values), so its value may need guards that the other
+ * fields do not.
+ */
+export interface McpFieldEncoder {
+  /** Writes the segments Claude's rule left for one field value, reading `env` for references. */
+  readonly expanded: (segments: readonly Segment[], secret: boolean, env: ClaudeEnv) => string;
+  /** Writes a value Claude leaves unexpanded. */
+  readonly literal: (text: string, secret: boolean) => string;
+}
+
+/**
+ * pi-mcp-adapter's encoder (AVAR-03). The adapter expands a kept `${NAME}`
+ * reference itself at connect time, so the encoder writes each reference as
+ * text and never reads the environment.
+ */
+export const ADAPTER_FIELD_ENCODER: McpFieldEncoder = {
+  expanded: (segments, secret) => serializeSegments(segments, secret),
+  literal: (text, secret) => serializeLiteral(text, secret),
+};
 
 /**
  * Resolution context for one staged entry. `pluginRoot` / `pluginData` are the
@@ -55,6 +86,13 @@ interface ReportNames {
   readonly blanked: string[];
 }
 
+/** What one entry's walk reads: the resolution context, the encoder, and the report it fills. */
+interface WalkState {
+  readonly ctx: McpSubstitutionContext;
+  readonly encoder: McpFieldEncoder;
+  readonly names: ReportNames;
+}
+
 /** The written entry and its variable report. */
 export interface SubstitutedEntry {
   readonly entry: Record<string, unknown>;
@@ -68,9 +106,8 @@ const LITERAL_ENV_KEYS: ReadonlySet<string> = new Set(["CLAUDE_PLUGIN_ROOT", "CL
 function expandedValue(
   raw: string,
   fieldClass: FieldClass,
-  ctx: McpSubstitutionContext,
   secret: boolean,
-  names: ReportNames,
+  { ctx, encoder, names }: WalkState,
 ): string {
   const expanded = expandClaudeValue(raw, fieldClass, ctx.env, ctx);
   names.missing.push(...expanded.missing);
@@ -78,7 +115,7 @@ function expandedValue(
     names.blanked.push(...expanded.withheld.filter(({ set }) => set).map(({ name }) => name));
   }
 
-  return serializeSegments(expanded.segments, secret);
+  return encoder.expanded(expanded.segments, secret, ctx.env);
 }
 
 /** Copies each key with `safeSet`, so a `__proto__` key stays an own key (WR-01). */
@@ -94,45 +131,35 @@ function mappedStrings(
   return written;
 }
 
-function writtenEnvValue(
-  key: string,
-  raw: string,
-  ctx: McpSubstitutionContext,
-  names: ReportNames,
-): string {
+function writtenEnvValue(key: string, raw: string, walk: WalkState): string {
   return LITERAL_ENV_KEYS.has(key)
-    ? serializeLiteral(raw, true)
-    : expandedValue(raw, "plain", ctx, true, names);
+    ? walk.encoder.literal(raw, true)
+    : expandedValue(raw, "plain", true, walk);
 }
 
-function writtenField(
-  field: string,
-  value: unknown,
-  ctx: McpSubstitutionContext,
-  names: ReportNames,
-): unknown {
+function writtenField(field: string, value: unknown, walk: WalkState): unknown {
   switch (field) {
     case "command":
-      return typeof value === "string" ? expandedValue(value, "plain", ctx, false, names) : value;
+      return typeof value === "string" ? expandedValue(value, "plain", false, walk) : value;
     case "url":
-      return typeof value === "string" ? expandedValue(value, "remote", ctx, false, names) : value;
+      return typeof value === "string" ? expandedValue(value, "remote", false, walk) : value;
     case "args":
       return Array.isArray(value)
         ? value.map((arg: unknown) =>
-            typeof arg === "string" ? expandedValue(arg, "plain", ctx, false, names) : arg,
+            typeof arg === "string" ? expandedValue(arg, "plain", false, walk) : arg,
           )
         : value;
     case "env":
       return isPlainObject(value)
-        ? mappedStrings(value, (key, raw) => writtenEnvValue(key, raw, ctx, names))
+        ? mappedStrings(value, (key, raw) => writtenEnvValue(key, raw, walk))
         : value;
     case "headers":
       return isPlainObject(value)
-        ? mappedStrings(value, (_key, raw) => expandedValue(raw, "remote", ctx, true, names))
+        ? mappedStrings(value, (_key, raw) => expandedValue(raw, "remote", true, walk))
         : value;
     case "oauth":
       return isPlainObject(value)
-        ? mappedStrings(value, (_key, raw) => serializeLiteral(raw, false))
+        ? mappedStrings(value, (_key, raw) => walk.encoder.literal(raw, false))
         : value;
     default:
       return value;
@@ -174,22 +201,23 @@ function withInjectedEnv(
 /**
  * Injects the stdio env, then writes Claude's five expansion fields of one
  * translated entry, in entry order: `command`, `args`, `env`, then `url`,
- * `headers`. The report lists the unset variables with no default, and the
- * set deny-listed variables blanked in `url` and `headers`, once each in that
- * order. Returns a fresh entry; the input is never mutated.
+ * `headers`, each through `encoder`. The report lists the unset variables
+ * with no default, and the set deny-listed variables blanked in `url` and
+ * `headers`, once each in that order. Returns a fresh entry; the input is
+ * never mutated. Without an `encoder` the values are written in
+ * pi-mcp-adapter's encoding (P2-DC-19).
  */
 export function substituteAndInject(
   translated: Readonly<Record<string, unknown>>,
   ctx: McpSubstitutionContext,
+  encoder: McpFieldEncoder = ADAPTER_FIELD_ENCODER,
 ): SubstitutedEntry {
-  const names: ReportNames = { missing: [], blanked: [] };
+  const walk: WalkState = { ctx, encoder, names: { missing: [], blanked: [] } };
   const entry: Record<string, unknown> = {};
   for (const [field, value] of Object.entries(withInjectedEnv(translated, ctx))) {
-    safeSet(entry, field, writtenField(field, value, ctx, names));
+    safeSet(entry, field, writtenField(field, value, walk));
   }
 
-  return {
-    entry,
-    report: { missing: [...new Set(names.missing)], blanked: [...new Set(names.blanked)] },
-  };
+  const { missing, blanked } = walk.names;
+  return { entry, report: { missing: [...new Set(missing)], blanked: [...new Set(blanked)] } };
 }
