@@ -784,3 +784,30 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Choice:** The distrust twin checks the registry, not that the stub got no messages, since no such step exists.
 - **Alternatives:** Add a no-messages step.
 - **Why dubious:** Indirect evidence the server never started.
+
+## Wave 2 (plan 02-06 executor, 2026-11-04)
+
+### P2-DC-77: The new-session lifecycle scenario runs `@adapter-only` because of a Pi 1.5.0 double `session_start`
+
+- **Phase / source:** Phase 2 plan 02-06 execution.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** "A new session offers the plugin's tool again (BLT-01)" runs
+  under the adapter profile only. Under the builtin profile every step passes,
+  but Pi 1.5.0's RPC `new_session` emits `session_start` twice, and Pi's
+  built-in MCP opens a second connection without closing the first, so a stub
+  outlives the profile Pi and the frozen HAR-05 stand-in check fails.
+  WINDOWS entry 112 (phase 2) tracks it.
+- **Alternatives:** A frozen-harness parent line (wait for stand-ins to exit,
+  or avoid the RPC double bind), then lift the scenario to `@mcp`; an
+  upstream Pi report.
+- **Why dubious:** the built-in half of BLT-01's "every new session" truth is
+  not proven end to end; it rests on the startup and `/reload` scenarios.
+
+### P2-DC-78: The built-in enable twin installs with `which did not fail`
+
+- **Phase / source:** Phase 2 plan 02-06 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Under the builtin profile enable warns `requires pi-mcp-adapter`
+  (a Phase 3 marker), so the twin uses the lenient step.
+- **Alternatives:** Pin the warning row (Phase 3's row).
+- **Why dubious:** the scenario no longer pins the enable output.
