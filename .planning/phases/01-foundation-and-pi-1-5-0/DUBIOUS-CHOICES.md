@@ -702,3 +702,46 @@ copies every item here. Phase 6 merges this file into the root log.
 - (Low) Accept-disposition threats were closed from the plan registers; the
   auditor re-ran `npm view` for the Pi 1.5.0 trio over the network.
 - **Recorded in:** `01-VALIDATION.md`, `01-SECURITY.md`.
+
+### P1-DC-40: CI flake fix, code review findings, and fix directions
+
+- **Severity:** Medium to High. **Status:** open.
+- (Medium) CI's adapter components shard lost one terminal-UI scenario to
+  the 15 s TUI readiness wait in each of two attempts (different scenarios).
+  Commit 863d8f3 raises the default to 25 s (inside the 30 s step timeout)
+  instead of lowering parallelism or speeding up the start. Likely cause:
+  Pi 1.5.0's slower terminal start plus the adapter now loading in every
+  adapter-profile shared Pi, on 4 vCPU with 8 workers.
+- (High) Code review CR-02: the built-in `toolNamePrefix` promised a prefix
+  Pi's 55-char cut breaks for long plugin+server names. Direction chosen:
+  return `string | undefined` (undefined when the prefix exceeds 55 chars),
+  consumers fall back to full tool names; frozen shape changes before the
+  freeze.
+- (Medium) CR-01 (`restorePin` mirror list missed the new record fields and
+  `resolvedVersion`): fixed by deriving the list from `DisabledPin`.
+- (Medium) WR-02: `compatibilityBasis` stays top-level; every writer that
+  replaces `compatibility` clears it (alternative: move it inside
+  `compatibility`).
+- (Medium) WR-01: the legacy reader refuses `version-mismatch` when the
+  re-resolved version differs from `resolvedVersion`.
+- (Low) WR-03 debug log on unreadable; WR-04 widen the built-in status
+  reader to `getAllTools`; WR-05 ENOENT race in `stubPidsIn`; IN-05 stale
+  ignoreExports. IN-01..04 and IN-06 skipped.
+- (Low) Reviewer's view: the adapter-profile shared Pi loading the adapter
+  for every scenario (P1-DC-03) means non-MCP scenarios no longer run in a
+  companion-free Pi.
+- **Recorded in:** `01-REVIEW.md`, `01-REVIEW-FIX.md`.
+- (Orchestrator, supersedes the 25 s timeout) The TUI failures were a cold
+  jiti cache: since a280c4a the adapter-profile shared Pi used its own TMPDIR
+  and stopped warming `/tmp/jiti`, the cache TMPDIR-less terminal Pis use.
+  Commit 8d03f4e symlinks the shared Pi's `jiti` to `/tmp/jiti` and restores
+  the 15 s wait (863d8f3 reverted in effect).
+- (Medium, fixer) WR-01 compares the version install would derive with the
+  record's `version`; a path plugin that changes its MCP declaration without
+  bumping its version still reads the new servers.
+- (Low, fixer) `deriveInstallVersion` exported from `install-outcome.ts` for
+  the legacy reader (it now imports the install ledger module);
+  `replaceCompatibility` also routes the AMIG-01 write in
+  `mcp-migration.ts`; `STUB_TOOL_NAMES` added to the frozen
+  `features/lib/mcp-stub-server.ts`; the built-in prefix promise stays at 55
+  characters (56 would also be safe).
