@@ -865,3 +865,61 @@ item here. The milestone parent merges this file into the root log in Phase 6.
   per-server names scenario names BLT-01, BLT-04, and D-MB-13 in its title.
 - **Alternatives:** Pin only the tool name; keep the old title.
 - **Why dubious:** one more Pi detail is pinned.
+
+## Wave 3 (plan 02-08 executor, 2026-11-04)
+
+### P2-DC-85: Each built-in table cell carries its own citation, so rows are long
+
+- **Phase / source:** Phase 2 plan 02-08 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Each built-in table cell carries its own citation, so rows are long.
+- **Alternatives:** Footnotes.
+- **Why dubious:** Hard to read.
+
+### P2-DC-86: `bareElicitationCapability` reads supported under built-in, proven by Pi's `initialize` capabilities, not by installing such a server
+
+- **Phase / source:** Phase 2 plan 02-08 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** `bareElicitationCapability` reads supported under built-in, proven by Pi's `initialize` capabilities, not by installing such a server.
+- **Alternatives:** A dedicated scenario.
+- **Why dubious:** Indirect proof.
+
+### P2-DC-87: The sentence on which implementation's verdict applies cites the extension's own source
+
+- **Phase / source:** Phase 2 plan 02-08 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The sentence on which implementation's verdict applies cites the extension's own source.
+- **Alternatives:** A scenario.
+- **Why dubious:** Self-citation.
+
+### P2-DC-88: The switching steps name no Pi command, and no run checked that `/reload` alone switches implementations
+
+- **Phase / source:** Phase 2 plan 02-08 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The switching steps name no Pi command, and no run checked that `/reload` alone switches implementations.
+- **Alternatives:** A `/reload` scenario.
+- **Why dubious:** The restart path is proven; `/reload` is assumed.
+
+### P2-DC-89: The `request_timeout_ms` cell cites a scenario that pins only `timeout`
+
+- **Phase / source:** Phase 2 plan 02-08 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The `request_timeout_ms` cell cites a scenario that pins only `timeout`.
+- **Alternatives:** A dedicated scenario.
+- **Why dubious:** Partial citation.
+
+### P2-DC-90: `docs/mcp-compatibility.md` cites `P2-DC` dubious-choice IDs as licenses
+
+- **Phase / source:** Phase 2 plan 02-08 execution.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** `docs/mcp-compatibility.md` cites `P2-DC` dubious-choice IDs as licenses.
+- **Alternatives:** Cite only D-MB/requirement IDs, or have the parent mint decision IDs.
+- **Why dubious:** P2-DC IDs are review-log IDs that Phase 6 merges into the root log, possibly renumbered; the docs could point at stale IDs.
+
+### P2-DC-91: The companion-missing tolerance check ran as split commands (the worktree guard refuses compound git commands)
+
+- **Phase / source:** Phase 2 plan 02-08 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The companion-missing tolerance check ran as split commands (the worktree guard refuses compound git commands).
+- **Alternatives:** The plan's one-shot command.
+- **Why dubious:** Same checks, run by hand.
