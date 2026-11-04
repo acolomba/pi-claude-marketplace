@@ -189,6 +189,48 @@ notes from child messages.
   says to offer the bump before creating a PR, so the parent offers it in the
   user review after the milestone close.
 
+### Amendments after research (06-RESEARCH.md, 2026-11-04)
+
+- **D-P6-18 (amends D-P6-05):** the DUAL-04 read is `/claude:plugin list`.
+  It is the only surface that shows `{requires mcp}` on an installed
+  plugin's row. A read-only `list` does not count as a "plugin command" in
+  DUAL-04's sense: it changes no installation state and uses no network
+  (NFR-5). The scenario says this in a comment. The scenario is
+  `@own-implementation`, so it runs only under the adapter profile.
+- **D-P6-19 (amends D-P6-04):** all nine catalog blocks that still render
+  `requires: pi-mcp-adapter` for a stdio-only plugin change to the output
+  the combined tree renders (`mcp`), not only the two blocks the parent lines
+  name. The catalog docs then match what users see. The catalog byte counter
+  and fixtures change in the same commit.
+- **D-P6-20 (amends D-P6-07):** no closed-set entry is removed. All six have
+  a production emitter and a scenario that observes them (research section
+  3). The lock counts stay at 80 and 12.
+- **D-P6-21 (amends D-P6-08):** `StoredMcpCompatibility` and `LegacyServers`
+  lose their `ignoreExports` entries but stay exported, because exported
+  signatures use them. `LegacyServersUnreadableError` and
+  `LegacyServersUnreadableReason` are unexported, and their test asserts
+  through the public reader. CONVENTIONS.md gets the measured
+  `fallow-ignore` count (45) and breakdown.
+- **D-P6-22 (amends D-P6-10, P3-DC-22):** completions differ from `list`
+  under built-in MCP, so a user can see the change. It ships with a cucumber
+  scenario that fails without it, and the completion cache file is keyed by
+  the implementation too, not only the memory key.
+- **D-P6-23 (amends D-P6-10, UF-1):** the containment check moves into
+  `recorded-servers.ts`, and `LegacyServersSource` gains the scope's
+  `ScopedLocations`, threaded through the call sites. The check is not
+  copied, because a copy would trip `fallow dupes`. This work comes after
+  P4-DC-60, because both touch `update-swap.ts`.
+- **D-P6-24 (amends D-P6-13):** D-MB IDs are minted for every P2-DC ID that
+  the docs cite. That is the nine P2-DC-90 lists plus 03, 07, 11, 15, 21,
+  22, and 23, as D-MB-14 and up, in P2-DC order.
+- **D-P6-25 (replaces D-P6-16's 80% rule):** the CI timing check applies
+  D-CF1-16's recorded rule, because a recorded project decision outranks a
+  phase default: each behavioral job timeout stays at least 1.5 times its
+  measured run.
+- **D-P6-26:** Phase 2's built-in status examples (02-08) are documented as
+  prose and table rows in `docs/output-catalog.md`. They do not become new
+  counted catalog states.
+
 ### Claude's Discretion
 
 - Plan split and wave order. Docs and records can run in parallel with the

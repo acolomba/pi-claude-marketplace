@@ -28,3 +28,36 @@ copies each entry into the root log.
   (D-P6-17).
 - **P6-DC-09 (Low):** the CHANGELOG folds the existing Pi 1.5.0 bullet into
   one milestone lead bullet with sub-bullets (D-P6-01).
+
+## After research (06-RESEARCH.md)
+
+- **P6-DC-10 (Medium):** the DUAL-04 read is `/claude:plugin list`, and a
+  read-only `list` does not count as a "plugin command" (D-P6-18). The
+  alternative is reading through the extension's LLM tool in a model turn,
+  which renumbers every later call.
+- **P6-DC-11 (Medium):** all nine stale `requires: pi-mcp-adapter` catalog
+  blocks change, not only the two the parent lines name (D-P6-19).
+- **P6-DC-12 (Low):** no closed-set entry is removed, since each has an
+  emitter (D-P6-20).
+- **P6-DC-13 (Low):** `StoredMcpCompatibility` and `LegacyServers` stay
+  exported, against the letter of D-P6-08. `LegacyServersUnreadableError`
+  is unexported, so its test moves from `instanceof` to matching `name` and
+  `reason` (D-P6-21).
+- **P6-DC-14 (Medium):** P3-DC-22 gets a cucumber pair that calls the
+  completion provider in-process with the profile's implementation. The
+  observation does not go through Pi's terminal UI (D-P6-22).
+- **P6-DC-15 (Medium):** UF-1 (a low-severity advisory) changes the former
+  frozen `LegacyServersSource` interface across about nine call sites
+  (D-P6-23). The alternative is to accept the risk in SECURITY.md.
+- **P6-DC-16 (Low):** D-MB IDs are minted for seven more cited P2-DC IDs
+  (D-P6-24).
+- **P6-DC-17 (Medium):** D-CF1-16's 1.5-times rule replaces D-P6-16's 80% rule
+  (D-P6-25).
+- **P6-DC-18 (Low):** the 02-08 status examples become prose and table rows,
+  not counted catalog states (D-P6-26).
+- **P6-DC-19 (Low):** P2-DC-18 is only a file move to
+  `features/lib/upstream/tool-search.ts`. The separate projection step
+  stays, which leaves a second projection path.
+- **P6-DC-20 (Low):** the Elicitation rows in `docs/hooks-compatibility.md` may
+  be reworded to name Pi's built-in MCP. That wording is not checked against
+  a source.
