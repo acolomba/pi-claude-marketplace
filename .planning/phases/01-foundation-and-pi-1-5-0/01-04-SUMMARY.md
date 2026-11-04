@@ -196,6 +196,12 @@ None - no external service configuration required.
 - Frozen interface 10 exists. Phases 2 and 3 can emit `requires mcp`, `requires builtin mcp`, the two status tokens, and the two companion names without touching a closed-set file.
 - Phase 3 still owns the MCP arm of `softDepMarkers`, `companionRequirements`, and `companionSeverity`, plus the catalog fixtures and counters once rows emit these entries.
 
+## Self-Check: PASSED
+
+- FOUND: commit 7992ccf is an ancestor of HEAD
+- FOUND: every modified file listed under key-files exists
+- Acceptance criteria re-run after the commit: all pass except the eight-file count, which is nine (documented under Deviations)
+
 ---
 *Phase: 01-foundation-and-pi-1-5-0*
 *Completed: 2026-11-04*
