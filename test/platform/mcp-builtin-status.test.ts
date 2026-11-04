@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  builtinServerOwner,
   createBuiltinMcpStatusReader,
+  noteBuiltinServerOwners,
   noteFreshBuiltinRegistration,
   noteReplacedBuiltinRegistration,
 } from "../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
@@ -241,4 +243,35 @@ test("P2-DC-10: a replacement of one server leaves another server's hidden tools
 
   // assert
   assert.strictEqual(status, "disabled");
+});
+
+test("P2-DC-14: each noted name answers its owner and a name the sync does not register answers none", (t) => {
+  // arrange
+  t.after(() => {
+    noteBuiltinServerOwners(new Map());
+  });
+  const project = { scope: "project", marketplace: "mp", plugin: "alpha" } as const;
+  noteBuiltinServerOwners(new Map([["plugin_alpha_api", project]]));
+
+  // act
+  const owners = [builtinServerOwner("plugin_alpha_api"), builtinServerOwner("plugin_alpha_db")];
+
+  // assert
+  assert.deepStrictEqual(owners, [project, undefined]);
+});
+
+test("P2-DC-14: a later sync's owners replace every earlier owner", (t) => {
+  // arrange
+  t.after(() => {
+    noteBuiltinServerOwners(new Map());
+  });
+  const user = { scope: "user", marketplace: "mp", plugin: "alpha" } as const;
+  noteBuiltinServerOwners(new Map([["plugin_alpha_api", user]]));
+  noteBuiltinServerOwners(new Map([["plugin_alpha_db", user]]));
+
+  // act
+  const owners = [builtinServerOwner("plugin_alpha_api"), builtinServerOwner("plugin_alpha_db")];
+
+  // assert
+  assert.deepStrictEqual(owners, [undefined, user]);
 });

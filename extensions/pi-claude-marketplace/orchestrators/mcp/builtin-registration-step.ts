@@ -43,6 +43,7 @@ import { profileFor } from "../../domain/mcp-implementation.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import {
+  noteBuiltinServerOwners,
   noteFreshBuiltinRegistration,
   noteReplacedBuiltinRegistration,
 } from "../../platform/mcp-builtin-status.ts";
@@ -58,6 +59,7 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { RecordedMcpServer } from "../../domain/mcp-implementation.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
+import type { BuiltinServerOwner } from "../../platform/mcp-builtin-status.ts";
 import type { ExtensionContext, McpServerConfig, PiMcpRegistry } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -86,7 +88,7 @@ interface SessionFacts {
   readonly env: ClaudeEnv;
 }
 
-type Registration = readonly [name: string, config: McpServerConfig];
+type Registration = readonly [name: string, config: McpServerConfig, owner: BuiltinServerOwner];
 
 const BUILTIN_PROFILE = profileFor("builtin");
 
@@ -193,6 +195,7 @@ function serverRegistrations(
   servers: readonly RecordedMcpServer[],
   ctx: McpSubstitutionContext,
   description: string | undefined,
+  owner: BuiltinServerOwner,
 ): Registration[] {
   return servers
     .filter(({ config }) => BUILTIN_PROFILE.classify(config).kind === "supported")
@@ -206,7 +209,7 @@ function serverRegistrations(
         return [];
       }
 
-      return [[serverName, built]];
+      return [[serverName, built, owner]];
     });
 }
 
@@ -249,7 +252,11 @@ async function recordRegistrations(
     projectDir: session.cwd,
     env: session.env,
   };
-  return serverRegistrations(source.pluginName, recorded.servers, ctx, description);
+  return serverRegistrations(source.pluginName, recorded.servers, ctx, description, {
+    scope: locations.scope,
+    marketplace: source.marketplaceName,
+    plugin: source.pluginName,
+  });
 }
 
 /** One record's registrations; a record that fails registers nothing and is logged. */
@@ -285,17 +292,17 @@ async function scopeRegistrations(scope: Scope, session: SessionFacts): Promise<
 }
 
 /**
- * D-MB-09: the project scope counts only while Pi trusts the project. The map
- * keeps the user registrations' order, and a project registration of the same
- * name replaces the user one in its place (P2-DC-14).
+ * D-MB-09: the project scope counts only while Pi trusts the project. The
+ * user registrations come first; a later registration of the same name
+ * replaces an earlier one in its place (P2-DC-14).
  */
 async function desiredRegistrations(
   session: SessionFacts,
   projectTrusted: boolean,
-): Promise<Map<string, McpServerConfig>> {
+): Promise<Registration[]> {
   const scopes: readonly Scope[] = projectTrusted ? SCOPES : ["user"];
   const perScope = await Promise.all(scopes.map((scope) => scopeRegistrations(scope, session)));
-  return new Map(perScope.flat());
+  return perScope.flat();
 }
 
 async function syncSession({ pi, ctx, snapshot }: BuiltinRegistrationStepInput): Promise<void> {
@@ -310,7 +317,14 @@ async function syncSession({ pi, ctx, snapshot }: BuiltinRegistrationStepInput):
       { cwd: ctx.cwd, env: process.env },
       ctx.isProjectTrusted(),
     );
-    syncBuiltinRegistrations(pi, desired, debugLog, REGISTRATION_NOTES);
+    // P2-DC-14: info reads which record each name belongs to from here.
+    noteBuiltinServerOwners(new Map(desired.map(([name, , owner]) => [name, owner])));
+    syncBuiltinRegistrations(
+      pi,
+      new Map(desired.map(([name, config]) => [name, config])),
+      debugLog,
+      REGISTRATION_NOTES,
+    );
   } catch (error: unknown) {
     debugLog(`MCP built-in registration skipped: ${errorMessage(error)}`);
   }

@@ -39,9 +39,15 @@
 // Then a server reads `overridden by mcp.json` when a server of Pi's
 // `mcp.json` files holds its namespace (BLT-04, P2-DC-08): the user's file,
 // and the project's only while trusted, read synchronously through the bridge
-// (P2-DC-26). Then a user row's server that the plugin's enabled project
-// record lists reads `overridden by project scope` while the project is
-// trusted (ASTAT-01, P2-DC-14). Otherwise it reads the reader's answer.
+// (P2-DC-26). Then a server whose registered name the registration step's
+// last sync gave to another record does not read that record's state: a user
+// row reads `overridden by project scope` when a project record owns the name
+// (ASTAT-01, P2-DC-14), and any other row reads `not loaded`. The owner is the
+// step's own decision, so a project server the step skipped, as blocked,
+// malformed, outside its clone root, or unreadable, overrides nothing, and
+// the owner's marketplace and plugin count, because the registered name does
+// not name the marketplace and can fold two plugins together. Otherwise the
+// server reads the reader's answer.
 
 import { readMcpJsonServerNamespaces } from "../../bridges/mcp/index.ts";
 import { profileFor } from "../../domain/mcp-implementation.ts";
@@ -52,6 +58,7 @@ import {
 } from "../../domain/name.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { builtinServerOwner } from "../../platform/mcp-builtin-status.ts";
 
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type {
@@ -149,42 +156,45 @@ function mcpJsonFiles(lookup: McpStatusLookup): readonly string[] {
   return lookup.projectTrusted ? [user, locationsFor("project", lookup.cwd).mcpJsonPath] : [user];
 }
 
-// ASTAT-01 / P2-DC-14: the registration step replaces a user server with the
-// same-named server of the plugin's enabled project record, and it registers
-// project servers only while Pi trusts the project.
-function builtinProjectOverrides(
-  block: PluginInfoMessage,
-  lookup: McpStatusLookup,
-  projectRecord: PluginInstallRecord | undefined,
-): ReadonlySet<string> {
-  if (!lookup.projectTrusted || block.marketplaceScope !== "user") {
-    return new Set<string>();
+/**
+ * ASTAT-01 / P2-DC-14: the state of a server whose registered name another
+ * record owns, or `undefined` when the row's own record owns it or no record
+ * does.
+ */
+function ownedElsewhere(block: PluginInfoMessage, name: string): McpServerStatus | undefined {
+  const owner = builtinServerOwner(name);
+  if (
+    owner === undefined ||
+    (owner.scope === block.marketplaceScope &&
+      owner.marketplace === block.marketplaceName &&
+      owner.plugin === block.plugin.name)
+  ) {
+    return undefined;
   }
 
-  return projectRecord === undefined || isRecordedButDisabled(projectRecord)
-    ? new Set<string>()
-    : new Set(builtinRecordedServers(projectRecord));
+  return owner.scope === "project" && block.marketplaceScope === "user"
+    ? "overridden by project scope"
+    : "not loaded";
 }
 
 /**
  * BLT-05: one server's built-in state, in a fixed order: an `mcp.json`
  * server that holds its namespace (BLT-04, T-02-19), so a same-named
- * `mcp.json` server never reads as the plugin's; then a project override;
- * then the reader's answer under the registered name.
+ * `mcp.json` server never reads as the plugin's; then a name another record
+ * owns; then the reader's answer under the registered name.
  */
 function builtinStatus(
-  plugin: string,
+  block: PluginInfoMessage,
   server: string,
   configured: ReadonlySet<string>,
-  overridden: ReadonlySet<string>,
   reader: McpStatusReader,
 ): McpServerStatus {
-  const name = profileFor("builtin").serverName(plugin, server);
+  const name = profileFor("builtin").serverName(block.plugin.name, server);
   if (configured.has(foldedMcpServerKey(name))) {
     return "overridden by mcp.json";
   }
 
-  return overridden.has(server) ? "overridden by project scope" : statusToken(reader.lookup(name));
+  return ownedElsewhere(block, name) ?? statusToken(reader.lookup(name));
 }
 
 function stampBuiltinEntries(
@@ -192,7 +202,6 @@ function stampBuiltinEntries(
   entries: readonly McpServerSummaryEntry[],
   record: PluginInstallRecord,
   lookup: McpStatusLookup,
-  projectRecord: PluginInstallRecord | undefined,
 ): McpServerSummaryEntry[] {
   const plugin = block.plugin.name;
   const recorded = builtinRecordedServers(record);
@@ -203,9 +212,8 @@ function stampBuiltinEntries(
   }
 
   const configured = readMcpJsonServerNamespaces(mcpJsonFiles(lookup));
-  const overridden = builtinProjectOverrides(block, lookup, projectRecord);
   return stampEntries(plugin, entries, recorded, (server) =>
-    builtinStatus(plugin, server, configured, overridden, lookup.reader),
+    builtinStatus(block, server, configured, lookup.reader),
   );
 }
 
@@ -214,8 +222,9 @@ function stampBuiltinEntries(
  * written stamped with the state `lookup.reader` reports for it. Only
  * `(installed)` and `(partially-installed)` rows with resolved components are
  * stamped. `projectRecord` is the same plugin's installation record in the
- * project scope; on a user row it decides which servers the project entry
- * overrides. The input is never mutated, and the row status, reasons and
+ * project scope; under pi-mcp-adapter it decides which servers of a user row
+ * the project entry overrides. Under Pi's built-in MCP the registration
+ * step's own decision does. The input is never mutated, and the row status, reasons and
  * severity are left as they are.
  */
 export function withMcpServerStatus(
@@ -237,7 +246,7 @@ export function withMcpServerStatus(
 
   const mcp =
     lookup.implementation === "builtin"
-      ? stampBuiltinEntries(block, entries, record, lookup, projectRecord)
+      ? stampBuiltinEntries(block, entries, record, lookup)
       : stampAdapterEntries(block, entries, record, lookup, projectRecord);
   return { ...block, plugin: { ...plugin, components: { ...plugin.components, mcp } } };
 }

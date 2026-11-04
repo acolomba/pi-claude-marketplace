@@ -3,7 +3,7 @@
 // BLT-05: the status reader for the MCP servers the extension registers with
 // Pi's built-in MCP. It lives in platform/ because Pi's MCP registry is an
 // external-system boundary; it imports only this zone's `mcp-status.ts` and
-// `pi-api.ts` types.
+// `pi-api.ts` types and the shared `Scope` type.
 //
 // P2-DC-10: Pi gives extensions no connection state and emits no status
 // event, so a lookup infers the state from what Pi exposes, within the view
@@ -45,6 +45,7 @@
 
 import type { McpStatusReader } from "./mcp-status.ts";
 import type { PiInventory, PiMcpRegistry, ToolInventoryItem } from "./pi-api.ts";
+import type { Scope } from "../shared/types.ts";
 
 // Pi 1.5.0 `core/mcp-servers.js` `mcpNamespace`.
 function namespaceOf(serverName: string): string {
@@ -73,6 +74,30 @@ function isHidden(tool: ToolInventoryItem): boolean {
 // and Pi starts each session with no registration, so a name from an earlier
 // session is cleared when it registers again.
 const replacedRegistrations = new Set<string>();
+
+/** The record whose server the built-in registration step registers under a name. */
+export interface BuiltinServerOwner {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly plugin: string;
+}
+
+// ASTAT-01 / P2-DC-14: the owner of each name the registration step's last
+// sync registers, as it decided: the user records first, then the trusted
+// project's, a later record of the same server name winning. The marketplace
+// is not part of the name, and two plugin and server pairs can fold to one
+// name, so another record can own a name.
+let serverOwners: ReadonlyMap<string, BuiltinServerOwner> = new Map();
+
+/** Records the owner of each name the registration step's sync registers. */
+export function noteBuiltinServerOwners(owners: ReadonlyMap<string, BuiltinServerOwner>): void {
+  serverOwners = owners;
+}
+
+/** The owner the last sync gave `serverName`, or `undefined` when it registers no such name. */
+export function builtinServerOwner(serverName: string): BuiltinServerOwner | undefined {
+  return serverOwners.get(serverName);
+}
 
 /** Notes that the sync registered `serverName` in place of a listed config of another shape. */
 export function noteReplacedBuiltinRegistration(serverName: string): void {

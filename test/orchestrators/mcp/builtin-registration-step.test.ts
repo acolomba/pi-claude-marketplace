@@ -9,6 +9,10 @@ import {
   builtinRegistrationStep,
   resyncBuiltinRegistrations,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/builtin-registration-step.ts";
+import {
+  builtinServerOwner,
+  noteBuiltinServerOwners,
+} from "../../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
@@ -284,10 +288,21 @@ describe("builtinRegistrationStep", () => {
       })
       .twice();
 
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+    });
+
     // act
     await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
 
     // assert
+    assert.deepStrictEqual(
+      [builtinServerOwner("plugin_demo_stub"), builtinServerOwner("plugin_demo_extra")],
+      [
+        { scope: "project", marketplace: "mp", plugin: "demo" },
+        { scope: "user", marketplace: "mp", plugin: "demo" },
+      ],
+    );
     assert.deepStrictEqual(registered, [
       [
         "plugin_demo_stub",
@@ -312,6 +327,37 @@ describe("builtinRegistrationStep", () => {
         },
       ],
     ]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("P2-DC-14: a trusted project server the built-in profile blocks leaves the name to the user server", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+    });
+    await writeState(fixture, "user", { demo: installRecord(fixture.pluginRoot) });
+    await writeState(fixture, "project", {
+      demo: installRecord(fixture.pluginRoot, [
+        { name: "stub", config: { type: "sse", url: "https://mcp.example.test/sse" } },
+      ]),
+    });
+    const ctx = sessionContext(fixture, true);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_stub", stubConfig(fixture, "user", fixture.pluginRoot));
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(builtinServerOwner("plugin_demo_stub"), {
+      scope: "user",
+      marketplace: "mp",
+      plugin: "demo",
+    });
     verify(pi);
     verify(ctx);
   });
