@@ -58,6 +58,7 @@ import type {
   ReconcilePlan,
   ScopeReadResult,
 } from "./types.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -153,7 +154,9 @@ function layerMarketplaceGapOutcomes(
 
 /**
  * Per-scope read pass under the scope lock. Migrate-then-load-then-plan
- * inside ONE lock so the deferred ordering rail is wired.
+ * inside ONE lock so the deferred ordering rail is wired. The catalog moves
+ * are settled under `mcpImplementation`, the run's active MCP implementation
+ * (D-P3-03).
  *
  * WR-05: the read pass is WRITE-FREE.
  *
@@ -175,6 +178,7 @@ export async function readPassForScope(
   reader: ReconcileStateReader,
   scope: Scope,
   cwd: string,
+  mcpImplementation: ActiveMcpImplementation,
 ): Promise<ScopeReadResult> {
   return readScopeLocked(
     reader,
@@ -199,6 +203,7 @@ export async function readPassForScope(
         scope,
         state,
         locations,
+        mcpImplementation,
         plan: planFrom(verdict, plan),
         verdict,
         replan: (released) =>
@@ -528,6 +533,8 @@ export interface ScopePassInput extends ScopePassAccumulators {
   readonly reader: ReconcileStateReader;
   readonly scope: Scope;
   readonly cwd: string;
+  /** D-P3-03: the run's active MCP implementation, which the read pass plans under. */
+  readonly mcpImplementation: ActiveMcpImplementation;
   /** AMIG-01: the injected MCP move; `migrateLegacyMcpEntries` when absent. */
   readonly migrateMcpEntries?: McpMigrationStep | undefined;
   /**
@@ -548,7 +555,12 @@ export interface ScopePassInput extends ScopePassAccumulators {
 export async function openScopePass(input: ScopePassInput): Promise<ScopeReadResult | undefined> {
   let readResult: ScopeReadResult;
   try {
-    readResult = await readPassForScope(input.reader, input.scope, input.cwd);
+    readResult = await readPassForScope(
+      input.reader,
+      input.scope,
+      input.cwd,
+      input.mcpImplementation,
+    );
   } catch (err) {
     input.outcomes.push(readPassFailureOutcome(input.scope, err));
     return undefined;

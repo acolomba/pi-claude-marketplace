@@ -927,7 +927,12 @@ async function refreshTogglePlan(
   const plan = toggles.plan;
   let fresh: ScopeReadResult = { plan: undefined, invalidOutcomes: [] };
   await runScopeIsolated(plan.scope, outcomes, async () => {
-    fresh = await readPassForScope(reader, plan.scope, opts.cwd);
+    fresh = await readPassForScope(
+      reader,
+      plan.scope,
+      opts.cwd,
+      opts.run.softDeps.mcpImplementation,
+    );
   });
 
   outcomes.push(...fresh.invalidOutcomes);
@@ -1363,7 +1368,13 @@ async function convergeScope(
   await runScopeIsolated(scope, failures, async () => {
     const state = await reader.loadState(locations.extensionRoot);
     const enable = new Set([...deferred.map(pluginKey), ...waiting]);
-    planned.cascade = await planConvergenceCascade({ scope, state, locations, enable });
+    planned.cascade = await planConvergenceCascade({
+      scope,
+      state,
+      locations,
+      enable,
+      mcpImplementation: opts.run.softDeps.mcpImplementation,
+    });
     const verdict = await buildScopeSatisfactionVerdict({ state, locations });
     planned.before = { state, unsatisfied: verdict.ok ? verdict.unsatisfied : [] };
   });
@@ -2359,6 +2370,7 @@ async function applyScopes(
       reader,
       scope,
       cwd: opts.cwd,
+      mcpImplementation: opts.run.softDeps.mcpImplementation,
       migrateMcpEntries: opts.migrateMcpEntries,
     });
     if (readResult === undefined) {

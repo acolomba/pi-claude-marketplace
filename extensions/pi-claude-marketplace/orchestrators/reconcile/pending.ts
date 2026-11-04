@@ -112,6 +112,7 @@ import type {
 } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -374,10 +375,13 @@ async function refusedCopyRows(
  * D-05 / D-06: reads each scope's config and state, plans it the way `apply`
  * would, and folds the plans and the failed blocks into one report. Offline
  * (NFR-5) and write-free. `scopes` is read in the order given (MSG-GR-3).
+ * Every verdict is read under `mcpImplementation`, the run's active MCP
+ * implementation, so a switch alone plans nothing (D-P3-15).
  */
 export async function composePendingReport(opts: {
   readonly cwd: string;
   readonly scopes: readonly Scope[];
+  readonly mcpImplementation: ActiveMcpImplementation;
 }): Promise<PendingReport> {
   const plans: ReconcilePlan[] = [];
   const invalidBlocks: MarketplaceRows<PendingMsg>[] = [];
@@ -496,6 +500,7 @@ export async function composePendingReport(opts: {
       scope,
       state,
       locations: loc,
+      mcpImplementation: opts.mcpImplementation,
       plan: planFrom(verdict, verdict === firstVerdict ? firstPlan : planFor(verdict)),
       verdict,
       replan: (released) => planFrom(released, planFor(released)),
@@ -505,7 +510,13 @@ export async function composePendingReport(opts: {
     const cascade =
       settled.cascade ??
       // eslint-disable-next-line no-await-in-loop -- at most two scopes, one convergence plan each
-      (await planConvergenceCascade({ scope, state, locations: loc, plan: settled.plan }));
+      (await planConvergenceCascade({
+        scope,
+        state,
+        locations: loc,
+        plan: settled.plan,
+        mcpImplementation: opts.mcpImplementation,
+      }));
     // D-PL2-25: a record whose installed copy cannot be used lists the row
     // `apply` reports for it.
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one final judgement each
@@ -594,7 +605,11 @@ export async function composePendingReport(opts: {
     };
   };
 
-  const forceInstallKeys = await resolvePendingForceInstalls(plans, locateCandidate);
+  const forceInstallKeys = await resolvePendingForceInstalls(
+    plans,
+    locateCandidate,
+    opts.mcpImplementation,
+  );
   const projection = buildReconcilePendingNotification(
     plans,
     forceInstallKeys,
@@ -660,7 +675,11 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // Project-first per MSG-GR-3 when both scopes are searched; otherwise the
   // explicit scope only.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
-  const report = await composePendingReport({ cwd: opts.cwd, scopes });
+  const report = await composePendingReport({
+    cwd: opts.cwd,
+    scopes,
+    mcpImplementation: opts.run.softDeps.mcpImplementation,
+  });
 
   // DIFF-01 SC #2: the empty case is the dedicated ReconcilePendingEmptyMessage
   // variant (the renderer hard-codes the catalog-locked advisory body line, so

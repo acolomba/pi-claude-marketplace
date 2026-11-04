@@ -24,6 +24,7 @@
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { declaredVersionWithPin, isSameVersion, shaVersion } from "../../domain/version.ts";
 import { atCatalogVersion, isRecordedButDisabled } from "../../persistence/state-io.ts";
@@ -42,6 +43,7 @@ import {
   unusableDeclaration,
 } from "../plugin/dependency-index.ts";
 import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
+import { readRecordMcpVerdict } from "../plugin/mcp-verdict-read.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "../plugin/shared.ts";
 
 import {
@@ -60,7 +62,15 @@ import type {
 } from "./dependency-verdict.ts";
 import type { PlannedPluginEnable, ReconcilePlan } from "./types.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
+import type {
+  ActiveMcpImplementation,
+  EffectiveMcpCompatibility,
+} from "../../domain/mcp-implementation.ts";
+import type {
+  MaterializablePlugin,
+  ResolveContext,
+  ResolvedPlugin,
+} from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -88,6 +98,12 @@ export interface ConvergenceInput {
    * planned as if enabled (`plugin@marketplace` keys).
    */
   readonly enable?: ReadonlySet<string>;
+  /**
+   * D-P3-03 / D-P3-13: the run's active MCP implementation, under which a
+   * record's verdict and its candidate's verdict are both read. Required, so
+   * no caller silently keeps the adapter's reading.
+   */
+  readonly mcpImplementation: ActiveMcpImplementation;
 }
 
 /** D-10: one catalog move, with the revisions on both sides (UPR-02). */
@@ -99,7 +115,7 @@ export interface PlannedMove extends RevisionMove {
   readonly revisionChanged: boolean;
   /** The supported component set strictly grew (BFILL-01). */
   readonly grew: boolean;
-  /** The record was installed partial (`installable: false`). */
+  /** The record is partial under the active MCP implementation (D-P3-13). */
   readonly partial: boolean;
 }
 
@@ -139,7 +155,7 @@ export interface ConvergencePlan {
 interface CandidateMove {
   readonly key: string;
   readonly move: PlannedMove;
-  /** The kinds a clean record's partial candidate would drop (D-12). */
+  /** The kinds the candidate would drop that the record does not (D-12, D-P3-13). */
   readonly consent?: readonly string[];
   /** DLS-D1: what the installed copy declares; none when it has no copy or no manifest. */
   readonly installed: readonly AddressedDependency[];
@@ -397,12 +413,34 @@ async function gitOffer(
 }
 
 /**
+ * D-12 / D-P3-13: the kinds a move needs consent for, or `undefined`. Both
+ * sides are read under the active implementation: the candidate through
+ * `resolutionFor`, the record through its effective verdict. Only a kind the
+ * candidate drops and the record does not is a new degrade, so a switch of
+ * implementation alone never holds a move.
+ */
+function newlyDroppedKinds(
+  effective: EffectiveMcpCompatibility,
+  resolved: ResolvedPlugin | undefined,
+  active: ActiveMcpImplementation,
+): readonly string[] | undefined {
+  const view = resolved === undefined ? undefined : resolutionFor(resolved, active);
+  if (view?.state !== "partially-available") {
+    return undefined;
+  }
+
+  const dropped = view.unsupported.filter((kind) => !effective.unsupported.includes(kind));
+  return dropped.length > 0 ? dropped : undefined;
+}
+
+/**
  * D-10: the move one enabled record would make, or `undefined`. A delisted
  * record (DLS-D1), an invalid entry and an `unavailable` candidate are not
  * moves. A move is a changed revision or a strictly grown supported set
  * (BFILL-01), weighed on every pass; a growth-only move keeps its version. A
- * clean record's `partially-available` candidate carries the kinds it would
- * drop; a record already installed partial moves without consent (D-12).
+ * `partially-available` candidate carries the kinds it would newly drop; a
+ * record partial under the active implementation moves partial (D-12,
+ * D-P3-13).
  */
 async function recordMove(
   input: ConvergenceInput,
@@ -438,6 +476,11 @@ async function recordMove(
     return undefined;
   }
 
+  const { effective } = await readRecordMcpVerdict(
+    record,
+    { marketplaceName: mp.name, marketplace: mp, pluginName: plugin },
+    input.mcpImplementation,
+  );
   const move: PlannedMove = {
     scope: input.scope,
     marketplace: mp.name,
@@ -448,12 +491,9 @@ async function recordMove(
     ...(offer.toCommit !== undefined && { toCommit: offer.toCommit }),
     revisionChanged: offer.revisionChanged,
     grew,
-    partial: !record.compatibility.installable,
+    partial: !effective.installable,
   };
-  const consent =
-    record.compatibility.installable && resolved?.state === "partially-available"
-      ? resolved.unsupported
-      : undefined;
+  const consent = newlyDroppedKinds(effective, resolved, input.mcpImplementation);
   return { move, ...(consent !== undefined && { consent }) };
 }
 
@@ -1072,7 +1112,12 @@ function isDependencyHeld(state: ExtensionState, op: PlannedPluginEnable): boole
  * judges every enabled plugin again once the moves have run.
  */
 export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCascade> {
-  const base = { scope: input.scope, state: input.state, locations: input.locations };
+  const base = {
+    scope: input.scope,
+    state: input.state,
+    locations: input.locations,
+    mcpImplementation: input.mcpImplementation,
+  };
   const settled = await releaseOnLandedMoves(input);
   const lifts = settled.plan.pluginsToEnable.filter((op) => isDependencyHeld(input.state, op));
   const cascade =
@@ -1193,7 +1238,12 @@ async function judgePlannedScope(
 async function releaseOnLandedMoves(
   input: MoveCascadeInput,
 ): Promise<Pick<MoveCascade, "plan" | "cascade"> & { readonly released: ReadonlySet<string> }> {
-  const base = { scope: input.scope, state: input.state, locations: input.locations };
+  const base = {
+    scope: input.scope,
+    state: input.state,
+    locations: input.locations,
+    mcpImplementation: input.mcpImplementation,
+  };
   const scheduled = plannedInstallKeys(input.plan);
   let released = releasableDependents(input.verdict, input.state, scheduled);
   while (released.size > 0) {
