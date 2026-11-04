@@ -33,8 +33,14 @@ export type Dependency = "agents" | "mcp" | "workflows";
  * ADET-01: the companion extension a component kind needs at runtime -- agents
  * need pi-subagents, mcp needs pi-mcp-adapter, workflows need the host
  * workflow engine.
+ *
+ * D-MB-07: `mcp` and `builtin mcp` name an MCP implementation the way the
+ * `requires mcp` and `requires builtin mcp` markers do: `mcp` when either
+ * implementation would run every server, `builtin mcp` when only Pi's
+ * built-in MCP would.
  */
-export type Companion = "pi-dynamic-workflows" | "pi-mcp-adapter" | "pi-subagents";
+export type Companion =
+  "pi-dynamic-workflows" | "pi-mcp-adapter" | "pi-subagents" | "mcp" | "builtin mcp";
 
 /**
  * ADET-01: one companion a plugin needs. `missing` is true when the probe

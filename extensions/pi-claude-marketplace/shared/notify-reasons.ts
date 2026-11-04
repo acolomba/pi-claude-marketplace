@@ -111,6 +111,10 @@ type UnsupportedReason =
   | "lsp"
   | "requires pi-subagents"
   | "requires pi-mcp-adapter"
+  // D-MB-07: the MCP markers that name either implementation, or Pi's
+  // built-in MCP alone.
+  | "requires mcp"
+  | "requires builtin mcp"
   // WDEP-04: the host workflow engine soft-dep marker.
   | "requires pi-dynamic-workflows"
   | "unsupported source"

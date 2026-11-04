@@ -161,6 +161,8 @@ const REASONS = {
   "enabled in local layer": true,
   "network error": true,
   "already added": true,
+  "requires mcp": true,
+  "requires builtin mcp": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {
@@ -194,12 +196,16 @@ const MCP_SERVER_STATUSES = {
   "status unknown": true,
   "not loaded": true,
   "overridden by project scope": true,
+  "overridden by mcp.json": true,
+  "project not trusted": true,
 } as const satisfies Record<McpServerStatus, true>;
 
 const COMPANIONS = {
   "pi-dynamic-workflows": true,
   "pi-mcp-adapter": true,
   "pi-subagents": true,
+  mcp: true,
+  "builtin mcp": true,
 } as const satisfies Record<Companion, true>;
 
 const MCP_CONFIG_FILE_NOTICE_KINDS = {

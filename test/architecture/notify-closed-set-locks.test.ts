@@ -118,6 +118,8 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "enabled in local layer": true,
   "network error": true,
   "already added": true,
+  "requires mcp": true,
+  "requires builtin mcp": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -196,6 +198,8 @@ const MCP_SERVER_STATUS_ENROLLMENT: Record<McpServerStatus, true> = {
   "status unknown": true,
   "not loaded": true,
   "overridden by project scope": true,
+  "overridden by mcp.json": true,
+  "project not trusted": true,
 };
 
 // Standalone notifications have their own discriminator set. Scoped prune
@@ -216,7 +220,7 @@ const NOTIFICATION_KIND_ENROLLMENT: Record<
   "reconcile-applied-cascade": true,
 };
 
-test("OUT-08: Reason is the closed 78-entry reason set", () => {
+test("OUT-08: Reason is the closed 80-entry reason set", () => {
   // The set is append-only and its declared order is catalog-stable, so this
   // length is a tripwire: an additive drift has to be a deliberate bump made
   // here, in the same edit as the member. The MEMBERSHIP is pinned separately by
@@ -230,7 +234,7 @@ test("OUT-08: Reason is the closed 78-entry reason set", () => {
   const memberCount = Object.keys(REASON_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 78);
+  assert.strictEqual(memberCount, 80);
 });
 
 test("SNM-02: StatusToken is the closed 27-entry token set", () => {
@@ -272,12 +276,12 @@ test("SNM-02: MarketplaceStatus is the closed 9-entry marketplace-status set", (
   assert.strictEqual(memberCount, 9);
 });
 
-test("ASTAT-02: McpServerStatus is the closed 10-entry MCP server status set", () => {
+test("ASTAT-02: McpServerStatus is the closed 12-entry MCP server status set", () => {
   // act
   const memberCount = Object.keys(MCP_SERVER_STATUS_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 10);
+  assert.strictEqual(memberCount, 12);
 });
 
 test("standalone notification kinds include scoped prune outcomes exactly", () => {

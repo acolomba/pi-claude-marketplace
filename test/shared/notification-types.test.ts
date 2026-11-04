@@ -171,6 +171,8 @@ const EXPECTED_REASONS = [
   "enabled in local layer",
   "network error",
   "already added",
+  "requires mcp",
+  "requires builtin mcp",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
