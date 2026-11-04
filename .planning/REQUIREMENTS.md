@@ -107,8 +107,8 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 
 ### Agent grants
 
-- [ ] **MGRT-01**: A generated pi-subagents agent's MCP grants name the active implementation's server, and after a switch and `/reload` the load rewrites only the agent files whose grants changed, atomically, with no user action (D-MB-03); with no active implementation the files stay as they are
-- [ ] **MGRT-02**: A background subagent child that loads the extension never rewrites agent files or any other installation state
+- [x] **MGRT-01**: A generated pi-subagents agent's MCP grants name the active implementation's server, and after a switch and `/reload` the load rewrites only the agent files whose grants changed, atomically, with no user action (D-MB-03); with no active implementation the files stay as they are
+- [x] **MGRT-02**: A background subagent child that loads the extension never rewrites agent files or any other installation state
 
 ### Hook naming
 
@@ -169,8 +169,8 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 | BLT-04 | Phase 2 | Pending |
 | BLT-05 | Phase 2 | Pending |
 | BLT-06 | Phase 2 | Pending |
-| MGRT-01 | Phase 4 | Pending |
-| MGRT-02 | Phase 4 | Pending |
+| MGRT-01 | Phase 4 | Complete |
+| MGRT-02 | Phase 4 | Complete |
 | MHK-01 | Phase 5 | Pending |
 | MHK-02 | Phase 5 | Pending |
 | DUAL-01 | Phase 1 | Complete |

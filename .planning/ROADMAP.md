@@ -444,13 +444,13 @@ Plans:
 - Wave 2: `orchestrators/mcp/agent-grants-step.ts` with child detection, and `agent-grants.feature` (MGRT-01 switch side, MGRT-02).
 - Wave 3: parent lines and the phase gate.
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans executed
 - [x] 04-01-PLAN.md
 - [x] 04-02-PLAN.md
 - [x] 04-03-PLAN.md
 - [x] 04-04-PLAN.md
 - [x] 04-05-PLAN.md
-- [ ] 04-06-PLAN.md
+- [x] 04-06-PLAN.md
 
 ### Phase 5: Hook Tool Names
 **Goal**: Plugin hooks on plugin MCP tools fire under built-in with Claude's server segment, and the adapter's proxy rule applies only while the adapter is active.
@@ -488,7 +488,7 @@ Plans:
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
 | 2. Built-in Materialization | 0/TBD | Not started | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
-| 4. Agent Grants | 5/6 | In Progress | - |
+| 4. Agent Grants | 6/6 | In Progress | - |
 | 5. Hook Tool Names | 0/TBD | Not started | - |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
 
