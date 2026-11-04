@@ -3763,32 +3763,24 @@ describe("resolvePendingForceInstalls", () => {
       });
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set(["project\u0000mp\u0000cr"]));
   });
 
-  for (const { server, preview, expectedKeys } of [
-    {
-      server: { type: "sse", url: "http://127.0.0.1:9/sse" },
-      preview: "whole",
-      expectedKeys: [],
-    },
-    {
-      server: { type: "ws", url: "ws://127.0.0.1:9/ws" },
-      preview: "partial",
-      expectedKeys: ["project\u0000mp\u0000cr"],
-    },
+  for (const { mcpImplementation, preview, expectedKeys } of [
+    { mcpImplementation: "builtin", preview: "partial", expectedKeys: ["project\u0000mp\u0000cr"] },
+    { mcpImplementation: "adapter", preview: "whole", expectedKeys: [] },
   ] as const) {
-    test(`D-P3-15: previews an install with a ${server.type} server as ${preview}, by the verdict every MCP implementation shares`, async (t) => {
+    test(`D-P3-15: previews an install with an sse server as ${preview} under ${mcpImplementation}`, async (t) => {
       // arrange
-      const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "reconcile-force-mcp-"));
+      const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "reconcile-force-sse-"));
       t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
       await mkdir(path.join(marketplaceRoot, "cr"), { recursive: true });
       await writeFile(
         path.join(marketplaceRoot, "cr", ".mcp.json"),
-        JSON.stringify({ mcpServers: { events: server } }),
+        JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
         "utf8",
       );
       const plans = [reconcilePlan("project", { pluginsToInstall: [install] })];
@@ -3800,7 +3792,7 @@ describe("resolvePendingForceInstalls", () => {
         });
 
       // act
-      const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+      const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, mcpImplementation);
 
       // assert
       assert.deepStrictEqual(forceInstallKeys, new Set(expectedKeys));
@@ -3823,7 +3815,7 @@ describe("resolvePendingForceInstalls", () => {
       });
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
@@ -3852,7 +3844,7 @@ describe("resolvePendingForceInstalls", () => {
       });
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(
@@ -3875,7 +3867,7 @@ describe("resolvePendingForceInstalls", () => {
       });
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
@@ -3887,7 +3879,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate | undefined> => Promise.resolve(undefined);
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
@@ -3910,7 +3902,7 @@ describe("resolvePendingForceInstalls", () => {
       });
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
@@ -3922,7 +3914,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate | undefined> => Promise.resolve(undefined);
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());

@@ -1,10 +1,12 @@
 Feature: MCP server verdict apply
 
-  Apply follows the MCP implementation pi runs, and a switch of implementation
-  alone never asks for consent (MREC-06, D-P3-13) or shows a new row (D-P3-14,
-  D-P3-15, D-P3-19). Pending promises no partial install that apply will not
-  make. A local marketplace stands in for a published one, and each sse server
-  points at a loopback port that nothing listens on.
+  Apply and pending follow the MCP implementation pi runs, and a switch of
+  implementation alone never asks for consent (MREC-06, D-P3-13) or shows a
+  new row (D-P3-14, D-P3-15, D-P3-19). Pending previews a declared plugin that
+  the active implementation runs only in part as a partial install, but apply
+  installs a declared plugin without --partial and refuses it. A local
+  marketplace stands in for a published one, and each sse server points at a
+  loopback port that nothing listens on.
 
   @own-implementation
   Scenario: Apply under Pi's built-in MCP moves a plugin with an sse server, installed without --partial, to its new version partially, without asking (MREC-06)
@@ -83,8 +85,36 @@ Feature: MCP server verdict apply
       | severity     | info                    |
       | needs reload | false                   |
 
-  @mcp
-  Scenario: Pending previews a declared plugin with an sse server as will install, under either MCP implementation (D-P3-15)
+  @builtin-only
+  Scenario: Pending previews a declared plugin with an sse server as will partially install, under Pi's built-in MCP (D-P3-15)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user runs "/claude:plugin pending --scope user"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 1                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope | partial |
+      | fixtures         | user              | demo@fixtures | demo | will install |         | user  | true    |
+
+  @adapter-only
+  Scenario: Pending previews a declared plugin with an sse server as will install, under pi-mcp-adapter (D-P3-15)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

@@ -806,11 +806,11 @@ for (const { condition, stage, rendered, expectedMessage } of plannedInstallRows
   });
 }
 
-// D-P3-15 / P3-DC-20: `apply` installs a declared plugin without `--partial`,
-// so it refuses an install the active implementation degrades; the preview
-// promises no partial install for an sse server under any implementation.
+// D-P3-15: the preview reads the planned install under the run's active MCP
+// implementation, so an sse server degrades the install only where the active
+// implementation cannot run it.
 for (const { mcpImplementation, adapterLoaded, rendered } of [
-  { mcpImplementation: "builtin", adapterLoaded: false, rendered: "will install" },
+  { mcpImplementation: "builtin", adapterLoaded: false, rendered: "will partially install" },
   { mcpImplementation: "adapter", adapterLoaded: true, rendered: "will install" },
 ] as const) {
   test(`D-P3-15: a planned install with an sse server renders "${rendered}" under ${mcpImplementation}`, async (t) => {

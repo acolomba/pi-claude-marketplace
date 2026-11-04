@@ -579,8 +579,8 @@ export async function composePendingReport(opts: {
   // both.
   // FSTAT-06 / D-66-04 / NFR-5: resolve each planned install candidate
   // no-network so the pending row renders `(will partially install)` when the
-  // install would degrade under every MCP implementation (the candidate's
-  // neutral verdict is `partially-available`, D-P3-15). The locator reads
+  // install would degrade (the candidate resolves `partially-available` under
+  // the active MCP implementation, D-P3-15). The locator reads
   // only the recorded marketplace's on-disk manifest (cache; no network sync) +
   // delegates the resolve to resolvePendingForceInstalls (which owns the
   // resolveStrict call). An unrecorded marketplace or a missing manifest entry
@@ -606,7 +606,11 @@ export async function composePendingReport(opts: {
     };
   };
 
-  const forceInstallKeys = await resolvePendingForceInstalls(plans, locateCandidate);
+  const forceInstallKeys = await resolvePendingForceInstalls(
+    plans,
+    locateCandidate,
+    opts.mcpImplementation,
+  );
   const projection = buildReconcilePendingNotification(
     plans,
     forceInstallKeys,
