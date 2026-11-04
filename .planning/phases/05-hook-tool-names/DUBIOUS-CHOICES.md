@@ -405,3 +405,63 @@ choice. The planner's choices follow.
 - **Alternatives:** `Pick<"getAllTools">` widened later; a non-null assertion.
 - **Why dubious:** minor scope and typing deviations.
 - **Recorded in:** `05-01-SUMMARY.md`.
+
+## Execution wave 2 (plans 05-02 and 05-03, gsd-executor, 2026-11-04)
+
+### P5-DC-32: Router cases count reads with a hand-written counter
+
+- **Phase / source:** plan 05-02 (executor P5-02-DC-01).
+- **Severity:** Low. **Status:** open.
+- **Choice:** the router unit cases count inventory reads with a counter added
+  to `makeRecordingPi` through `Object.assign`, not a strict strong-mock.
+- **Alternatives:** a strict mock listing ~20 `pi.on` registrations; spies.
+- **Why dubious:** departs from the strict-mock convention; totals are exact.
+- **Recorded in:** `05-02-SUMMARY.md`.
+
+### P5-DC-33: Dispatch proxy rows use a recording view stub
+
+- **Phase / source:** plan 05-02 (executor P5-02-DC-02).
+- **Severity:** Low. **Status:** open.
+- **Choice:** the dispatch proxy rows drive a recording `HookToolView` stub;
+  the inventory-to-answer mapping is pinned once in `mcp-tool-view.test.ts`.
+- **Alternatives:** seeded adapter, built-in, and empty inventories per row.
+- **Why dubious:** less end-to-end in the dispatch file.
+- **Recorded in:** `05-02-SUMMARY.md`.
+
+### P5-DC-34: Three guard cases that pass on any tree
+
+- **Phase / source:** plan 05-02 (executor P5-02-DC-03).
+- **Severity:** Low. **Status:** open.
+- **Choice:** two empty-bucket cases and "registering the bridge reads neither
+  Pi's tools nor its commands" are kept as guards, not RED evidence.
+- **Alternatives:** drop them (the factory-time ban already covers it).
+- **Why dubious:** tests with no red proof.
+- **Recorded in:** `05-02-SUMMARY.md`.
+
+### P5-DC-35: Scenarios pin the `*` row on `tool_search`; one acceptance count missed
+
+- **Phase / source:** plan 05-02 (executor P5-02-DC-04, P5-02-DC-05).
+- **Severity:** Low. **Status:** open.
+- **Choice:** the built-in twin and the cut-name scenario pin a `*` row on
+  Pi's `tool_search` under that name (renaming to `ToolSearch` later would
+  change these rows, P5-DC-09). `createHookToolView` appears twice in
+  `event-router.ts` (import and call) where the plan counted one.
+- **Alternatives:** no `*` hook in the twin; an aliased import to hit the count.
+- **Why dubious:** a deferred parity gap becomes a pinned row; a criterion
+  mismatch with no behavior change.
+- **Recorded in:** `05-02-SUMMARY.md`.
+
+### P5-DC-36: Plan 05-03 doc and step details
+
+- **Phase / source:** plan 05-03 (executor P5-03-DC-01..04).
+- **Severity:** Low. **Status:** open.
+- **Choice:** (1) the doc cites `tool-use.feature` for the proxy rule under
+  each implementation, true only after the wave merged; (2) the `mcp.json` step
+  also fails if a profile Pi already started and removes the file at scenario
+  end; (3) the notice scenario compares only the notices (the stdin name is
+  pinned by the shared scenario); (4) the doc states Pi's cut as "longer than
+  64 characters, cut and ended with a hash", without the 55-character rule.
+- **Alternatives:** cite only `mcp-tool-names.feature`; a bare `wx` write;
+  also compare runs; state the exact rule.
+- **Why dubious:** small precision and scope choices.
+- **Recorded in:** `05-03-SUMMARY.md`, `docs/hooks-compatibility.md`.
