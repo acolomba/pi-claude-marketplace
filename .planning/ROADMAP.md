@@ -402,7 +402,22 @@ Plans:
 - Wave 2, in parallel, one feature file and step module each: configuration and source variants with the `substitute.ts` encoder parameter (BLT-02); project trust (BLT-03); naming, collisions, overrides, and status in `info-mcp-status.ts` and `platform/mcp-builtin-status.ts` (BLT-04, BLT-05); lifecycle (BLT-06); invocation through `tool_search` and direct `alwaysLoad` calls (BLT-01); the switch and legacy records in `implementation-switch.feature` (MSEL-02, MSEL-04, MREC-02; Phase 6 adds the `{requires mcp}` step for DUAL-04).
 - Wave 3: the built-in column in `docs/mcp-compatibility.md` (MDOC-01), decision rows, parent lines, and the phase gate.
 
-**Plans**: TBD
+**Plans**: 8 plans in 3 waves (the suggested waves; Wave 2 splits into six plans with disjoint files, and the registration's `description` reader moves into Wave 1 so that only one Wave 2 plan edits the `bridges/mcp` barrel)
+
+Plans:
+**Wave 1**
+- [ ] 02-01-PLAN.md — Wave 1: the built-in translation table, the encoder port with both encoders, the idempotent sync, the registration step (gate, trust, containment, legacy records, description), the `tool_search` projection, and `listing.feature` under both profiles (BLT-01, BLT-02, BLT-04, MSEL-03, MREC-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-02-PLAN.md — Wave 2: `configuration.feature` and `invocation.feature` lifted, with built-in twins for variables, `$` and `!`, headers, and IN-02 (BLT-02, BLT-01)
+- [ ] 02-03-PLAN.md — Wave 2: `sources.feature` lifted, the registry config probe, `builtin-values.feature` (OAuth, timeout, exposure, description), `builtin-direct.feature`, and the Pi resolver conformance test (BLT-02, BLT-01)
+- [ ] 02-04-PLAN.md — Wave 2: the built-in status reader, the `mcp.json` override read, the built-in `info` arm, and `builtin-status.feature` (BLT-05, BLT-04)
+- [ ] 02-05-PLAN.md — Wave 2: `project-scope.feature` lifted and `builtin-trust.feature` (BLT-03)
+- [ ] 02-06-PLAN.md — Wave 2: `lifecycle.feature` lifted, next-session effects, a new session, and the autoapply resync (BLT-06, BLT-01)
+- [ ] 02-07-PLAN.md — Wave 2: `implementation-switch.feature` with the switch, the install under built-in, and the earlier-release record (MSEL-02, MSEL-03, MSEL-04, MREC-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 02-08-PLAN.md — Wave 3: the built-in column and sections of `docs/mcp-compatibility.md`, the phase gate, and the parent lines (MDOC-01)
 
 ### Phase 3: Read-Time Verdicts
 **Goal**: A plugin's available or partially available state, each server's verdict, the markers, and `--partial` consent follow the active implementation, computed at read time from neutral records, so a switch never asks the user for anything and a Pi with no MCP support tells the user what to turn on.

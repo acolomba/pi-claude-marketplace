@@ -341,3 +341,157 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Alternatives:** `persistence/`; a synchronous variant in `adapter-doc.ts`.
 - **Why dubious:** the extension's first synchronous file read; possible
   clone of `readMcpConfigDoc`.
+
+## Planning step (gsd-planner, 2026-11-04)
+
+### P2-DC-27: Tracer plan 02-01 is large (22 files, 3 tasks)
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Tracer plan 02-01 is large (22 files, 3 tasks).
+- **Alternatives:** Split Wave 1 into encoding/translation and step/sync plans.
+- **Why dubious:** Breaks the split-at-5-files guidance and risks executor context.
+
+### P2-DC-28: Wave 2 runs six parallel plans, each running cucumber profiles
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Wave 2 runs six parallel plans, each running cucumber profiles.
+- **Alternatives:** 4-5 plans as the ROADMAP grouped them.
+- **Why dubious:** Machine load can add flakes and timeouts.
+
+### P2-DC-29: The `disabled` status is proven by driving Pi's TUI `/mcp` manager through a pseudo-terminal (02-04), with a unit-proof fallback
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** The `disabled` status is proven by driving Pi's TUI `/mcp` manager through a pseudo-terminal (02-04), with a unit-proof fallback.
+- **Alternatives:** Unit-only proof.
+- **Why dubious:** The PTY-driven upstream UI is fragile.
+
+### P2-DC-30: A synchronous `readFileSync` `mcp.json` reader, the extension's first (02-04)
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** A synchronous `readFileSync` `mcp.json` reader, the extension's first (02-04).
+- **Alternatives:** An async read plus a frozen-file change to the info call.
+- **Why dubious:** Blocking I/O and a new pattern (see P2-DC-26).
+
+### P2-DC-31: 02-04 edits one fixture line in the shared `test/orchestrators/plugin/info.test.ts`
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** 02-04 edits one fixture line in the shared `test/orchestrators/plugin/info.test.ts`.
+- **Alternatives:** Leave the case failing and write a parent line.
+- **Why dubious:** Merge-conflict risk with Phase 3.
+
+### P2-DC-32: The adapter `pending approval` info scenario gets no built-in twin in `project-scope.feature`; `project not trusted` lives in `builtin-status.feature`
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The adapter `pending approval` info scenario gets no built-in twin in `project-scope.feature`; `project not trusted` lives in `builtin-status.feature`.
+- **Alternatives:** A twin depending on 02-04.
+- **Why dubious:** Departs from the pair-in-one-file rule.
+
+### P2-DC-33: The lifecycle Background install moves into 8 adapter scenarios to keep their strict form
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The lifecycle Background install moves into 8 adapter scenarios to keep their strict form.
+- **Alternatives:** A lenient Background.
+- **Why dubious:** Duplication.
+
+### P2-DC-34: A scenario pins that a server disabled in session stays registered until the next session (D-MB-10)
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** A scenario pins that a server disabled in session stays registered until the next session (D-MB-10).
+- **Alternatives:** Do not pin it.
+- **Why dubious:** MCPV2-01 may reverse it; Claude parity unverified.
+
+### P2-DC-35: Only the autoapply-at-load scenario tells the resync apart, with a mutation red run
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Only the autoapply-at-load scenario tells the resync apart, with a mutation red run.
+- **Alternatives:** Unit-only proof.
+- **Why dubious:** A single indirect witness.
+
+### P2-DC-36: New polling `Then` steps for tool listings, because no Given may follow a When
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** New polling `Then` steps for tool listings, because no Given may follow a When.
+- **Alternatives:** Change the frozen harness.
+- **Why dubious:** A Then that waits.
+
+### P2-DC-37: `pi reports no extension error` checks every record of the restarted Pi
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** `pi reports no extension error` checks every record of the restarted Pi.
+- **Alternatives:** Filter MCP-related errors only.
+- **Why dubious:** Unrelated errors fail it.
+
+### P2-DC-38: MSEL-04 "no rewrite at load" is shown by an empty session report plus the adapter serving, not by a file check
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** MSEL-04 "no rewrite at load" is shown by an empty session report plus the adapter serving, not by a file check.
+- **Alternatives:** Compare `mcp-adapter.json` bytes.
+- **Why dubious:** Indirect, but scenarios must not read bridge files.
+
+### P2-DC-39: MREC-02 is an `@mcp` listing scenario rather than a call pair
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** MREC-02 is an `@mcp` listing scenario rather than a call pair.
+- **Alternatives:** Call twins.
+- **Why dubious:** A weaker "reaches" claim.
+
+### P2-DC-40: The docs citation check is an inline node one-liner in 02-08's verify, not a committed script
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The docs citation check is an inline node one-liner in 02-08's verify, not a committed script.
+- **Alternatives:** A committed script.
+- **Why dubious:** Hard to read and edit.
+
+### P2-DC-41: COVERAGE.md treats Pi's in-process MCP extension surface as an external API (26-row matrix)
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** COVERAGE.md treats Pi's in-process MCP extension surface as an external API (26-row matrix).
+- **Alternatives:** Declare no external API, as Phase 1 did.
+- **Why dubious:** Treats a host API as external.
+
+### P2-DC-42: The decision-coverage gate is replaced by a manual audit (CONTEXT has no `D-NN` bullets)
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The decision-coverage gate is replaced by a manual audit (CONTEXT has no `D-NN` bullets).
+- **Alternatives:** Reformat CONTEXT.md.
+- **Why dubious:** No machine gate.
+
+### P2-DC-43: 02-08's gate tolerates one known failure: Phase 3's `companion-missing.feature:76` cell reads `not loaded` instead of `status unknown` once the built-in status reader lands
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** 02-08's gate tolerates one known failure: Phase 3's `companion-missing.feature:76` cell reads `not loaded` instead of `status unknown` once the built-in status reader lands.
+- **Alternatives:** The parent applies the one-cell fix first.
+- **Why dubious:** The phase branch gate is not fully green.
+
+### P2-DC-44: The adapter cucumber gate runs in 3 directory groups
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The adapter cucumber gate runs in 3 directory groups.
+- **Alternatives:** Finer splits.
+- **Why dubious:** May exceed the 10-minute cap under load.
+
+### P2-DC-45: Outcome-dependent plan branches: 02-03's bundle-scenario tag, 02-01's description-drop branch, 02-03's probe run in a Then
+
+- **Phase / source:** Phase 2 planning.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Outcome-dependent plan branches: 02-03's bundle-scenario tag, 02-01's description-drop branch, 02-03's probe run in a Then.
+- **Alternatives:** Fix them at planning time.
+- **Why dubious:** Executors decide.
