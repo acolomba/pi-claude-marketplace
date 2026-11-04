@@ -37,12 +37,19 @@
 //     when the call was denied (D-CF5-13).
 //   - a call that pi-mcp-adapter's `mcp` proxy makes in call mode runs no
 //     hook: its nested call fires them under the real tool name (D-CF5-12).
+//   - a tool of Pi's built-in MCP is compared and seen under its server's
+//     registered name, with `-` kept, as Claude Code names it (MHK-01,
+//     D-P5-03).
 //
 // All handlers short-circuit when capturedEpoch != currentEpoch() so a
 // stale closure from a prior load cannot fire against the live routing
 // tables (DISP-03 zombie-defense belt-and-suspenders), and a run whose
 // generation changed while its hooks ran folds to noop.
 
+import {
+  serverPrefixNames,
+  toolLiteralNames,
+} from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyHookNotice } from "../../shared/notification-dispatch.ts";
@@ -65,16 +72,19 @@ import {
   promptBlockedText,
 } from "./hook-labels.ts";
 import { ifFires } from "./if-field/index.ts";
+import { createHookToolView } from "./mcp-tool-view.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
 
 import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { HookBlock } from "./hook-labels.ts";
+import type { HookTool, HookToolView } from "./mcp-tool-view.ts";
 import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
+import type { McpToolIdentity } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import type { ParsedMatcher } from "../../domain/components/hooks.ts";
 import type {
   ExtensionAPI,
@@ -120,22 +130,25 @@ export type HookExecutor = (
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Tool-event matcher-fires predicate. A tool-set matcher fires when Pi's
- * runtime `event.toolName` is in its `toolNames` set -- the Pi tool
- * literals a Claude matcher token maps to, plus the MCP tool names Pi
- * emits verbatim -- or starts with one of its MCP server `toolPrefixes`
- * (ANAME-02). The comparison is exact and case-sensitive. The parser
- * already filters regex/unmapped matchers at parse time so those arms are
- * unreachable at dispatch; defensive `false` keeps the switch exhaustive.
+ * Tool-event matcher-fires predicate. A tool-set matcher fires when one of
+ * its `toolNames` -- the Pi tool literals a Claude matcher token maps to,
+ * plus the MCP tool literals -- names the event's tool, or one of its MCP
+ * server `toolPrefixes` names the tool's server (ANAME-02). For a tool of
+ * Pi's built-in MCP an MCP literal or prefix names the server as it
+ * registered, with `-` kept (D-P5-04); for every other tool the literal is
+ * Pi's name and the prefix starts it (D-P5-05). The comparison is exact and
+ * case-sensitive. The parser already filters regex/unmapped matchers at
+ * parse time so those arms are unreachable at dispatch; defensive `false`
+ * keeps the switch exhaustive.
  */
-function matcherFiresOnToolEvent(matcher: ParsedMatcher, toolName: string): boolean {
+function matcherFiresOnToolEvent(matcher: ParsedMatcher, tool: McpToolIdentity): boolean {
   switch (matcher.kind) {
     case "match-all":
       return true;
     case "tool-set":
       return (
-        matcher.toolNames.has(toolName) ||
-        (matcher.toolPrefixes?.some((prefix) => toolName.startsWith(prefix)) ?? false)
+        [...matcher.toolNames].some((literal) => toolLiteralNames(literal, tool)) ||
+        (matcher.toolPrefixes?.some((prefix) => serverPrefixNames(prefix, tool)) ?? false)
       );
     case "regex":
     case "unmapped":
@@ -204,16 +217,19 @@ function dedupeHooks(entries: readonly RoutingEntry[]): RoutingEntry[] {
 
 // The entries of `bucket` that run for `event`: the matcher and the `if`
 // both fire (MATCH-03 / D-61-02: an `if` that does not match skips the entry,
-// it does not block), then one entry per hook.
+// it does not block), then one entry per hook. A tool event's `if` compares
+// `tool`, the event's tool as the dispatch named it (D-P5-04).
 function matchingHooks(
   bucket: readonly RoutingEntry[],
   event: unknown,
   ctx: ExtensionContext,
   matcherFires: (entry: RoutingEntry) => boolean,
+  tool?: McpToolIdentity,
 ): RoutingEntry[] {
   return dedupeHooks(
     bucket.filter(
-      (entry) => matcherFires(entry) && ifFires(entry.ifPredicate, event, ctx, entry.claudeEvent),
+      (entry) =>
+        matcherFires(entry) && ifFires(entry.ifPredicate, event, ctx, entry.claudeEvent, tool),
     ),
   );
 }
@@ -396,17 +412,19 @@ function foldOutcomes(outcomes: readonly BucketOutcome[]): FoldedBucket {
   return foldMutations(outcomes, context);
 }
 
-// Run the matching hooks of `bucket` for `event` and fold their outcomes.
+// Run the matching hooks of `bucket` for the view's event and fold their
+// outcomes.
 async function runAndFold(
   runtime: HooksRuntime,
   bucket: readonly RoutingEntry[],
-  event: unknown,
+  view: HookEventView,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
   executor: HookExecutor,
   matcherFires: (entry: RoutingEntry) => boolean,
 ): Promise<FoldedBucket> {
-  const hooks = matchingHooks(bucket, event, ctx, matcherFires);
+  const { event } = view;
+  const hooks = matchingHooks(bucket, event, ctx, matcherFires, view.tool);
   const outcomes = await runHooks(runtime, hooks, (entry) =>
     executor(entry, event, ctx, pi, runtime),
   );
@@ -692,6 +710,10 @@ function dropStalePromptContext(runtime: HooksRuntime, event: InputEvent): void 
  * `registerHooksBridge` threads its own optional `executor`
  * into every call here, so a test can register the real bridge against a spy
  * and assert on dispatch without spawning a child (see `HookExecutor`).
+ *
+ * `tools` names a PreToolUse event's tool as the hooks see it (D-P5-01); it
+ * defaults to a view over `pi`'s tool list, which reads nothing until a tool
+ * event's bucket has hooks.
  */
 export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   runtime: HooksRuntime,
@@ -699,6 +721,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   capturedGeneration: number,
   pi?: ExtensionAPI,
   executor: HookExecutor = dispatchHookExec,
+  tools: HookToolView = createHookToolView(pi),
 ): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<CompositeReturnFor<E>> {
   return async (event, ctx) => {
     if (capturedGeneration !== runtime.currentGeneration()) {
@@ -714,17 +737,18 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       return undefined as CompositeReturnFor<E>;
     }
 
-    const folded = await runAndFold(runtime, bucket, event, ctx, pi, executor, (entry) =>
-      entryFires(claudeEvent, entry, event),
+    const view = hookEventView(claudeEvent, event, tools);
+    const folded = await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
+      entryFires(claudeEvent, entry, view),
     );
-    const label = noticeLabel(claudeEvent, event);
+    const label = noticeLabel(claudeEvent, view.event);
     showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
     if (claudeEvent === "PreToolUse") {
       sendToolContext(pi, label, folded.result);
     }
 
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
-    return (await adaptForEvent(claudeEvent, folded, event, context)) as CompositeReturnFor<E>;
+    return (await adaptForEvent(claudeEvent, folded, view.event, context)) as CompositeReturnFor<E>;
   };
 }
 
@@ -739,13 +763,15 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
  * `adaptToolResultResult` (D-60-03).
  *
  * `executor` is the same injected seam `compositeHandlerFor` takes, defaulted
- * and forwarded identically.
+ * and forwarded identically, and so is `tools`, which names the event's tool
+ * as the hooks see it (D-P5-01).
  */
 export function toolResultCompositeHandler(
   runtime: HooksRuntime,
   capturedGeneration: number,
   pi?: ExtensionAPI,
   executor: HookExecutor = dispatchHookExec,
+  tools: HookToolView = createHookToolView(pi),
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
   return async (event, ctx) => {
     if (capturedGeneration !== runtime.currentGeneration()) {
@@ -758,14 +784,15 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const folded = await runAndFold(runtime, bucket, event, ctx, pi, executor, (entry) =>
-      matcherFiresOnToolEvent(entry.matcher, event.toolName),
+    const view = toolEventView(event, tools);
+    const folded = await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
+      matcherFiresOnToolEvent(entry.matcher, view.tool),
     );
-    const label = hookEventLabel(claudeEvent, event.toolName);
+    const label = hookEventLabel(claudeEvent, view.event.toolName);
     showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
     sendToolContext(pi, label, folded.result);
 
-    return adaptToolResultResult(folded.result, event, {
+    return adaptToolResultResult(folded.result, view.event, {
       runtime,
       ctx,
       pi,
@@ -885,23 +912,57 @@ function matchValue(claudeEvent: CompositeDispatchEvent, event: unknown): string
 }
 
 /**
- * Per-event filter dispatch on the event's match value: a PreToolUse matcher
- * compares the tool name, every other matcher the closed-set value.
- * UserPromptSubmit fires unconditionally.
+ * The event the hooks of one dispatch read, and the tool their matchers
+ * compare (D-P5-01, D-P5-03): Pi's event and no tool for an event that names
+ * none; for a tool event, the event as the hooks see it and its tool.
+ */
+interface HookEventView {
+  readonly event: unknown;
+  readonly tool: HookTool | undefined;
+}
+
+/**
+ * D-P5-03: a tool event with its tool named as the hooks see it, once per
+ * event. Pi's event itself when the names agree, else a shallow copy that
+ * shares Pi's `input` and `content`, so an input rewrite still reaches Pi.
+ * Only an `mcp__` name changes, and Pi types such an event as its open-ended
+ * custom tool event, whose `toolName` is any string, so the copy keeps the
+ * event's type.
+ */
+function toolEventView<T extends ToolCallEvent | ToolResultEvent>(
+  event: T,
+  tools: HookToolView,
+): { readonly event: T; readonly tool: HookTool } {
+  const tool = tools.identify(event.toolName);
+  return { event: tool.name === event.toolName ? event : { ...event, toolName: tool.name }, tool };
+}
+
+function hookEventView(
+  claudeEvent: CompositeDispatchEvent,
+  event: unknown,
+  tools: HookToolView,
+): HookEventView {
+  return claudeEvent === "PreToolUse"
+    ? toolEventView(event as ToolCallEvent, tools)
+    : { event, tool: undefined };
+}
+
+/**
+ * Per-event filter dispatch: a PreToolUse matcher compares the event's tool,
+ * every other matcher the closed-set match value. UserPromptSubmit fires
+ * unconditionally.
  */
 function entryFires(
   claudeEvent: CompositeDispatchEvent,
   entry: RoutingEntry,
-  event: unknown,
+  view: HookEventView,
 ): boolean {
-  const value = matchValue(claudeEvent, event);
-  if (value === undefined) {
-    return true;
+  if (view.tool !== undefined) {
+    return matcherFiresOnToolEvent(entry.matcher, view.tool);
   }
 
-  return claudeEvent === "PreToolUse"
-    ? matcherFiresOnToolEvent(entry.matcher, value)
-    : matcherFiresOnClosedSetValue(entry, value);
+  const value = matchValue(claudeEvent, view.event);
+  return value === undefined || matcherFiresOnClosedSetValue(entry, value);
 }
 
 /**

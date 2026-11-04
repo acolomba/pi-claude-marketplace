@@ -816,6 +816,102 @@ for (const declaration of ["mcp__plugin_acme_db", "mcp__plugin_acme_db__*"]) {
   });
 }
 
+for (const { declaration, piName, server, fires } of [
+  {
+    declaration: "mcp__plugin_hook-demo_stub-server__echo",
+    piName: "mcp__plugin_hook_demo_stub_server__echo",
+    server: "plugin_hook-demo_stub-server",
+    fires: true,
+  },
+  {
+    declaration: "mcp__plugin_hook_demo_stub_server__echo",
+    piName: "mcp__plugin_hook_demo_stub_server__echo",
+    server: "plugin_hook-demo_stub-server",
+    fires: false,
+  },
+  {
+    declaration: "mcp__echo-server__echo-text",
+    piName: "mcp__echo_server__echo_text",
+    server: "echo-server",
+    fires: true,
+  },
+  {
+    declaration: "mcp__echo-server__echo_text",
+    piName: "mcp__echo_server__echo_text",
+    server: "echo-server",
+    fires: true,
+  },
+  {
+    declaration: "mcp__plugin_hook-demo_stub-server",
+    piName: "mcp__plugin_hook_demo_stub_server__echo",
+    server: "plugin_hook-demo_stub-server",
+    fires: true,
+  },
+  {
+    declaration: "mcp__plugin_hook-demo_stub-server__*",
+    piName: "mcp__plugin_hook_demo_stub_server__echo",
+    server: "plugin_hook-demo_stub-server",
+    fires: true,
+  },
+  {
+    declaration: "mcp__plugin_hook_demo_stub_server",
+    piName: "mcp__plugin_hook_demo_stub_server__echo",
+    server: "plugin_hook-demo_stub-server",
+    fires: false,
+  },
+  {
+    declaration: "mcp__plugin_hook_demo_stub_server__*",
+    piName: "mcp__plugin_hook_demo_stub_server__echo",
+    server: "plugin_hook-demo_stub-server",
+    fires: false,
+  },
+]) {
+  test(`D-P5-04: ${declaration} fires on the built-in tool ${piName} of ${server}: ${fires}`, () => {
+    // arrange
+    const compileContext = {
+      homedir: "/home/plugin-user",
+      cwd: "/workspace/plugin",
+      projectRoot: "/workspace/plugin",
+    } satisfies CompileIfPredicateContext;
+    const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+    const predicate = compileIfPredicate(declaration, "PreToolUse", compileContext);
+
+    // act
+    const fired = ifFires(
+      predicate,
+      { toolName: piName, input: {} },
+      extensionContext,
+      "PreToolUse",
+      { piName, builtinServer: server },
+    );
+
+    // assert
+    assert.strictEqual(fired, fires);
+  });
+}
+
+test("matches no MCP arm on an event with no tool name when no tool is given", () => {
+  // arrange
+  const compileContext = {
+    homedir: "/home/plugin-user",
+    cwd: "/workspace/plugin",
+    projectRoot: "/workspace/plugin",
+  } satisfies CompileIfPredicateContext;
+  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const predicates = [
+    compileIfPredicate("mcp__files__read", "PreToolUse", compileContext),
+    compileIfPredicate("mcp__files__*", "PreToolUse", compileContext),
+  ];
+
+  // act
+  const fired = predicates.map((predicate) =>
+    ifFires(predicate, { input: {} }, extensionContext, "PreToolUse"),
+  );
+
+  // assert
+  assert.deepStrictEqual(fired, [false, false]);
+});
+
 test("dispatches all seven predicate arms in stable row order", () => {
   // arrange
   const compileContext = {

@@ -10,6 +10,10 @@
  * the tools of a server it has not cached and then disconnects, in the
  * background, so a scenario waits until that listing is over before it
  * prompts.
+ *
+ * The call step scripts the model's call of one of the stub's tools through
+ * whichever MCP implementation the profile runs: pi-mcp-adapter's `mcp` proxy,
+ * or `tool_search` and then the tool itself under Pi's built-in MCP (D-P5-08).
  */
 
 import assert from "node:assert/strict";
@@ -19,8 +23,10 @@ import { setTimeout as pause } from "node:timers/promises";
 
 import { Given } from "@cucumber/cucumber";
 
+import { hookMcpCallScript } from "../../lib/hook-mcp-calls.ts";
 import { MCP_STUB_SERVER, readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
+import { readModelScript, writeModelScript } from "../../lib/scripted-model/script.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -76,5 +82,22 @@ Given(
       );
       await pause(HOOK_STUB_LISTING_RECHECK_MS);
     }
+  },
+);
+
+Given(
+  "the scripted model calls the tool {string} of the hooks' stub mcp server {string} of the plugin {string} through the mcp implementation with {string}, then replies {string}",
+  async function (
+    this: ScenarioWorld,
+    tool: string,
+    server: string,
+    plugin: string,
+    argumentsText: string,
+    reply: string,
+  ) {
+    const steps = hookMcpCallScript(this.mcpProfile, plugin, server, tool, argumentsText, reply);
+    const harness = this.profileHarness();
+    await writeModelScript(harness, steps);
+    assert.deepStrictEqual(await readModelScript(harness), steps);
   },
 );
