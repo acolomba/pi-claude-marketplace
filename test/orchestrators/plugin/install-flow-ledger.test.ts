@@ -170,7 +170,7 @@ for (const orchestrated of [false, true]) {
             : [
                 {
                   message:
-                    'A plugin operation has failed.\n\n● mp [project]\n  ⊘ app (failed) {invalid manifest}\n    cause: Config file "claude-plugins.json" failed schema validation.\n  ● zzz@mp v1.0.0 (installed) {requires pi-mcp-adapter}\n  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}\n    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"\n\n/reload to pick up changes',
+                    'A plugin operation has failed.\n\n● mp [project]\n  ⊘ app (failed) {invalid manifest}\n    cause: Config file "claude-plugins.json" failed schema validation.\n  ● zzz@mp v1.0.0 (installed) {requires mcp}\n  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}\n    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"\n\n/reload to pick up changes',
                   severity: "error",
                 },
                 {
@@ -366,7 +366,7 @@ function retryStagingMkdirPrefix(stagingDir: string): string {
 //   PI-9: 7-phase ordering + rollback on phase-N failure (end-state assertion).
 //   PI-10: ${CLAUDE_PLUGIN_ROOT} substitution observable in staged skill body.
 //   PI-11: subagents warning -- the run reports pi-subagents unloaded -> warning.
-//   PI-12: mcp-adapter warning -- the run reports pi-mcp-adapter unloaded -> warning.
+//   PI-12: MCP warning -- the run reports no MCP implementation -> warning (D-MB-07).
 //   PI-13: dependencies declaration -> manual-install note appended to body.
 //   PI-14: PathContainmentError bypass -- verbatim message, NO rollback partial.
 //   PI-15: concurrent install (state pre-seeded) -> ConcurrentInstallError path
@@ -3203,6 +3203,53 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
 // PI-9 -- 7-phase order + end-state assertion
 // ───────────────────────────────────────────────────────────────────────────
 
+test("D-P3-10 / D-MB-07: the installed row takes its MCP dependency from the declared servers, not the staged ones", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-mcp-dependency-"));
+    try {
+      // arrange: the adapter stages no server, Pi's built-in MCP runs the one
+      // declared, so the row still declares an MCP dependency and, with no
+      // MCP implementation loaded, names Pi's built-in MCP (D-MB-07).
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        mcpServers: { asker: { command: "node", bareElicitationCapability: true } },
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n" +
+            "\n" +
+            "● mp [project]\n" +
+            "  ● hello v1.0.0 (installed) {requires builtin mcp}\n" +
+            "\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PI-9: happy-path install lands skills + commands + agents + mcp + state in order", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi9-"));
@@ -3281,7 +3328,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
             "A plugin operation needs attention.\n" +
             "\n" +
             "● mp [project]\n" +
-            "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
+            "  ● hello v1.0.0 (installed) {requires pi-subagents, requires mcp}\n" +
             "\n" +
             "/reload to pick up changes",
           severity: "warning",
@@ -4264,7 +4311,7 @@ test("AFILE-04: promoting a disabled dependency that re-materializes MCP servers
         version: "0.0.1",
         resourcesChanged: true,
         declaresAgents: false,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
         declaresWorkflows: false,
         promoted: true,
         mcpConfigNotices: [
@@ -4306,7 +4353,7 @@ test("AFILE-04: an orchestrated install returns its MCP config notices and sends
         version: "0.0.1",
         resourcesChanged: true,
         declaresAgents: false,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
         declaresWorkflows: false,
         mcpConfigNotices: [
           { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
@@ -4347,7 +4394,7 @@ test("AFILE-04: an orchestrated install over a comment-free mcp-adapter.json car
         version: "0.0.1",
         resourcesChanged: true,
         declaresAgents: false,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
         declaresWorkflows: false,
       });
       assert.deepStrictEqual(notifications, []);
@@ -5120,7 +5167,7 @@ test("PI-11 / RH-3: staged agents + a run reporting pi-subagents unloaded -> the
 // PI-12 / ADET-02 -- mcp-adapter not loaded warning
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-12 / RH-4: staged mcp + a run reporting pi-mcp-adapter unloaded -> the success row carries the {requires pi-mcp-adapter} marker", async () => {
+test("PI-12 / RH-4 / D-MB-07: a stdio server with no MCP implementation -> the success row carries the {requires mcp} marker", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi12-"));
     try {
@@ -5146,16 +5193,16 @@ test("PI-12 / RH-4: staged mcp + a run reporting pi-mcp-adapter unloaded -> the 
       });
 
       // assert
-      // CMC-13 / MSG-SD-2: per-row soft-dep marker `{requires pi-mcp-adapter}`
-      // fires when (declaresMcp AND !piMcpAdapterLoaded) per D-13-07.
-      // SEV-01: the declared `pi-mcp-adapter` companion is unloaded, so the
-      // success row stamps warning (silent degradation of a clean install).
+      // CMC-13 / MSG-SD-2 / D-MB-07: both implementations run a stdio server,
+      // so with none active the per-row marker is `{requires mcp}`.
+      // SEV-01 / D-P3-09: the marker shows, so the success row stamps warning
+      // (silent degradation of a clean install).
       assert.deepStrictEqual(notifications, [
         {
           message:
             "A plugin operation needs attention.\n\n" +
             "● mp [project]\n" +
-            "  ● hello v0.0.1 (installed) {requires pi-mcp-adapter}\n\n" +
+            "  ● hello v0.0.1 (installed) {requires mcp}\n\n" +
             "/reload to pick up changes",
           severity: "warning",
         },
@@ -14703,6 +14750,7 @@ test("install forwards explicit map-model and version-pin entrypoint options", a
           .plain,
         {
           compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+          compatibilityBasis: "neutral",
           enabled: true,
           provenance: "explicit",
           installedAt: (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp
@@ -15487,7 +15535,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       assertRetryFailure(first, readFailure);
       assert.deepStrictEqual(second, {
         declaresAgents: true,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
         declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
@@ -17960,6 +18008,7 @@ test("WLIF-01: a re-stage over a kept record displaces the plugin's own envelope
         marketplace: "mp",
         plugin: "hello",
         scope: "project",
+        consentView: "none",
         removalOps: createRemovalOps(),
         env: {},
         allowExistingRecord: true,
@@ -18032,6 +18081,7 @@ test("WLIF-05: the projection reports the placed names in discovery order, stabl
         marketplace: "mp",
         plugin: "hello",
         scope: "project",
+        consentView: "none",
         removalOps: createRemovalOps(),
         env: {},
         allowExistingRecord: true,
@@ -18099,6 +18149,7 @@ test("WLIF-05: a refused re-stage places nothing and leaves the foreign envelope
           marketplace: "mp",
           plugin: "hello",
           scope: "project",
+          consentView: "none",
           removalOps: createRemovalOps(),
           env: {},
           allowExistingRecord: true,
@@ -18147,6 +18198,7 @@ test("WLIF-01: a statePhase failure takes the envelope and the staging tree back
           marketplace: "mp",
           plugin: "hello",
           scope: "project",
+          consentView: "none",
           removalOps: createRemovalOps(),
           env: {},
         }),
@@ -18361,6 +18413,7 @@ test("WLIF-03: an undo that cannot remove a placed envelope raises the typed fai
             cwd,
             marketplace: "mp",
             plugin: "hello",
+            consentView: "none",
             removalOps: createRemovalOps(),
             env: {},
             scope: "project",
@@ -18422,6 +18475,7 @@ test("T-112-01: an envelope this install did not place survives the undo byte-un
           marketplace: "mp",
           plugin: "hello",
           scope: "project",
+          consentView: "none",
           removalOps: createRemovalOps(),
           env: {},
         }),
@@ -18490,6 +18544,7 @@ test("WLIF-03: an unremovable envelope does not abort the rest of the removal", 
             cwd,
             marketplace: "mp",
             plugin: "hello",
+            consentView: "none",
             removalOps: createRemovalOps(),
             env: {},
             scope: "project",

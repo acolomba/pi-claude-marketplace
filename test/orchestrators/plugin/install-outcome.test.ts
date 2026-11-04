@@ -49,6 +49,7 @@ import { createHermeticEnvironment } from "../../platform/hermetic-environment.t
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
+import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   InstallFailureCapture,
@@ -269,6 +270,7 @@ test("returns the marketplace-absent discriminant without mutating state", async
     marketplace: "missing",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -293,6 +295,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
     pinVersionOverride: "pinned-by-caller",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -359,6 +362,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
     ],
     resolved: {
       ...ledgerOutcome.summary.resolved,
+      declaredMcpServers: { server: { command: "node" } },
       orphanRewake: true,
       state: "partially-available" as const,
       unsupported: ["hooks"],
@@ -375,7 +379,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
   });
   assert.deepStrictEqual(installedPluginOutcome(richSummary, ["warning"], true), {
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
     declaresWorkflows: true,
     degradedKinds: ["skill", "command"],
     landedDisabled: true,
@@ -441,6 +445,7 @@ test("captures the resolved version when a concurrent record aborts state commit
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     },
@@ -490,6 +495,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     },
@@ -520,6 +526,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -528,6 +535,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
   assert.equal(ledgerOutcome.kind, "installed");
   assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins.empty, {
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    compatibilityBasis: "neutral",
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -561,6 +569,7 @@ test("LOAD-02: re-materializing a held-down record drops the dependency marker",
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -638,6 +647,7 @@ async function installWithFaultedStagingCleanup(
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: removal.removalOps,
     env: {},
   });
@@ -720,6 +730,7 @@ test("surfaces the workflows staging cleanup leak and still lands the install", 
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -804,6 +815,7 @@ test("a failed workflows removal during rollback surfaces as its own partial rat
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     },
@@ -966,6 +978,7 @@ function skillsLedgerOptions(cwd: string): InstallLedgerOptions {
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   };
@@ -1235,6 +1248,7 @@ test("throws already-installed when a target-scope record exists and the caller 
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -1272,6 +1286,7 @@ test("throws not-in-manifest for a plugin the cached manifest does not carry", a
     marketplace: "marketplace",
     plugin: "ghost",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -1312,6 +1327,7 @@ function projectInstallOptions(cwd: string): InstallLedgerOptions {
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   };
@@ -1685,6 +1701,7 @@ test("flags binaries as unsupported when the marketplace is an official one", as
     marketplace: "claude-plugins-official",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     partial: true,
@@ -1717,6 +1734,7 @@ test("--partial admits the partially-available arm the default gate refuses", as
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project" as const,
+    consentView: "none" as const,
     removalOps: createRemovalOps(),
     env: {},
   };
@@ -1764,6 +1782,7 @@ test("collects the per-source frontmatter degrade records from the skills and co
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -1822,6 +1841,7 @@ test("AS-7: a retired foreign agent target is preserved while a distinct agent i
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -1864,6 +1884,7 @@ test("writes the hooks config and records the plugin's hooks slug on the state r
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -1913,6 +1934,7 @@ test("an mcp phase that cannot even prepare unwinds the hooks config the phase b
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     },
@@ -1967,6 +1989,7 @@ test("a hooks.json that turns malformed after resolution unwinds the ledger", as
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps,
       env: {},
     },
@@ -2027,6 +2050,7 @@ async function assertFailingPhaseUndoIsInert(
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     },
@@ -2097,6 +2121,7 @@ test("stages the declared mcp servers and records their generated names", async 
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2134,6 +2159,7 @@ test("MREC-01 / D-MB-04: records every declared server in its Claude form and le
     partial: true,
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: { MREC_TOKEN: "secret-value" },
   });
@@ -2156,7 +2182,7 @@ test("MREC-01 / D-MB-04: records every declared server in its Claude form and le
         { name: "live", config: declaredServers.live },
       ],
       mcpBundle: undefined,
-      compatibilityBasis: undefined,
+      compatibilityBasis: "neutral",
       stagedMcpServerNames: ["local"],
       resolvedDeclared: declaredServers,
       resolvedSupported: { local: declaredServers.local },
@@ -2178,6 +2204,7 @@ test("MREC-01: the recorded configs are copies that a later change to the resolv
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2210,6 +2237,7 @@ test("MREC-01: a bundle reference records the bundle flag beside no recorded ser
     partial: true,
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2227,9 +2255,164 @@ test("MREC-01: a bundle reference records the bundle flag beside no recorded ser
     {
       mcpServerConfigs: [],
       mcpBundle: true,
-      compatibilityBasis: undefined,
+      compatibilityBasis: "neutral",
       unsupported: ["mcpServers"],
     },
+  );
+});
+
+const SSE_SERVERS = { events: { type: "sse", url: "http://127.0.0.1:9/sse" } };
+const ELICITATION_SERVERS = { asker: { command: "node", bareElicitationCapability: true } };
+const WS_SERVERS = { live: { type: "ws", url: "wss://mcp.example.com/ws" } };
+
+/** A run whose snapshot names `active` as the MCP implementation Pi runs. */
+function runUnder(active: ActiveMcpImplementation): NotificationRun {
+  return runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+    mcpImplementation: active,
+    workflowEngineLoaded: false,
+  });
+}
+
+/** Installs a plugin declaring `servers`, gated on `consentView`, in a fresh environment. */
+async function installGatedOn(
+  t: TestContext,
+  servers: Record<string, unknown>,
+  consentView: ActiveMcpImplementation,
+  extra: { readonly partial?: true; readonly run: NotificationRun },
+): Promise<{
+  readonly state: ExtensionState;
+  readonly outcome: Promise<Awaited<ReturnType<typeof runInstallLedger>>>;
+}> {
+  const environment = await createHermeticEnvironment(t, "install-outcome-consent-");
+  const seeded = await seedPlugin(environment.cwd, { mcpServers: servers });
+  const locations = locationsFor("project", environment.cwd);
+  const outcome = runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: extra.run,
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    consentView,
+    ...(extra.partial === true && { partial: true }),
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+  return { state: seeded.state, outcome };
+}
+
+for (const { label, servers, consentView } of [
+  { label: "an sse server", servers: SSE_SERVERS, consentView: "builtin" },
+  { label: "a bare-elicitation server", servers: ELICITATION_SERVERS, consentView: "adapter" },
+  { label: "a ws server", servers: WS_SERVERS, consentView: "none" },
+] as const) {
+  test(`MREC-06 / D-P3-11: the ${consentView} view asks for --partial for ${label} and records nothing`, async (t) => {
+    // arrange
+    const { state, outcome } = await installGatedOn(t, servers, consentView, {
+      run: runUnder(consentView),
+    });
+
+    // act & assert
+    await assert.rejects(outcome, (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError);
+      assert.deepStrictEqual(error.shape, {
+        kind: "not-installable",
+        plugin: "empty",
+        reasons: [],
+        partialable: true,
+        unsupportedKinds: ["mcpServers"],
+      });
+      return true;
+    });
+    assert.deepStrictEqual(state.marketplaces.marketplace?.plugins, {});
+  });
+}
+
+for (const { label, servers, consentView } of [
+  { label: "an sse server", servers: SSE_SERVERS, consentView: "adapter" },
+  { label: "an sse server", servers: SSE_SERVERS, consentView: "none" },
+  { label: "a bare-elicitation server", servers: ELICITATION_SERVERS, consentView: "builtin" },
+  { label: "a bare-elicitation server", servers: ELICITATION_SERVERS, consentView: "none" },
+] as const) {
+  test(`MREC-06 / D-MB-05: the ${consentView} view installs ${label} without --partial`, async (t) => {
+    // arrange
+    const { state, outcome } = await installGatedOn(t, servers, consentView, {
+      run: runUnder(consentView),
+    });
+
+    // act
+    const ledgerOutcome = await outcome;
+
+    // assert
+    assert.ok(ledgerOutcome.kind === "installed");
+    const record = state.marketplaces.marketplace?.plugins.empty;
+    assert.deepStrictEqual(
+      {
+        installable: record?.compatibility.installable,
+        unsupported: record?.compatibility.unsupported,
+        summaryState: ledgerOutcome.summary.resolved.state,
+        summaryUnsupported: ledgerOutcome.summary.resolved.unsupported,
+      },
+      { installable: true, unsupported: [], summaryState: "installable", summaryUnsupported: [] },
+    );
+  });
+}
+
+test("MREC-03 / D-P3-02: an sse install with --partial under Pi's built-in MCP records the neutral verdict and reads the built-in view", async (t) => {
+  // arrange
+  const { state, outcome } = await installGatedOn(t, SSE_SERVERS, "builtin", {
+    partial: true,
+    run: runUnder("builtin"),
+  });
+
+  // act
+  const ledgerOutcome = await outcome;
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  const record = state.marketplaces.marketplace?.plugins.empty;
+  assert.deepStrictEqual(
+    {
+      compatibilityBasis: record?.compatibilityBasis,
+      installable: record?.compatibility.installable,
+      unsupported: record?.compatibility.unsupported,
+      summaryState: ledgerOutcome.summary.resolved.state,
+      summaryUnsupported: ledgerOutcome.summary.resolved.unsupported,
+      summaryDropped: ledgerOutcome.summary.resolved.droppedMcpServers,
+      stagedMcpServerNames: ledgerOutcome.summary.stagedMcpServerNames,
+    },
+    {
+      compatibilityBasis: "neutral",
+      installable: true,
+      unsupported: [],
+      summaryState: "partially-available",
+      summaryUnsupported: ["mcpServers"],
+      summaryDropped: [{ server: "events", feature: "sse" }],
+      stagedMcpServerNames: ["events"],
+    },
+  );
+});
+
+test("D-P3-13: a re-materialization gated on the none view installs an sse server under Pi's built-in MCP and reads the built-in view", async (t) => {
+  // arrange
+  const { state, outcome } = await installGatedOn(t, SSE_SERVERS, "none", {
+    run: runUnder("builtin"),
+  });
+
+  // act
+  const ledgerOutcome = await outcome;
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(
+    {
+      installable: state.marketplaces.marketplace?.plugins.empty?.compatibility.installable,
+      summaryState: ledgerOutcome.summary.resolved.state,
+      summaryUnsupported: ledgerOutcome.summary.resolved.unsupported,
+    },
+    { installable: true, summaryState: "partially-available", summaryUnsupported: ["mcpServers"] },
   );
 });
 
@@ -2269,6 +2452,7 @@ test("ANAME-02: an agent's Claude-form MCP tool name installs as a pi-subagents 
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2304,6 +2488,7 @@ test("ANAME-02: a server left out by a partial install is not granted to the plu
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     partial: true,
@@ -2342,6 +2527,7 @@ async function installGrantedAgent(t: TestContext, prefix: string, run: Notifica
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: run.softDeps.mcpImplementation,
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2432,6 +2618,7 @@ test("D-PL1-03: an agents duplicate joins the discovery warnings and a conversio
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2466,6 +2653,7 @@ test("D-CF1-06: a commands folder the manifest's declared path leaves unread joi
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2505,6 +2693,7 @@ test("stages the workflow and skips a command of the same name with a discovery 
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2560,6 +2749,7 @@ test("D-PL1-13: an mcp phase failure captures the warnings the agents phase coll
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     },
@@ -2600,6 +2790,7 @@ test("D-PL1-13: an mcp phase failure with no collected warnings captures none", 
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     },
@@ -2629,6 +2820,7 @@ test("AFILE-04: staging over a commented mcp-adapter.json reports the comments-d
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2670,6 +2862,7 @@ test("AFILE-04: a later-phase failure restores the commented mcp-adapter.json by
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     },
@@ -2715,6 +2908,7 @@ test("AMIG-02: a plugin with a commented legacy entry installs, and its MCP noti
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2757,6 +2951,7 @@ test("AMIG-02: a later-phase failure restores mcp.json and mcp-adapter.json byte
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     },
@@ -2824,6 +3019,7 @@ test("AFILE-04 / NFR-3: an mcp restore that cannot write is reported as the mcp 
           marketplace: "marketplace",
           plugin: "empty",
           scope: "project",
+          consentView: "none",
           removalOps: createRemovalOps(),
           env: {},
         },
@@ -2863,6 +3059,7 @@ test("AFILE-02: a plugin with no MCP servers installs over an unparseable mcp-ad
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
   });
@@ -2899,6 +3096,7 @@ test("AFILE-02: a plugin with MCP servers refuses an unparseable mcp-adapter.jso
         marketplace: "marketplace",
         plugin: "empty",
         scope: "project",
+        consentView: "none",
         removalOps: createRemovalOps(),
         env: {},
       },
@@ -2937,6 +3135,7 @@ test("ANAME-03: an install whose two servers share one key refuses before any wr
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     }),
@@ -2980,6 +3179,7 @@ test("PURL-09 / VER-01 / D-77-02: a git-source install takes its root from the c
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     // The ledger injects THIS policy into the resolver, which stays
@@ -3032,6 +3232,7 @@ test("GV-01: a git-source install that declares no version records its 12-hex co
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     cloneProbe: () =>
@@ -3066,6 +3267,7 @@ test("RESV-03: a source pin override materializes the pinned commit, not the ent
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     sourcePinOverride: RESOLVED_SHA,
@@ -3126,6 +3328,7 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     authMemo,
@@ -3177,6 +3380,7 @@ test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the 
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     sourcePinOverride: RESOLVED_SHA,
@@ -3233,6 +3437,7 @@ test("an unpinned path-source install threads neither pathPluginPin nor resolveP
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     pathPinProbe: () =>
@@ -3272,6 +3477,7 @@ test("D-07-06: with no pathPinProbe override, a pinned path-source install falls
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     sourcePinOverride: tagOid,
@@ -3306,6 +3512,7 @@ test("D-07-06: a pinned path-source install whose callback does not materialize 
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     sourcePinOverride: RESOLVED_SHA,
@@ -3578,6 +3785,7 @@ test("D-PL9-05: runs the packages phase after the workflows phase and before the
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      consentView: "none",
       removalOps: createRemovalOps(),
       env: {},
     },
@@ -3706,3 +3914,87 @@ test("D-PL9-05: a state phase failure removes the node_modules the packages phas
     "package.json",
   ]);
 });
+
+/**
+ * D-P3-10: a ledger summary that staged the adapter's subset of the declared
+ * servers, so a producer reading the staged count instead of the declaration
+ * gives a different answer.
+ */
+function summaryDeclaring(
+  declaredMcpServers: Record<string, Record<string, unknown>>,
+  stagedMcpServerNames: readonly string[],
+): InstallLedgerSummary {
+  const cwd = path.join(path.sep, "work");
+  const locations = locationsFor("project", cwd);
+  return {
+    agentForeignFailures: [],
+    bridgeWarnings: [],
+    cwd,
+    discoveryWarnings: [],
+    frontmatterDegradations: [],
+    locations,
+    marketplace: "marketplace",
+    mcpConfigNotices: [],
+    plugin: "servers",
+    pluginDataDir: path.join(locations.dataRoot, "marketplace", "servers"),
+    resolved: {
+      componentPaths: { agents: [], commands: [], skills: [], workflows: [] },
+      declaredMcpServers,
+      defaultEnabled: true,
+      installable: true,
+      mcpServers: {},
+      name: "servers",
+      notes: [],
+      pluginRoot: path.join(cwd, "servers"),
+      state: "installable",
+      supported: [],
+      unsupported: [],
+    },
+    stagedAgentNames: [],
+    stagedCommandNames: [],
+    stagedMcpServerNames: [...stagedMcpServerNames],
+    stagedSkillNames: [],
+    stagedWorkflowNames: [],
+    version: "1.0.0",
+  };
+}
+
+for (const { title, declaredMcpServers, staged, runEvery } of [
+  {
+    title:
+      "D-P3-10 / D-MB-07: an install declaring an sse and a bare-elicitation server carries an empty runEvery",
+    declaredMcpServers: {
+      events: { type: "sse", url: "https://mcp.example.com/sse" },
+      asker: { command: "node", bareElicitationCapability: true },
+    },
+    staged: ["events"],
+    runEvery: [],
+  },
+  {
+    title: "D-P3-10 / D-MB-07: an install declaring a stdio server carries both implementations",
+    declaredMcpServers: { tool: { command: "node" } },
+    staged: ["tool"],
+    runEvery: ["adapter", "builtin"],
+  },
+  {
+    title:
+      "D-P3-10 / D-MB-07: an install whose only server the adapter blocks still carries Pi's built-in MCP",
+    declaredMcpServers: { asker: { command: "node", bareElicitationCapability: true } },
+    staged: [],
+    runEvery: ["builtin"],
+  },
+] as const) {
+  test(title, () => {
+    // arrange
+    const summary = summaryDeclaring(declaredMcpServers, staged);
+
+    // act
+    const outcome = installedPluginOutcome(summary, [], false);
+
+    // assert
+    assert.deepStrictEqual(outcome.status === "installed" && outcome.declaresMcp, {
+      kind: "mcp",
+      runEvery,
+    });
+  });
+}

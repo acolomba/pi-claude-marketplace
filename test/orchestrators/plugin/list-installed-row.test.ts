@@ -69,6 +69,8 @@ async function installedEnvironment(testContext: TestContext): Promise<{
   readonly marketplaceRoot: string;
   readonly marketplaceName: string;
   readonly marketplaceSource: unknown;
+  readonly manifestPath: string;
+  readonly mcpImplementation: "adapter";
 }> {
   const environment = await createHermeticEnvironment(testContext, "list-installed-row-");
   const marketplaceRoot = path.join(environment.cwd, "marketplace");
@@ -78,6 +80,8 @@ async function installedEnvironment(testContext: TestContext): Promise<{
     marketplaceRoot,
     marketplaceName: "third-party",
     marketplaceSource: undefined,
+    manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    mcpImplementation: "adapter",
   };
 }
 
@@ -111,7 +115,7 @@ test("composes a same-scope installed row with exact dependencies and descriptio
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "alpha",
-    dependencies: ["agents", "mcp", "workflows"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }, "workflows"],
     version: "1.0.0",
     description: "Alpha plugin.",
     severity: "info",
@@ -693,5 +697,349 @@ test("a git plugin with no mirror falls back to the entry version and lists as u
     name: "cold-plugin",
     reasons: [],
     version: "1.0.0",
+  });
+});
+
+const EVENTS = { type: "sse", url: "https://mcp.example.com/sse" };
+
+/** D-P3-02: a record an install stored with the neutral verdict and its one sse server. */
+function neutralSseRecord(overrides: PluginRecordOverrides = {}): PluginInstallRecord {
+  return {
+    ...pluginRecord({
+      resources: {
+        agents: [],
+        hooks: [],
+        mcpServers: ["events"],
+        prompts: [],
+        skills: [],
+        workflows: [],
+      },
+      ...overrides,
+    }),
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [{ name: "events", config: EVENTS }],
+  };
+}
+
+test("MREC-03: lists a neutral sse record as installed under pi-mcp-adapter", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record: neutralSseRecord(),
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "alpha",
+    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("MREC-03 / D-P3-05: lists the same record as partially installed under Pi's built-in MCP", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    mcpImplementation: "builtin",
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record: neutralSseRecord(),
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "partially-installed",
+    name: "alpha",
+    reasons: ["unsupported mcp"],
+    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+  });
+});
+
+test("MREC-03: lists a disabled sse record as disabled under Pi's built-in MCP", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    mcpImplementation: "builtin",
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record: neutralSseRecord({ enabled: false }),
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "disabled",
+    name: "alpha",
+    version: "1.0.0",
+    description: "Alpha plugin.",
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+for (const { mcpImplementation, expectedRow } of [
+  {
+    mcpImplementation: "adapter",
+    expectedRow: {
+      status: "upgradable",
+      name: "alpha",
+      reasons: [],
+      version: "1.0.0",
+      description: "Alpha plugin.",
+    },
+  },
+  {
+    mcpImplementation: "builtin",
+    expectedRow: {
+      status: "partially-upgradable",
+      name: "alpha",
+      reasons: ["unsupported mcp"],
+      version: "1.0.0",
+      description: "Alpha plugin.",
+    },
+  },
+] as const) {
+  test(`D-P3-03: a newer candidate with an sse server lists as ${expectedRow.status} under ${mcpImplementation}`, async (testContext) => {
+    // arrange
+    const composeInstalledListRow = await loadComposeInstalledListRow();
+    const environment = await installedEnvironment(testContext);
+    const pluginRoot = path.join(environment.marketplaceRoot, "alpha");
+    await mkdir(pluginRoot, { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: { events: EVENTS } }),
+    );
+
+    // act
+    const row = await composeInstalledListRow({
+      ...environment,
+      mcpImplementation,
+      pluginName: "alpha",
+      pluginScope: "user",
+      marketplaceScope: "user",
+      record: pluginRecord(),
+      lookup: { kind: "declared", entry: manifestEntry({ version: "2.0.0" }) },
+    });
+
+    // assert
+    assert.deepStrictEqual(row, expectedRow);
+  });
+}
+
+test("D-P3-10: an installed row over a record whose staged server is a ws server carries no MCP dependency", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord({
+      resources: {
+        agents: [],
+        hooks: [],
+        mcpServers: ["live"],
+        prompts: [],
+        skills: [],
+        workflows: [],
+      },
+    }),
+    mcpServerConfigs: [{ name: "live", config: { type: "ws", url: "wss://mcp.example.com/ws" } }],
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record,
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "alpha",
+    dependencies: [],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("D-P3-10 / D-MB-07: an installed row under Pi's built-in MCP carries the server the adapter did not stage", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord(),
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [
+      { name: "asker", config: { command: "node", bareElicitationCapability: true } },
+    ],
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    mcpImplementation: "builtin",
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record,
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "alpha",
+    dependencies: [{ kind: "mcp", runEvery: ["builtin"] }],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("D-P3-07 / D-MB-07: a partially-installed row under pi-mcp-adapter carries the server only Pi's built-in MCP runs", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord(),
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [
+      { name: "asker", config: { command: "node", bareElicitationCapability: true } },
+    ],
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record,
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "partially-installed",
+    name: "alpha",
+    reasons: ["unsupported mcp"],
+    dependencies: [{ kind: "mcp", runEvery: ["builtin"] }],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+  });
+});
+
+test("MREC-07: a partially-installed row over a ws server neither implementation runs carries no dependency", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord({
+      compatibility: {
+        installable: false,
+        notes: ["unsupported mcpServers"],
+        supported: [],
+        unsupported: ["mcpServers"],
+      },
+    }),
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [{ name: "live", config: { type: "ws", url: "ws://127.0.0.1:9/" } }],
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    mcpImplementation: "builtin",
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record,
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "partially-installed",
+    name: "alpha",
+    reasons: ["unsupported mcp"],
+    version: "1.0.0",
+    description: "Alpha plugin.",
+  });
+});
+
+test("D-P3-07: a partially-installed row carries only its MCP dependency, never agents or workflows", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord({
+      compatibility: {
+        installable: false,
+        notes: ["unsupported lspServers"],
+        supported: [],
+        unsupported: ["lspServers"],
+      },
+      resources: {
+        agents: ["bot"],
+        hooks: [],
+        mcpServers: ["tools"],
+        prompts: [],
+        skills: [],
+        workflows: ["flow"],
+      },
+    }),
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [{ name: "tools", config: { command: "node" } }],
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    mcpImplementation: "none",
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record,
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "partially-installed",
+    name: "alpha",
+    reasons: ["lsp"],
+    dependencies: [{ kind: "mcp", runEvery: ["adapter", "builtin"] }],
+    version: "1.0.0",
+    description: "Alpha plugin.",
   });
 });

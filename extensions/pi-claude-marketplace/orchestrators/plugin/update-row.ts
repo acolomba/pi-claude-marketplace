@@ -28,7 +28,7 @@ import {
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { Dependency, McpDependency } from "../../shared/concerns/soft-dep.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   PluginUpdateSkippedOutcome,
@@ -268,7 +268,8 @@ export function withCommits(commits: VersionCommits | undefined): {
 }
 
 /**
- * Derive the v2 Dependency[] tuple from the outcome's declared kinds. File-
+ * Derive the v2 Dependency[] tuple from the outcome's declared kinds; the MCP
+ * entry is the outcome's `McpDependency` (D-P3-10). File-
  * private: both row forms take it from the one composer above, so no caller can
  * hand-derive a third spelling of the same tuple (IN-05).
  *
@@ -277,12 +278,12 @@ export function withCommits(commits: VersionCommits | undefined): {
  */
 function outcomeDependencies(
   declaresAgents: boolean,
-  declaresMcp: boolean,
+  declaresMcp: McpDependency | false,
   declaresWorkflows: boolean,
 ): readonly Dependency[] {
   return [
     ...(declaresAgents ? (["agents"] as const) : []),
-    ...(declaresMcp ? (["mcp"] as const) : []),
+    ...(declaresMcp === false ? [] : [declaresMcp]),
     ...(declaresWorkflows ? (["workflows"] as const) : []),
   ];
 }

@@ -28,8 +28,12 @@ type ComposeCandidateListRow = (
   declaredEnabled: boolean | undefined,
 ) => Promise<CandidateRow>;
 
+// The cases below are about one implementation's rows; the MREC-03 cases
+// at the end name each implementation themselves.
 function loadComposeCandidateListRow(): Promise<ComposeCandidateListRow> {
-  return Promise.resolve(availableRowMessage);
+  return Promise.resolve((manifestEntry, marketplaceContext, locations, declaredEnabled) =>
+    availableRowMessage(manifestEntry, marketplaceContext, locations, declaredEnabled, "adapter"),
+  );
 }
 
 async function candidateEnvironment(testContext: TestContext): Promise<{
@@ -510,5 +514,133 @@ test("flags binaries as unsupported for an official marketplace name", async (te
   assert.deepStrictEqual(row, {
     message: { status: "partially-available", name: "alpha", reasons: ["unsupported component"] },
     bucket: "partially-available",
+  });
+});
+
+const MARKETPLACE_NAME = "third-party";
+
+/** A path plugin `alpha` whose `.mcp.json` declares one server. */
+async function mcpCandidate(
+  marketplaceRoot: string,
+  server: unknown,
+): Promise<ManifestPluginEntry> {
+  const pluginRoot = path.join(marketplaceRoot, "alpha");
+  await mkdir(pluginRoot, { recursive: true });
+  await writeFile(path.join(pluginRoot, ".mcp.json"), JSON.stringify({ mcpServers: { server } }));
+  return { name: "alpha", source: "./alpha", version: "1.0.0" };
+}
+
+const AVAILABLE_ALPHA: CandidateRow = {
+  message: { status: "available", name: "alpha", version: "1.0.0" },
+  bucket: "available",
+};
+
+const PARTIAL_ALPHA: CandidateRow = {
+  message: {
+    status: "partially-available",
+    name: "alpha",
+    version: "1.0.0",
+    reasons: ["unsupported mcp"],
+  },
+  bucket: "partially-available",
+};
+
+for (const { mcpImplementation, server, expectedRow } of [
+  {
+    mcpImplementation: "adapter",
+    server: { type: "sse", url: "https://mcp.example.com/sse" },
+    expectedRow: AVAILABLE_ALPHA,
+  },
+  {
+    mcpImplementation: "none",
+    server: { type: "sse", url: "https://mcp.example.com/sse" },
+    expectedRow: AVAILABLE_ALPHA,
+  },
+  {
+    mcpImplementation: "builtin",
+    server: { type: "sse", url: "https://mcp.example.com/sse" },
+    expectedRow: PARTIAL_ALPHA,
+  },
+  {
+    mcpImplementation: "adapter",
+    server: { command: "node", bareElicitationCapability: true },
+    expectedRow: PARTIAL_ALPHA,
+  },
+  {
+    mcpImplementation: "builtin",
+    server: { command: "node", bareElicitationCapability: true },
+    expectedRow: AVAILABLE_ALPHA,
+  },
+] as const) {
+  test(`MREC-03: a candidate whose server is ${JSON.stringify(server)} lists as ${expectedRow.message.status} under ${mcpImplementation}`, async (testContext) => {
+    // arrange
+    const environment = await candidateEnvironment(testContext);
+    const entry = await mcpCandidate(environment.marketplaceRoot, server);
+
+    // act
+    const row = await availableRowMessage(
+      entry,
+      {
+        marketplaceRoot: environment.marketplaceRoot,
+        marketplaceName: MARKETPLACE_NAME,
+        marketplaceSource: undefined,
+      },
+      environment.locations,
+      undefined,
+      mcpImplementation,
+    );
+
+    // assert
+    assert.deepStrictEqual(row, expectedRow);
+  });
+}
+
+test("MREC-03: a cold git candidate stays remote under Pi's built-in MCP", async (testContext) => {
+  // arrange
+  const environment = await candidateEnvironment(testContext);
+  const entry: ManifestPluginEntry = { name: "cold-plugin", source: "https://example.com/cold" };
+
+  // act
+  const row = await availableRowMessage(
+    entry,
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
+    environment.locations,
+    undefined,
+    "builtin",
+  );
+
+  // assert
+  assert.deepStrictEqual(row, {
+    message: { status: "remote", name: "cold-plugin" },
+    bucket: "remote",
+  });
+});
+
+test("MREC-03: a probe failure stays unavailable under Pi's built-in MCP", async (testContext) => {
+  // arrange
+  const environment = await candidateEnvironment(testContext);
+  const entry: ManifestPluginEntry = { name: "bad/name", source: "./bad" };
+
+  // act
+  const row = await availableRowMessage(
+    entry,
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
+    environment.locations,
+    undefined,
+    "builtin",
+  );
+
+  // assert
+  assert.deepStrictEqual(row, {
+    message: { status: "unavailable", name: "bad/name", reasons: ["unreadable"] },
+    bucket: "unavailable",
   });
 });

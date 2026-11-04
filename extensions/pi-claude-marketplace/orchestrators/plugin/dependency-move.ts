@@ -29,6 +29,7 @@ import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absol
 
 import { plannedRangeVersion } from "./dependency-plan.ts";
 import { materializeLatestVersion } from "./materialize-latest.ts";
+import { recordDegradeBaselineReader } from "./mcp-verdict-read.ts";
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
 import { updatedRowFromOutcome } from "./update-row.ts";
 import { assertUpdateNamesFree } from "./update-swap.ts";
@@ -163,6 +164,11 @@ function moveArgs(
     completionCache: context.completionCache,
     env: context.env,
     cascade: true,
+    // D-P3-11: a move asks against the implementation of the operation's run,
+    // and only for a kind its record does not drop under that implementation,
+    // so a cascade never asks because of a switch (D-MB-06, D-P3-13).
+    mcpImplementation: context.softDeps.mcpImplementation,
+    readRecordDegradeBaseline: recordDegradeBaselineReader(context.softDeps.mcpImplementation),
     cleanupClones: context.cleanupClones,
     cloneCandidates: context.cloneCandidates,
     constraintTagMemo: context.constraintTagMemo,

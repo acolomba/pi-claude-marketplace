@@ -162,7 +162,7 @@ test("reinstalledRowFromOutcome projects an MCP-only dependency", () => {
     stagedAgentNames: [],
     stagedMcpServerNames: ["docs"],
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
   };
 
@@ -173,7 +173,7 @@ test("reinstalledRowFromOutcome projects an MCP-only dependency", () => {
   assert.deepStrictEqual(row, {
     status: "reinstalled",
     name: "mcp-only",
-    dependencies: ["mcp"],
+    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
     version: "1.0.0",
     severity: "info",
     needsReload: true,
@@ -193,7 +193,7 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
     stagedAgentNames: ["reviewer"],
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: false,
   };
 
@@ -204,7 +204,7 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
   assert.deepStrictEqual(row, {
     status: "reinstalled",
     name: "both",
-    dependencies: ["agents", "mcp"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
     version: "1.0.0",
     severity: "info",
     needsReload: true,
@@ -224,7 +224,7 @@ test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", 
     stagedAgentNames: ["reviewer"],
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
     declaresWorkflows: true,
   };
 
@@ -235,7 +235,7 @@ test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", 
   assert.deepStrictEqual(row, {
     status: "reinstalled",
     name: "all-three",
-    dependencies: ["agents", "mcp", "workflows"],
+    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }, "workflows"],
     version: "1.0.0",
     severity: "info",
     needsReload: true,
@@ -256,8 +256,12 @@ for (const { companion, declares, dependency, loaded } of [
   },
   {
     companion: "pi-mcp-adapter",
-    declares: { declaresAgents: false, declaresMcp: true, declaresWorkflows: false },
-    dependency: "mcp",
+    declares: {
+      declaresAgents: false,
+      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
+      declaresWorkflows: false,
+    },
+    dependency: { kind: "mcp", runEvery: ["adapter"] },
     loaded: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
@@ -539,7 +543,7 @@ test("SEV-01: the reinstall cascade reports an unloaded declared companion as ne
       stagedAgentNames: ["reviewer"],
       stagedMcpServerNames: ["docs"],
       declaresAgents: true,
-      declaresMcp: true,
+      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
       declaresWorkflows: false,
     },
   ];
@@ -1108,7 +1112,7 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
       stagedAgentNames: ["reviewer"],
       stagedMcpServerNames: ["docs"],
       declaresAgents: true,
-      declaresMcp: true,
+      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
       declaresWorkflows: false,
     },
     {

@@ -424,7 +424,7 @@ describe("reinstallOutcomeFromRun", () => {
       stagedAgentNames: ["hello-bot"],
       stagedMcpServerNames: ["hello-server"],
       declaresAgents: true,
-      declaresMcp: true,
+      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
       declaresWorkflows: false,
       constraint: undefined,
       stagingWarnings: [{ kind: "discovery", message: "skill tool could not be read" }],
@@ -445,7 +445,7 @@ describe("reinstallOutcomeFromRun", () => {
       stagedAgentNames: ["hello-bot"],
       stagedMcpServerNames: ["hello-server"],
       declaresAgents: true,
-      declaresMcp: true,
+      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
       declaresWorkflows: false,
     });
   });

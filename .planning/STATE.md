@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
-current_phase: 3
-current_phase_name: Read-Time Verdicts
+current_phase: 6
+current_phase_name: Release Docs and Combined Tree
 status: verifying
-stopped_at: Phases 5, 4, and 2 merged into features/mcp-builtin; Phase 3 to merge
-last_updated: "2026-11-04T18:00:00.000Z"
+stopped_at: Phase 3 complete, ready to verify Phase 6
+last_updated: "2026-11-04T20:31:03.538Z"
 last_activity: 2026-11-04
-last_activity_desc: Phases 5, 4, and 2 merged into the milestone branch
-state_head: 7802eecb10c4405eb30b5de0feeea57d85e67f68
+last_activity_desc: Phase 3 complete, transitioned to Phase 6
+state_head: 721d699230a0f178ede22634039a225b50059c41
 progress:
   total_phases: 6
-  completed_phases: 4
-  total_plans: 33
-  completed_plans: 33
-  percent: 33
+  completed_phases: 5
+  total_plans: 42
+  completed_plans: 42
+  percent: 83
 ---
 
 # Project State
@@ -27,20 +27,21 @@ See: `.planning/PROJECT.md` (updated 2026-11-04 after mcp-builtin Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phases 5, 4, and 2 merged into `features/mcp-builtin`;
-Phase 3 (critical path) merges next, then Phase 6 in the parent session.
+**Current focus:** Phase 3 — Read-Time Verdicts. Phases 5, 4, and 2 are
+merged into `features/mcp-builtin`, and Phase 3 (critical path) has merged that
+branch; Phase 6 follows in the parent session.
 Phase 6 closes on the milestone branch. Still open from component-features:
 the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 `acolomba/pi` and `acolomba/pi-subagents`.
 
 ## Current Position
 
-Phase: 3 — Read-Time Verdicts
-Plan: 7
+Phase: 6 — Release Docs and Combined Tree
+Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-11-04 — Phases 5, 4, and 2 merged into the milestone branch
+Last activity: 2026-11-04 — Phase 3 complete, transitioned to Phase 6
 
-Progress: [███░░░░░░░] 33%
+Progress: [████████░░] 83%
 
 
 ### mcp-4 closeout
@@ -904,5 +905,5 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 ## Session Continuity
 
 Last session: 2026-11-04T18:00:00Z
-Stopped at: Phases 5, 4, and 2 merged; Phase 3 to merge
+Stopped at: Phase 3 complete, ready to verify Phase 6
 Resume file: None

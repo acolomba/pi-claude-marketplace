@@ -2891,6 +2891,69 @@ test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial 
   });
 });
 
+test("MREC-06 / D-P3-13: enabling a plugin with an sse server under Pi's built-in MCP needs no --partial and reads partially installed", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } },
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithSoftDeps({
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        mcpImplementation: "builtin",
+        workflowEngineLoaded: false,
+      }),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation needs attention.",
+          "",
+          "● mp [user]",
+          "  ◉ foo-plugin v1.2.3 (partially-installed) {unsupported mcp, requires pi-mcp-adapter}",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+        severity: "warning",
+      },
+    ]);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<
+        string,
+        {
+          plugins: Record<
+            string,
+            { enabled: boolean; compatibility: { installable: boolean; unsupported: string[] } }
+          >;
+        }
+      >;
+    };
+    const record = state.marketplaces.mp!.plugins["foo-plugin"]!;
+    assert.deepStrictEqual(
+      { enabled: record.enabled, compatibility: record.compatibility },
+      {
+        enabled: true,
+        compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+      },
+    );
+  });
+});
+
 test("WARN-01 / D-86-03: enable of a plugin whose skill frontmatter is unparseable renders (installed) {malformed skill} at warning severity, matching install of the same plugin", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // The enable branch runs the SAME runInstallLedger over the SAME bridges as
@@ -4791,7 +4854,7 @@ test("orchestrated enable returns every live degradation and companion signal wi
       name: "foo",
       orphanRewake: true,
       stagedAgents: true,
-      stagedMcpServers: true,
+      stagedMcpServers: { kind: "mcp", runEvery: ["adapter", "builtin"] },
       stagingWarnings: [
         {
           kind: "hygiene",
@@ -6279,6 +6342,52 @@ async function seedEnableCascadeFixture(
 interface EdepStateShape {
   marketplaces: Record<string, { plugins: Record<string, { enabled: boolean }> }>;
 }
+
+test("D-P3-13 / D-MB-06: enabling a plugin under Pi's built-in MCP turns on its disabled dependency with an sse server without --partial", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEnableCascadeFixture(home, {
+      declareDependency: true,
+      dependencyEnabled: false,
+    });
+    await writeFile(
+      path.join(home, "tools-src", "plugins", "formatter", ".mcp.json"),
+      JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithSoftDeps({
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        mcpImplementation: "builtin",
+        workflowEngineLoaded: false,
+      }),
+      cwd,
+      marketplace: "official",
+      plugin: "helper",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● official [user]",
+          "  ● formatter@tools v2.1.0 (installed) {dependency enabled, requires pi-mcp-adapter}",
+          "  ● helper v1.0.0 (installed)",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+    ]);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.tools!.plugins.formatter!.enabled, true);
+  });
+});
 
 test("EDEP-01 / EDEP-03: enabling a plugin turns on its one disabled dependency and reports both rows", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
@@ -9211,7 +9320,7 @@ test("AFILE-04: an orchestrated enable returns the notice on its outcome and sen
       status: "enabled",
       name: "foo",
       version: "1.2.3",
-      stagedMcpServers: true,
+      stagedMcpServers: { kind: "mcp", runEvery: ["adapter", "builtin"] },
       mcpConfigNotices: [{ kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" }],
     });
     assert.deepStrictEqual(notifications, []);

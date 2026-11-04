@@ -1,6 +1,8 @@
+import { mcpDependencyMarker } from "./concerns/soft-dep.ts";
 import { type Reason } from "./notification-types.ts";
 
 import type { SoftDepStatus } from "../platform/pi-api.ts";
+import type { McpDependency } from "./concerns/soft-dep.ts";
 
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
@@ -78,24 +80,30 @@ export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "
  * SEV-01: per-producer severity for an otherwise-successful install/update row,
  * classified from the plugin's DECLARED soft-dep companions and the host's
  * companion-loaded probe. A declared `agents` kind requires `pi-subagents`; a
- * declared `mcp` kind requires `pi-mcp-adapter`; a declared `workflows` kind
- * requires the host workflow engine. When a declared companion is unloaded the
- * clean operation is silently degraded -> `warning`; otherwise (companion
- * present, or none declared) -> `info`. The caller passes the command run's
- * snapshot (D-05), the same snapshot resolve reads for the `{requires pi-...}`
- * marker, so severity and marker never disagree. The row bytes stay the same;
- * only the desired-state severity moves.
+ * declared `workflows` kind requires the host workflow engine. When a declared
+ * companion is unloaded the clean operation is silently degraded -> `warning`;
+ * otherwise (companion present, or none declared) -> `info`. D-P3-09 /
+ * D-MB-07: the MCP term raises to `warning` exactly when `mcpDependencyMarker`
+ * shows a marker for the row's `McpDependency`, so an MCP dependency the
+ * active implementation runs keeps `info`. The caller passes the command
+ * run's snapshot (D-05), the same snapshot resolve reads for the markers, so
+ * severity and marker never disagree. The row bytes stay the same; only the
+ * desired-state severity moves.
  */
 export function companionSeverity(
   {
     declaresAgents,
     declaresMcp,
     declaresWorkflows,
-  }: { declaresAgents: boolean; declaresMcp: boolean; declaresWorkflows: boolean },
+  }: {
+    declaresAgents: boolean;
+    declaresMcp: McpDependency | false;
+    declaresWorkflows: boolean;
+  },
   probe: SoftDepStatus,
 ): "info" | "warning" {
   return (declaresAgents && !probe.piSubagentsLoaded) ||
-    (declaresMcp && !probe.piMcpAdapterLoaded) ||
+    mcpDependencyMarker(declaresMcp, probe) !== undefined ||
     (declaresWorkflows && !probe.workflowEngineLoaded)
     ? "warning"
     : "info";

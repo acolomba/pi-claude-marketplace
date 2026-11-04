@@ -320,7 +320,7 @@ changes their names or shapes.
 
 - [x] **Phase 1: Foundation and Pi 1.5.0** - Pi 1.5.0, the active-implementation snapshot, the pure profiles, records that keep every declared server, and the dual-profile cucumber harness, with every shared file and interface frozen and no visible change (completed 2026-11-04)
 - [x] **Phase 2: Built-in Materialization** - Recorded servers connect through Pi's built-in MCP on startup and `/reload` with Claude's values and names, trust gating, status in `info`, and a switch that needs no plugin action (completed 2026-11-04)
-- [ ] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records
+- [x] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records (completed 2026-11-04)
 - [x] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child (completed 2026-11-04)
 - [x] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter (completed 2026-11-04)
 - [ ] **Phase 6: Release Docs and Combined Tree** - The CHANGELOG and READMEs describe built-in MCP support, closed sets are clean, and the combined tree passes under both profiles
@@ -440,7 +440,27 @@ Plans:
 - Wave 2, in parallel: the server verdicts in `info.ts` (MREC-04); markers, `requires:`, severity, and the marker rows in `features/plugin/*` and `features/marketplace/update.feature` (MREC-05 marker, MREC-07); the consent split and convergence (`install-outcome.ts` gate, `update-preflight.ts`, the `partial` functions, `reconcile/convergence.ts`, `import/execute.ts`), with `mcp-migration.ts` made explicit about the adapter profile (MREC-03 install side, MREC-05 consent, MREC-06).
 - Wave 3: merge the milestone branch (Phases 5, 4, and 2), re-run every owned row under both profiles, parent lines, and the phase gate.
 
-**Plans**: TBD
+**Plans:** 9/9 plans complete in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the `Dependency` type change gets its own wave before the marker rule, and the consent split, convergence, and the `requires:` line run in parallel after the rule)
+
+Plans:
+**Wave 1**
+- [x] 03-01-PLAN.md — Wave 1 (tracer): neutral stored verdict with its basis, `resolutionFor`, the effective record read, and `list` on the active implementation, proven by an `sse` plugin under both profiles (MREC-03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 03-02-PLAN.md — Wave 2: `McpDependency` in place of the boolean `declaresMcp` at every emit site, with today's marker rule (MREC-05, MREC-07)
+- [x] 03-03-PLAN.md — Wave 2: `info` per-server verdicts and status rows, `fetch` rows, and the `invalid-configs.feature` retag (MREC-03, MREC-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 03-04-PLAN.md — Wave 3: the D-MB-07 marker rule and severity, partially-installed list markers, the style guide, and the no-implementation scenarios (MREC-05, MREC-07)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 03-05-PLAN.md — Wave 4: install consent against the active implementation; enable, promotion, and cascades never ask after a switch (MREC-03, MREC-05, MREC-06)
+- [x] 03-06-PLAN.md — Wave 4: update and reinstall consent for a new degrade only, and the neutral record writes of the update runner (MREC-03, MREC-06)
+- [x] 03-07-PLAN.md — Wave 4: `pending` and `apply` convergence after a switch, and AMIG-01 explicit about the adapter (MREC-03, MREC-06)
+- [x] 03-08-PLAN.md — Wave 4: `info`'s `requires:` line names the implementation, and the e2e marker tests (MREC-05, MREC-07)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 03-09-PLAN.md — Wave 5: merge the milestone branch, repair the sibling rows, the phase gate, and the parent lines (MREC-03..07)
 
 ### Phase 4: Agent Grants
 **Goal**: A generated pi-subagents agent carries the active implementation's MCP grant, and after a switch the load rewrites only the agent files whose grants changed, never from a background child.
@@ -514,7 +534,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
 | 2. Built-in Materialization | 9/9 | Complete    | 2026-11-04 |
-| 3. Read-Time Verdicts | 0/TBD | Not started | - |
+| 3. Read-Time Verdicts | 9/9 | Complete    | 2026-11-04 |
 | 4. Agent Grants | 6/6 | Complete    | 2026-11-04 |
 | 5. Hook Tool Names | 4/4 | Complete    | 2026-11-04 |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |

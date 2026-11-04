@@ -266,7 +266,7 @@ test("AVAR-04: an update reports the unset variable and the withheld credential 
       assertVariableWarningsAfter(updated.notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 → v1.1.0 (updated) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 → v1.1.0 (updated) {requires mcp}\n\n/reload to pick up changes",
           severity: "warning",
         },
       ]);
@@ -304,7 +304,7 @@ test("AVAR-04: a reinstall reports the unset variable and the withheld credentia
       assertVariableWarningsAfter(reinstalled.notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
           severity: "warning",
         },
       ]);
@@ -337,7 +337,7 @@ test("AVAR-04: enabling a disabled plugin reports the unset variable and the wit
       assertVariableWarningsAfter(enabled.notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (installed) {requires mcp}\n\n/reload to pick up changes",
           severity: "warning",
         },
       ]);

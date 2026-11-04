@@ -30,7 +30,7 @@ import {
 
 import { rejectUnknownFlag } from "./shared.ts";
 
-import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ActiveMcpImplementation, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { NotificationRun } from "../../../shared/notification-run.ts";
 import type {
   PluginFailedMessage,
@@ -77,14 +77,22 @@ async function loadMarketplaceEntries(cwd: string): Promise<readonly Marketplace
  * `loadPluginListPayload`, selects the matching marketplace block (falling
  * back to the first block for a synthetic `(list)` failure), and returns the
  * raw `PluginNotificationMessage` rows. The browser projects them onto its
- * display entries. The loader only reads, so it takes no notification run.
+ * display entries. The loader only reads, so it takes no notification run,
+ * only the browse command's MCP implementation, whose view the rows show
+ * (MREC-03).
  */
 function makePluginLoader(
   ctx: ExtensionCommandContext,
   cwd: string,
+  mcpImplementation: ActiveMcpImplementation,
 ): (marketplace: MarketplaceEntry) => Promise<readonly PluginNotificationMessage[]> {
   return async (mp): Promise<readonly PluginNotificationMessage[]> => {
-    const payload = await loadPluginListPayload({ ctx, cwd, marketplace: mp.name });
+    const payload = await loadPluginListPayload({
+      ctx,
+      cwd,
+      marketplace: mp.name,
+      mcpImplementation,
+    });
     const block = payload.find((b) => b.name === mp.name && b.scope === mp.scope);
     return block?.plugins ?? [];
   };
@@ -182,7 +190,7 @@ export function makeBrowseHandler(handlers: BrowseActionHandlers): SubcommandHan
       return;
     }
 
-    const pluginLoader = makePluginLoader(ctx, ctx.cwd);
+    const pluginLoader = makePluginLoader(ctx, ctx.cwd, run.softDeps.mcpImplementation);
 
     const result = await ctx.ui.custom<PickerResult | null>((tui, theme, _kb, done) => {
       const browser = new PluginBrowser({

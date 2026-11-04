@@ -177,7 +177,7 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
         marketplace: "mp",
         plugin: "cr",
         version: "1.0.0",
-        dependencies: ["mcp"],
+        dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
         installable: true,
         unsupported: [],
       },
@@ -192,7 +192,7 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
                 status: "installed",
                 name: "cr",
                 version: "1.0.0",
-                dependencies: ["mcp"],
+                dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
                 reasons: ["components now supported"],
                 severity: "info",
                 needsReload: true,
@@ -1263,7 +1263,7 @@ describe("buildReconcileAppliedCascade", () => {
         plugin: "cr",
         version: "1.0.0",
         stagedAgents: true,
-        stagedMcpServers: true,
+        stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
       },
     ];
 
@@ -1282,7 +1282,7 @@ describe("buildReconcileAppliedCascade", () => {
               status: "installed",
               name: "cr",
               version: "1.0.0",
-              dependencies: ["agents", "mcp"],
+              dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
               severity: "info",
               needsReload: true,
             },
@@ -1302,7 +1302,7 @@ describe("buildReconcileAppliedCascade", () => {
         plugin: "cr",
         version: "1.0.0",
         stagedAgents: true,
-        stagedMcpServers: true,
+        stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
         stagedWorkflows: true,
       },
     ];
@@ -1322,7 +1322,7 @@ describe("buildReconcileAppliedCascade", () => {
               status: "installed",
               name: "cr",
               version: "1.0.0",
-              dependencies: ["agents", "mcp", "workflows"],
+              dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }, "workflows"],
               severity: "info",
               needsReload: true,
             },
@@ -3763,11 +3763,41 @@ describe("resolvePendingForceInstalls", () => {
       });
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set(["project\u0000mp\u0000cr"]));
   });
+
+  for (const { mcpImplementation, preview, expectedKeys } of [
+    { mcpImplementation: "builtin", preview: "partial", expectedKeys: ["project\u0000mp\u0000cr"] },
+    { mcpImplementation: "adapter", preview: "whole", expectedKeys: [] },
+  ] as const) {
+    test(`D-P3-15: previews an install with an sse server as ${preview} under ${mcpImplementation}`, async (t) => {
+      // arrange
+      const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "reconcile-force-sse-"));
+      t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
+      await mkdir(path.join(marketplaceRoot, "cr"), { recursive: true });
+      await writeFile(
+        path.join(marketplaceRoot, "cr", ".mcp.json"),
+        JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+        "utf8",
+      );
+      const plans = [reconcilePlan("project", { pluginsToInstall: [install] })];
+      const locate = (): Promise<PendingInstallCandidate> =>
+        Promise.resolve({
+          marketplaceRoot,
+          marketplaceSource: undefined,
+          manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
+        });
+
+      // act
+      const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, mcpImplementation);
+
+      // assert
+      assert.deepStrictEqual(forceInstallKeys, new Set(expectedKeys));
+    });
+  }
 
   test("leaves a hosted marketplace's relative entry out of the partial installs", async (t) => {
     // arrange
@@ -3785,7 +3815,7 @@ describe("resolvePendingForceInstalls", () => {
       });
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
@@ -3814,7 +3844,7 @@ describe("resolvePendingForceInstalls", () => {
       });
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(
@@ -3837,7 +3867,7 @@ describe("resolvePendingForceInstalls", () => {
       });
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
@@ -3849,7 +3879,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate | undefined> => Promise.resolve(undefined);
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
@@ -3872,7 +3902,7 @@ describe("resolvePendingForceInstalls", () => {
       });
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
@@ -3884,7 +3914,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate | undefined> => Promise.resolve(undefined);
 
     // act
-    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate, "adapter");
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
@@ -3901,7 +3931,7 @@ describe("dependencyInstallRows", () => {
         marketplace: "other",
         plugin: "lib",
         version: "1.0.0",
-        dependencies: ["mcp"],
+        dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
         dependencyInstalled: true,
         orphanRewake: true,
       },
@@ -3916,7 +3946,7 @@ describe("dependencyInstallRows", () => {
         status: "installed",
         name: "lib@other",
         version: "1.0.0",
-        dependencies: ["mcp"],
+        dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
         reasons: ["dependency installed", "orphan rewake"],
         severity: "info",
         needsReload: true,

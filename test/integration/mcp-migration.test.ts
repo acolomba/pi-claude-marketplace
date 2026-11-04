@@ -363,7 +363,7 @@ test("AMIG-04: when claude-plugins.json declares the owner, the reload installs 
       [
         [
           "● mp [project]",
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}",
+          "  ● hello v1.0.0 (installed) {requires mcp}",
           "",
           "Reconcile: 1 success",
           "",
@@ -519,6 +519,13 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
     });
     await seedLegacyNames(cwd, ["srv", "live", "gone"]);
     const locations = locationsFor("project", cwd);
+    // A released build recorded no server configs, so the move reads the
+    // declaration at the recorded version (MREC-02).
+    const state = await loadState(locations.extensionRoot);
+    const seeded = state.marketplaces.mp?.plugins.hello;
+    assert.ok(seeded);
+    delete seeded.mcpServerConfigs;
+    await saveState(locations.extensionRoot, state);
 
     // act
     const notifications = await reload(cwd);
@@ -544,6 +551,7 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
       supported: [],
       unsupported: ["mcpServers"],
     });
+    assert.strictEqual(record.compatibilityBasis, "neutral");
     assert.deepStrictEqual(notifications, [
       {
         message: [

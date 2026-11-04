@@ -25,6 +25,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
+import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
   AuthAttemptResult,
@@ -52,6 +53,10 @@ const UPDATE_POLICY = {
 
 // D-18-04: a caller names its verb's policy; omitting it does not compile.
 void (true satisfies undefined extends PreparePluginUpdateOptions["policy"] ? false : true);
+// D-P3-11: a caller names its run's MCP implementation; omitting it does not compile.
+void (true satisfies undefined extends PreparePluginUpdateOptions["mcpImplementation"]
+  ? false
+  : true);
 
 const REINSTALL_POLICY = {
   refreshSource: false,
@@ -186,7 +191,9 @@ async function prepare(
     readonly onRecord?: PreparePluginUpdateOptions["onRecord"];
     readonly move?: Pick<PreparePluginUpdateOptions, "expectVersion" | "requesters">;
     readonly judgeOnly?: true;
+    readonly cascadeGate?: Pick<PreparePluginUpdateOptions, "readRecordDegradeBaseline">;
   } = {},
+  mcpImplementation: ActiveMcpImplementation = "none",
 ) {
   return preparePluginUpdate({
     plugin: "hello",
@@ -194,6 +201,7 @@ async function prepare(
     scope: "project",
     locations: seed.locations,
     cleanupClones: options.cleanupClones ?? (async () => {}),
+    mcpImplementation,
     ...(options.partial === true && { partial: true }),
     policy: options.policy ?? UPDATE_POLICY,
     ...(options.cloneCacheSeam !== undefined && { cloneCacheSeam: options.cloneCacheSeam }),
@@ -213,6 +221,7 @@ async function prepare(
     ...(options.onRecord !== undefined && { onRecord: options.onRecord }),
     ...options.move,
     ...(options.judgeOnly !== undefined && { judgeOnly: options.judgeOnly }),
+    ...options.cascadeGate,
   });
 }
 
@@ -230,6 +239,7 @@ test("classifies a missing marketplace without reading a manifest", async (t) =>
     scope: "project",
     locations,
     cleanupClones: async () => {},
+    mcpImplementation: "none",
   });
 
   // assert
@@ -935,6 +945,7 @@ test("does not rewrite an unchanged disabled pin", async (t) => {
   assert.ok(record !== undefined);
   record.resolvedSource = seed.pluginRoot;
   record.mcpServerConfigs = [];
+  record.compatibilityBasis = "neutral";
   await saveState(seed.locations.extensionRoot, state);
   const before = await readFile(seed.locations.stateJsonPath, "utf8");
 
@@ -955,7 +966,7 @@ test("does not rewrite an unchanged disabled pin", async (t) => {
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
 
-test("MREC-01: a disabled update rewrites a pin whose only change is a neutral basis and removes the basis", async (t) => {
+test("D-P3-02: a disabled update rewrites a legacy pin whose only change is the neutral basis", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("2.0.0", false) });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
@@ -964,7 +975,6 @@ test("MREC-01: a disabled update rewrites a pin whose only change is a neutral b
   assert.ok(record !== undefined);
   record.resolvedSource = seed.pluginRoot;
   record.mcpServerConfigs = [];
-  record.compatibilityBasis = "neutral";
   await saveState(seed.locations.extensionRoot, state);
 
   // act
@@ -979,6 +989,7 @@ test("MREC-01: a disabled update rewrites a pin whose only change is a neutral b
       refreshed: {
         ...pluginRecord("2.0.0", false),
         resolvedSource: seed.pluginRoot,
+        compatibilityBasis: "neutral",
         mcpServerConfigs: [],
         updatedAt: refreshed?.updatedAt,
       },
@@ -1005,6 +1016,7 @@ test("MREC-01: a disabled legacy record without recorded MCP servers gains them 
       refreshed: {
         ...pluginRecord("2.0.0", false),
         resolvedSource: seed.pluginRoot,
+        compatibilityBasis: "neutral",
         mcpServerConfigs: [],
         updatedAt: refreshed?.updatedAt,
       },
@@ -1127,6 +1139,176 @@ test("admits a partial candidate only with explicit partial permission", async (
   assert.strictEqual(strictOutcome.partialUpgradable, true);
   assert.ok(!("partition" in partialOutcome));
   assert.strictEqual(partialOutcome.installable.state, "partially-available");
+});
+
+/** A seed whose 2.0.0 candidate declares one sse server, which only Pi's built-in MCP blocks. */
+async function seedSseCandidate(t: TestContext): Promise<Awaited<ReturnType<typeof seedUpdate>>> {
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  await writeFile(
+    path.join(seed.pluginRoot, ".mcp.json"),
+    JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+  );
+  return seed;
+}
+
+test("D-P3-11: refuses a candidate that adds an sse server without partial permission under Pi's built-in MCP", async (t) => {
+  // arrange
+  const seed = await seedSseCandidate(t);
+
+  // act
+  const outcome = await prepare(seed, {}, "builtin");
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ['Plugin "hello" is no longer installable: '],
+    reasons: ["unsupported mcp"],
+    partialUpgradable: true,
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+});
+
+for (const { mcpImplementation, partial } of [
+  { mcpImplementation: "builtin", partial: true },
+  { mcpImplementation: "adapter", partial: false },
+  { mcpImplementation: "none", partial: false },
+] as const) {
+  test(`D-P3-11: prepares the neutral candidate that adds an sse server under ${mcpImplementation} ${partial ? "with" : "without"} partial permission`, async (t) => {
+    // arrange
+    const seed = await seedSseCandidate(t);
+
+    // act
+    const outcome = await prepare(seed, { partial }, mcpImplementation);
+
+    // assert
+    assert.ok(!("partition" in outcome));
+    assert.deepStrictEqual(
+      {
+        state: outcome.installable.state,
+        unsupported: outcome.installable.unsupported,
+        toVersion: outcome.toVersion,
+      },
+      { state: "installable", unsupported: [], toVersion: "2.0.0" },
+    );
+  });
+}
+
+test("D-MB-06 / D-P3-13: admits without partial permission a candidate whose sse drop the installed record already makes under Pi's built-in MCP", async (t) => {
+  // arrange
+  const seed = await seedSseCandidate(t);
+  const baselineReads: string[] = [];
+
+  // act
+  const outcome = await prepare(
+    seed,
+    {
+      cascadeGate: {
+        readRecordDegradeBaseline: (record, marketplace, plugin) => {
+          baselineReads.push(`${plugin}@${marketplace.name} ${record.version}`);
+          return Promise.resolve({ unsupported: ["mcpServers"], readable: true });
+        },
+      },
+    },
+    "builtin",
+  );
+
+  // assert
+  assert.ok(!("partition" in outcome));
+  assert.deepStrictEqual(
+    { state: outcome.installable.state, toVersion: outcome.toVersion, baselineReads },
+    { state: "installable", toVersion: "2.0.0", baselineReads: ["hello@mp 1.0.0"] },
+  );
+});
+
+test("D-P3-13: refuses without partial permission a candidate whose sse drop the installed record does not make under Pi's built-in MCP", async (t) => {
+  // arrange
+  const seed = await seedSseCandidate(t);
+
+  // act
+  const outcome = await prepare(
+    seed,
+    {
+      cascadeGate: {
+        readRecordDegradeBaseline: () => Promise.resolve({ unsupported: [], readable: true }),
+      },
+    },
+    "builtin",
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ['Plugin "hello" is no longer installable: '],
+    reasons: ["unsupported mcp"],
+    partialUpgradable: true,
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+});
+
+test("D-MB-06: refuses without partial permission a candidate that also drops a non-MCP kind the installed record already drops", async (t) => {
+  // arrange
+  const seed = await seedSseCandidate(t);
+  await writeFile(
+    path.join(seed.pluginRoot, ".lsp.json"),
+    JSON.stringify({ ts: { command: "ts" } }),
+  );
+
+  // act
+  const outcome = await prepare(
+    seed,
+    {
+      cascadeGate: {
+        readRecordDegradeBaseline: () =>
+          Promise.resolve({ unsupported: ["lspServers", "mcpServers"], readable: true }),
+      },
+    },
+    "builtin",
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ['Plugin "hello" is no longer installable: contains lspServers'],
+    reasons: ["lsp", "unsupported mcp"],
+    partialUpgradable: true,
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+});
+
+test("D-P3-13: reads no record baseline for a candidate the active implementation runs whole", async (t) => {
+  // arrange
+  const seed = await seedSseCandidate(t);
+
+  // act
+  const outcome = await prepare(
+    seed,
+    {
+      cascadeGate: {
+        readRecordDegradeBaseline: () => Promise.reject(new Error("no baseline read expected")),
+      },
+    },
+    "adapter",
+  );
+
+  // assert
+  assert.ok(!("partition" in outcome));
+  assert.deepStrictEqual(
+    { state: outcome.installable.state, toVersion: outcome.toVersion },
+    { state: "installable", toVersion: "2.0.0" },
+  );
 });
 
 test("flags binaries on a candidate of an official marketplace", async (t) => {
@@ -2720,6 +2902,7 @@ test("does not rewrite a concurrently converged disabled pin", async (t) => {
   record.resolvedSource = seed.pluginRoot;
   record.resolvedSha = sha;
   record.compatibility = { installable: true, notes: [], supported: ["skills"], unsupported: [] };
+  record.compatibilityBasis = "neutral";
   record.mcpServerConfigs = [];
   record.updatedAt = "concurrent-writer";
   await saveState(seed.locations.extensionRoot, state);

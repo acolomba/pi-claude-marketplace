@@ -1354,6 +1354,90 @@ test("ANAME-07: leaves a blocked server out and records it with its feature", as
   );
 });
 
+test("D-P3-01: stages the adapter subset and drops only the servers both implementations block", async () => {
+  // arrange
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await resolveStrictMcp(
+    {
+      entry: {
+        mcpServers: {
+          local: { command: "node" },
+          events: { type: "sse", url: "https://mcp.example.com/sse" },
+          asker: { command: "node", bareElicitationCapability: true },
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        },
+      },
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    mcpFiles({}),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: false,
+      resolution: {
+        notes: [],
+        unsupported: ["mcpServers"],
+        mcpServers: {
+          local: { command: "node" },
+          events: { type: "sse", url: "https://mcp.example.com/sse" },
+        },
+        declaredMcpServers: {
+          local: { command: "node" },
+          events: { type: "sse", url: "https://mcp.example.com/sse" },
+          asker: { command: "node", bareElicitationCapability: true },
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        },
+        droppedMcpServers: [{ server: "live", feature: "ws" }],
+      },
+    },
+  );
+});
+
+test("D-P3-01: an sse and a bare-elicitation server leave the neutral verdict clean", async () => {
+  // arrange
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await resolveStrictMcp(
+    {
+      entry: {
+        mcpServers: {
+          events: { type: "sse", url: "https://mcp.example.com/sse" },
+          asker: { command: "node", bareElicitationCapability: true },
+        },
+      },
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    mcpFiles({}),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: false,
+      resolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { events: { type: "sse", url: "https://mcp.example.com/sse" } },
+        declaredMcpServers: {
+          events: { type: "sse", url: "https://mcp.example.com/sse" },
+          asker: { command: "node", bareElicitationCapability: true },
+        },
+      },
+    },
+  );
+});
+
 test("ANAME-07: records the mcpServers kind once for several blocked servers", async () => {
   // arrange
   const resolution = emptyResolution();

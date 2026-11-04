@@ -4508,7 +4508,7 @@ test("SURF-01 / D-63-04: installed plugin with hooks/hooks.json renders multi-li
           "      PostToolUse(Edit)",
           "      SessionStart",
           "    mcp: plugin:h:my-mcp",
-          "    requires: pi-mcp-adapter (missing)",
+          "    requires: mcp (missing)",
         ].join("\n"),
       },
     ]);
@@ -7467,7 +7467,7 @@ test("resolved MCP inventory sorts two server names exactly", async () => {
           "● mp [user] <no autoupdate>",
           "  ○ alpha v1.0.0 (available)",
           "    mcp: plugin:alpha:alpha, plugin:alpha:zeta",
-          "    requires: pi-mcp-adapter (missing)",
+          "    requires: mcp (missing)",
         ].join("\n"),
       },
     ]);
@@ -7512,7 +7512,7 @@ test("ANAME-07: info names each left-out MCP server with the feature that blocks
           "● mp [user] <no autoupdate>",
           "  ⊖ db-tools v1.0.0 (partially-available) {unsupported mcp}",
           "    mcp: plugin:db-tools:db, plugin:db-tools:live (unsupported ws)",
-          "    requires: pi-mcp-adapter (missing)",
+          "    requires: mcp (missing)",
         ].join("\n"),
       },
     ]);
@@ -7527,7 +7527,7 @@ async function seedAlphaWithPluginJson(
   home: string,
   cwd: string,
   pluginJson: Record<string, unknown>,
-): Promise<void> {
+): Promise<string> {
   const mpRoot = await seedPathMarketplace({
     scope: "user",
     scopeRoot: path.join(home, ".pi", "agent"),
@@ -7545,6 +7545,7 @@ async function seedAlphaWithPluginJson(
     JSON.stringify(pluginJson),
     "utf8",
   );
+  return mpRoot;
 }
 
 test("AVAR-03: info names a server left out for a leading ~ with its field", async () => {
@@ -7569,14 +7570,14 @@ test("AVAR-03: info names a server left out for a leading ~ with its field", asy
           "● mp [user] <no autoupdate>",
           "  ⊖ alpha v1.0.0 (partially-available) {unsupported mcp}",
           "    mcp: plugin:alpha:db, plugin:alpha:home (unsupported args ~)",
-          "    requires: pi-mcp-adapter (missing)",
+          "    requires: mcp (missing)",
         ].join("\n"),
       },
     ]);
   });
 });
 
-test("ADET-01: info names no pi-mcp-adapter when the install leaves out every MCP server", async () => {
+test("ADET-01 / MREC-07: info names no MCP implementation when both implementations leave out every MCP server (D-P3-08)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     await seedAlphaWithPluginJson(home, cwd, {
@@ -7600,7 +7601,7 @@ test("ADET-01: info names no pi-mcp-adapter when the install leaves out every MC
   });
 });
 
-test("ADET-01: info still names pi-mcp-adapter when the install writes one of the plugin's MCP servers", async () => {
+test("ADET-01 / D-P3-08: info still names mcp when the install writes one of the plugin's MCP servers", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     await seedAlphaWithPluginJson(home, cwd, {
@@ -7622,7 +7623,7 @@ test("ADET-01: info still names pi-mcp-adapter when the install writes one of th
           "● mp [user] <no autoupdate>\n" +
           "  ⊖ alpha v1.0.0 (partially-available) {unsupported mcp}\n" +
           "    mcp: plugin:alpha:live (unsupported ws), plugin:alpha:stdio\n" +
-          "    requires: pi-mcp-adapter (missing)",
+          "    requires: mcp (missing)",
       },
     ]);
   });
@@ -7694,7 +7695,7 @@ test("AVAR-04: info lists an MCP server's unset variables and withheld credentia
           "● mp [user] <no autoupdate>",
           "  ○ analytics v1.0.0 (available)",
           "    mcp: plugin:analytics:api (unset ANALYTICS_TOKEN; withheld ANTHROPIC_API_KEY)",
-          "    requires: pi-mcp-adapter (missing)",
+          "    requires: mcp (missing)",
         ].join("\n"),
       },
     ]);
@@ -7755,7 +7756,7 @@ for (const { label, mcpServers, env, pluginLine, mcpLine } of [
             "● mp [user] <no autoupdate>",
             pluginLine,
             mcpLine,
-            "    requires: pi-mcp-adapter (missing)",
+            "    requires: mcp (missing)",
           ].join("\n"),
         },
       ]);
@@ -7872,7 +7873,7 @@ test("ASTAT-01: an installed plugin's written servers show the adapter's state f
           "● mp [user] <no autoupdate>",
           "  ● analytics v1.0.0 (installed)",
           "    mcp: plugin:analytics:api (needs authentication; unset ANALYTICS_TOKEN), plugin:analytics:db (failed)",
-          "    requires: pi-mcp-adapter (missing)",
+          "    requires: mcp (missing)",
         ].join("\n"),
       },
     ]);
@@ -8300,17 +8301,22 @@ for (const { implementation, inventory, readerAsked, requiresLine, status } of [
 
 for (const { inventory, label, requiresLine } of [
   {
-    label: "Pi's built-in MCP alone tags pi-mcp-adapter missing",
+    label: "Pi's built-in MCP alone names mcp untagged",
     inventory: { tools: [builtinMcpTool()], commands: [builtinMcpCommand()] },
-    requiresLine: "    requires: pi-mcp-adapter (missing)",
+    requiresLine: "    requires: mcp",
   },
   {
-    label: "the adapter's mcp-adapter command names pi-mcp-adapter untagged",
+    label: "the adapter's mcp-adapter command names mcp untagged",
     inventory: { commands: [adapterCommand()] },
-    requiresLine: "    requires: pi-mcp-adapter",
+    requiresLine: "    requires: mcp",
+  },
+  {
+    label: "no MCP implementation names mcp missing",
+    inventory: {},
+    requiresLine: "    requires: mcp (missing)",
   },
 ]) {
-  test(`ADET-01: ${label} on the requires line of an MCP plugin`, async () => {
+  test(`ADET-01 / D-P3-08: ${label} on the requires line of a stdio MCP plugin`, async () => {
     await withHermeticHome(async ({ home, cwd }) => {
       // arrange
       await seedAlphaWithPluginJson(home, cwd, {
@@ -8336,6 +8342,39 @@ for (const { inventory, label, requiresLine } of [
     });
   });
 }
+
+test("D-P3-08 / MREC-07: a stdio plugin with an agent names mcp before pi-subagents, both missing with nothing loaded", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedAlphaWithPluginJson(home, cwd, {
+      name: "alpha",
+      mcpServers: { srv: { command: "srv" } },
+    });
+    await mkdir(path.join(mpRoot, "alpha", "agents"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "alpha", "agents", "a1.md"),
+      "---\nname: a1\ndescription: An agent\n---\nBody\n",
+      "utf8",
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ alpha v1.0.0 (available)",
+          "    agents: a1",
+          "    mcp: plugin:alpha:srv",
+          "    requires: mcp (missing), pi-subagents (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
 
 test("ADET-01: a plugin whose components need no companion gets no requires line, with no companion loaded", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
@@ -10901,6 +10940,424 @@ test("D-78-04: bare info of an installed git plugin whose warm manifest cannot b
           "● mp [user] <no autoupdate>",
           "  ● gplug v1.0.0 (installed)",
           "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+/** The soft-dependency inventory under which the run reads each MCP implementation. */
+const IMPLEMENTATION_INVENTORY = {
+  adapter: { commands: [adapterCommand()] },
+  builtin: { tools: [builtinMcpTool()], commands: [builtinMcpCommand()] },
+  none: {},
+} as const;
+
+type InfoImplementation = keyof typeof IMPLEMENTATION_INVENTORY;
+
+/** An sse server, which pi-mcp-adapter runs and Pi's built-in MCP blocks. */
+const SSE_SERVER = { type: "sse", url: "http://127.0.0.1:9/sse" };
+
+/**
+ * Seeds a user-scope path-source `alpha` plugin whose `plugin.json` declares
+ * `mcpServers`, installed when `installed` is set.
+ */
+async function seedAlphaMcpPlugin(
+  home: string,
+  cwd: string,
+  mcpServers: Record<string, unknown> | undefined,
+  installed: boolean,
+): Promise<void> {
+  const mpRoot = await seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: { name: "mp", plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }] },
+    ...(installed && { installed: { alpha: { version: "1.0.0", resources: { skills: [] } } } }),
+    installablePluginDirs: ["alpha"],
+  });
+  await mkdir(path.join(mpRoot, "alpha", ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(mpRoot, "alpha", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "alpha", ...(mcpServers !== undefined && { mcpServers }) }),
+    "utf8",
+  );
+}
+
+/** Runs user-scope `info alpha@mp` under `implementation` and returns what it printed. */
+async function infoAlphaUnder(
+  implementation: InfoImplementation,
+  cwd: string,
+): Promise<readonly NotifyRecord[]> {
+  const { ctx, run, notifications } = makeCtx(1, IMPLEMENTATION_INVENTORY[implementation]);
+  await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+  assert.strictEqual(run.softDeps.mcpImplementation, implementation);
+  return notifications;
+}
+
+/**
+ * D-P3-08: the `requires:` line of a row whose servers only pi-mcp-adapter
+ * runs every one of, as an sse server makes them.
+ */
+function adapterRequiresLine(implementation: InfoImplementation): string {
+  return implementation === "adapter"
+    ? "    requires: pi-mcp-adapter"
+    : "    requires: pi-mcp-adapter (missing)";
+}
+
+for (const { implementation, statusLine, mcpLine } of [
+  {
+    implementation: "builtin",
+    statusLine: "  ◉ alpha v1.0.0 (partially-installed) {unsupported mcp}",
+    mcpLine: "    mcp: plugin:alpha:events (unsupported sse), plugin:alpha:stub",
+  },
+  {
+    implementation: "adapter",
+    statusLine: "  ● alpha v1.0.0 (installed)",
+    mcpLine: "    mcp: plugin:alpha:events, plugin:alpha:stub",
+  },
+  {
+    implementation: "none",
+    statusLine: "  ● alpha v1.0.0 (installed)",
+    mcpLine: "    mcp: plugin:alpha:events, plugin:alpha:stub",
+  },
+] as const) {
+  test(`MREC-04 / D-P3-05: under ${implementation} an installed plugin's sse server reads for that implementation`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedAlphaMcpPlugin(
+        home,
+        cwd,
+        { stub: { command: "stub-server" }, events: SSE_SERVER },
+        true,
+      );
+
+      // act
+      const notifications = await infoAlphaUnder(implementation, cwd);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            statusLine,
+            mcpLine,
+            adapterRequiresLine(implementation),
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+}
+
+for (const { implementation, statusLine, mcpLine, requiresLine } of [
+  {
+    implementation: "adapter",
+    statusLine: "  ⊖ alpha v1.0.0 (partially-available) {unsupported mcp}",
+    mcpLine: "    mcp: plugin:alpha:ask (unsupported bareElicitationCapability)",
+    requiresLine: "    requires: builtin mcp (missing)",
+  },
+  {
+    implementation: "builtin",
+    statusLine: "  ○ alpha v1.0.0 (available)",
+    mcpLine: "    mcp: plugin:alpha:ask",
+    requiresLine: "    requires: builtin mcp",
+  },
+  {
+    implementation: "none",
+    statusLine: "  ○ alpha v1.0.0 (available)",
+    mcpLine: "    mcp: plugin:alpha:ask",
+    requiresLine: "    requires: builtin mcp (missing)",
+  },
+] as const) {
+  test(`MREC-04 / D-P3-08: under ${implementation} a server with a bare elicitation capability reads for that implementation`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedAlphaMcpPlugin(
+        home,
+        cwd,
+        { ask: { command: "ask-server", bareElicitationCapability: true } },
+        false,
+      );
+
+      // act
+      const notifications = await infoAlphaUnder(implementation, cwd);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: ["● mp [user] <no autoupdate>", statusLine, mcpLine, requiresLine].join("\n"),
+        },
+      ]);
+    });
+  });
+}
+
+for (const implementation of ["adapter", "builtin", "none"] as const) {
+  test(`MREC-04: under ${implementation} a ws server reads as left out`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedAlphaMcpPlugin(
+        home,
+        cwd,
+        { live: { type: "ws", url: "wss://h.test/live" } },
+        false,
+      );
+
+      // act
+      const notifications = await infoAlphaUnder(implementation, cwd);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            "  ⊖ alpha v1.0.0 (partially-available) {unsupported mcp}",
+            "    mcp: plugin:alpha:live (unsupported ws)",
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+
+  test(`MREC-04: under ${implementation} a plugin with no MCP server shows no mcp line`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedAlphaMcpPlugin(home, cwd, undefined, false);
+
+      // act
+      const notifications = await infoAlphaUnder(implementation, cwd);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        { message: ["● mp [user] <no autoupdate>", "  ○ alpha v1.0.0 (available)"].join("\n") },
+      ]);
+    });
+  });
+}
+
+for (const { implementation, lines } of [
+  {
+    implementation: "builtin",
+    lines: [
+      "  ⊖ alpha v1.0.0 (partially-available) {unsupported mcp}",
+      "    mcp: plugin:alpha:events (unsupported sse)",
+      adapterRequiresLine("builtin"),
+    ],
+  },
+  {
+    implementation: "adapter",
+    lines: [
+      "  ○ alpha v1.0.0 (available)",
+      "    mcp: plugin:alpha:events",
+      adapterRequiresLine("adapter"),
+    ],
+  },
+] as const) {
+  test(`MREC-04 / D-P3-08: under ${implementation} a not-installed sse plugin reads for that implementation`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedAlphaMcpPlugin(home, cwd, { events: SSE_SERVER }, false);
+
+      // act
+      const notifications = await infoAlphaUnder(implementation, cwd);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        { message: ["● mp [user] <no autoupdate>", ...lines].join("\n") },
+      ]);
+    });
+  });
+}
+
+for (const { implementation, requiresLine } of [
+  { implementation: "adapter", requiresLine: "    requires: mcp" },
+  { implementation: "builtin", requiresLine: "    requires: mcp" },
+  { implementation: "none", requiresLine: "    requires: mcp (missing)" },
+] as const) {
+  test(`D-P3-08: under ${implementation} a stdio plugin's requires line names mcp`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedAlphaMcpPlugin(home, cwd, { stub: { command: "stub-server" } }, false);
+
+      // act
+      const notifications = await infoAlphaUnder(implementation, cwd);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            "  ○ alpha v1.0.0 (available)",
+            "    mcp: plugin:alpha:stub",
+            requiresLine,
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+}
+
+/**
+ * D-P3-02: gives the user-scope `alpha` record of `mp` the neutral verdict of
+ * an install: every declared server in its Claude form, with the basis.
+ */
+async function recordNeutralVerdict(cwd: string, servers: Record<string, unknown>): Promise<void> {
+  const statePath = path.join(locationsFor("user", cwd).extensionRoot, "state.json");
+  const state = JSON.parse(await readFile(statePath, "utf8")) as {
+    marketplaces: Record<string, { plugins: Record<string, Record<string, unknown>> }>;
+  };
+  const record = state.marketplaces.mp?.plugins.alpha;
+  assert.ok(record !== undefined);
+  record.mcpServerConfigs = Object.entries(servers).map(([name, config]) => ({ name, config }));
+  record.compatibilityBasis = "neutral";
+  await writeFile(statePath, JSON.stringify(state), "utf8");
+}
+
+/** Seeds a user-scope `alpha` record whose manifest entry is a non-path (npm) source. */
+async function seedNpmAlphaRecord(
+  home: string,
+  cwd: string,
+  mcpServers: readonly string[],
+): Promise<void> {
+  await seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: {
+      name: "mp",
+      plugins: [
+        {
+          name: "alpha",
+          source: { source: "npm", package: "@scope/alpha", version: "1.0.0" },
+          version: "1.0.0",
+        },
+      ],
+    },
+    installed: { alpha: { version: "1.0.0", resources: { skills: [], mcpServers } } },
+  });
+}
+
+for (const { implementation, statusLine } of [
+  {
+    implementation: "builtin",
+    statusLine: "  ◉ alpha v1.0.0 (partially-installed) {unsupported mcp}",
+  },
+  { implementation: "adapter", statusLine: "  ● alpha v1.0.0 (installed)" },
+] as const) {
+  test(`D-P3-05: under ${implementation} a non-path row reads the neutral record's status for that implementation`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedNpmAlphaRecord(home, cwd, ["events"]);
+      await recordNeutralVerdict(cwd, { events: SSE_SERVER });
+
+      // act
+      const notifications = await infoAlphaUnder(implementation, cwd);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: ["● mp [user] <no autoupdate>", statusLine, "    components: not resolved"].join(
+            "\n",
+          ),
+        },
+      ]);
+    });
+  });
+}
+
+for (const { implementation, statusLine, mcpLine } of [
+  {
+    implementation: "builtin",
+    statusLine: "  ◉ alpha v1.0.0 (partially-installed) {not in manifest, unsupported mcp}",
+    mcpLine: "    mcp: plugin:alpha:events (unsupported sse), plugin:alpha:stub (status unknown)",
+  },
+  {
+    implementation: "adapter",
+    statusLine: "  ● alpha v1.0.0 (installed) {not in manifest}",
+    mcpLine: "    mcp: plugin:alpha:events (status unknown), plugin:alpha:stub (status unknown)",
+  },
+] as const) {
+  test(`MREC-04 / D-P3-05: under ${implementation} a record-only row reads the neutral record's servers for that implementation`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, {
+        mcpServers: ["events", "stub"],
+      });
+      await recordNeutralVerdict(cwd, { stub: { command: "stub-server" }, events: SSE_SERVER });
+
+      // act
+      const notifications = await infoAlphaUnder(implementation, cwd);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            statusLine,
+            mcpLine,
+            adapterRequiresLine(implementation),
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+}
+
+test("MREC-02 / D-P3-08: a record-only row whose servers cannot be read keeps its stored status and staged names and names pi-mcp-adapter (P3-DC-24)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: {
+          version: "1.0.0",
+          unsupported: ["mcpServers"],
+          resources: { skills: [], mcpServers: ["srv"] },
+        },
+      },
+    });
+
+    // act
+    const notifications = await infoAlphaUnder("builtin", cwd);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◉ alpha v1.0.0 (partially-installed) {not in manifest, unsupported mcp}",
+          "    mcp: plugin:alpha:srv (status unknown)",
+          adapterRequiresLine("builtin"),
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-P3-08: a record-only row whose recorded servers are stdio names mcp missing with no MCP implementation", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["stub"] });
+    await recordNeutralVerdict(cwd, { stub: { command: "stub-server" } });
+
+    // act
+    const notifications = await infoAlphaUnder("none", cwd);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:stub (status unknown)",
+          "    requires: mcp (missing)",
         ].join("\n"),
       },
     ]);

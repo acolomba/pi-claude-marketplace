@@ -32,6 +32,8 @@ import {
   composePromotedRow,
   formatOrchestratedCause,
 } from "./install.messaging.ts";
+import { readRecordMcpDependency } from "./mcp-verdict-read.ts";
+import { mcpDependencyOf } from "./mcp-verdict.ts";
 import {
   localOnlyMarketplaceRefusal,
   overwriteDisabledMemberEntries,
@@ -58,6 +60,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
@@ -301,7 +304,8 @@ export function failedRowOutcome(args: {
 export interface PromotionOutcome {
   readonly version: string;
   readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
+  /** D-P3-10: the promoted plugin's MCP dependency, or `false`. */
+  readonly declaresMcp: McpDependency | false;
   readonly declaresWorkflows: boolean;
   readonly materialized: readonly HydratableMember[];
   /** AFILE-04: the re-materialization's MCP config notices; empty otherwise. */
@@ -356,8 +360,13 @@ export async function promoteDependencyRecord(
   args: PromotionArgs,
 ): Promise<PromotionOutcome | undefined> {
   const { marketplace, plugin } = args.opts;
-  const record = ownValue(ownValue(args.state.marketplaces, marketplace)?.plugins, plugin);
-  if (record?.provenance !== "dependency" || refusesPromotion(args.opts, record)) {
+  const marketplaceRecord = ownValue(args.state.marketplaces, marketplace);
+  const record = ownValue(marketplaceRecord?.plugins, plugin);
+  if (
+    marketplaceRecord === undefined ||
+    record?.provenance !== "dependency" ||
+    refusesPromotion(args.opts, record)
+  ) {
     return undefined;
   }
 
@@ -367,7 +376,11 @@ export async function promoteDependencyRecord(
     return {
       version: record.version,
       declaresAgents: record.resources.agents.length > 0,
-      declaresMcp: record.resources.mcpServers.length > 0,
+      declaresMcp: await readRecordMcpDependency(record, {
+        marketplaceName: marketplace,
+        marketplace: marketplaceRecord,
+        pluginName: plugin,
+      }),
       declaresWorkflows: record.resources.workflows.length > 0,
       materialized: [],
       mcpConfigNotices: [],
@@ -380,7 +393,7 @@ export async function promoteDependencyRecord(
   return {
     version: summary.version,
     declaresAgents: summary.stagedAgentNames.length > 0,
-    declaresMcp: summary.stagedMcpServerNames.length > 0,
+    declaresMcp: mcpDependencyOf(Object.values(summary.resolved.declaredMcpServers)),
     declaresWorkflows: summary.stagedWorkflowNames.length > 0,
     materialized: [
       {
@@ -512,6 +525,9 @@ async function materializePromotedRecord(
       ...(record.resolvedVersion !== undefined && { resolvedVersion: record.resolvedVersion }),
       allowExistingRecord: true,
       partial: !record.compatibility.installable,
+      // D-P3-13 / D-MB-06: a promotion re-materializes a kept record, so a
+      // switch of MCP implementation never asks for consent.
+      consentView: "none",
       removalOps: args.removalOps,
       env: args.env,
     },
@@ -887,9 +903,11 @@ export async function declareInstalledPlugin(args: {
 }): Promise<InstallTransactionOutcome | undefined> {
   const { opts, state, selection } = args;
   const { marketplace, plugin } = opts;
-  const record = ownValue(ownValue(state.marketplaces, marketplace)?.plugins, plugin);
+  const marketplaceRecord = ownValue(state.marketplaces, marketplace);
+  const record = ownValue(marketplaceRecord?.plugins, plugin);
   if (
     args.orchestrated ||
+    marketplaceRecord === undefined ||
     record?.provenance !== "explicit" ||
     opts.pinVersionOverride !== undefined ||
     pluginLayerVerdict({
@@ -916,6 +934,11 @@ export async function declareInstalledPlugin(args: {
   return {
     kind: "declared",
     record,
+    mcpDependency: await readRecordMcpDependency(record, {
+      marketplaceName: marketplace,
+      marketplace: marketplaceRecord,
+      pluginName: plugin,
+    }),
     reason: selection.targetIsLocal
       ? "already installed in base layer"
       : "already installed in local layer",
@@ -926,7 +949,8 @@ export async function declareInstalledPlugin(args: {
  * LAYER-05: the one `(skipped)` row of an install that only added a
  * declaration, at the severity `skipSeverity` gives an idempotent reason. The
  * outcome is the `installed` shape a promotion of a record on disk returns:
- * nothing changed on disk but the target layer.
+ * nothing changed on disk but the target layer. `mcpDependency` is the
+ * record's MCP dependency, read from its recorded servers (D-P3-10).
  */
 export function declaredRowOutcome(args: {
   readonly ctx: NotificationContext;
@@ -935,6 +959,7 @@ export function declaredRowOutcome(args: {
   readonly scope: Scope;
   readonly plugin: string;
   readonly record: PluginInstallRecord;
+  readonly mcpDependency: McpDependency | false;
   readonly reason: "already installed in base layer" | "already installed in local layer";
 }): InstallPluginOutcome {
   const { record } = args;
@@ -966,7 +991,7 @@ export function declaredRowOutcome(args: {
     version: record.version,
     resourcesChanged: false,
     declaresAgents: record.resources.agents.length > 0,
-    declaresMcp: record.resources.mcpServers.length > 0,
+    declaresMcp: args.mcpDependency,
     declaresWorkflows: record.resources.workflows.length > 0,
   };
 }
@@ -1031,6 +1056,8 @@ export type InstallTransactionOutcome =
   | {
       kind: "declared";
       record: PluginInstallRecord;
+      /** D-P3-10: the record's MCP dependency, read inside the lock. */
+      mcpDependency: McpDependency | false;
       reason: "already installed in base layer" | "already installed in local layer";
     }
   | { kind: "promoted"; promotion: PromotionOutcome }

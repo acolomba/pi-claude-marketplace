@@ -106,6 +106,7 @@ function updateArgs(overrides: Partial<CascadeThreePhaseArgs> = {}): CascadeThre
     env: {},
     cascade: true,
     cleanupClones: () => Promise.resolve(),
+    mcpImplementation: "none",
     ...overrides,
   };
 }
@@ -280,6 +281,7 @@ describe("updateCaller", () => {
         completionCache: createCompletionCache(),
         env: {},
         cleanupClones: () => Promise.resolve(),
+        mcpImplementation: "none",
         mapModel: true,
         partial: true,
         authMemo,

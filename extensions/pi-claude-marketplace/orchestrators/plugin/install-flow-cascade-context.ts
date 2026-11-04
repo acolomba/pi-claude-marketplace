@@ -162,6 +162,9 @@ export function buildInstallLedgerOptions(
     ...(core.provenance !== undefined && { provenance: core.provenance }),
     ...(opts.mapModel !== undefined && { mapModel: opts.mapModel }),
     ...(opts.partial !== undefined && { partial: opts.partial }),
+    // D-P3-11: a user-run install, its cascade members, and a fresh import or
+    // apply install ask for `--partial` against the run's implementation.
+    consentView: opts.run.softDeps.mcpImplementation,
     ...(core.pinVersion !== undefined && { pinVersionOverride: core.pinVersion }),
     ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
     ...(core.cloneCandidates !== undefined && { cloneCandidates: core.cloneCandidates }),

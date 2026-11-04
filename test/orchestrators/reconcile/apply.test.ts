@@ -95,7 +95,7 @@ import { createNotificationBoundary } from "../../edge/notification-boundary.ts"
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
@@ -3015,7 +3015,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● rich v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
+          "  ● rich v1.0.0 (installed) {requires pi-subagents, requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -3555,7 +3555,7 @@ describe("applyReconcile", () => {
     {
       name: "declares both companions when the ledger stages an agent and a server",
       tree: { agents: ["with-tools"], mcpServer: true, skill: "clean" },
-      row: "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}",
+      row: "  ● hello v1.0.0 (installed) {requires pi-subagents, requires mcp}",
       severity: undefined,
       summary: "",
       tally: "Reconcile: 1 success",
@@ -7877,7 +7877,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -7945,7 +7945,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -8055,7 +8055,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -8088,7 +8088,7 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ● duo v1.0.0 (installed) {requires pi-subagents}\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 2 successes\n" +
           "\n" +
@@ -8294,7 +8294,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● secrets-vault v1.0.0 (installed) {dependency installed, requires pi-mcp-adapter}\n" +
+          "  ● secrets-vault v1.0.0 (installed) {dependency installed, requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -8331,7 +8331,7 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ○ alfa v1.0.0 (uninstalled)\n" +
-          "  ● bravo v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● bravo v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 2 successes\n" +
           "\n" +
@@ -10591,6 +10591,52 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("D-P3-13: a candidate that adds an sse server is declined under Pi's built-in MCP and writes nothing", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "converge-sse-builtin",
+      {
+        trees: { demo: { skill: "clean" } },
+        supported: { demo: ["skills"] },
+        offered: { demo: "1.1.0" },
+      },
+    );
+    await writeUnder(
+      path.join(marketplaceRoot, "plugins", "demo", ".mcp.json"),
+      JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+    );
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const run = runWithSoftDeps({
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      mcpImplementation: "builtin",
+      workflowEngineLoaded: false,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 (partially-upgradable) {unsupported mcp}\n" +
+          "    Run update --partial on this plugin to update it with the supported components.\n" +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
+      },
+    ]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
   test("ENBL-08: a disabled record whose supported set grew is never re-materialized", async (t) => {
     // arrange
     const { cwd, project } = await seedConvergenceScope(t, "converge-grown-disabled", {
@@ -10775,7 +10821,7 @@ describe("applyReconcile catalog convergence", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● alfa v1.0.0 (installed) {components now supported, requires pi-mcp-adapter}\n" +
+          "  ● alfa v1.0.0 (installed) {components now supported, requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +

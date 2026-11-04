@@ -90,11 +90,11 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 
 - [x] **MREC-01**: Install, update, reinstall, enable, and import record every declared MCP server in its Claude form before plugin-variable substitution (D-MB-04), including servers the active implementation cannot run; `state.json` still holds no absolute paths
 - [x] **MREC-02**: A plugin installed before this milestone, whose record lists no servers, materializes correctly under either implementation with no reinstall
-- [ ] **MREC-03**: `list`, `info`, `install`, `update`, `pending`, and `apply` compute a plugin's available or partially available state against the active implementation, so one installed plugin can be available under one implementation and partially available under the other
-- [ ] **MREC-04**: `info` shows each server's verdict for the active implementation with that implementation's reason tokens (for example, an `sse` server is blocked under built-in and runs under the adapter)
-- [ ] **MREC-05**: With no active implementation, a plugin with MCP servers stays `installed` and its row carries `{requires mcp}`, `{requires pi-mcp-adapter}`, or `{requires builtin mcp}`, naming the implementation that would run every server (D-MB-01, D-MB-07); installing it needs no `--partial` (D-MB-05)
-- [ ] **MREC-06**: `--partial` consent is asked only on an install or update the user runs, against the active implementation; enable, apply, reinstall, import, and cascades never ask because of a switch (D-MB-06)
-- [ ] **MREC-07**: When the active implementation cannot run a server that the other implementation can, the row carries that implementation's `requires` marker beside `{unsupported mcp}`, and `info`'s `requires:` line names it with `(missing)` (D-MB-07); a server neither can run shows `{unsupported mcp}` only; the two new reasons are documented in the CHANGELOG and `docs/json-output.md`
+- [x] **MREC-03**: `list`, `info`, `install`, `update`, `pending`, and `apply` compute a plugin's available or partially available state against the active implementation, so one installed plugin can be available under one implementation and partially available under the other
+- [x] **MREC-04**: `info` shows each server's verdict for the active implementation with that implementation's reason tokens (for example, an `sse` server is blocked under built-in and runs under the adapter)
+- [x] **MREC-05**: With no active implementation, a plugin with MCP servers stays `installed` and its row carries `{requires mcp}`, `{requires pi-mcp-adapter}`, or `{requires builtin mcp}`, naming the implementation that would run every server (D-MB-01, D-MB-07); installing it needs no `--partial` (D-MB-05)
+- [x] **MREC-06**: `--partial` consent is asked only on an install or update the user runs, against the active implementation; enable, apply, reinstall, import, and cascades never ask because of a switch (D-MB-06)
+- [x] **MREC-07**: When the active implementation cannot run a server that the other implementation can, the row carries that implementation's `requires` marker beside `{unsupported mcp}`, and `info`'s `requires:` line names it with `(missing)` (D-MB-07); a server neither can run shows `{unsupported mcp}` only; the two new reasons are documented in the CHANGELOG and `docs/json-output.md`
 
 ### Built-in materialization
 
@@ -158,11 +158,11 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 | MSEL-04 | Phase 2 | Complete |
 | MREC-01 | Phase 1 | Complete |
 | MREC-02 | Phase 2 | Complete |
-| MREC-03 | Phase 3 | Pending |
-| MREC-04 | Phase 3 | Pending |
-| MREC-05 | Phase 3 | Pending |
-| MREC-06 | Phase 3 | Pending |
-| MREC-07 | Phase 3 | Pending |
+| MREC-03 | Phase 3 | Complete |
+| MREC-04 | Phase 3 | Complete |
+| MREC-05 | Phase 3 | Complete |
+| MREC-06 | Phase 3 | Complete |
+| MREC-07 | Phase 3 | Complete |
 | BLT-01 | Phase 2 | Complete |
 | BLT-02 | Phase 2 | Complete |
 | BLT-03 | Phase 2 | Complete |

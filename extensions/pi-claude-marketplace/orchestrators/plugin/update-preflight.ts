@@ -3,6 +3,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import {
   requireInstallable,
   requirePartialInstallable,
+  resolutionFor,
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
@@ -48,6 +49,7 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { admitResolvedVersion, evaluateCatalogConstraint } from "./constraint-fold.ts";
+import { newlyDroppedKinds } from "./mcp-verdict.ts";
 import { DEFAULT_PACKAGE_INSTALL_OPS, removeInstalledPackages } from "./package-install.ts";
 import {
   isRecordedCandidate,
@@ -58,11 +60,13 @@ import {
 import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type {
   GitPluginRootResult,
   MaterializablePlugin,
   ResolveContext,
+  ResolvedPlugin,
 } from "../../domain/resolver-types.ts";
 import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -85,6 +89,7 @@ import type {
   UpdateConstraintVerdict,
   UpdateTagPin,
 } from "./constraint-fold.ts";
+import type { RecordDegradeBaselineReader } from "./mcp-verdict.ts";
 import type { UpdateConstraintOptions } from "./update-constraint-gate.ts";
 
 /** Target selected by the three public plugin-update invocation forms. */
@@ -202,6 +207,20 @@ export interface PreparePluginUpdateOptions {
   /** State I/O for the disabled-pin refresh; production callers omit it. */
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly partial?: boolean;
+  /**
+   * D-P3-11: the MCP implementation of the calling run. The candidate gate
+   * asks for `--partial` against this implementation's view. It is required,
+   * so no caller gets a view by leaving it out.
+   */
+  readonly mcpImplementation: ActiveMcpImplementation;
+  /**
+   * D-MB-06 / D-P3-13: a cascade never asks because of a switch. When set,
+   * the candidate gate also admits, without `--partial`, a candidate that
+   * drops nothing the installed record does not drop under
+   * `mcpImplementation`, read through this port. A dependency move sets it; a
+   * user-run update leaves it out and keeps today's rules (D-P3-12).
+   */
+  readonly readRecordDegradeBaseline?: RecordDegradeBaselineReader;
   readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   /** Exact clone-cache keys created by the current dependency-planning attempt. */
@@ -452,6 +471,39 @@ interface UpdateCandidateResolution {
   readonly pathResolvedSha: string | undefined;
 }
 
+/**
+ * D-MB-06 / D-P3-13: whether a candidate the active implementation sees as
+ * partially available drops nothing the installed record does not drop
+ * under the same implementation, so the gate admits it without `--partial`.
+ * Only a caller that passes the baseline reader (a cascade) gets this, and
+ * only for a candidate that drops MCP servers alone: a drop of any other kind
+ * keeps the `--partial` rule it had before the MCP implementations split.
+ */
+async function dropsNothingNew(
+  view: ResolvedPlugin,
+  neutral: ResolvedPlugin,
+  marketplace: ExtensionState["marketplaces"][string],
+  gate: {
+    readonly plugin: string;
+    readonly record: PluginStateRecord;
+    readonly readRecordDegradeBaseline: RecordDegradeBaselineReader | undefined;
+  },
+): Promise<boolean> {
+  // A partially available view comes only from a resolution that is not
+  // unavailable; the second test narrows the type.
+  if (
+    view.state !== "partially-available" ||
+    neutral.state === "unavailable" ||
+    gate.readRecordDegradeBaseline === undefined ||
+    view.unsupported.some((kind) => kind !== "mcpServers")
+  ) {
+    return false;
+  }
+
+  const baseline = await gate.readRecordDegradeBaseline(gate.record, marketplace, gate.plugin);
+  return newlyDroppedKinds(view, neutral, baseline).length === 0;
+}
+
 async function resolveUpdateCandidate(
   entry: PluginEntry,
   marketplace: ExtensionState["marketplaces"][string],
@@ -460,6 +512,9 @@ async function resolveUpdateCandidate(
     readonly plugin: string;
     readonly fromVersion: string;
     readonly partial: boolean;
+    readonly mcpImplementation: ActiveMcpImplementation;
+    readonly record: PluginStateRecord;
+    readonly readRecordDegradeBaseline: RecordDegradeBaselineReader | undefined;
     readonly locations: ScopedLocations;
     readonly pin?: UpdateTagPin;
     readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
@@ -515,12 +570,18 @@ async function resolveUpdateCandidate(
         },
       }),
     });
-    if (options.partial) {
-      requirePartialInstallable(resolved, "update");
+    // D-P3-11: the gate asks for `--partial` against the active
+    // implementation's view. The candidate stays the neutral resolution that
+    // the swap records. Every implementation blocks what the neutral verdict
+    // blocks, so the neutral narrowing below cannot throw once the view passed.
+    const view = resolutionFor(resolved, options.mcpImplementation);
+    if (options.partial || (await dropsNothingNew(view, resolved, marketplace, options))) {
+      requirePartialInstallable(view, "update");
     } else {
-      requireInstallable(resolved, "update");
+      requireInstallable(view, "update");
     }
 
+    requirePartialInstallable(resolved, "update");
     return { candidate: resolved, pathResolvedSha };
   } catch (error: unknown) {
     // GHB-03: an invalid GitHub base override fails the whole command; it never
@@ -794,6 +855,9 @@ function nextDisabledPin(preflight: PreparedPluginUpdate): {
         resolvedVersion: preflight.resolvedVersion,
       }),
       compatibility,
+      // D-P3-02: the refresh writes the neutral basis, so a record that
+      // already holds it projects the same and is not rewritten.
+      compatibilityBasis: "neutral",
       mcpServerConfigs,
       ...(mcpBundle && { mcpBundle: true }),
     }),
@@ -857,9 +921,11 @@ async function refreshDisabledRecord(
         record.resolvedVersion = preflight.resolvedVersion;
       }
 
-      // MREC-01: the refresh writes the adapter's verdict, so a neutral
-      // basis left from the old version goes.
+      // MREC-01 / D-P3-02: the refresh writes the neutral verdict, and
+      // `replaceCompatibility` clears the basis, so the basis is set after it
+      // in the same locked save.
       replaceCompatibility(record, next.compatibility);
+      record.compatibilityBasis = "neutral";
       // MREC-01: the declared MCP servers of the version the record now names.
       record.mcpServerConfigs = next.mcpServerConfigs;
       if (next.mcpBundle) {
@@ -954,6 +1020,9 @@ async function resolvePinnedUpdateCandidate(
     readonly plugin: string;
     readonly fromVersion: string;
     readonly partial: boolean;
+    readonly mcpImplementation: ActiveMcpImplementation;
+    readonly record: PluginStateRecord;
+    readonly readRecordDegradeBaseline: RecordDegradeBaselineReader | undefined;
     readonly locations: ScopedLocations;
     readonly cloneCandidates?: Set<string>;
   },
@@ -1198,6 +1267,9 @@ export async function preparePluginUpdate(
       plugin: options.plugin,
       fromVersion: triaged.record.version,
       partial: options.partial === true || widensPartialGate(triaged.record),
+      mcpImplementation: options.mcpImplementation,
+      record: triaged.record,
+      readRecordDegradeBaseline: options.readRecordDegradeBaseline,
       locations: options.locations,
       ...(options.cloneCandidates !== undefined && {
         cloneCandidates: options.cloneCandidates,

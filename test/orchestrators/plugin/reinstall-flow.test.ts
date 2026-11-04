@@ -685,6 +685,7 @@ for (const coexist of [false, true]) {
         JSON.parse(await readFile(locations.agentsIndexPath, "utf8")),
         expectedIndex,
       );
+      // D-P3-02: the reinstall writes the neutral verdict with its basis.
       const migratedState = (updatedAt: string) => ({
         ...beforeState,
         marketplaces: {
@@ -694,6 +695,7 @@ for (const coexist of [false, true]) {
             plugins: {
               hello: {
                 ...oldRecord,
+                compatibilityBasis: "neutral",
                 resources: { ...oldRecord.resources, agents: expectedNames },
                 updatedAt,
               },
@@ -1349,7 +1351,7 @@ test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even wit
         // appear on the (reinstalled) row when companion extensions are
         // unloaded.
         assert.match(body, /\{[^}]*requires pi-subagents[^}]*\}/);
-        assert.match(body, /\{[^}]*requires pi-mcp-adapter[,}]/);
+        assert.match(body, /\{[^}]*requires mcp[,}]/);
         assert.match(body, /\/reload to pick up changes/);
       } finally {
         await rm(cwdWithDependencies, { recursive: true, force: true });
@@ -2280,7 +2282,7 @@ test("PRL-15: batch soft dependency markers ride only the reinstalled row", asyn
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}\n\nPlugin reinstall: 1 failure, 1 warning\n\n/reload to pick up changes",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires mcp}\n\nPlugin reinstall: 1 failure, 1 warning\n\n/reload to pick up changes",
           severity: "error",
         },
       ]);
@@ -2330,7 +2332,7 @@ test("DLS-01: a recorded plugin the manifest no longer declares keeps its instal
             "",
             "● mp [project]",
             "  ⊘ bad (skipped) {not in manifest}",
-            "  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}",
+            "  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires mcp}",
             "",
             "Plugin reinstall: 2 warnings",
             "",
@@ -4272,6 +4274,59 @@ test("D-18-06 / D-18-08: a reinstall that newly leaves a component out names it 
     }
   });
 });
+
+for (const { mcpImplementation, notification } of [
+  {
+    mcpImplementation: "builtin",
+    notification: {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {unsupported mcp, requires pi-mcp-adapter}\n\n/reload to pick up changes",
+      severity: "warning",
+    },
+  },
+  {
+    mcpImplementation: "adapter",
+    notification: {
+      message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+    },
+  },
+] as const) {
+  test(`D-P3-12 / D-P3-13: a reinstall under ${mcpImplementation} of a plugin that now declares an sse server re-materializes it and names what that implementation drops`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-view-"));
+      try {
+        // arrange
+        const seeded = await seedMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          resources: { skill: "old skill" },
+          install: true,
+        });
+        await writeFile(
+          path.join(seeded.pluginRoot, ".mcp.json"),
+          JSON.stringify({
+            mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } },
+          }),
+        );
+        const { ctx, run, notifications } = makeCtx({ mcpImplementation });
+
+        // act
+        await reinstallPlugins({
+          ctx,
+          run,
+          cwd,
+          scope: "project",
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        // assert
+        assert.deepStrictEqual(notifications, [notification]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 test("BFILL-01 / D-18-06 full: reinstall of an installable plugin records installable:true with empty unsupported", async () => {
   await withHermeticHome(async () => {
@@ -8420,9 +8475,11 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       // before the mark fails as concurrently updated.
       assert.ok(firstRecord !== undefined);
       const { updatedAt: markedStamp, ...markedFields } = firstRecord;
+      // D-P3-02: the intent mark keeps the basis the install set.
       const { updatedAt: readStamp, ...readFields } = recordBefore;
       assert.deepStrictEqual(markedFields, {
         ...readFields,
+        compatibilityBasis: "neutral",
         compatibility: {
           installable: false,
           notes: ["update-in-progress"],
@@ -8442,7 +8499,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
         declaresWorkflows: false,
       });
       const finalRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
@@ -9865,7 +9922,7 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
         declaresWorkflows: false,
       });
       const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
@@ -10015,7 +10072,7 @@ test("AFILE-04: reinstall over a commented mcp-adapter.json shows the comments-r
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
           severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
@@ -10139,7 +10196,7 @@ test("AFILE-04: an orchestrated reinstall returns the notice on its outcome and 
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
         declaresWorkflows: false,
         mcpConfigNotices: [
           { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
@@ -10167,7 +10224,7 @@ test("AFILE-04: a self-rendered reinstall shows the notice after its row", async
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
           severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
@@ -10215,7 +10272,7 @@ for (const { label, env, notices } of [
         assert.deepStrictEqual(notifications, [
           {
             message:
-              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
             severity: "warning",
           },
           ...notices,

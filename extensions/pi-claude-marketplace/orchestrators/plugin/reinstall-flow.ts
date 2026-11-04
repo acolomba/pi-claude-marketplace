@@ -417,8 +417,11 @@ async function runReinstall(
       cascade: false,
       cardinality: "single",
       // D-18-06 / BFILL-01: reinstall is partial-capable, so a still-partial
-      // plugin re-materializes in place.
+      // plugin re-materializes in place. D-P3-13: so a switch of MCP
+      // implementation never holds a reinstall either.
       partial: true,
+      // D-P3-12: the outcome reports the kinds this implementation drops.
+      mcpImplementation: opts.run.softDeps.mcpImplementation,
       cleanupClones: collectPluginClonesLocked,
       // D-18-10: the commit or finalize failure is reinstall's own outcome to
       // render, so the callback only captures it.

@@ -50,6 +50,7 @@ import {
   type ManifestBoundary,
 } from "./manifest-containment.ts";
 import { MANIFEST_CANDIDATES } from "./manifest-path.ts";
+import { effectiveMcpCompatibility, type ActiveMcpImplementation } from "./mcp-implementation.ts";
 import { resolveStrictMcp, type McpResolution } from "./mcp-resolution.ts";
 import { assertSafeName, isReservedRecordKey } from "./name.ts";
 import {
@@ -64,6 +65,7 @@ import { collectUnsupportedKinds } from "./unsupported-components.ts";
 
 import type {
   GitPluginRootResult,
+  MaterializablePlugin,
   ResolveContext,
   ResolvedPlugin,
   ResolvedPluginInstallable,
@@ -739,6 +741,72 @@ export async function resolveStrict(
   await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
 
   return decideResolution(entry.name, pluginRoot, partial, dirty, metadata);
+}
+
+/**
+ * D-P3-03: one MCP implementation's view of a materializable resolution. The
+ * frozen effective read recomputes the MCP part from the declared servers,
+ * as `list` does for a stored neutral record, so a fresh resolution and a
+ * record read agree on every kind and on its order.
+ */
+function materializableViewFor(
+  resolved: MaterializablePlugin,
+  active: ActiveMcpImplementation,
+): MaterializablePlugin {
+  const effective = effectiveMcpCompatibility(
+    {
+      compatibility: {
+        installable: resolved.state === "installable",
+        notes: resolved.notes,
+        unsupported: resolved.unsupported,
+      },
+      compatibilityBasis: "neutral",
+    },
+    {
+      kind: "recorded",
+      servers: Object.entries(resolved.declaredMcpServers).map(([name, config]) => ({
+        name,
+        config,
+      })),
+      bundle: resolved.mcpBundle === true,
+    },
+    active,
+  );
+  // Every implementation blocks what the neutral verdict blocks, so a view
+  // with no blocked server comes from a resolution with no
+  // `droppedMcpServers`, and the spread carries no stale list.
+  const view = {
+    ...resolved,
+    unsupported: [...effective.unsupported],
+    ...(effective.blocked.length > 0 && { droppedMcpServers: [...effective.blocked] }),
+  };
+  return effective.unsupported.length > 0
+    ? { ...view, state: "partially-available" }
+    : { ...view, state: "installable" };
+}
+
+/**
+ * D-P3-03: the view of a resolution for one MCP implementation. The
+ * resolver's own `state`, `unsupported` kind list, and `droppedMcpServers`
+ * are the neutral verdict (D-P3-01); this gives the ones the named implementation
+ * sees, so a server only one implementation blocks counts under that one.
+ * `"none"` gives the neutral verdict back. An `unavailable` resolution is a
+ * structural defect that no implementation changes, so it returns as is.
+ * Every caller names the implementation: there is no default.
+ */
+export function resolutionFor(
+  resolved: MaterializablePlugin,
+  active: ActiveMcpImplementation,
+): MaterializablePlugin;
+export function resolutionFor(
+  resolved: ResolvedPlugin,
+  active: ActiveMcpImplementation,
+): ResolvedPlugin;
+export function resolutionFor(
+  resolved: ResolvedPlugin,
+  active: ActiveMcpImplementation,
+): ResolvedPlugin {
+  return resolved.state === "unavailable" ? resolved : materializableViewFor(resolved, active);
 }
 
 /**

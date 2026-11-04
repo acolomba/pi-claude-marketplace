@@ -473,6 +473,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    compatibilityBasis: "neutral",
     resources: {
       skills: [],
       prompts: [],
@@ -826,6 +827,7 @@ test("setPluginEnabled(false) unstages the artifacts, flips durable state and dr
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    compatibilityBasis: "neutral",
     resources: {
       skills: [],
       prompts: [],
@@ -947,6 +949,7 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    compatibilityBasis: "neutral",
     resources: {
       skills: [],
       prompts: [],
@@ -1005,6 +1008,7 @@ test("D-26: convergePlugin moves the plugin to the catalog version in place and 
     scope: "project",
     cwd,
     partial: false,
+    mcpImplementation: "none",
     rematerialize: false,
   });
 

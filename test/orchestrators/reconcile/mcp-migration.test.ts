@@ -77,6 +77,10 @@ interface PluginSeed {
   readonly servers: Readonly<Record<string, unknown>>;
   /** `.lsp.json` makes the plugin resolve partially-available, not installable. */
   readonly lsp?: boolean;
+  /** `plugin.json` also names a `.mcpb` bundle beside `.mcp.json`. */
+  readonly bundle?: boolean;
+  /** The version the catalog lists, `1.0.0` unless the catalog moved past the record. */
+  readonly version?: string;
 }
 
 /** Writes path marketplace `mp` at `<cwd>/mp-src` holding each plugin, and returns its paths. */
@@ -90,8 +94,16 @@ async function seedMarketplace(
     await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
     await writeFile(
       path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: plugin, version: "1.0.0" }),
+      JSON.stringify({
+        name: plugin,
+        version: seed.version ?? "1.0.0",
+        ...(seed.bundle === true && { mcpServers: ["./.mcp.json", "./tool.mcpb"] }),
+      }),
     );
+    if (seed.bundle === true) {
+      await writeFile(path.join(pluginRoot, "tool.mcpb"), "bundle");
+    }
+
     await writeFile(
       path.join(pluginRoot, ".mcp.json"),
       JSON.stringify({ mcpServers: seed.servers }),
@@ -110,10 +122,10 @@ async function seedMarketplace(
     manifestPath,
     JSON.stringify({
       name: "mp",
-      plugins: Object.keys(plugins).map((plugin) => ({
+      plugins: Object.entries(plugins).map(([plugin, seed]) => ({
         name: plugin,
         source: `./plugins/${plugin}`,
-        version: "1.0.0",
+        version: seed.version ?? "1.0.0",
       })),
     }),
   );
@@ -129,6 +141,7 @@ function pluginRecord(
   return {
     version: "1.0.0",
     resolvedSource: path.join(marketplaceRoot, "plugins", plugin),
+    compatibilityBasis: "neutral",
     compatibility: { installable: true, notes: [], supported: ["mcpServers"], unsupported: [] },
     resources: {
       skills: [],
@@ -143,6 +156,20 @@ function pluginRecord(
     installedAt: RECORDED_AT,
     updatedAt: RECORDED_AT,
   } satisfies PluginRecord;
+}
+
+/** A record a released build wrote: no `compatibilityBasis`, so it holds pi-mcp-adapter's verdict. */
+function legacyPluginRecord(
+  marketplaceRoot: string,
+  plugin: string,
+  mcpServers: readonly string[],
+): PluginRecord {
+  const { compatibilityBasis: _basis, ...legacy } = pluginRecord(
+    marketplaceRoot,
+    plugin,
+    mcpServers,
+  );
+  return legacy;
 }
 
 function stateWith(
@@ -1550,14 +1577,18 @@ describe("migrateLegacyMcpEntries", () => {
           supported: ["mcpServers"],
           unsupported: ["mcpServers"],
         },
+        mcpServerConfigs: [
+          { name: "srv", config: { command: "srv" } },
+          { name: "live", config: WS_SERVER },
+        ],
         updatedAt: MOVED_AT,
       },
     });
   });
 
-  test("MREC-01: a record that becomes partially installed for an unsupported server loses its neutral basis", async (t) => {
+  test("D-P3-16: a legacy record whose server no implementation runs gets the partial neutral verdict and its basis", async (t) => {
     // arrange
-    const scope = await createProjectScope(t, "unsupported-neutral");
+    const scope = await createProjectScope(t, "unsupported-legacy");
     const { cwd, locations } = scope;
     const marketplace = await seedMarketplace(cwd, {
       hello: { servers: { srv: { command: "srv" }, live: WS_SERVER } },
@@ -1565,10 +1596,7 @@ describe("migrateLegacyMcpEntries", () => {
     await seedState(
       locations,
       stateWith(cwd, marketplace, {
-        hello: {
-          ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv", "live"]),
-          compatibilityBasis: "neutral",
-        },
+        hello: legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv", "live"]),
       }),
     );
     await writeLegacy(locations, {
@@ -1581,6 +1609,10 @@ describe("migrateLegacyMcpEntries", () => {
     await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
 
     // assert
+    assert.deepStrictEqual(input.rows, [
+      HELLO_MOVED,
+      helloRemoved("live", "unsupported-feature", "ws"),
+    ]);
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
       hello: {
         ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
@@ -1590,6 +1622,157 @@ describe("migrateLegacyMcpEntries", () => {
           supported: ["mcpServers"],
           unsupported: ["mcpServers"],
         },
+        mcpServerConfigs: [
+          { name: "srv", config: { command: "srv" } },
+          { name: "live", config: WS_SERVER },
+        ],
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("D-P3-16: a server only Pi's built-in MCP runs is left out of mcp-adapter.json, and the record stays installable with the neutral basis", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "bare-elicitation");
+    const { cwd, locations } = scope;
+    const asker = { command: "node", bareElicitationCapability: true };
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" }, asker } },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv", "asker"]),
+      }),
+    );
+    await writeLegacy(locations, {
+      srv: legacyEntry("hello"),
+      asker: legacyEntry("hello", asker),
+    });
+    const log: string[] = [];
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, log));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [
+      HELLO_MOVED,
+      helloRemoved("asker", "unsupported-feature", "bareElicitationCapability"),
+    ]);
+    assert.deepStrictEqual(log, ["mcp-adapter.json", "state.json", "mcp.json"]);
+    assert.strictEqual(
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      freshAdapterText(locations, marketplace.marketplaceRoot, {
+        plugin_hello_srv_: { plugin: "hello", fields: { command: "srv" } },
+      }),
+    );
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        mcpServerConfigs: [
+          { name: "srv", config: { command: "srv" } },
+          { name: "asker", config: asker },
+        ],
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("D-P3-16: a legacy record that a plain move converts gets the neutral verdict and its basis", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "plain-legacy");
+    const { cwd, locations } = scope;
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" } } },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const log: string[] = [];
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, log));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual(log, ["mcp-adapter.json", "state.json", "mcp.json"]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        mcpServerConfigs: [{ name: "srv", config: { command: "srv" } }],
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("D-P3-16: a legacy record whose source names an MCP bundle records the bundle with its servers", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "bundle-legacy");
+    const { cwd, locations } = scope;
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" } }, bundle: true },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        compatibility: {
+          installable: false,
+          notes: [],
+          supported: ["mcpServers"],
+          unsupported: ["mcpServers"],
+        },
+        mcpServerConfigs: [{ name: "srv", config: { command: "srv" } }],
+        mcpBundle: true,
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("MREC-02: a legacy record whose catalog moved past its version keeps its stored verdict and records no servers of the newer version", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "moved-legacy");
+    const { cwd, locations } = scope;
+    const events = { type: "sse", url: "http://127.0.0.1:9/sse" };
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" }, events }, version: "1.1.0" },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv", "events"]),
         updatedAt: MOVED_AT,
       },
     });

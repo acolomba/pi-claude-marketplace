@@ -198,6 +198,7 @@ async function readOnlyPass(
       reader,
       scope,
       cwd: opts.cwd,
+      mcpImplementation: opts.run.softDeps.mcpImplementation,
       migrateMcpEntries: opts.migrateMcpEntries,
       configOutcomes,
     });
@@ -211,7 +212,11 @@ async function readOnlyPass(
     }
   }
 
-  const report = await composePendingReport({ cwd: opts.cwd, scopes: readableScopes });
+  const report = await composePendingReport({
+    cwd: opts.cwd,
+    scopes: readableScopes,
+    mcpImplementation: opts.run.softDeps.mcpImplementation,
+  });
   notifyMcpMigration(opts.ctx, opts.run, accumulators.migration);
   if (report.marketplaces.length > 0) {
     notifyPendingReport(opts.ctx, opts.run, report);

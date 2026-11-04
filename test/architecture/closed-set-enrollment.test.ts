@@ -40,7 +40,10 @@ import {
 import { softDepMarkers } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
 
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { Dependency } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
+import type {
+  Dependency,
+  McpDependency,
+} from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
 import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /**
@@ -52,8 +55,12 @@ import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notif
  * set, spelled here because `Dependency` has no tuple of its own to constrain.
  */
 type AssertNever<T extends never> = T;
-type UnenrolledDependency = Exclude<Dependency, "agents" | "mcp" | "workflows">;
+type UnenrolledDependency = Exclude<Dependency, "agents" | McpDependency | "workflows">;
 const UNENROLLED_DEPENDENCIES: AssertNever<UnenrolledDependency>[] = [];
+
+// D-P3-10: the MCP member is an McpDependency; this one renders the
+// `requires pi-mcp-adapter` marker.
+const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
 
 test("SCN-F025: BUCKET_A_EVENTS is the closed 10-entry admitted-event set", () => {
   // TOOL-02: the admission set opened at 8 events, the closed set
@@ -130,7 +137,7 @@ test("SCN-F025: softDepMarkers emits the agents and mcp markers in canonical age
   } satisfies SoftDepStatus;
 
   // act
-  const markers = softDepMarkers(true, true, false, probe);
+  const markers = softDepMarkers(true, ADAPTER_MCP, false, probe);
 
   // assert
   assert.deepStrictEqual(markers, ["requires pi-subagents", "requires pi-mcp-adapter"]);
@@ -162,7 +169,7 @@ test("SCN-F025: softDepMarkers emits only the mcp marker for an mcp-only declara
   } satisfies SoftDepStatus;
 
   // act
-  const markers = softDepMarkers(false, true, false, probe);
+  const markers = softDepMarkers(false, ADAPTER_MCP, false, probe);
 
   // assert
   assert.deepStrictEqual(markers, ["requires pi-mcp-adapter"]);
@@ -194,7 +201,7 @@ test("SCN-F025: softDepMarkers emits nothing when both companions are loaded", (
   } satisfies SoftDepStatus;
 
   // act
-  const markers = softDepMarkers(true, true, false, probe);
+  const markers = softDepMarkers(true, ADAPTER_MCP, false, probe);
 
   // assert
   assert.deepStrictEqual(markers, []);
@@ -228,7 +235,7 @@ test("SCN-F025: every marker softDepMarkers can emit is a reason catalog member"
   // act
   // All three dependencies declared and no companion loaded is the one input
   // that emits every marker, so this call enumerates the emittable set.
-  const markers = softDepMarkers(true, true, true, probe);
+  const markers = softDepMarkers(true, ADAPTER_MCP, true, probe);
 
   // assert
   assert.deepStrictEqual(markers, expectedMarkers);

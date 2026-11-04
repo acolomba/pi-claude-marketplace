@@ -80,6 +80,7 @@ import type {
   ImportDeps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { McpDependency } from "../../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
 import type { ContentReason } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { TestContext } from "node:test";
 
@@ -97,6 +98,10 @@ type ImportState = Awaited<ReturnType<LoadState>>;
 type MarketplaceRecord = ImportState["marketplaces"][string];
 type MarketplaceSource = MarketplaceRecord["source"];
 type PluginRecord = MarketplaceRecord["plugins"][string];
+
+// D-P3-10: the MCP dependency a boolean `mcp` row maps to, which renders the
+// `requires pi-mcp-adapter` marker exactly as a declared MCP kind did.
+const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
 type AddOutcome = Awaited<ReturnType<AddMarketplace>>;
 type InstallOutcome = Awaited<ReturnType<InstallPlugin>>;
 type AddOptions = Parameters<AddMarketplace>[0];
@@ -410,7 +415,7 @@ function installed(
 ): Installed {
   return {
     declaresAgents: declares.agents,
-    declaresMcp: declares.mcp,
+    declaresMcp: declares.mcp && ADAPTER_MCP,
     declaresWorkflows: declares.workflows ?? false,
     kind: "plugin-installed",
     marketplace,
@@ -3075,45 +3080,45 @@ test("records an unexpected plugin failure whose error carries a nested cause wi
 // companion extension loaded, so a declared dependency always surfaces.
 // WDEP-02: `workflows` composes LAST, so the agents/mcp brace forms are the same
 // bytes whether or not the row also declares workflows.
-for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
-  { declaresAgents: false, declaresMcp: false, declaresWorkflows: false, marker: "" },
+for (const { declaresAgents, mcp, declaresWorkflows, marker } of [
+  { declaresAgents: false, mcp: false, declaresWorkflows: false, marker: "" },
   {
     declaresAgents: true,
-    declaresMcp: false,
+    mcp: false,
     declaresWorkflows: false,
     marker: " {requires pi-subagents}",
   },
   {
     declaresAgents: false,
-    declaresMcp: true,
+    mcp: true,
     declaresWorkflows: false,
     marker: " {requires pi-mcp-adapter}",
   },
   {
     declaresAgents: false,
-    declaresMcp: false,
+    mcp: false,
     declaresWorkflows: true,
     marker: " {requires pi-dynamic-workflows}",
   },
   {
     declaresAgents: true,
-    declaresMcp: true,
+    mcp: true,
     declaresWorkflows: false,
     marker: " {requires pi-subagents, requires pi-mcp-adapter}",
   },
   {
     declaresAgents: true,
-    declaresMcp: true,
+    mcp: true,
     declaresWorkflows: true,
     marker: " {requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}",
   },
 ] satisfies readonly {
   readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
+  readonly mcp: boolean;
   readonly declaresWorkflows: boolean;
   readonly marker: string;
 }[]) {
-  test(`propagates declaresAgents ${declaresAgents}, declaresMcp ${declaresMcp} and declaresWorkflows ${declaresWorkflows} onto the outcome and the cascade row`, async (t) => {
+  test(`propagates declaresAgents ${declaresAgents}, declaresMcp ${mcp} and declaresWorkflows ${declaresWorkflows} onto the outcome and the cascade row`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "declares");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -3124,7 +3129,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
       installedPlugins: [
         installed("plugin", "mp", "user", {
           agents: declaresAgents,
-          mcp: declaresMcp,
+          mcp,
           workflows: declaresWorkflows,
         }),
       ],
@@ -3141,7 +3146,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
           Promise.resolve({
             ...installedOutcome(),
             declaresAgents,
-            declaresMcp,
+            declaresMcp: mcp && ADAPTER_MCP,
             declaresWorkflows,
           }),
         loadSettings: () =>
@@ -3477,7 +3482,7 @@ test("AVAR-04: an import reports the unset variable and the withheld credential 
     {
       message:
         "● fixture-mp [project] (added)\n" +
-        "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n\n" +
+        "  ● hello v1.0.0 (installed) {requires mcp}\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -5917,7 +5922,7 @@ test("IMP-05: enables a plugin the scope records disabled and declares it enable
                 name: "alpha",
                 version: "1.0.0",
                 stagedAgents: true,
-                stagedMcpServers: true,
+                stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
                 stagedWorkflows: true,
                 mcpConfigNotices: [adapterNotice],
               }

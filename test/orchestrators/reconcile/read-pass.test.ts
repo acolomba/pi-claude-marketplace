@@ -212,7 +212,7 @@ describe("readPassForScope", () => {
     await writeUnder(scope.project.localConfigJsonPath, declaring({ mp: replacement }));
 
     // act
-    const readResult = await readPassForScope(reader, "project", scope.cwd);
+    const readResult = await readPassForScope(reader, "project", scope.cwd, "adapter");
 
     // assert
     assert.deepStrictEqual(readResult.plan?.marketplacesToAdd, [
@@ -225,7 +225,7 @@ describe("readPassForScope", () => {
     const { cwd, project } = await createProjectScope(t, "pristine");
 
     // act
-    const readResult = await readPassForScope(reader, "project", cwd);
+    const readResult = await readPassForScope(reader, "project", cwd, "adapter");
 
     // assert
     assert.deepStrictEqual(readResult, {
@@ -247,7 +247,7 @@ describe("readPassForScope", () => {
     const stateMtime = (await stat(scope.project.stateJsonPath)).mtimeMs;
 
     // act
-    const readResult = await readPassForScope(reader, "project", scope.cwd);
+    const readResult = await readPassForScope(reader, "project", scope.cwd, "adapter");
 
     // assert
     assert.deepStrictEqual(readResult, {
@@ -303,7 +303,7 @@ describe("readPassForScope", () => {
     );
 
     // act
-    const readResult = await readPassForScope(reader, "project", scope.cwd);
+    const readResult = await readPassForScope(reader, "project", scope.cwd, "adapter");
 
     // assert
     assert.deepStrictEqual(
@@ -388,7 +388,7 @@ describe("readPassForScope", () => {
     );
 
     // act
-    const readResult = await readPassForScope(reader, "project", scope.cwd);
+    const readResult = await readPassForScope(reader, "project", scope.cwd, "adapter");
 
     // assert
     assert.deepStrictEqual(
@@ -424,7 +424,7 @@ describe("readPassForScope", () => {
     await seedWaitingDependent(scope);
 
     // act
-    const readResult = await readPassForScope(reader, "project", scope.cwd);
+    const readResult = await readPassForScope(reader, "project", scope.cwd, "adapter");
 
     // assert
     assert.deepStrictEqual(readResult.plan?.pluginsToEnable, []);
@@ -444,7 +444,7 @@ describe("readPassForScope", () => {
     await seedRecordedState(scope);
 
     // act
-    const readResult = await readPassForScope(reader, "project", scope.cwd);
+    const readResult = await readPassForScope(reader, "project", scope.cwd, "adapter");
 
     // assert
     assert.deepStrictEqual(readResult.plan, planOf({}));
@@ -463,7 +463,7 @@ describe("readPassForScope", () => {
 
     // act & assert
     await assert.rejects(
-      () => readPassForScope(reader, "project", scope.cwd),
+      () => readPassForScope(reader, "project", scope.cwd, "adapter"),
       (error: unknown) => {
         assert.ok(error instanceof MigrateConfigSaveError);
         assert.equal(error.configFilePath, scope.project.baseConfigJsonPath);
@@ -485,7 +485,7 @@ describe("readPassForScope", () => {
     );
 
     // act
-    const readResult = await readPassForScope(reader, "project", scope.cwd);
+    const readResult = await readPassForScope(reader, "project", scope.cwd, "adapter");
 
     // assert
     assert.deepStrictEqual(readResult, {
@@ -523,7 +523,7 @@ describe("readPassForScope", () => {
     );
 
     // act
-    const readResult = await readPassForScope(reader, "project", scope.cwd);
+    const readResult = await readPassForScope(reader, "project", scope.cwd, "adapter");
 
     // assert
     assert.deepStrictEqual(readResult, {
@@ -813,6 +813,7 @@ describe("openScopePass", () => {
       reader,
       scope: "project",
       cwd: scope.cwd,
+      mcpImplementation: "adapter",
       migrateMcpEntries: recordingMove(moves),
     });
 
@@ -844,6 +845,7 @@ describe("openScopePass", () => {
       reader,
       scope: "project",
       cwd: scope.cwd,
+      mcpImplementation: "adapter",
       migrateMcpEntries: recordingMove(moves),
     });
 
@@ -880,6 +882,7 @@ describe("openScopePass", () => {
       reader,
       scope: "project",
       cwd: scope.cwd,
+      mcpImplementation: "adapter",
       migrateMcpEntries: recordingMove([]),
       configOutcomes,
     });
@@ -907,6 +910,7 @@ describe("openScopePass", () => {
       reader,
       scope: "project",
       cwd: scope.cwd,
+      mcpImplementation: "adapter",
       migrateMcpEntries: recordingMove(moves),
     });
 
@@ -937,6 +941,7 @@ describe("openScopePass", () => {
       reader,
       scope: "project",
       cwd: scope.cwd,
+      mcpImplementation: "adapter",
       migrateMcpEntries: recordingMove(moves),
     });
 
@@ -964,7 +969,13 @@ describe("openScopePass", () => {
     const pass = accumulators();
 
     // act
-    const readResult = await openScopePass({ ...pass, reader, scope: "project", cwd: scope.cwd });
+    const readResult = await openScopePass({
+      ...pass,
+      reader,
+      scope: "project",
+      cwd: scope.cwd,
+      mcpImplementation: "adapter",
+    });
 
     // assert
     assert.equal(readResult, undefined);
@@ -984,6 +995,7 @@ describe("openScopePass", () => {
       reader,
       scope: "project",
       cwd: scope.cwd,
+      mcpImplementation: "adapter",
       migrateMcpEntries: () =>
         Promise.reject(new Error(`cannot read ${path.join(scope.cwd, ".pi", "mcp.json")}`)),
     });
@@ -1004,7 +1016,13 @@ describe("openScopePass", () => {
     const pass = accumulators();
 
     // act
-    await openScopePass({ ...pass, reader, scope: "project", cwd: scope.cwd });
+    await openScopePass({
+      ...pass,
+      reader,
+      scope: "project",
+      cwd: scope.cwd,
+      mcpImplementation: "adapter",
+    });
 
     // assert
     assert.deepStrictEqual(pass, accumulators());
