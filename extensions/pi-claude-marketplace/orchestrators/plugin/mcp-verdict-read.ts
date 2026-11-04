@@ -34,13 +34,16 @@ import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 
 /**
- * A legacy record with no MCP trace staged no server and stored no
- * `mcpServers` kind, so it reads as no servers without loading the manifest.
- * Only a record that left a trace re-resolves its declaration.
+ * A legacy record that holds pi-mcp-adapter's verdict (no basis), staged no
+ * server, and stored no `mcpServers` kind has no MCP trace: every server the
+ * adapter blocks leaves that kind. Such a record reads as no servers without
+ * loading the manifest. Any other record re-resolves its declaration, because
+ * a neutral verdict does not record a server only one implementation blocks.
  */
 function legacyReaderFor(source: LegacyServersSource): LegacyServersReader {
   const reader = createLegacyServersReader(source);
   return (record) =>
+    record.compatibilityBasis === undefined &&
     record.resources.mcpServers.length === 0 &&
     !record.compatibility.unsupported.includes("mcpServers")
       ? Promise.resolve({ servers: [], bundle: false })

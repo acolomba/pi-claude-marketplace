@@ -15,6 +15,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { createLoadReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/load.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -23,7 +24,9 @@ import {
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { adapterCommand, adapterProxyTool } from "../platform/pi-inventory-seed.ts";
 
 import { makeCtx, seedLegacyMcpInstall } from "./mcp-plugin-seed.ts";
 
@@ -152,6 +155,73 @@ test("D-P3-16: a load writes a record whose ws server no implementation runs as 
         "  extra (hello) [project] {unsupported mcp} ws: pi-mcp-adapter cannot run it.",
         COST_LINE,
         "/reload to pick up changes",
+      ].join("\n"),
+    ]);
+  });
+});
+
+/**
+ * The `list` text for the project scope from a session whose snapshot finds
+ * pi-mcp-adapter loaded.
+ */
+async function adapterListText(cwd: string): Promise<readonly string[]> {
+  const { session, notifications } = makeCtx();
+  const run = openNotificationRun(
+    {
+      getAllTools: () => [adapterProxyTool()],
+      getCommands: () => [adapterCommand()],
+      appendEntry(): never {
+        throw new Error("a text-mode session appends no entry");
+      },
+    },
+    { kind: "command", commandId: "plugin", invocationId: "list-run" },
+  );
+  await listPlugins({ ctx: session.ctx, run, cwd, scope: "project" });
+  return notifications.map((notification) => notification.message);
+}
+
+test("MREC-03 / D-P3-16: a moved legacy plugin whose only server pi-mcp-adapter blocks lists as partially installed under the adapter", async () => {
+  await withHermeticEnvironment("mcp-verdict-migration-asker-", async ({ cwd }) => {
+    // arrange
+    const asker = { command: "node", bareElicitationCapability: true };
+    const { pluginRoot } = await seedLegacyMcpInstall(cwd, "project", asker, STDIO_SERVER);
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: { srv: asker } }),
+    );
+    const locations = locationsFor("project", cwd);
+    const state = await loadState(locations.extensionRoot);
+    const seeded = state.marketplaces.mp?.plugins.hello;
+    assert.ok(seeded);
+    delete seeded.compatibilityBasis;
+    delete seeded.mcpServerConfigs;
+    seeded.resources.mcpServers = ["srv"];
+    await saveState(locations.extensionRoot, state);
+    await runLoad(cwd);
+
+    // act
+    const listed = await adapterListText(cwd);
+
+    // assert
+    const record = await projectRecord(cwd);
+    assert.deepStrictEqual(
+      {
+        compatibilityBasis: record?.compatibilityBasis,
+        mcpServerConfigs: record?.mcpServerConfigs,
+        stagedMcpServers: record?.resources.mcpServers,
+      },
+      {
+        compatibilityBasis: "neutral",
+        mcpServerConfigs: [{ name: "srv", config: asker }],
+        stagedMcpServers: [],
+      },
+    );
+    assert.deepStrictEqual(listed, [
+      [
+        "● mp [project]",
+        "  ◉ hello v1.0.0 (partially-installed) {unsupported mcp, requires builtin mcp}",
+        "",
+        "Plugin list: 1 success",
       ].join("\n"),
     ]);
   });

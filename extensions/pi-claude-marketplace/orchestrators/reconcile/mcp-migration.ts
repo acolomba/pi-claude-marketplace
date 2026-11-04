@@ -525,7 +525,10 @@ function sameKinds(left: readonly string[], right: readonly string[]): boolean {
  * servers its source declares, with `compatibilityBasis: "neutral"`, so a
  * migration never puts pi-mcp-adapter's verdict into a record (D-P3-02). A
  * server no implementation runs makes the record partially installed, as
- * `install --partial` records it. A record that already holds that verdict
+ * `install --partial` records it. The write also records the declared servers
+ * and the bundle flag, as an install does: a neutral verdict does not name a
+ * server only one implementation blocks, so the record must carry the servers
+ * every read re-classifies (MREC-01). A record that already holds that verdict
  * and the basis is not rewritten. Returns whether the record changed.
  */
 function applyNeutralVerdict(action: OwnerAction): boolean {
@@ -534,15 +537,9 @@ function applyNeutralVerdict(action: OwnerAction): boolean {
   }
 
   const { record, resolved } = action;
-  const neutral = effectiveMcpCompatibility(
-    record,
-    {
-      kind: "recorded",
-      servers: mcpServerConfigsOf(resolved.declaredMcpServers),
-      bundle: resolved.mcpBundle === true,
-    },
-    "none",
-  );
+  const servers = mcpServerConfigsOf(resolved.declaredMcpServers);
+  const bundle = resolved.mcpBundle === true;
+  const neutral = effectiveMcpCompatibility(record, { kind: "recorded", servers, bundle }, "none");
   const compatibility = record.compatibility;
   if (
     record.compatibilityBasis === "neutral" &&
@@ -559,6 +556,13 @@ function applyNeutralVerdict(action: OwnerAction): boolean {
     unsupported: [...neutral.unsupported],
   });
   record.compatibilityBasis = "neutral";
+  record.mcpServerConfigs = servers;
+  if (bundle) {
+    record.mcpBundle = true;
+  } else {
+    delete record.mcpBundle;
+  }
+
   return true;
 }
 

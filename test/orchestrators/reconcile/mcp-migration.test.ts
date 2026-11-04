@@ -77,6 +77,8 @@ interface PluginSeed {
   readonly servers: Readonly<Record<string, unknown>>;
   /** `.lsp.json` makes the plugin resolve partially-available, not installable. */
   readonly lsp?: boolean;
+  /** `plugin.json` also names a `.mcpb` bundle beside `.mcp.json`. */
+  readonly bundle?: boolean;
 }
 
 /** Writes path marketplace `mp` at `<cwd>/mp-src` holding each plugin, and returns its paths. */
@@ -90,8 +92,16 @@ async function seedMarketplace(
     await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
     await writeFile(
       path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: plugin, version: "1.0.0" }),
+      JSON.stringify({
+        name: plugin,
+        version: "1.0.0",
+        ...(seed.bundle === true && { mcpServers: ["./.mcp.json", "./tool.mcpb"] }),
+      }),
     );
+    if (seed.bundle === true) {
+      await writeFile(path.join(pluginRoot, "tool.mcpb"), "bundle");
+    }
+
     await writeFile(
       path.join(pluginRoot, ".mcp.json"),
       JSON.stringify({ mcpServers: seed.servers }),
@@ -1565,6 +1575,10 @@ describe("migrateLegacyMcpEntries", () => {
           supported: ["mcpServers"],
           unsupported: ["mcpServers"],
         },
+        mcpServerConfigs: [
+          { name: "srv", config: { command: "srv" } },
+          { name: "live", config: WS_SERVER },
+        ],
         updatedAt: MOVED_AT,
       },
     });
@@ -1606,6 +1620,10 @@ describe("migrateLegacyMcpEntries", () => {
           supported: ["mcpServers"],
           unsupported: ["mcpServers"],
         },
+        mcpServerConfigs: [
+          { name: "srv", config: { command: "srv" } },
+          { name: "live", config: WS_SERVER },
+        ],
         updatedAt: MOVED_AT,
       },
     });
@@ -1650,6 +1668,10 @@ describe("migrateLegacyMcpEntries", () => {
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
       hello: {
         ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        mcpServerConfigs: [
+          { name: "srv", config: { command: "srv" } },
+          { name: "asker", config: asker },
+        ],
         updatedAt: MOVED_AT,
       },
     });
@@ -1681,6 +1703,44 @@ describe("migrateLegacyMcpEntries", () => {
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
       hello: {
         ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        mcpServerConfigs: [{ name: "srv", config: { command: "srv" } }],
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("D-P3-16: a legacy record whose source names an MCP bundle records the bundle with its servers", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "bundle-legacy");
+    const { cwd, locations } = scope;
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" } }, bundle: true },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        compatibility: {
+          installable: false,
+          notes: [],
+          supported: ["mcpServers"],
+          unsupported: ["mcpServers"],
+        },
+        mcpServerConfigs: [{ name: "srv", config: { command: "srv" } }],
+        mcpBundle: true,
         updatedAt: MOVED_AT,
       },
     });

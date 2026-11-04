@@ -123,6 +123,25 @@ test("MREC-03: reads a legacy record with no MCP trace as no servers without the
   });
 });
 
+test("MREC-02: re-resolves a neutral record without server configs that staged no server", async (t) => {
+  // arrange
+  const marketplace = await marketplaceFixture(t, true);
+  const record = legacyRecord(marketplace.pluginRoot, { compatibilityBasis: "neutral" });
+
+  // act
+  const verdict = await readRecordMcpVerdict(record, marketplace.source, "builtin");
+
+  // assert
+  assert.deepStrictEqual(verdict, {
+    effective: {
+      installable: false,
+      unsupported: ["mcpServers"],
+      blocked: [{ server: "events", feature: "sse" }],
+    },
+    recorded: { kind: "re-resolved", servers: [{ name: "events", config: EVENTS }], bundle: false },
+  });
+});
+
 test("MREC-02: re-resolves a legacy record with a staged server from the cached manifest", async (t) => {
   // arrange
   const marketplace = await marketplaceFixture(t, true);
