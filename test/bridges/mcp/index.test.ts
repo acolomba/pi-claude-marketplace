@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { readBuiltinServerDescription as peerReadBuiltinServerDescription } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-description.ts";
 import { builtinServerConfig as peerBuiltinServerConfig } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-entry.ts";
 import { syncBuiltinRegistrations as peerSyncBuiltinRegistrations } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-registration.ts";
 import {
@@ -10,6 +11,7 @@ import {
   commitPreparedMcp,
   prepareStageMcpServers,
   projectDisableStubNames,
+  readBuiltinServerDescription,
   readLegacyMcpOwners,
   removeLegacyMcpEntries,
   removeProjectDisableStubs,
@@ -206,5 +208,16 @@ describe("MCP barrel runtime bindings", () => {
 
     // assert
     assert.strictEqual(boundarySyncBuiltinRegistrations, expectedSyncBuiltinRegistrations);
+  });
+
+  test("re-exports readBuiltinServerDescription from the built-in description module", () => {
+    // arrange
+    const expectedReadBuiltinServerDescription = peerReadBuiltinServerDescription;
+
+    // act
+    const boundaryReadBuiltinServerDescription = readBuiltinServerDescription;
+
+    // assert
+    assert.strictEqual(boundaryReadBuiltinServerDescription, expectedReadBuiltinServerDescription);
   });
 });

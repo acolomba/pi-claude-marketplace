@@ -10,6 +10,12 @@
  * more. A server's values are resolved here from the session environment
  * (BLT-02); nothing is written to a file (D-MB-04).
  *
+ * The user scope's records register first, then, only while Pi trusts the
+ * project on this call, the project scope's (D-MB-09). A project server
+ * replaces the user server of the same name in place (P2-DC-14), so a user
+ * server the project lacks still registers. A background child runs the same
+ * steps for its own session (D-MB-12).
+ *
  * MSEL-03: under pi-mcp-adapter, or with no implementation active, both steps
  * return before they read the context, the state, or Pi's registry. Pi reports
  * a registration nothing connects as an extension error, and the adapter
@@ -24,13 +30,18 @@
  * `mcp_servers_change`, which would make this extension the connector (PI-11).
  */
 
-import { builtinServerConfig, syncBuiltinRegistrations } from "../../bridges/mcp/index.ts";
+import {
+  builtinServerConfig,
+  readBuiltinServerDescription,
+  syncBuiltinRegistrations,
+} from "../../bridges/mcp/index.ts";
 import { profileFor } from "../../domain/mcp-implementation.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { SCOPES } from "../../shared/types.ts";
 
 import { createLegacyServersReader, recordedMcpServers } from "./recorded-servers.ts";
 
@@ -109,11 +120,16 @@ async function isContained(source: RecordSource, locations: ScopedLocations): Pr
   return isInside(locations.pluginClonesDir, pluginRoot);
 }
 
-/** The supported servers of one plugin, named and built in the record's server order. */
+/**
+ * The servers of one plugin that the built-in profile runs, named and built in
+ * the record's server order. The install-time verdict does not filter: a
+ * server only pi-mcp-adapter blocks registers here (P2-DC-06).
+ */
 function serverRegistrations(
   pluginName: string,
   servers: readonly RecordedMcpServer[],
   ctx: McpSubstitutionContext,
+  description: string | undefined,
 ): Registration[] {
   return servers
     .filter(({ config }) => BUILTIN_PROFILE.classify(config).kind === "supported")
@@ -121,7 +137,7 @@ function serverRegistrations(
       ({ name, config }) =>
         [
           BUILTIN_PROFILE.serverName(pluginName, name),
-          builtinServerConfig(config, ctx, undefined),
+          builtinServerConfig(config, ctx, description),
         ] as const,
     )
     .filter((entry): entry is Registration => entry[1] !== undefined);
@@ -138,19 +154,35 @@ async function recordRegistrations(
     return [];
   }
 
+  // MREC-02: a record without `mcpServerConfigs` is re-resolved read-only
+  // against its own marketplace record.
   const recorded = await recordedMcpServers(source.record, createLegacyServersReader(source));
   if (recorded.kind === "unreadable") {
     debugLog(`MCP servers of ${plugin} not registered: its servers are unreadable`);
     return [];
   }
 
-  const pluginData = await locations.pluginDataDir(source.marketplaceName, source.pluginName);
-  return serverRegistrations(source.pluginName, recorded.servers, {
+  if (recorded.servers.length === 0) {
+    return [];
+  }
+
+  const [pluginData, description] = await Promise.all([
+    locations.pluginDataDir(source.marketplaceName, source.pluginName),
+    readBuiltinServerDescription({
+      manifestPath: source.marketplace.manifestPath,
+      marketplaceRoot: source.marketplace.marketplaceRoot,
+      pluginName: source.pluginName,
+      pluginRoot: source.record.resolvedSource,
+      pin: source.record.resolvedSha,
+    }),
+  ]);
+  const ctx: McpSubstitutionContext = {
     pluginRoot: source.record.resolvedSource,
     pluginData,
     projectDir: session.cwd,
     env: session.env,
-  });
+  };
+  return serverRegistrations(source.pluginName, recorded.servers, ctx, description);
 }
 
 /** One record's registrations; a record that fails registers nothing and is logged. */
@@ -185,8 +217,18 @@ async function scopeRegistrations(scope: Scope, session: SessionFacts): Promise<
   return perRecord.flat();
 }
 
-async function desiredRegistrations(session: SessionFacts): Promise<Map<string, McpServerConfig>> {
-  return new Map(await scopeRegistrations("user", session));
+/**
+ * D-MB-09: the project scope counts only while Pi trusts the project. The map
+ * keeps the user registrations' order, and a project registration of the same
+ * name replaces the user one in its place (P2-DC-14).
+ */
+async function desiredRegistrations(
+  session: SessionFacts,
+  projectTrusted: boolean,
+): Promise<Map<string, McpServerConfig>> {
+  const scopes: readonly Scope[] = projectTrusted ? SCOPES : ["user"];
+  const perScope = await Promise.all(scopes.map((scope) => scopeRegistrations(scope, session)));
+  return new Map(perScope.flat());
 }
 
 async function syncSession({ pi, ctx, snapshot }: BuiltinRegistrationStepInput): Promise<void> {
@@ -195,8 +237,12 @@ async function syncSession({ pi, ctx, snapshot }: BuiltinRegistrationStepInput):
   }
 
   try {
-    // The composition root: the only read of the process environment.
-    const desired = await desiredRegistrations({ cwd: ctx.cwd, env: process.env });
+    // The composition root: the only read of the process environment. Trust
+    // is asked on every call, since the user can trust a project mid-session.
+    const desired = await desiredRegistrations(
+      { cwd: ctx.cwd, env: process.env },
+      ctx.isProjectTrusted(),
+    );
     syncBuiltinRegistrations(pi, desired, debugLog);
   } catch (error: unknown) {
     debugLog(`MCP built-in registration skipped: ${errorMessage(error)}`);
