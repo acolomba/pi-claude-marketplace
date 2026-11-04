@@ -322,7 +322,7 @@ changes their names or shapes.
 - [ ] **Phase 2: Built-in Materialization** - Recorded servers connect through Pi's built-in MCP on startup and `/reload` with Claude's values and names, trust gating, status in `info`, and a switch that needs no plugin action
 - [ ] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records
 - [ ] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child
-- [ ] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter
+- [x] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter (completed 2026-11-04)
 - [ ] **Phase 6: Release Docs and Combined Tree** - The CHANGELOG and READMEs describe built-in MCP support, closed sets are clean, and the combined tree passes under both profiles
 
 ## Phase Details
@@ -457,7 +457,7 @@ Plans:
   2. The pi-mcp-adapter `mcp` proxy special case in hook dispatch applies only while the adapter is active; under built-in or with no implementation, no call is treated as a proxy call (MHK-02).
   3. `docs/hooks-compatibility.md` states the built-in tool names and the divergence, and every MCP scenario in `features/hook/` runs under both profiles or carries an implementation tag.
 
-**Plans:** 4/4 plans executed in 3 waves
+**Plans:** 4/4 plans complete in 3 waves
 
 Plans:
 **Wave 1**
@@ -494,7 +494,7 @@ Plans:
 | 2. Built-in Materialization | 0/TBD | Not started | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
 | 4. Agent Grants | 0/TBD | Not started | - |
-| 5. Hook Tool Names | 4/4 | In Progress | - |
+| 5. Hook Tool Names | 4/4 | Complete    | 2026-11-04 |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
 
 ## Carried Forward
