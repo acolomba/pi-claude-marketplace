@@ -23,8 +23,9 @@ import {
   type LegacyServersSource,
 } from "../mcp/recorded-servers.ts";
 
-import { recordMcpDependency } from "./mcp-verdict.ts";
+import { degradeBaselineOf, recordMcpDependency } from "./mcp-verdict.ts";
 
+import type { RecordDegradeBaselineReader } from "./mcp-verdict.ts";
 import type {
   ActiveMcpImplementation,
   EffectiveMcpCompatibility,
@@ -66,6 +67,23 @@ export async function readRecordMcpVerdict(
 }> {
   const recorded = await recordedMcpServers(record, legacyReaderFor(source));
   return { effective: effectiveMcpCompatibility(record, recorded, active), recorded };
+}
+
+/**
+ * D-P3-13: the degrade baseline reader for `active`, which reads a record's
+ * MCP verdict as `readRecordMcpVerdict` does.
+ */
+export function recordDegradeBaselineReader(
+  active: ActiveMcpImplementation,
+): RecordDegradeBaselineReader {
+  return async (record, marketplace, plugin) => {
+    const { effective, recorded } = await readRecordMcpVerdict(
+      record,
+      { marketplaceName: marketplace.name, marketplace, pluginName: plugin },
+      active,
+    );
+    return degradeBaselineOf(effective, recorded);
+  };
 }
 
 /**

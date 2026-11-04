@@ -191,6 +191,7 @@ async function prepare(
     readonly onRecord?: PreparePluginUpdateOptions["onRecord"];
     readonly move?: Pick<PreparePluginUpdateOptions, "expectVersion" | "requesters">;
     readonly judgeOnly?: true;
+    readonly cascadeGate?: Pick<PreparePluginUpdateOptions, "readRecordDegradeBaseline">;
   } = {},
   mcpImplementation: ActiveMcpImplementation = "none",
 ) {
@@ -220,6 +221,7 @@ async function prepare(
     ...(options.onRecord !== undefined && { onRecord: options.onRecord }),
     ...options.move,
     ...(options.judgeOnly !== undefined && { judgeOnly: options.judgeOnly }),
+    ...options.cascadeGate,
   });
 }
 
@@ -1195,6 +1197,85 @@ for (const { mcpImplementation, partial } of [
     );
   });
 }
+
+test("D-MB-06 / D-P3-13: admits without partial permission a candidate whose sse drop the installed record already makes under Pi's built-in MCP", async (t) => {
+  // arrange
+  const seed = await seedSseCandidate(t);
+  const baselineReads: string[] = [];
+
+  // act
+  const outcome = await prepare(
+    seed,
+    {
+      cascadeGate: {
+        readRecordDegradeBaseline: (record, marketplace, plugin) => {
+          baselineReads.push(`${plugin}@${marketplace.name} ${record.version}`);
+          return Promise.resolve({ unsupported: ["mcpServers"], readable: true });
+        },
+      },
+    },
+    "builtin",
+  );
+
+  // assert
+  assert.ok(!("partition" in outcome));
+  assert.deepStrictEqual(
+    { state: outcome.installable.state, toVersion: outcome.toVersion, baselineReads },
+    { state: "installable", toVersion: "2.0.0", baselineReads: ["hello@mp 1.0.0"] },
+  );
+});
+
+test("D-P3-13: refuses without partial permission a candidate whose sse drop the installed record does not make under Pi's built-in MCP", async (t) => {
+  // arrange
+  const seed = await seedSseCandidate(t);
+
+  // act
+  const outcome = await prepare(
+    seed,
+    {
+      cascadeGate: {
+        readRecordDegradeBaseline: () => Promise.resolve({ unsupported: [], readable: true }),
+      },
+    },
+    "builtin",
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ['Plugin "hello" is no longer installable: '],
+    reasons: ["unsupported mcp"],
+    partialUpgradable: true,
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+});
+
+test("D-P3-13: reads no record baseline for a candidate the active implementation runs whole", async (t) => {
+  // arrange
+  const seed = await seedSseCandidate(t);
+
+  // act
+  const outcome = await prepare(
+    seed,
+    {
+      cascadeGate: {
+        readRecordDegradeBaseline: () => Promise.reject(new Error("no baseline read expected")),
+      },
+    },
+    "adapter",
+  );
+
+  // assert
+  assert.ok(!("partition" in outcome));
+  assert.deepStrictEqual(
+    { state: outcome.installable.state, toVersion: outcome.toVersion },
+    { state: "installable", toVersion: "2.0.0" },
+  );
+});
 
 test("flags binaries on a candidate of an official marketplace", async (t) => {
   // arrange

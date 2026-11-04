@@ -349,6 +349,37 @@ describe("judgeDependencyMove", () => {
     });
   }
 
+  test("D-MB-06 / D-P3-13: admits a move to a version that keeps an sse server its record already drops under the run's built-in MCP", async (t) => {
+    // arrange
+    const seeded = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const events = { type: "sse", url: "http://127.0.0.1:9/sse" };
+    await writeFile(
+      path.join(seeded.pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: { events } }),
+    );
+    const state = await loadState(seeded.context.locations.extensionRoot);
+    const record = state.marketplaces.mp?.plugins.zcore;
+    assert.ok(record !== undefined);
+    record.compatibilityBasis = "neutral";
+    record.mcpServerConfigs = [{ name: "events", config: events }];
+    await saveState(seeded.context.locations.extensionRoot, state);
+    const context = {
+      ...seeded.context,
+      softDeps: { ...seeded.context.softDeps, mcpImplementation: "builtin" as const },
+    };
+
+    // act
+    const judgement = await judgeDependencyMove(request(), context);
+
+    // assert
+    assert.deepStrictEqual(
+      judgement.ok
+        ? { ok: true, toVersion: judgement.prepared.toVersion }
+        : { ok: false, cause: judgement.cause },
+      { ok: true, toVersion: "2.0.0" },
+    );
+  });
+
   test("refuses a move whose catalog version falls outside the requester's range", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "1.5.0" });

@@ -146,6 +146,7 @@ import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { RecordDegradeBaselineReader } from "./mcp-verdict.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type {
   MaterializationPolicy,
@@ -225,6 +226,8 @@ export interface ThreePhaseArgsBase {
    * the kinds it drops. It is required, so no builder leaves it out.
    */
   readonly mcpImplementation: ActiveMcpImplementation;
+  /** D-MB-06 / D-P3-13: a cascade's baseline reader (`PreparePluginUpdateOptions`). */
+  readonly readRecordDegradeBaseline?: RecordDegradeBaselineReader;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   readonly cloneCandidates?: Set<string>;
   readonly credentialOps?: CredentialOps;

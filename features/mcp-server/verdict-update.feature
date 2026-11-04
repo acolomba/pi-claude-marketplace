@@ -1,10 +1,9 @@
 Feature: MCP server verdict update
 
-  An update asks for --partial only when the MCP implementation pi runs now
-  drops a server of the new version that the installed version did not need
-  (MREC-06, D-P3-11, D-P3-12, D-P3-19). A local marketplace stands in for a
-  published one, a stdio stub for a real server, and the sse server points at a
-  loopback port that nothing listens on.
+  An update asks for --partial when the MCP implementation pi runs now drops a
+  server of the new version (MREC-06, D-P3-11, D-P3-19). A local marketplace
+  stands in for a published one, a stdio stub for a real server, and the sse
+  server points at a loopback port that nothing listens on.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source

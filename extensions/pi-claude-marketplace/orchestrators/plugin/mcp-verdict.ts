@@ -15,7 +15,7 @@
 import { profileFor } from "../../domain/mcp-implementation.ts";
 
 import type { McpImplementationId, RecordedMcpServers } from "../../domain/mcp-implementation.ts";
-import type { PluginInstallRecord } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 
 // The order of `runEvery`: adapter, then builtin.
@@ -67,6 +67,17 @@ export interface RecordDegradeBaseline {
   readonly unsupported: readonly string[];
   readonly readable: boolean;
 }
+
+/**
+ * D-P3-13: reads the degrade baseline of `plugin`'s record in `marketplace`
+ * under one implementation, offline. The update preflight takes it as a port,
+ * because it cannot import the record read without closing an import cycle.
+ */
+export type RecordDegradeBaselineReader = (
+  record: PluginInstallRecord,
+  marketplace: ExtensionState["marketplaces"][string],
+  plugin: string,
+) => Promise<RecordDegradeBaseline>;
 
 /** The baseline of a record's effective verdict and the servers it was read from. */
 export function degradeBaselineOf(

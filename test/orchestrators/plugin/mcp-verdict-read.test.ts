@@ -7,6 +7,7 @@ import test, { type TestContext } from "node:test";
 import {
   readRecordMcpDependency,
   readRecordMcpVerdict,
+  recordDegradeBaselineReader,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/mcp-verdict-read.ts";
 
 import type { LegacyServersSource } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
@@ -300,3 +301,52 @@ test("D-P3-10: reads a neutral record's dependency from its recorded servers", a
   // assert
   assert.deepStrictEqual(dependency, { kind: "mcp", runEvery: ["adapter"] });
 });
+
+for (const { title, marketplaceListed, active, baseline } of [
+  {
+    title: "a neutral record's sse drop under Pi's built-in MCP as readable",
+    marketplaceListed: true,
+    active: "builtin",
+    baseline: { unsupported: ["mcpServers"], readable: true },
+  },
+  {
+    title: "an unreadable legacy record's stored verdict as unreadable",
+    marketplaceListed: false,
+    active: "builtin",
+    baseline: { unsupported: [], readable: false },
+  },
+] as const) {
+  test(`D-P3-13: the degrade baseline reader gives ${title}`, async (t) => {
+    // arrange
+    const marketplace = await marketplaceFixture(t, marketplaceListed);
+    const record = legacyRecord(marketplace.pluginRoot, {
+      resources: {
+        skills: [],
+        prompts: [],
+        agents: [],
+        mcpServers: ["events"],
+        hooks: [],
+        workflows: [],
+      },
+    });
+    const readBaseline = recordDegradeBaselineReader(active);
+
+    // act
+    const degradeBaseline = await readBaseline(
+      record,
+      {
+        name: "mp",
+        scope: "project",
+        source: marketplace.source.marketplace.source,
+        addedFromCwd: marketplace.pluginRoot,
+        manifestPath: marketplace.source.marketplace.manifestPath,
+        marketplaceRoot: marketplace.source.marketplace.marketplaceRoot,
+        plugins: {},
+      },
+      "p1",
+    );
+
+    // assert
+    assert.deepStrictEqual(degradeBaseline, baseline);
+  });
+}

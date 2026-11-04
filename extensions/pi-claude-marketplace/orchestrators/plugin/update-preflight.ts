@@ -49,6 +49,7 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { admitResolvedVersion, evaluateCatalogConstraint } from "./constraint-fold.ts";
+import { newlyDroppedKinds } from "./mcp-verdict.ts";
 import { DEFAULT_PACKAGE_INSTALL_OPS, removeInstalledPackages } from "./package-install.ts";
 import {
   isRecordedCandidate,
@@ -65,6 +66,7 @@ import type {
   GitPluginRootResult,
   MaterializablePlugin,
   ResolveContext,
+  ResolvedPlugin,
 } from "../../domain/resolver-types.ts";
 import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -87,6 +89,7 @@ import type {
   UpdateConstraintVerdict,
   UpdateTagPin,
 } from "./constraint-fold.ts";
+import type { RecordDegradeBaselineReader } from "./mcp-verdict.ts";
 import type { UpdateConstraintOptions } from "./update-constraint-gate.ts";
 
 /** Target selected by the three public plugin-update invocation forms. */
@@ -210,6 +213,14 @@ export interface PreparePluginUpdateOptions {
    * so no caller gets a view by leaving it out.
    */
   readonly mcpImplementation: ActiveMcpImplementation;
+  /**
+   * D-MB-06 / D-P3-13: a cascade never asks because of a switch. When set,
+   * the candidate gate also admits, without `--partial`, a candidate that
+   * drops nothing the installed record does not drop under
+   * `mcpImplementation`, read through this port. A dependency move sets it; a
+   * user-run update leaves it out and keeps today's rules (D-P3-12).
+   */
+  readonly readRecordDegradeBaseline?: RecordDegradeBaselineReader;
   readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   /** Exact clone-cache keys created by the current dependency-planning attempt. */
@@ -460,6 +471,36 @@ interface UpdateCandidateResolution {
   readonly pathResolvedSha: string | undefined;
 }
 
+/**
+ * D-MB-06 / D-P3-13: whether a candidate the active implementation sees as
+ * partially available drops nothing the installed record does not drop
+ * under the same implementation, so the gate admits it without `--partial`.
+ * Only a caller that passes the baseline reader (a cascade) gets this.
+ */
+async function dropsNothingNew(
+  view: ResolvedPlugin,
+  neutral: ResolvedPlugin,
+  marketplace: ExtensionState["marketplaces"][string],
+  gate: {
+    readonly plugin: string;
+    readonly record: PluginStateRecord;
+    readonly readRecordDegradeBaseline: RecordDegradeBaselineReader | undefined;
+  },
+): Promise<boolean> {
+  // A partially available view comes only from a resolution that is not
+  // unavailable; the second test narrows the type.
+  if (
+    view.state !== "partially-available" ||
+    neutral.state === "unavailable" ||
+    gate.readRecordDegradeBaseline === undefined
+  ) {
+    return false;
+  }
+
+  const baseline = await gate.readRecordDegradeBaseline(gate.record, marketplace, gate.plugin);
+  return newlyDroppedKinds(view, neutral, baseline).length === 0;
+}
+
 async function resolveUpdateCandidate(
   entry: PluginEntry,
   marketplace: ExtensionState["marketplaces"][string],
@@ -469,6 +510,8 @@ async function resolveUpdateCandidate(
     readonly fromVersion: string;
     readonly partial: boolean;
     readonly mcpImplementation: ActiveMcpImplementation;
+    readonly record: PluginStateRecord;
+    readonly readRecordDegradeBaseline: RecordDegradeBaselineReader | undefined;
     readonly locations: ScopedLocations;
     readonly pin?: UpdateTagPin;
     readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
@@ -529,7 +572,7 @@ async function resolveUpdateCandidate(
     // the swap records. Every implementation blocks what the neutral verdict
     // blocks, so the neutral narrowing below cannot throw once the view passed.
     const view = resolutionFor(resolved, options.mcpImplementation);
-    if (options.partial) {
+    if (options.partial || (await dropsNothingNew(view, resolved, marketplace, options))) {
       requirePartialInstallable(view, "update");
     } else {
       requireInstallable(view, "update");
@@ -975,6 +1018,8 @@ async function resolvePinnedUpdateCandidate(
     readonly fromVersion: string;
     readonly partial: boolean;
     readonly mcpImplementation: ActiveMcpImplementation;
+    readonly record: PluginStateRecord;
+    readonly readRecordDegradeBaseline: RecordDegradeBaselineReader | undefined;
     readonly locations: ScopedLocations;
     readonly cloneCandidates?: Set<string>;
   },
@@ -1220,6 +1265,8 @@ export async function preparePluginUpdate(
       fromVersion: triaged.record.version,
       partial: options.partial === true || widensPartialGate(triaged.record),
       mcpImplementation: options.mcpImplementation,
+      record: triaged.record,
+      readRecordDegradeBaseline: options.readRecordDegradeBaseline,
       locations: options.locations,
       ...(options.cloneCandidates !== undefined && {
         cloneCandidates: options.cloneCandidates,
