@@ -313,6 +313,9 @@ const EXPECTED_REASONS = [
   "network error",
   // IMP-06: import's skipped header for a marketplace already recorded with the same source.
   "already added",
+  // D-MB-07: the MCP markers naming either implementation, or Pi's built-in MCP alone.
+  "requires mcp",
+  "requires builtin mcp",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
