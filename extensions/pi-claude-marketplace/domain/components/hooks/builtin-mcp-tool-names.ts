@@ -84,7 +84,7 @@ export function toolLiteralNames(literal: string, tool: McpToolIdentity): boolea
   }
 
   const prefix = claudeServerPrefix(tool.builtinServer);
-  if (!literal.startsWith(prefix) || literal.length === prefix.length) {
+  if (!literal.startsWith(prefix)) {
     return false;
   }
 
