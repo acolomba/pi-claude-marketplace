@@ -12,11 +12,15 @@ import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shar
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import {
+  ADAPTER_ASYNC,
   adapterBlock,
+  agentBlock,
   agentPath,
   BODY,
+  BUILTIN_ASYNC,
   builtinBlock,
   indexPath,
+  legacyRow,
   NAME,
   OTHER_NAME,
   plainRow,
@@ -98,6 +102,41 @@ describe("needsAgentGrantRewrite", () => {
 
     // act
     const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, false);
+  });
+  test("P4-DC-06: a legacy row holding the adapter async warning is a candidate under Pi's built-in MCP", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    await writeIndex(locations, [legacyRow(agentPath(locations), [ADAPTER_ASYNC])]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, true);
+  });
+
+  test("P4-DC-06: a legacy row without the adapter async warning is never a candidate", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    await writeIndex(locations, [legacyRow(agentPath(locations), ["a warning that stays"])]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, false);
+  });
+
+  test("P4-DC-06: a legacy row is never a candidate under pi-mcp-adapter", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    await writeIndex(locations, [legacyRow(agentPath(locations), [ADAPTER_ASYNC])]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "adapter");
 
     // assert
     assert.strictEqual(needed, false);
@@ -296,5 +335,100 @@ describe("rewriteAgentGrantForms", () => {
     // assert
     assert.strictEqual(await readFile(target, "utf8"), builtinBlock() + BODY);
     assert.deepStrictEqual(await readIndexRows(locations), [swappedRow(row, "builtin")]);
+  });
+
+  test("P4-DC-06: a legacy agent gets the translated built-in block and its row stores both forms", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    const row = legacyRow(target, [ADAPTER_ASYNC]);
+    await writeAgent(target, adapterBlock() + BODY);
+    await writeIndex(locations, [row]);
+
+    // act
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+
+    // assert
+    assert.strictEqual(await readFile(target, "utf8"), builtinBlock() + BODY);
+    assert.deepStrictEqual(await readIndexRows(locations), [
+      {
+        ...row,
+        warnings: [BUILTIN_ASYNC],
+        mcpImplementation: "builtin",
+        mcpForms: {
+          adapter: { frontmatter: adapterBlock(), warnings: [ADAPTER_ASYNC], droppedTools: [] },
+          builtin: { frontmatter: builtinBlock(), warnings: [BUILTIN_ASYNC], droppedTools: [] },
+        },
+      },
+    ]);
+  });
+
+  test("P4-DC-06: a translated legacy agent swaps back exactly after a switch to pi-mcp-adapter", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    const row = legacyRow(target, [ADAPTER_ASYNC]);
+    await writeAgent(target, adapterBlock() + BODY);
+    await writeIndex(locations, [row]);
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+
+    // act
+    await rewriteAgentGrantForms(locations, "adapter", createRemovalOps());
+
+    // assert
+    assert.strictEqual(await readFile(target, "utf8"), adapterBlock() + BODY);
+    assert.deepStrictEqual(await readIndexRows(locations), [
+      {
+        ...row,
+        mcpImplementation: "adapter",
+        mcpForms: {
+          adapter: { frontmatter: adapterBlock(), warnings: [ADAPTER_ASYNC], droppedTools: [] },
+          builtin: { frontmatter: builtinBlock(), warnings: [BUILTIN_ASYNC], droppedTools: [] },
+        },
+      },
+    ]);
+  });
+
+  test("P4-DC-06: a legacy agent whose translation gives up keeps its file and is not a candidate again", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    const block = agentBlock(`excludeTools: mcp__plugin_demo_my-db__${"q".repeat(41)}`, [
+      ADAPTER_ASYNC,
+    ]);
+    const row = legacyRow(target, [ADAPTER_ASYNC]);
+    await writeAgent(target, block + BODY);
+    await writeIndex(locations, [row]);
+
+    // act
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+
+    // assert
+    assert.strictEqual(await readFile(target, "utf8"), block + BODY);
+    assert.deepStrictEqual(await readIndexRows(locations), [
+      {
+        ...row,
+        mcpImplementation: "adapter",
+        mcpForms: { adapter: { frontmatter: block, warnings: [ADAPTER_ASYNC], droppedTools: [] } },
+      },
+    ]);
+    assert.strictEqual(await needsAgentGrantRewrite(locations, "builtin"), false);
+  });
+
+  test("P4-DC-06: a legacy file that is not a generated agent is left with its row", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    const text = adapterBlock().replace("  generatedBy: pi-claude-marketplace\n", "") + BODY;
+    await writeAgent(target, text);
+    await writeIndex(locations, [legacyRow(target, [ADAPTER_ASYNC])]);
+    const indexBefore = await readFile(indexPath(locations), "utf8");
+
+    // act
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps());
+
+    // assert
+    assert.strictEqual(await readFile(target, "utf8"), text);
+    assert.strictEqual(await readFile(indexPath(locations), "utf8"), indexBefore);
   });
 });

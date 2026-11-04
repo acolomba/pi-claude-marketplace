@@ -22,13 +22,16 @@ export const BUILTIN_ASYNC =
   "foreground; a launch before Pi's built-in MCP has listed the server's tools still fails";
 export const BODY = "\nYou help with the demo.\n---\nA body line after a rule.\n";
 
-/** A hand-written generated agent block holding `tools` and one provenance warning. */
-export function agentBlock(name: string, tools: string, warning: string): string {
+/**
+ * A hand-written generated agent block with one grant line (`tools: ...` or
+ * `excludeTools: ...`) and its provenance warnings.
+ */
+export function agentBlock(grantLine: string, warnings: readonly string[], name = NAME): string {
   return [
     "---",
     `name: ${name}`,
     "description: Helps with the demo",
-    `tools: ${tools}`,
+    grantLine,
     "systemPromptMode: replace",
     "inheritProjectContext: true",
     "inheritSkills: false",
@@ -42,18 +45,18 @@ export function agentBlock(name: string, tools: string, warning: string): string
     "  droppedFields: []",
     "  droppedTools: []",
     "  warnings:",
-    `    - ${warning}`,
+    ...warnings.map((warning) => `    - ${warning}`),
     "---",
     "",
   ].join("\n");
 }
 
 export function adapterBlock(name = NAME): string {
-  return agentBlock(name, "read,mcp:plugin_demo_stub_/echo", ADAPTER_ASYNC);
+  return agentBlock("tools: read,mcp:plugin_demo_stub_/echo", [ADAPTER_ASYNC], name);
 }
 
 export function builtinBlock(name = NAME): string {
-  return agentBlock(name, "read,mcp:plugin_demo_stub/echo", BUILTIN_ASYNC);
+  return agentBlock("tools: read,mcp:plugin_demo_stub/echo", [BUILTIN_ASYNC], name);
 }
 
 /** A row that stores both forms and records `recorded` as the form its file holds. */
@@ -94,6 +97,26 @@ export function swappedRow(row: AgentsIndexEntry, active: "adapter" | "builtin")
     mcpImplementation: active,
     warnings: [...form.warnings],
     droppedTools: [...form.droppedTools],
+  };
+}
+
+/** A row written before MGRT-01: no stored forms; its file holds the adapter form. */
+export function legacyRow(
+  targetPath: string,
+  warnings: readonly string[],
+  droppedTools: readonly string[] = [],
+): AgentsIndexEntry {
+  return {
+    plugin: "demo",
+    marketplace: "mp",
+    sourceAgent: "helper",
+    generatedName: NAME,
+    sourcePath: "/plugins/demo/agents/helper.md",
+    targetPath,
+    sourceHash: "sha256:helper",
+    droppedFields: [],
+    droppedTools: [...droppedTools],
+    warnings: [...warnings],
   };
 }
 

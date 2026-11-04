@@ -31,7 +31,11 @@
 //      target (NFR-1), never as a temporary file inside the watched agents
 //      folder. The index is saved last, so a failure before the save heals at
 //      the next load.
-//   6. Silent: every skip is debug-logged on the `mcp` channel and nothing
+//   6. A row written before the index stored forms (P4-DC-06) gets its forms
+//      from `legacy-grant-form.ts` under the lock, then the same swap; a
+//      translation that gives up records the adapter form only, so the row
+//      is not retried at every load.
+//   7. Silent: every skip is debug-logged on the `mcp` channel and nothing
 //      reaches the user (RECON-05).
 
 import { randomUUID } from "node:crypto";
@@ -44,7 +48,9 @@ import { errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
+import { deriveLegacyGrantForms } from "./legacy-grant-form.ts";
 import { GENERATED_AGENT_MARKER } from "./marker.ts";
+import { mcpAsyncWarning } from "./mcp-async-warning.ts";
 
 import type { McpImplementationId } from "../../domain/mcp-implementation.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
@@ -75,16 +81,35 @@ function storedSwap(row: AgentsIndexEntry, active: McpImplementationId): FormSwa
 }
 
 /**
+ * P4-DC-06: a row written before the index stored forms, under Pi's built-in
+ * MCP. Its file holds the adapter form, and every such agent with MCP grants
+ * carries the adapter async warning, so no file is read before the lock.
+ */
+function isLegacyCandidate(row: AgentsIndexEntry, active: McpImplementationId): boolean {
+  return (
+    active === "builtin" &&
+    row.mcpImplementation === undefined &&
+    row.mcpForms === undefined &&
+    row.warnings.includes(mcpAsyncWarning("adapter"))
+  );
+}
+
+function isCandidate(row: AgentsIndexEntry, active: McpImplementationId): boolean {
+  return storedSwap(row, active) !== undefined || isLegacyCandidate(row, active);
+}
+
+/**
  * MGRT-01: true when some row of the scope's agents index records another
- * grant form than `active` and stores the active one. Reads without the lock;
- * a missing index is no work, and nothing is created.
+ * grant form than `active` and stores the active one, or is a legacy row a
+ * built-in session translates (P4-DC-06). Reads without the lock; a missing
+ * index is no work, and nothing is created.
  */
 export async function needsAgentGrantRewrite(
   locations: ScopedLocations,
   active: McpImplementationId,
 ): Promise<boolean> {
   const index = await loadAgentsIndex(locations);
-  return index.agents.some((row) => storedSwap(row, active) !== undefined);
+  return index.agents.some((row) => isCandidate(row, active));
 }
 
 /** AG-4: a block this bridge wrote opens and closes with `---` and carries the marker. */
@@ -133,23 +158,21 @@ function rowForActive(
 }
 
 /**
- * Swaps one candidate row's file and returns the row to save; the row
- * itself when the file is left. Throws when containment or a read fails.
+ * Swaps one candidate file's text for the active form and returns the row to
+ * save; the row itself when the file is left.
  */
-async function swapRow(
-  locations: ScopedLocations,
+async function swapFile(
   stagingDir: string,
   row: AgentsIndexEntry,
   active: McpImplementationId,
   swap: FormSwap,
+  text: string,
 ): Promise<AgentsIndexEntry> {
-  await assertRowContained(locations, row);
   if (!isGeneratedBlock(swap.active.frontmatter)) {
     hookDebugLog(`agent ${row.generatedName}: the stored ${active} form is malformed`, "mcp");
     return row;
   }
 
-  const text = await readFile(row.targetPath, "utf8");
   if (text.startsWith(swap.recorded.frontmatter)) {
     const body = text.slice(swap.recorded.frontmatter.length);
     await replaceAgentFile(stagingDir, row, swap.active.frontmatter + body);
@@ -161,6 +184,46 @@ async function swapRow(
   return rowForActive(row, active, swap.active);
 }
 
+/**
+ * P4-DC-06: a legacy row gets its forms from its file's text, then the same
+ * swap to the built-in form. A translation that gives up records the adapter
+ * form only, so the row is not a candidate again.
+ */
+async function translateLegacyFile(
+  stagingDir: string,
+  row: AgentsIndexEntry,
+  text: string,
+): Promise<AgentsIndexEntry> {
+  const recorded = deriveLegacyGrantForms(text, row);
+  if (recorded === undefined) {
+    hookDebugLog(`agent ${row.generatedName}: the legacy file is not a generated agent`, "mcp");
+    return row;
+  }
+
+  const swap = storedSwap(recorded, "builtin");
+  if (swap === undefined) {
+    hookDebugLog(`agent ${row.generatedName}: no exact built-in translation`, "mcp");
+    return recorded;
+  }
+
+  return swapFile(stagingDir, recorded, "builtin", swap, text);
+}
+
+/** Rewrites one candidate row after containment; throws when containment or the read fails. */
+async function rewriteCandidate(
+  locations: ScopedLocations,
+  stagingDir: string,
+  row: AgentsIndexEntry,
+  active: McpImplementationId,
+): Promise<AgentsIndexEntry> {
+  await assertRowContained(locations, row);
+  const text = await readFile(row.targetPath, "utf8");
+  const swap = storedSwap(row, active);
+  return swap === undefined
+    ? translateLegacyFile(stagingDir, row, text)
+    : swapFile(stagingDir, row, active, swap, text);
+}
+
 /** One row's outcome: rewritten, fixed, or left; a failure leaves the row. */
 async function rewriteRow(
   locations: ScopedLocations,
@@ -168,13 +231,12 @@ async function rewriteRow(
   row: AgentsIndexEntry,
   active: McpImplementationId,
 ): Promise<AgentsIndexEntry> {
-  const swap = storedSwap(row, active);
-  if (swap === undefined) {
+  if (!isCandidate(row, active)) {
     return row;
   }
 
   try {
-    return await swapRow(locations, stagingDir, row, active, swap);
+    return await rewriteCandidate(locations, stagingDir, row, active);
   } catch (err) {
     hookDebugLog(`agent ${row.generatedName}: grant rewrite skipped: ${errorMessage(err)}`, "mcp");
     return row;
