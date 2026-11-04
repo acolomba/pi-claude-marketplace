@@ -579,3 +579,53 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Alternatives:** Inline about 2,800 lines into each of nine prompts.
 - **Why dubious:** departs from the workflow's embed rule; an executor that
   skips the reads runs without the procedure.
+
+## Wave 1 (plan 02-01 executor, 2026-11-04)
+
+### P2-DC-53: The encoder parameter of `substituteAndInject` defaults to the adapter encoder (reverses P2-DC-19)
+
+- **Phase / source:** Phase 2 plan 02-01 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The encoder parameter of `substituteAndInject` defaults to the adapter encoder (reverses P2-DC-19).
+- **Alternatives:** A required parameter (breaks the unowned `adapter-expansion-conformance` test, which calls it with two arguments); a second walk export; editing the unowned test.
+- **Why dubious:** A caller that forgets the encoder silently gets the adapter's encoding. A parent line passes the encoder in that test so the parameter can become required.
+
+### P2-DC-54: `ADAPTER_FIELD_ENCODER` is defined in `substitute.ts`, not `adapter-escape.ts`
+
+- **Phase / source:** Phase 2 plan 02-01 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** `ADAPTER_FIELD_ENCODER` is defined in `substitute.ts`, not `adapter-escape.ts`.
+- **Alternatives:** Export it from `adapter-escape.ts` plus fallow-ignore markers on two exports only tests use.
+- **Why dubious:** The shared walk now knows the adapter's encoder.
+
+### P2-DC-55: The description reader treats a directory named `plugin.json` as no manifest and any other read error as a present but unusable manifest
+
+- **Phase / source:** Phase 2 plan 02-01 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The description reader treats a directory named `plugin.json` as no manifest and any other read error as a present but unusable manifest.
+- **Alternatives:** Treat every read error as no manifest.
+- **Why dubious:** Matches the resolver and D-01-07; its test needs a non-root run (CI or the nondac wrapper).
+
+### P2-DC-56: A record with an empty server list skips the description and data-directory reads
+
+- **Phase / source:** Phase 2 plan 02-01 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** A record with an empty server list skips the description and data-directory reads.
+- **Alternatives:** Always read them.
+- **Why dubious:** Fewer reads; no behavior difference since nothing registers.
+
+### P2-DC-57: A plugin the manifest no longer lists reads its description inside its plugin directory only
+
+- **Phase / source:** Phase 2 plan 02-01 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** A plugin the manifest no longer lists reads its description inside its plugin directory only.
+- **Alternatives:** Read no description.
+- **Why dubious:** Keeps a description for an orphaned record.
+
+### P2-DC-58: The tool-search projector accepts any tool name on a loaded line, not only `mcp__` names
+
+- **Phase / source:** Phase 2 plan 02-01 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The tool-search projector accepts any tool name on a loaded line, not only `mcp__` names.
+- **Alternatives:** Filter to `mcp__` names.
+- **Why dubious:** A search that also loads another extension's tool would list it.
