@@ -24,10 +24,13 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+
+import { stubPidFiles } from "./mcp-stub-server.ts";
+import { isRunning } from "./turn-records.ts";
 
 import type { ListedCommand } from "../../test/e2e/_rpc.ts";
 
@@ -125,6 +128,14 @@ async function runFile(directory: string, name: string): Promise<string> {
   }
 
   return path.join(resolved, name);
+}
+
+// Writes `text` to `file` through a temporary file and a rename, so Pi never
+// reads a half-written file.
+async function replaceFile(file: string, text: string): Promise<void> {
+  const temporary = `${file}.${process.pid}.tmp`;
+  await writeFile(temporary, text, { flag: "wx" });
+  await rename(temporary, file);
 }
 
 // The `extensions` entries of the Pi settings file `file`, none when it is absent.
@@ -241,6 +252,98 @@ export async function waitForAdapterOnboarding(
       assert.fail(
         `pi-mcp-adapter ${version} recorded no onboarding within ${timeoutMs} ms; ${ONBOARDING_FILE} records ${JSON.stringify(recorded)}`,
       );
+    }
+
+    await delay(POLL_MS);
+  }
+}
+
+// Replaces the `extensions` of `<agentDir>/settings.json` with what `change`
+// returns for them, keeping every other member, creating the file when it is
+// absent, and checking that the file holds the new entries.
+async function changeUserExtensions(
+  agentDir: string,
+  change: (extensions: readonly unknown[]) => readonly unknown[],
+): Promise<void> {
+  const file = await runFile(agentDir, SETTINGS_FILE);
+  let settings: Readonly<Record<string, unknown>> = {};
+  try {
+    const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+    assert.ok(isRecord(parsed), `${file} holds no settings object`);
+    settings = parsed;
+  } catch (error: unknown) {
+    if (!isMissing(error)) {
+      throw error;
+    }
+  }
+
+  const extensions = Array.isArray(settings.extensions) ? (settings.extensions as unknown[]) : [];
+  const changed = change(extensions);
+  await replaceFile(file, `${JSON.stringify({ ...settings, extensions: changed }, null, 2)}\n`);
+  assert.deepStrictEqual(await settingsExtensions(file), changed);
+}
+
+/**
+ * Adds `-builtin:mcp` to the `extensions` of `<agentDir>/settings.json`, as
+ * pi-mcp-adapter or a user does, and fails when it is already there.
+ */
+export async function turnOffBuiltinMcp(agentDir: string): Promise<void> {
+  await changeUserExtensions(agentDir, (extensions) => {
+    assert.ok(!extensions.includes(BUILTIN_OFF_ENTRY), "Pi's built-in MCP is already turned off");
+    return [...extensions, BUILTIN_OFF_ENTRY];
+  });
+}
+
+/**
+ * Removes `-builtin:mcp` from the `extensions` of `<agentDir>/settings.json`,
+ * as a user does (P1-DC-08), and fails when it is not there.
+ */
+export async function turnOnBuiltinMcp(agentDir: string): Promise<void> {
+  await changeUserExtensions(agentDir, (extensions) => {
+    assert.ok(extensions.includes(BUILTIN_OFF_ENTRY), "Pi's built-in MCP is not turned off");
+    return extensions.filter((entry) => entry !== BUILTIN_OFF_ENTRY);
+  });
+}
+
+/**
+ * Returns the pids that the pid files of the stub MCP servers in `harness`
+ * name, none when the directory is absent.
+ */
+export async function stubPidsIn(harness: string): Promise<readonly number[]> {
+  let names: readonly string[];
+  try {
+    await runFile(harness, ".");
+    names = await stubPidFiles(harness);
+  } catch (error: unknown) {
+    if (isMissing(error)) {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const texts = await Promise.all(names.map((name) => readFile(path.join(harness, name), "utf8")));
+  return texts.map((text, index) => {
+    const pid = Number(text.trim());
+    assert.ok(Number.isInteger(pid) && pid > 0, `${names[index]} names no pid: ${text}`);
+    return pid;
+  });
+}
+
+/** Waits until every process of `pids` has exited, and fails with the live ones after `timeoutMs`. */
+export async function waitUntilProcessesExit(
+  pids: readonly number[],
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const running = pids.filter((pid) => isRunning(pid));
+    if (running.length === 0) {
+      return;
+    }
+
+    if (Date.now() >= deadline) {
+      assert.fail(`these processes still run after ${timeoutMs} ms: ${running.join(", ")}`);
     }
 
     await delay(POLL_MS);

@@ -43,6 +43,8 @@ import {
   parseMcpProfile,
   readBuiltinTurnedOff,
   removeAdapterOnboardingSeed,
+  turnOffBuiltinMcp,
+  turnOnBuiltinMcp,
   waitForAdapterOnboarding,
 } from "../lib/mcp-implementation.ts";
 import { npmConfigText, NpmRegistry } from "../lib/npm-registry.ts";
@@ -115,9 +117,12 @@ export interface PiProfile {
 
 /**
  * How a restart step changes the launch of the scenario's profile Pi:
- * `without-adapter` removes pi-mcp-adapter from its companions.
+ * `without-adapter` removes pi-mcp-adapter from its companions, and
+ * `with-adapter` adds it; `builtin-on` removes `-builtin:mcp` from the user's
+ * Pi settings and keeps the companions; `no-mcp` removes pi-mcp-adapter and
+ * starts Pi with `--no-mcp`.
  */
-export type PiRestart = "without-adapter";
+export type PiRestart = "without-adapter" | "with-adapter" | "builtin-on" | "no-mcp";
 
 // What a profile Pi starts with: its profile and whether it starts with `--no-mcp`.
 interface ProfileLaunch extends PiProfile {
@@ -611,15 +616,33 @@ export class ScenarioWorld extends World {
   }
 
   /**
+   * Adds `-builtin:mcp` to the `extensions` of the sandbox user's Pi
+   * settings, as pi-mcp-adapter or a user does, before any profile Pi starts,
+   * since Pi reads its settings when it starts. Fails once a profile Pi has
+   * started.
+   */
+  async turnOffBuiltinMcpBeforeStart(): Promise<void> {
+    if (this.profileHarnessDirectory !== undefined) {
+      throw new Error("a profile Pi already started in this scenario");
+    }
+
+    const { agentDir } = currentRun().sandbox;
+    await turnOffBuiltinMcp(agentDir);
+    this.onRelease(() => rm(path.join(agentDir, "settings.json"), { force: true }));
+  }
+
+  /**
    * Stops this scenario's profile Pi, asserts that its stand-ins stopped, and
    * starts another with the launch that `restart` changes, in the same
    * sandbox, so the trust entry, the script, and the installed plugins stay.
    * When the stopped Pi loaded pi-mcp-adapter, it first waits until the
    * adapter's onboarding file records its version, so the `-builtin:mcp`
-   * entry the adapter writes is on disk, as after a real removal. Returns
-   * what the new Pi's first session offers and reports. Fails when no profile
-   * Pi started, or when the new Pi does not run the MCP implementation its
-   * launch implies (DUAL-02).
+   * entry the adapter writes is on disk, as after a real removal. A
+   * `builtin-on` restart removes that entry from the user's Pi settings
+   * between the two Pis, as a user does (P1-DC-08). Returns what the new Pi's
+   * first session offers and reports. Fails when no profile Pi started, or
+   * when the new Pi does not run the MCP implementation its launch implies
+   * (DUAL-02).
    */
   async restartPi(restart: PiRestart): Promise<SessionReport> {
     const harness = this.profileHarness();
@@ -636,6 +659,10 @@ export class ScenarioWorld extends World {
 
     await this.pi.stop();
     await assertStandInsStopped(harness);
+    if (restart === "builtin-on") {
+      await turnOnBuiltinMcp(agentDir);
+    }
+
     await this.startProfilePi(restartedLaunch(launch, restart));
     return readSession(this.pi);
   }
@@ -858,6 +885,7 @@ export class ScenarioWorld extends World {
         ...(launch.extraExtensions ?? []),
       ],
       environment: { TMPDIR: path.join(sandbox.home, "tmp") },
+      ...(launch.noMcp === true ? { noMcp: true } : {}),
     });
     // HAR-05: the profile Pi stops first, so a stand-in that exits when its
     // stdin closes has exited before its pid file is checked.
@@ -882,11 +910,18 @@ export class ScenarioWorld extends World {
 }
 
 // The launch of a profile Pi after `restart` changes `launch`.
-function restartedLaunch(launch: ProfileLaunch, _restart: PiRestart): ProfileLaunch {
-  return {
-    ...launch,
-    companions: launch.companions.filter((name) => name !== "pi-mcp-adapter"),
-  };
+function restartedLaunch(launch: ProfileLaunch, restart: PiRestart): ProfileLaunch {
+  const withoutAdapter = launch.companions.filter((name) => name !== "pi-mcp-adapter");
+  switch (restart) {
+    case "without-adapter":
+      return { ...launch, companions: withoutAdapter };
+    case "with-adapter":
+      return { ...launch, companions: [...withoutAdapter, "pi-mcp-adapter"] };
+    case "builtin-on":
+      return launch;
+    case "no-mcp":
+      return { ...launch, companions: withoutAdapter, noMcp: true };
+  }
 }
 
 setWorldConstructor(ScenarioWorld);

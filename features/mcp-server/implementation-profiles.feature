@@ -20,3 +20,49 @@ Feature: MCP server implementation profiles
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
     Then the session reports no results
+
+  @own-implementation
+  Scenario: Restarting pi with pi's built-in mcp turned on keeps the installed plugins and reports nothing
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user's pi settings turn off pi's built-in mcp
+    Given pi runs with the scripted model
+    When the user restarts pi with pi's built-in mcp turned on
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+    Then the session reports no results
+
+  @own-implementation
+  Scenario: Restarting pi with no mcp keeps the installed plugins and reports nothing
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given pi runs with the scripted model
+    When the user restarts pi with no mcp
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+    Then the session reports no results
+
+  @own-implementation
+  Scenario: Restarting pi with pi-mcp-adapter keeps the installed plugins and reports nothing
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given pi runs with the scripted model
+    When the user restarts pi with pi-mcp-adapter
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+    Then the session reports no results

@@ -80,6 +80,14 @@ export interface RpcProfile {
   /** Absolute paths of the extensions loaded after the real one, in this order. */
   readonly extensions: readonly string[];
   readonly environment: RpcProfileEnvironment;
+  /** Starts Pi with `--no-mcp`, which turns its built-in MCP off for this run. */
+  readonly noMcp?: true;
+}
+
+/** Launch options of Pi beyond its extensions. */
+export interface PiArgumentOptions {
+  /** Adds `--no-mcp`, which turns Pi's built-in MCP off and keeps every other extension. */
+  readonly noMcp?: boolean;
 }
 
 /** What one RPC session runs: the sandbox, the steps in order, and extra extensions. */
@@ -239,9 +247,16 @@ export function rpcChildEnvironment(
   return environment;
 }
 
+/**
+ * Returns the arguments that start the repository's Pi CLI in `mode` with the
+ * real extension and `extraExtensions`, and with `--no-mcp` when `options`
+ * asks for it. It never passes `--no-extensions`, which also removes
+ * `builtin:mcp`.
+ */
 export function piArguments(
   mode: "rpc" | "tui",
   extraExtensions: readonly string[] = [],
+  options: PiArgumentOptions = {},
 ): string[] {
   const extensions = [EXTENSION_ENTRY, ...extraExtensions];
   return [
@@ -249,6 +264,7 @@ export function piArguments(
     ...(mode === "rpc" ? ["--mode", "rpc"] : []),
     "--offline",
     "--no-session",
+    ...(options.noMcp === true ? ["--no-mcp"] : []),
     ...extensions.flatMap((extension) => ["--extension", extension]),
   ];
 }
@@ -419,8 +435,9 @@ function spawnPi(
   extraExtensions: readonly string[],
   git?: RpcGitEnvironment,
   profileEnvironment?: RpcProfileEnvironment,
+  options: PiArgumentOptions = {},
 ): ChildProcessByStdio<Writable, Readable, Readable> {
-  return spawn(process.execPath, piArguments("rpc", extraExtensions), {
+  return spawn(process.execPath, piArguments("rpc", extraExtensions, options), {
     cwd: sandbox.cwd,
     // Its own process group, so the stops can kill Pi's children too. A dead
     // parent closes stdin, and Pi exits on that.
@@ -465,9 +482,9 @@ export async function runRpcSession(options: RpcSessionOptions): Promise<RpcSess
  * Starts the repository's own Pi CLI in RPC mode in `sandbox` and returns the
  * child, which stays up until its stdin closes. The child also gets `git` on
  * top of the allowlist, and a profile Pi gets the extensions and `TMPDIR` of
- * `profile`. The caller owns the JSONL exchange and the stop. Rejects as
- * `runRpcSession` does for a sandbox location outside the temp directory or
- * inside the repository.
+ * `profile`, and `--no-mcp` when `profile.noMcp` is set. The caller owns the
+ * JSONL exchange and the stop. Rejects as `runRpcSession` does for a sandbox
+ * location outside the temp directory or inside the repository.
  */
 export async function startRpcPi(
   sandbox: RpcSandbox,
@@ -479,6 +496,7 @@ export async function startRpcPi(
     profile?.extensions ?? [],
     git,
     profile?.environment,
+    { noMcp: profile?.noMcp === true },
   );
 }
 
