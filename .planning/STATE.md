@@ -2,14 +2,14 @@
 gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
-current_phase: 1
+current_phase: 01
 current_phase_name: Foundation and Pi 1.5.0
 status: executing
 stopped_at: mcp-builtin roadmap created; Phase 1 ready to plan
-last_updated: "2026-11-04T03:49:15.581Z"
+last_updated: "2026-11-04T03:50:30.636Z"
 last_activity: 2026-11-04
-last_activity_desc: Roadmap created (6 phases, 31/31 requirements mapped)
-state_head: 3ebedd27ceb70e578558c6c9743cb3d30e3b6319
+last_activity_desc: Phase 01 execution started
+state_head: d8bba1bf9dc76655ad930f6c20177121a61319c3
 progress:
   total_phases: 6
   completed_phases: 0
@@ -27,20 +27,17 @@ See: `.planning/PROJECT.md` (updated 2026-11-04 when the mcp-builtin milestone s
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** mcp-builtin -- MCP Built-in, on `features/mcp-builtin`.
-Phase 1 (Foundation and Pi 1.5.0) runs serially in the parent session; then
-Phases 2-5 run in parallel child sessions on `features/mcp-builtin-phase-N`
-(brief: `.planning/CHILD-SESSION-BRIEF.md`), merged in the order 5, 4, 2, 3;
+**Current focus:** Phase 01 — Foundation and Pi 1.5.0
 Phase 6 closes on the milestone branch. Still open from component-features:
 the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 `acolomba/pi` and `acolomba/pi-subagents`.
 
 ## Current Position
 
-Phase: 1 (Foundation and Pi 1.5.0) — READY TO EXECUTE
-Plan: not planned yet
-Status: Ready to execute
-Last activity: 2026-11-04 — Roadmap created (6 phases, 31/31 requirements mapped)
+Phase: 01 (Foundation and Pi 1.5.0) — EXECUTING
+Plan: 1 of 14
+Status: Executing Phase 01
+Last activity: 2026-11-04 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
