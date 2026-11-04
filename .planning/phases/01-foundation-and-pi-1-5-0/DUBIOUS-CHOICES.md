@@ -668,3 +668,22 @@ copies every item here. Phase 6 merges this file into the root log.
   load) and passed on a targeted rerun; `test/integration/
   mcp-status-conformance.test.ts` edited outside the plan (direct caller).
 - **Recorded in:** `01-11-SUMMARY.md`.
+
+### P1-DC-38: Plan 01-14 executor choices (phase gate, frozen record)
+
+- **Severity:** Low to Medium. **Status:** open.
+- (Medium) `01-FROZEN.md` wins over the ROADMAP text where they differ
+  (the code is what children import; each difference cites a P1-DC entry).
+- (Low) The gate ran on the base commit f3ab832 (no fix needed); the
+  cucumber part ran as the three CI legs (10-minute tool cap); the adapter
+  total 1558 matches.
+- (Low) `behavioral-shard-coverage.test.ts` is listed as frozen; the brief's
+  frozen list gains `edge/handlers/plugin/info.ts` (ROADMAP freezes it).
+- (Low) CONVENTIONS.md counts 44 `fallow-ignore` markers, now including
+  `features/`.
+- (Low) The CI handoff proposes the full amended D-CF1-16 text; if the
+  timeout must rise, the parent edits the frozen `ci.yml` before children
+  start.
+- (Low) No WINDOWS.md entry and no requirements marking (DUAL-03 waits on
+  the parent's CI run).
+- **Recorded in:** `01-14-SUMMARY.md`.
