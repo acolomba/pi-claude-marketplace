@@ -14,7 +14,7 @@ import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { SkillFrontmatterNodeError } from "../../shared/errors-bridges.ts";
 
 /**
- * Index of the closing fence as Pi 1.4.0's `parseFrontmatter` finds it
+ * Index of the closing fence as Pi 1.5.0's `parseFrontmatter` finds it
  * (`indexOf("\n---", 3)` in `dist/utils/frontmatter.js`): the first line after
  * the opening one that starts with `---` at column 0, or `lines.length`. An
  * indented `---` is block-scalar content to Pi, so no writer may stop there,

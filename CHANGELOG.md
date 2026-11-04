@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The extension now needs Pi 1.5.0 or newer.
+
 ## [0.22.0] - 2026-11-03
 
 - Plugin skills, commands, agents, hooks, MCP servers, and workflows now work more like Claude Code, project plugins follow Pi's trust, and Pi 1.4.0 is required. (#295)
