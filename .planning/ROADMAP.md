@@ -355,7 +355,7 @@ changes their names or shapes.
 | 3 | Wiring | `orchestrators/mcp/{session-materialize,recorded-servers,builtin-registration-step,agent-grants-step}.ts`, the `platform/mcp-builtin-status.ts` seed, `EdgeDeps.mcpStatus` in `edge/{types,register}.ts` and `edge/handlers/plugin/info.ts`, the status call in `orchestrators/plugin/info.ts`, `index.ts`, the factory-time probe ban |
 | 4 | Phase gate | `npm run check`, both cucumber profiles, `npm run test:modules`, the CI timing measurement, the frozen-file record, the parent lines |
 
-**Plans:** 7/14 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the snapshot and the session steps move to wave 2, the record producer to wave 3, the status pair and `recorded-servers.ts` to wave 4 after the producer, and the harness splits into four plans across waves 2-4)
+**Plans:** 10/14 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the snapshot and the session steps move to wave 2, the record producer to wave 3, the status pair and `recorded-servers.ts` to wave 4 after the producer, and the harness splits into four plans across waves 2-4)
 
 Plans:
 **Wave 1**
@@ -370,9 +370,9 @@ Plans:
 - [x] 01-07-PLAN.md — Wave 2: cucumber profiles, the implementation probe, the restart steps, and `--no-mcp` (DUAL-01, DUAL-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 01-08-PLAN.md — Wave 3: record producer: `declaredMcpServers`, `mcpServerConfigs`, `mcpBundle`, and `compatibilityBasis` (MREC-01)
-- [ ] 01-09-PLAN.md — Wave 3: the shared Pi follows the profile, `@adapter-only` tags, the agent-grants split, and the implementation-dependent marker rows (DUAL-01, DUAL-02)
-- [ ] 01-10-PLAN.md — Wave 3: the MCP implementation step and the built-in stand-in server (DUAL-01)
+- [x] 01-08-PLAN.md — Wave 3: record producer: `declaredMcpServers`, `mcpServerConfigs`, `mcpBundle`, and `compatibilityBasis` (MREC-01)
+- [x] 01-09-PLAN.md — Wave 3: the shared Pi follows the profile, `@adapter-only` tags, the agent-grants split, and the implementation-dependent marker rows (DUAL-01, DUAL-02)
+- [x] 01-10-PLAN.md — Wave 3: the MCP implementation step and the built-in stand-in server (DUAL-01)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 01-11-PLAN.md — Wave 4: the `mcpStatus` reader pair, the built-in status seed, and the frozen status call in `info` (MSEL-01)
@@ -479,7 +479,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Foundation and Pi 1.5.0 | 7/14 | In Progress | - |
+| 1. Foundation and Pi 1.5.0 | 10/14 | In Progress | - |
 | 2. Built-in Materialization | 0/TBD | Not started | - |
 | 3. Read-Time Verdicts | 0/TBD | Not started | - |
 | 4. Agent Grants | 0/TBD | Not started | - |
