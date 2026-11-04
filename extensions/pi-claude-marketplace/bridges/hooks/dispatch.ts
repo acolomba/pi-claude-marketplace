@@ -217,16 +217,19 @@ function dedupeHooks(entries: readonly RoutingEntry[]): RoutingEntry[] {
 
 // The entries of `bucket` that run for `event`: the matcher and the `if`
 // both fire (MATCH-03 / D-61-02: an `if` that does not match skips the entry,
-// it does not block), then one entry per hook.
+// it does not block), then one entry per hook. A tool event's `if` compares
+// `tool`, the event's tool as the dispatch named it (D-P5-04).
 function matchingHooks(
   bucket: readonly RoutingEntry[],
   event: unknown,
   ctx: ExtensionContext,
   matcherFires: (entry: RoutingEntry) => boolean,
+  tool?: McpToolIdentity,
 ): RoutingEntry[] {
   return dedupeHooks(
     bucket.filter(
-      (entry) => matcherFires(entry) && ifFires(entry.ifPredicate, event, ctx, entry.claudeEvent),
+      (entry) =>
+        matcherFires(entry) && ifFires(entry.ifPredicate, event, ctx, entry.claudeEvent, tool),
     ),
   );
 }
@@ -409,17 +412,19 @@ function foldOutcomes(outcomes: readonly BucketOutcome[]): FoldedBucket {
   return foldMutations(outcomes, context);
 }
 
-// Run the matching hooks of `bucket` for `event` and fold their outcomes.
+// Run the matching hooks of `bucket` for the view's event and fold their
+// outcomes.
 async function runAndFold(
   runtime: HooksRuntime,
   bucket: readonly RoutingEntry[],
-  event: unknown,
+  view: HookEventView,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
   executor: HookExecutor,
   matcherFires: (entry: RoutingEntry) => boolean,
 ): Promise<FoldedBucket> {
-  const hooks = matchingHooks(bucket, event, ctx, matcherFires);
+  const { event } = view;
+  const hooks = matchingHooks(bucket, event, ctx, matcherFires, view.tool);
   const outcomes = await runHooks(runtime, hooks, (entry) =>
     executor(entry, event, ctx, pi, runtime),
   );
@@ -733,7 +738,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     }
 
     const view = hookEventView(claudeEvent, event, tools);
-    const folded = await runAndFold(runtime, bucket, view.event, ctx, pi, executor, (entry) =>
+    const folded = await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, view),
     );
     const label = noticeLabel(claudeEvent, view.event);
@@ -758,13 +763,15 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
  * `adaptToolResultResult` (D-60-03).
  *
  * `executor` is the same injected seam `compositeHandlerFor` takes, defaulted
- * and forwarded identically.
+ * and forwarded identically, and so is `tools`, which names the event's tool
+ * as the hooks see it (D-P5-01).
  */
 export function toolResultCompositeHandler(
   runtime: HooksRuntime,
   capturedGeneration: number,
   pi?: ExtensionAPI,
   executor: HookExecutor = dispatchHookExec,
+  tools: HookToolView = createHookToolView(pi),
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
   return async (event, ctx) => {
     if (capturedGeneration !== runtime.currentGeneration()) {
@@ -777,14 +784,15 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const folded = await runAndFold(runtime, bucket, event, ctx, pi, executor, (entry) =>
-      matcherFiresOnToolEvent(entry.matcher, { piName: event.toolName, builtinServer: undefined }),
+    const view = toolEventView(event, tools);
+    const folded = await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
+      matcherFiresOnToolEvent(entry.matcher, view.tool),
     );
-    const label = hookEventLabel(claudeEvent, event.toolName);
+    const label = hookEventLabel(claudeEvent, view.event.toolName);
     showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
     sendToolContext(pi, label, folded.result);
 
-    return adaptToolResultResult(folded.result, event, {
+    return adaptToolResultResult(folded.result, view.event, {
       runtime,
       ctx,
       pi,

@@ -24,7 +24,10 @@ import type {
   HookExecutor,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
-import type { HookToolView } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts";
+import type {
+  HookTool,
+  HookToolView,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts";
 import type { ClaudeSessionEndEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
@@ -4020,18 +4023,29 @@ describe("tool hook context (HOOK-04 / D-CF5-13)", () => {
 const BUILTIN_PI_NAME = "mcp__plugin_hook_demo_stub_server__echo";
 const BUILTIN_CLAUDE_NAME = "mcp__plugin_hook-demo_stub-server__echo";
 
+const BUILTIN_TOOLS: Readonly<Partial<Record<string, HookTool>>> = {
+  [BUILTIN_PI_NAME]: {
+    piName: BUILTIN_PI_NAME,
+    name: BUILTIN_CLAUDE_NAME,
+    builtinServer: "plugin_hook-demo_stub-server",
+  },
+  mcp__echo_server__echo_text: {
+    piName: "mcp__echo_server__echo_text",
+    name: "mcp__echo-server__echo_text",
+    builtinServer: "echo-server",
+  },
+};
+
 /**
- * A tool view that names `mcp__plugin_hook_demo_stub_server__echo` as a tool
- * of Pi's built-in MCP and keeps every other name, recording each name it is
- * asked for.
+ * A tool view that names the tools of `BUILTIN_TOOLS` as tools of Pi's
+ * built-in MCP and keeps every other name, recording each name it is asked
+ * for.
  */
 function createBuiltinToolView(identified: string[]): HookToolView {
   return {
     identify: (piName) => {
       identified.push(piName);
-      return piName === BUILTIN_PI_NAME
-        ? { piName, name: BUILTIN_CLAUDE_NAME, builtinServer: "plugin_hook-demo_stub-server" }
-        : { piName, name: piName, builtinServer: undefined };
+      return BUILTIN_TOOLS[piName] ?? { piName, name: piName, builtinServer: undefined };
     },
   };
 }
@@ -4317,4 +4331,203 @@ describe("built-in MCP tool names (MHK-01)", () => {
     assert.strictEqual(output, undefined);
     assert.deepStrictEqual(identified, []);
   });
+});
+
+function builtinToolResultEvent(isError: boolean, toolName = BUILTIN_PI_NAME): ToolResultEvent {
+  return {
+    ...createToolResultEvent(isError, toolName),
+    input: { text: "ping" },
+    content: [{ type: "text", text: "echo:ping" }],
+  };
+}
+
+describe("built-in MCP tool names in tool results and if fields (MHK-01)", () => {
+  for (const claudeEvent of ["PostToolUse", "PostToolUseFailure"] as const) {
+    test(`runs the Claude-form ${claudeEvent} literal and server prefix and not the folded-server literal (D-P5-04)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(
+        claudeEvent,
+        builtinToolEntries(claudeEvent, [
+          { pluginId: "literal", rawMatcher: BUILTIN_CLAUDE_NAME },
+          { pluginId: "prefix", rawMatcher: "mcp__plugin_hook-demo_stub-server__.*" },
+          { pluginId: "folded", rawMatcher: BUILTIN_PI_NAME },
+        ]),
+      );
+      const received: ReceivedEvent[] = [];
+      const identified: string[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        undefined,
+        createEventKeepingExecutor({}, received),
+        createBuiltinToolView(identified),
+      );
+      const event = builtinToolResultEvent(claudeEvent === "PostToolUseFailure");
+      const hookEvent = builtinToolResultEvent(
+        claudeEvent === "PostToolUseFailure",
+        BUILTIN_CLAUDE_NAME,
+      );
+
+      // act
+      const output = await handler(event, createExtensionContext("/workspace/result"));
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(received, [
+        { pluginId: "literal", event: hookEvent },
+        { pluginId: "prefix", event: hookEvent },
+      ]);
+      assert.deepStrictEqual(
+        received.map((run) => [
+          run.event.input === event.input,
+          run.event.content === event.content,
+        ]),
+        [
+          [true, true],
+          [true, true],
+        ],
+      );
+      assert.deepStrictEqual(event, builtinToolResultEvent(claudeEvent === "PostToolUseFailure"));
+      assert.deepStrictEqual(identified, [BUILTIN_PI_NAME]);
+    });
+
+    test(`names the tool in Claude's form in a ${claudeEvent} notice, block feedback, and context (D-P5-03)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(
+        claudeEvent,
+        builtinToolEntries(claudeEvent, [{ pluginId: "guard", rawMatcher: BUILTIN_CLAUDE_NAME }]),
+      );
+      const host = createNoticeHost("/workspace/result-labels");
+      const sent: SentMessage[] = [];
+      const pi = Object.assign(host.pi, {
+        sendMessage: (message: unknown, options: unknown): void => {
+          sent.push({ message, options });
+        },
+      });
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        pi,
+        createEventKeepingExecutor(
+          {
+            guard: {
+              kind: "block",
+              reason: "no",
+              systemMessage: "checked",
+              additionalContext: "why",
+            },
+          },
+          [],
+        ),
+        createBuiltinToolView([]),
+      );
+      const label = `${claudeEvent}:${BUILTIN_CLAUDE_NAME}`;
+
+      // act
+      const output = await handler(
+        builtinToolResultEvent(claudeEvent === "PostToolUseFailure"),
+        host.context,
+      );
+
+      // assert
+      assert.deepStrictEqual(output, {
+        content: [
+          { type: "text", text: "echo:ping" },
+          {
+            type: "text",
+            text: `${label} hook blocking error from command: "printf guard": no`,
+          },
+        ],
+      });
+      assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry(`${label} says: checked`)]);
+      assert.deepStrictEqual(sent, [toolContextMessage(`${label} hook additional context: why`)]);
+      host.capture.assertValid();
+    });
+  }
+
+  test("never asks the view when the tool result's bucket is empty", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const identified: string[] = [];
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, []),
+      createBuiltinToolView(identified),
+    );
+
+    // act
+    const output = await handler(
+      builtinToolResultEvent(false),
+      createExtensionContext("/workspace/result-empty"),
+    );
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(identified, []);
+  });
+
+  for (const { toolName, ran } of [
+    { toolName: BUILTIN_PI_NAME, ran: ["iffed"] },
+    { toolName: "mcp__echo_server__echo_text", ran: ["dashed"] },
+    { toolName: "tool_search", ran: [] },
+  ]) {
+    test(`runs the PreToolUse hooks whose if names ${toolName} as Claude Code does: ${ran.join(", ") || "none"} (D-P5-04)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const compileContext = {
+        homedir: "/home/plugin-user",
+        cwd: "/workspace/if",
+        projectRoot: "/workspace/if",
+      };
+      runtime.setRoutingBucket("PreToolUse", [
+        createRoutingEntry({
+          pluginId: "iffed",
+          claudeEvent: "PreToolUse",
+          rawMatcher: "*",
+          declarationIndex: 0,
+          ifPredicate: compileIfPredicate(BUILTIN_CLAUDE_NAME, "PreToolUse", compileContext),
+        }),
+        createRoutingEntry({
+          pluginId: "dashed",
+          claudeEvent: "PreToolUse",
+          rawMatcher: "*",
+          declarationIndex: 1,
+          ifPredicate: compileIfPredicate(
+            "mcp__echo-server__echo-text",
+            "PreToolUse",
+            compileContext,
+          ),
+        }),
+      ]);
+      const received: ReceivedEvent[] = [];
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        createEventKeepingExecutor({}, received),
+        createBuiltinToolView([]),
+      );
+
+      // act
+      await handler(
+        createToolCallEvent(toolName, { text: "ping" }),
+        createExtensionContext("/workspace/if"),
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        received.map(({ pluginId }) => pluginId),
+        ran,
+      );
+    });
+  }
 });
