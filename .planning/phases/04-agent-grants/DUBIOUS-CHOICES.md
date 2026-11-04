@@ -314,3 +314,13 @@ Each entry: severity; choice; alternatives; why dubious. Recorded in the named p
 - **P4-DC-50 (Low, 04-01):** an io test pins TypeBox's error text (`must be equal to constant`) for a bad `mcpImplementation`, like existing tests do.
 - **P4-DC-51 (Low, 04-01):** part of the RED proof is type-level only (the new warning module had no prior failing run; the schema "accepts" cases already passed at runtime because TypeBox keeps extra properties).
 - **P4-DC-52 (Low, 04-02):** the child autoapply scenario's red run fails at the session-report step (the child's startup load already installed during the Given), not at "no installed plugins". Alt: a check right after the child Pi starts.
+
+## Wave 2 (executors 04-03, 04-04, 2026-11-04)
+
+- **P4-DC-53 (Low, 04-03):** the built-in server set keeps declaration order, which cannot change any output (grants sort by prefix length; tools follow the agent's token order), so no case pins order.
+- **P4-DC-54 (Low, 04-03):** a stage without `mcpGrantForms` records no forms, so a re-stage from such a caller drops a row's stored forms (the load then leaves the file). Alt: carry forms forward (could go stale).
+- **P4-DC-55 (Low, 04-03, 04-04):** RED evidence for new modules was taken by restoring base sources after the implementation; some fail at import rather than on behavior.
+- **P4-DC-56 (Low, 04-04):** a legacy row whose file has no frame/marker or is missing stays a candidate, so under built-in each load takes one lock and re-reads it. Alt: record adapter-only fields (a form the file does not hold).
+- **P4-DC-57 (Low, 04-04):** the legacy warning translation applies to every `    - ` list line of the block, not only `warnings:` items (only the two exact sentences change).
+- **P4-DC-58 (Low, 04-04):** the swap reads and writes UTF-8 strings; invalid UTF-8 in a body would become U+FFFD (the bridge only writes UTF-8).
+- **P4-DC-59 (Low, 04-04):** added `test/bridges/agents/agent-grant-seeds.ts` outside `files_modified` to avoid a fallow clone between two tests.
