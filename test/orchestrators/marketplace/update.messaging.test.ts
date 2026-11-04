@@ -704,6 +704,7 @@ test("SC3: an unconstrained plugin renders the same autoupdate cascade rows as b
     scope: "project",
     locations: seed.locations,
     cleanupClones: async () => {},
+    mcpImplementation: "none",
   });
   assert.ok(!("partition" in prepared));
   assert.strictEqual(prepared.constraint, undefined);

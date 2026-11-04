@@ -685,9 +685,7 @@ for (const coexist of [false, true]) {
         JSON.parse(await readFile(locations.agentsIndexPath, "utf8")),
         expectedIndex,
       );
-      // WR-02: the reinstall writes its compatibility through
-      // `replaceCompatibility`, which clears the basis the install set.
-      const { compatibilityBasis: _installBasis, ...reinstalledFields } = oldRecord;
+      // D-P3-02: the reinstall writes the neutral verdict with its basis.
       const migratedState = (updatedAt: string) => ({
         ...beforeState,
         marketplaces: {
@@ -696,7 +694,8 @@ for (const coexist of [false, true]) {
             ...beforeState.marketplaces.mp,
             plugins: {
               hello: {
-                ...reinstalledFields,
+                ...oldRecord,
+                compatibilityBasis: "neutral",
                 resources: { ...oldRecord.resources, agents: expectedNames },
                 updatedAt,
               },
@@ -4275,6 +4274,59 @@ test("D-18-06 / D-18-08: a reinstall that newly leaves a component out names it 
     }
   });
 });
+
+for (const { mcpImplementation, notification } of [
+  {
+    mcpImplementation: "builtin",
+    notification: {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {unsupported mcp, requires pi-mcp-adapter}\n\n/reload to pick up changes",
+      severity: "warning",
+    },
+  },
+  {
+    mcpImplementation: "adapter",
+    notification: {
+      message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+    },
+  },
+] as const) {
+  test(`D-P3-12 / D-P3-13: a reinstall under ${mcpImplementation} of a plugin that now declares an sse server re-materializes it and names what that implementation drops`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-view-"));
+      try {
+        // arrange
+        const seeded = await seedMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          resources: { skill: "old skill" },
+          install: true,
+        });
+        await writeFile(
+          path.join(seeded.pluginRoot, ".mcp.json"),
+          JSON.stringify({
+            mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } },
+          }),
+        );
+        const { ctx, run, notifications } = makeCtx({ mcpImplementation });
+
+        // act
+        await reinstallPlugins({
+          ctx,
+          run,
+          cwd,
+          scope: "project",
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        // assert
+        assert.deepStrictEqual(notifications, [notification]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 test("BFILL-01 / D-18-06 full: reinstall of an installable plugin records installable:true with empty unsupported", async () => {
   await withHermeticHome(async () => {
@@ -8423,15 +8475,11 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       // before the mark fails as concurrently updated.
       assert.ok(firstRecord !== undefined);
       const { updatedAt: markedStamp, ...markedFields } = firstRecord;
-      // WR-02: the intent mark and the final write replace the compatibility
-      // through `replaceCompatibility`, which clears the basis the install set.
-      const {
-        updatedAt: readStamp,
-        compatibilityBasis: _installBasis,
-        ...readFields
-      } = recordBefore;
+      // D-P3-02: the intent mark keeps the basis the install set.
+      const { updatedAt: readStamp, ...readFields } = recordBefore;
       assert.deepStrictEqual(markedFields, {
         ...readFields,
+        compatibilityBasis: "neutral",
         compatibility: {
           installable: false,
           notes: ["update-in-progress"],

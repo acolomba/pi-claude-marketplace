@@ -123,6 +123,7 @@ async function preparedUpdate(cwd: string, plugin: string): Promise<PreparedPlug
     locations: locationsFor("project", cwd),
     policy: UPDATE_MATERIALIZATION,
     cleanupClones: () => Promise.resolve(),
+    mcpImplementation: "none",
   });
   assert.ok(!isUpdatePreflightOutcome(prepared), "the update has a candidate");
   return prepared;
@@ -150,6 +151,7 @@ function updateArgs(owner: InstallTestOwner, cwd: string, plugin: string): Casca
     env: {},
     cascade: true,
     cleanupClones: () => Promise.resolve(),
+    mcpImplementation: "none",
   };
 }
 

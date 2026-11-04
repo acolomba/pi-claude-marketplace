@@ -133,6 +133,7 @@ import type {
   UpdateRunOutcome,
 } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -318,6 +319,8 @@ function buildDirectThreePhaseArgs(
     // The cascade entrypoint never sets it, so cascade re-installs keep the
     // `requireInstallable` block.
     partial: opts.partial ?? false,
+    // D-P3-11: the gate asks against the implementation of the command's run.
+    mcpImplementation: opts.run.softDeps.mcpImplementation,
     // LAYER-04: `--local` selects the layer a named update acts on.
     ...(opts.local === true && { local: true }),
     // PURL-06: the test-only clone-cache seam for the git-source candidate
@@ -783,6 +786,7 @@ async function updateSinglePluginWith(
     readonly tagMemo: Map<string, readonly RemoteTag[]>;
     readonly marketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>;
   },
+  mcpImplementation: ActiveMcpImplementation,
 ): Promise<PluginUpdateOutcome> {
   // The cascade signature does not carry `cwd`; we default to process.cwd
   // because the cascade is invoked from a marketplace orchestrator that
@@ -806,7 +810,10 @@ async function updateSinglePluginWith(
     // automatic partial path can never materialize a structurally-broken plugin.
     // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
     // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
+    // D-P3-13: so a switch of MCP implementation never holds an autoupdate.
     partial: true,
+    // D-P3-12: the outcome reports the kinds this implementation drops.
+    mcpImplementation,
     // D-10-18: the SAME pair for every plugin of ONE autoupdate run, so a
     // cascade over many plugins of one marketplace lists it once -- see
     // `beginPluginUpdateRun` below for why the pair is allocated per run
@@ -839,6 +846,11 @@ function convergePluginWith(
     // D-26 / WCONV-01: only a record already installed partial admits a
     // partial candidate; a clean record's consent guard declines it.
     partial: target.partial,
+    // D-P3-13: `apply`'s plan already judged the move under its run's MCP
+    // implementation and set `partial` from the record's view. The target
+    // carries no implementation, so the runner reads the neutral view, which
+    // holds back nothing that the plan's implementation would admit.
+    mcpImplementation: "none",
     cleanupClones: target.cleanupClones ?? collectPluginClonesLocked,
   });
 }
@@ -1540,11 +1552,19 @@ export function createPluginUpdateOperations(
     const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
     const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
     const runner = settling(notification);
+    // D-P3-12: the implementation of the command's run. A run with no command
+    // has no snapshot, so it reads the neutral view.
+    const mcpImplementation = notification?.run.softDeps.mcpImplementation ?? "none";
     return (plugin, marketplace, scope) =>
-      updateSinglePluginWith(bindings, runner, plugin, marketplace, scope, {
-        tagMemo: constraintTagMemo,
-        marketplaceTagMemo: constraintMarketplaceTagMemo,
-      });
+      updateSinglePluginWith(
+        bindings,
+        runner,
+        plugin,
+        marketplace,
+        scope,
+        { tagMemo: constraintTagMemo, marketplaceTagMemo: constraintMarketplaceTagMemo },
+        mcpImplementation,
+      );
   };
 
   const convergePlugin: PluginConvergeFn = (target) =>
