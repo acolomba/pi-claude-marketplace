@@ -169,6 +169,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -181,6 +182,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -193,6 +195,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -205,6 +208,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -217,6 +221,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -229,6 +234,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -241,6 +247,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -253,6 +260,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -265,6 +273,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -277,6 +286,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -289,6 +299,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -301,6 +312,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -313,6 +325,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -325,6 +338,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -337,6 +351,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -349,6 +364,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -363,6 +379,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     },
     expectedSeverity: "warning",
@@ -375,6 +392,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -389,6 +407,7 @@ const companionSeverityCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",

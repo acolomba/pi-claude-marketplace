@@ -963,6 +963,7 @@ test("keeps mixed entries and duplicates ordered while reading live mode on the 
   assert.deepStrictEqual(run.softDeps, {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
   });
   assert.strictEqual(run.entrySink, pi);
@@ -1092,6 +1093,7 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: true,
+    mcpImplementation: "adapter",
     workflowEngineLoaded: false,
   }); // agents NOT loaded
   const msg: NotificationMessage = {
@@ -1130,6 +1132,7 @@ test("notify renders updated plugin with version arrow + mcp dep marker", (t) =>
   const run = runWithSoftDeps({
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
   }); // mcp NOT loaded
   const msg: NotificationMessage = {
@@ -1568,6 +1571,7 @@ test("WR-03: partially-installed success row threads dependencies -> soft-dep ma
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: true,
+    mcpImplementation: "adapter",
     workflowEngineLoaded: false,
   });
   const msg: NotificationMessage = {
@@ -7348,6 +7352,7 @@ for (const mode of ["json", "rpc"]) {
       softDeps: {
         piSubagentsLoaded: false,
         piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
       entrySink: capture.entrySink,

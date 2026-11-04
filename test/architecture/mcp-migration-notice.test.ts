@@ -205,7 +205,12 @@ type NotifyArguments = [message: string, severity?: string];
 function loadRun(entrySink: NotificationRun["entrySink"]): NotificationRun {
   return {
     origin: { kind: "load" },
-    softDeps: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
+    softDeps: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
+      workflowEngineLoaded: false,
+    },
     entrySink,
   };
 }

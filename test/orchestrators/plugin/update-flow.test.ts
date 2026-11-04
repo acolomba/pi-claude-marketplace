@@ -304,6 +304,7 @@ function makeCtx(softDeps?: Partial<SoftDepStatus>): {
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
     ...softDeps,
   });
@@ -12041,7 +12042,10 @@ test("D-PL1-14 / D-PL1-22: a direct update whose later target throws in prepare 
       await seedCollidingSkills(seeded.marketplaceRoot, "aaa");
       await seedCollidingSkills(seeded.marketplaceRoot, "zzz");
       const refusal = await seedForeignMcpServerKey(cwd, seeded.marketplaceRoot, "zzz");
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await updatePlugins({

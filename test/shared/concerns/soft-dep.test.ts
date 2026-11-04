@@ -24,6 +24,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
@@ -36,6 +37,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedMarkers: ["requires pi-subagents"],
@@ -48,6 +50,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedMarkers: ["requires pi-mcp-adapter"],
@@ -60,6 +63,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedMarkers: ["requires pi-subagents", "requires pi-mcp-adapter"],
@@ -72,6 +76,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
@@ -84,6 +89,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedMarkers: ["requires pi-subagents"],
@@ -96,6 +102,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
@@ -108,6 +115,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedMarkers: ["requires pi-subagents"],
@@ -120,6 +128,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
@@ -132,6 +141,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
@@ -144,6 +154,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedMarkers: ["requires pi-mcp-adapter"],
@@ -156,6 +167,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedMarkers: ["requires pi-mcp-adapter"],
@@ -168,6 +180,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
@@ -180,6 +193,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
@@ -192,6 +206,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
@@ -204,6 +219,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
@@ -219,6 +235,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     },
     expectedMarkers: ["requires pi-dynamic-workflows"],
@@ -231,6 +248,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
@@ -243,6 +261,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     },
     expectedMarkers: [],
@@ -257,6 +276,7 @@ const markerCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: false,
     },
     expectedMarkers: [
@@ -301,6 +321,7 @@ const requirementCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: false,
     },
     expectedRequirements: [],
@@ -314,6 +335,7 @@ const requirementCases = [
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedRequirements: [{ companion: "pi-mcp-adapter", missing: true }],
@@ -326,6 +348,7 @@ const requirementCases = [
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     },
     expectedRequirements: [
@@ -364,6 +387,7 @@ for (const {
 const NOTHING_LOADED = {
   piSubagentsLoaded: false,
   piMcpAdapterLoaded: false,
+  mcpImplementation: "none",
   workflowEngineLoaded: false,
 } as const;
 

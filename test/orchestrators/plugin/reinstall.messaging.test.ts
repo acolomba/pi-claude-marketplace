@@ -247,19 +247,34 @@ for (const { companion, declares, dependency, loaded } of [
     companion: "pi-subagents",
     declares: { declaresAgents: true, declaresMcp: false, declaresWorkflows: false },
     dependency: "agents",
-    loaded: { piSubagentsLoaded: false, piMcpAdapterLoaded: true, workflowEngineLoaded: true },
+    loaded: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
+      workflowEngineLoaded: true,
+    },
   },
   {
     companion: "pi-mcp-adapter",
     declares: { declaresAgents: false, declaresMcp: true, declaresWorkflows: false },
     dependency: "mcp",
-    loaded: { piSubagentsLoaded: true, piMcpAdapterLoaded: false, workflowEngineLoaded: true },
+    loaded: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
+      workflowEngineLoaded: true,
+    },
   },
   {
     companion: "the workflow engine",
     declares: { declaresAgents: false, declaresMcp: false, declaresWorkflows: true },
     dependency: "workflows",
-    loaded: { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: false },
+    loaded: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
+      workflowEngineLoaded: false,
+    },
   },
 ] as const) {
   test(`SEV-01: a reinstall whose declared ${companion} is unloaded raises the row to warning`, () => {

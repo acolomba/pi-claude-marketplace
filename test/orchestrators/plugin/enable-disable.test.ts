@@ -155,6 +155,7 @@ function runWithMcpAdapterLoaded(): NotificationRun {
   return runWithSoftDeps({
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: true,
+    mcpImplementation: "adapter",
     workflowEngineLoaded: false,
   });
 }
@@ -3002,6 +3003,7 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
       run: runWithSoftDeps({
         piSubagentsLoaded: true,
         piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       }),
       cwd,
@@ -4776,6 +4778,7 @@ test("orchestrated enable returns every live degradation and companion signal wi
       run: runWithSoftDeps({
         piSubagentsLoaded: true,
         piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       }),
       plugin: "foo",
@@ -5746,6 +5749,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
       run: runWithSoftDeps({
         piSubagentsLoaded: false,
         piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       }),
       plugin: "foo",
@@ -9389,6 +9393,7 @@ test("D-PL1-12: a standalone enable whose only staging warning is hygiene shows 
       run: runWithSoftDeps({
         piSubagentsLoaded: true,
         piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       }),
       cwd,

@@ -3609,7 +3609,10 @@ test("ANAME-07: --partial installs every server except the blocked one", async (
       });
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       const dataDir = path.join(locations.dataRoot, "mp", "hello");
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({
@@ -3688,7 +3691,10 @@ test("ANAME-03: a plugin tool-name prefix past 128 characters installs with no l
         mcpServers: { [serverName]: { command: "node" } },
       });
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({
@@ -3936,7 +3942,10 @@ test("AFILE-04: install over a commented mcp-adapter.json shows the comments-rem
         siblingPlugins: [{ name: "other", mcpServers: { server2: { command: "node" } } }],
       });
       await writeCommentedProjectAdapterFile(cwd);
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -3992,7 +4001,10 @@ test("AFILE-04: a dependency cascade over a commented mcp-adapter.json shows the
       // arrange
       await seedMcpDependencyCascade(cwd);
       await writeCommentedProjectAdapterFile(cwd);
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -4025,7 +4037,10 @@ test("AFILE-04: a failed dependency cascade still reports the removed comments a
       await writeCommentedProjectAdapterFile(cwd);
       await seedForeignServer1();
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -4092,7 +4107,10 @@ for (const { title, env, expectedNotifications } of [
           pluginName: "hello",
           mcpServers: { server1: { command: "node", args: ["${PI_CM_SET_FOR_STAGING}"] } },
         });
-        const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+        const { ctx, run, notifications } = makeCtx({
+          piMcpAdapterLoaded: true,
+          mcpImplementation: "adapter",
+        });
         const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, env);
 
         // act
@@ -4134,7 +4152,10 @@ test("AVAR-04: a failed dependency cascade shows no variable notice for the depe
         ],
       });
       await seedForeignServer1();
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
       const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, {});
 
       // act
@@ -4171,7 +4192,10 @@ test("AVAR-04: an install that lands disabled shows no variable notice for the s
         entryDefaultEnabled: false,
         mcpServers: { server1: { command: "node", args: UNSET_VARIABLE_ARGS } },
       });
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
       const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, {});
 
       // act
@@ -4206,7 +4230,10 @@ test("AFILE-04: promoting a disabled dependency that re-materializes MCP servers
     try {
       // arrange
       await seedMcpDependencyCascade(cwd);
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
       await disableSeededDependency(cwd, hooksRouting, { ctx, run });
       await writeCommentedProjectAdapterFile(cwd);
@@ -4257,7 +4284,10 @@ test("AFILE-04: an orchestrated install returns its MCP config notices and sends
       // arrange
       await seedMcpDependencyCascade(cwd);
       await writeCommentedProjectAdapterFile(cwd);
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       const outcome = await installPlugin({
@@ -4295,7 +4325,10 @@ test("AFILE-04: an orchestrated install over a comment-free mcp-adapter.json car
     try {
       // arrange
       await seedMcpDependencyCascade(cwd);
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       const outcome = await installPlugin({
@@ -4332,7 +4365,10 @@ test("AFILE-04: an orchestrated failed cascade returns the removed comments on i
       await seedMcpDependencyCascade(cwd);
       await writeCommentedProjectAdapterFile(cwd);
       await seedForeignServer1();
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       const outcome = await installPlugin({
@@ -4365,7 +4401,10 @@ test("AFILE-04: the reload missing-dependency install returns its MCP config not
       // arrange
       await seedMcpDependencyCascade(cwd);
       await writeCommentedProjectAdapterFile(cwd);
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       const outcome = await installMissingDependency({
@@ -4450,7 +4489,10 @@ test("AFILE-04: an install that lands disabled reports the notices of both its s
         legacyPath,
         '// legacy note\n{"mcpServers":{"server1":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n',
       );
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({
@@ -4533,7 +4575,10 @@ test("AFILE-06: install over a project override with an env field shows the over
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
       });
       await writeProjectOverrideFile(cwd, "plugin_hello_server1_");
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -4572,7 +4617,10 @@ test("AFILE-06: an install that lands disabled writes the override back and show
         cwd,
         "plugin_hello_server1_",
       );
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({
@@ -4612,7 +4660,10 @@ test("AFILE-06: a failed dependency cascade writes its dependency's override bac
         "plugin_some-other-plugin_server2_",
       );
       await seedForeignServer1();
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -4654,7 +4705,10 @@ test("AFILE-04: install over a commented file holding an override shows the comm
         adapterPath,
         '{\n  // mine\n  "mcpServers": { "plugin_hello_server1_": { "disabled": true, "env": { "STUB_TOKEN": "stub-secret" } } }\n}\n',
       );
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -4716,7 +4770,10 @@ test("AFILE-04: an install whose state save fails still reports the removed comm
       });
       await writeCommentedProjectAdapterFile(cwd);
       const installPlugin = refusingSaveInstall(owner);
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -4758,7 +4815,10 @@ test("AFILE-04: an install that lands disabled and whose state save fails report
         '// legacy note\n{"mcpServers":{"server1":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n',
       );
       const installPlugin = refusingSaveInstall(owner);
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({
@@ -4801,7 +4861,10 @@ test("AFILE-04: a promotion whose state save fails still reports the removed com
     try {
       // arrange
       await seedMcpDependencyCascade(cwd);
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
       await owner.installPlugin({
         ctx,
         run,
@@ -4855,7 +4918,10 @@ test("AFILE-04: a missing-dependency install whose state save fails returns the 
         owner.hooksRouting,
         owner.completionCache,
       );
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       const outcome = await installMissingDependency({
@@ -13436,7 +13502,10 @@ test("GHB-03: an invalid base after a dependency rewrote the MCP config reports 
       });
       await writeCommentedProjectAdapterFile(cwd);
       const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
+      });
 
       // act
       await installPlugin({
@@ -14800,6 +14869,7 @@ test("retry proof: install: commands prepare failure after a committed skill con
       );
       const { ctx, notifications, run } = makeCtx({
         piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -14937,6 +15007,7 @@ test("retry proof: install: skills prepare failure with no committed phases conv
       );
       const { ctx, notifications, run } = makeCtx({
         piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -15062,6 +15133,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
       );
       const { ctx, notifications, run } = makeCtx({
         piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -15218,6 +15290,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
       );
       const { ctx, notifications, run } = makeCtx({
         piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -15381,6 +15454,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       );
       const { ctx, notifications, run } = makeCtx({
         piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -15511,6 +15585,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
       );
       const { ctx, notifications, run } = makeCtx({
         piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -15654,6 +15729,7 @@ test("retry proof: install: containment failure preserves the refused residue an
       );
       const { ctx, notifications, run } = makeCtx({
         piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -15798,6 +15874,7 @@ test("retry proof: install: state commit race after staged work retries from unc
       const cacheDrops = observeCompletionDrops(t, completionCache);
       const { ctx, notifications, run } = makeCtx({
         piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 

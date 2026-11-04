@@ -593,12 +593,22 @@ function marketplaceWith(
 
 /** A snapshot in which every companion extension is loaded. */
 function allLoaded(): SoftDepStatus {
-  return { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: true };
+  return {
+    piSubagentsLoaded: true,
+    piMcpAdapterLoaded: true,
+    mcpImplementation: "adapter",
+    workflowEngineLoaded: true,
+  };
 }
 
 /** A snapshot in which no companion extension is loaded. */
 function noneLoaded(): SoftDepStatus {
-  return { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false };
+  return {
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
+    workflowEngineLoaded: false,
+  };
 }
 
 describe("resolveRows", () => {

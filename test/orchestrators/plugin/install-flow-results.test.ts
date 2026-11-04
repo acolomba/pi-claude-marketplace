@@ -51,6 +51,7 @@ import type {
   ExtensionState,
   PluginInstallRecord,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const EMPTY_RESOURCES: PluginInstallRecord["resources"] = {
   agents: [],
@@ -649,8 +650,9 @@ describe("cascade projections", () => {
     const softDeps = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: false,
-    };
+    } satisfies SoftDepStatus;
 
     // act
     const absent = dependencyInstallsMember(undefined, members, "app@mp", softDeps);
