@@ -216,3 +216,37 @@ test("D-MB-12: a refused registration is logged with its name and Pi's message a
   verify(registry);
   verify(log);
 });
+
+test("D-MB-12: a refused removal is logged with its name and Pi's message and the rest still change", () => {
+  // arrange
+  const registry = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+  const log = mock<DebugLog>({ exactParams: true, name: "debug log" });
+  when(() => registry.getMcpServers()).thenReturn([
+    listed("plugin_gone_a", stdioConfig("a")),
+    listed("plugin_gone_b", stdioConfig("b")),
+  ]);
+  when(() => {
+    registry.unregisterMcpServer("plugin_gone_a");
+  }).thenThrow(new Error("runtime is stale"));
+  when(() => {
+    registry.unregisterMcpServer("plugin_gone_b");
+  }).thenReturn(undefined);
+  when(() => {
+    registry.registerMcpServer("plugin_demo_c", stdioConfig("c"));
+  }).thenReturn(undefined);
+  when(() => {
+    log("MCP server plugin_gone_a not unregistered: runtime is stale");
+  }).thenReturn(undefined);
+  const { notes, noted } = noteRecorder();
+
+  // act
+  syncBuiltinRegistrations(registry, new Map([["plugin_demo_c", stdioConfig("c")]]), log, notes);
+
+  // assert
+  assert.deepStrictEqual(noted, [
+    ["plugin_gone_b", false],
+    ["plugin_demo_c", false],
+  ]);
+  verify(registry);
+  verify(log);
+});

@@ -15,6 +15,22 @@ import type { McpServerConfig, PiMcpRegistry } from "../../platform/pi-api.ts";
 // D-MB-13: every server name this extension registers starts with it.
 const PLUGIN_SERVER_PREFIX = "plugin_";
 
+// One removal: a throw goes to `log` with the server name and Pi's message,
+// and the sync goes on.
+function unregister(
+  registry: PiMcpRegistry,
+  name: string,
+  log: (detail: string) => void,
+  notes: { readonly fresh: (serverName: string) => void },
+): void {
+  try {
+    registry.unregisterMcpServer(name);
+    notes.fresh(name);
+  } catch (error: unknown) {
+    log(`MCP server ${name} not unregistered: ${errorMessage(error)}`);
+  }
+}
+
 /**
  * Unregisters each listed `plugin_` server that `desired` lacks, then
  * registers each desired server whose config differs from the one Pi lists,
@@ -22,8 +38,10 @@ const PLUGIN_SERVER_PREFIX = "plugin_";
  * a registration in place of a listed config of another shape, `fresh` for
  * any other registration or a removal (P2-DC-10). A
  * `registerMcpServer` throw (another extension's name, a `-`/`_` clash, a
- * config Pi refuses) goes to `log` with the server name and Pi's message,
- * never a config value, and the other servers still register.
+ * config Pi refuses) or an `unregisterMcpServer` throw goes to `log` with the
+ * server name and Pi's message, never a config value, and the other servers
+ * still change. A `getMcpServers` throw leaves nothing to compare, so it
+ * propagates and the whole sync is skipped.
  */
 export function syncBuiltinRegistrations(
   registry: PiMcpRegistry,
@@ -38,8 +56,7 @@ export function syncBuiltinRegistrations(
   for (const server of registry.getMcpServers()) {
     listed.set(server.name, JSON.stringify(server.config));
     if (server.name.startsWith(PLUGIN_SERVER_PREFIX) && !desired.has(server.name)) {
-      registry.unregisterMcpServer(server.name);
-      notes.fresh(server.name);
+      unregister(registry, server.name, log, notes);
     }
   }
 
