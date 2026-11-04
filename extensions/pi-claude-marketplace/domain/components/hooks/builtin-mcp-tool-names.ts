@@ -68,9 +68,13 @@ function claudeServerPrefix(server: string): string {
  * D-P5-04 / D-P5-05: whether the MCP literal `mcp__<S>__<T>` of a matcher or
  * an `if` field names `tool`. A tool of Pi's built-in MCP is named when `<S>`
  * is its server's registered name and Pi names `<T>` of that server as the
- * event's tool, so Claude's full name fires and so does the name with the
- * tool segment folded, while a folded server segment does not. Every other
- * tool is named only by Pi's own name, which is already Claude's form.
+ * event's tool. So Claude's full name always fires, and a folded server
+ * segment never does. The name with the tool segment folded fires only when
+ * Pi did not end the tool's name with a hash. Pi adds the hash to a name over
+ * 64 characters and to a name that another tool of the server already holds,
+ * such as `a-b` beside `a_b`. Pi hashes the tool's original name, which a
+ * folded `<T>` no longer spells. Every other tool is named only by Pi's own
+ * name, which is already Claude's form.
  */
 export function toolLiteralNames(literal: string, tool: McpToolIdentity): boolean {
   if (tool.builtinServer === undefined) {

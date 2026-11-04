@@ -128,6 +128,31 @@ describe("toolLiteralNames", () => {
     // assert
     assert.strictEqual(named, true);
   });
+
+  for (const { literal, fires } of [
+    {
+      literal: "mcp__echo-server__summarize-the-current-repository-state-and-history-now",
+      fires: true,
+    },
+    {
+      literal: "mcp__echo-server__summarize_the_current_repository_state_and_history_now",
+      fires: false,
+    },
+  ]) {
+    test(`fires ${literal} on a tool whose name Pi cut and hashed: ${fires} (D-P5-04)`, () => {
+      // arrange
+      const tool = {
+        piName: "mcp__echo_server__summarize_the_current_repository_stat_03a79582",
+        builtinServer: "echo-server",
+      };
+
+      // act
+      const named = toolLiteralNames(literal, tool);
+
+      // assert
+      assert.strictEqual(named, fires);
+    });
+  }
 });
 
 describe("serverPrefixNames", () => {
