@@ -84,19 +84,6 @@ Given(
   },
 );
 
-// Setup whose results may be info or warning, such as an install of a plugin
-// with MCP servers whose severity depends on the active MCP implementation.
-Given(
-  "the user has run {string}, which did not fail",
-  async function (this: ScenarioWorld, command: string) {
-    const payloads = await runCommandPayloads(this.pi, expandTokens(command, this.tokens));
-    assert.deepStrictEqual(
-      payloads.filter((payload) => payload.severity === "error"),
-      [],
-    );
-  },
-);
-
 When("the user runs {string}", async function (this: ScenarioWorld, command: string) {
   this.recordResults(
     await runCommandPayloads(this.pi, expandTokens(command, this.tokens)),
