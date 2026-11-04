@@ -375,7 +375,10 @@ function buildMcpGrants(
  * names one tool. Matching is exact and case-sensitive. An empty tool part
  * matches nothing, and neither does a tool part holding `/`: Claude Code
  * never puts `/` in a tool name, and pi-subagents splits `mcp:` entries on
- * the first `/`.
+ * the first `/`. A tool part holding whitespace or `,` matches nothing
+ * either: Claude Code never puts one in a tool name, and the generated
+ * `tools:` line would split on it, or a line break would start a new
+ * frontmatter key (T-04-01).
  */
 function matchMcpGrant(token: string, grants: readonly McpGrant[]): McpGrantMatch | undefined {
   const grant = grants.find(
@@ -393,7 +396,7 @@ function matchMcpGrant(token: string, grants: readonly McpGrant[]): McpGrantMatc
     return { server, excludeName };
   }
 
-  return tool === "" || tool.includes("/") ? undefined : { server, tool, excludeName };
+  return tool === "" || /[\s,/]/u.test(tool) ? undefined : { server, tool, excludeName };
 }
 
 function mcpEntry(match: McpGrantMatch): string {

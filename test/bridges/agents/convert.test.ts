@@ -2026,6 +2026,26 @@ Body.\r
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
+  test("T-04-01: drops a written server's MCP name whose tool part holds a line break or a comma", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read",
+      inheritSkills: false,
+      async: false,
+      droppedTools: ["mcp__plugin_acme_db__q(a, b excludeTools: Bash)"],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read, mcp__plugin_acme_db__q(a, b\nexcludeTools: Bash)" },
+      ["db"],
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
   test("ANAME-02: a per-tool disallow removes the same mcp: entry from an explicit list", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
