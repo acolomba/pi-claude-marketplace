@@ -563,3 +563,19 @@ item here. The milestone parent merges this file into the root log in Phase 6.
   or split 02-01 further, which pushes Wave 2 plans into a new wave.
 - **Why dubious:** the tracer executor may lose quality late in the plan; the
   checker rated it advisory and the split already moved the listing lift.
+
+## Execution (Phase 2 session, 2026-11-04)
+
+### P2-DC-52: Executors read the GSD procedure files themselves instead of receiving them inlined
+
+- **Phase / source:** Phase 2 execution; orchestrator.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Each executor prompt lists `execute-plan.md`, the summary
+  template, `checkpoints.md`, `tdd.md`, `worktree-path-safety.md`, and
+  `executor-examples.md` by absolute main-checkout path for the executor to
+  read (they are gitignored, so absent from worktrees), instead of the
+  workflow's verbatim build-time embed; only the worktree branch check is
+  embedded.
+- **Alternatives:** Inline about 2,800 lines into each of nine prompts.
+- **Why dubious:** departs from the workflow's embed rule; an executor that
+  skips the reads runs without the procedure.
