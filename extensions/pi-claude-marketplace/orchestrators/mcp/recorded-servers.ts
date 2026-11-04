@@ -16,6 +16,8 @@
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
+import { isSameVersion } from "../../domain/version.ts";
+import { deriveInstallVersion } from "../plugin/install-outcome.ts";
 
 import type { RecordedMcpServer, RecordedMcpServers } from "../../domain/mcp-implementation.ts";
 import type { GitPluginRootResult, ResolveContext } from "../../domain/resolver-types.ts";
@@ -72,7 +74,8 @@ export interface LegacyServersSource {
 }
 
 /** Why the legacy reader could not re-resolve a record's declaration. */
-export type LegacyServersUnreadableReason = "not-in-manifest" | "unavailable" | "root-mismatch";
+export type LegacyServersUnreadableReason =
+  "not-in-manifest" | "unavailable" | "root-mismatch" | "version-mismatch";
 
 /**
  * MREC-02: the legacy reader refuses to re-resolve a record's declaration.
@@ -124,10 +127,16 @@ function recordedRootContext(
  * MREC-02: the production legacy reader for one plugin. It reads the cached
  * `marketplace.json` and the plugin's own files, and re-runs `resolveStrict`
  * pinned to the recorded plugin root. It refuses when the manifest no longer
- * lists the plugin, when the re-resolution is unavailable, and when the
- * re-resolved plugin root is not `record.resolvedSource`. The servers come
- * back in D-CF6-01 merge order, as declared, before plugin-variable
- * substitution (D-MB-04).
+ * lists the plugin, when the re-resolution is unavailable, when the
+ * re-resolved plugin root is not `record.resolvedSource`, and when the
+ * version install would record for the re-resolution is not the record's
+ * `version`. The last check matters for an unpinned path source, whose
+ * recorded root is the live directory that `marketplace update` moves
+ * forward, and for a manifest entry that changed after the install: the
+ * reader never returns the servers of a version the record does not name.
+ * A record with `resolvedVersion` derives the version at its release tag, as
+ * install did. The servers come back in D-CF6-01 merge order, as declared,
+ * before plugin-variable substitution (D-MB-04).
  */
 export function createLegacyServersReader(source: LegacyServersSource): LegacyServersReader {
   const refuse = (reason: LegacyServersUnreadableReason): LegacyServersUnreadableError =>
@@ -147,6 +156,21 @@ export function createLegacyServersReader(source: LegacyServersSource): LegacySe
 
     if (resolved.pluginRoot !== record.resolvedSource) {
       throw refuse("root-mismatch");
+    }
+
+    const version = await deriveInstallVersion({
+      entry: lookup.entry,
+      installable: resolved,
+      marketplace: {
+        marketplaceName: source.marketplaceName,
+        marketplaceRoot: source.marketplace.marketplaceRoot,
+      },
+      resolvedSha: record.resolvedSha,
+      pinVersionOverride: undefined,
+      resolvedVersion: record.resolvedVersion,
+    });
+    if (!isSameVersion(record.version, version, record.resolvedSha)) {
+      throw refuse("version-mismatch");
     }
 
     return {

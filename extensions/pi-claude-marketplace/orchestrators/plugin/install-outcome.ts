@@ -513,8 +513,11 @@ type InstallLedgerContextResult =
  *      commit for a git source (url / git-subdir / github) whose clone probe
  *      captured it, spelled as `shaVersion` spells it (GV-01), then the
  *      content hash (D-16-08). The full sha is recorded apart (D-77-02).
+ *
+ * MREC-02: the legacy MCP servers reader derives a re-resolution's version
+ * here too, so it compares the version install would record.
  */
-async function deriveInstallVersion(args: {
+export async function deriveInstallVersion(args: {
   entry: PluginEntry;
   installable: MaterializablePlugin;
   marketplace: Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">;

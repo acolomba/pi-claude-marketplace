@@ -44,7 +44,11 @@ interface MarketplaceFixture {
   readonly source: LegacyServersSource;
 }
 
-/** A path-source marketplace `mp` in a fresh directory, listing `entries`. */
+/**
+ * A path-source marketplace `mp` in a fresh directory, listing `entries`. Each
+ * entry declares version 1.0.0, the version `installRecord` names, unless it
+ * declares its own.
+ */
 async function marketplaceListing(
   t: TestContext,
   entries: readonly Record<string, unknown>[],
@@ -53,7 +57,10 @@ async function marketplaceListing(
   t.after(() => rm(root, { recursive: true, force: true }));
   const marketplaceRoot = path.join(root, "mp");
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  await writeJson(manifestPath, { name: "mp", plugins: entries });
+  await writeJson(manifestPath, {
+    name: "mp",
+    plugins: entries.map((entry) => ({ version: "1.0.0", ...entry })),
+  });
   return {
     root,
     marketplaceRoot,
@@ -334,6 +341,47 @@ describe("createLegacyServersReader", () => {
       servers: [{ name: "pinned", config: { command: "pinned" } }],
       bundle: false,
     });
+  });
+
+  test("GV-01: re-resolves a record installed at a release tag at that tag's version", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(t, [{ name: "p1", source: "./plugin" }]);
+    await mkdir(path.join(marketplace.marketplaceRoot, "plugin"), { recursive: true });
+    const pinnedRoot = path.join(marketplace.root, "plugin-clones", "mp-tag", "plugin");
+    await writeJson(path.join(pinnedRoot, ".mcp.json"), {
+      mcpServers: { pinned: { command: "pinned" } },
+    });
+    const record: PluginInstallRecord = {
+      ...installRecord(pinnedRoot),
+      version: "1.0.0-aaaaaaaaaaaa",
+      resolvedSha: RESOLVED_SHA,
+      resolvedVersion: "1.0.0",
+    };
+    const reader = createLegacyServersReader(marketplace.source);
+
+    // act
+    const legacy = await reader(record);
+
+    // assert
+    assert.deepStrictEqual(legacy, {
+      servers: [{ name: "pinned", config: { command: "pinned" } }],
+      bundle: false,
+    });
+  });
+
+  test("MREC-02: refuses a re-resolution whose version is not the one the record names", async (t) => {
+    // arrange -- `marketplace update` moved the live plugin directory to 1.1.0
+    const marketplace = await marketplaceListing(t, [
+      { name: "p1", source: "./plugin", version: "1.1.0" },
+    ]);
+    const pluginRoot = path.join(marketplace.marketplaceRoot, "plugin");
+    await writeJson(path.join(pluginRoot, ".mcp.json"), {
+      mcpServers: { added: { command: "added" } },
+    });
+    const reader = createLegacyServersReader(marketplace.source);
+
+    // act & assert
+    await assert.rejects(reader(installRecord(pluginRoot)), unreadableAs("version-mismatch"));
   });
 
   test("MREC-02: refuses a plugin the marketplace manifest no longer lists", async (t) => {
