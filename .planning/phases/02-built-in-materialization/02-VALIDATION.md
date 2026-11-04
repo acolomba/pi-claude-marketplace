@@ -2,7 +2,8 @@
 phase: "2"
 slug: "built-in-materialization"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
+# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
+status: validated
 nyquist_compliant: false
 wave_0_complete: false
 created: "2026-11-04"
@@ -11,7 +12,7 @@ created: "2026-11-04"
 # Phase 2 — Validation Strategy
 
 > Per-phase validation contract for feedback sampling during execution.
-> Source: `02-RESEARCH.md` "Validation Architecture".
+> Source: `02-RESEARCH.md` "Validation Architecture". Audited after execution against the final tree. No test was added in this audit (the phase gate is closed); every gap is recorded as manual-only or deferred.
 
 ---
 
@@ -26,6 +27,15 @@ created: "2026-11-04"
 | **Full suite command** | `npm run check` in parts (`check:static`, `test:unpaired`, `test:integration`, `test:coverage:direct:all`) plus `npm run test:cucumber:profile` under `adapter` and `builtin`; the phase gate adds `npm run test:modules` |
 | **Estimated runtime** | unit 0.2-1.2 s per file; one builtin feature 20-60 s; full adapter profile about 7 min; full builtin profile 1-3 min |
 
+### Gate evidence on the final tree
+
+| Gate | Result | Source |
+|------|--------|--------|
+| `check:static`, `test:unpaired`, `test:integration`, `test:coverage:direct:all`, `test:modules` | green | orchestrator-supplied evidence (not re-run in this audit) |
+| cucumber `adapter` profile | 1564/1564, seed 679076 | orchestrator-supplied evidence |
+| cucumber `builtin` profile | 97/98, seed 779998; sole failure `features/mcp-server/companion-missing.feature:61` (P2-DC-43, Phase 3-owned, MREC-05) | orchestrator-supplied evidence |
+| Spot-check in this audit: `node --test` on the nine phase unit pairs plus `test/integration/mcp-builtin-encoding-conformance.test.ts` | 249/249 pass | run here |
+
 ---
 
 ## Sampling Rate
@@ -39,33 +49,37 @@ created: "2026-11-04"
 
 ## Per-Requirement Verification Map
 
+Unit pairs live under `test/`. "Feature" means `features/mcp-server/<name>.feature`; a profile in parentheses is the profile the scenario runs under (a `@builtin-only` or `@adapter-only` tag pins one, an untagged scenario runs under both).
+
 | Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
 |-------------|----------|-----------|-------------------|-------------|--------|
-| MSEL-03 | No registration under adapter or none | unit + cucumber | `node --test test/orchestrators/mcp/builtin-registration-step.test.ts`; adapter profile on `implementation-switch.feature` | seed ✅ / feature ❌ | ⬜ pending |
-| MSEL-02 | Switch adapter → none → built-in → adapter, no plugin command | cucumber (`@own-implementation`) | `npm run test:cucumber:profile -- --profile adapter features/mcp-server/implementation-switch.feature` | ❌ W2 | ⬜ pending |
-| MSEL-04 | Installed under built-in, reached under adapter after restart | cucumber | same file | ❌ W2 | ⬜ pending |
-| MREC-02 | Legacy record (no `mcpServerConfigs`) reaches its server | unit + cucumber | `node --test test/orchestrators/mcp/builtin-registration-step.test.ts`; builtin profile on the owning feature | ❌ | ⬜ pending |
-| BLT-01 | Registered at startup and `/reload`; deferred via `tool_search`, `alwaysLoad` direct | unit + cucumber | `node --test test/bridges/mcp/builtin-registration.test.ts`; builtin profile on `listing.feature`, `invocation.feature` | ❌ | ⬜ pending |
-| BLT-02 | Transports, fields, expansion, `$`/`!`, timeout seconds, OAuth | unit + integration + cucumber | `node --test test/domain/mcp-builtin-translation.test.ts test/bridges/mcp/builtin-escape.test.ts test/bridges/mcp/builtin-entry.test.ts`; `node --test test/integration/mcp-builtin-*.test.ts`; builtin profile on `configuration.feature`, `sources.feature` | ❌ | ⬜ pending |
-| BLT-02 | Adapter output byte-identical | unit + integration | `node --test test/bridges/mcp/substitute.test.ts test/bridges/mcp/adapter-entry.test.ts test/integration/adapter-expansion-conformance.test.ts` | ✅ | ⬜ pending |
-| BLT-03 | Project servers only while trusted | unit + cucumber | builtin profile on `project-scope.feature` and the built-in trust feature | ❌ | ⬜ pending |
-| BLT-04 | Names, fold, overrides reported | unit + cucumber | builtin profile on `listing.feature` and the built-in status feature | ❌ | ⬜ pending |
-| BLT-05 | `info` statuses | unit + cucumber | `node --test test/orchestrators/plugin/info-mcp-status.test.ts test/platform/mcp-builtin-status.test.ts`; builtin profile on the built-in status feature | pairs ✅ / feature ❌ | ⬜ pending |
-| BLT-06 | Disable, uninstall, enable, update take effect next session | cucumber both profiles | `npm run test:cucumber:profile -- --profile builtin features/mcp-server/lifecycle.feature` (and adapter) | ❌ (tags lifted) | ⬜ pending |
-| MDOC-01 | Built-in column with a citation per statement | docs lint + review | `pre-commit run --files docs/mcp-compatibility.md` | ✅ | ⬜ pending |
+| MSEL-03 | No registration under adapter or none | unit + cucumber | `node --test test/orchestrators/mcp/builtin-registration-step.test.ts`; adapter profile on `listing.feature` ("registers no server with Pi (MSEL-03)") and `implementation-switch.feature` (`none` leg: empty registry, no extension error) | ✅ | ✅ green |
+| MSEL-02 | Switch adapter → none → built-in → adapter, no plugin command | cucumber (`@own-implementation`) | `npm run test:cucumber:profile -- --profile adapter features/mcp-server/implementation-switch.feature` (3 scenarios) | ✅ | ⚠️ green with a gap: restarts stand in for `/reload`, which no run drives (P2-DC-88) |
+| MSEL-04 | Installed under built-in, reached under adapter after restart | cucumber | same file, scenario "(MSEL-04)" | ✅ | ✅ green |
+| MREC-02 | Legacy record (no `mcpServerConfigs`) reaches its server | unit + cucumber | `node --test test/orchestrators/mcp/builtin-registration-step.test.ts`; `implementation-switch.feature` `@mcp` scenario "(MREC-02)", both profiles | ✅ | ✅ green |
+| BLT-01 | Registered at startup and `/reload`; deferred via `tool_search`, `alwaysLoad` direct | unit + cucumber | `node --test test/bridges/mcp/builtin-registration.test.ts test/orchestrators/mcp/builtin-registration-step.test.ts`; builtin profile on `listing.feature`, `invocation.feature`, `builtin-direct.feature` | ✅ | ⚠️ startup leg green; `/reload` leg not run (P2-DC-88); new-session-in-running-Pi scenario is `@adapter-only` (P2-DC-77) |
+| BLT-02 | Transports, fields, expansion, `$`/`!`, timeout seconds, OAuth | unit + integration + cucumber | `node --test test/domain/mcp-builtin-translation.test.ts test/bridges/mcp/builtin-escape.test.ts test/bridges/mcp/builtin-entry.test.ts test/integration/mcp-builtin-encoding-conformance.test.ts`; builtin profile on `configuration.feature`, `sources.feature`, `builtin-values.feature` | ✅ | ✅ green |
+| BLT-02 | Adapter output byte-identical | unit + integration | `node --test test/bridges/mcp/substitute.test.ts test/bridges/mcp/adapter-entry.test.ts test/integration/adapter-expansion-conformance.test.ts` | ✅ | ✅ green |
+| BLT-03 | Project servers only while trusted | unit + cucumber | `test/orchestrators/mcp/builtin-registration-step.test.ts`; builtin profile on `project-scope.feature` and `builtin-trust.feature` | ✅ | ✅ green |
+| BLT-04 | Names, fold, overrides reported | unit + cucumber | `test/bridges/mcp/builtin-overrides.test.ts`; builtin profile on `listing.feature` (name, fold, 64-char cut) and `builtin-status.feature` (`overridden by mcp.json`) | ✅ | ⚠️ names and fold green; "never silent" met by pull surfaces only (`info`, Pi `/mcp`); a foreign-extension name collision is debug-logged only (P2-DC-08, P2-DC-46); product decision pending in `02-UAT.md` |
+| BLT-05 | `info` statuses | unit + cucumber | `node --test test/orchestrators/plugin/info-mcp-status.test.ts test/platform/mcp-builtin-status.test.ts`; builtin profile on `builtin-status.feature` (one scenario per token) | ✅ | ✅ green; WR-03 and WR-04 race and cross-marketplace rows are unit-only (P2-DC-97) |
+| BLT-06 | Disable, uninstall, enable, update take effect next session | cucumber both profiles | `npm run test:cucumber:profile -- --profile builtin features/mcp-server/lifecycle.feature` (and adapter) | ✅ | ✅ green |
+| MDOC-01 | Built-in column with a citation per statement | docs lint + review | `pre-commit run --files docs/mcp-compatibility.md`; the citation scan by the verifier found no missing path | ✅ | ✅ green (lint); citation accuracy stays manual, see below |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ green with a recorded gap*
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `test/domain/mcp-builtin-translation.test.ts`, `test/bridges/mcp/builtin-{escape,entry,registration}.test.ts` — new pairs (BLT-01, BLT-02)
-- [ ] `test/integration/mcp-builtin-*.test.ts` — Pi resolver and validator conformance (BLT-02)
-- [ ] The `tool_search` projection lib and step (BLT-01)
-- [ ] The legacy-record rewrite lib and step (MREC-02)
-- [ ] A restart-scoped "not reached, no extension error" step (MSEL-02, MSEL-03)
-- [ ] The registry-config probe extension for OAuth and timeout values (BLT-02, P2-DC-17)
+Files all exist on the final tree; the flag stays `false` as found in the draft, since this audit did not tick the boxes against a Wave 0 close-out record.
+
+- [x] `test/domain/mcp-builtin-translation.test.ts`, `test/bridges/mcp/builtin-{escape,entry,registration}.test.ts` — present, pass (BLT-01, BLT-02)
+- [x] `test/integration/mcp-builtin-encoding-conformance.test.ts` — present, passes (BLT-02)
+- [x] The `tool_search` projection lib and step (`features/lib/mcp-builtin-tool-search.ts`, `builtin-tool-search.steps.ts`) (BLT-01)
+- [x] The legacy-record rewrite lib and step (`features/lib/mcp-builtin-earlier-record.ts`) (MREC-02)
+- [x] A restart-scoped "not reached, no extension error" step (`implementation-switch.steps.ts`) (MSEL-02, MSEL-03)
+- [x] The registry-config probe extension (`features/lib/mcp-builtin-config-probe/`) (BLT-02, P2-DC-17)
 
 ---
 
@@ -74,16 +88,25 @@ created: "2026-11-04"
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
 | Each built-in statement in `docs/mcp-compatibility.md` cites a scenario or the Pi 1.5.0 source | MDOC-01 | Citation accuracy is a reading check | Read each built-in cell and open the cited scenario or file |
+| `/reload` in a running Pi under built-in MCP re-registers the plugin's servers; a new session in a running Pi does too (P2-DC-88, P2-DC-77) | BLT-01, MSEL-02 | No builtin scenario drives `/reload`; the new-session scenario is `@adapter-only` because Pi 1.5.0's RPC `new_session` emits `session_start` twice and leaks a second built-in MCP connection | Install a plugin with a stub server, run `/reload`, list registered servers, prompt the model to `tool_search` and call the tool; repeat with a new session |
+| An override or name collision is reported without the user running `info` or `/mcp` | BLT-04 | Product decision (P2-DC-08, P2-DC-46), tracked in `02-UAT.md`; no load-time notice exists | Decide whether pull surfaces count as "reported"; if not, add a load-time notice in a later phase |
+
+## Deferred / Unit-Only Gaps
+
+| Gap | Requirement | Disposition |
+|-----|-------------|-------------|
+| `companion-missing.feature:61` red under builtin (reads `not loaded`, expects `status unknown`) | BLT-05 | Deferred to Phase 3 (MREC-05); builtin profile 97/98 until then (P2-DC-43) |
+| WR-03 (replaced-registration race) and WR-04 (cross-marketplace owner) have no scenario | BLT-05 | Unit-only by design (P2-DC-97); unit rows pass |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s for a task-level check
+- [ ] `nyquist_compliant: true` set in frontmatter — withheld: BLT-01 (`/reload`, new session), MSEL-02 (`/reload`) and BLT-04 ("never silent") lack full automated verification
 
-**Approval:** pending
+**Approval:** validated with gaps, 2026-11-04 (not Nyquist-compliant)
