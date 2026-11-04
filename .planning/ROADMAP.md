@@ -424,11 +424,11 @@ Plans:
 - Wave 2, in parallel: the server verdicts in `info.ts` (MREC-04); markers, `requires:`, severity, and the marker rows in `features/plugin/*` and `features/marketplace/update.feature` (MREC-05 marker, MREC-07); the consent split and convergence (`install-outcome.ts` gate, `update-preflight.ts`, the `partial` functions, `reconcile/convergence.ts`, `import/execute.ts`), with `mcp-migration.ts` made explicit about the adapter profile (MREC-03 install side, MREC-05 consent, MREC-06).
 - Wave 3: merge the milestone branch (Phases 5, 4, and 2), re-run every owned row under both profiles, parent lines, and the phase gate.
 
-**Plans:** 9 plans in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the `Dependency` type change gets its own wave before the marker rule, and the consent split, convergence, and the `requires:` line run in parallel after the rule)
+**Plans:** 1/9 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the `Dependency` type change gets its own wave before the marker rule, and the consent split, convergence, and the `requires:` line run in parallel after the rule)
 
 Plans:
 **Wave 1**
-- [ ] 03-01-PLAN.md — Wave 1 (tracer): neutral stored verdict with its basis, `resolutionFor`, the effective record read, and `list` on the active implementation, proven by an `sse` plugin under both profiles (MREC-03)
+- [x] 03-01-PLAN.md — Wave 1 (tracer): neutral stored verdict with its basis, `resolutionFor`, the effective record read, and `list` on the active implementation, proven by an `sse` plugin under both profiles (MREC-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 03-02-PLAN.md — Wave 2: `McpDependency` in place of the boolean `declaresMcp` at every emit site, with today's marker rule (MREC-05, MREC-07)
@@ -501,7 +501,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
 | 2. Built-in Materialization | 0/TBD | Not started | - |
-| 3. Read-Time Verdicts | 0/TBD | Not started | - |
+| 3. Read-Time Verdicts | 1/9 | In Progress | - |
 | 4. Agent Grants | 0/TBD | Not started | - |
 | 5. Hook Tool Names | 0/TBD | Not started | - |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
