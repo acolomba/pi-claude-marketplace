@@ -853,3 +853,15 @@ item here. The milestone parent merges this file into the root log in Phase 6.
 - **Choice:** The seed red runs fail at the listing wait; the escaping mutation run does not cover the plugin-directory rows.
 - **Alternatives:** A mutation per row.
 - **Why dubious:** Those rows rest on the seed red run only.
+
+## Wave 2 (plan 02-09 executor, 2026-11-04)
+
+### P2-DC-84: The 64-character cut scenario also pins the registry table, and the per-server names title gained IDs
+
+- **Phase / source:** Phase 2 plan 02-09 execution.
+- **Severity:** Low. **Status:** open.
+- **Choice:** Beyond the plan, the cut scenario states Pi's registry row
+  (`plugin_demo_a-server-whose-name-runs-well-past-the-limit`), and the lifted
+  per-server names scenario names BLT-01, BLT-04, and D-MB-13 in its title.
+- **Alternatives:** Pin only the tool name; keep the old title.
+- **Why dubious:** one more Pi detail is pinned.
