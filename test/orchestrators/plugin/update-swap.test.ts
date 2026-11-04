@@ -25,6 +25,7 @@ import {
   assertUpdateNamesFree,
   swapPluginUpdate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -35,7 +36,7 @@ import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketpl
 import { PluginUpdateConcurrencyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 // The flow suite supplies the real bridge, filesystem, rollback, and
 // state-ledger fixtures while this mirrored owner pair proves they execute
@@ -45,8 +46,10 @@ import { seedCollidingSkills, seedPathMarketplace, withHermeticHome } from "./up
 import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type {
   DirectThreePhaseArgs,
+  ThreePhaseArgs,
   ThreePhaseArgsBase,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { TestContext } from "node:test";
 
 /** `update`'s knobs on the shared runner (D-18-04). */
@@ -2275,3 +2278,110 @@ for (const { situation, resources, spec, expectedOutcome } of [
     assert.deepStrictEqual(outcome, expectedOutcome);
   });
 }
+
+// MGRT-01: a run snapshot whose active MCP implementation is Pi's built-in MCP.
+function builtinRun(): NotificationRun {
+  return runWithSoftDeps({
+    piSubagentsLoaded: true,
+    piMcpAdapterLoaded: false,
+    mcpImplementation: "builtin",
+    workflowEngineLoaded: false,
+  });
+}
+
+/**
+ * MGRT-01: updates `hello` 1.0.0 -> 2.0.0, whose agent `bot` is granted the
+ * tool `query` of its server `server1`, with the swap arguments `swapArgs`
+ * builds, and returns the agent's `tools:` lines and what its index row
+ * records.
+ */
+async function swapGrantedAgent(
+  t: TestContext,
+  prefix: string,
+  swapArgs: (cwd: string) => ThreePhaseArgs,
+) {
+  const { cwd } = await createHermeticEnvironment(t, prefix);
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: false, hasMcp: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const agentsDir = path.join(marketplaceRoot, "plugins", "hello", "agents");
+  await mkdir(agentsDir, { recursive: true });
+  await writeFile(
+    path.join(agentsDir, "bot.md"),
+    "---\nname: bot\ndescription: Queries.\ntools: Read, mcp__plugin_hello_server1__query\n---\n\nBody.\n",
+  );
+  const args = swapArgs(cwd);
+  const outcome = await swapPluginUpdate(args, await preflightOf(args), UPDATE_POLICY);
+  assert.strictEqual(outcome.partition, "updated");
+  const text = await readFile(
+    path.join(args.locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
+    "utf8",
+  );
+  const index = await loadAgentsIndex(args.locations);
+  return {
+    toolLines: text.split("\n").filter((line) => line.startsWith("tools:")),
+    rows: index.agents.map((row) => ({
+      generatedName: row.generatedName,
+      mcpImplementation: row.mcpImplementation,
+      storedForms: Object.keys(row.mcpForms ?? {}).sort(),
+    })),
+  };
+}
+
+const BUILTIN_GRANT = {
+  toolLines: ["tools: read,mcp:plugin_hello_server1/query"],
+  rows: [
+    {
+      generatedName: "pi-claude-marketplace-hello-bot",
+      mcpImplementation: "builtin",
+      storedForms: ["adapter", "builtin"],
+    },
+  ],
+};
+
+test("MGRT-01: a direct swap under Pi's built-in MCP restages the agent with the built-in grant", async (t) => {
+  // act
+  const swapped = await swapGrantedAgent(t, "update-swap-grant-direct-", (cwd) => ({
+    ...directSwapArgs(cwd),
+    run: builtinRun(),
+  }));
+
+  // assert
+  assert.deepStrictEqual(swapped, BUILTIN_GRANT);
+});
+
+test("MGRT-01: a cascade swap reads the built-in MCP of the command it runs for", async (t) => {
+  // act
+  const swapped = await swapGrantedAgent(t, "update-swap-grant-notification-", (cwd) => ({
+    ...cascadeSwapArgs(cwd),
+    preflightNotification: {
+      ctx: { mode: "tui", ui: { notify: () => undefined } },
+      run: builtinRun(),
+    },
+  }));
+
+  // assert
+  assert.deepStrictEqual(swapped, BUILTIN_GRANT);
+});
+
+test("MGRT-01 / P4-DC-13: a cascade swap with no run snapshot restages pi-mcp-adapter's grant", async (t) => {
+  // act
+  const swapped = await swapGrantedAgent(t, "update-swap-grant-cascade-", cascadeSwapArgs);
+
+  // assert
+  assert.deepStrictEqual(swapped, {
+    toolLines: ["tools: read,mcp:plugin_hello_server1_/query"],
+    rows: [
+      {
+        generatedName: "pi-claude-marketplace-hello-bot",
+        mcpImplementation: "adapter",
+        storedForms: ["adapter", "builtin"],
+      },
+    ],
+  });
+});

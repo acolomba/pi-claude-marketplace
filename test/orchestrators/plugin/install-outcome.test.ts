@@ -15,6 +15,7 @@ import {
   previewInstall,
   runInstallLedger,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -46,7 +47,7 @@ import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
@@ -59,6 +60,7 @@ import type { PackageInstallOps } from "../../../extensions/pi-claude-marketplac
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Phase } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import type { TestContext } from "node:test";
 
@@ -2320,6 +2322,89 @@ test("ANAME-02: a server left out by a partial install is not granted to the plu
         "[bot] tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails",
     },
     { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_empty_live__stream" },
+  ]);
+});
+
+// MGRT-01: installs a plugin whose agent `bot` is granted `mcp__plugin_empty_db__query`
+// under the run snapshot `run`, and returns the ledger outcome with the agent's
+// `tools:` lines and the implementation and stored forms its index row records.
+async function installGrantedAgent(t: TestContext, prefix: string, run: NotificationRun) {
+  const environment = await createHermeticEnvironment(t, prefix);
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { db: { command: "node", args: ["s.js"] } },
+  });
+  await writeAgent(seeded.pluginRoot, "bot", "Read, mcp__plugin_empty_db__query");
+  const locations = locationsFor("project", environment.cwd);
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run,
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+  const index = await loadAgentsIndex(locations);
+  return {
+    ledgerOutcome,
+    toolLines: await generatedAgentToolLines(locations, "bot"),
+    rows: index.agents.map((row) => ({
+      generatedName: row.generatedName,
+      mcpImplementation: row.mcpImplementation,
+      storedForms: Object.keys(row.mcpForms ?? {}).sort(),
+    })),
+  };
+}
+
+test("MGRT-01: an install under Pi's built-in MCP stages the built-in grant and records both forms", async (t) => {
+  // arrange
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: true,
+    piMcpAdapterLoaded: false,
+    mcpImplementation: "builtin",
+    workflowEngineLoaded: false,
+  });
+
+  // act
+  const installed = await installGrantedAgent(t, "install-outcome-agent-builtin-", run);
+
+  // assert
+  assert.ok(installed.ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(installed.toolLines, ["tools: read,mcp:plugin_empty_db/query"]);
+  assert.deepStrictEqual(installed.ledgerOutcome.summary.bridgeWarnings, [
+    {
+      kind: "hygiene",
+      message:
+        "[bot] tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before Pi's built-in MCP has listed the server's tools still fails",
+    },
+  ]);
+  assert.deepStrictEqual(installed.rows, [
+    {
+      generatedName: "pi-claude-marketplace-empty-bot",
+      mcpImplementation: "builtin",
+      storedForms: ["adapter", "builtin"],
+    },
+  ]);
+});
+
+test("MGRT-01: an install with no MCP implementation stages pi-mcp-adapter's grant and records both forms", async (t) => {
+  // act
+  const installed = await installGrantedAgent(
+    t,
+    "install-outcome-agent-none-",
+    runWithNothingLoaded(),
+  );
+
+  // assert
+  assert.ok(installed.ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(installed.toolLines, ["tools: read,mcp:plugin_empty_db_/query"]);
+  assert.deepStrictEqual(installed.rows, [
+    {
+      generatedName: "pi-claude-marketplace-empty-bot",
+      mcpImplementation: "adapter",
+      storedForms: ["adapter", "builtin"],
+    },
   ]);
 });
 
