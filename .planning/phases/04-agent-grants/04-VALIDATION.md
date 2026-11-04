@@ -1,9 +1,9 @@
 ---
 phase: "4"
 slug: "agent-grants"
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-11-04"
 ---
 
@@ -49,9 +49,9 @@ Prefix npm scripts with `npm_config_script_shell=<scratchpad>/nondac-sh NODE_OPT
 
 ## Wave 0 Requirements
 
-- [ ] `test/platform/subagent-child.test.ts`
-- [ ] `test/bridges/agents/<rewrite module>.test.ts`
-- [ ] rewrite `test/orchestrators/mcp/agent-grants-step.test.ts`
+- [x] `test/platform/subagent-child.test.ts`
+- [x] `test/bridges/agents/grant-rewrite.test.ts`
+- [x] rewrite `test/orchestrators/mcp/agent-grants-step.test.ts`
 
 ## Manual-Only Verifications
 
@@ -59,9 +59,23 @@ All phase behaviors have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] No watch-mode flags
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] No watch-mode flags
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-11-04
+
+## Validation Audit 2026-11-04
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Run results (nondac env): 896 unit/integration tests green across test/bridges/agents, test/persistence/agents-index-*, test/platform/subagent-child, test/orchestrators/mcp/agent-grants-step, install-outcome, update-swap, reconcile/load, and test/integration/agents-builtin-grant-conformance. Cucumber `features/mcp-server/agent-grants.feature`: adapter 12/12, builtin 5/5.
+
+Per-task map: every row above maps to a file on disk that passed. Wave 0 files exist (`grant-rewrite.test.ts` is the rewrite module test).
+
+Accepted partial coverage (recorded in 04-VERIFICATION.md, not new gaps): cascade-driven update staging and some legacy-translation cases; untrusted-project rewrite is unit-only (P4-DC-18).

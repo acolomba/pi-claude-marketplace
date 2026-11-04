@@ -360,3 +360,4 @@ Status `passed`, 3/3 must-haves; three accepted gaps listed as warnings (cascade
 - **P4-DC-76 (High):** verification passed despite the cascade-update grant gap (P4-DC-13/60): SC1 says "updating", and autoupdate and `apply` convergence are updates that stage the adapter form under built-in until the next load. Alt: `gaps_found` or `human_needed`. Closure is parent line 2 after Phase 3 merges; the parent must not drop it.
 - **P4-DC-77 (Low):** the verifier relied on the phase gate logs and re-ran only the feature under both profiles, focused unit suites, and two red experiments.
 - **P4-DC-78 (Low):** the verifier briefly edited `subagent-child.ts` and `agent-grants-step.ts` in the main checkout for red proofs and restored them with `git checkout --`.
+- **P4-DC-79 (Low, nyquist auditor):** `nyquist_compliant: true` although the accepted gaps (cascade updates, some legacy cases, untrusted leg) stay untested.
