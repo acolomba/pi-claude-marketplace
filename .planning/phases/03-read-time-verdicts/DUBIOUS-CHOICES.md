@@ -560,3 +560,11 @@ The planner's choices, numbered here. Each is Low unless marked.
 - **P3-DC-110 (Low): Phase 2's `builtin-status.feature` `plugin requires`
   cells (seven) now read `[{"companion":"mcp","missing":false}]`** under our
   `requires:` rule (state rows are Phase 3's).
+- **P3-DC-111 (Low): the orchestrator's own phase gate on the merged tree
+  (e6eb687 plus docs) had one adapter failure, Phase 2's
+  `lifecycle.feature:396` "A new session offers the plugin's tool again"
+  (seed 115524, the listing after a new session under load)**; it passed 4 of 4
+  alone and the full adapter rerun passed 1599/1599 (seed 888709), so it is
+  recorded as a load flake, not a Phase 3 regression. Every other part was
+  green: static, unpaired, integration, builtin 128/128, direct coverage, and
+  the whole `test:modules`. The full gate stands in for GSD's regression gate.

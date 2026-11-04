@@ -440,7 +440,7 @@ Plans:
 - Wave 2, in parallel: the server verdicts in `info.ts` (MREC-04); markers, `requires:`, severity, and the marker rows in `features/plugin/*` and `features/marketplace/update.feature` (MREC-05 marker, MREC-07); the consent split and convergence (`install-outcome.ts` gate, `update-preflight.ts`, the `partial` functions, `reconcile/convergence.ts`, `import/execute.ts`), with `mcp-migration.ts` made explicit about the adapter profile (MREC-03 install side, MREC-05 consent, MREC-06).
 - Wave 3: merge the milestone branch (Phases 5, 4, and 2), re-run every owned row under both profiles, parent lines, and the phase gate.
 
-**Plans:** 8/9 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the `Dependency` type change gets its own wave before the marker rule, and the consent split, convergence, and the `requires:` line run in parallel after the rule)
+**Plans:** 9/9 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the `Dependency` type change gets its own wave before the marker rule, and the consent split, convergence, and the `requires:` line run in parallel after the rule)
 
 Plans:
 **Wave 1**
@@ -460,7 +460,7 @@ Plans:
 - [x] 03-08-PLAN.md — Wave 4: `info`'s `requires:` line names the implementation, and the e2e marker tests (MREC-05, MREC-07)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 03-09-PLAN.md — Wave 5: merge the milestone branch, repair the sibling rows, the phase gate, and the parent lines (MREC-03..07)
+- [x] 03-09-PLAN.md — Wave 5: merge the milestone branch, repair the sibling rows, the phase gate, and the parent lines (MREC-03..07)
 
 ### Phase 4: Agent Grants
 **Goal**: A generated pi-subagents agent carries the active implementation's MCP grant, and after a switch the load rewrites only the agent files whose grants changed, never from a background child.
@@ -534,7 +534,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
 | 2. Built-in Materialization | 9/9 | Complete    | 2026-11-04 |
-| 3. Read-Time Verdicts | 8/9 | In Progress | - |
+| 3. Read-Time Verdicts | 9/9 | In Progress | - |
 | 4. Agent Grants | 6/6 | Complete    | 2026-11-04 |
 | 5. Hook Tool Names | 4/4 | Complete    | 2026-11-04 |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
