@@ -860,7 +860,7 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 - [mcp-builtin] Resolved 2026-11-04: pi-mcp-adapter 7.0.0 writes
   `-builtin:mcp` into the user's Pi settings once per version, so after the
   adapter is removed the next start is usually `none`. Under D-MB-01 that is
-  the missing-MCP marker until the user turns built-in MCP back on. MSEL-02
+  `{requires mcp}` until the user turns built-in MCP back on (D-MB-07). MSEL-02
   and DUAL-04 now say so, and DUAL-04 moved to Phase 6 because it needs
   Phase 2's registration and Phase 3's marker on the combined tree.
 - [mcp-builtin] Phases 4 and 5 prove their built-in legs with a Phase 1

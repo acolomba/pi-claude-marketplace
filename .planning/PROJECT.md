@@ -52,9 +52,12 @@ implementations, and a switch between them never needs action from the user.
   MCP grants are re-materialized for the active implementation.
 - When neither implementation is active (no adapter, and built-in MCP
   turned off, for example by the `-builtin:mcp` entry the adapter leaves in
-  `~/.pi/agent/settings.json`), a plugin with MCP servers is partially
-  available, and its marker tells the user to turn on Pi's built-in MCP or
-  install pi-mcp-adapter. The extension never edits Pi settings.
+  `~/.pi/agent/settings.json`), a plugin with MCP servers stays installed
+  with a soft-dependency marker that names what would run all its servers:
+  `requires mcp`, `requires pi-mcp-adapter`, or `requires builtin mcp`. The
+  same marker shows beside `{unsupported mcp}` when the active
+  implementation cannot run a server the other one can. The extension never
+  edits Pi settings.
 - Every MCP behavioral test runs against both implementations, through
   `@adapter` and `@builtin` cucumber profiles with shared step definitions.
 - `docs/mcp-compatibility.md` gains a built-in column; CHANGELOG and README
@@ -74,10 +77,19 @@ implementations, and a switch between them never needs action from the user.
    `piBuiltinMcpHandledVersion` cannot prove the adapter wrote the entry,
    and that a cleanup at `session_start` takes effect only at the next
    runtime build): the extension never edits Pi settings. With no active
-   implementation, plugins with MCP servers are partially available because
-   they require MCP support, and it is up to the user to turn on Pi's
-   built-in MCP or install pi-mcp-adapter. NFR-10 and the rule that the
-   extension never edits Pi settings stay unamended.
+   implementation, it is up to the user to turn on Pi's built-in MCP or
+   install pi-mcp-adapter. NFR-10 and the rule that the extension never
+   edits Pi settings stay unamended.
+5. Markers (user, 2026-11-04, refining decision 4): with no active
+   implementation a plugin with MCP servers stays installed, as with any
+   missing soft dependency, and carries `{requires mcp}` when either
+   implementation would run all its servers, `{requires pi-mcp-adapter}`
+   when only the adapter would, and `{requires builtin mcp}` when only
+   built-in would. When the active implementation cannot run a server that
+   the other can, the row shows `{unsupported mcp}` plus the other
+   implementation's `requires` marker; a server neither can run shows
+   `{unsupported mcp}` only. The docs say to turn on built-in MCP or install
+   pi-mcp-adapter, and list what the adapter adds.
 
 **Key context:** The user's brief, with the verified Pi 1.5.0 and
 pi-mcp-adapter 7.0.0 findings, is kept verbatim in

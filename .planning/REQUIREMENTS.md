@@ -28,9 +28,10 @@ tagged scenario.
 **Decisions taken while defining the milestone (user, 2026-11-04):**
 
 - D-MB-01 (replaces brief decision 1): the extension never edits Pi settings;
-  NFR-10 is not amended. With no active implementation, plugins with MCP
-  servers are partially available because they require MCP support, and the
-  user turns on Pi's built-in MCP or installs pi-mcp-adapter.
+  NFR-10 is not amended. With no active implementation, a plugin with MCP
+  servers stays installed and carries a `{requires ...}` soft-dependency
+  marker (D-MB-07); the user turns on Pi's built-in MCP or installs
+  pi-mcp-adapter.
 - D-MB-02 (brief decision 2): built-in plugin servers get
   `exposure: "deferred"`; a server with `alwaysLoad: true` gets `"direct"`.
 - D-MB-03: amends APL-D1. A load may rewrite generated agent files whose MCP
@@ -38,10 +39,20 @@ tagged scenario.
 - D-MB-04: install records each server in its Claude form before plugin-variable
   substitution; each implementation encodes it at materialization.
 - D-MB-05: installing a plugin while no implementation is active needs no
-  `--partial` consent; the install shows the missing-MCP marker.
+  `--partial` consent; the install shows the `{requires ...}` marker.
 - D-MB-06: `--partial` consent is asked only on an install or update the user
   runs, against the active implementation; enable, apply, reinstall, import,
   and cascades never ask because of a switch.
+- D-MB-07: the MCP soft-dependency marker names the implementation that
+  would run every server of the plugin: `requires mcp` when either would,
+  `requires pi-mcp-adapter` when only the adapter would, and
+  `requires builtin mcp` when only Pi's built-in MCP would. It shows when no
+  implementation is active, and also beside `{unsupported mcp}` when the
+  active implementation cannot run a server that the other one can (for
+  example `{unsupported mcp, requires pi-mcp-adapter}` for an `sse` server
+  under built-in). A server neither implementation can run shows
+  `{unsupported mcp}` only. `info`'s `requires:` line uses the same names
+  with `(missing)`. The existing `requires pi-mcp-adapter` reason is kept.
 
 Defaults taken by the parity rule and existing decisions (IDs assigned in
 Phase 1): hook matchers see Claude's server segment (with `-`), and only the
@@ -81,9 +92,9 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 - [ ] **MREC-02**: A plugin installed before this milestone, whose record lists no servers, materializes correctly under either implementation with no reinstall
 - [ ] **MREC-03**: `list`, `info`, `install`, `update`, `pending`, and `apply` compute a plugin's available or partially available state against the active implementation, so one installed plugin can be available under one implementation and partially available under the other
 - [ ] **MREC-04**: `info` shows each server's verdict for the active implementation with that implementation's reason tokens (for example, an `sse` server is blocked under built-in and runs under the adapter)
-- [ ] **MREC-05**: With no active implementation, a plugin with MCP servers is partially available and its marker tells the user to turn on Pi's built-in MCP or install pi-mcp-adapter (D-MB-01); installing it needs no `--partial` (D-MB-05)
+- [ ] **MREC-05**: With no active implementation, a plugin with MCP servers stays `installed` and its row carries `{requires mcp}`, `{requires pi-mcp-adapter}`, or `{requires builtin mcp}`, naming the implementation that would run every server (D-MB-01, D-MB-07); installing it needs no `--partial` (D-MB-05)
 - [ ] **MREC-06**: `--partial` consent is asked only on an install or update the user runs, against the active implementation; enable, apply, reinstall, import, and cascades never ask because of a switch (D-MB-06)
-- [ ] **MREC-07**: The soft-dependency marker and the `info` `requires:` line name what the active implementation needs; the JSON output reason change is documented as a breaking change
+- [ ] **MREC-07**: When the active implementation cannot run a server that the other implementation can, the row carries that implementation's `requires` marker beside `{unsupported mcp}`, and `info`'s `requires:` line names it with `(missing)` (D-MB-07); a server neither can run shows `{unsupported mcp}` only; the two new reasons are documented in the CHANGELOG and `docs/json-output.md`
 
 ### Built-in materialization
 
@@ -109,13 +120,13 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 - [ ] **DUAL-01**: The cucumber suite has an adapter profile and a built-in profile; every MCP feature runs under both with shared step definitions, and implementation-specific expectations live in their own tagged scenarios
 - [ ] **DUAL-02**: Each profile's Pi proves which implementation is active, and an architecture test fails when an MCP scenario runs under only one profile without an implementation tag
 - [ ] **DUAL-03**: CI runs both profiles within the behavioral job timeouts
-- [ ] **DUAL-04**: A switch scenario installs a plugin and reaches its server under the adapter; after the adapter is removed it shows the missing-MCP marker while built-in MCP is off; after built-in MCP is on it reaches the server under built-in; and after the adapter is added again it reaches the server under the adapter, with no plugin command in between
+- [ ] **DUAL-04**: A switch scenario installs a plugin and reaches its server under the adapter; after the adapter is removed it shows `{requires mcp}` while built-in MCP is off; after built-in MCP is on it reaches the server under built-in; and after the adapter is added again it reaches the server under the adapter, with no plugin command in between
 
 ### Documentation and decisions
 
 - [ ] **MDOC-01**: `docs/mcp-compatibility.md` has a built-in column, and each built-in statement cites a scenario or the Pi 1.5.0 source
-- [ ] **MDOC-02**: CHANGELOG, README, `README.es.md`, and `docs/hooks-compatibility.md` describe built-in MCP support, the missing-MCP marker, and the naming divergence
-- [ ] **MDEC-01**: D-MB-01 to D-MB-06 and the defaults above carry IDs in PROJECT.md Key Decisions, and the APL-D1 and Current Milestone text reflect them
+- [ ] **MDOC-02**: CHANGELOG, README, `README.es.md`, and `docs/hooks-compatibility.md` describe built-in MCP support, the three `requires` markers, and the naming divergence; the docs say to turn on built-in MCP or install pi-mcp-adapter, and list what the adapter adds
+- [ ] **MDEC-01**: D-MB-01 to D-MB-07 and the defaults above carry IDs in PROJECT.md Key Decisions, and the APL-D1 and Current Milestone text reflect them
 
 ## v2 Requirements
 
@@ -127,7 +138,7 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 
 | Feature | Reason |
 |---------|--------|
-| Editing `~/.pi/agent/settings.json` (removing the adapter's `-builtin:mcp`) | D-MB-01: the extension never edits Pi settings; the missing-MCP marker tells the user what to do |
+| Editing `~/.pi/agent/settings.json` (removing the adapter's `-builtin:mcp`) | D-MB-01: the extension never edits Pi settings; the `{requires ...}` marker tells the user what to do |
 | A command that switches implementations | The trigger is installing or uninstalling pi-mcp-adapter |
 | Registering through Pi for the adapter | The adapter connects Pi registrations proxy-only and drops `directTools`, so `alwaysLoad` is lost |
 | SSE, `headersHelper`, MCP prompts, elicitation, and sampling under built-in | Pi 1.5.0 has none of them; each is a blocked verdict or a recorded gap |

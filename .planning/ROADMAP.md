@@ -62,7 +62,7 @@ is installed and through Pi's built-in MCP when it is not. The two are equal
 implementations, and a switch between them never needs action from the user.
 
 Inputs: the user's brief (`.planning/inputs/mcp-builtin/BRIEF.md`, with its
-amendment), `.planning/REQUIREMENTS.md` (31 requirements, D-MB-01..06), and the
+amendment), `.planning/REQUIREMENTS.md` (31 requirements, D-MB-01..07), and the
 research in `.planning/research/` (`SUMMARY.md`, `ARCHITECTURE.md`). The
 settings-cleanup phase the research once proposed is dropped: the extension
 never edits Pi settings (D-MB-01).
@@ -245,8 +245,8 @@ changes their names or shapes.
    switch), the "MCP implementation" step wording, the restart steps (adapter
    added, adapter removed, no MCP via `--no-mcp`), and the built-in stand-in
    server step.
-10. Closed set: the reason `requires MCP support` (final wording from the
-    messaging style guide, fixed in Phase 1) and the built-in status tokens
+10. Closed set: the reasons `requires mcp` and `requires builtin mcp`
+    (D-MB-07; `requires pi-mcp-adapter` stays) and the built-in status tokens
     BLT-05 names that do not exist yet (`overridden by mcp.json`,
     `project not trusted`).
 
@@ -332,14 +332,14 @@ changes their names or shapes.
 **Depends on**: Nothing (first phase)
 **Runs**: serially in the parent session on `features/mcp-builtin`; its waves run parallel GSD executors in worktrees
 **Requirements**: PI15-01, PI15-02, PI15-03, MSEL-01, MREC-01, DUAL-01, DUAL-02, DUAL-03, MDEC-01
-**Discuss step**: IDs for D-MB-01..06 and the parity defaults (hook matchers see Claude's server segment with `-`, trust from Pi alone, registration at `session_start` and after the load reconcile, the OAuth client name as Claude Code sets it, background subagent children never write files); the wording of the `requires MCP support` reason and the new built-in status tokens (messaging style guide); how `effectiveMcpCompatibility` reads a legacy stored compatibility that carries the adapter verdict; the tag for scenarios that choose their own implementation; how the harness reaches `none` and serves a built-in stand-in server.
+**Discuss step**: IDs for D-MB-01..07 and the parity defaults (hook matchers see Claude's server segment with `-`, trust from Pi alone, registration at `session_start` and after the load reconcile, the OAuth client name as Claude Code sets it, background subagent children never write files); the rendering of the `requires mcp` and `requires builtin mcp` reasons (words fixed by D-MB-07) and the new built-in status tokens (messaging style guide); how `effectiveMcpCompatibility` reads a legacy stored compatibility that carries the adapter verdict; the tag for scenarios that choose their own implementation; how the harness reaches `none` and serves a built-in stand-in server.
 **Research flag**: yes. Pi's long tool-name cut and hash rule for `builtinMcpServerName`; whether the 1.5.0 `isProjectTrusted()` fix flips the untrusted-project scenarios; the profile-tag architecture test; CI time with a second profile.
 **Success Criteria** (what must be TRUE):
   1. `package.json` declares `@earendil-works/pi-coding-agent` peer `>=1.5.0` and dev `^1.5.0`, `pi-tui` dev `^1.5.0`, and `pi-ai` dev exactly `1.5.0`, with the lock matching; the floor tests prove 1.5.0; README, `README.es.md`, the compatibility docs, `AGENTS.md`, `STACK.md`, and the PROJECT.md Pi API constraint name it; what 1.5.0 breaks (the pi-schema validation move, the `isProjectTrusted()` fix, the `clientRegistration` `"auto"` default) is fixed; and the unit, integration, and cucumber suites pass on 1.5.0 (PI15-01, PI15-02, PI15-03).
   2. Each command run, load, hook run, and tool run reads one active MCP implementation from its run snapshot: the adapter when `/mcp-adapter` is loaded, built-in when `/mcp` comes from `builtin:mcp`, otherwise none; an architecture test rejects a probe that runs before every extension has loaded (MSEL-01).
   3. Install, update, reinstall, enable, and import record every declared, non-malformed MCP server in its Claude form before plugin-variable substitution, including servers the adapter cannot run; `state.json` holds no absolute path; a record written before the field still loads; and list, info, and install output is unchanged (MREC-01).
   4. The cucumber suite has an `adapter` and a `builtin` profile: every MCP feature runs under both with shared step definitions, each profile's Pi proves which implementation is active, an architecture test fails when an MCP scenario runs under only one profile without an implementation tag, a scenario can restart its Pi with the adapter added or removed or with no MCP at all and can use a built-in stand-in server, and CI runs both profiles within the behavioral job timeouts (DUAL-01, DUAL-02, DUAL-03).
-  5. Every frozen file and cross-phase interface listed above exists, with the session steps wired as no-op seeds; each feature that fails under built-in carries `@adapter-only` naming its owning phase; each row whose MCP marker or state will change with the active implementation sits in a Phase 3 file; D-MB-01..06 and the defaults carry IDs in PROJECT.md Key Decisions, with the APL-D1 and Current Milestone text updated (MDEC-01); and `npm run check` plus both cucumber profiles pass.
+  5. Every frozen file and cross-phase interface listed above exists, with the session steps wired as no-op seeds; each feature that fails under built-in carries `@adapter-only` naming its owning phase; each row whose MCP marker or state will change with the active implementation sits in a Phase 3 file; D-MB-01..07 and the defaults carry IDs in PROJECT.md Key Decisions, with the APL-D1 and Current Milestone text updated (MDEC-01); and `npm run check` plus both cucumber profiles pass.
 
 **Parallel structure** (suggested; the planner may split further, and plans in one wave own disjoint files):
 
@@ -374,7 +374,7 @@ changes their names or shapes.
 **Parallel structure** (suggested):
 
 - Wave 1 (tracer): the translation table, the Pi value encoding, the idempotent registration sync, and the registration step (built-in only, enabled records, nothing under the adapter or none); `listing.feature` passes under both profiles (BLT-01, MSEL-03).
-- Wave 2, in parallel, one feature file and step module each: configuration and source variants with the `substitute.ts` encoder parameter (BLT-02); project trust (BLT-03); naming, collisions, overrides, and status in `info-mcp-status.ts` and `platform/mcp-builtin-status.ts` (BLT-04, BLT-05); lifecycle (BLT-06); invocation through `tool_search` and direct `alwaysLoad` calls (BLT-01); the switch and legacy records in `implementation-switch.feature` (MSEL-02, MSEL-04, MREC-02; Phase 6 adds the missing-MCP step for DUAL-04).
+- Wave 2, in parallel, one feature file and step module each: configuration and source variants with the `substitute.ts` encoder parameter (BLT-02); project trust (BLT-03); naming, collisions, overrides, and status in `info-mcp-status.ts` and `platform/mcp-builtin-status.ts` (BLT-04, BLT-05); lifecycle (BLT-06); invocation through `tool_search` and direct `alwaysLoad` calls (BLT-01); the switch and legacy records in `implementation-switch.feature` (MSEL-02, MSEL-04, MREC-02; Phase 6 adds the `{requires mcp}` step for DUAL-04).
 - Wave 3: the built-in column in `docs/mcp-compatibility.md` (MDOC-01), decision rows, parent lines, and the phase gate.
 
 **Plans**: TBD
@@ -384,14 +384,14 @@ changes their names or shapes.
 **Depends on**: Phase 1
 **Runs**: parallel child session, branch `features/mcp-builtin-phase-3`; starts first and merges last (critical path); before its gate it merges the milestone branch, which by then holds the other parallel phases
 **Requirements**: MREC-03, MREC-04, MREC-05, MREC-06, MREC-07
-**Discuss step**: the marker and `requires:` wording per implementation; whether `requires pi-mcp-adapter` keeps a use (a server built-in blocks and the adapter runs) or becomes unused, in which case its removal is a parent line for Phase 6; a load warning row for a plugin that becomes partial after a switch; the AMIG-01 notice under built-in; how `pending` and `apply` show a plugin whose state changed only because the implementation changed.
-**Research flag**: no `--research-phase`. D-MB-01, D-MB-05, D-MB-06, and the frozen `effectiveMcpCompatibility` fix the rules.
+**Discuss step**: how each surface computes which `requires` marker applies (D-MB-07 fixes the words and the cases); a load warning row for a plugin that becomes partial after a switch; the AMIG-01 notice under built-in; how `pending` and `apply` show a plugin whose state changed only because the implementation changed.
+**Research flag**: no `--research-phase`. D-MB-01, D-MB-05, D-MB-06, D-MB-07, and the frozen `effectiveMcpCompatibility` fix the rules.
 **Success Criteria** (what must be TRUE):
   1. `list`, `info`, `install`, `update`, `pending`, and `apply` compute a plugin's state against the active implementation: one installed plugin with an `sse` server is available under the adapter and partially available under built-in, with no reinstall in between, and the stored compatibility no longer depends on the implementation that was active at install (MREC-03).
   2. `info` shows each server's verdict for the active implementation with that implementation's reason tokens, so an `sse` server reads as blocked under built-in and as runnable under the adapter (MREC-04).
-  3. With no active implementation, a plugin with MCP servers is partially available, its marker tells the user to turn on Pi's built-in MCP or install pi-mcp-adapter, installing it needs no `--partial`, and Pi's settings are never written (MREC-05).
+  3. With no active implementation, a plugin with MCP servers stays `installed` with `{requires mcp}`, `{requires pi-mcp-adapter}`, or `{requires builtin mcp}`, naming the implementation that would run every server; installing it needs no `--partial`, and Pi's settings are never written (MREC-05).
   4. `--partial` consent is asked only on an install or update the user runs, against the active implementation; after a switch, enable, `apply`, reinstall, import, and cascades complete without asking (MREC-06).
-  5. The soft-dependency marker and the `info` `requires:` line name what the active implementation needs, every MCP marker and state row in the files this phase owns passes under both profiles, and the JSON reason change is drafted as a breaking-change CHANGELOG parent line (MREC-07).
+  5. An `sse` server under built-in shows `{unsupported mcp, requires pi-mcp-adapter}` and `info`'s `requires: pi-mcp-adapter (missing)`, a server neither implementation runs shows `{unsupported mcp}` only, every MCP marker and state row in the files this phase owns passes under both profiles, and the two new reasons are drafted as CHANGELOG parent lines (MREC-07).
 
 **Parallel structure** (suggested):
 
@@ -435,14 +435,14 @@ changes their names or shapes.
 **Plans**: TBD
 
 ### Phase 6: Release Docs and Combined Tree
-**Goal**: The combined milestone tree is ready to ship: the CHANGELOG and READMEs describe built-in MCP support, the missing-MCP marker, and the naming divergence; closed sets hold no unused entry; and every MCP feature and the switch scenario pass under both profiles after the last merge.
+**Goal**: The combined milestone tree is ready to ship: the CHANGELOG and READMEs describe built-in MCP support, the three `requires` markers, and the naming divergence; closed sets hold no unused entry; and every MCP feature and the switch scenario pass under both profiles after the last merge.
 **Depends on**: Phase 2, Phase 3, Phase 4, Phase 5 (all merged)
 **Runs**: serially in the parent session on `features/mcp-builtin`, after the last merge
 **Requirements**: MDOC-02, DUAL-04
-**Why serial**: children never edit `CHANGELOG.md`, the READMEs, or a closed-set entry they did not add, so no parallel phase can own MDOC-02 or the closed-set cleanup. DUAL-04 needs Phase 2's registration and Phase 3's missing-MCP marker together, so it can pass only on the combined tree. This phase also turns the post-merge checks into verified criteria.
+**Why serial**: children never edit `CHANGELOG.md`, the READMEs, or a closed-set entry they did not add, so no parallel phase can own MDOC-02 or the closed-set cleanup. DUAL-04 needs Phase 2's registration and Phase 3's `{requires mcp}` marker together, so it can pass only on the combined tree. This phase also turns the post-merge checks into verified criteria.
 **Success Criteria** (what must be TRUE):
-  1. `CHANGELOG.md`, `README.md`, `README.es.md`, and `docs/hooks-compatibility.md` describe built-in MCP support, the missing-MCP marker, and the `-` to `_` naming divergence, and the CHANGELOG marks the JSON reason change as breaking (MDOC-02).
-  2. The switch scenario reaches the server under the adapter; after the adapter is removed it shows the missing-MCP marker while built-in MCP is off (D-MB-01); after built-in MCP is on it reaches the server under built-in; after the adapter is added again it reaches it under the adapter; no plugin command runs in between (DUAL-04).
+  1. `CHANGELOG.md`, `README.md`, `README.es.md`, and `docs/hooks-compatibility.md` describe built-in MCP support, the three `requires` markers (turn on built-in MCP or install pi-mcp-adapter, and what the adapter adds), and the `-` to `_` naming divergence (MDOC-02).
+  2. The switch scenario reaches the server under the adapter; after the adapter is removed it shows `{requires mcp}` while built-in MCP is off (D-MB-01, D-MB-07); after built-in MCP is on it reaches the server under built-in; after the adapter is added again it reaches it under the adapter; no plugin command runs in between (DUAL-04).
   3. On the combined tree, `npm run check`, both cucumber profiles, and `npm run test:modules` pass, `npx fallow dupes` reports no unreviewed clone group, and the CI behavioral jobs finish within their timeouts.
   4. Every child's parent lines are applied (PROJECT.md Key Decisions rows, BACKLOG entries), no closed-set entry remains that the combined tree never emits, and the phase dubious-choice logs are merged into the root log for the user's review.
 

@@ -81,3 +81,18 @@ builtin mcp or add the 3rd party mcp library"
 
 This replaces decision 1: the extension does not edit Pi settings, and
 NFR-10 is not amended.
+
+2026-11-04, the user, refining the amendment above after a walk-through of
+today's `{requires pi-mcp-adapter}` marker and `{unsupported mcp}` reason
+(verbatim):
+
+"or could we say "requires mcp" if the built-in mcp is sufficient (but not
+enabled), "requires pi-mcp-adapter" (is that the verbiage today?) if the mcp
+in the plugin requires features only available in pi-mcp-adapter, otherwise
+"mcp" as the reason for partially available?"
+
+Then, accepting the three-point proposal (a plugin stays installed with a
+`requires` marker when no implementation is active; markers
+`requires mcp`, `requires pi-mcp-adapter`, `requires builtin mcp`; the other
+implementation's marker beside `{unsupported mcp}`): "yes, go with all three".
+Recorded as D-MB-07.
