@@ -140,6 +140,32 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   // held down right now. A widening into a reason enum would make it a durable
   // claim about WHY, which nothing keeps honest.
   dependencyDisabled: Type.Optional(Type.Boolean()),
+  // MREC-01 / D-MB-04: every declared, non-malformed MCP server of the
+  // version this record names, in D-CF6-01 merge order, each as the plugin
+  // declared it, before plugin-variable substitution, the servers the adapter
+  // blocks included. OPTIONAL and additive -- NO schemaVersion bump (the
+  // resolvedSha precedent), so a legacy record without it loads unchanged and
+  // absence needs no migrate fill.
+  //
+  // ABSENCE MEANS "this record predates the key", never "no servers": the
+  // reader re-resolves the declaration read-only. A present empty array means
+  // the plugin declares no non-malformed server. A value never holds a
+  // substituted variable, an environment value, or an absolute host path.
+  mcpServerConfigs: Type.Optional(
+    Type.Array(Type.Object({ name: Type.String(), config: Type.Unknown() })),
+  ),
+  // MREC-01: the plugin references a `.mcpb` or `.dxt` bundle, a block that
+  // no recorded server represents and that no MCP implementation runs.
+  // OPTIONAL and additive -- NO schemaVersion bump (the resolvedSha
+  // precedent). Absence means no bundle was read, or the record predates the
+  // key.
+  mcpBundle: Type.Optional(Type.Literal(true)),
+  // MREC-01: `"neutral"` marks a `compatibility` whose
+  // `mcpServers` kind stands only for an implementation-independent block (a
+  // bundle). OPTIONAL and additive -- NO schemaVersion bump (the resolvedSha
+  // precedent). ABSENCE MEANS `compatibility` carries pi-mcp-adapter's
+  // verdict, as every record written before the neutral producer does.
+  compatibilityBasis: Type.Optional(Type.Literal("neutral")),
   compatibility: Type.Object({
     installable: Type.Boolean(),
     notes: Type.Array(Type.String()),
@@ -259,6 +285,21 @@ export function rangeVersionOf(record: {
   readonly resolvedSha?: string;
 }): string {
   return record.resolvedVersion ?? withoutTagCommit(record.version, record.resolvedSha);
+}
+
+/**
+ * MREC-01 / D-MB-04: the `mcpServerConfigs` value for a resolver's declared
+ * MCP servers: one entry per server in merge order, each config a deep copy,
+ * so no later in-memory change reaches the saved record. `Object.entries`
+ * reads own keys, so a server named `__proto__` stays a server.
+ */
+export function mcpServerConfigsOf(
+  declared: Readonly<Record<string, unknown>>,
+): NonNullable<PluginInstallRecord["mcpServerConfigs"]> {
+  return Object.entries(declared).map(([name, config]) => ({
+    name,
+    config: structuredClone(config),
+  }));
 }
 
 /**

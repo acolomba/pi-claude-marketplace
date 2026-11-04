@@ -75,6 +75,7 @@ function installableSkillsPlugin(
     notes: [],
     componentPaths: { skills: [...skillsDirectories], commands: [], agents: [], workflows: [] },
     mcpServers: {},
+    declaredMcpServers: {},
     defaultEnabled: true,
   };
 }
@@ -1047,6 +1048,7 @@ describe("prepareStageSkills", () => {
         workflows: [],
       },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
 

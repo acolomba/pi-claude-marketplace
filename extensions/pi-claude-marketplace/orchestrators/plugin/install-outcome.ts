@@ -118,6 +118,7 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
+import { mcpServerConfigsOf } from "../../persistence/state-io.ts";
 import { WorkflowsUnstageRefusedError } from "../../shared/errors-bridges.ts";
 import {
   ConcurrentInstallError,
@@ -1599,6 +1600,12 @@ async function runInstallLedgerBody(
         // a later `info` need not read the config back off disk. Omitted when
         // the plugin declares no hooks config -- there is nothing to describe.
         ...(installCtx.hookEntries !== undefined && { hookEntries: [...installCtx.hookEntries] }),
+        // MREC-01 / D-MB-04: every declared, non-malformed MCP server in its
+        // Claude form, read from the resolver and never from the mcp phase's
+        // substituted entries. Each config is a deep copy, so no later
+        // in-memory change reaches the saved record.
+        mcpServerConfigs: mcpServerConfigsOf(installCtx.resolved.declaredMcpServers),
+        ...(installCtx.resolved.mcpBundle === true && { mcpBundle: true }),
         compatibility: {
           // INV-1 / D-66-01 / BFILL-01: record the REAL compatibility from the
           // resolve, not a hardcoded `true`. A `--partial` install of an

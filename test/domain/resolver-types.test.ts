@@ -55,6 +55,7 @@ const installableExample = {
   notes: [],
   componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
   mcpServers: {},
+  declaredMcpServers: {},
   defaultEnabled: true,
 } satisfies ResolvedPlugin;
 const partialExample = {
@@ -135,6 +136,15 @@ void ({ ...unavailableExample, state: "unknown" } satisfies ResolvedPlugin);
 // @ts-expect-error installable and state discriminants must agree.
 void ({ ...unavailableExample, state: "installable" } satisfies ResolvedPlugin);
 void partialExample;
+// MREC-01: a materializable arm may flag a bundle reference, and only as `true`.
+void ({ ...installableExample, mcpBundle: true } satisfies ResolvedPlugin);
+// @ts-expect-error the bundle flag is absent when no bundle was read.
+void ({ ...installableExample, mcpBundle: false } satisfies ResolvedPlugin);
+// MREC-01: a materializable arm always carries its declared MCP servers.
+const { declaredMcpServers: _declaredMcpServers, ...withoutDeclaredMcpServers } =
+  installableExample;
+// @ts-expect-error the declared MCP servers are required on a materializable arm.
+void (withoutDeclaredMcpServers satisfies ResolvedPlugin);
 
 function consumeInstallable(): string {
   return installablePluginContract.pluginRoot;

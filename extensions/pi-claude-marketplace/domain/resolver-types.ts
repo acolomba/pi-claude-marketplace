@@ -151,7 +151,15 @@ interface MaterializableFields {
       >
     >
   >;
+  // MSEL-04: the subset pi-mcp-adapter supports, which the mcp phase stages
+  // under every MCP implementation.
   mcpServers: McpServersFieldSchema;
+  // MREC-01 / D-CF6-01: every non-malformed merged server in merge order,
+  // supported or blocked, as declared before plugin-variable substitution.
+  declaredMcpServers: McpServersFieldSchema;
+  // MREC-01: a `.mcpb` or `.dxt` bundle reference was read; no declared
+  // server stands for it.
+  mcpBundle: Type.TOptional<Type.TLiteral<true>>;
   hooksConfigPath: Type.TOptional<Type.TString>;
   orphanRewake: Type.TOptional<Type.TBoolean>;
   droppedHooks: Type.TOptional<

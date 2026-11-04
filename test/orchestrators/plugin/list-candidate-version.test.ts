@@ -41,6 +41,7 @@ function installableVerdict(name: string, pluginRoot: string): object {
     notes: [],
     componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
+    declaredMcpServers: {},
     defaultEnabled: true,
   };
 }

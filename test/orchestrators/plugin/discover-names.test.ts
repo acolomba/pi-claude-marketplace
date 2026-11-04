@@ -34,6 +34,7 @@ function resolvedPlugin(
     defaultEnabled: true,
     installable: true,
     mcpServers: {},
+    declaredMcpServers: {},
     name: "acme",
     notes: [],
     pluginRoot,

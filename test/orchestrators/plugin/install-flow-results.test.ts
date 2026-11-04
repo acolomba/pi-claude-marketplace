@@ -184,6 +184,7 @@ function installSummary(args: {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     },
     version: "1.2.3",

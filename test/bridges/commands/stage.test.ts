@@ -64,6 +64,7 @@ function resolvedFor(
       workflows: [],
     },
     mcpServers: {},
+    declaredMcpServers: {},
     defaultEnabled: true,
   };
 }

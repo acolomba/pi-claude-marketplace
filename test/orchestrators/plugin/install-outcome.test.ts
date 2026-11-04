@@ -311,6 +311,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
       pluginDataDir: path.join(locations.dataRoot, "marketplace", "empty"),
       resolved: {
         componentPaths: { agents: [], commands: [], skills: [], workflows: [] },
+        declaredMcpServers: {},
         defaultEnabled: true,
         installable: true,
         mcpServers: {},
@@ -528,6 +529,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
+    mcpServerConfigs: [],
     resolvedSource: seeded.pluginRoot,
     resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
     updatedAt: seeded.state.marketplaces.marketplace?.plugins.empty?.updatedAt,
@@ -2104,6 +2106,128 @@ test("stages the declared mcp servers and records their generated names", async 
   assert.deepStrictEqual(
     seeded.state.marketplaces.marketplace?.plugins.empty?.resources.mcpServers,
     ["server1"],
+  );
+});
+
+test("MREC-01 / D-MB-04: records every declared server in its Claude form and leaves the resolver's configs unexpanded", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-records-");
+  const declaredServers = {
+    local: {
+      command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
+      args: ["--data", "${CLAUDE_PLUGIN_DATA}/cache"],
+      env: { TOKEN: "${MREC_TOKEN}" },
+    },
+    live: { type: "ws", url: "wss://mcp.example.com/ws" },
+  };
+  const seeded = await seedPlugin(environment.cwd, { mcpServers: declaredServers });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    partial: true,
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: { MREC_TOKEN: "secret-value" },
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  const record = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.deepStrictEqual(
+    {
+      mcpServerConfigs: record?.mcpServerConfigs,
+      mcpBundle: record?.mcpBundle,
+      compatibilityBasis: record?.compatibilityBasis,
+      stagedMcpServerNames: ledgerOutcome.summary.stagedMcpServerNames,
+      resolvedDeclared: ledgerOutcome.summary.resolved.declaredMcpServers,
+      resolvedSupported: ledgerOutcome.summary.resolved.mcpServers,
+    },
+    {
+      mcpServerConfigs: [
+        { name: "local", config: declaredServers.local },
+        { name: "live", config: declaredServers.live },
+      ],
+      mcpBundle: undefined,
+      compatibilityBasis: undefined,
+      stagedMcpServerNames: ["local"],
+      resolvedDeclared: declaredServers,
+      resolvedSupported: { local: declaredServers.local },
+    },
+  );
+});
+
+test("MREC-01: the recorded configs are copies that a later change to the resolved plugin does not reach", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-copy-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { srv: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+  assert.ok(ledgerOutcome.kind === "installed");
+  const resolvedConfig = ledgerOutcome.summary.resolved.declaredMcpServers.srv as {
+    args: string[];
+  };
+
+  // act
+  resolvedConfig.args.push("--changed");
+
+  // assert
+  assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins.empty?.mcpServerConfigs, [
+    { name: "srv", config: { command: "node", args: ["s.js"] } },
+  ]);
+});
+
+test("MREC-01: a bundle reference records the bundle flag beside no recorded server", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-bundle-");
+  const seeded = await seedPlugin(environment.cwd, { pluginJson: { mcpServers: "server.mcpb" } });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    partial: true,
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  const record = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.deepStrictEqual(
+    {
+      mcpServerConfigs: record?.mcpServerConfigs,
+      mcpBundle: record?.mcpBundle,
+      compatibilityBasis: record?.compatibilityBasis,
+      unsupported: record?.compatibility.unsupported,
+    },
+    {
+      mcpServerConfigs: [],
+      mcpBundle: true,
+      compatibilityBasis: undefined,
+      unsupported: ["mcpServers"],
+    },
   );
 });
 

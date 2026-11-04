@@ -50,6 +50,7 @@ function installableResolution(name: string): ResolvedPlugin {
     notes: [],
     componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
+    declaredMcpServers: {},
     defaultEnabled: true,
   };
 }
@@ -65,6 +66,7 @@ function partiallyAvailableResolution(name: string): ResolvedPlugin {
     notes: ["contains lspServers"],
     componentPaths: { skills: ["skills/commit"], commands: [], agents: [], workflows: [] },
     mcpServers: {},
+    declaredMcpServers: {},
     defaultEnabled: true,
   };
 }

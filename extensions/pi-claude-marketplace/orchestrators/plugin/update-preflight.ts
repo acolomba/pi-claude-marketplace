@@ -7,7 +7,11 @@ import {
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { listedDirectoryPin, versionNamesCommit, withoutTagCommit } from "../../domain/version.ts";
-import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import {
+  isRecordedButDisabled,
+  loadState,
+  mcpServerConfigsOf,
+} from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CleanupLeakError,
@@ -722,27 +726,40 @@ function widensPartialGate(record: PluginStateRecord): boolean {
   return isRecordedButDisabled(record) && !record.compatibility.installable;
 }
 
-function disabledPinProjection(
-  version: string,
-  resolvedSource: string,
-  resolvedSha: string | undefined,
-  resolvedVersion: string | undefined,
-  compatibility: PluginStateRecord["compatibility"],
-): string {
+// The record fields a disabled-plugin update writes. MREC-01: the declared
+// MCP servers and the bundle flag are among them, so a declaration-only
+// change writes, and a legacy record without `mcpServerConfigs` reads as
+// changed and gains the field.
+type DisabledPin = Pick<
+  PluginStateRecord,
+  | "version"
+  | "resolvedSource"
+  | "resolvedSha"
+  | "resolvedVersion"
+  | "compatibility"
+  | "mcpServerConfigs"
+  | "mcpBundle"
+>;
+
+function disabledPinProjection(pin: DisabledPin): string {
   return JSON.stringify([
-    version,
-    resolvedSource,
-    resolvedSha ?? null,
-    resolvedVersion ?? null,
-    compatibility.installable,
-    [...compatibility.notes],
-    [...compatibility.supported],
-    [...compatibility.unsupported],
+    pin.version,
+    pin.resolvedSource,
+    pin.resolvedSha ?? null,
+    pin.resolvedVersion ?? null,
+    pin.compatibility.installable,
+    [...pin.compatibility.notes],
+    [...pin.compatibility.supported],
+    [...pin.compatibility.unsupported],
+    pin.mcpServerConfigs ?? null,
+    pin.mcpBundle === true,
   ]);
 }
 
 function nextDisabledPin(preflight: PreparedPluginUpdate): {
   readonly compatibility: PluginStateRecord["compatibility"];
+  readonly mcpServerConfigs: NonNullable<PluginStateRecord["mcpServerConfigs"]>;
+  readonly mcpBundle: boolean;
   readonly projection: string;
 } {
   const compatibility = {
@@ -751,30 +768,34 @@ function nextDisabledPin(preflight: PreparedPluginUpdate): {
     supported: [...preflight.installable.supported],
     unsupported: [...preflight.installable.unsupported],
   };
+  // MREC-01 / D-MB-04: the declared servers of `toVersion`, before
+  // substitution.
+  const mcpServerConfigs = mcpServerConfigsOf(preflight.installable.declaredMcpServers);
+  const mcpBundle = preflight.installable.mcpBundle === true;
   return {
     compatibility,
+    mcpServerConfigs,
+    mcpBundle,
     // No `?? shaFallback`: a re-resolution that produced no pin PROJECTS no
     // pin, so a record still carrying one reads as changed and gets it
     // cleared.
-    projection: disabledPinProjection(
-      preflight.toVersion,
-      preflight.installable.pluginRoot,
-      preflight.resolvedSha,
-      preflight.resolvedVersion,
+    projection: disabledPinProjection({
+      version: preflight.toVersion,
+      resolvedSource: preflight.installable.pluginRoot,
+      ...(preflight.resolvedSha !== undefined && { resolvedSha: preflight.resolvedSha }),
+      ...(preflight.resolvedVersion !== undefined && {
+        resolvedVersion: preflight.resolvedVersion,
+      }),
       compatibility,
-    ),
+      mcpServerConfigs,
+      ...(mcpBundle && { mcpBundle: true }),
+    }),
   };
 }
 
 function disabledRefreshWouldWrite(preflight: PreparedPluginUpdate): boolean {
   const next = nextDisabledPin(preflight);
-  const current = disabledPinProjection(
-    preflight.record.version,
-    preflight.record.resolvedSource,
-    preflight.record.resolvedSha,
-    preflight.record.resolvedVersion,
-    preflight.record.compatibility,
-  );
+  const current = disabledPinProjection(preflight.record);
   return next.projection !== current;
 }
 
@@ -794,13 +815,7 @@ async function refreshDisabledRecord(
       }
 
       const next = nextDisabledPin(preflight);
-      const current = disabledPinProjection(
-        record.version,
-        record.resolvedSource,
-        record.resolvedSha,
-        record.resolvedVersion,
-        record.compatibility,
-      );
+      const current = disabledPinProjection(record);
       if (next.projection === current) {
         return false;
       }
@@ -836,6 +851,14 @@ async function refreshDisabledRecord(
       }
 
       record.compatibility = next.compatibility;
+      // MREC-01: the declared MCP servers of the version the record now names.
+      record.mcpServerConfigs = next.mcpServerConfigs;
+      if (next.mcpBundle) {
+        record.mcpBundle = true;
+      } else {
+        delete record.mcpBundle;
+      }
+
       record.updatedAt = new Date().toISOString();
       await transaction.save();
       return true;

@@ -169,6 +169,7 @@ test("NFR-7 + HOOK-01: resolveStrict admits a hook-only plugin (installable: tru
     notes: [],
     componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
+    declaredMcpServers: {},
     hooksConfigPath: "hooks/hooks.json",
     defaultEnabled: true,
   });

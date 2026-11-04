@@ -119,6 +119,7 @@ function emptyResolution(): PartialResolution {
     notes: [],
     componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
+    declaredMcpServers: {},
   };
 }
 
@@ -165,6 +166,9 @@ function materializableFields(
     // D-CF1-06: component-path collection creates the list only to add a kind.
     ...(partial.shadowedFolders !== undefined && { shadowedFolders: partial.shadowedFolders }),
     mcpServers: partial.mcpServers,
+    // MREC-01: every non-malformed declared server, for the install record.
+    declaredMcpServers: partial.declaredMcpServers,
+    ...(partial.mcpBundle !== undefined && { mcpBundle: partial.mcpBundle }),
     ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
     ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),
     ...(partial.droppedHooks !== undefined && { droppedHooks: partial.droppedHooks }),

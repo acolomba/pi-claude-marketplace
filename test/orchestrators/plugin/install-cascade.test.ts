@@ -271,6 +271,7 @@ function unmaterializedSummary(
       defaultEnabled: true,
       installable: true,
       mcpServers: {},
+      declaredMcpServers: {},
       name: member.name,
       notes: [],
       pluginRoot: path.join(cwd, "unmaterialized"),
