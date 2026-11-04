@@ -36,7 +36,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../../platform/mcp-status-seed.ts";
+import { noStatusReaders } from "../../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
@@ -1150,7 +1150,8 @@ test("getPluginInfo reports the installed plugin through the bound reader capabi
   await getPluginInfo({
     ctx,
     run,
-    mcpStatus: noStatusSnapshot(),
+    mcpStatus: noStatusReaders(),
+    projectTrusted: true,
     marketplace: "mp",
     plugin: "p1",
     scope: "project",

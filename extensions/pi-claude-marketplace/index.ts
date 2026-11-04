@@ -33,6 +33,7 @@ import {
 import { createLoadReconcile } from "./orchestrators/reconcile/load.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
+import { createBuiltinMcpStatusReader } from "./platform/mcp-builtin-status.ts";
 import { createMcpStatusTracker } from "./platform/mcp-status.ts";
 import { createCompletionCache } from "./shared/completion-cache.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
@@ -97,7 +98,12 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   const backgroundGate = createBackgroundGate();
   // ASTAT-01: one status tracker per extension load. Pi drops its subscription
   // when it invalidates this runtime, and the next load starts empty.
-  const mcpStatus = createMcpStatusTracker(pi.events);
+  // MSEL-01 / BLT-05: the built-in reader beside it reads nothing from Pi here,
+  // at factory time; info picks one of the pair per command run.
+  const mcpStatus = {
+    adapter: createMcpStatusTracker(pi.events),
+    builtin: createBuiltinMcpStatusReader(pi),
+  };
   const pluginUpdateOperations = createUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
   // RECON-01..05: one reconcile apply operation and one load reconcile step

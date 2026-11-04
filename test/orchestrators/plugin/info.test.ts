@@ -79,7 +79,7 @@ import {
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { noStatusSnapshot, statusSnapshot } from "../../platform/mcp-status-seed.ts";
+import { noStatusReaders, statusReaders, statusSnapshot } from "../../platform/mcp-status-seed.ts";
 import {
   adapterCommand,
   builtinMcpCommand,
@@ -92,7 +92,7 @@ import { whileStateLockHeld } from "../state-lock.ts";
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-import type { McpStatusReader } from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
+import type { McpStatusReaders } from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import type {
   CommandInventoryItem,
   ToolInventoryItem,
@@ -121,19 +121,26 @@ const NODE_READER: PluginInfoReader = {
   listDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
 };
 
-/** The info command's options with the MCP status tracker left optional. */
-type InfoCommandOptions = Omit<GetPluginInfoOptions, "mcpStatus"> & {
-  readonly mcpStatus?: McpStatusReader;
+/** The info command's options with the MCP status readers and project trust left optional. */
+type InfoCommandOptions = Omit<GetPluginInfoOptions, "mcpStatus" | "projectTrusted"> & {
+  readonly mcpStatus?: McpStatusReaders;
+  readonly projectTrusted?: boolean;
 };
 
 /**
- * ASTAT-01: every case that names no MCP status tracker runs against one that
- * has received no snapshot.
+ * ASTAT-01 / MSEL-01: every case that names no MCP status readers runs against
+ * a pair that has received no snapshot, and every case that names no project
+ * trust runs in a trusted project.
  */
 function withDefaultMcpStatus(
   info: (opts: GetPluginInfoOptions) => Promise<void>,
 ): (opts: InfoCommandOptions) => Promise<void> {
-  return (opts) => info({ ...opts, mcpStatus: opts.mcpStatus ?? noStatusSnapshot() });
+  return (opts) =>
+    info({
+      ...opts,
+      mcpStatus: opts.mcpStatus ?? noStatusReaders(),
+      projectTrusted: opts.projectTrusted ?? true,
+    });
 }
 
 /**
@@ -7839,10 +7846,12 @@ test("ASTAT-01: an installed plugin's written servers show the adapter's state f
       "utf8",
     );
     const getPluginInfoInEnv = withDefaultMcpStatus(createGetPluginInfo(NODE_READER, {}));
-    const mcpStatus = statusSnapshot([
-      { name: "plugin_analytics_api_", status: "needs-auth" },
-      { name: "plugin_analytics_db_", status: "failed" },
-    ]);
+    const mcpStatus = statusReaders({
+      adapter: statusSnapshot([
+        { name: "plugin_analytics_api_", status: "needs-auth" },
+        { name: "plugin_analytics_db_", status: "failed" },
+      ]),
+    });
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -7893,10 +7902,12 @@ test("ASTAT-01: in a both-scopes fan-out each row's servers are stamped from its
         alpha: { version: "1.0.0", resources: { skills: [], mcpServers: ["zeta-srv"] } },
       },
     });
-    const mcpStatus = statusSnapshot([
-      { name: "plugin_alpha_alpha-srv_", status: "connected" },
-      { name: "plugin_alpha_zeta-srv_", status: "failed" },
-    ]);
+    const mcpStatus = statusReaders({
+      adapter: statusSnapshot([
+        { name: "plugin_alpha_alpha-srv_", status: "connected" },
+        { name: "plugin_alpha_zeta-srv_", status: "failed" },
+      ]),
+    });
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -7949,7 +7960,9 @@ test("ASTAT-01: with the plugin in both scopes, the project row shows the adapte
     // arrange
     await seedAlphaRecord("project", path.join(cwd, ".pi"), cwd, { mcpServers: ["srv"] });
     await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
-    const mcpStatus = statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]);
+    const mcpStatus = statusReaders({
+      adapter: statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]),
+    });
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -7979,7 +7992,9 @@ test("ASTAT-01: under --scope user the user row reads overridden by project scop
     // arrange
     await seedAlphaRecord("project", path.join(cwd, ".pi"), cwd, { mcpServers: ["srv"] });
     await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
-    const mcpStatus = statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]);
+    const mcpStatus = statusReaders({
+      adapter: statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]),
+    });
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -8014,7 +8029,9 @@ test("ASTAT-01: under --scope user an unparseable project state.json leaves the 
     const projectStateJson = locationsFor("project", cwd).stateJsonPath;
     await mkdir(path.dirname(projectStateJson), { recursive: true });
     await writeFile(projectStateJson, "{", "utf8");
-    const mcpStatus = statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]);
+    const mcpStatus = statusReaders({
+      adapter: statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]),
+    });
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -8052,7 +8069,9 @@ test("ENBL-08 / ASTAT-01: a disabled project record shows (disabled) with no sta
       disabled: true,
     });
     await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
-    const mcpStatus = statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]);
+    const mcpStatus = statusReaders({
+      adapter: statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]),
+    });
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -8088,7 +8107,7 @@ test("ASTAT-02: with no snapshot both rows of the fan-out read status unknown", 
     await getPluginInfo({
       ctx,
       run,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
       marketplace: "mp",
       plugin: "alpha",
       cwd,
@@ -8118,10 +8137,12 @@ test("ASTAT-01: a project record that lists a different server leaves the user r
     // arrange
     await seedAlphaRecord("project", path.join(cwd, ".pi"), cwd, { mcpServers: ["other"] });
     await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
-    const mcpStatus = statusSnapshot([
-      { name: "plugin_alpha_other_", status: "connected" },
-      { name: "plugin_alpha_srv_", status: "failed" },
-    ]);
+    const mcpStatus = statusReaders({
+      adapter: statusSnapshot([
+        { name: "plugin_alpha_other_", status: "connected" },
+        { name: "plugin_alpha_srv_", status: "failed" },
+      ]),
+    });
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -8150,7 +8171,9 @@ test("ASTAT-01: without --scope and with the marketplace in the user scope only,
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
-    const mcpStatus = statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]);
+    const mcpStatus = statusReaders({
+      adapter: statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]),
+    });
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -8183,9 +8206,11 @@ test("ASTAT-02: a snapshot status holding an escape sequence reads status unknow
         analytics: { version: "1.0.0", resources: { skills: [], mcpServers: ["api"] } },
       },
     });
-    const mcpStatus = statusSnapshot([
-      { name: "plugin_analytics_api_", status: "\u001b[31mconnected\u001b[0m" },
-    ]);
+    const mcpStatus = statusReaders({
+      adapter: statusSnapshot([
+        { name: "plugin_analytics_api_", status: "\u001b[31mconnected\u001b[0m" },
+      ]),
+    });
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -8212,6 +8237,66 @@ test("ASTAT-02: a snapshot status holding an escape sequence reads status unknow
     ]);
   });
 });
+
+for (const { implementation, inventory, readerAsked, requiresLine, status } of [
+  {
+    implementation: "adapter",
+    inventory: { commands: [adapterCommand()] },
+    readerAsked: "adapter",
+    status: "connected",
+    requiresLine: "    requires: pi-mcp-adapter",
+  },
+  {
+    implementation: "builtin",
+    inventory: { tools: [builtinMcpTool()], commands: [builtinMcpCommand()] },
+    readerAsked: "built-in",
+    status: "failed",
+    requiresLine: "    requires: pi-mcp-adapter (missing)",
+  },
+  {
+    implementation: "none",
+    inventory: {},
+    readerAsked: "adapter",
+    status: "connected",
+    requiresLine: "    requires: pi-mcp-adapter (missing)",
+  },
+]) {
+  test(`MSEL-01: under ${implementation} info stamps the written servers through the ${readerAsked} status reader`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
+      const mcpStatus = statusReaders({
+        adapter: statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]),
+        builtin: statusSnapshot([{ name: "plugin_alpha_srv_", status: "failed" }]),
+      });
+      const { ctx, run, notifications } = makeCtx(1, inventory);
+
+      // act
+      await getPluginInfo({
+        ctx,
+        run,
+        mcpStatus,
+        marketplace: "mp",
+        plugin: "alpha",
+        scope: "user",
+        cwd,
+      });
+
+      // assert
+      assert.strictEqual(run.softDeps.mcpImplementation, implementation);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            "  ● alpha v1.0.0 (installed) {not in manifest}",
+            `    mcp: plugin:alpha:srv (${status})`,
+            requiresLine,
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+}
 
 for (const { inventory, label, requiresLine } of [
   {

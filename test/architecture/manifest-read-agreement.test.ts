@@ -52,7 +52,7 @@ import {
   mergeMarketplaceIntoState,
 } from "../edge/handlers/marketplace-seed.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
+import { noStatusReaders } from "../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
@@ -262,7 +262,8 @@ for (const { label, prepare, resolution, notification } of [
     await getPluginInfo({
       ctx,
       run,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
+      projectTrusted: true,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -316,7 +317,8 @@ for (const { label, prepare } of [
     await getPluginInfo({
       ctx,
       run,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
+      projectTrusted: true,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -493,7 +495,8 @@ for (const { label, plant, expected } of [
     await getPluginInfo({
       ctx,
       run,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
+      projectTrusted: true,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
@@ -592,7 +595,8 @@ test("all four readers locate one bare manifest, and two let it outrank the entr
   await getPluginInfo({
     ctx,
     run,
-    mcpStatus: noStatusSnapshot(),
+    mcpStatus: noStatusReaders(),
+    projectTrusted: true,
     marketplace: "mp",
     plugin: "alpha",
     scope: "user",

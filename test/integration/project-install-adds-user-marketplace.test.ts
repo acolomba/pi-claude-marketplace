@@ -39,7 +39,7 @@ import { createNotificationBoundary } from "../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
+import { noStatusReaders } from "../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -245,7 +245,8 @@ test("LAYER-07: a project keeps the marketplace its install added after a user-s
   await getPluginInfo({
     ctx: boundary.ctx,
     run: runWithNothingLoaded(),
-    mcpStatus: noStatusSnapshot(),
+    mcpStatus: noStatusReaders(),
+    projectTrusted: true,
     marketplace: "mp",
     plugin: "p",
     scope: "project",

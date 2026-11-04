@@ -22,7 +22,7 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { makeCtx, makeMockPi } from "../e2e/_helpers.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
+import { noStatusReaders } from "../platform/mcp-status-seed.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -190,7 +190,7 @@ function registeredCommand(cwd: string) {
     piHost.pi,
     {
       completionCache,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
       gitOps: git.gitOps,
       beginPluginUpdateRun: () => () =>
         Promise.resolve({

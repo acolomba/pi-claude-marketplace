@@ -8,7 +8,12 @@
 // surface.
 //
 // The status lookup key is `generatedMcpServerKey(plugin, server)`, an exact
-// string match, because pi-mcp-adapter reports raw config keys. Only the
+// string match, because pi-mcp-adapter reports raw config keys. MSEL-01: info
+// hands in the reader of the run's active implementation as part of an
+// `McpStatusLookup`; the key stays the adapter's under every implementation,
+// so the built-in seed reader, which answers `no-snapshot`, leaves every
+// built-in row at `status unknown` until BLT-05 picks the naming by
+// `lookup.implementation`. Only the
 // servers the installation record lists get a state: the manifest arm lists
 // the current declaration, which can differ from what install wrote. A
 // disabled record's servers are out of the adapter configuration (ENBL-08),
@@ -26,7 +31,11 @@ import { generatedMcpServerKey, mcpServerDisplayName } from "../../domain/name.t
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
-import type { McpServerRuntimeStatus, McpStatusReader } from "../../platform/mcp-status.ts";
+import type {
+  McpServerRuntimeStatus,
+  McpStatusLookup,
+  McpStatusReader,
+} from "../../platform/mcp-status.ts";
 import type {
   McpServerStatus,
   McpServerSummaryEntry,
@@ -75,7 +84,7 @@ function stampEntries(
   entries: readonly McpServerSummaryEntry[],
   recordedServers: readonly string[],
   overridden: ReadonlySet<string>,
-  mcpStatus: McpStatusReader,
+  reader: McpStatusReader,
 ): McpServerSummaryEntry[] {
   const recordedByName = new Map(
     recordedServers.map((server) => [mcpServerDisplayName(plugin, server), server]),
@@ -86,7 +95,7 @@ function stampEntries(
       return entry;
     }
 
-    const answer = mcpStatus.lookup(generatedMcpServerKey(plugin, server));
+    const answer = reader.lookup(generatedMcpServerKey(plugin, server));
     const status: McpServerStatus =
       answer !== "no-snapshot" && overridden.has(server)
         ? "overridden by project scope"
@@ -97,7 +106,7 @@ function stampEntries(
 
 /**
  * Returns `block` with each MCP server its installation record lists as
- * written stamped with the state pi-mcp-adapter last reported. Only
+ * written stamped with the state `lookup.reader` last reported. Only
  * `(installed)` and `(partially-installed)` rows with resolved components are
  * stamped. `projectRecord` is the same plugin's installation record in the
  * project scope; on a user row it decides which servers the project entry
@@ -107,7 +116,7 @@ function stampEntries(
 export function withMcpServerStatus(
   block: PluginInfoMessage,
   record: PluginInstallRecord | undefined,
-  mcpStatus: McpStatusReader,
+  lookup: McpStatusLookup,
   projectRecord: PluginInstallRecord | undefined,
 ): PluginInfoMessage {
   const plugin = block.plugin;
@@ -126,7 +135,7 @@ export function withMcpServerStatus(
     entries,
     record.resources.mcpServers,
     projectOverrides(block, projectRecord),
-    mcpStatus,
+    lookup.reader,
   );
   return { ...block, plugin: { ...plugin, components: { ...plugin.components, mcp } } };
 }

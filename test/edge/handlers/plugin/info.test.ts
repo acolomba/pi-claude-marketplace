@@ -33,7 +33,10 @@
 // Boundary reads, which differ between the two emission paths:
 //   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
 //     writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once.
+//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and asks
+//     `ctx.isProjectTrusted()` once, because the status lookup it hands info
+//     carries the project's trust (BLT-05, D-MB-09). The strict context
+//     verifies that single question, which no emission can show yet.
 // Neither path reads the tool list: the projection renders from the command
 // run's soft-dependency snapshot (D-05).
 //
@@ -71,10 +74,12 @@ import https from "node:https";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import { when } from "strong-mock";
+
 import { parseFlagNames } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makePluginInfoHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../../../platform/mcp-status-seed.ts";
+import { noStatusReaders } from "../../../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import {
   createMachineNotificationBoundary,
@@ -202,7 +207,10 @@ for (const { args, expectedMessage, label, summary } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+    when(() => ctx.isProjectTrusted())
+      .thenReturn(true)
+      .times(1);
+    const infoHandler = makePluginInfoHandler(noStatusReaders());
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -221,7 +229,10 @@ test("reads a git-source plugin from disk alone while the fetch flag is absent, 
     value: workspace.cwd,
     reads: 1,
   });
-  const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
+    .times(1);
+  const infoHandler = makePluginInfoHandler(noStatusReaders());
 
   // act
   await infoHandler("gitp@mp", ctx, runWithNothingLoaded());
@@ -249,7 +260,10 @@ for (const { args, label, position } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+    when(() => ctx.isProjectTrusted())
+      .thenReturn(true)
+      .times(1);
+    const infoHandler = makePluginInfoHandler(noStatusReaders());
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -292,7 +306,7 @@ for (const { args, label, summary, sentence = MISSING_REFERENCE } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+    const infoHandler = makePluginInfoHandler(noStatusReaders());
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -343,7 +357,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+    const infoHandler = makePluginInfoHandler(noStatusReaders());
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -403,7 +417,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+    const infoHandler = makePluginInfoHandler(noStatusReaders());
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -419,7 +433,7 @@ test("carries the tokenizer's own sentence for an unrecognised scope value and n
   const workspace = await createHermeticWorkspace(t, "scope-value");
   await seedBothScopes(workspace);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+  const infoHandler = makePluginInfoHandler(noStatusReaders());
 
   // act
   await infoHandler("alpha@mp --scope bogus", ctx, runWithNothingLoaded());
@@ -458,7 +472,7 @@ for (const mode of ["json", "rpc"] as const) {
       // arrange
       const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
 
-      const commandHandler = makePluginInfoHandler(noStatusSnapshot());
+      const commandHandler = makePluginInfoHandler(noStatusReaders());
 
       // act
       await commandHandler(args, ctx, run);

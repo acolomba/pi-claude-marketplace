@@ -15,7 +15,7 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
+import { noStatusReaders } from "../platform/mcp-status-seed.ts";
 
 import { makeCtx, makeMockPi } from "./_helpers.ts";
 
@@ -119,7 +119,7 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
     harness.pi,
     {
       completionCache,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
       gitOps,
       beginPluginUpdateRun: () => () =>
         Promise.resolve({
