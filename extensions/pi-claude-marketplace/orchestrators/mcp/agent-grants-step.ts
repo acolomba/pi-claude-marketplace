@@ -22,8 +22,8 @@
  *   stays untouched. The rewrite checks the lock is still held before each
  *   write (D-06).
  * - It reports nothing to the user (RECON-05). A held lock skips the scope
- *   until the next load, any other failure is debug-logged on the `mcp`
- *   channel, and the step never rejects (NFR-2).
+ *   until the next load, any other failure, a context that throws included,
+ *   is debug-logged on the `mcp` channel, and the step never rejects (NFR-2).
  */
 
 import { needsAgentGrantRewrite, rewriteAgentGrantForms } from "../../bridges/agents/index.ts";
@@ -82,9 +82,13 @@ export async function agentGrantsStep(
     return;
   }
 
-  const cwd = input.ctx.cwd;
-  await rewriteScope("user", cwd, active);
-  if (input.ctx.isProjectTrusted()) {
-    await rewriteScope("project", cwd, active);
+  try {
+    const cwd = input.ctx.cwd;
+    await rewriteScope("user", cwd, active);
+    if (input.ctx.isProjectTrusted()) {
+      await rewriteScope("project", cwd, active);
+    }
+  } catch (err) {
+    hookDebugLog(`agent grants skipped: ${errorMessage(err)}`, "mcp");
   }
 }

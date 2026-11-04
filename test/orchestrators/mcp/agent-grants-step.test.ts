@@ -218,6 +218,27 @@ test("NFR-2: a held user-scope lock skips the user scope and still rewrites the 
   verify(ctx);
 });
 
+test("NFR-2: a trust question that throws resolves the step after the user scope is rewritten", async (t) => {
+  // arrange
+  const { cwd, user, project } = await scopes(t);
+  const userRow = await seedAgent(user, "adapter");
+  await seedAgent(project, "adapter");
+  const projectIndexBefore = await readFile(indexPath(project), "utf8");
+  const pi = inventory();
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  when(() => ctx.cwd).thenReturn(cwd);
+  when(() => ctx.isProjectTrusted()).thenThrow(new Error("the trust store is unreadable"));
+
+  // act
+  await agentGrantsStep({ pi, ctx, snapshot: runFor("builtin") }, NOT_A_CHILD);
+
+  // assert
+  assert.deepStrictEqual(await readIndexRows(user), [swappedRow(userRow, "builtin")]);
+  assert.strictEqual(await readFile(indexPath(project), "utf8"), projectIndexBefore);
+  verify(pi);
+  verify(ctx);
+});
+
 test("MGRT-01: a scope with no agents index stays absent", async (t) => {
   // arrange
   const { cwd, user, project } = await scopes(t);
