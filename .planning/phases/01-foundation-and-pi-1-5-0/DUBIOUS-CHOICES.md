@@ -296,3 +296,19 @@ copies every item here. Phase 6 merges this file into the root log.
 - The frozen status call passes `{ reader, implementation }` to
   `withMcpServerStatus` so Phase 2 needs no frozen-file edit.
 - **Recorded in:** `01-RESEARCH.md`.
+
+## Pattern mapping step (gsd-pattern-mapper, 2026-11-04)
+
+### P1-DC-20: Pattern-map choices
+
+- **Severity:** Low to Medium. **Status:** open.
+- (Low) The built-in stand-in extension carries a source
+  `fallow-ignore-next-line unused-export` marker, like the registry probe,
+  not an `ignoreExports` entry; the CONVENTIONS.md marker count changes.
+- (Low) `info.ts` uses the built-in status reader only under `builtin`, and
+  the adapter reader under both `adapter` and `none` (follows CONTEXT); a
+  dedicated reader for `none` is the alternative.
+- (Medium) `ActiveMcpImplementation` and `McpImplementationId` must live in
+  `platform/` or `shared/` and be re-exported from `domain/`, because
+  `platform/` may not import `domain/`; the planner picks the home.
+- **Recorded in:** `01-PATTERNS.md`.
