@@ -642,3 +642,21 @@ and kept WR-03 open.
   it restores the earlier behavior).
 - **P3-DC-127 (Low): `03-REVIEW-FIX.md` lists iteration 2 first** and keeps
   iteration 1's outcomes under an `iteration_1:` key.
+
+## Verification and transition (2026-11-04)
+
+- **P3-DC-128 (Low): the review loop ran before the verifier** (code review,
+  fix, re-review, then secure-phase, validate-phase, and the verifier), and the
+  full phase gate (every `npm run check` part, both cucumber profiles,
+  `test:modules`, and `test:e2e`) stood in for GSD's regression gate.
+- **P3-DC-129 (Low): the orchestrator wrote `03-VERIFICATION.md` and
+  `03-SECURITY.md` from the verifier's and auditor's returned reports** (their
+  harness rules forbid writing report files); the fingerprint fields are the
+  verifier's real `verification.fingerprint` output.
+- **P3-DC-130 (Low): the transition ran in post-completion mode**, and its
+  `evolve_project` step became parent lines (PROJECT.md belongs to Phase 6),
+  added to `03-09-SUMMARY.md` with a CHANGELOG wording correction, the BACKLOG
+  line, and the security auditor's frozen-reader observation.
+- **P3-DC-131 (Low): `phase.complete` reported verification-debt warnings that
+  are false positives** (SUMMARY paths written relative to the extension folder
+  and command lines); not acted on.
