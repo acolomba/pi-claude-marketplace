@@ -149,3 +149,97 @@ session copies every item here. Phase 6 merges this file into the root log.
   `ToolSearch` written for Claude Code does not fire. It is outside MHK-01 and
   MHK-02.
 - **Recorded in:** `05-CONTEXT.md` Deferred Ideas.
+
+## Research step (gsd-phase-researcher, 2026-11-04; adopted by the child session)
+
+### P5-DC-10: The proxy rule reads the implementation through the notification snapshot
+
+- **Phase / source:** Phase 5 research.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** the bridge reads the active implementation through
+  `openNotificationSnapshot(pi).softDeps.mcpImplementation`, not by calling
+  `softDepStatus(pi)` itself; CONTEXT D-P5-06 now says so.
+- **Alternatives:** call `softDepStatus` directly, as D-P5-06 first read.
+- **Why dubious:** it changes how a discuss decision is carried out. D-JO-01
+  (PROJECT.md) makes the notification run the only caller of
+  `softDepStatus`; the answer and the probe counts are the same.
+- **Recorded in:** `05-CONTEXT.md` D-P5-06, `05-RESEARCH.md`.
+
+### P5-DC-11: The namespace prefix is `<namespace name>__`
+
+- **Phase / source:** Phase 5 research.
+- **Severity:** Low. **Status:** open.
+- **Choice:** the Claude-form name strips `<namespace name>__` from Pi's name;
+  CONTEXT D-P5-02 is corrected.
+- **Alternatives:** the first text, `mcp__<namespace name>__`, which never
+  matches because Pi's namespace name already starts with `mcp__`.
+- **Why dubious:** a decision's text was corrected after discuss.
+- **Recorded in:** `05-CONTEXT.md` D-P5-02.
+
+### P5-DC-12: The built-in twin's PostToolUse hook is a literal, not `*`
+
+- **Phase / source:** Phase 5 research.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** in the built-in half of the tool-use pair, only the PreToolUse
+  hook is `*`; the PostToolUse hook names the tool in Claude's form.
+- **Alternatives:** keep `*` for both, as D-P5-11 first said.
+- **Why dubious:** a `*` PostToolUse row would pin `tool_search`'s result,
+  which is Pi's own wording; the cucumber rules forbid stating upstream text,
+  and the runs table must list every column.
+- **Recorded in:** `05-CONTEXT.md` D-P5-11.
+
+### P5-DC-13: The tool-use pair moves to `hook-demo`/`stub-server`
+
+- **Phase / source:** Phase 5 research.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** both halves of the Phase 1 scenario use names with `-`.
+- **Alternatives:** keep `demo`/`stub` and record the twin as coverage only.
+- **Why dubious:** it rewrites a Phase 1 scenario; with `demo`/`stub` the
+  built-in twin passes on the Phase 1 tree and gives no red proof (D-P5-12).
+- **Recorded in:** `05-CONTEXT.md` D-P5-11.
+
+### P5-DC-14: A profile-aware step builds the model script
+
+- **Phase / source:** Phase 5 research.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** the shared `@mcp` scenario's model script is built by a step
+  from `profileFor(...).toolName` (helper `features/lib/hook-mcp-calls.ts`).
+- **Alternatives:** an `@adapter-only`/`@builtin-only` pair with literal
+  scripts, which drops D-P5-08's single both-profile scenario.
+- **Why dubious:** the cucumber rule says a feature file writes the whole
+  script as literals (`world-and-stand-ins.md`); no literal works under both
+  profiles, because the tool names differ.
+- **Recorded in:** `05-RESEARCH.md`.
+
+### P5-DC-15: Built-in tools are not excluded from the proxy rule under the adapter
+
+- **Phase / source:** Phase 5 research.
+- **Severity:** Low. **Status:** open.
+- **Choice:** no extra hardening: when the adapter and built-in MCP are both
+  loaded, a built-in cut-name tool with a string `tool` input is still
+  skipped as a proxy call.
+- **Alternatives:** never treat a `builtin:mcp` tool as a proxy call.
+- **Why dubious:** an edge case stays; the hardening goes beyond D-P5-06.
+- **Recorded in:** `05-RESEARCH.md` Open Questions.
+
+### P5-DC-16: Claude Code matcher differences stay out of scope
+
+- **Phase / source:** Phase 5 research.
+- **Severity:** Low. **Status:** open.
+- **Choice:** none acted on: Claude Code 2.1.318 treats a matcher of
+  `[a-zA-Z0-9_|, -]` as a list of exact names (spaces and commas allowed) and
+  any other matcher as an unanchored regex; this project accepts only
+  `[A-Za-z0-9_|-]` and matches server prefixes with `startsWith`.
+- **Alternatives:** widen the safe charset and match unanchored.
+- **Why dubious:** two existing parity gaps stay.
+- **Recorded in:** `05-RESEARCH.md`.
+
+### P5-DC-17: Research probes ran cucumber on scratch feature files
+
+- **Phase / source:** Phase 5 research.
+- **Severity:** Low. **Status:** open.
+- **Choice:** probes ran `npx cucumber-js` on feature files outside
+  `features/`; the plans reuse this for the red proofs (D-P5-12).
+- **Alternatives:** red proofs from a temporary edit inside `features/`.
+- **Why dubious:** not a documented harness use; it writes no repo file.
+- **Recorded in:** `05-RESEARCH.md` Validation Architecture.

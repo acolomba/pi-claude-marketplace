@@ -57,7 +57,8 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   missing tool, or a tool from another source leaves the name as it is today.
 - **D-P5-02 (the Claude-form name).** A built-in tool's Claude-form name is
   `mcp__<alias>__<rest>`, where `<rest>` is Pi's tool name after the
-  namespace prefix `mcp__<namespace name>__`. The tool segment keeps Pi's
+  namespace prefix `<namespace name>__` (Pi's namespace name already starts
+  with `mcp__`, research Q1). The tool segment keeps Pi's
   sanitizing (`-` and every other character outside `[A-Za-z0-9_]` become
   `_`) and, for a name Pi cut at 64 characters, Pi's cut and hash. When Pi's
   cut falls inside the namespace, the name does not start with the namespace
@@ -88,7 +89,8 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   namespace proxy `mcp__<server>` with a string `tool` and no `action` runs no
   hook) applies only when the active MCP implementation is the adapter, as
   `softDepStatus(pi).mcpImplementation === "adapter"` defines it (MSEL-01,
-  ADET-02). Under built-in or none, no call is a proxy call, so a built-in
+  ADET-02), read through `openNotificationSnapshot(pi).softDeps`, the one
+  caller of `softDepStatus` (D-JO-01). Under built-in or none, no call is a proxy call, so a built-in
   tool whose cut name has no second `__` and whose input holds a string
   `tool` still fires its hooks.
 - **D-P5-07 (when the bridge reads it).** The bridge reads the active
@@ -129,7 +131,11 @@ log every questionable choice in `DUBIOUS-CHOICES.md` in this directory
   call under the real tool name") becomes an `@adapter-only` and
   `@builtin-only` pair in that file. The adapter half keeps the proxy de-dup
   (D-CF5-12, MHK-02): the outer `mcp` call runs no hook. The built-in half has
-  no proxy: the `*` hooks run once on `tool_search` and once on the tool call.
+  no proxy: the PreToolUse `*` hook runs once on `tool_search` and once on the
+  tool call; its PostToolUse hook is a Claude-form literal, because a `*`
+  PostToolUse row would pin Pi's own `tool_search` result text. Both halves
+  move to the plugin `hook-demo` and the server `stub-server`, so the built-in
+  half fails on the Phase 1 tree (D-P5-12).
   The feature description's "until MHK-01, MHK-02 lift its tag" goes.
 - **D-P5-12 (red proof).** Each new scenario fails on the Phase 1 tree under
   each profile where it applies, and the plan SUMMARY records the failing run
