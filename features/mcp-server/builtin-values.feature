@@ -18,7 +18,7 @@ Feature: MCP server builtin values
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given pi runs with the scripted model and a probe of the mcp servers registered with pi's built-in mcp
     Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
-    When the user lists the mcp tools pi offers
+    When the user asks pi for the configs of the mcp servers registered with it
     Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
       | name             | config                                                                                                                                                                                     |
       | plugin_demo_stub | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"timeout":2.5,"exposure":"deferred"} |
@@ -52,7 +52,7 @@ Feature: MCP server builtin values
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given pi runs with the scripted model and a probe of the mcp servers registered with pi's built-in mcp
-    When the user lists the mcp tools pi offers
+    When the user asks pi for the configs of the mcp servers registered with it
     Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
       | name               | config                                                                                                                                                                                                                                                                                    |
       | plugin_demo_remote | {"type":"http","url":"http://127.0.0.1:9/mcp","headers":{"X-Api-Key":"key"},"oauth":{"clientId":"client","callbackUrl":"http://localhost:8765/callback","authServerMetadataUrl":"https://127.0.0.1:9/.well-known/oauth-authorization-server","scope":"read write"},"exposure":"deferred"} |
@@ -75,7 +75,7 @@ Feature: MCP server builtin values
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given pi runs with the scripted model and a probe of the mcp servers registered with pi's built-in mcp
     Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
-    When the user lists the mcp tools pi offers
+    When the user asks pi for the configs of the mcp servers registered with it
     Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
       | name             | config                                                                                                                                                                       |
       | plugin_demo_stub | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"exposure":"deferred"} |
@@ -94,7 +94,7 @@ Feature: MCP server builtin values
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given pi runs with the scripted model and a probe of the mcp servers registered with pi's built-in mcp
     Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
-    When the user lists the mcp tools pi offers
+    When the user asks pi for the configs of the mcp servers registered with it
     Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
       | name             | config                                                                                                                                                                                                                |
       | plugin_demo_stub | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"exposure":"deferred","description":"Demo tools for the team."} |
@@ -112,7 +112,7 @@ Feature: MCP server builtin values
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given pi runs with the scripted model and a probe of the mcp servers registered with pi's built-in mcp
     Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
-    When the user lists the mcp tools pi offers
+    When the user asks pi for the configs of the mcp servers registered with it
     Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
       | name             | config                                                                                                                                                                     |
       | plugin_demo_stub | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"exposure":"direct"} |

@@ -11,13 +11,15 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-import { type DataTable, Given, Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import {
+  lastRegisteredConfigs,
   MCP_BUILTIN_CONFIG_PROBE_COMMAND,
   MCP_BUILTIN_CONFIG_PROBE_EXTENSION,
   readRegisteredConfigs,
 } from "../../lib/mcp-builtin-config-probe/snapshot.ts";
+import { settledRegistry } from "../../lib/mcp-implementation.ts";
 import { MCP_STUB_SERVER } from "../../lib/mcp-stub-server.ts";
 import { writePublishedPluginFile } from "../../lib/published-marketplace.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
@@ -60,14 +62,15 @@ Given(
   },
 );
 
-// The whole list of MCP servers that extensions registered with Pi, in Pi's
-// order, each with its config as JSON and run tokens projected. A stdio
-// server's command and arguments name this run's Node and stub paths, so they
-// are left out. The probe is a read-only query of Pi's registry, as a stub
-// log is read, so the step runs it itself.
-Then(
-  "pi holds these mcp server configs, apart from each stdio server's command and arguments:",
-  async function (this: ScenarioWorld, table: DataTable) {
+// The probe reports every MCP server an extension registered with Pi once the
+// registry has settled. Pi runs the probe's command to completion before it
+// answers, so the report is among the request's entries, and the session's
+// records keep it for the `Then`.
+When(
+  "the user asks pi for the configs of the mcp servers registered with it",
+  async function (this: ScenarioWorld) {
+    this.profileHarness();
+    await settledRegistry(this.pi);
     const { response, entries, extensionErrors, dialogs } = await this.pi.request({
       type: "prompt",
       message: `/${MCP_BUILTIN_CONFIG_PROBE_COMMAND}`,
@@ -76,7 +79,18 @@ Then(
       [response.data, extensionErrors, dialogs],
       [{ disposition: "handled" }, [], []],
     );
-    const rows = readRegisteredConfigs(entries).map(({ name, config }) => {
+    readRegisteredConfigs(entries);
+  },
+);
+
+// The whole list of MCP servers that extensions registered with Pi, in Pi's
+// order, each with its config as JSON and run tokens projected, from the
+// probe report the `When` asked for. A stdio server's command and arguments
+// name this run's Node and stub paths, so they are left out.
+Then(
+  "pi holds these mcp server configs, apart from each stdio server's command and arguments:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const rows = lastRegisteredConfigs(this.pi.recordsSince(0)).map(({ name, config }) => {
       const { command, args: _args, ...rest } = config;
       const shown = typeof command === "string" ? rest : config;
       return [name, projectTokens("config", JSON.stringify(shown), this.tokens)];

@@ -8,7 +8,9 @@
  * runs, it appends one custom entry that holds every MCP server an extension
  * registered with Pi, each with its name and its whole config, in Pi's order.
  * The reader requires exactly one such entry among a request's custom entries
- * and validates its shape.
+ * and validates its shape. A `Then` takes the last report the profile Pi
+ * printed in its session, which the `When` before it asked for, so it reads
+ * the report without asking Pi again.
  */
 
 import { fileURLToPath } from "node:url";
@@ -16,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { Type } from "typebox";
 import { Compile } from "typebox/compile";
 
-import type { CustomEntry } from "../pi-process.ts";
+import type { CustomEntry, RpcRecord } from "../pi-process.ts";
 
 /** The command that makes the probe report. No step text names it. */
 export const MCP_BUILTIN_CONFIG_PROBE_COMMAND = "pi-mcp-builtin-config-probe";
@@ -65,4 +67,27 @@ export function readRegisteredConfigs(entries: readonly CustomEntry[]): Register
   }
 
   return data;
+}
+
+// The probe report one record of Pi's session holds: none unless the record
+// appended a custom entry of the probe's type.
+function probeReportsOf(record: RpcRecord): CustomEntry[] {
+  const { type, entry } = record;
+  return type === "entry_appended" &&
+    typeof entry === "object" &&
+    entry !== null &&
+    "customType" in entry &&
+    entry.customType === MCP_BUILTIN_CONFIG_PROBE_ENTRY &&
+    "data" in entry
+    ? [{ customType: MCP_BUILTIN_CONFIG_PROBE_ENTRY, data: entry.data }]
+    : [];
+}
+
+/**
+ * Returns the last probe report among `records`, the records a profile Pi
+ * printed in its session. Fails when Pi printed no report, or when the report
+ * is not a list of named configs.
+ */
+export function lastRegisteredConfigs(records: readonly RpcRecord[]): RegisteredConfigs {
+  return readRegisteredConfigs(records.flatMap(probeReportsOf).slice(-1));
 }
