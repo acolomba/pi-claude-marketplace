@@ -551,3 +551,15 @@ item here. The milestone parent merges this file into the root log in Phase 6.
   run, since forcing trust cannot change it.
 - **Alternatives:** Seed red run only.
 - **Why dubious:** one red run beyond the checker's hint.
+
+### P2-DC-51: Plan 02-01's size warning is accepted without a second revision
+
+- **Phase / source:** Phase 2 plan check, iteration 2 (Phase 2 session).
+- **Severity:** Low. **Status:** open.
+- **Choice:** The checker's last warning (02-01 lists 20 files, about 125k
+  tokens) is accepted; the session proceeds to execution instead of a third
+  revision round.
+- **Alternatives:** Move the barrel export edit and its test to a later wave,
+  or split 02-01 further, which pushes Wave 2 plans into a new wave.
+- **Why dubious:** the tracer executor may lose quality late in the plan; the
+  checker rated it advisory and the split already moved the listing lift.
