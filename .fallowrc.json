@@ -1,7 +1,8 @@
 {
   "entry": [
     "extensions/pi-claude-marketplace/index.ts",
-    "extensions/pi-claude-marketplace/domain/mcp-implementation.ts"
+    "extensions/pi-claude-marketplace/domain/mcp-implementation.ts",
+    "extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts"
   ],
   "rulePacks": ["rule-packs/architecture.json"],
   "ignorePatterns": [".pi/**", ".planning/**"],
@@ -18,6 +19,18 @@
         "StoredMcpCompatibility",
         "effectiveMcpCompatibility",
         "profileFor"
+      ]
+    },
+    {
+      "file": "extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts",
+      "exports": [
+        "LegacyServers",
+        "LegacyServersReader",
+        "LegacyServersSource",
+        "LegacyServersUnreadableError",
+        "LegacyServersUnreadableReason",
+        "createLegacyServersReader",
+        "recordedMcpServers"
       ]
     },
     {
