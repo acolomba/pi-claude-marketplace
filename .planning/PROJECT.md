@@ -50,10 +50,11 @@ implementations, and a switch between them never needs action from the user.
   `exposure: "deferred"` (or `"direct"` for `alwaysLoad: true`), and
   project-scope servers only when Pi trusts the project. Generated agents'
   MCP grants are re-materialized for the active implementation.
-- The adapter's `-builtin:mcp` entry in `~/.pi/agent/settings.json` is
-  removed only when the adapter is absent and its onboarding state shows
-  that the adapter wrote it (amends NFR-10 and the rule that the extension
-  never edits Pi settings).
+- When neither implementation is active (no adapter, and built-in MCP
+  turned off, for example by the `-builtin:mcp` entry the adapter leaves in
+  `~/.pi/agent/settings.json`), a plugin with MCP servers is partially
+  available, and its marker tells the user to turn on Pi's built-in MCP or
+  install pi-mcp-adapter. The extension never edits Pi settings.
 - Every MCP behavioral test runs against both implementations, through
   `@adapter` and `@builtin` cucumber profiles with shared step definitions.
 - `docs/mcp-compatibility.md` gains a built-in column; CHANGELOG and README
@@ -61,15 +62,22 @@ implementations, and a switch between them never needs action from the user.
 
 **Decisions already made (user, 2026-11-04):**
 
-1. Remove `-builtin:mcp` from the user's Pi settings only when both hold:
-   the adapter is absent, and the adapter's onboarding state
-   (`piBuiltinMcpHandledVersion`) shows the adapter wrote it. Never touch a
-   `builtin:mcp` entry the user set. Amends NFR-10 and the "never edit Pi
-   settings" rule.
+1. Superseded 2026-11-04 (see below). It was: remove `-builtin:mcp` from
+   the user's Pi settings only when the adapter is absent and its
+   onboarding state (`piBuiltinMcpHandledVersion`) shows the adapter wrote
+   it.
 2. Built-in exposure: plugin servers get `exposure: "deferred"`, found
    through `tool_search` and called directly; a server with
    `alwaysLoad: true` gets `"direct"`.
 3. Run this as a GSD milestone.
+4. Replaces decision 1 (user, 2026-11-04, after research showed that
+   `piBuiltinMcpHandledVersion` cannot prove the adapter wrote the entry,
+   and that a cleanup at `session_start` takes effect only at the next
+   runtime build): the extension never edits Pi settings. With no active
+   implementation, plugins with MCP servers are partially available because
+   they require MCP support, and it is up to the user to turn on Pi's
+   built-in MCP or install pi-mcp-adapter. NFR-10 and the rule that the
+   extension never edits Pi settings stay unamended.
 
 **Key context:** The user's brief, with the verified Pi 1.5.0 and
 pi-mcp-adapter 7.0.0 findings, is kept verbatim in

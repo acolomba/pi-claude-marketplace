@@ -69,3 +69,15 @@ Follow AGENTS.md: the GSD workflow, `npm run check` green with 100% direct cover
 ## Parallelism
 
 "When you plan, plan for using maximum session parallelism through worktrees, with different sessions authorised to push to github."
+
+## Amendments
+
+2026-11-04, the user, after the stack, architecture, and pitfalls research
+reported that decision 1 cannot be carried out as written (verbatim):
+
+"for the removal of builtin mcp, then we report that plugins are partially
+available because they require mcp -- up to the user to enable either the
+builtin mcp or add the 3rd party mcp library"
+
+This replaces decision 1: the extension does not edit Pi settings, and
+NFR-10 is not amended.
