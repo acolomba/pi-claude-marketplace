@@ -194,6 +194,15 @@ Under the next release's MCP built-in section:
 
 - `orchestrators/plugin/mcp-verdict-read.ts` header: `update-swap.ts` dropped from the import ban (`67d71f0`).
 
+### Addendum after the review, verification, and transition (orchestrator)
+
+- **CHANGELOG.md, third bullet above (correction, P3-DC-112):** replace "`update` asks only when the active implementation would leave out a server of the new version" with "a dependency move during `install` or `update` asks only when the active implementation would leave out a server the installed version does not already leave out; a plain `update` asks as before when the new version is partially available".
+- **CHANGELOG.md (CR-01, WR-05):** "The first load after the upgrade records the MCP servers of plugins installed by earlier versions together with their implementation-neutral verdict, when the recorded version's servers can still be read."
+- **.planning/BACKLOG.md (P3-DC-122):** "apply refuses a declared install pending previews as will partially install; choose one behavior for both" (predates Phase 3 for every partially-available kind; Phase 3 makes it reachable for an sse plugin under Pi's built-in MCP).
+- **.planning/PROJECT.md (transition `evolve_project`; Phase 6 owns the file):** move MREC-03, MREC-04, MREC-05, MREC-06, and MREC-07 to Validated with "Phase 3 (mcp-builtin)"; add Key Decisions rows for the phase's load-bearing choices if the user accepts them in the review: the neutral stored verdict (`compatibilityBasis: "neutral"`, P3-DC-01/02/15), the D-MB-07 marker table and `requires:` naming (P3-DC-05/07), consent per active implementation with record-driven sites on the neutral view (P3-DC-09/10/20), and the user-run `update` keeping today's consent rules (P3-DC-112). Update "Last updated" to "after mcp-builtin Phase 3".
+- **orchestrators/mcp/recorded-servers.ts (frozen; Phase 6 hardening, from the security audit):** the git-source root callback returns `record.resolvedSource` with no containment check against `plugin-clones/`; path sources are contained. Only classification output reaches a row, so it is low severity; consider `assertPathInside` there.
+- **Known flakes (for the parent's list):** Phase 2's `features/mcp-server/lifecycle.feature:396` "A new session offers the plugin's tool again" failed once under the adapter profile under load (seed 115524) and passed 4/4 alone and in a full rerun (seed 888709).
+
 ## Combined-tree findings
 
 - The milestone's Phase 4 helper `installGrantedAgent` in `test/orchestrators/plugin/install-outcome.test.ts` did not compile against this branch's required `consentView` (D-P3-11). Fixed inside the merge commit; the parent should know the two phases touched the same options type.
