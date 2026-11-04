@@ -5242,3 +5242,73 @@ test("MREC-03: listing twice leaves state.json byte-identical and repeats the ro
     verify(ctx);
   });
 });
+
+/** A user-scope marketplace `mp1` offering `beta` 1.0.0, not installed, with one sse server. */
+async function seedSseCandidate(home: string, cwd: string): Promise<void> {
+  const userRoot = path.join(home, ".pi", "agent");
+  await seedMarketplace({
+    scope: "user",
+    scopeRoot: userRoot,
+    cwd,
+    mpName: "mp1",
+    manifest: { name: "mp1", plugins: [{ name: "beta", source: "./beta", version: "1.0.0" }] },
+    installablePluginDirs: ["beta"],
+  });
+  await writeFile(
+    path.join(userRoot, "marketplaces", "mp1", "beta", ".mcp.json"),
+    JSON.stringify({ mcpServers: { events: SSE_EVENTS } }),
+  );
+}
+
+test("MREC-03 / D-67-01: --partial keeps a not-installed sse plugin under Pi's built-in MCP", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedSseCandidate(home, cwd);
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+
+    // act
+    const marketplaces = await loadPluginListPayload({
+      ctx,
+      cwd,
+      partial: true,
+      mcpImplementation: "builtin",
+    });
+
+    // assert
+    assert.deepStrictEqual(marketplaces, [
+      {
+        name: "mp1",
+        scope: "user",
+        plugins: [
+          {
+            status: "partially-available",
+            name: "beta",
+            version: "1.0.0",
+            reasons: ["unsupported mcp"],
+          },
+        ],
+      },
+    ]);
+    verify(ctx);
+  });
+});
+
+test("MREC-03 / D-67-01: --partial leaves out a not-installed sse plugin under pi-mcp-adapter", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedSseCandidate(home, cwd);
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+
+    // act
+    const marketplaces = await loadPluginListPayload({
+      ctx,
+      cwd,
+      partial: true,
+      mcpImplementation: "adapter",
+    });
+
+    // assert
+    assert.deepStrictEqual(marketplaces, [{ name: "mp1", scope: "user", plugins: [] }]);
+    verify(ctx);
+  });
+});

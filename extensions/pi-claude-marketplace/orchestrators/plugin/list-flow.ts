@@ -415,6 +415,8 @@ async function enumerateMarketplacePlugins(args: {
       },
       locationsFor(pluginScope, opts.cwd),
       ownValue(pluginScopeConfig.plugins, `${manifestEntry.name}@${mpName}`)?.entry.enabled,
+      // MREC-03: the `--partial` bucket keys on the same view as the row.
+      opts.mcpImplementation,
     );
     if (shouldShow(opts, row.status, bucket)) {
       rows.push(row);

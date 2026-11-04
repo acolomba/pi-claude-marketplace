@@ -80,3 +80,51 @@ Feature: MCP server verdict list
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status              | reasons         | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp | project | 1.0.0   |
+
+  @adapter-only
+  Scenario: A plugin with an sse server is available to install, under pi-mcp-adapter (MREC-03)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | version |
+      | fixtures         | project           | demo@fixtures | demo | available |         | 1.0.0   |
+
+  @builtin-only
+  Scenario: A plugin with an sse server is partially available, under Pi's built-in MCP (MREC-03)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status              | reasons         | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-available | unsupported mcp | 1.0.0   |
