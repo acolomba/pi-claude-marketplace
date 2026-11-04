@@ -8,8 +8,12 @@
 // (ANAME-05, ANAME-07). The table writes `auth: "oauth"` itself where Claude
 // keeps OAuth beside `headers` (D-08-04); a plugin's own `auth` is dropped.
 //
-// `classifyMcpServer` sorts one server into supported, blocked by a Claude
-// feature pi-mcp-adapter cannot honor, or malformed by Claude's own schema.
+// `checkClaudeShape` is the one Claude-shape check every MCP implementation
+// shares (MSEL-01): it decides malformed and hands back the typed server.
+// `classifyMcpServer` is the pi-mcp-adapter verdict built on it: supported,
+// blocked by a Claude feature pi-mcp-adapter cannot honor, or malformed. The
+// built-in verdict lives in `mcp-builtin-features.ts` and uses the same check
+// and field-feature helpers.
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";
@@ -20,10 +24,13 @@ import { Compile } from "typebox/compile";
  * `command ~` and `args ~` are a leading home marker in a stdio server's
  * `command` or an `args` element. Claude Code passes it through literally, but
  * pi-mcp-adapter expands it to the home directory after interpolation, so no
- * written form keeps the value literal (AVAR-03).
+ * written form keeps the value literal (AVAR-03). `sse` is the SSE transport,
+ * which only Pi's built-in MCP rejects (MSEL-01), so only the built-in verdict
+ * returns it.
  */
 export type McpUnsupportedFeature =
   | "ws"
+  | "sse"
   | "sse-ide"
   | "ws-ide"
   | "sdk"
@@ -40,7 +47,7 @@ export interface DroppedMcpServer {
   readonly feature: McpUnsupportedFeature;
 }
 
-/** The verdict `classifyMcpServer` gives one declared server. */
+/** The verdict an MCP implementation gives one declared server. */
 export type McpServerVerdict =
   | { readonly kind: "supported" }
   | { readonly kind: "blocked"; readonly feature: McpUnsupportedFeature }
@@ -217,7 +224,7 @@ export function translateMcpServer(
 }
 
 // Claude Code 2.1.291's per-transport server schemas, chosen by `type` in
-// `classifyMcpServer`. Unknown keys stay allowed, as Claude's strip-mode
+// `checkClaudeShape`. Unknown keys stay allowed, as Claude's strip-mode
 // objects allow them. `role` and `request_timeout_ms` are never invalid, so
 // they are absent, and `oauth.xaa` accepts any value.
 const STRING_RECORD = Type.Record(Type.String(), Type.String());
@@ -228,14 +235,14 @@ const COMMON_FIELDS = {
   bareElicitationCapability: Type.Optional(Type.Boolean()),
 };
 
-const STDIO_SERVER = Compile(
-  Type.Object({
-    command: Type.String({ minLength: 1 }),
-    args: Type.Optional(Type.Array(Type.String())),
-    env: Type.Optional(STRING_RECORD),
-    ...COMMON_FIELDS,
-  }),
-);
+const STDIO_SERVER_SCHEMA = Type.Object({
+  command: Type.String({ minLength: 1 }),
+  args: Type.Optional(Type.Array(Type.String())),
+  env: Type.Optional(STRING_RECORD),
+  ...COMMON_FIELDS,
+});
+
+const STDIO_SERVER = Compile(STDIO_SERVER_SCHEMA);
 
 const OAUTH = Type.Object({
   clientId: Type.Optional(Type.String()),
@@ -274,18 +281,41 @@ const REMOTE_SERVER_SCHEMA = Type.Object({
 
 const REMOTE_SERVER = Compile(REMOTE_SERVER_SCHEMA);
 
-const WS_SERVER = Compile(
-  Type.Object({
-    url: Type.String(),
-    headers: Type.Optional(STRING_RECORD),
-    headersHelper: Type.Optional(Type.String()),
-    ...COMMON_FIELDS,
-  }),
-);
+const WS_SERVER_SCHEMA = Type.Object({
+  url: Type.String(),
+  headers: Type.Optional(STRING_RECORD),
+  headersHelper: Type.Optional(Type.String()),
+  ...COMMON_FIELDS,
+});
 
-type RemoteServer = Type.Static<typeof REMOTE_SERVER_SCHEMA>;
+const WS_SERVER = Compile(WS_SERVER_SCHEMA);
 
-function malformed(errors: readonly { instancePath: string; message: string }[]): McpServerVerdict {
+/**
+ * One declared server after the shared Claude-shape check (MSEL-01):
+ * malformed with Claude's first schema error, a host-only type (reported
+ * without validation), or a valid server typed by its transport. A valid
+ * remote server keeps its `type` as `transport`.
+ */
+export type McpServerShape =
+  | { readonly kind: "malformed"; readonly detail: string }
+  | {
+      readonly kind: "host-only";
+      readonly feature: Extract<
+        McpUnsupportedFeature,
+        "sse-ide" | "ws-ide" | "sdk" | "claudeai-proxy"
+      >;
+    }
+  | { readonly kind: "stdio"; readonly server: Type.Static<typeof STDIO_SERVER_SCHEMA> }
+  | {
+      readonly kind: "remote";
+      readonly transport: "sse" | "http" | "streamable-http";
+      readonly server: Type.Static<typeof REMOTE_SERVER_SCHEMA>;
+    }
+  | { readonly kind: "ws"; readonly server: Type.Static<typeof WS_SERVER_SCHEMA> };
+
+type MalformedShape = Extract<McpServerShape, { readonly kind: "malformed" }>;
+
+function malformed(errors: readonly { instancePath: string; message: string }[]): MalformedShape {
   const detail = errors
     .slice(0, 1)
     .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
@@ -304,11 +334,14 @@ function elicitationFeature(server: {
 }
 
 /**
- * The remote fields in table order: `headersHelper`, a truthy `oauth.xaa`,
- * then `bareElicitationCapability: true`. Tool permission rules do not block
- * (`unenforcedToolRules`).
+ * The remote field features both implementations block, in table order:
+ * `headersHelper`, then a truthy `oauth.xaa`. Tool permission rules do not
+ * block (`unenforcedToolRules`).
  */
-function remoteFeature(server: RemoteServer): McpUnsupportedFeature | undefined {
+export function remoteFieldFeature(server: {
+  readonly headersHelper?: string;
+  readonly oauth?: { readonly xaa?: unknown };
+}): McpUnsupportedFeature | undefined {
   if (server.headersHelper !== undefined) {
     return "headersHelper";
   }
@@ -317,7 +350,7 @@ function remoteFeature(server: RemoteServer): McpUnsupportedFeature | undefined 
     return "oauth.xaa";
   }
 
-  return elicitationFeature(server);
+  return undefined;
 }
 
 /** A Claude Code tool permission field that pi-mcp-adapter does not enforce. */
@@ -366,8 +399,11 @@ function startsWithHomeMarker(value: string): boolean {
   return LEADING_HOME.test(value) || LEADING_HOME_DEFAULT.test(value);
 }
 
-/** `command ~` before `args ~`, so a server with both reports its command. */
-function homeFeature(server: {
+/**
+ * The leading home features both implementations block (AVAR-03): `command ~`
+ * before `args ~`, so a stdio server with both reports its command.
+ */
+export function leadingHomeFeature(server: {
   readonly command: string;
   readonly args?: readonly string[];
 }): McpUnsupportedFeature | undefined {
@@ -378,15 +414,18 @@ function homeFeature(server: {
   return (server.args ?? []).some((arg) => startsWithHomeMarker(arg)) ? "args ~" : undefined;
 }
 
-function classifyStdio(server: unknown): McpServerVerdict {
+function stdioShape(server: unknown): McpServerShape {
   return STDIO_SERVER.Check(server)
-    ? featureVerdict(homeFeature(server) ?? elicitationFeature(server))
+    ? { kind: "stdio", server }
     : malformed(STDIO_SERVER.Errors(server));
 }
 
 // Claude's schema also checks `authServerMetadataUrl` as a URL, which the
 // typebox pattern cannot express.
-function classifyRemote(server: unknown): McpServerVerdict {
+function remoteShape(
+  server: unknown,
+  transport: "sse" | "http" | "streamable-http",
+): McpServerShape {
   if (!REMOTE_SERVER.Check(server)) {
     return malformed(REMOTE_SERVER.Errors(server));
   }
@@ -396,29 +435,24 @@ function classifyRemote(server: unknown): McpServerVerdict {
     return { kind: "malformed", detail: "/oauth/authServerMetadataUrl: must be a valid URL" };
   }
 
-  return featureVerdict(remoteFeature(server));
+  return { kind: "remote", transport, server };
 }
 
-function classifyWs(server: unknown): McpServerVerdict {
-  return WS_SERVER.Check(server)
-    ? { kind: "blocked", feature: "ws" }
-    : malformed(WS_SERVER.Errors(server));
+function wsShape(server: unknown): McpServerShape {
+  return WS_SERVER.Check(server) ? { kind: "ws", server } : malformed(WS_SERVER.Errors(server));
 }
 
 /**
- * Classifies one declared server by Claude Code 2.1.291's server schemas
- * (ANAME-07). A non-object, an unknown `type`, or a config its transport's
- * schema rejects is `malformed`, with the first error as `detail`. A host-only
- * type (`sse-ide`, `ws-ide`, `sdk`, `claudeai-proxy`) is `blocked` without
- * validation, since Claude does not run one from a plugin. A valid server that
- * uses a feature pi-mcp-adapter cannot honor is `blocked` with the first such
- * feature in table order: `ws`, `headersHelper`, `oauth.xaa`, then for stdio
- * `command ~` and `args ~` (AVAR-03), then `bareElicitationCapability`.
- * `role`, `discoveryCache` and the tool permission rules never block
- * (`unenforcedToolRules`, AMIG-01), and neither does a `~` in a remote
- * server's `url` or `headers`, which the adapter does not home-expand.
+ * The Claude-shape check every MCP implementation shares (MSEL-01), by Claude
+ * Code 2.1.291's server schemas (ANAME-07). A non-object, an unknown `type`,
+ * or a config its transport's schema rejects is `malformed`, with the first
+ * error as `detail`. A host-only type (`sse-ide`, `ws-ide`, `sdk`,
+ * `claudeai-proxy`) is reported without validation, since Claude does not run
+ * one from a plugin. A valid stdio, remote, or `ws` server comes back typed.
+ * A server is malformed for one implementation exactly when it is malformed
+ * for every other.
  */
-export function classifyMcpServer(server: unknown): McpServerVerdict {
+export function checkClaudeShape(server: unknown): McpServerShape {
   if (!isPlainObject(server)) {
     return { kind: "malformed", detail: "(root): must be object" };
   }
@@ -426,19 +460,46 @@ export function classifyMcpServer(server: unknown): McpServerVerdict {
   switch (server.type) {
     case undefined:
     case "stdio":
-      return classifyStdio(server);
+      return stdioShape(server);
     case "sse":
     case "http":
     case "streamable-http":
-      return classifyRemote(server);
+      return remoteShape(server, server.type);
     case "ws":
-      return classifyWs(server);
+      return wsShape(server);
     case "sse-ide":
     case "ws-ide":
     case "sdk":
     case "claudeai-proxy":
-      return { kind: "blocked", feature: server.type };
+      return { kind: "host-only", feature: server.type };
     default:
       return { kind: "malformed", detail: `unknown type ${JSON.stringify(server.type)}` };
+  }
+}
+
+/**
+ * The pi-mcp-adapter verdict for one declared server (ANAME-07). A server the
+ * shared Claude-shape check finds malformed is `malformed`; a host-only type
+ * is `blocked` by its type. A valid server that uses a feature pi-mcp-adapter
+ * cannot honor is `blocked` with the first such feature in table order: `ws`,
+ * `headersHelper`, `oauth.xaa`, then for stdio `command ~` and `args ~`
+ * (AVAR-03), then `bareElicitationCapability`. `role`, `discoveryCache` and
+ * the tool permission rules never block (`unenforcedToolRules`, AMIG-01), and
+ * neither does a `~` in a remote server's `url` or `headers`, which the
+ * adapter does not home-expand.
+ */
+export function classifyMcpServer(server: unknown): McpServerVerdict {
+  const shape = checkClaudeShape(server);
+  switch (shape.kind) {
+    case "malformed":
+      return shape;
+    case "host-only":
+      return { kind: "blocked", feature: shape.feature };
+    case "ws":
+      return { kind: "blocked", feature: "ws" };
+    case "stdio":
+      return featureVerdict(leadingHomeFeature(shape.server) ?? elicitationFeature(shape.server));
+    case "remote":
+      return featureVerdict(remoteFieldFeature(shape.server) ?? elicitationFeature(shape.server));
   }
 }

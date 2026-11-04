@@ -100,6 +100,7 @@ type DroppedMcpServerSchema = Type.TObject<{
   feature: Type.TUnion<
     [
       Type.TLiteral<"ws">,
+      Type.TLiteral<"sse">,
       Type.TLiteral<"sse-ide">,
       Type.TLiteral<"ws-ide">,
       Type.TLiteral<"sdk">,

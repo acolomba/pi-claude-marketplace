@@ -2,14 +2,19 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  checkClaudeShape,
   classifyMcpServer,
+  leadingHomeFeature,
+  remoteFieldFeature,
   translateMcpServer,
   unenforcedToolRules,
 } from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
 
 import type {
+  McpServerShape,
   McpServerVerdict,
   McpUnenforcedToolRule,
+  McpUnsupportedFeature,
 } from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
 
 interface TranslationRow {
@@ -771,6 +776,181 @@ describe("unenforcedToolRules", () => {
 
       // assert
       assert.deepStrictEqual(reportedRules, expectedRules);
+    });
+  }
+});
+
+interface ShapeRow {
+  readonly title: string;
+  readonly server: unknown;
+  readonly shape: McpServerShape;
+}
+
+// A valid server keeps keys its schema does not name, such as `type`. Each
+// expected server is declared apart so the shape type allows those keys.
+const TYPED_STDIO = { type: "stdio", command: "node" };
+const TYPED_SSE = { type: "sse", url: "x" };
+const TYPED_HTTP = { type: "http", url: "x", headersHelper: "./h.sh" };
+const TYPED_STREAMABLE_HTTP = { type: "streamable-http", url: "x" };
+const TYPED_WS = { type: "ws", url: "wss://x" };
+
+const SHAPE_ROWS: readonly ShapeRow[] = [
+  {
+    title: "MSEL-01: a non-object is malformed",
+    server: "node",
+    shape: { kind: "malformed", detail: "(root): must be object" },
+  },
+  {
+    title: "MSEL-01: an unknown type is malformed",
+    server: { type: "grpc", url: "x" },
+    shape: { kind: "malformed", detail: 'unknown type "grpc"' },
+  },
+  {
+    title: "MSEL-01: a stdio config its schema rejects is malformed with the first error",
+    server: { command: "node", args: ["a", 2] },
+    shape: { kind: "malformed", detail: "/args/1: must be string" },
+  },
+  {
+    title: "MSEL-01: a remote config its schema rejects is malformed with the first error",
+    server: { type: "sse", url: "x", headers: { A: 1 } },
+    shape: { kind: "malformed", detail: "/headers/A: must be string" },
+  },
+  {
+    title: "MSEL-01: an authServerMetadataUrl that does not parse is malformed",
+    server: { type: "http", url: "x", oauth: { authServerMetadataUrl: "https://bad host" } },
+    shape: { kind: "malformed", detail: "/oauth/authServerMetadataUrl: must be a valid URL" },
+  },
+  {
+    title: "MSEL-01: a ws config its schema rejects is malformed with the first error",
+    server: { type: "ws", url: 5 },
+    shape: { kind: "malformed", detail: "/url: must be string" },
+  },
+  {
+    title: "MSEL-01: a host-only type is reported without validation",
+    server: { type: "claudeai-proxy", url: 5 },
+    shape: { kind: "host-only", feature: "claudeai-proxy" },
+  },
+  {
+    title: "MSEL-01: a valid stdio config with no type comes back as stdio",
+    server: { command: "node", args: ["server.js"] },
+    shape: { kind: "stdio", server: { command: "node", args: ["server.js"] } },
+  },
+  {
+    title: "MSEL-01: a valid stdio config with type stdio comes back as stdio",
+    server: { type: "stdio", command: "node" },
+    shape: { kind: "stdio", server: TYPED_STDIO },
+  },
+  {
+    title: "MSEL-01: a valid sse config comes back as remote with its transport",
+    server: { type: "sse", url: "x" },
+    shape: { kind: "remote", transport: "sse", server: TYPED_SSE },
+  },
+  {
+    title: "MSEL-01: a valid http config comes back as remote with its transport",
+    server: { type: "http", url: "x", headersHelper: "./h.sh" },
+    shape: { kind: "remote", transport: "http", server: TYPED_HTTP },
+  },
+  {
+    title: "MSEL-01: a valid streamable-http config comes back as remote with its transport",
+    server: { type: "streamable-http", url: "x" },
+    shape: { kind: "remote", transport: "streamable-http", server: TYPED_STREAMABLE_HTTP },
+  },
+  {
+    title: "MSEL-01: a valid ws config comes back as ws",
+    server: { type: "ws", url: "wss://x" },
+    shape: { kind: "ws", server: TYPED_WS },
+  },
+];
+
+describe("checkClaudeShape", () => {
+  for (const { title, server, shape } of SHAPE_ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedShape = shape;
+
+      // act
+      const checkedShape = checkClaudeShape(server);
+
+      // assert
+      assert.deepStrictEqual(checkedShape, expectedShape);
+    });
+  }
+});
+
+interface HomeRow {
+  readonly title: string;
+  readonly server: { readonly command: string; readonly args?: readonly string[] };
+  readonly feature: McpUnsupportedFeature | undefined;
+}
+
+const HOME_ROWS: readonly HomeRow[] = [
+  {
+    title: "AVAR-03: reports command ~ before args ~",
+    server: { command: "~/a", args: ["~/b"] },
+    feature: "command ~",
+  },
+  {
+    title: "AVAR-03: reports args ~ for a leading home marker in an args element",
+    server: { command: "node", args: ["--x", "~/a"] },
+    feature: "args ~",
+  },
+  {
+    title: "AVAR-03: reports nothing without a leading home marker",
+    server: { command: "node" },
+    feature: undefined,
+  },
+];
+
+describe("leadingHomeFeature", () => {
+  for (const { title, server, feature } of HOME_ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedFeature = feature;
+
+      // act
+      const homeFeature = leadingHomeFeature(server);
+
+      // assert
+      assert.strictEqual(homeFeature, expectedFeature);
+    });
+  }
+});
+
+interface RemoteFieldRow {
+  readonly title: string;
+  readonly server: { readonly headersHelper?: string; readonly oauth?: { readonly xaa?: unknown } };
+  readonly feature: McpUnsupportedFeature | undefined;
+}
+
+const REMOTE_FIELD_ROWS: readonly RemoteFieldRow[] = [
+  {
+    title: "ANAME-07: reports headersHelper before a truthy oauth.xaa",
+    server: { headersHelper: "./h.sh", oauth: { xaa: true } },
+    feature: "headersHelper",
+  },
+  {
+    title: "ANAME-07: reports a truthy oauth.xaa",
+    server: { oauth: { xaa: { idp: "x" } } },
+    feature: "oauth.xaa",
+  },
+  {
+    title: "ANAME-07: reports nothing for a falsy oauth.xaa and no headersHelper",
+    server: { oauth: { xaa: 0 } },
+    feature: undefined,
+  },
+];
+
+describe("remoteFieldFeature", () => {
+  for (const { title, server, feature } of REMOTE_FIELD_ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedFeature = feature;
+
+      // act
+      const fieldFeature = remoteFieldFeature(server);
+
+      // assert
+      assert.strictEqual(fieldFeature, expectedFeature);
     });
   }
 });

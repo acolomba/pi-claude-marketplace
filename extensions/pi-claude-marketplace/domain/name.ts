@@ -618,34 +618,54 @@ export function mcpServerDisplayName(plugin: string, server: string): string {
 }
 
 /**
- * MCP server key generator (ANAME-01).
- *
- * Format: `plugin_<plugin>_<server>_`. Claude Code names a plugin server
- * `plugin:<plugin>:<server>` and replaces every character outside
- * `[A-Za-z0-9_-]` with `_` when it builds a tool name. This builder applies
- * the same rule to `mcpServerDisplayName`'s string, then appends one `_`. pi-mcp-adapter
- * names a tool `<toolPrefix>__<key>_<tool>`, so the trailing `_` and the
- * entry's `toolPrefix: "mcp"` give Claude Code's `mcp__plugin_<p>_<s>__<tool>`.
+ * Claude Code's normalized server name, `plugin_<plugin>_<server>`: Claude
+ * Code names a plugin server `plugin:<plugin>:<server>` and replaces every
+ * character outside `[A-Za-z0-9_-]` with `_` when it builds a tool name.
  *
  * The pattern has no `u` flag, so it replaces each UTF-16 code unit as Claude
  * Code does: an astral character becomes two `_`. This is the only copy of the
- * pattern; every generated MCP server key comes from here.
+ * pattern; `generatedMcpServerKey` and `builtinMcpServerName` both build on it.
  *
  * Only `plugin` is screened. A declared server name is a JSON key that may
- * hold any character, and the replacement makes every key safe.
+ * hold any character, and the replacement makes every name safe.
+ */
+function claudeMcpServerName(plugin: string, server: string): string {
+  assertSafeName(plugin);
+  return mcpServerDisplayName(plugin, server).replaceAll(/[^A-Za-z0-9_-]/g, "_");
+}
+
+/**
+ * MCP server key generator (ANAME-01).
+ *
+ * Format: `plugin_<plugin>_<server>_`: Claude Code's normalized server name
+ * plus one `_`. pi-mcp-adapter names a tool `<toolPrefix>__<key>_<tool>`, so
+ * the trailing `_` and the entry's `toolPrefix: "mcp"` give Claude Code's
+ * `mcp__plugin_<p>_<s>__<tool>`. Every generated MCP server key comes from
+ * here.
  */
 export function generatedMcpServerKey(plugin: string, server: string): string {
-  assertSafeName(plugin);
-  const claudeServerName = mcpServerDisplayName(plugin, server);
-  return `${claudeServerName.replaceAll(/[^A-Za-z0-9_-]/g, "_")}_`;
+  return `${claudeMcpServerName(plugin, server)}_`;
+}
+
+/**
+ * D-MB-13: the name a plugin server registers under in Pi's built-in MCP,
+ * `plugin_<plugin>_<server>`. It is Claude Code's normalized server name with
+ * `-` kept and no trailing `_`, which Pi's server-name rule
+ * (`^[A-Za-z0-9_-]+$`, no length limit) accepts. Pi folds `-` and cuts long
+ * names only in tool names, which the built-in profile in
+ * `mcp-implementation.ts` reproduces.
+ */
+export function builtinMcpServerName(plugin: string, server: string): string {
+  return claudeMcpServerName(plugin, server);
 }
 
 /**
  * ANAME-03: a server key with every `-` folded to `_`. pi-mcp-adapter names a
  * server's deferred-tool namespace `mcp__` plus the key with `-` folded, so
  * two keys equal after the fold share one namespace in Pi. Claude Code keeps
- * `-`, so refusing such a pair is a Pi capability gap. This is the only fold
- * of a server key.
+ * `-`, so refusing such a pair is a Pi capability gap. Pi's built-in MCP
+ * folds a registered server name the same way in its tool names (D-MB-13).
+ * This is the only fold of a server key.
  */
 export function foldedMcpServerKey(key: string): string {
   return key.replaceAll("-", "_");
