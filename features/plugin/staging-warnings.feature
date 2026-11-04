@@ -110,6 +110,7 @@ Feature: Plugin staging warnings
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
+  @mcp
   Scenario: An install that fails in its mcp phase reports the skill the skills phase skipped after the failed row
     Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
     Given a directory blocks the mcp-adapter.json file of the project scope
@@ -122,6 +123,7 @@ Feature: Plugin staging warnings
       | marketplace name | marketplace scope | id            | name | status | reasons | scope   | version | cause chain                   | cause truncated | leaks | rollback partial |
       | fixtures         | project           | demo@fixtures | demo | failed |         | project | 1.0.0   | {mcp-adapter.json read error} | false           |       |                  |
 
+  @mcp
   Scenario: An update that fails in its mcp phase reports the skill the skills phase skipped after the failed row
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the marketplace "fixtures" offers these plugins:
@@ -138,6 +140,7 @@ Feature: Plugin staging warnings
       | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | from  | version | cause chain                   | cause truncated | leaks | rollback partial |
       | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | 1.0.0 | 1.1.0   | {mcp-adapter.json read error} | false           |       |                  |
 
+  @mcp
   Scenario: A reinstall that fails in its mcp phase reports the skill the skills phase skipped after the failed row
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
@@ -184,6 +187,7 @@ Feature: Plugin staging warnings
       | marketplace name | marketplace scope | marketplace status | id            | name | status  | reasons               | scope   | from  | to    |
       | fixtures         | project           | updated            | demo@fixtures | demo | updated | requires pi-subagents | project | 1.0.0 | 1.1.0 |
 
+  @mcp
   Scenario: A marketplace update with autoupdate on reports a moved plugin that fails in its mcp phase under an update failed header
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin marketplace autoupdate fixtures --scope project"

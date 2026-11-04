@@ -652,6 +652,7 @@ Feature: Plugin update
       | demo@fixtures | 1.0.0   | true    |
       | lib@tools     | 1.0.0   | true    |
 
+  @mcp
   Scenario: A bridge failure after an update starts replacing files reports the reinstall remedy
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

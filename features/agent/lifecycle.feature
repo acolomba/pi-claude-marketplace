@@ -111,6 +111,7 @@ Feature: Agent lifecycle
       | 2    | assistant   | tool call subagent {"action":"list"}                                                                   |
       | 2    | tool result | subagent returned: agent tools:auditor, aliases pi-claude-marketplace-tools-auditor: Audits the build. |
 
+  @mcp
   Scenario: An install that fails in its mcp phase leaves no agent of the plugin in the list
     Given the marketplace "fixtures" offers these plugins:
       | name  | version |

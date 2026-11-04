@@ -1036,6 +1036,7 @@ Feature: Plugin import
       | diagnostic | warning  | false        | 1 import diagnostic surfaced. | Cannot read user scope state: state.json at state.json has an unsupported schema version |
     Then the command result contains no absolute sandbox path
 
+  @mcp
   Scenario: Importing a plugin whose install rollback cannot finish names the rollback phase
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -1071,6 +1072,7 @@ Feature: Plugin import
       | kind  | name       |
       | skill | demo-skill |
 
+  @mcp
   Scenario: Importing a disabled plugin whose enable rollback cannot finish names the rollback phase
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -1108,6 +1110,7 @@ Feature: Plugin import
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | false   |
 
+  @mcp
   Scenario: Importing a plugin whose dependency rollback cannot finish names the dependency and its rollback phase
     Given the marketplace "fixtures" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -1142,6 +1145,7 @@ Feature: Plugin import
       | fixtures         | user              | added              | lib@fixtures | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
     Then the installation record of the user scope holds no plugins
 
+  @mcp
   Scenario: Importing two plugins whose shared dependency rollback cannot finish names that dependency once
     Given the marketplace "fixtures" offers these plugins with dependencies:
       | name | version | dependencies |
