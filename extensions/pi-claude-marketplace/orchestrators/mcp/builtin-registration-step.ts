@@ -28,7 +28,10 @@
  * scope's `sources/<marketplace>/` checkout.
  *
  * NFR-2: neither step throws. Every skipped record, scope, or server is
- * debug-logged on the `mcp` channel with names only. The steps never handle
+ * debug-logged on the `mcp` channel with its name and the error message, never
+ * a config value; each absolute path in the line is cut to its last segment,
+ * since state, data-directory, and Pi registry errors name absolute paths.
+ * The frozen legacy reader logs its own refusals. The steps never handle
  * `mcp_servers_change`, which would make this extension the connector (PI-11).
  */
 
@@ -50,6 +53,7 @@ import {
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { SCOPES } from "../../shared/types.ts";
 
 import { createLegacyServersReader, recordedMcpServers } from "./recorded-servers.ts";
@@ -100,7 +104,7 @@ const REGISTRATION_NOTES = {
 };
 
 function debugLog(detail: string): void {
-  hookDebugLog(detail, "mcp");
+  hookDebugLog(redactAbsolutePaths(detail), "mcp");
 }
 
 function enabledRecords(state: ExtensionState): RecordSource[] {

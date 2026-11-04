@@ -399,7 +399,7 @@ describe("builtinRegistrationStep", () => {
 
     // assert
     assert.deepStrictEqual(logged, [
-      `[mcp] MCP servers of the project scope not registered: state.json at ${projectState} has an unsupported schema version`,
+      "[mcp] MCP servers of the project scope not registered: state.json at state.json has an unsupported schema version",
     ]);
     verify(pi);
     verify(ctx);
@@ -419,7 +419,7 @@ describe("builtinRegistrationStep", () => {
 
     // assert
     assert.deepStrictEqual(logged, [
-      `[mcp] MCP servers of the user scope not registered: state.json at ${statePath} has an unsupported schema version`,
+      "[mcp] MCP servers of the user scope not registered: state.json at state.json has an unsupported schema version",
     ]);
     verify(pi);
     verify(ctx);
@@ -746,6 +746,32 @@ describe("builtinRegistrationStep", () => {
     // assert
     assert.deepStrictEqual(logged, [
       '[mcp] MCP servers of ..@mp not registered: pluginDataDir plugin name ".." must not be "." or "..".',
+    ]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("NFR-2: a refused registration is logged with each absolute path cut to its last segment", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(fixture, "user", { demo: installRecord(fixture.pluginRoot) });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_stub", stubConfig(fixture, "user", fixture.pluginRoot));
+    }).thenThrow(
+      new Error(
+        'MCP server "plugin_demo_stub" is already registered by extension "/opt/pi/extensions/other.ts"',
+      ),
+    );
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      '[mcp] MCP server plugin_demo_stub not registered: MCP server "plugin_demo_stub" is already registered by extension "other.ts"',
     ]);
     verify(pi);
     verify(ctx);
