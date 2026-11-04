@@ -424,7 +424,7 @@ Plans:
 - Wave 2, in parallel: the server verdicts in `info.ts` (MREC-04); markers, `requires:`, severity, and the marker rows in `features/plugin/*` and `features/marketplace/update.feature` (MREC-05 marker, MREC-07); the consent split and convergence (`install-outcome.ts` gate, `update-preflight.ts`, the `partial` functions, `reconcile/convergence.ts`, `import/execute.ts`), with `mcp-migration.ts` made explicit about the adapter profile (MREC-03 install side, MREC-05 consent, MREC-06).
 - Wave 3: merge the milestone branch (Phases 5, 4, and 2), re-run every owned row under both profiles, parent lines, and the phase gate.
 
-**Plans:** 3/9 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the `Dependency` type change gets its own wave before the marker rule, and the consent split, convergence, and the `requires:` line run in parallel after the rule)
+**Plans:** 4/9 plans executed in 5 waves (the suggested waves, split at planning so each wave's plans own disjoint files: the `Dependency` type change gets its own wave before the marker rule, and the consent split, convergence, and the `requires:` line run in parallel after the rule)
 
 Plans:
 **Wave 1**
@@ -435,7 +435,7 @@ Plans:
 - [x] 03-03-PLAN.md — Wave 2: `info` per-server verdicts and status rows, `fetch` rows, and the `invalid-configs.feature` retag (MREC-03, MREC-04)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 03-04-PLAN.md — Wave 3: the D-MB-07 marker rule and severity, partially-installed list markers, the style guide, and the no-implementation scenarios (MREC-05, MREC-07)
+- [x] 03-04-PLAN.md — Wave 3: the D-MB-07 marker rule and severity, partially-installed list markers, the style guide, and the no-implementation scenarios (MREC-05, MREC-07)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 03-05-PLAN.md — Wave 4: install consent against the active implementation; enable, promotion, and cascades never ask after a switch (MREC-03, MREC-05, MREC-06)
@@ -501,7 +501,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Foundation and Pi 1.5.0 | 14/14 | Complete    | 2026-11-04 |
 | 2. Built-in Materialization | 0/TBD | Not started | - |
-| 3. Read-Time Verdicts | 3/9 | In Progress | - |
+| 3. Read-Time Verdicts | 4/9 | In Progress | - |
 | 4. Agent Grants | 0/TBD | Not started | - |
 | 5. Hook Tool Names | 0/TBD | Not started | - |
 | 6. Release Docs and Combined Tree | 0/TBD | Not started | - |
