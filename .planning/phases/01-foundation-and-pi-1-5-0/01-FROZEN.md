@@ -3,9 +3,11 @@
 This is the authoritative frozen record for the parallel child sessions of the
 mcp-builtin milestone (Phases 2 to 5). It lists what ROADMAP's "Frozen after
 Phase 1" and "Frozen cross-phase interfaces" sections ask for, as the code
-stands at the gate commit `f3ab832f52a3c98c43b56c5e3def436aba24f556`. Where the
-build differs from the ROADMAP text, this file wins, and the entry names the
-dubious choice (`P1-DC-NN` in `DUBIOUS-CHOICES.md`) that explains it.
+stands at the gate commit `f3ab832f52a3c98c43b56c5e3def436aba24f556`, with the
+code review fixes of `01-REVIEW-FIX.md` applied (CR-01, CR-02, WR-01 to
+WR-05, IN-05). Where the build differs from the ROADMAP text, this file wins,
+and the entry names the dubious choice (`P1-DC-NN` in `DUBIOUS-CHOICES.md`)
+or the review finding that explains it.
 
 A child phase never edits a file listed here. When a child needs a change to
 one, it writes the change under "Parent lines" in its last plan's SUMMARY.md,
@@ -119,7 +121,7 @@ export interface McpImplementationProfile {
   readonly id: McpImplementationId;
   readonly classify: (config: unknown) => McpServerVerdict;
   readonly serverName: (plugin: string, server: string) => string;
-  readonly toolNamePrefix: (plugin: string, server: string) => string;
+  readonly toolNamePrefix: (plugin: string, server: string) => string | undefined;
   readonly toolName: (plugin: string, server: string, tool: string) => string;
   readonly grantSelector: (plugin: string, server: string) => string;
 }
@@ -158,6 +160,13 @@ Differences from the ROADMAP text:
   P1-DC-22).
 - The profile adds `toolName(plugin, server, tool)`, the full tool name with
   Pi's long-name cut for built-in (P1-DC-22).
+- `toolNamePrefix` returns `string | undefined` (CR-02). It promises only a
+  text that every tool name of the server starts with. The adapter profile
+  always returns one. The built-in profile returns `undefined` when its
+  namespace is longer than the 55 characters Pi keeps of a cut tool name
+  (plugin and server names of 41 or more characters together). A caller
+  without a prefix matches the full names from `toolName` instead, as the
+  harness listing wait does.
 - The adapter `toolName` matches pi-mcp-adapter 7.0.0 `formatToolName` (`.`
   folds to `_`, and a name that already carries the prefix is not prefixed
   again; P1-DC-28).
@@ -206,6 +215,10 @@ compatibilityBasis?: "neutral";
 export function mcpServerConfigsOf(
   declared: Readonly<Record<string, unknown>>,
 ): NonNullable<PluginInstallRecord["mcpServerConfigs"]>;
+export function replaceCompatibility(
+  record: Pick<PluginInstallRecord, "compatibility" | "compatibilityBasis">,
+  compatibility: PluginInstallRecord["compatibility"],
+): void;
 ```
 
 File `orchestrators/mcp/recorded-servers.ts`:
@@ -222,7 +235,8 @@ export interface LegacyServersSource {
   readonly marketplace: Pick<ExtensionState["marketplaces"][string], "manifestPath" | "marketplaceRoot" | "source">;
   readonly pluginName: string;
 }
-export type LegacyServersUnreadableReason = "not-in-manifest" | "unavailable" | "root-mismatch";
+export type LegacyServersUnreadableReason =
+  | "not-in-manifest" | "unavailable" | "root-mismatch" | "version-mismatch";
 export class LegacyServersUnreadableError extends Error { /* reason, plugin, marketplace */ }
 export function createLegacyServersReader(source: LegacyServersSource): LegacyServersReader;
 ```
@@ -234,6 +248,29 @@ frozen file (P1-DC-34). The typed error lives in `recorded-servers.ts`
 (P1-DC-35). A legacy record answers `re-resolved`, and every refusal answers
 `unreadable`. Phase 1 also writes the field in the disabled-plugin update
 write in `orchestrators/plugin/update-preflight.ts`, a Phase 3 file (P1-DC-17).
+
+Review fixes:
+
+- `compatibilityBasis` describes the `compatibility` beside it (WR-02). Every
+  write that replaces or changes `compatibility` goes through
+  `replaceCompatibility`, which clears the basis; a writer of the neutral
+  verdict sets `compatibilityBasis = "neutral"` after that call. The update
+  swap, the update intent mark, the disabled pin refresh, and the AMIG-01
+  dropped-server write use it. An install writes a new record without the
+  basis.
+- The disabled pin refresh's field list is the exported `DISABLED_PIN_FIELDS`
+  in `update-preflight.ts` (version, resolvedSource, resolvedSha,
+  resolvedVersion, compatibility, compatibilityBasis, mcpServerConfigs,
+  mcpBundle). `apply`'s pin restore after a failed deferred enable restores
+  those fields and `updatedAt`, and removes each one the saved record lacked
+  (CR-01).
+- The legacy reader refuses with `version-mismatch` when the version install
+  would record for the re-resolution (`install-outcome.ts`
+  `deriveInstallVersion`, now exported) is not the record's `version`
+  (WR-01). A record with `resolvedVersion` derives the version at its
+  release tag.
+- `recordedMcpServers` logs a reader failure to the `mcp` debug channel
+  before it answers `unreadable` (WR-03).
 
 ### 4. The resolver's declared servers
 
@@ -333,12 +370,15 @@ const lookup: McpStatusLookup = {
 return { ...built, block: withMcpServerStatus(built.block, record, lookup, projectRecord) };
 // platform/mcp-builtin-status.ts (Phase 2 fills the body)
 export function createBuiltinMcpStatusReader(
-  _pi: Pick<PiMcpRegistry, "getMcpServers">,
+  _pi: Pick<PiMcpRegistry, "getMcpServers"> & Pick<PiInventory, "getAllTools">,
 ): McpStatusReader;
 ```
 
 Differences: `McpStatusLookup` carries `projectTrusted` and `cwd`, so Phase 2
-needs no frozen-file edit for BLT-05 (P1-DC-19, P1-DC-22). The adapter reader
+needs no frozen-file edit for BLT-05 (P1-DC-19, P1-DC-22). The built-in
+reader's parameter also exposes `getAllTools`, because whether a server's
+tools are listed is the only connection signal Pi's built-in MCP gives
+(WR-04). Building the reader and the seed's lookup still read nothing. The adapter reader
 serves both `adapter` and `none` (P1-DC-20). Phase 2 owns the body of
 `withMcpServerStatus` in `orchestrators/plugin/info-mcp-status.ts`.
 
@@ -353,7 +393,8 @@ export function builtinMcpServerName(plugin: string, server: string): string; //
 The registered name is Claude Code's normalized name with `-` kept and no
 trailing `_` (P1-DC-10). Pi's long-name rule is in the built-in profile, not in
 the name: `toolNamePrefix` is `mcp__` plus the name with `-` folded to `_`,
-plus `__`; `toolName` replaces every character outside `[A-Za-z0-9_]` in
+plus `__`, or `undefined` when that text is longer than 55 characters
+(CR-02); `toolName` replaces every character outside `[A-Za-z0-9_]` in
 `mcp__<server>__<tool>` with `_`, and a name over 64 characters keeps its
 first 55 characters, then `_` and the first 8 hex of
 `sha256("<server>\0<tool>")` (Pi 1.5.0 `createMcpToolName`). Pi's extra hash
@@ -414,6 +455,12 @@ for two tools that sanitize to one name cannot be predicted (recorded gap).
   under `builtinMcpServerName(plugin, server)`, deferred, and steps aside when
   Pi already has the folded name or an `mcp.json` server of that name
   (P1-DC-05). The list lives at `<home>/builtin-mcp-stand-in.json` (P1-DC-32).
+- **Listing wait:** `waitForStubListing` under `builtin` waits for a tool in
+  the server's built-in namespace, or, when `toolNamePrefix` returns
+  `undefined`, for a tool whose name is the `toolName` of one of the stub's
+  tools. `features/lib/mcp-stub-server.ts` exports those tool names as
+  `STUB_TOOL_NAMES` (CR-02). `stubPidsIn` reads a pid file that vanished after
+  the listing as an exited stub (WR-05).
 - **Shared Pi:** it follows the profile (pi-mcp-adapter under `adapter`, no
   companion under `builtin`, P1-DC-03), with a seeded
   `mcp-onboarding.json` under `adapter` (P1-DC-13). Each Pi is checked against
@@ -435,18 +482,20 @@ removes each entry whose exports have a consumer on the combined tree.
   (beside the original `extensions/pi-claude-marketplace/index.ts`, which
   stays).
 - `ignoreExports` for `domain/mcp-implementation.ts`: `ActiveMcpImplementation`,
-  `EffectiveMcpCompatibility`, `McpImplementationId`,
-  `McpImplementationProfile`, `RecordedMcpServer`, `RecordedMcpServers`,
-  `StoredMcpCompatibility`, `effectiveMcpCompatibility`, `profileFor`.
+  `EffectiveMcpCompatibility`, `StoredMcpCompatibility`,
+  `effectiveMcpCompatibility`.
 - `ignoreExports` for `orchestrators/mcp/recorded-servers.ts`: `LegacyServers`,
   `LegacyServersReader`, `LegacyServersSource`,
   `LegacyServersUnreadableError`, `LegacyServersUnreadableReason`,
   `createLegacyServersReader`, `recordedMcpServers`.
-- `ignoreExports` for `platform/pi-api.ts`: `McpServerConfig`,
-  `PiMcpRegistry`, `RegisteredMcpServer`.
-- `ignoreExports` for `features/lib/mcp-implementation.ts`: `stubPidsIn`,
-  `waitUntilProcessesExit`, `writeAdapterOnboardingSeed`. `pi-process.ts`
-  already uses all three, so this entry can go now (P1-DC-33).
+
+The review fix for IN-05 removed the entries that `fallow dead-code` no
+longer needs: `McpImplementationId`, `McpImplementationProfile`,
+`RecordedMcpServer`, `RecordedMcpServers`, and `profileFor` from the
+`mcp-implementation.ts` entry, and the whole entries for `platform/pi-api.ts`
+(`McpServerConfig`, `PiMcpRegistry`, `RegisteredMcpServer`) and
+`features/lib/mcp-implementation.ts` (`stubPidsIn`, `waitUntilProcessesExit`,
+`writeAdapterOnboardingSeed`, P1-DC-33). Each now has a consumer.
 
 The one source marker Phase 1 added,
 `// fallow-ignore-next-line unused-export` on the default export of
