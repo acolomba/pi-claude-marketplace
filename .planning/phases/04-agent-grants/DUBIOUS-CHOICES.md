@@ -333,3 +333,10 @@ Each entry: severity; choice; alternatives; why dubious. Recorded in the named p
 - **P4-DC-63 (Low):** the agent-grants.feature description runs ten lines (the cucumber skill says two or three).
 - **P4-DC-64 (Low):** the update unit cases have no separate unit red run; their red rests on the cucumber red runs.
 - Parent's Pi `new_session` stand-in leak heads-up: not applicable; no `@builtin-only` scenario starts a new session, nothing retagged.
+
+## Wave 4 (executor 04-06, gate and parent lines, 2026-11-04)
+
+- **P4-DC-65 (Low):** the phase gate reuses the Wave 3 gate on `8e801f4` for `8c95f25` (identical build inputs; only `.planning` docs differ) and runs only `npm run test:modules` anew. Alt: rerun the whole gate.
+- **P4-DC-66 (Low):** README and README.es get no agent-grants sentence now (a conditional sentence is drafted as parent line 6).
+- **P4-DC-67 (Medium):** parent line 2 asks for a new `@builtin-only` autoupdate or apply-convergence scenario with the repoint after Phase 3 merges: post-merge work no plan schedules.
+- **P4-DC-68 (Low):** the plan's "phase DUBIOUS-CHOICES.md unchanged against PHASE_BASE" check was read as "no executor edited it" (the session logs each wave there).
