@@ -35,8 +35,10 @@
 //   - after the fold, the notices go to the user (D-CF5-14), and on a tool
 //     event the joined context goes to the model after the tool result, also
 //     when the call was denied (D-CF5-13).
-//   - a call that pi-mcp-adapter's `mcp` proxy makes in call mode runs no
-//     hook: its nested call fires them under the real tool name (D-CF5-12).
+//   - while pi-mcp-adapter is the active MCP implementation, a call that its
+//     `mcp` proxy makes in call mode runs no hook: its nested call fires them
+//     under the real tool name (D-CF5-12). Under Pi's built-in MCP, or with
+//     none, no call is a proxy call (MHK-02, D-P5-06).
 //   - a tool of Pi's built-in MCP is compared and seen under its server's
 //     registered name, with `-` kept, as Claude Code names it (MHK-01,
 //     D-P5-03).
@@ -630,12 +632,16 @@ const MCP_PROXY_TOOL = "mcp";
 const MCP_TOOL_PREFIX = "mcp__";
 
 /**
- * D-CF5-12: a call pi-mcp-adapter's proxy makes in call mode: the tool is
- * `mcp` or a namespace proxy `mcp__<server>` (a name with no further
- * `__<tool>` part), the input names a `tool` as a string, and it sets no
- * `action`. The adapter runs the real tool as a nested Pi call, which fires
+ * D-CF5-12: the shape of a call pi-mcp-adapter's proxy makes in call mode:
+ * the tool is `mcp` or a namespace proxy `mcp__<server>` (a name with no
+ * further `__<tool>` part), the input names a `tool` as a string, and it sets
+ * no `action`. The adapter runs the real tool as a nested Pi call, which fires
  * the hooks under the real name, so the outer call fires none. A search,
  * describe, or status call still fires hooks as the proxy tool.
+ *
+ * MHK-02, D-P5-06: the shape counts only while the adapter is the active MCP
+ * implementation (`HookToolView.proxyRuleApplies`). Pi's built-in MCP has no
+ * proxy, and a tool name it cut inside the namespace has the same shape.
  */
 function isMcpProxyCall(event: { readonly toolName: string; readonly input: object }): boolean {
   const { toolName } = event;
@@ -711,9 +717,9 @@ function dropStalePromptContext(runtime: HooksRuntime, event: InputEvent): void 
  * into every call here, so a test can register the real bridge against a spy
  * and assert on dispatch without spawning a child (see `HookExecutor`).
  *
- * `tools` names a PreToolUse event's tool as the hooks see it (D-P5-01); it
- * defaults to a view over `pi`'s tool list, which reads nothing until a tool
- * event's bucket has hooks.
+ * `tools` names a PreToolUse event's tool as the hooks see it (D-P5-01) and
+ * says whether pi-mcp-adapter's proxy rule applies (D-P5-06); it defaults to
+ * a view over `pi`, which reads nothing until a tool event's bucket has hooks.
  */
 export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   runtime: HooksRuntime,
@@ -733,11 +739,15 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     }
 
     const bucket = runtime.getRoutingBucket(claudeEvent);
-    if (bucket.length === 0 || isProxiedToolCall(claudeEvent, event)) {
+    if (bucket.length === 0) {
       return undefined as CompositeReturnFor<E>;
     }
 
     const view = hookEventView(claudeEvent, event, tools);
+    if (view === undefined) {
+      return undefined as CompositeReturnFor<E>;
+    }
+
     const folded = await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, view),
     );
@@ -757,7 +767,8 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
  * `event.isError` once, picks the PostToolUseFailure bucket on truthy or
  * PostToolUse on falsy/undefined, then runs and folds the bucket's matching
  * hooks. DISP-01 (event.isError split) happens before any hook runs; DISP-03
- * epoch check at entry; the call-mode `mcp` proxy runs no hook (D-CF5-12).
+ * epoch check at entry; while pi-mcp-adapter is the active implementation,
+ * the call-mode `mcp` proxy runs no hook (D-CF5-12, MHK-02).
  *
  * Returns `ToolResultEventResult | undefined` via
  * `adaptToolResultResult` (D-60-03).
@@ -780,11 +791,15 @@ export function toolResultCompositeHandler(
 
     const claudeEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
     const bucket = runtime.getRoutingBucket(claudeEvent);
-    if (bucket.length === 0 || isMcpProxyCall(event)) {
+    if (bucket.length === 0) {
       return undefined;
     }
 
     const view = toolEventView(event, tools);
+    if (view === undefined) {
+      return undefined;
+    }
+
     const folded = await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
       matcherFiresOnToolEvent(entry.matcher, view.tool),
     );
@@ -834,15 +849,6 @@ async function adaptForEvent(
       adaptObservationResultForEvent(result, claudeEvent, context);
       return undefined;
   }
-}
-
-// D-CF5-12: a PreToolUse event for a call the `mcp` proxy makes in call mode.
-function isProxiedToolCall(claudeEvent: CompositeDispatchEvent, event: unknown): boolean {
-  if (claudeEvent !== "PreToolUse") {
-    return false;
-  }
-
-  return isMcpProxyCall(event as ToolCallEvent);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -928,11 +934,20 @@ interface HookEventView {
  * Only an `mcp__` name changes, and Pi types such an event as its open-ended
  * custom tool event, whose `toolName` is any string, so the copy keeps the
  * event's type.
+ *
+ * No view, and so no hook, for a call pi-mcp-adapter's proxy makes while the
+ * adapter is the active implementation (D-CF5-12, MHK-02). The shape check
+ * comes first, so only a proxy-shaped call asks for the implementation
+ * (D-P5-07), and a skipped call reads no tool.
  */
 function toolEventView<T extends ToolCallEvent | ToolResultEvent>(
   event: T,
   tools: HookToolView,
-): { readonly event: T; readonly tool: HookTool } {
+): { readonly event: T; readonly tool: HookTool } | undefined {
+  if (isMcpProxyCall(event) && tools.proxyRuleApplies()) {
+    return undefined;
+  }
+
   const tool = tools.identify(event.toolName);
   return { event: tool.name === event.toolName ? event : { ...event, toolName: tool.name }, tool };
 }
@@ -941,7 +956,7 @@ function hookEventView(
   claudeEvent: CompositeDispatchEvent,
   event: unknown,
   tools: HookToolView,
-): HookEventView {
+): HookEventView | undefined {
   return claudeEvent === "PreToolUse"
     ? toolEventView(event as ToolCallEvent, tools)
     : { event, tool: undefined };
