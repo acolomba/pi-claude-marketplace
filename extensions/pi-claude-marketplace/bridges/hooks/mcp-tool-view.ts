@@ -13,7 +13,10 @@
 // registers its tools again. It keeps one answer for its generation: whether
 // pi-mcp-adapter's proxy rule applies (MHK-02, D-P5-06, D-P5-07).
 
-import { claudeFormToolName } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
+import {
+  claudeFormToolName,
+  MCP_TOOL_PREFIX,
+} from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { openNotificationSnapshot } from "../../shared/notification-run.ts";
@@ -25,8 +28,6 @@ import type { ExtensionAPI } from "../../platform/pi-api.ts";
 // registers carries it as `sourceInfo.path`. The frozen platform probe that
 // compares the same literal is private to its module.
 const BUILTIN_MCP_SOURCE_PATH = "builtin:mcp";
-
-const MCP_TOOL_PREFIX = "mcp__";
 
 type PiTool = ReturnType<ExtensionAPI["getAllTools"]>[number];
 

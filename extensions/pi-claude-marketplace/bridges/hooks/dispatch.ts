@@ -49,6 +49,7 @@
 // generation changed while its hooks ran folds to noop.
 
 import {
+  MCP_TOOL_PREFIX,
   serverPrefixNames,
   toolLiteralNames,
 } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
@@ -629,7 +630,6 @@ function sendToolContext(
 // ──────────────────────────────────────────────────────────────────────────
 
 const MCP_PROXY_TOOL = "mcp";
-const MCP_TOOL_PREFIX = "mcp__";
 
 /**
  * D-CF5-12: the shape of a call pi-mcp-adapter's proxy makes in call mode:

@@ -25,7 +25,9 @@ const PI_NAME_HASH_DIGITS = 8;
 // UTF-16 code unit.
 const PI_FOLDED_CHARACTER = /\W/g;
 
-const MCP_PREFIX = "mcp__";
+/** The text that starts every MCP tool name, in Claude Code and in Pi. */
+export const MCP_TOOL_PREFIX = "mcp__";
+
 const SEGMENT_SEPARATOR = "__";
 
 /**
@@ -47,7 +49,7 @@ export interface McpToolIdentity {
 // hashed form. Which one Pi chose depends on the server's other tools.
 function piToolNames(server: string, tool: string): readonly string[] {
   const digest = createHash("sha256").update(`${server}\0${tool}`).digest("hex");
-  const folded = `${MCP_PREFIX}${server}${SEGMENT_SEPARATOR}${tool}`.replaceAll(
+  const folded = `${MCP_TOOL_PREFIX}${server}${SEGMENT_SEPARATOR}${tool}`.replaceAll(
     PI_FOLDED_CHARACTER,
     "_",
   );
@@ -61,7 +63,7 @@ function piToolNames(server: string, tool: string): readonly string[] {
 // The `mcp__<server>__` text that starts Claude Code's names of the server's
 // tools.
 function claudeServerPrefix(server: string): string {
-  return `${MCP_PREFIX}${server}${SEGMENT_SEPARATOR}`;
+  return `${MCP_TOOL_PREFIX}${server}${SEGMENT_SEPARATOR}`;
 }
 
 /**
