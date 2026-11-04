@@ -165,6 +165,11 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   // bundle). OPTIONAL and additive -- NO schemaVersion bump (the resolvedSha
   // precedent). ABSENCE MEANS `compatibility` carries pi-mcp-adapter's
   // verdict, as every record written before the neutral producer does.
+  //
+  // The basis describes the `compatibility` beside it. So every write that
+  // replaces or changes `compatibility` also writes the basis:
+  // `replaceCompatibility` clears it, and only a writer that computed the
+  // neutral verdict sets it again.
   compatibilityBasis: Type.Optional(Type.Literal("neutral")),
   compatibility: Type.Object({
     installable: Type.Boolean(),
@@ -300,6 +305,20 @@ export function mcpServerConfigsOf(
     name,
     config: structuredClone(config),
   }));
+}
+
+/**
+ * MREC-01: replaces a record's `compatibility` with an adapter-basis verdict
+ * and removes its `compatibilityBasis`, because the basis describes the
+ * `compatibility` beside it. A writer of the neutral verdict sets the basis
+ * after this call.
+ */
+export function replaceCompatibility(
+  record: Pick<PluginInstallRecord, "compatibility" | "compatibilityBasis">,
+  compatibility: PluginInstallRecord["compatibility"],
+): void {
+  record.compatibility = compatibility;
+  delete record.compatibilityBasis;
 }
 
 /**

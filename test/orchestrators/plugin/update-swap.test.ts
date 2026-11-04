@@ -426,7 +426,7 @@ const PREVIOUS_MCP_SERVER_CONFIGS = [{ name: "old", config: { command: "old-serv
  */
 async function seedMcpRecordUpdate(
   cwd: string,
-  previous: { readonly mcpBundle?: true },
+  previous: { readonly mcpBundle?: true; readonly compatibilityBasis?: "neutral" },
   declaration: { readonly mcpJson: object; readonly manifestServers?: unknown },
 ): Promise<ThreePhaseArgsBase & { readonly cascade: true }> {
   const marketplaceRoot = path.join(cwd, "mp-src");
@@ -456,6 +456,10 @@ async function seedMcpRecordUpdate(
   record.mcpServerConfigs = PREVIOUS_MCP_SERVER_CONFIGS;
   if (previous.mcpBundle === true) {
     record.mcpBundle = true;
+  }
+
+  if (previous.compatibilityBasis !== undefined) {
+    record.compatibilityBasis = previous.compatibilityBasis;
   }
 
   await saveState(args.locations.extensionRoot, state);
@@ -561,6 +565,60 @@ test("MREC-01: a failed swap keeps the previous MCP servers beside the intent ma
       mcpServerConfigs: PREVIOUS_MCP_SERVER_CONFIGS,
       mcpBundle: true,
     },
+  );
+});
+
+test("MREC-01: an all-success swap removes a neutral basis with the compatibility it replaces", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-basis-");
+  const args = await seedMcpRecordUpdate(
+    cwd,
+    { compatibilityBasis: "neutral" },
+    { mcpJson: { server1: { command: "node", args: ["s.js"] } } },
+  );
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      version: record?.version,
+      hasCompatibilityBasis: record !== undefined && Object.hasOwn(record, "compatibilityBasis"),
+    },
+    { partition: "updated", version: "2.0.0", hasCompatibilityBasis: false },
+  );
+});
+
+test("MREC-01: a failed swap removes a neutral basis beside the intent mark", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-basis-failure-");
+  const args = await seedMcpRecordUpdate(
+    cwd,
+    { compatibilityBasis: "neutral" },
+    { mcpJson: { server1: { command: "node", args: ["s.js"] } } },
+  );
+  await mkdir(args.locations.skillsTargetDir, { recursive: true });
+  await writeFile(path.join(args.locations.skillsTargetDir, "hello-tool"), "old-resource-tree");
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      notes: record?.compatibility.notes,
+      hasCompatibilityBasis: record !== undefined && Object.hasOwn(record, "compatibilityBasis"),
+    },
+    { partition: "failed", notes: ["update-in-progress"], hasCompatibilityBasis: false },
   );
 });
 

@@ -1555,6 +1555,46 @@ describe("migrateLegacyMcpEntries", () => {
     });
   });
 
+  test("MREC-01: a record that becomes partially installed for an unsupported server loses its neutral basis", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "unsupported-neutral");
+    const { cwd, locations } = scope;
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" }, live: WS_SERVER } },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: {
+          ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv", "live"]),
+          compatibilityBasis: "neutral",
+        },
+      }),
+    );
+    await writeLegacy(locations, {
+      srv: legacyEntry("hello"),
+      live: legacyEntry("hello", WS_SERVER),
+    });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        compatibility: {
+          installable: false,
+          notes: [],
+          supported: ["mcpServers"],
+          unsupported: ["mcpServers"],
+        },
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
   test("AMIG-01: a record already partially installed for its MCP servers is not stamped again", async (t) => {
     // arrange
     const scope = await createProjectScope(t, "unsupported-recorded");

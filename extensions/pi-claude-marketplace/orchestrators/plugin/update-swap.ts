@@ -95,7 +95,7 @@ import {
 import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { mcpServerConfigsOf } from "../../persistence/state-io.ts";
+import { mcpServerConfigsOf, replaceCompatibility } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CleanupContextError,
@@ -720,7 +720,8 @@ async function markUpdateInProgress(
 
       sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
 
-      sRecord.compatibility = {
+      // MREC-01: the intent mark is no neutral verdict, so it clears the basis.
+      replaceCompatibility(sRecord, {
         installable: false,
         notes: [UPDATE_IN_PROGRESS_NOTE],
         // Carry forward from EXISTING sRecord, NOT from
@@ -728,7 +729,7 @@ async function markUpdateInProgress(
         // view during the intent-mark window.
         supported: [...sRecord.compatibility.supported],
         unsupported: [...sRecord.compatibility.unsupported],
-      };
+      });
 
       // CR-02: `resources.workflows` is the ONE inventory this window widens, to
       // the union of the names already recorded and the names about to be
@@ -878,12 +879,14 @@ function applyPerBridgeResources(
 function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: PluginPreflight): void {
   const { installable, toVersion, resolvedSha } = preflight;
   sRecord.version = toVersion;
-  sRecord.compatibility = {
+  // MREC-01: the swap records the adapter's verdict for `toVersion`, so it
+  // clears the basis.
+  replaceCompatibility(sRecord, {
     installable: installable.state === "installable",
     notes: [...installable.notes],
     supported: [...installable.supported],
     unsupported: [...installable.unsupported],
-  };
+  });
   // MREC-01 / D-MB-04: the declared MCP servers of `toVersion`, written
   // beside `compatibility` so a failed update keeps the previous servers next
   // to the intent mark.

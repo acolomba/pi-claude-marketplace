@@ -77,7 +77,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { generatedMcpServerKey } from "../../domain/name.ts";
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, replaceCompatibility } from "../../persistence/state-io.ts";
 import { McpConfigFileError, McpServerCollisionError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
@@ -523,11 +523,14 @@ function applyDroppedServers(action: OwnerAction): boolean {
     return false;
   }
 
-  compatibility.installable = false;
+  const unsupported = [...compatibility.unsupported];
   if (!listed) {
-    compatibility.unsupported = [...compatibility.unsupported, "mcpServers"];
+    unsupported.push("mcpServers");
   }
 
+  // MREC-01: the adapter's dropped servers make an adapter verdict, so the
+  // write clears the basis.
+  replaceCompatibility(action.record, { ...compatibility, installable: false, unsupported });
   return true;
 }
 

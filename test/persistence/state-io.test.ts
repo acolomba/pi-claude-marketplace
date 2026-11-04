@@ -16,6 +16,7 @@ import {
   loadState,
   mcpServerConfigsOf,
   rangeVersionOf,
+  replaceCompatibility,
   saveState,
   toDisabledRecord,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -139,6 +140,41 @@ test("GV-01: a record moved to a catalog version keeps no release tag version", 
   const { resolvedVersion: _tagVersion, ...expected } = { ...record, version: "3.0.0" };
   assert.deepStrictEqual(moved, expected);
   assert.strictEqual(record.resolvedVersion, "2.0.0");
+});
+
+test("MREC-01: replacing a record's compatibility removes the neutral basis beside it", () => {
+  // arrange
+  const record: PluginInstallRecord = {
+    version: "1.0.0",
+    resolvedSource: "/plugin",
+    compatibilityBasis: "neutral",
+    compatibility: { installable: false, notes: [], supported: [], unsupported: ["mcpServers"] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  // act
+  replaceCompatibility(record, {
+    installable: true,
+    notes: ["note"],
+    supported: ["skills"],
+    unsupported: [],
+  });
+
+  // assert
+  assert.deepStrictEqual(record, {
+    version: "1.0.0",
+    resolvedSource: "/plugin",
+    compatibility: { installable: true, notes: ["note"], supported: ["skills"], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
 });
 
 test("disables a plugin while preserving its complete inventory", () => {

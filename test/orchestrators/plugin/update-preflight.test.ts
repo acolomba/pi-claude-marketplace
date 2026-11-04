@@ -955,6 +955,37 @@ test("does not rewrite an unchanged disabled pin", async (t) => {
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
 
+test("MREC-01: a disabled update rewrites a pin whose only change is a neutral basis and removes the basis", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("2.0.0", false) });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const state = await loadState(seed.locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record !== undefined);
+  record.resolvedSource = seed.pluginRoot;
+  record.mcpServerConfigs = [];
+  record.compatibilityBasis = "neutral";
+  await saveState(seed.locations.extensionRoot, state);
+
+  // act
+  const outcome = await prepare(seed);
+
+  // assert
+  const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.deepStrictEqual(
+    { partition: "partition" in outcome ? outcome.partition : undefined, refreshed },
+    {
+      partition: "unchanged",
+      refreshed: {
+        ...pluginRecord("2.0.0", false),
+        resolvedSource: seed.pluginRoot,
+        mcpServerConfigs: [],
+        updatedAt: refreshed?.updatedAt,
+      },
+    },
+  );
+});
+
 test("MREC-01: a disabled legacy record without recorded MCP servers gains them on its next update", async (t) => {
   // arrange
   const seed = await seedUpdate({

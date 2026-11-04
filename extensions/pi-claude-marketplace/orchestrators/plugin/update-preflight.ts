@@ -11,6 +11,7 @@ import {
   isRecordedButDisabled,
   loadState,
   mcpServerConfigsOf,
+  replaceCompatibility,
 } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -739,6 +740,7 @@ export const DISABLED_PIN_FIELDS = [
   "resolvedSha",
   "resolvedVersion",
   "compatibility",
+  "compatibilityBasis",
   "mcpServerConfigs",
   "mcpBundle",
 ] as const satisfies readonly (keyof PluginStateRecord)[];
@@ -755,6 +757,7 @@ function disabledPinProjection(pin: DisabledPin): string {
     [...pin.compatibility.notes],
     [...pin.compatibility.supported],
     [...pin.compatibility.unsupported],
+    pin.compatibilityBasis ?? null,
     pin.mcpServerConfigs ?? null,
     pin.mcpBundle === true,
   ]);
@@ -854,7 +857,9 @@ async function refreshDisabledRecord(
         record.resolvedVersion = preflight.resolvedVersion;
       }
 
-      record.compatibility = next.compatibility;
+      // MREC-01: the refresh writes the adapter's verdict, so a neutral
+      // basis left from the old version goes.
+      replaceCompatibility(record, next.compatibility);
       // MREC-01: the declared MCP servers of the version the record now names.
       record.mcpServerConfigs = next.mcpServerConfigs;
       if (next.mcpBundle) {
