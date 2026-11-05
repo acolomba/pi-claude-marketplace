@@ -204,13 +204,14 @@ function withInjectedEnv(
  * `headers`, each through `encoder`. The report lists the unset variables
  * with no default, and the set deny-listed variables blanked in `url` and
  * `headers`, once each in that order. Returns a fresh entry; the input is
- * never mutated. Without an `encoder` the values are written in
- * pi-mcp-adapter's encoding (P2-DC-19).
+ * never mutated. Every caller names its encoder, pi-mcp-adapter's or Pi's
+ * built-in one, so no path writes one implementation's encoding by omission
+ * (P2-DC-53).
  */
 export function substituteAndInject(
   translated: Readonly<Record<string, unknown>>,
   ctx: McpSubstitutionContext,
-  encoder: McpFieldEncoder = ADAPTER_FIELD_ENCODER,
+  encoder: McpFieldEncoder,
 ): SubstitutedEntry {
   const walk: WalkState = { ctx, encoder, names: { missing: [], blanked: [] } };
   const entry: Record<string, unknown> = {};

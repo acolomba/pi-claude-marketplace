@@ -8,8 +8,8 @@ import assert from "node:assert/strict";
 
 import { type DataTable, Then } from "@cucumber/cucumber";
 
-import { toolSearchCallRows } from "../../lib/mcp-builtin-tool-search.ts";
 import { callMessageRows, modelCallsOf } from "../../lib/scripted-model/script.ts";
+import { toolSearchCallRows } from "../../lib/upstream/tool-search.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 

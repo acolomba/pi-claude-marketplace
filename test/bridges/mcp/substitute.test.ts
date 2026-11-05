@@ -526,20 +526,6 @@ test("AVAR-05: a deny-listed header variable set to the empty string is blanked 
   });
 });
 
-test("P2-DC-19: without an encoder the walk writes pi-mcp-adapter's encoding", () => {
-  // arrange
-  const translated = { url: "https://mcp.example.test", headers: { Value: "!token" } };
-
-  // act
-  const substituted = substituteAndInject(translated, PROJECT_CONTEXT);
-
-  // assert
-  assert.deepStrictEqual(substituted, {
-    entry: { url: "https://mcp.example.test", headers: { Value: "!!token" } },
-    report: { missing: [], blanked: [] },
-  });
-});
-
 test("BLT-02: routes command, args, and url as plain, env and headers as secret, and literals", () => {
   // arrange
   const encoder: McpFieldEncoder = {

@@ -28,7 +28,10 @@ import {
   serializeLiteral,
   serializeSegments,
 } from "../../extensions/pi-claude-marketplace/bridges/mcp/adapter-escape.ts";
-import { substituteAndInject } from "../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
+import {
+  ADAPTER_FIELD_ENCODER,
+  substituteAndInject,
+} from "../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 import { expandClaudeValue } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
 import { applyMcpAdapterEnv } from "../../extensions/pi-claude-marketplace/shared/session-env.ts";
 import { EXPANSION_BUILTINS, EXPANSION_CASES } from "../bridges/mcp/expansion-cases.ts";
@@ -588,6 +591,7 @@ function writtenRemoteValues(form: string, installEnv: Environment): [string, st
   const { entry } = substituteAndInject(
     { url: `https://mcp.example.test/?k=${form}`, headers: { Value: form } },
     ctx,
+    ADAPTER_FIELD_ENCODER,
   );
   const { url, headers } = entry;
   const header: unknown =
@@ -672,6 +676,7 @@ function userScopeHeader(raw: string): string {
   const { entry } = substituteAndInject(
     { url: "https://mcp.example.test/", headers: { Value: raw } },
     ctx,
+    ADAPTER_FIELD_ENCODER,
   );
   const header: unknown =
     typeof entry.headers === "object" && entry.headers !== null && "Value" in entry.headers
