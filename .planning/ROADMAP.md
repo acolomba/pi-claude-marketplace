@@ -524,7 +524,7 @@ Plans:
   3. On the combined tree, `npm run check`, both cucumber profiles, and `npm run test:modules` pass, `npx fallow dupes` reports no unreviewed clone group, and the CI behavioral jobs finish within their timeouts.
   4. Every child's parent lines are applied (PROJECT.md Key Decisions rows, BACKLOG entries), no closed-set entry remains that the combined tree never emits, and the phase dubious-choice logs are merged into the root log for the user's review.
 
-**Plans:** 12/13 plans executed in 5 waves (each wave's plans own disjoint files; the gate runs alone in Wave 4, and the records that read every SUMMARY run alone in Wave 5, after the gate, and change only `.planning/**/*.md`)
+**Plans:** 13/13 plans executed in 5 waves (each wave's plans own disjoint files; the gate runs alone in Wave 4, and the records that read every SUMMARY run alone in Wave 5, after the gate, and change only `.planning/**/*.md`)
 
 Plans:
 **Wave 1**
@@ -548,7 +548,7 @@ Plans:
 - [x] 06-12-PLAN.md — Wave 4: the per-feature re-runs under both profiles, `fallow dupes`, the MDOC-02 cross-check, the whole gate on one commit, and the CI handoff (DUAL-04, MDOC-02, DUAL-03)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 06-13-PLAN.md — Wave 5: the root dubious-choices log, the 01-FROZEN.md amendments, and the outcome of every parent line (criterion 4)
+- [x] 06-13-PLAN.md — Wave 5: the root dubious-choices log, the 01-FROZEN.md amendments, and the outcome of every parent line (criterion 4)
 
 ## Progress
 
@@ -561,7 +561,7 @@ Plans:
 | 3. Read-Time Verdicts | 9/9 | Complete    | 2026-11-04 |
 | 4. Agent Grants | 6/6 | Complete    | 2026-11-04 |
 | 5. Hook Tool Names | 4/4 | Complete    | 2026-11-04 |
-| 6. Release Docs and Combined Tree | 12/13 | In Progress | - |
+| 6. Release Docs and Combined Tree | 13/13 | In Progress | - |
 
 ## Carried Forward
 
