@@ -599,7 +599,6 @@ function marketplaceWith(
 function allLoaded(): SoftDepStatus {
   return {
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
     mcpImplementation: "adapter",
     workflowEngineLoaded: true,
   };
@@ -609,7 +608,6 @@ function allLoaded(): SoftDepStatus {
 function noneLoaded(): SoftDepStatus {
   return {
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
   };

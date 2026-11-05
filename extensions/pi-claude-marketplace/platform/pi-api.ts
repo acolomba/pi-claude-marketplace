@@ -170,8 +170,6 @@ export type StopReason = AssistantMessage["stopReason"];
 
 export interface SoftDepStatus {
   piSubagentsLoaded: boolean;
-  /** Equals `mcpImplementation === "adapter"`; kept for the current readers. */
-  piMcpAdapterLoaded: boolean;
   /**
    * MSEL-01: the run's active MCP implementation, with the precedence adapter,
    * then Pi's built-in MCP, then none.
@@ -365,7 +363,6 @@ export function softDepStatus(pi: PiInventory): SoftDepStatus {
   const adapterLoaded = hasLoadedPiMcpAdapter(pi, commands);
   return {
     piSubagentsLoaded,
-    piMcpAdapterLoaded: adapterLoaded,
     mcpImplementation: activeMcpImplementation(adapterLoaded, hasLoadedBuiltinMcp(commands)),
     workflowEngineLoaded: hasLoadedWorkflowEngine(pi),
   };

@@ -743,7 +743,6 @@ describe("cascade projections", () => {
     const members = [installedRow({ key: "app@mp" }), installedRow({ key: "dep@mp" })];
     const softDeps = {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: false,
     } satisfies SoftDepStatus;

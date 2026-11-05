@@ -809,9 +809,9 @@ for (const { condition, stage, rendered, expectedMessage } of plannedInstallRows
 // D-P3-15: the preview reads the planned install under the run's active MCP
 // implementation, so an sse server degrades the install only where the active
 // implementation cannot run it.
-for (const { mcpImplementation, adapterLoaded, rendered } of [
-  { mcpImplementation: "builtin", adapterLoaded: false, rendered: "will partially install" },
-  { mcpImplementation: "adapter", adapterLoaded: true, rendered: "will install" },
+for (const { mcpImplementation, rendered } of [
+  { mcpImplementation: "builtin", rendered: "will partially install" },
+  { mcpImplementation: "adapter", rendered: "will install" },
 ] as const) {
   test(`D-P3-15: a planned install with an sse server renders "${rendered}" under ${mcpImplementation}`, async (t) => {
     // arrange
@@ -823,7 +823,6 @@ for (const { mcpImplementation, adapterLoaded, rendered } of [
     );
     const run = runWithSoftDeps({
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: adapterLoaded,
       mcpImplementation,
       workflowEngineLoaded: false,
     });

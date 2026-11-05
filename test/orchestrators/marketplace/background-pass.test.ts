@@ -740,7 +740,6 @@ test("runs every update through one silent load run", async (t) => {
   assert.deepStrictEqual(notification.run.origin, { kind: "load" });
   assert.deepStrictEqual(notification.run.softDeps, {
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
   });

@@ -154,7 +154,6 @@ const GITHUB_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 function runWithMcpAdapterLoaded(): NotificationRun {
   return runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
     mcpImplementation: "adapter",
     workflowEngineLoaded: false,
   });
@@ -2907,7 +2906,6 @@ test("MREC-06 / D-P3-13: enabling a plugin with an sse server under Pi's built-i
       ctx,
       run: runWithSoftDeps({
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
         mcpImplementation: "builtin",
         workflowEngineLoaded: false,
       }),
@@ -3065,7 +3063,6 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
       ctx,
       run: runWithSoftDeps({
         piSubagentsLoaded: true,
-        piMcpAdapterLoaded: false,
         mcpImplementation: "none",
         workflowEngineLoaded: false,
       }),
@@ -4840,7 +4837,6 @@ test("orchestrated enable returns every live degradation and companion signal wi
       notifications: { mode: "orchestrated" },
       run: runWithSoftDeps({
         piSubagentsLoaded: true,
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       }),
@@ -5811,7 +5807,6 @@ test("standalone enable exposes ordered rollback partials and retries without du
       marketplace: "mp",
       run: runWithSoftDeps({
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       }),
@@ -6361,7 +6356,6 @@ test("D-P3-13 / D-MB-06: enabling a plugin under Pi's built-in MCP turns on its 
       ctx,
       run: runWithSoftDeps({
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
         mcpImplementation: "builtin",
         workflowEngineLoaded: false,
       }),
@@ -9501,7 +9495,6 @@ test("D-PL1-12: a standalone enable whose only staging warning is hygiene shows 
       ctx,
       run: runWithSoftDeps({
         piSubagentsLoaded: true,
-        piMcpAdapterLoaded: false,
         mcpImplementation: "none",
         workflowEngineLoaded: false,
       }),

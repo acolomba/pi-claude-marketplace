@@ -2269,7 +2269,6 @@ const WS_SERVERS = { live: { type: "ws", url: "wss://mcp.example.com/ws" } };
 function runUnder(active: ActiveMcpImplementation): NotificationRun {
   return runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: active,
     workflowEngineLoaded: false,
   });
@@ -2547,7 +2546,6 @@ test("MGRT-01: an install under Pi's built-in MCP stages the built-in grant and 
   // arrange
   const run = runWithSoftDeps({
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "builtin",
     workflowEngineLoaded: false,
   });

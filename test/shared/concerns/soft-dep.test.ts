@@ -39,7 +39,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
@@ -52,7 +51,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
@@ -65,7 +63,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
@@ -78,7 +75,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
@@ -91,7 +87,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
@@ -104,7 +99,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
@@ -117,7 +111,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
@@ -130,7 +123,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
@@ -143,7 +135,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
@@ -156,7 +147,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
@@ -169,7 +159,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
@@ -182,7 +171,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
@@ -195,7 +183,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
@@ -208,7 +195,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
@@ -221,7 +207,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
@@ -234,7 +219,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
@@ -250,7 +234,6 @@ const markerCases = [
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     },
@@ -263,7 +246,6 @@ const markerCases = [
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
@@ -276,7 +258,6 @@ const markerCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     },
@@ -291,7 +272,6 @@ const markerCases = [
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: false,
     },
@@ -336,7 +316,6 @@ const requirementCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: false,
     },
@@ -350,7 +329,6 @@ const requirementCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
@@ -364,7 +342,6 @@ const requirementCases = [
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     },
@@ -381,7 +358,6 @@ const requirementCases = [
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: false,
     },
@@ -398,7 +374,6 @@ const requirementCases = [
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "builtin",
       workflowEngineLoaded: true,
     },
@@ -549,22 +524,10 @@ describe("companionRequirements MCP entry", () => {
       assert.deepStrictEqual(requirements, []);
     });
   }
-
-  test("D-P3-08: ignores the adapter-loaded flag and reads the active implementation", () => {
-    // arrange
-    const probe = { ...probeWith("builtin"), piMcpAdapterLoaded: true };
-
-    // act
-    const requirements = companionRequirements(false, ADAPTER_MCP, false, probe);
-
-    // assert
-    assert.deepStrictEqual(requirements, [{ companion: "pi-mcp-adapter", missing: true }]);
-  });
 });
 
 const NOTHING_LOADED = {
   piSubagentsLoaded: false,
-  piMcpAdapterLoaded: false,
   mcpImplementation: "none",
   workflowEngineLoaded: false,
 } as const;
@@ -700,7 +663,6 @@ test("D-P3-10: isMcpDependency picks the McpDependency out of a mixed list", () 
 function probeWith(active: ActiveMcpImplementation): SoftDepStatus {
   return {
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: active === "adapter",
     mcpImplementation: active,
     workflowEngineLoaded: true,
   };
@@ -775,17 +737,6 @@ describe("mcpDependencyMarker", () => {
       assert.strictEqual(marker, expectedMarker);
     });
   }
-
-  test("D-MB-07: ignores the adapter-loaded flag and reads the active implementation", () => {
-    // arrange
-    const probe = { ...probeWith("builtin"), piMcpAdapterLoaded: true };
-
-    // act
-    const marker = mcpDependencyMarker(ADAPTER_MCP, probe);
-
-    // assert
-    assert.strictEqual(marker, "requires pi-mcp-adapter");
-  });
 });
 
 for (const { active, dependency, expectedMarkers } of [
@@ -822,7 +773,6 @@ for (const { active, dependency, expectedMarkers } of [
     // arrange
     const probe: SoftDepStatus = {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: active === "adapter",
       mcpImplementation: active,
       workflowEngineLoaded: false,
     };

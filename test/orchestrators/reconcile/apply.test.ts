@@ -10609,7 +10609,6 @@ describe("applyReconcile catalog convergence", () => {
     const before = await readFile(project.stateJsonPath, "utf8");
     const run = runWithSoftDeps({
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "builtin",
       workflowEngineLoaded: false,
     });

@@ -19,7 +19,6 @@ export function runWithSoftDeps(softDeps: SoftDepStatus): NotificationRun {
 export function runWithNothingLoaded(): NotificationRun {
   return runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
   });
@@ -29,7 +28,6 @@ export function runWithNothingLoaded(): NotificationRun {
 export function runWithAllLoaded(): NotificationRun {
   return runWithSoftDeps({
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
     mcpImplementation: "adapter",
     workflowEngineLoaded: true,
   });
