@@ -6,7 +6,7 @@
  * The facts are the tools a search loads: each tool's name, which this
  * extension gives (`mcp__plugin_<plugin>_<server>__<tool>`), and the first
  * line of its description, which the stub server declares. A projection
- * keeps them in the form `features/lib/upstream/mcp.ts` gives a search
+ * keeps them in the form the sibling `./mcp.ts` gives a search
  * through pi-mcp-adapter's `mcp` tool: one line `found <tool>: <description>`
  * per tool, sorted by tool name because the order is Pi's ranking, or
  * `found no tools`. Counts and hints are Pi's, so the projection drops them,
@@ -14,7 +14,7 @@
  * fails the scenario.
  */
 
-import { projectTokens, type RunTokens } from "./run-tokens.ts";
+import { projectTokens, type RunTokens } from "../run-tokens.ts";
 
 const TOOL_LINE_PATTERN = /^-\s*(\S+?):\s?(.*)$/;
 const LOADED_PATTERN = /\bloaded\s+\d+\s+tools?\b/i;
