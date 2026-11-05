@@ -167,6 +167,8 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
   installNetworkTrap(t);
 
   const resolver = {
+    mcpImplementation: "adapter",
+
     pluginCachePath: (scope: Scope, marketplace: string): Promise<string> =>
       Promise.resolve(path.join(cacheRoot, scope, "plugins", `${marketplace}.json`)),
 

@@ -81,6 +81,7 @@ import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { noStatusReaders } from "../platform/mcp-status-seed.ts";
+import { adapterCommand, builtinMcpCommand } from "../platform/pi-inventory-seed.ts";
 
 import { buildInstalledPluginRecord, seedAutoupdateConfig } from "./handlers/marketplace-seed.ts";
 import { createJsonCapture } from "./json-capture.ts";
@@ -293,6 +294,34 @@ async function seedProjectMarketplaces(
       marketplaceNames.map((name) => [name, marketplaceRecordIn(root, name)]),
     ),
   });
+}
+
+/**
+ * Lay out the catalog of the marketplace `marketplaceRecordIn` records: an
+ * `events` plugin whose one server is sse, which pi-mcp-adapter runs and Pi's
+ * built-in MCP cannot, and a `plain` plugin with no server.
+ */
+async function seedSseMarketplaceTree(root: string, marketplaceName: string): Promise<void> {
+  const record = marketplaceRecordIn(root, marketplaceName);
+  await mkdir(path.dirname(record.manifestPath), { recursive: true });
+  await writeFile(
+    record.manifestPath,
+    JSON.stringify({
+      name: marketplaceName,
+      plugins: [
+        { name: "events", source: "./plugins/events", version: "1.0.0" },
+        { name: "plain", source: "./plugins/plain", version: "1.0.0" },
+      ],
+    }),
+    "utf8",
+  );
+  await mkdir(path.join(record.marketplaceRoot, "plugins", "events"), { recursive: true });
+  await mkdir(path.join(record.marketplaceRoot, "plugins", "plain"), { recursive: true });
+  await writeFile(
+    path.join(record.marketplaceRoot, "plugins", "events", ".mcp.json"),
+    JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+    "utf8",
+  );
 }
 
 /** Record one project-scope marketplace under `root`. */
@@ -2042,7 +2071,8 @@ describe("registerClaudePluginCommand", () => {
     });
     await seedProjectMarketplace(scope.cwd, "registration-mp");
     await seedProjectMarketplace(laterRoot, "invocation-mp");
-    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
+    // MSEL-01: the lookup takes one inventory snapshot.
+    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
     const expectedCandidates = [{ label: "invocation-mp", value: "list invocation-mp " }];
     process.chdir(laterRoot);
 
@@ -2054,12 +2084,71 @@ describe("registerClaudePluginCommand", () => {
     verifyRegistrar();
   });
 
+  test("classifies install completions for the MCP implementation each lookup reads (D-P6-22, MSEL-01)", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "completion-implementation");
+    const marketplace = "sse-mp";
+    await seedProjectMarketplace(scope.cwd, marketplace);
+    await seedSseMarketplaceTree(scope.cwd, marketplace);
+    const completionCache = createCompletionCache();
+    const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
+    const commandOptions = It.willCapture<CommandRegistration>("claude:plugin registration");
+    when(() => {
+      pi.registerCommand("claude:plugin", commandOptions);
+    })
+      .thenReturn()
+      .times(1);
+    when(() => {
+      pi.on("session_start", It.willCapture<SessionStartListener>("session start listener"));
+    })
+      .thenReturn()
+      .times(1);
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    // Registration reads no inventory: the strict handle states no inventory
+    // read until registration returns.
+    registerClaudePluginCommand(
+      pi,
+      createEdgeDeps(completionCache),
+      hooksRouting,
+      createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
+    );
+    const registration = commandOptions.value;
+    assert.ok(registration !== undefined, "the registration glue installed no command");
+    const cachePath = await makeLocationsResolver(scope.cwd, "none").pluginCachePath(
+      "project",
+      marketplace,
+    );
+    const expectedAdapterCandidates = [
+      { label: "events@sse-mp", value: "install --scope project events@sse-mp " },
+      { label: "plain@sse-mp", value: "install --scope project plain@sse-mp " },
+    ];
+    const expectedBuiltinCandidates = [
+      { label: "plain@sse-mp", value: "install --scope project plain@sse-mp " },
+    ];
+
+    // act
+    expectSoftDepProbes(pi, 1, [], [adapterCommand()]);
+    const adapterCandidates = await registration.getArgumentCompletions?.(
+      "install --scope project ",
+    );
+    await completionCache.dropMarketplaceCache(cachePath, "project", marketplace);
+    expectSoftDepProbes(pi, 1, [], [builtinMcpCommand()]);
+    const builtinCandidates = await registration.getArgumentCompletions?.(
+      "install --scope project ",
+    );
+
+    // assert
+    assert.deepStrictEqual(adapterCandidates, expectedAdapterCandidates);
+    assert.deepStrictEqual(builtinCandidates, expectedBuiltinCandidates);
+    verify(pi);
+  });
+
   test("keeps supplied lifecycle completion-cache hits isolated between registrations", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "completion-cache");
     const marketplace = "cache-mp";
     await seedProjectMarketplace(scope.cwd, marketplace);
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
     const cachePath = await resolver.pluginCachePath("project", marketplace);
     const ownerCache = createCompletionCache();
     const peerCache = createCompletionCache();
@@ -2071,8 +2160,9 @@ describe("registerClaudePluginCommand", () => {
       Promise.resolve([{ name: "peer-row", status: "installed" }]),
     );
     await rm(cachePath);
-    const owner = registerCommandWithCache(ownerCache);
-    const peer = registerCommandWithCache(peerCache);
+    // MSEL-01: each registration's one lookup takes one inventory snapshot.
+    const owner = registerCommandWithCache(ownerCache, undefined, undefined, { runs: 1 });
+    const peer = registerCommandWithCache(peerCache, undefined, undefined, { runs: 1 });
     const expectedOwnerCandidates = [
       {
         label: "owner-row@cache-mp",
@@ -2254,7 +2344,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     }),
     "utf8",
   );
-  const resolver = makeLocationsResolver(cwd);
+  const resolver = makeLocationsResolver(cwd, "adapter");
   const cachePath = await resolver.pluginCachePath("project", marketplace);
   const ownerCache = createCompletionCache();
   const peerCache = createCompletionCache();
@@ -2266,14 +2356,14 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-stale", status: "available" }]),
   );
   await rm(cachePath, { force: true });
-  // The one run is the only probe.
+  // The run takes one probe, and each completion lookup one more (MSEL-01).
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1 },
+    { runs: 2 },
   );
-  const peer = registerCommandWithCache(peerCache);
+  const peer = registerCommandWithCache(peerCache, undefined, undefined, { runs: 1 });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
   const notifications: Notification[] = [];
@@ -2339,7 +2429,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     "utf8",
   );
   await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
-  const resolver = makeLocationsResolver(cwd);
+  const resolver = makeLocationsResolver(cwd, "adapter");
   const cachePath = await resolver.pluginCachePath("project", marketplace);
   const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
   const ownerCache = createCompletionCache();
@@ -2360,14 +2450,15 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
-  // The one run is the only probe: the remove notification renders from it.
+  // The run takes one probe, which the remove notification renders from, and
+  // each completion lookup one more (MSEL-01).
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1 },
+    { runs: 2 },
   );
-  const peer = registerCommandWithCache(peerCache);
+  const peer = registerCommandWithCache(peerCache, undefined, undefined, { runs: 1 });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
   const notifications: Notification[] = [];
@@ -2442,7 +2533,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     "utf8",
   );
   await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
-  const resolver = makeLocationsResolver(cwd);
+  const resolver = makeLocationsResolver(cwd, "adapter");
   const cachePath = await resolver.pluginCachePath("project", marketplace);
   const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
   const ownerCache = createCompletionCache();
@@ -2463,14 +2554,15 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
-  // The one run is the only probe: the update notification renders from it.
+  // The run takes one probe, which the update notification renders from, and
+  // each completion lookup one more (MSEL-01).
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1 },
+    { runs: 2 },
   );
-  const peer = registerCommandWithCache(peerCache);
+  const peer = registerCommandWithCache(peerCache, undefined, undefined, { runs: 1 });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
   const notifications: Notification[] = [];
@@ -2657,7 +2749,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     "utf8",
   );
   await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
-  const resolver = makeLocationsResolver(cwd);
+  const resolver = makeLocationsResolver(cwd, "adapter");
   const cachePath = await resolver.pluginCachePath("project", marketplace);
   const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
   const ownerCache = createCompletionCache();
@@ -2678,15 +2770,16 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
-  // D-05: the run is the only probe; the install stamps severity and renders
-  // its markers from the run's snapshot.
+  // D-05: the run takes one probe; the install stamps severity and renders
+  // its markers from the run's snapshot. Each completion lookup takes one more
+  // (MSEL-01).
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1 },
+    { runs: 3 },
   );
-  const peer = registerCommandWithCache(peerCache);
+  const peer = registerCommandWithCache(peerCache, undefined, undefined, { runs: 1 });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
   const notifications: Notification[] = [];
@@ -2892,7 +2985,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
   ) as ExtensionState["marketplaces"][string]["plugins"][string];
   await saveState(extensionRoot, state);
-  const resolver = makeLocationsResolver(cwd);
+  const resolver = makeLocationsResolver(cwd, "adapter");
   const cachePath = await resolver.pluginCachePath("project", marketplace);
   const ownerCache = createCompletionCache();
   const peerCache = createCompletionCache();
@@ -2905,13 +2998,14 @@ test("rebuilds completion rows through the cache that owns a successful register
   );
   await rm(cachePath, { force: true });
   // One run; the reinstall notification renders from it and probes nothing.
+  // Each completion lookup takes one probe (MSEL-01).
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1 },
+    { runs: 2 },
   );
-  const peer = registerCommandWithCache(peerCache);
+  const peer = registerCommandWithCache(peerCache, undefined, undefined, { runs: 1 });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
   const notifications: Notification[] = [];
@@ -2995,7 +3089,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
   ) as ExtensionState["marketplaces"][string]["plugins"][string];
   await saveState(extensionRoot, state);
-  const resolver = makeLocationsResolver(cwd);
+  const resolver = makeLocationsResolver(cwd, "adapter");
   const cachePath = await resolver.pluginCachePath("project", marketplace);
   const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
   const ownerCache = createCompletionCache();
@@ -3013,13 +3107,14 @@ test("rebuilds completion rows through the cache that owns a successful register
   );
   await rm(unrelatedCachePath, { force: true });
   // One run; the uninstall notification renders from it and probes nothing.
+  // Each completion lookup takes one probe (MSEL-01).
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    { runs: 1 },
+    { runs: 3 },
   );
-  const peer = registerCommandWithCache(peerCache);
+  const peer = registerCommandWithCache(peerCache, undefined, undefined, { runs: 1 });
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
   const notifications: Notification[] = [];

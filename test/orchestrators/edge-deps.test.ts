@@ -28,6 +28,7 @@ import { ManifestSoftFailError } from "../../extensions/pi-claude-marketplace/sh
 import { InvalidMarketplaceManifestError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
+import type { ActiveMcpImplementation } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { PluginIndexRow } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
@@ -62,6 +63,8 @@ interface FixturePlugin {
   readonly declaresBinaries?: boolean;
   /** Create the on-disk plugin tree (default true). */
   readonly pluginTree?: boolean;
+  /** The `.mcp.json` text the plugin tree ships, when it ships one. */
+  readonly mcpJson?: string;
   readonly installed?: InstalledFixture;
 }
 
@@ -72,6 +75,11 @@ interface BucketizerCase {
   readonly plugins: () => readonly FixturePlugin[];
   readonly rows: readonly PluginIndexRow[];
 }
+
+/** One sse server: pi-mcp-adapter runs it, Pi's built-in MCP cannot. */
+const SSE_MCP_JSON = JSON.stringify({
+  mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } },
+});
 
 function refuseNetwork(): Promise<Response> {
   throw new Error("the completion resolver must not reach the network");
@@ -190,6 +198,9 @@ async function layoutMarketplace(
         }),
         "utf8",
       );
+      if (plugin.mcpJson !== undefined) {
+        await writeFile(path.join(pluginRoot, ".mcp.json"), plugin.mcpJson, "utf8");
+      }
     }
 
     if (plugin.installed !== undefined) {
@@ -204,7 +215,7 @@ describe("pluginCachePath", () => {
   test("derives the project-scope per-marketplace cache file", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "index-project");
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
     const expectedCachePath = path.join(
       scope.cwd,
       ".pi",
@@ -224,7 +235,7 @@ describe("pluginCachePath", () => {
   test("derives the user-scope per-marketplace cache file", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "index-user");
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
     const expectedCachePath = path.join(
       scope.home,
       ".pi",
@@ -254,7 +265,7 @@ describe("loadStateForScope", () => {
       }),
       marketplaceRecord(scope.cwd, "empty-mp", {}),
     ]);
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
     const expectedState = {
       marketplaces: {
         "team-mp": { plugins: { plug: pluginRecord(pluginRoot, { version: "1.0.0" }) } },
@@ -272,7 +283,7 @@ describe("loadStateForScope", () => {
   test("reports no marketplaces when the scope has no state file", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "state-absent");
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
     const expectedState = { marketplaces: {} };
 
     // act
@@ -530,7 +541,7 @@ describe("loadManifestForMarketplace", () => {
       // arrange
       const scope = await createHermeticScope(t, marketplace);
       await layoutMarketplace(scope.cwd, marketplace, plugins());
-      const resolver = makeLocationsResolver(scope.cwd);
+      const resolver = makeLocationsResolver(scope.cwd, "adapter");
       const expectedRows = rows;
 
       // act
@@ -544,7 +555,7 @@ describe("loadManifestForMarketplace", () => {
   test("reports a soft failure when the scope has no record for the marketplace", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "absent-record");
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
 
     // act
     const rejection = resolver.loadManifestForMarketplace("project", "absent-mp");
@@ -568,7 +579,7 @@ describe("loadManifestForMarketplace", () => {
     await mkdir(path.dirname(manifestPath), { recursive: true });
     await writeFile(manifestPath, "{", "utf8");
     await writeStateFile(scope.cwd, [marketplaceRecord(scope.cwd, "broken-mp", {})]);
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
 
     // act
     const rejection = resolver.loadManifestForMarketplace("project", "broken-mp");
@@ -581,4 +592,37 @@ describe("loadManifestForMarketplace", () => {
       return true;
     });
   });
+});
+
+describe("loadManifestForMarketplace for each MCP implementation (D-P6-22, MREC-03)", () => {
+  const implementationCases = [
+    { mcpImplementation: "adapter", sseStatus: "available" },
+    { mcpImplementation: "builtin", sseStatus: "partially-available" },
+    { mcpImplementation: "none", sseStatus: "available" },
+  ] satisfies readonly {
+    readonly mcpImplementation: ActiveMcpImplementation;
+    readonly sseStatus: PluginIndexRow["status"];
+  }[];
+
+  for (const { mcpImplementation, sseStatus } of implementationCases) {
+    test(`classifies a not-installed sse entry as ${sseStatus} for ${mcpImplementation}`, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, `sse-${mcpImplementation}`);
+      await layoutMarketplace(scope.cwd, "sse-mp", [
+        { name: "events", manifestVersion: "1.0.0", mcpJson: SSE_MCP_JSON },
+        { name: "plain", manifestVersion: "1.0.0" },
+      ]);
+      const resolver = makeLocationsResolver(scope.cwd, mcpImplementation);
+      const expectedRows = [
+        { name: "events", status: sseStatus, version: "1.0.0" },
+        { name: "plain", status: "available", version: "1.0.0" },
+      ];
+
+      // act
+      const indexRows = await resolver.loadManifestForMarketplace("project", "sse-mp");
+
+      // assert
+      assert.deepStrictEqual(indexRows, expectedRows);
+    });
+  }
 });
