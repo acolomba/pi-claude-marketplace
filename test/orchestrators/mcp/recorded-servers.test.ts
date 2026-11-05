@@ -7,7 +7,6 @@ import { mock, verify, when } from "strong-mock";
 
 import {
   createLegacyServersReader,
-  LegacyServersUnreadableError,
   recordedMcpServers,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -105,18 +104,6 @@ async function marketplaceListing(
       pluginName: "p1",
       locations,
     },
-  };
-}
-
-/** Matches the reader's refusal of plugin `p1` of marketplace `mp` for `reason`. */
-function unreadableAs(reason: LegacyServersUnreadableError["reason"]): (error: unknown) => boolean {
-  return (error: unknown) => {
-    assert.ok(error instanceof LegacyServersUnreadableError);
-    assert.deepStrictEqual(
-      { reason: error.reason, plugin: error.plugin, marketplace: error.marketplace },
-      { reason, plugin: "p1", marketplace: "mp" },
-    );
-    return true;
   };
 }
 
@@ -226,6 +213,28 @@ describe("recordedMcpServers", () => {
     // assert
     assert.deepStrictEqual(recorded, { kind: "unreadable" });
     assert.deepStrictEqual(logged, ["[mcp] recorded MCP servers unreadable: plugin root gone"]);
+  });
+
+  test("UF-4: logs a legacy reader failure that names an absolute path without the path", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const record = installRecord();
+    const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
+    when(() => reader(installRecord())).thenReject(
+      new Error(
+        "ENOENT: no such file or directory, open '/home/someone/.pi/agent/pi-claude-marketplace/sources/mp/.claude-plugin/marketplace.json'",
+      ),
+    );
+
+    // act
+    const recorded = await recordedMcpServers(record, reader);
+
+    // assert
+    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(logged, [
+      "[mcp] recorded MCP servers unreadable: ENOENT: no such file or directory, open 'marketplace.json'",
+    ]);
+    verify(reader);
   });
 
   test("UF-1: reads a legacy record whose plugin root is outside its marketplace as unreadable", async (t) => {
@@ -515,7 +524,12 @@ describe("createLegacyServersReader", () => {
       const reader = createLegacyServersReader(marketplace.source);
 
       // act & assert
-      await assert.rejects(reader(await record(marketplace)), unreadableAs("uncontained"));
+      await assert.rejects(reader(await record(marketplace)), {
+        name: "LegacyServersUnreadableError",
+        reason: "uncontained",
+        plugin: "p1",
+        marketplace: "mp",
+      });
     });
   }
 
@@ -531,7 +545,12 @@ describe("createLegacyServersReader", () => {
     const reader = createLegacyServersReader(marketplace.source);
 
     // act & assert
-    await assert.rejects(reader(installRecord(pluginRoot)), unreadableAs("version-mismatch"));
+    await assert.rejects(reader(installRecord(pluginRoot)), {
+      name: "LegacyServersUnreadableError",
+      reason: "version-mismatch",
+      plugin: "p1",
+      marketplace: "mp",
+    });
   });
 
   test("MREC-02: refuses a plugin the marketplace manifest no longer lists", async (t) => {
@@ -540,10 +559,12 @@ describe("createLegacyServersReader", () => {
     const reader = createLegacyServersReader(marketplace.source);
 
     // act & assert
-    await assert.rejects(
-      reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))),
-      unreadableAs("not-in-manifest"),
-    );
+    await assert.rejects(reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))), {
+      name: "LegacyServersUnreadableError",
+      reason: "not-in-manifest",
+      plugin: "p1",
+      marketplace: "mp",
+    });
   });
 
   test("MREC-02: refuses a re-resolution that resolves unavailable", async (t) => {
@@ -552,10 +573,12 @@ describe("createLegacyServersReader", () => {
     const reader = createLegacyServersReader(marketplace.source);
 
     // act & assert
-    await assert.rejects(
-      reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))),
-      unreadableAs("unavailable"),
-    );
+    await assert.rejects(reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))), {
+      name: "LegacyServersUnreadableError",
+      reason: "unavailable",
+      plugin: "p1",
+      marketplace: "mp",
+    });
   });
 
   test("MREC-02: refuses a re-resolved plugin root that differs from the recorded one", async (t) => {
@@ -566,9 +589,11 @@ describe("createLegacyServersReader", () => {
     const reader = createLegacyServersReader(marketplace.source);
 
     // act & assert
-    await assert.rejects(
-      reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))),
-      unreadableAs("root-mismatch"),
-    );
+    await assert.rejects(reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))), {
+      name: "LegacyServersUnreadableError",
+      reason: "root-mismatch",
+      plugin: "p1",
+      marketplace: "mp",
+    });
   });
 });

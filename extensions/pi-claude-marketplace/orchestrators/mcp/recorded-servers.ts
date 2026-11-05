@@ -28,6 +28,7 @@ import { isSameVersion } from "../../domain/version.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { deriveInstallVersion } from "../plugin/install-outcome.ts";
 
 import type { RecordedMcpServer, RecordedMcpServers } from "../../domain/mcp-implementation.ts";
@@ -71,7 +72,12 @@ export async function recordedMcpServers(
   } catch (err) {
     // MREC-02: an unreadable declaration leaves the stored verdict standing.
     // The debug channel keeps why, since a caller sees only `unreadable`.
-    hookDebugLog(`recorded MCP servers unreadable: ${errorMessage(err)}`, "mcp");
+    // UF-4: manifest and plugin file errors name absolute paths, which the
+    // line cuts to their last segment.
+    hookDebugLog(
+      redactAbsolutePaths(`recorded MCP servers unreadable: ${errorMessage(err)}`),
+      "mcp",
+    );
     return { kind: "unreadable" };
   }
 }
@@ -94,14 +100,14 @@ export interface LegacyServersSource {
 }
 
 /** Why the legacy reader could not re-resolve a record's declaration. */
-export type LegacyServersUnreadableReason =
+type LegacyServersUnreadableReason =
   "not-in-manifest" | "unavailable" | "root-mismatch" | "version-mismatch" | "uncontained";
 
 /**
  * MREC-02: the legacy reader refuses to re-resolve a record's declaration.
  * `recordedMcpServers` reads every refusal as `unreadable`.
  */
-export class LegacyServersUnreadableError extends Error {
+class LegacyServersUnreadableError extends Error {
   readonly reason: LegacyServersUnreadableReason;
   readonly plugin: string;
   readonly marketplace: string;
