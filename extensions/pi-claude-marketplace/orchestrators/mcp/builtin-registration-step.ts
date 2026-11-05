@@ -25,17 +25,16 @@
  * before any of its files is read or its root reaches `${CLAUDE_PLUGIN_ROOT}`:
  * a git record's own `plugin-clones/<key>/` entry, any other record's
  * marketplace root, which for a cloned marketplace must itself lie inside the
- * scope's `sources/<marketplace>/` checkout.
+ * scope's `sources/<marketplace>/` checkout. `recorded-servers.ts` owns the
+ * check, which its legacy reader applies too.
  *
  * NFR-2: neither step throws. Every skipped record, scope, or server is
  * debug-logged on the `mcp` channel with its name and the error message, never
  * a config value; each absolute path in the line is cut to its last segment,
  * since state, data-directory, and Pi registry errors name absolute paths.
- * The frozen legacy reader logs its own refusals. The steps never handle
+ * The legacy reader logs its own refusals. The steps never handle
  * `mcp_servers_change`, which would make this extension the connector (PI-11).
  */
-
-import path from "node:path";
 
 import {
   builtinServerConfig,
@@ -52,11 +51,14 @@ import {
 } from "../../platform/mcp-builtin-status.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { assertPathInside } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { SCOPES } from "../../shared/types.ts";
 
-import { createLegacyServersReader, recordedMcpServers } from "./recorded-servers.ts";
+import {
+  createLegacyServersReader,
+  isPluginRootContained,
+  recordedMcpServers,
+} from "./recorded-servers.ts";
 
 import type { McpSubstitutionContext } from "../../bridges/mcp/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
@@ -120,73 +122,6 @@ function enabledRecords(state: ExtensionState): RecordSource[] {
   return sources;
 }
 
-/** `pluginCloneKey` (`<12hex>-<sha12>`) and `pluginMirrorKey` (`<12hex>`) outputs. */
-const CLONE_KEY = /^[0-9a-f]{12}(?:-[0-9a-f]{12})?$/;
-
-/**
- * D-PL2-23: the `plugin-clones/` entry that owns a record, or `undefined` when
- * the record runs in place in its marketplace. Records carry no source kind,
- * so `plugin-clones/` owns one only when it has `resolvedSha` and its root
- * lies under `plugin-clones/`.
- */
-function cloneKeyOf(record: PluginInstallRecord, pluginClonesDir: string): string | undefined {
-  const relative = path.relative(pluginClonesDir, record.resolvedSource);
-  if (
-    record.resolvedSha === undefined ||
-    relative === "" ||
-    relative.startsWith("..") ||
-    path.isAbsolute(relative)
-  ) {
-    return undefined;
-  }
-
-  return relative.split(path.sep)[0];
-}
-
-/** A `dir` or `file` marketplace, whose root is the user's own directory. */
-function isPathMarketplace(source: unknown): boolean {
-  return (
-    typeof source === "object" && source !== null && "kind" in source && source.kind === "path"
-  );
-}
-
-/**
- * UF-1 / NFR-10: the one clone root a record's plugin root must lie in. A
- * cloned marketplace's root is taken from the same state file as the record,
- * so it must itself lie inside the scope's checkout of that marketplace.
- * Throws when the record names no such root.
- */
-async function owningRoot(source: RecordSource, locations: ScopedLocations): Promise<string> {
-  const cloneKey = cloneKeyOf(source.record, locations.pluginClonesDir);
-  if (cloneKey !== undefined) {
-    if (!CLONE_KEY.test(cloneKey)) {
-      throw new Error(`plugin root is not inside a plugin clone: ${cloneKey}`);
-    }
-
-    return locations.pluginCloneDir(cloneKey);
-  }
-
-  const { marketplace } = source;
-  if (!isPathMarketplace(marketplace.source)) {
-    const checkout = await locations.sourceCloneDir(source.marketplaceName);
-    await assertPathInside(checkout, marketplace.marketplaceRoot, "marketplace root");
-  }
-
-  return marketplace.marketplaceRoot;
-}
-
-async function isContained(source: RecordSource, locations: ScopedLocations): Promise<boolean> {
-  try {
-    const root = await owningRoot(source, locations);
-    await assertPathInside(root, source.record.resolvedSource, "plugin root");
-    return true;
-  } catch {
-    // Any refusal, a traversal, a path outside, a symlinked segment, or a
-    // root the record cannot own, leaves the plugin root uncontained.
-    return false;
-  }
-}
-
 /**
  * The servers of one plugin that the built-in profile runs, named and built in
  * the record's server order. The install-time verdict does not filter: a
@@ -223,14 +158,15 @@ async function recordRegistrations(
   session: SessionFacts,
 ): Promise<Registration[]> {
   const plugin = `${source.pluginName}@${source.marketplaceName}`;
-  if (!(await isContained(source, locations))) {
+  const legacySource = { ...source, locations };
+  if (!(await isPluginRootContained(source.record, legacySource))) {
     debugLog(`MCP servers of ${plugin} not registered: its plugin root is outside its sources`);
     return [];
   }
 
   // MREC-02: a record without `mcpServerConfigs` is re-resolved read-only
   // against its own marketplace record.
-  const recorded = await recordedMcpServers(source.record, createLegacyServersReader(source));
+  const recorded = await recordedMcpServers(source.record, createLegacyServersReader(legacySource));
   if (recorded.kind === "unreadable") {
     debugLog(`MCP servers of ${plugin} not registered: its servers are unreadable`);
     return [];

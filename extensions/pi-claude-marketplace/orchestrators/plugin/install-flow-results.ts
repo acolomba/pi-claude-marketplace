@@ -380,6 +380,7 @@ export async function promoteDependencyRecord(
         marketplaceName: marketplace,
         marketplace: marketplaceRecord,
         pluginName: plugin,
+        locations: args.locations,
       }),
       declaresWorkflows: record.resources.workflows.length > 0,
       materialized: [],
@@ -938,6 +939,7 @@ export async function declareInstalledPlugin(args: {
       marketplaceName: marketplace,
       marketplace: marketplaceRecord,
       pluginName: plugin,
+      locations: args.locations,
     }),
     reason: selection.targetIsLocal
       ? "already installed in base layer"

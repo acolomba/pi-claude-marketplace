@@ -31,6 +31,7 @@ import type {
   EffectiveMcpCompatibility,
   RecordedMcpServers,
 } from "../../domain/mcp-implementation.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 
@@ -54,8 +55,10 @@ function legacyReaderFor(source: LegacyServersSource): LegacyServersReader {
 /**
  * D-P3-04 / MREC-03: a plugin record's MCP verdict for the active
  * implementation, read offline. `source` names the marketplace record that
- * lists the plugin, which a legacy record re-resolves against. The result
- * also carries the servers the verdict was read from.
+ * lists the plugin, which a legacy record re-resolves against, and the
+ * locations of the scope whose state file holds both, inside whose clone
+ * root the record's plugin root must lie (UF-1). The result also carries the
+ * servers the verdict was read from.
  */
 export async function readRecordMcpVerdict(
   record: PluginInstallRecord,
@@ -71,15 +74,17 @@ export async function readRecordMcpVerdict(
 
 /**
  * D-P3-13: the degrade baseline reader for `active`, which reads a record's
- * MCP verdict as `readRecordMcpVerdict` does.
+ * MCP verdict as `readRecordMcpVerdict` does. `locations` are those of the
+ * scope whose state file holds the records it reads (UF-1).
  */
 export function recordDegradeBaselineReader(
   active: ActiveMcpImplementation,
+  locations: ScopedLocations,
 ): RecordDegradeBaselineReader {
   return async (record, marketplace, plugin) => {
     const { effective, recorded } = await readRecordMcpVerdict(
       record,
-      { marketplaceName: marketplace.name, marketplace, pluginName: plugin },
+      { marketplaceName: marketplace.name, marketplace, pluginName: plugin, locations },
       active,
     );
     return degradeBaselineOf(effective, recorded, record, active);

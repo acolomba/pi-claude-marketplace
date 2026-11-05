@@ -9,9 +9,17 @@
 // plugin root instead. A present empty array means the plugin declares no
 // non-malformed server, and the legacy reader is not called.
 //
+// UF-1 / NFR-10: a record's plugin root must lie inside its own clone root
+// before any of its files is read: a git record's own `plugin-clones/<key>/`
+// entry, any other record's marketplace root, which for a cloned marketplace
+// must itself lie inside the scope's `sources/<marketplace>/` checkout. The
+// legacy reader and the built-in registration step share the one check here.
+//
 // The read changes nothing: it writes no file and no state, and it reaches no
 // network (NFR-5). This module is outside BLOCK F's NETWORK_SEAMS, so it can
 // import no git surface.
+
+import path from "node:path";
 
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -19,10 +27,12 @@ import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { isSameVersion } from "../../domain/version.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { assertPathInside } from "../../shared/path-safety.ts";
 import { deriveInstallVersion } from "../plugin/install-outcome.ts";
 
 import type { RecordedMcpServer, RecordedMcpServers } from "../../domain/mcp-implementation.ts";
 import type { GitPluginRootResult, ResolveContext } from "../../domain/resolver-types.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 
 /** The MCP servers the legacy reader re-resolves for a record that predates the field. */
@@ -75,11 +85,17 @@ export interface LegacyServersSource {
     "manifestPath" | "marketplaceRoot" | "source"
   >;
   readonly pluginName: string;
+  /**
+   * UF-1 / NFR-10: the locations of the scope whose state file holds the
+   * record and its marketplace record. They name the clone root the record's
+   * plugin root must lie in.
+   */
+  readonly locations: ScopedLocations;
 }
 
 /** Why the legacy reader could not re-resolve a record's declaration. */
 export type LegacyServersUnreadableReason =
-  "not-in-manifest" | "unavailable" | "root-mismatch" | "version-mismatch";
+  "not-in-manifest" | "unavailable" | "root-mismatch" | "version-mismatch" | "uncontained";
 
 /**
  * MREC-02: the legacy reader refuses to re-resolve a record's declaration.
@@ -95,6 +111,84 @@ export class LegacyServersUnreadableError extends Error {
     this.reason = reason;
     this.plugin = plugin;
     this.marketplace = marketplace;
+  }
+}
+
+/** `pluginCloneKey` (`<12hex>-<sha12>`) and `pluginMirrorKey` (`<12hex>`) outputs. */
+const CLONE_KEY = /^[0-9a-f]{12}(?:-[0-9a-f]{12})?$/;
+
+/**
+ * D-PL2-23: the `plugin-clones/` entry that owns a record, or `undefined` when
+ * the record runs in place in its marketplace. Records carry no source kind,
+ * so `plugin-clones/` owns one only when it has `resolvedSha` and its root
+ * lies under `plugin-clones/`.
+ */
+function cloneKeyOf(record: PluginInstallRecord, pluginClonesDir: string): string | undefined {
+  const relative = path.relative(pluginClonesDir, record.resolvedSource);
+  if (
+    record.resolvedSha === undefined ||
+    relative === "" ||
+    relative.startsWith("..") ||
+    path.isAbsolute(relative)
+  ) {
+    return undefined;
+  }
+
+  return relative.split(path.sep)[0];
+}
+
+/** A `dir` or `file` marketplace, whose root is the user's own directory. */
+function isPathMarketplace(source: unknown): boolean {
+  return (
+    typeof source === "object" && source !== null && "kind" in source && source.kind === "path"
+  );
+}
+
+/**
+ * UF-1 / NFR-10: the one clone root a record's plugin root must lie in. A
+ * cloned marketplace's root is taken from the same state file as the record,
+ * so it must itself lie inside the scope's checkout of that marketplace.
+ * Throws when the record names no such root.
+ */
+async function owningRoot(
+  record: PluginInstallRecord,
+  source: LegacyServersSource,
+): Promise<string> {
+  const { locations, marketplace } = source;
+  const cloneKey = cloneKeyOf(record, locations.pluginClonesDir);
+  if (cloneKey !== undefined) {
+    if (!CLONE_KEY.test(cloneKey)) {
+      throw new Error(`plugin root is not inside a plugin clone: ${cloneKey}`);
+    }
+
+    return locations.pluginCloneDir(cloneKey);
+  }
+
+  if (!isPathMarketplace(marketplace.source)) {
+    const checkout = await locations.sourceCloneDir(source.marketplaceName);
+    await assertPathInside(checkout, marketplace.marketplaceRoot, "marketplace root");
+  }
+
+  return marketplace.marketplaceRoot;
+}
+
+/**
+ * UF-1 / NFR-10: whether `record`'s plugin root lies inside its owning clone
+ * root, the record's `plugin-clones/<key>/` entry or its marketplace root.
+ * Reads no file but the path segments it walks.
+ */
+export async function isPluginRootContained(
+  record: PluginInstallRecord,
+  source: LegacyServersSource,
+): Promise<boolean> {
+  try {
+    const root = await owningRoot(record, source);
+    await assertPathInside(root, record.resolvedSource, "plugin root");
+    return true;
+  } catch {
+    // Any refusal, a traversal, a path outside, a symlinked segment, or a
+    // root the record cannot own, leaves the plugin root uncontained.
+    return false;
   }
 }
 
@@ -130,8 +224,11 @@ function recordedRootContext(
 /**
  * MREC-02: the production legacy reader for one plugin. It reads the cached
  * `marketplace.json` and the plugin's own files, and re-runs `resolveStrict`
- * pinned to the recorded plugin root. It refuses when the manifest no longer
- * lists the plugin, when the re-resolution is unavailable, when the
+ * pinned to the recorded plugin root. Before it reads anything, it refuses a
+ * plugin root outside its owning clone root (UF-1, NFR-10): both root
+ * callbacks answer the recorded root, so the root-mismatch check below
+ * cannot catch such a root for a git or tag-pinned record. It refuses when
+ * the manifest no longer lists the plugin, when the re-resolution is unavailable, when the
  * re-resolved plugin root is not `record.resolvedSource`, and when the
  * version install would record for the re-resolution is not the record's
  * `version`. The last check matters for an unpinned path source, whose
@@ -147,6 +244,10 @@ export function createLegacyServersReader(source: LegacyServersSource): LegacySe
     new LegacyServersUnreadableError(reason, source.pluginName, source.marketplaceName);
 
   return async (record) => {
+    if (!(await isPluginRootContained(record, source))) {
+      throw refuse("uncontained");
+    }
+
     const manifest = await loadMarketplaceManifest(source.marketplace.manifestPath);
     const lookup = lookupDeclaredPlugin(manifest, source.pluginName);
     if (lookup.kind === "absent") {

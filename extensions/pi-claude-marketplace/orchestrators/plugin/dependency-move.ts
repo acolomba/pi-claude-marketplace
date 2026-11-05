@@ -168,7 +168,10 @@ function moveArgs(
     // and only for a kind its record does not drop under that implementation,
     // so a cascade never asks because of a switch (D-MB-06, D-P3-13).
     mcpImplementation: context.softDeps.mcpImplementation,
-    readRecordDegradeBaseline: recordDegradeBaselineReader(context.softDeps.mcpImplementation),
+    readRecordDegradeBaseline: recordDegradeBaselineReader(
+      context.softDeps.mcpImplementation,
+      context.locations,
+    ),
     cleanupClones: context.cleanupClones,
     cloneCandidates: context.cloneCandidates,
     constraintTagMemo: context.constraintTagMemo,

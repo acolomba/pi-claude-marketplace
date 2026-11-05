@@ -170,7 +170,8 @@ export async function composeInstalledListRow(
 
   // D-P3-04 / D-P3-05: the record's MCP verdict for the active
   // implementation, read offline, decides the row, so a switch needs no
-  // reinstall.
+  // reinstall. The record and its marketplace record are in the plugin
+  // scope's state file (UF-1).
   const { effective, recorded } = await readRecordMcpVerdict(
     record,
     {
@@ -181,6 +182,7 @@ export async function composeInstalledListRow(
         source: options.marketplaceSource,
       },
       pluginName,
+      locations: locationsFor(options.pluginScope, options.cwd),
     },
     options.mcpImplementation,
   );
