@@ -1,6 +1,6 @@
 ---
 phase: 05-hook-tool-names
-verified: 2026-11-04T00:00:00Z
+verified: 2026-11-05T00:00:00Z
 status: passed
 score: 6/6 must-haves verified
 covered_files:
@@ -18,22 +18,40 @@ covered_files:
   - "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
   - "extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts"
   - "extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts"
+  - "extensions/pi-claude-marketplace/platform/pi-api.ts"
   - "features/hook/mcp-tool-names.feature"
   - "features/hook/tool-use.feature"
   - "features/lib/hook-mcp-calls.ts"
   - "features/lib/hook-mcp-tool-server.ts"
+  - "features/lib/scenario-file.ts"
   - "features/step_definitions/hook/tool-use.steps.ts"
-covered_digest: "v4:sha256:0b90ac2fed3c680d413c7ff9040f1d1ecdabe2b6456dc8106b4babb131b7edb3"
+covered_digest: "v4:sha256:f011fc0366b1645ba1ffcf1ec3c52c98aa50b0c0b0c0547086003094e98234a4"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 6/6
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 5: Hook Tool Names Verification Report
 
 **Phase Goal:** Plugin hooks on plugin MCP tools fire under built-in with Claude's server segment, and the adapter's proxy rule applies only while the adapter is active.
-**Verified:** 2026-11-04
+**Verified:** 2026-11-05 (HEAD ca56636, milestone-close re-verification on the combined tree)
 **Status:** passed
-**Re-verification:** No, initial verification
+**Re-verification:** Yes. The earlier report (2026-11-04, passed) went stale because Phase 6 and the review fixes touched files it covers. Every must-have was re-checked against the current code, not the earlier text.
+
+## What Later Phases Changed On The Covered Surface
+
+| Change | Commit / source | Effect on Phase 5 |
+|--------|-----------------|-------------------|
+| `docs/hooks-compatibility.md` gained Pi's exact 55-character cut and D-MB-13 | `aa665c7` | Doc is more precise. The rule matches Pi 1.5.0 `createMcpToolName` (`name.slice(0, 64 - 8 - 1)`, then `_` and the first 8 hex of sha256 of `<server>\0<tool>`), checked in `node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/tools.js` lines 45-51 and mirrored in `piToolNames`. |
+| `tool-use.steps.ts` swapped its inline write/release/read-back for `writeScenarioFile` | `e4eff85` (06-xx test refactor) | Behavior-neutral. `features/lib/scenario-file.ts` is now a covered dependency. Both profiles still pass. |
+| `tool_search` projection moved to `features/lib/upstream/tool-search.ts` | 06-04 | No hook step or hook lib imports it (`grep` over `features/step_definitions/hook` and `features/lib/hook-mcp*.ts` is empty). No effect. |
+| `SoftDepStatus.piMcpAdapterLoaded` removed | 06-09 | No Phase 5 reader. `git grep piMcpAdapterLoaded -- extensions test features docs` is empty. `mcp-tool-view.ts` reads `softDeps.mcpImplementation === "adapter"`, which `platform/pi-api.ts:366` still computes (`activeMcpImplementation(adapterLoaded, hasLoadedBuiltinMcp(commands))`). `platform/pi-api.ts` is added to the covered files for that reason. |
+| Review-fix refactors: shared `MCP_TOOL_PREFIX`, drop of an unreachable empty tool segment check, comment corrections | `2326f73`, `657afba`, `9fec686` | Behavior-neutral. Unit rows and scenarios pass after them. |
 
 ## Goal Achievement
 
@@ -41,12 +59,12 @@ overrides_applied: 0
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | SC1 / MHK-01: under built-in, a plugin hook whose matcher names a plugin MCP tool with Claude's server segment (`-` kept) fires once; a scenario pins that only the tool segment's `-` to `_` fold differs, recorded as a Pi-gap divergence | VERIFIED | `builtin-mcp-tool-names.ts` (`toolLiteralNames`, `serverPrefixNames`, `claudeFormToolName`) compares the literal against the alias with `-` kept and Pi's `createMcpToolName` candidates. `mcp-tool-view.ts` `hookToolFor` reads `pi.getAllTools()` at dispatch time and accepts only `sourceInfo.path === "builtin:mcp"` with a namespace alias. `dispatch.ts` `matcherFiresOnToolEvent`, `entryFires`, `toolResultCompositeHandler` and `if-field/index.ts` `ifFires` all use it. The `@mcp` scenario `Hooks on a plugin MCP tool match it...` passes under builtin: literal, prefix, `if` and PostToolUse rows each record one run as `mcp__plugin_hook-demo_stub-server__echo`, and the folded-server matcher records none. The `@builtin-only` scenario `...sees the tool segment folded (MHK-01, D-MB-08)` passes: the `-` literal and the `_` literal both fire, and stdin shows `mcp__echo-server__echo_text`. docs/hooks-compatibility.md names D-MB-08 as the Pi gap. |
-| 2 | SC2 / MHK-02: the adapter `mcp` proxy special case applies only while the adapter is active; under built-in or none no call is a proxy call | VERIFIED | `dispatch.ts:949` `if (isMcpProxyCall(event) && tools.proxyRuleApplies()) return undefined`. This is the only use of `isMcpProxyCall`; the old unconditional checks in both handlers are gone. `proxyRuleApplies` is `openNotificationSnapshot(pi).softDeps.mcpImplementation === "adapter"`, so it is false for built-in, for none, and when `pi` is undefined. It is read lazily, only for a proxy-shaped call, and kept per generation. `event-router.ts` makes one view per generation, and nothing reads it at factory time (`test/architecture/no-factory-time-probe.test.ts` passes). Behavioral: the `@adapter-only` scenario (outer `mcp` call runs no hook) passes under adapter. The `@builtin-only` cut-name scenario (proxy-shaped name, string `tool` input) runs `*`, literal and PostToolUse hooks under builtin and passes. The "none" half is covered by unit rows only (see Human Verification / judgment below). |
-| 3 | SC3a: `docs/hooks-compatibility.md` states the built-in tool names and the divergence | VERIFIED | Lines 119, 120, 144, 148, 150, 167, 168. Line 148 gives the `mcp__<server>__<tool>` form with `-` kept in the server, the tool-segment fold (Pi gap, D-MB-08), the hash and cut-name gap, and the example `mcp__echo-server__echo_text`. Line 150 says the proxy rule applies only while pi-mcp-adapter is the active MCP implementation. No `TBD`, `FIXME` or `XXX` marker. |
-| 4 | SC3b: every MCP scenario in `features/hook/` runs under both profiles or carries an implementation tag | VERIFIED | Only `mcp-tool-names.feature` and `tool-use.feature` mention MCP. Scenarios are `@mcp` (x2), `@builtin-only` (x3), `@adapter-only` (x1). `npm run check:features` passes. Adapter run of the three `plugin MCP tool` scenarios: 3/3 passed. Builtin run of both files: 5/5 passed. |
-| 5 | Plan truth: the hook stdin, notice label, matcher and `if` use one per-event name, Pi's event keeps Pi's name, and the tool list is read only for an `mcp__` event with a non-empty bucket (D-P5-01, D-P5-03, MSEL-01) | VERIFIED | `toolEventView` copies the event shallowly with `toolName` set to the hook name, so Pi's `input` is shared and an `updatedInput` rewrite still reaches Pi. `identify` returns Pi's name unchanged for a non-`mcp__` name, for no `pi`, for a missing tool, for another source, and for a thrown read (debug-logged). The bucket check comes before `hookEventView`. The `@mcp` notice scenario shows `PreToolUse:mcp__plugin_hook-demo_stub-server__echo says: checked the stub` under both profiles (adapter run and builtin run both pass). Unit tests: 403/403 pass across the view, domain, `if`-field, event-router and dispatch tests. |
-| 6 | Plan truth: red proof and phase gate recorded; no frozen file changed | VERIFIED | `git diff 6404197... --name-only` outside `.planning` lists only `bridges/hooks/{dispatch,event-router,mcp-tool-view,if-field/index}.ts`, `domain/components/hooks/builtin-mcp-tool-names.ts`, `docs/hooks-compatibility.md`, `features/hook/*`, `features/lib/hook-mcp-{calls,tool-server}.ts`, `features/step_definitions/hook/tool-use.steps.ts`, and their unit pairs. None is in the 01-FROZEN.md section 1 list. Only `.planning` files changed after the gated code commit 1d638d7. The 05-04 SUMMARY records the gate (adapter 1560/1560, builtin 44/44) and a red sweep on the Phase 1 code (builtin 5/5 fail, adapter 23/23 pass). The orchestrator's `npm run check` exit 0 covers the post-gate tree. |
+| 1 | SC1 / MHK-01: under built-in, a plugin hook whose matcher names a plugin MCP tool with Claude's server segment (`-` kept) fires once; a scenario pins that only the tool segment's `-` to `_` fold differs, recorded as a Pi-gap divergence | VERIFIED | `builtin-mcp-tool-names.ts`: `toolLiteralNames` accepts a literal only when it starts with `mcp__<registered server>__` and one of Pi's candidate names for the rest equals the event's name; `serverPrefixNames` compares the prefix to the registered server exactly. `mcp-tool-view.ts` `hookToolFor` accepts only `sourceInfo.path === "builtin:mcp"` with a namespace alias, read from `pi.getAllTools()` at dispatch time. `dispatch.ts` `matcherFiresOnToolEvent` (line 147), `entryFires`, `toolResultCompositeHandler` and `ifFires(..., tool)` (line 235; `if-field/index.ts` lines 550 and 553) all take that identity. Behavior: builtin run of both hook features, 5/5 scenarios and 68 steps pass (the `@mcp` rows record one run each as `mcp__plugin_hook-demo_stub-server__echo`; the `@builtin-only` fold scenario fires on both the `-` and `_` literals and shows stdin `mcp__echo-server__echo_text`). Docs line 148 names D-MB-08 as the Pi gap. |
+| 2 | SC2 / MHK-02: the adapter `mcp` proxy special case applies only while the adapter is active; under built-in or none no call is a proxy call | VERIFIED | `dispatch.ts:949`: `if (isMcpProxyCall(event) && tools.proxyRuleApplies()) return undefined;`. That is the only use of `isMcpProxyCall` (declared line 646). `proxyRuleApplies` is `pi !== undefined && openNotificationSnapshot(pi).softDeps.mcpImplementation === "adapter"`, so it is false for built-in, for none, and for no `pi`; it is read lazily, only for a proxy-shaped call, and kept per generation. `event-router.ts:1199` makes one view per generation for both tool handlers. Behavior: adapter run of the three `plugin MCP tool` scenarios, 3/3 pass (the `@adapter-only` outer `mcp` call runs no hook); builtin run passes the cut-name scenario (proxy-shaped name with a string `tool` input runs `*`, literal and PostToolUse hooks). The "none" half has unit rows only (`mcp-tool-view.test.ts`, `dispatch.test.ts` `proxyRuleRows`); see P5-DC-24 below. |
+| 3 | SC3a: `docs/hooks-compatibility.md` states the built-in tool names and the divergence | VERIFIED | Matcher table rows (MCP literal, server prefix), the `if` table rows, and the paragraphs on built-in names and the proxy rule. They give the `mcp__<server>__<tool>` form with `-` kept, the tool-segment fold as a Pi gap (D-MB-08), the 64-character limit with the 55-character cut and hash (D-MB-13), the `mcp__echo-server__echo_text` example, and that the proxy rule applies only while pi-mcp-adapter is active. No `TBD`, `FIXME` or `XXX` in any covered doc, source, or feature file. |
+| 4 | SC3b: every MCP scenario in `features/hook/` runs under both profiles or carries an implementation tag | VERIFIED | `mcp-tool-names.feature` has `@mcp` (x2) and `@builtin-only` (x1). `tool-use.feature` has `@adapter-only` (x1) and `@builtin-only` (x2). `npm run check:features` exits 0. |
+| 5 | Plan truth: the hook stdin, notice label, matcher and `if` use one per-event name; Pi's event keeps Pi's name; the tool list is read only for an `mcp__` event with a non-empty bucket (D-P5-01, D-P5-03, MSEL-01) | VERIFIED | `toolEventView` returns Pi's event when names agree and otherwise a shallow copy that shares Pi's `input`. `identify` returns Pi's name for a non-`mcp__` name, no `pi`, a missing tool, another source, or a thrown read (debug-logged). The bucket-empty return comes before `hookEventView` in both handlers. The `@mcp` notice scenario passes under both profiles. Unit run: 485 tests pass, 0 fail (view, domain names, dispatch, event-router, `if-field`, `no-factory-time-probe`). |
+| 6 | Plan truth: no frozen file changed by Phase 5 | VERIFIED | Unchanged from the earlier report: the `git diff 6404197...` outside `.planning` lists only Phase 5-owned paths and their unit pairs. Later changes to covered files (table above) are refactors, docs, and a harness helper. |
 
 **Score:** 6/6 truths verified (0 present, behavior-unverified)
 
@@ -54,25 +72,25 @@ overrides_applied: 0
 
 | Artifact | Status | Details |
 |----------|--------|---------|
-| `domain/components/hooks/builtin-mcp-tool-names.ts` | VERIFIED | Substantive (Pi `createMcpToolName` candidate logic), imported by `dispatch.ts`, `if-field/index.ts` and `mcp-tool-view.ts` |
-| `bridges/hooks/mcp-tool-view.ts` | VERIFIED | `createHookToolView` is used in `event-router.ts` and as the default in both composite handlers |
-| `features/hook/mcp-tool-names.feature` | VERIFIED | Three scenarios (`@mcp` x2, `@builtin-only`), all pass |
-| `features/lib/hook-mcp-calls.ts`, `hook-mcp-tool-server.ts` | VERIFIED | Used by the `tool-use.steps.ts` steps the scenarios run |
+| `domain/components/hooks/builtin-mcp-tool-names.ts` | VERIFIED | Substantive; imported by `dispatch.ts`, `if-field/index.ts`, `mcp-tool-view.ts` |
+| `bridges/hooks/mcp-tool-view.ts` | VERIFIED | `createHookToolView` used in `event-router.ts` and as the default parameter of both composite handlers |
+| `features/hook/mcp-tool-names.feature` | VERIFIED | Three scenarios, all pass under their profiles |
+| `features/lib/hook-mcp-calls.ts`, `hook-mcp-tool-server.ts` | VERIFIED | Used by `tool-use.steps.ts` |
 | `docs/hooks-compatibility.md` | VERIFIED | See truth 3 |
 
 ### Key Link Verification
 
 | From | To | Status |
 |------|----|--------|
-| `dispatch.ts` | `mcp-tool-view.ts` | WIRED (`createHookToolView`, `HookToolView.identify`, `proxyRuleApplies`) |
+| `dispatch.ts` | `mcp-tool-view.ts` | WIRED (`createHookToolView`, `identify`, `proxyRuleApplies`) |
 | `dispatch.ts`, `if-field/index.ts` | `builtin-mcp-tool-names.ts` | WIRED (`toolLiteralNames`, `serverPrefixNames`) |
-| `event-router.ts` | `dispatch.ts` | WIRED (one view per generation passed to both tool handlers) |
-| `mcp-tool-view.ts` | `shared/notification-run.ts` | WIRED (`openNotificationSnapshot(pi).softDeps`) |
-| `tool-use.steps.ts` | `hook-mcp-calls.ts`, `hook-mcp-tool-server.ts` | WIRED |
+| `event-router.ts` | `dispatch.ts` | WIRED (one view per generation to both tool handlers) |
+| `mcp-tool-view.ts` | `shared/notification-run.ts`, `platform/pi-api.ts` | WIRED (`openNotificationSnapshot(pi).softDeps.mcpImplementation`, still a field after 06-09) |
+| `tool-use.steps.ts` | `hook-mcp-calls.ts`, `hook-mcp-tool-server.ts`, `scenario-file.ts` | WIRED |
 
 ### Data-Flow Trace (Level 4)
 
-The tool name comes from `pi.getAllTools()` (real Pi registration, FLOWING). The implementation comes from `softDepStatus` through the run snapshot (FLOWING). Both are exercised end to end by the cucumber scenarios against a real Pi.
+The tool name and server alias come from `pi.getAllTools()` (real Pi registration). The implementation comes from `softDepStatus` through the run snapshot. Both reach a real Pi in the cucumber scenarios. FLOWING.
 
 ### Behavioral Spot-Checks
 
@@ -81,8 +99,10 @@ The tool name comes from `pi.getAllTools()` (real Pi registration, FLOWING). The
 | Builtin profile, both hook features | `npx cucumber-js --profile builtin features/hook/mcp-tool-names.feature features/hook/tool-use.feature` | 5 scenarios, 68 steps passed | PASS |
 | Adapter profile, MCP scenarios | `npx cucumber-js features/hook/mcp-tool-names.feature features/hook/tool-use.feature --name "plugin MCP tool"` | 3 scenarios, 41 steps passed | PASS |
 | Feature tag rules | `npm run check:features` | exit 0 | PASS |
-| Hooks unit tests (view, domain, if-field, event-router, dispatch) | `node --test ...` | 403 pass, 0 fail | PASS |
-| No factory-time probe | `node --test test/architecture/no-factory-time-probe.test.ts` | pass | PASS |
+| Hook, domain, `if`-field, router, factory-probe unit tests | `node --test ...` | 485 pass, 0 fail | PASS |
+| Pi cut rule vs code | read `dist/extensions/mcp/tools.js` `createMcpToolName` | 55-char cut, `_`, 8 hex of sha256 `<server>\0<tool>`; matches `piToolNames` and the doc | PASS |
+
+Combined-tree gate evidence supplied by the orchestrator (not re-run here): `npm run check` exit 0 on 71a37c4 (cucumber adapter 1603/1603, builtin 133/133, direct coverage), `test:modules` exit 0 on 2b6f2f4, CI run 41967152313 success on 2b6f2f4.
 
 ### Probe Execution
 
@@ -95,23 +115,33 @@ Step 7c: SKIPPED, the phase declares no probe scripts.
 | MHK-01 | 05-01, 05-03, 05-04 | Hook matcher on a plugin MCP tool fires on the built-in call with the server segment in Claude's form; only the tool-segment fold is a divergence licensed by a Pi gap | SATISFIED | Truths 1, 3, 5 |
 | MHK-02 | 05-02, 05-03, 05-04 | The adapter `mcp` proxy special case applies only while the adapter is active | SATISFIED | Truth 2 |
 
-Both IDs appear in REQUIREMENTS.md (lines 115-116, mapped to Phase 5 at lines 174-175) and in the PLAN frontmatter. No orphaned requirement maps to Phase 5. The REQUIREMENTS.md checkboxes still read `[ ]` and the traceability rows read "Pending"; the roadmap/requirements update is the orchestrator's close-out step.
+REQUIREMENTS.md lines 115-116 are checked `[x]` and the traceability rows (175-176) read Complete. No orphaned requirement maps to Phase 5.
 
 ### Anti-Patterns Found
 
-None. No `TBD`, `FIXME` or `XXX` in the phase's new or edited product, feature or doc files. No stubs: every new function carries logic that tests exercise.
+None. No debt markers in the covered files; no stubs; no hardcoded empty data flowing to output.
 
 ### Human Verification Required
 
-None required. One judgment call, resolved below.
+None. One judgment call stays recorded.
 
-**"No implementation" half of MHK-02 (P5-DC-24).** Success criterion 2 says "under built-in or with no implementation, no call is treated as a proxy call". Only unit rows cover the "none" case: `mcp-tool-view.test.ts` ("no MCP implementation is the active implementation" gives `false`) and `dispatch.test.ts` (`proxyRuleRows`, applies=false labelled "built-in MCP or none"). I judge this sufficient. The gate is a single boolean (`mcpImplementation === "adapter"`), so the "none" and "built-in" values take the same `false` branch. The built-in half is proven end to end by two cucumber scenarios, and the view test feeds the real `softDepStatus` with no commands. A none-profile scenario would need a new harness stand-in for a case that exercises no new branch. It stays a recorded, open, medium-severity dubious choice, not a gap.
+**"No implementation" half of MHK-02 (P5-DC-24).** Success criterion 2 says "under built-in or with no implementation, no call is treated as a proxy call". Only unit rows cover "none". I keep the earlier judgment that this is sufficient: the gate is the single boolean `mcpImplementation === "adapter"`, so "none" and "built-in" take the same false branch, and the built-in side is proven end to end by two scenarios. It stays an open medium-severity dubious choice, not a gap.
 
 ### Gaps Summary
 
-No gaps. All three ROADMAP success criteria and both requirement IDs are met in code and in passing behavioral scenarios under both profiles. The REVIEW findings (6, all Info or warning level) are all fixed per 05-REVIEW-FIX.md, and the security audit reports `threats_open: 0`.
+No gaps. All three ROADMAP success criteria and both requirement IDs hold on the current tree, and the changes Phase 6 made to the covered surface did not change behavior.
+
+## Dubious Choices
+
+| Choice | Alternatives | Why dubious | Severity |
+|--------|--------------|-------------|----------|
+| P5-DC-24: "no MCP implementation" half of MHK-02 proven by unit rows only, no cucumber scenario | Add a none-profile scenario with a harness stand-in | The roadmap names "no implementation" explicitly; the end-to-end proof covers built-in and adapter only. The branch is shared with built-in, so risk is low. | Medium |
+| P5-DC-03: a literal with Claude's full tool name (`-` in the tool segment) fires on the built-in tool, going beyond the literal wording of D-MB-08 | Compare the literal to the Claude-form name as is, so a matcher must fold the tool segment itself | Reads the divergence as covering only what Pi cannot give (stdin tool name), not matchers. It favors upstream parity, but the user has not reviewed it. | High |
+| P5-DC-02: every built-in server gets Claude's server form, not only plugin servers | Map plugin servers only | Wider than the requirement text (plugin tools); the alias is the one signal Pi gives for both. | Medium |
+| The proxy-rule answer is cached per bridge generation, and a failed implementation read keeps `false` until `/reload` (docs state it) | Re-read per proxy call | Under the adapter, a transient read failure makes proxy calls run hooks on the outer and nested call until `/reload`. The doc states the behavior; at `tool_call` time reads are not expected to throw. | Low |
+| Scenarios depend on Pi 1.5.0 `createMcpToolName` details (64 limit, 55 cut, sha256 form) copied into `piToolNames` | Read the name from Pi if it ever exposes the original tool name | A Pi change to the hashing rule would silently change which literals fire. The doc cites the Pi source file and D-MB-13. | Low |
 
 ---
 
-_Verified: 2026-11-04_
+_Verified: 2026-11-05_
 _Verifier: Claude (gsd-verifier)_
