@@ -20,12 +20,12 @@ adds the Phase 6 entries that the working copy does not have.
 Each phase keeps its full log. When an entry below is short, its phase log has
 the full text:
 
-- `.planning/phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`
-- `.planning/phases/02-built-in-materialization/DUBIOUS-CHOICES.md`
-- `.planning/phases/03-read-time-verdicts/DUBIOUS-CHOICES.md`
-- `.planning/phases/04-agent-grants/DUBIOUS-CHOICES.md`
-- `.planning/phases/05-hook-tool-names/DUBIOUS-CHOICES.md`
-- `.planning/phases/06-release-docs-and-combined-tree/DUBIOUS-CHOICES.md`
+- `.planning/milestones/mcp-builtin-phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`
+- `.planning/milestones/mcp-builtin-phases/02-built-in-materialization/DUBIOUS-CHOICES.md`
+- `.planning/milestones/mcp-builtin-phases/03-read-time-verdicts/DUBIOUS-CHOICES.md`
+- `.planning/milestones/mcp-builtin-phases/04-agent-grants/DUBIOUS-CHOICES.md`
+- `.planning/milestones/mcp-builtin-phases/05-hook-tool-names/DUBIOUS-CHOICES.md`
+- `.planning/milestones/mcp-builtin-phases/06-release-docs-and-combined-tree/DUBIOUS-CHOICES.md`
 
 The log of the previous milestone is archived, unchanged, at
 `.planning/milestones/component-features-DUBIOUS-CHOICES.md`.
@@ -38,47 +38,47 @@ The short list. Each line names the entry and the file with its full text.
 
 - **P1-DC-12** (High): D-MB-11 is reversed in part. Under built-in, neither
   `oauth.clientName` nor `clientRegistration` is written, so Pi keeps CIMD.
-  Full text: `.planning/phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`.
+  Full text: `.planning/milestones/mcp-builtin-phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`.
 - **P1-DC-21** (High): the package legitimacy check ran unattended, with no
   human review. Full text:
-  `.planning/phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`.
+  `.planning/milestones/mcp-builtin-phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`.
 - **P1-DC-40** (Medium to High; its code review item CR-02 is High): the CI
   flake fix, the code review findings, and the fix directions. CR-02: the
   built-in `toolNamePrefix` returns nothing when the prefix exceeds Pi's
   55-character cut. Full text:
-  `.planning/phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`.
+  `.planning/milestones/mcp-builtin-phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`.
 - **P2-DC-02** (High): the built-in encoder expands every Claude variable
   itself at registration, so resolved secrets sit in Pi's session registry.
-  Full text: `.planning/phases/02-built-in-materialization/DUBIOUS-CHOICES.md`.
+  Full text: `.planning/milestones/mcp-builtin-phases/02-built-in-materialization/DUBIOUS-CHOICES.md`.
 - **P2-DC-08** (High): BLT-04 "reported, never silent" is met by `info` and
   Pi's `/mcp` only, with no load notice. Full text:
-  `.planning/phases/02-built-in-materialization/DUBIOUS-CHOICES.md`.
+  `.planning/milestones/mcp-builtin-phases/02-built-in-materialization/DUBIOUS-CHOICES.md`.
 - **P2-DC-100** (High): Phase 2's two human checks were accepted
   provisionally so the phase could move on. They are in `02-UAT.md` (see
   below). Full text:
-  `.planning/phases/02-built-in-materialization/DUBIOUS-CHOICES.md`.
+  `.planning/milestones/mcp-builtin-phases/02-built-in-materialization/DUBIOUS-CHOICES.md`.
 - **P3-DC-06** (High): `partially-installed` list rows gain
   `{unsupported mcp, requires <other>}`, a visible change to `list`. Full text:
-  `.planning/phases/03-read-time-verdicts/DUBIOUS-CHOICES.md`.
+  `.planning/milestones/mcp-builtin-phases/03-read-time-verdicts/DUBIOUS-CHOICES.md`.
 - **P3-DC-07** (High): `info`'s `requires:` names the `mcp` marker also when
   it is satisfied, which changes adapter output. Full text:
-  `.planning/phases/03-read-time-verdicts/DUBIOUS-CHOICES.md`.
+  `.planning/milestones/mcp-builtin-phases/03-read-time-verdicts/DUBIOUS-CHOICES.md`.
 - **P4-DC-06** (High in the working log, Medium in its phase log): agents
   installed before Phase 4 have no stored grant forms. The working log entry
   leaves them unrewritten at load (High). The phase log records the revised
   choice, a textual adapter-to-built-in translation at load (Medium). Full
-  text: `.planning/phases/04-agent-grants/DUBIOUS-CHOICES.md`.
+  text: `.planning/milestones/mcp-builtin-phases/04-agent-grants/DUBIOUS-CHOICES.md`.
 - **P4-DC-60** (High, carries P4-DC-13): autoupdate and apply convergence
   staged the adapter form under built-in until the next session rewrote it.
   Phase 6 repointed `updateAgentImplementation` (plan 06-02). Full text:
-  `.planning/phases/04-agent-grants/DUBIOUS-CHOICES.md`.
+  `.planning/milestones/mcp-builtin-phases/04-agent-grants/DUBIOUS-CHOICES.md`.
 - **P4-DC-76** (High): Phase 4's verification passed despite the
   cascade-update grant gap (P4-DC-13, P4-DC-60). Full text:
-  `.planning/phases/04-agent-grants/DUBIOUS-CHOICES.md`.
+  `.planning/milestones/mcp-builtin-phases/04-agent-grants/DUBIOUS-CHOICES.md`.
 - **P5-DC-03** (High): a hook matcher or `if` literal
   `mcp__<server>__<tool>` fires on a built-in tool when Pi's
   `createMcpToolName` gives the event's name, so Claude's full name fires.
-  Full text: `.planning/phases/05-hook-tool-names/DUBIOUS-CHOICES.md`.
+  Full text: `.planning/milestones/mcp-builtin-phases/05-hook-tool-names/DUBIOUS-CHOICES.md`.
 
 ### Other decisions
 
@@ -139,7 +139,7 @@ review (`-- Pending`):
 Follow-ups that need you:
 
 - The two manual checks in
-  `.planning/phases/02-built-in-materialization/02-UAT.md` (P2-DC-100): accept
+  `.planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-UAT.md` (P2-DC-100): accept
   BLT-04's "reported, never silent" as `info` plus `/mcp`, and run `/reload`
   and `/new` in a real Pi with built-in MCP.
 - The version bump and the pull request offer (D-P6-17). AGENTS.md asks to
@@ -196,7 +196,7 @@ Follow-ups that need you:
 
 ## Phase 1: Foundation and Pi 1.5.0
 
-Durable copy: `.planning/phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`.
+Durable copy: `.planning/milestones/mcp-builtin-phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`.
 
 ### Discuss step (parent session, 2026-11-04)
 
@@ -934,7 +934,7 @@ Durable copy: `.planning/phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`.
 
 ### Phase 2 (child session session_01EDUMG78rMfEcaGf2ZRYWev, branch features/mcp-builtin-phase-2)
 
-Full text in `.planning/phases/02-built-in-materialization/DUBIOUS-CHOICES.md` on that branch.
+Full text in `.planning/milestones/mcp-builtin-phases/02-built-in-materialization/DUBIOUS-CHOICES.md` on that branch.
 
 #### Discuss step (received 2026-11-04 10:50Z)
 
@@ -953,7 +953,7 @@ Full text in `.planning/phases/02-built-in-materialization/DUBIOUS-CHOICES.md` o
 
 ### Phase 3 (child session session_01EDUMG5p4jHecGXqAFGi3Do, branch features/mcp-builtin-phase-3)
 
-Full text in `.planning/phases/03-read-time-verdicts/DUBIOUS-CHOICES.md` on that branch.
+Full text in `.planning/milestones/mcp-builtin-phases/03-read-time-verdicts/DUBIOUS-CHOICES.md` on that branch.
 
 #### Discuss step (received 2026-11-04 10:53Z)
 
@@ -973,7 +973,7 @@ Full text in `.planning/phases/03-read-time-verdicts/DUBIOUS-CHOICES.md` on that
 
 ### Phase 4 (child session session_01EDUMG87PKcySw33ikhvFmE, branch features/mcp-builtin-phase-4)
 
-Full text in `.planning/phases/04-agent-grants/DUBIOUS-CHOICES.md` on that branch.
+Full text in `.planning/milestones/mcp-builtin-phases/04-agent-grants/DUBIOUS-CHOICES.md` on that branch.
 
 #### Discuss step (received 2026-11-04 11:02Z)
 
@@ -1009,7 +1009,7 @@ Research closed P1-DC-28: pi-subagents 0.84.0 resolves built-in `mcp:<server>[/<
 
 ### Phase 5 (child session session_01EDUMG4jWcEu7RZAr5kSKXC, branch features/mcp-builtin-phase-5)
 
-Full text in `.planning/phases/05-hook-tool-names/DUBIOUS-CHOICES.md` on that branch. (The first Phase 5 session failed container setup and did no work.)
+Full text in `.planning/milestones/mcp-builtin-phases/05-hook-tool-names/DUBIOUS-CHOICES.md` on that branch. (The first Phase 5 session failed container setup and did no work.)
 
 #### Discuss step (received 2026-11-04 12:28Z)
 
@@ -1776,12 +1776,12 @@ Review: 0 critical, 6 warnings, 5 info; fixed WR-01, WR-02, WR-04, WR-05, WR-06,
 This section holds the P6-DC entries that the working copy above does not
 have. Each entry is written once. The working copy above already holds
 P6-DC-01 to P6-DC-22 from
-`.planning/phases/06-release-docs-and-combined-tree/DUBIOUS-CHOICES.md`, and
+`.planning/milestones/mcp-builtin-phases/06-release-docs-and-combined-tree/DUBIOUS-CHOICES.md`, and
 one entry for each item of the `## Dubious Choices` section of the
 06-01 to 06-12 SUMMARYs (P6-DC-0101 to P6-DC-1206), so they are not repeated
 here. The SUMMARYs keep the full text of those entries.
 
-### From `.planning/phases/06-release-docs-and-combined-tree/06-13-SUMMARY.md`
+### From `.planning/milestones/mcp-builtin-phases/06-release-docs-and-combined-tree/06-13-SUMMARY.md`
 
 - **P6-DC-1301 (Low):** the root log's `## Phase 6 (execution)` section repeats none of P6-DC-01 to P6-DC-22 and P6-DC-0101 to P6-DC-1206, because the working-log copy above it already has an entry with each ID. The working log's executor entries are short summaries, so the full text of the 80 SUMMARY entries stays only in the SUMMARYs. Alternative: copy the full SUMMARY text again, so one file holds it all, at the cost of a second, longer version of 80 entries. Chosen because the plan's rule writes each entry once.
 - **P6-DC-1302 (Low):** the twelve `### High` lines and the 36 `### Other decisions` lines are my own short paraphrases of the entries and the Key Decisions row titles. Alternative: quote each entry's first line verbatim, which is longer and in places unclear without context. A paraphrase can drift from the entry; each line names the file with the full text.
