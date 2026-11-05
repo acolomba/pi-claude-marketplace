@@ -388,11 +388,7 @@ Feature: MCP server lifecycle
       | 3    | tool result | mcp returned: server plugin_demo_stub_ disabled                             |
     Then no stub mcp server receives a message
 
-  # Pi 1.5.0's RPC new_session runs session_start twice in the new session,
-  # and Pi's built-in MCP leaves the first of the two connections open, so its
-  # stub outlives the profile Pi and the stand-in check fails the scenario.
-  # The built-in half waits for a harness that tolerates it.
-  @adapter-only
+  @mcp
   Scenario: A new session offers the plugin's tool again (BLT-01)
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given pi runs with the scripted model and the mcp implementation
