@@ -3,7 +3,7 @@ gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
 status: Awaiting next milestone
-stopped_at: Phase 06 complete — all phases complete
+stopped_at: Milestone mcp-builtin archived — user review next
 last_updated: "2026-11-05T04:55:12.051Z"
 last_activity: 2026-11-05
 last_activity_desc: Milestone mcp-builtin completed and archived
@@ -21,13 +21,13 @@ current_phase: 06
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-05 after mcp-builtin Phase 6)
+See: `.planning/PROJECT.md` (updated 2026-11-05 after the mcp-builtin milestone closed)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** mcp-builtin milestone audit and completion (all six phases complete)
-Phase 6 closed on the milestone branch; the root review log is `.planning/DUBIOUS-CHOICES.md`. Still open from component-features:
+**Current focus:** the user's review of the mcp-builtin choices, then the PR (milestone archived 2026-11-05)
+The root review log is `.planning/DUBIOUS-CHOICES.md`. Still open from component-features:
 the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 `acolomba/pi` and `acolomba/pi-subagents`.
 
@@ -915,6 +915,6 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-05T04:45:00Z
-Stopped at: Phase 06 complete — all phases complete; milestone audit next
+Last session: 2026-11-05T05:10:00Z
+Stopped at: milestone mcp-builtin archived; user review of the choices next
 Resume file: None
