@@ -342,3 +342,128 @@ Each line names its target file and its owner. The parent applies them at the me
 - 01-FROZEN.md interface 3.
 - Phase 3 BACKLOG parent line (P3-DC-122): "apply refuses a declared install pending previews as will partially install; choose one behavior for both".
 - Known flake: lifecycle.feature:396 "A new session offers the plugin's tool again" (adapter, under load; P3-DC-111).
+
+## Dispositions
+
+The outcome of every parent line above, one row per line in order (ROADMAP Phase 6 criterion 4). The evidence of an applied line is the commit that applied it, from the owning plan's SUMMARY. The evidence of a backlogged line is its `.planning/BACKLOG.md` ID. PL-90 groups the parent notes that repeat an earlier line, with one sub-row per note. The other parent notes are PL-91 to PL-94.
+
+| Label | Line | Outcome | Evidence |
+| --- | --- | --- | --- |
+| PL-01 | 01-14 "Frozen files": the redundant `ignoreExports` entry for `features/lib/mcp-implementation.ts` (P1-DC-33) | already applied | 13ce40a removed it; plan 06-08 confirmed it absent at its base 837a0da |
+| PL-02 | 01-14 "Phase 6, fallow": drop the frozen-module `entry` lines and `ignoreExports`, then update the maps | applied | 698a3a6 (config, plan 06-08); d6157b2 (CONVENTIONS, STACK, ARCHITECTURE, plan 06-11) |
+| PL-03 | 01-14 "Phase 6, closed sets": remove each of the six entries that nothing emits | nothing to apply | Plan 06-07 found an emitter and a scenario for all six, so none is removed and the lock counts stay (D-P6-20, 06-07-SUMMARY `## Closed-set emitters`); 99a62fe records it in 01-FROZEN.md section 4 |
+| PL-04 | 01-14 "Phase 6, snapshot": remove `SoftDepStatus.piMcpAdapterLoaded` | applied | aeb9c7e (plan 06-09, D-P6-09) |
+| PL-05 | 01-14 "CHANGELOG.md": fold the Pi 1.5.0 bullet into the milestone bullet, add the PR number | applied; left for the user | 3fd8819 (plan 06-10); the PR number waits for the pull request, which waits for the user's review (D-P6-17) |
+| PL-06 | 01-14 "README.md and README.es.md": the built-in MCP text for MDOC-02 | applied | 81cc18c (plan 06-06) |
+| PL-07 | 01-14 "PROJECT.md": resolve the Pending D-MB rows with the user, amend D-CF1-16 after CI | left for the user | D-MB-08 to D-MB-13 stay Pending for the user's review (D-P6-13); the parent amends D-CF1-16 after the CI run from 06-CI-HANDOFF.md (9e9c116) |
+| PL-08 | 01-14 "BACKLOG.md": MCPV2-01 to MCPV2-03 and the four conditional items | backlogged; no longer applicable | MCPV2-01, MCPV2-02, MCPV2-03, and SWITCHNOTICE-01 for conditional (b), in 511bb30; conditionals (a), (c), and (d) were settled by D-P3-08, D-MB-20, and D-MB-21 |
+| PL-09 | 01-14 "ARCHITECTURE.md and STRUCTURE.md": the new `orchestrators/mcp/`, domain, and platform modules | applied | 0ca5ee6 (plan 06-11) |
+| PL-10 | 01-14 "CI": re-measure the behavioral legs on the combined tree | applied; open | 9e9c116 records the local legs from the gate on a7f73bf in 06-CI-HANDOFF.md; the CI run is not done yet: the parent dispatched ci.yml on 1bec91e and fills `## CI timings` after the run |
+| PL-11 | 01-14 "Root DUBIOUS-CHOICES.md": merge the phase logs into the root log | applied | fd414a0 (archive of the previous log), 272dd20 (the new root log) |
+| PL-12 | 02-01 `manifest-read-agreement.test.ts`: add `builtin-description.ts` to the MANF-01 gate | applied | ec36113 (plan 06-04) |
+| PL-13 | 02-01 `adapter-expansion-conformance.test.ts`: pass the encoder, then make it required | applied | c5445ba (plan 06-04) |
+| PL-14 | 02-01 `features/lib/upstream/`: move the tool_search projection (P2-DC-18) | applied | ed1b7a7 (plan 06-04) |
+| PL-15 | 02-01 `.fallowrc.json`: drop the `recorded-servers.ts` entry and exemptions | applied | 698a3a6 (plan 06-08) |
+| PL-16 | 02-01 CONVENTIONS.md: the three reasoned `unbound-method` disables | applied | 0ca5ee6 (plan 06-11) |
+| PL-17 | 02-02: None | nothing to apply | The SUMMARY lists no parent line |
+| PL-18 | 02-03 CONVENTIONS.md: the suppression count 44 to 45 and the fifth loader-read extension | applied | d6157b2 (plan 06-11) |
+| PL-19 | 02-03 cucumber skill: name the config probe beside the registry probe (optional) | applied | 9ab4c42 (plan 06-11) |
+| PL-20 | 02-03: none for the bundle scenario | nothing to apply | The SUMMARY says the bundle scenario needs no change |
+| PL-21 | 02-04 `companion-missing.feature` line 76: `status unknown` becomes `not loaded` | no longer applicable | eb4ebf7 keeps `status unknown` there, because that scenario runs with no MCP implementation loaded |
+| PL-22 | 02-04 `info.test.ts`: keep the `plugin_alpha_srv` snapshot name at the Phase 3 merge | already applied | 30a2e89 |
+| PL-23 | 02-05 `project-scope.feature` description points to `builtin-status.feature` | nothing to apply | 02-08 item 15: plan 02-04 used that exact file name |
+| PL-24 | 02-06 the stand-in wait, the `@mcp` lift of the new-session scenario, and its WINDOWS entry | applied | 230b60d (plan 06-05: bounded wait and lift); 511bb30 (plan 06-10: WINDOWS entry 112 fixed) |
+| PL-25 | 02-06 the upstream Pi report on the RPC `new_session` defect | no longer applicable | D-P6-11 makes the report conditional on the lift failing; the lift passed in 230b60d, so plan 06-05 drafted no report and RPCSESSION is not written (P6-DC-0503 keeps the Pi defect on record) |
+| PL-26 | 02-06 `02-06-PLAN.md` flagged assumption 2 is false for built-in MCP | nothing to apply | A historical plan, recorded only |
+| PL-27 | 02-07: None | nothing to apply | The SUMMARY lists no parent line |
+| PL-28 | 02-08 item 1: the CHANGELOG bullet for built-in materialization | applied | 3fd8819 (plan 06-10) |
+| PL-29 | 02-08 item 2: README.md and README.es.md lines 29, 40, 126, 144 | applied | 81cc18c (plan 06-06) |
+| PL-30 | 02-08 item 3: PROJECT.md Key Decisions rows for the Phase 2 choices | applied | a65e979 (plan 06-10: D-MB-14 to D-MB-29) |
+| PL-31 | 02-08 item 4: (a) move the tool_search projection; (b) to (e) BACKLOG items | applied; backlogged | (a) ed1b7a7 (plan 06-04); (b) DENYPIN-01, (c) BLTNOTICE-01, (d) TOOLSEARCHOFF-01, (e) BLTOWNER-01, in 511bb30 |
+| PL-32 | 02-08 item 5: output-catalog built-in status mapping, examples, line 3161, and the json-output token sentence | applied; no longer applicable | d343443 (plan 06-07: mapping table, prose in place of the two example blocks per D-P6-26, json-output sentence); the line 3161 `not loaded` change no longer applies, because that block's probe finds no MCP implementation (7b04f94, P6-DC-0702) |
+| PL-33 | 02-08 item 6: `companion-missing.feature` line 76 | no longer applicable | As PL-21: eb4ebf7 keeps `status unknown` |
+| PL-34 | 02-08 item 7: `info.test.ts` snapshot name | already applied | As PL-22: 30a2e89 |
+| PL-35 | 02-08 item 8: `.fallowrc.json` `recorded-servers.ts` entry and its consumed names | applied | 698a3a6 (plan 06-08) |
+| PL-36 | 02-08 item 9: re-verify the `info` and switch scenarios, the strict installs, and AMIG-01 | applied; backlogged; no longer applicable | builtin-status and implementation-switch re-run and passed on a7f73bf (plan 06-12), and 58ab863 verified the switch restarts (plan 06-01); the strict installs are STRICTINSTALL-01 (511bb30); the AMIG-01 part no longer applies (D-P3-16), and plan 06-06 confirmed the doc text |
+| PL-37 | 02-08 items 10 to 12: MANF-01 gate, encoder parameter, upstream move | applied | item 10 ec36113, item 11 c5445ba, item 12 ed1b7a7 (plan 06-04) |
+| PL-38 | 02-08 item 13: CONVENTIONS.md count, loader-read extensions, `unbound-method` note | applied | d6157b2, 0ca5ee6 (plan 06-11) |
+| PL-39 | 02-08 item 14: cucumber skill config probe note (optional) | applied | 9ab4c42 (plan 06-11) |
+| PL-40 | 02-08 item 15: `project-scope.feature` description | nothing to apply | Listed only so the parent can close it; the file name matches |
+| PL-41 | 02-08 item 16: the stand-in wait, the `@mcp` lift, and the WINDOWS entry | applied | 230b60d (plan 06-05); 511bb30 (plan 06-10, WINDOWS 112) |
+| PL-42 | 02-08 item 17: the upstream Pi report | no longer applicable | As PL-25: the lift passed in 230b60d, so no report is drafted (D-P6-11) |
+| PL-43 | 02-08 item 18: `02-06-PLAN.md` assumption 2 | nothing to apply | As PL-26: a historical plan, recorded only |
+| PL-44 | 02-08 item 19: rerun `fallow dupes` and the Phase 4 and 5 built-in scenarios | applied | Verified with no change on a7f73bf (plan 06-12): `fallow dupes` exit 0, agent-grants, mcp-tool-names, and tool-use pass under builtin |
+| PL-45 | 02-08 item 20: None from 02-02, 02-07, 02-09 | nothing to apply | The SUMMARY lists no line |
+| PL-46 | 02-09: None | nothing to apply | The SUMMARY lists no parent line |
+| PL-47 | 03-09 CHANGELOG.md: the four D-P3-21 lines | applied | 3fd8819 (plan 06-10) |
+| PL-48 | 03-09 `docs/json-output.md` lines 723 and 766 | applied | d343443 (plan 06-07) |
+| PL-49 | 03-09 `docs/output-catalog.md` lines 69, 3041, 3161, 3176-3188, the fixture literals, and the rewording | applied | 7b04f94, d343443 (plan 06-07) |
+| PL-50 | 03-09 README.md and README.es.md line 144 | applied | 81cc18c (plan 06-06) |
+| PL-51 | 03-09 `.fallowrc.json`: drop the consumed `ignoreExports` names | applied | 698a3a6 (plan 06-08: every exemption removed, D-P6-08, D-P6-21) |
+| PL-52 | 03-09 `edge/register.ts` and `shared/completion-cache.ts` (P3-DC-22) | applied | 29135b2, cd2f629, 7d24997 (plan 06-03) |
+| PL-53 | 03-09 01-FROZEN.md interface 3: an install writes the neutral basis | applied | 99a62fe (plan 06-13) |
+| PL-54 | 03-09 `orchestrators/types.ts` and `reconcile/apply.ts` (03-06 candidate) | already applied | 1178bd7 |
+| PL-55 | 03-09 `mcp-verdict-read.ts` header: drop `update-swap.ts` from the import ban | already applied | 67d71f0 |
+| PL-56 | 03-09 addendum CHANGELOG lines (P3-DC-112 correction, CR-01 and WR-05) | applied | 3fd8819 (plan 06-10) |
+| PL-57 | 03-09 addendum BACKLOG (P3-DC-122): apply and pending disagree on a partial install | backlogged | PENDAPPLY-01, in 511bb30 |
+| PL-58 | 03-09 addendum PROJECT.md: MREC-03 to MREC-07 Validated, Key Decisions rows | applied | a65e979 (plan 06-10); Phase 6's own requirements move to Validated at the phase transition |
+| PL-59 | 03-09 addendum `recorded-servers.ts` containment of the git-source root | applied | 41bc6ae (plan 06-08, UF-1) |
+| PL-60 | 03-09 addendum known flake `lifecycle.feature:396` | applied | 9e9c116 carries it into 06-CI-HANDOFF.md `## Known flakes` with the rerun rule; it did not occur in the gate on a7f73bf |
+| PL-61 | 04-02: None | nothing to apply | The SUMMARY lists no parent line |
+| PL-62 | 04-04: None | nothing to apply | The SUMMARY lists no parent line |
+| PL-63 | 04-05 the verdict-markers `diagnostic` row text | already applied | 0bec3c2 |
+| PL-64 | 04-05 repoint `updateAgentImplementation` at Phase 3's field (P4-DC-13) | applied | 670f742 (plan 06-02) |
+| PL-65 | 04-05 no frozen file changed | nothing to apply | The SUMMARY records that no frozen file changed |
+| PL-66 | 04-06 item 1: `verdict-markers.feature` built-in async warning text | already applied | 0bec3c2 |
+| PL-67 | 04-06 item 2: repoint `updateAgentImplementation` and add a built-in apply or autoupdate scenario | applied | 670f742, 75c1d48 (plan 06-02) |
+| PL-68 | 04-06 item 3: 01-FROZEN.md interface 5 signatures | applied | 99a62fe (plan 06-13) |
+| PL-69 | 04-06 item 4: `docs/mcp-compatibility.md` agents text | applied | 8969c18 (plan 06-06) |
+| PL-70 | 04-06 item 5: CHANGELOG MGRT-01 and MGRT-02 lines | applied | 3fd8819 (plan 06-10) |
+| PL-71 | 04-06 item 6: README agents bullet sentence, both languages | applied | 81cc18c (plan 06-06) |
+| PL-72 | 04-06 item 7: PROJECT.md D-MB-03 and D-MB-12 rows | applied | a65e979 (plan 06-10) |
+| PL-73 | 04-06 item 8: two BACKLOG items | backlogged | GRANTLEGACY-01, GRANTWARN-01, in 511bb30 |
+| PL-74 | 04-06 item 9: ARCHITECTURE.md and STACK.md (P4-DC-40) | applied | 0ca5ee6 (plan 06-11) |
+| PL-75 | 04-06 item 10: drop `ActiveMcpImplementation` from `ignoreExports` | applied | 698a3a6 (plan 06-08) |
+| PL-76 | 04-06 item 11: re-run `agent-grants.feature` under both profiles | applied | Verified with no change on a7f73bf (plan 06-12): adapter 13 of 13, builtin 6 of 6 |
+| PL-77 | 05-01: None | nothing to apply | The SUMMARY lists no parent line |
+| PL-78 | 05-02 BACKLOG (T-05-07, P5-DC-15): the proxy skip when both implementations load | backlogged | HOOKPROXYBOTH-01, in 511bb30 |
+| PL-79 | 05-02 CHANGELOG: the proxy rule applies only under the adapter | applied | 3fd8819 (plan 06-10) |
+| PL-80 | 05-02 no frozen file changed | nothing to apply | The SUMMARY records that no frozen file changed |
+| PL-81 | 05-03: None; the CHANGELOG and README lines stay with the parent | applied | 3fd8819 (plan 06-10, CHANGELOG); 81cc18c (plan 06-06, README) |
+| PL-82 | 05-04 item 1: the CHANGELOG bullet for built-in hook tool names | applied | 3fd8819 (plan 06-10) |
+| PL-83 | 05-04 item 2: the optional README pointer to the hooks doc | applied | 81cc18c (plan 06-06) |
+| PL-84 | 05-04 item 3: the cucumber skill texts | applied | 9ab4c42 (plan 06-11) |
+| PL-85 | 05-04 item 4: PROJECT.md Key Decisions rows D-P5-01 to D-P5-07 | applied | a65e979 (plan 06-10) |
+| PL-86 | 05-04 item 5: five BACKLOG items | backlogged | HOOKTOOLSEARCH-01, HOOKDETAILS-01, HOOKPROXYBOTH-01, HOOKMATCH-01, HOOKNOIMPL-01, in 511bb30 |
+| PL-87 | 05-04 item 6: STRUCTURE.md, ARCHITECTURE.md, CONVENTIONS.md | applied | 0ca5ee6 (plan 06-11) |
+| PL-88 | 05-04 item 7: re-run the hook scenarios under both profiles | applied | Verified with no change on a7f73bf (plan 06-12): mcp-tool-names adapter 2 of 2 and builtin 3 of 3, tool-use adapter 21 of 21 and builtin 2 of 2 |
+| PL-89 | 05-04 item 8: merged from earlier plans | repeats PL-78; repeats PL-79 | 05-04 item 8 restates 05-02's BACKLOG and CHANGELOG lines |
+| PL-90 | Parent notes from child messages that repeat an earlier line | repeats earlier lines | One sub-row per note, PL-90.1 to PL-90.24 below |
+| PL-90.1 | P4-DC-13: repoint the agent staging of autoupdate and apply convergence | repeats PL-64; repeats PL-67 | 670f742 |
+| PL-90.2 | P4 parent line 1: the `verdict-markers.feature` built-in async warning text | repeats PL-66 | 0bec3c2 |
+| PL-90.3 | P4-DC-40: the codebase map updates | repeats PL-74 | 0ca5ee6 |
+| PL-90.4 | P4 docs: the `docs/mcp-compatibility.md` agents section | repeats PL-69 | 8969c18 |
+| PL-90.5 | P3-DC-22: the completion resolver and the completion cache key | repeats PL-52 | 29135b2, cd2f629, 7d24997 |
+| PL-90.6 | P2-DC-18: move the tool_search projection into `features/lib/upstream/` | repeats PL-14 | ed1b7a7 |
+| PL-90.7 | P2-DC-22: re-pin the env deny-lists | repeats PL-31 | DENYPIN-01 |
+| PL-90.8 | Phase 2 parent lines (02-01): MANF-01, encoder, upstream move, `.fallowrc.json` | repeats PL-12; repeats PL-13; repeats PL-14; repeats PL-15 | ec36113, c5445ba, ed1b7a7, 698a3a6 |
+| PL-90.9 | Phase 3 parent lines: completion resolver, 01-FROZEN.md interface 3, CHANGELOG `list` line | repeats PL-52; repeats PL-53; repeats PL-47 | 29135b2, 99a62fe, 3fd8819 |
+| PL-90.10 | Phase 2 parent line (P2-DC-77): the double `session_start`, the stand-in wait, the report | repeats PL-24; repeats PL-25 | 230b60d, 511bb30 |
+| PL-90.11 | Phase 3 CHANGELOG candidate for `info` | repeats PL-47 | 3fd8819 (plan 06-10 Task 1, sub-bullet 7) |
+| PL-90.12 | Phase 2 parent lines (wave 2): `info.test.ts`, CONVENTIONS count, config probe note | repeats PL-22; repeats PL-18; repeats PL-19 | 30a2e89, d6157b2, 9ab4c42 |
+| PL-90.13 | Phase 5 parent lines: the proxy skip BACKLOG item and the CHANGELOG proxy line | repeats PL-78; repeats PL-79 | HOOKPROXYBOTH-01, 3fd8819 |
+| PL-90.14 | Phase 3 parent line: output-catalog lines 69, 3041, 3161 | repeats PL-49 | 7b04f94, d343443 |
+| PL-90.15 | Phase 4 parent lines (04-06 items 1 to 11) | repeats PL-66; repeats PL-67; repeats PL-68; repeats PL-69; repeats PL-70; repeats PL-71; repeats PL-72; repeats PL-73; repeats PL-74; repeats PL-75; repeats PL-76 | See those rows |
+| PL-90.16 | Phase 5 parent lines (05-04 items 1 to 7) | repeats PL-82; repeats PL-83; repeats PL-84; repeats PL-85; repeats PL-86; repeats PL-87; repeats PL-88 | See those rows |
+| PL-90.17 | Phase 3 parent lines (wave 4): output-catalog and json-output `requires:` wording, CHANGELOG lines | repeats PL-48; repeats PL-49; repeats PL-47 | d343443, 7b04f94, 3fd8819 |
+| PL-90.18 | CHANGELOG.md: four lines (D-P3-21) | repeats PL-47 | 3fd8819 |
+| PL-90.19 | `docs/json-output.md` and `docs/output-catalog.md` with the fixture literals | repeats PL-48; repeats PL-49 | d343443, 7b04f94 |
+| PL-90.20 | README.md and README.es.md line 144 | repeats PL-50 | 81cc18c |
+| PL-90.21 | `.fallowrc.json`: remove the consumed `ignoreExports` names | repeats PL-51 | 698a3a6 |
+| PL-90.22 | `edge/register.ts` and `completion-cache.ts` (P3-DC-22) | repeats PL-52 | 29135b2, cd2f629, 7d24997 |
+| PL-90.23 | 01-FROZEN.md interface 3 | repeats PL-53 | 99a62fe |
+| PL-90.24 | Phase 3 BACKLOG parent line (P3-DC-122) | repeats PL-57 | PENDAPPLY-01 |
+| PL-91 | Watch at merge: P3-DC-36, P3-DC-30, P4-DC-38, P2-DC-43, P2-DC-31 | no longer applicable | The merges are done with green gates: 7d4246c and a25cd35 |
+| PL-92 | Phase 2 verification: P2-DC-100, the manual checks in 02-UAT.md, the REQUIREMENTS traceability | already applied; left for the user | 73db55e recorded the traceability of Phase 2's IDs in REQUIREMENTS.md; the 02-UAT.md checks are listed for the user under "Decisions waiting on you" in `.planning/DUBIOUS-CHOICES.md` (272dd20) |
+| PL-93 | P2-DC-90: mint D-MB IDs for the cited P2-DC IDs and re-point the docs citations | applied | a65e979 (plan 06-10: D-MB-14 to D-MB-29); 8969c18 (plan 06-06: docs citations) |
+| PL-94 | Known flake: `lifecycle.feature:396` under the adapter profile (P3-DC-111) | applied | 9e9c116 carries it into 06-CI-HANDOFF.md `## Known flakes` with the rerun rule |
