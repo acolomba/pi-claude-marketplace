@@ -3111,7 +3111,6 @@ test("D-P3-13 / D-MB-06: a disabled dependency with an sse server re-enables und
       ...builtinOptionsFor(member),
       run: runWithSoftDeps({
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
         mcpImplementation: "builtin",
         workflowEngineLoaded: false,
       }),

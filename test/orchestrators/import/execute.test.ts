@@ -3501,7 +3501,6 @@ test("AVAR-04 / AVAR-05: with pi-mcp-adapter loaded, an import reports an info r
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
     mcpImplementation: "adapter",
     workflowEngineLoaded: false,
   });

@@ -155,7 +155,6 @@ function makeCtx(softDeps?: Partial<SoftDepStatus>): {
   };
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
     ...softDeps,
@@ -298,7 +297,6 @@ async function seedMarketplace(opts: {
       ctx,
       run: runWithSoftDeps({
         piSubagentsLoaded: true,
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       }),
@@ -2732,7 +2730,6 @@ test("D-PL1-14: a bulk reinstall renders each reinstalled and failed plugin's di
 
       await seedForeignServerKey(cwd, "zzz");
       const { ctx, run, notifications } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
       });
 
@@ -7817,7 +7814,6 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -7972,7 +7968,6 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -8121,7 +8116,6 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -8255,7 +8249,6 @@ test("retry proof: reinstall: a refused intent-mark save changes nothing and the
       });
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -8389,7 +8382,6 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       });
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -8617,7 +8609,6 @@ test("retry proof: reinstall: a concurrently removed record fails before any wri
       );
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -8734,7 +8725,6 @@ test("retry proof: reinstall: an unreadable base layer is left unchanged by a re
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -8841,7 +8831,6 @@ test("retry proof: reinstall: a completion-cache drop failure notes nothing and 
         completionCache,
       );
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -8938,7 +8927,6 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
       });
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -9056,7 +9044,6 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
         ?.plugins["beta"];
       const maintenance: string[] = [];
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -9216,7 +9203,6 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
       const reinstall = createReinstallPlugin(hooksRouting, createCompletionCache());
 
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -9827,7 +9813,6 @@ test("PRL-03: a bulk cascade forwards the state-transaction seam to every per-pl
         },
       };
       const { ctx, run } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
@@ -9891,7 +9876,6 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
         .hello;
       assert.ok(beforeRecord !== undefined);
       const { ctx, run, notifications } = makeCtx({
-        piMcpAdapterLoaded: true,
         mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });

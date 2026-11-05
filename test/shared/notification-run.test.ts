@@ -58,7 +58,6 @@ test("takes a snapshot without an entry sink or command identity", () => {
   assert.deepStrictEqual(snapshot, {
     softDeps: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: false,
     },
@@ -83,7 +82,6 @@ test("MSEL-01: a snapshot names Pi's built-in MCP as the run's active implementa
   assert.deepStrictEqual(snapshot, {
     softDeps: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "builtin",
       workflowEngineLoaded: false,
     },
@@ -108,7 +106,6 @@ test("MSEL-01: a run carries Pi's built-in MCP as its active implementation", ()
     entrySink: pi,
     softDeps: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "builtin",
       workflowEngineLoaded: false,
     },
@@ -159,7 +156,6 @@ test("D-05: opening a run reads the tools three times and the commands once", ()
     origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     softDeps: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     },
@@ -216,7 +212,6 @@ for (const kind of ["load", "hook"] as const) {
       entrySink: pi,
       softDeps: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
         mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
@@ -246,7 +241,6 @@ test("D-05: a run keeps its snapshot when the inventory later answers differentl
   // assert
   assert.deepStrictEqual(run.softDeps, {
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
   });

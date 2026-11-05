@@ -154,7 +154,6 @@ function makeCtx(
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
     ...options.softDeps,

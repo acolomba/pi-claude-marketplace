@@ -249,7 +249,6 @@ for (const { companion, declares, dependency, loaded } of [
     dependency: "agents",
     loaded: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
@@ -264,7 +263,6 @@ for (const { companion, declares, dependency, loaded } of [
     dependency: { kind: "mcp", runEvery: ["adapter"] },
     loaded: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
@@ -275,7 +273,6 @@ for (const { companion, declares, dependency, loaded } of [
     dependency: "workflows",
     loaded: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
       mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     },

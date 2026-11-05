@@ -207,7 +207,6 @@ function loadRun(entrySink: NotificationRun["entrySink"]): NotificationRun {
     origin: { kind: "load" },
     softDeps: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
       mcpImplementation: "none",
       workflowEngineLoaded: false,
     },

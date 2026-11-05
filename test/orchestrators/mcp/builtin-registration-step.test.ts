@@ -44,7 +44,6 @@ const STUB_SERVER = {
 function runOf(mcpImplementation: ActiveMcpImplementation): NotificationRun {
   return runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: mcpImplementation === "adapter",
     mcpImplementation,
     workflowEngineLoaded: false,
   });

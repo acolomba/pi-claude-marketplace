@@ -2520,7 +2520,6 @@ for (const { situation, resources, spec, expectedOutcome } of [
 function builtinRun(): NotificationRun {
   return runWithSoftDeps({
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "builtin",
     workflowEngineLoaded: false,
   });

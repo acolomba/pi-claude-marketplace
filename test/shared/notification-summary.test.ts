@@ -42,7 +42,6 @@ function createContext(t: TestContext): NotificationContext {
 function notificationRun(): NotificationRun {
   return runWithSoftDeps({
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
     mcpImplementation: "adapter",
     workflowEngineLoaded: false,
   });

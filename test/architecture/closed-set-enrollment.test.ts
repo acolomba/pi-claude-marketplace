@@ -131,7 +131,6 @@ test("SCN-F025: softDepMarkers emits the agents and mcp markers in canonical age
   // arrange
   const probe = {
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
   } satisfies SoftDepStatus;
@@ -147,7 +146,6 @@ test("SCN-F025: softDepMarkers emits only the agents marker for an agents-only d
   // arrange
   const probe = {
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
   } satisfies SoftDepStatus;
@@ -163,7 +161,6 @@ test("SCN-F025: softDepMarkers emits only the mcp marker for an mcp-only declara
   // arrange
   const probe = {
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
   } satisfies SoftDepStatus;
@@ -179,7 +176,6 @@ test("SCN-F025: softDepMarkers emits nothing when the row declares neither depen
   // arrange
   const probe = {
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
   } satisfies SoftDepStatus;
@@ -195,7 +191,6 @@ test("SCN-F025: softDepMarkers emits nothing when both companions are loaded", (
   // arrange
   const probe = {
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
     mcpImplementation: "adapter",
     workflowEngineLoaded: true,
   } satisfies SoftDepStatus;
@@ -226,7 +221,6 @@ test("SCN-F025: every marker softDepMarkers can emit is a reason catalog member"
   // arrange
   const probe = {
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
     mcpImplementation: "none",
     workflowEngineLoaded: false,
   } satisfies SoftDepStatus;

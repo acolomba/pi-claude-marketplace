@@ -38,7 +38,6 @@ const NOT_A_CHILD = {};
 function runFor(mcpImplementation: ActiveMcpImplementation): NotificationRun {
   return runWithSoftDeps({
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: mcpImplementation === "adapter",
     mcpImplementation,
     workflowEngineLoaded: false,
   });
