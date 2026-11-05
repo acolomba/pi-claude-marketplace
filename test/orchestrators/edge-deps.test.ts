@@ -46,6 +46,8 @@ interface InstalledFixture {
   readonly resolvedSha?: string;
   readonly enabled?: boolean;
   readonly unsupported?: readonly string[];
+  /** MREC-01: the servers the record holds, as an install writes them. */
+  readonly mcpServerConfigs?: PluginRecord["mcpServerConfigs"];
 }
 
 interface FixturePlugin {
@@ -65,6 +67,8 @@ interface FixturePlugin {
   readonly pluginTree?: boolean;
   /** The `.mcp.json` text the plugin tree ships, when it ships one. */
   readonly mcpJson?: string;
+  /** The `hooks/hooks.json` text the plugin tree ships, when it ships one. */
+  readonly hooksJson?: string;
   readonly installed?: InstalledFixture;
 }
 
@@ -115,6 +119,9 @@ function pluginRecord(resolvedSource: string, installed: InstalledFixture): Plug
     version: installed.version,
     resolvedSource,
     ...(installed.resolvedSha !== undefined && { resolvedSha: installed.resolvedSha }),
+    ...(installed.mcpServerConfigs !== undefined && {
+      mcpServerConfigs: installed.mcpServerConfigs,
+    }),
     compatibility: {
       installable: unsupported.length === 0,
       notes: [],
@@ -200,6 +207,11 @@ async function layoutMarketplace(
       );
       if (plugin.mcpJson !== undefined) {
         await writeFile(path.join(pluginRoot, ".mcp.json"), plugin.mcpJson, "utf8");
+      }
+
+      if (plugin.hooksJson !== undefined) {
+        await mkdir(path.join(pluginRoot, "hooks"), { recursive: true });
+        await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), plugin.hooksJson, "utf8");
       }
     }
 
@@ -620,6 +632,63 @@ describe("loadManifestForMarketplace for each MCP implementation (D-P6-22, MREC-
 
       // act
       const indexRows = await resolver.loadManifestForMarketplace("project", "sse-mp");
+
+      // assert
+      assert.deepStrictEqual(indexRows, expectedRows);
+    });
+  }
+});
+
+describe("loadManifestForMarketplace installed records for each MCP implementation (D-P6-22, MREC-03)", () => {
+  /** One recorded sse server: pi-mcp-adapter runs it, Pi's built-in MCP cannot. */
+  const sseRecord = (enabled: boolean): InstalledFixture => ({
+    version: "1.0.0",
+    enabled,
+    mcpServerConfigs: [{ name: "events", config: { type: "sse", url: "http://127.0.0.1:9/sse" } }],
+  });
+  const recordCases = [
+    { newerTree: "unavailable", enabled: true, mcpImplementation: "adapter", status: "upgradable" },
+    { newerTree: "unavailable", enabled: true, mcpImplementation: "none", status: "upgradable" },
+    {
+      newerTree: "unavailable",
+      enabled: true,
+      mcpImplementation: "builtin",
+      status: "partially-installed",
+    },
+    { newerTree: "installable", enabled: true, mcpImplementation: "adapter", status: "upgradable" },
+    {
+      newerTree: "installable",
+      enabled: true,
+      mcpImplementation: "builtin",
+      status: "partially-installed-upgradable",
+    },
+    { newerTree: "unavailable", enabled: false, mcpImplementation: "builtin", status: "installed" },
+  ] satisfies readonly {
+    readonly newerTree: "installable" | "unavailable";
+    readonly enabled: boolean;
+    readonly mcpImplementation: ActiveMcpImplementation;
+    readonly status: PluginIndexRow["status"];
+  }[];
+
+  for (const { newerTree, enabled, mcpImplementation, status } of recordCases) {
+    const recordLabel = enabled ? "an sse record" : "a disabled sse record";
+    test(`classifies ${recordLabel} with an ${newerTree} newer tree as ${status} for ${mcpImplementation}`, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, `sse-record-${mcpImplementation}`);
+      await layoutMarketplace(scope.cwd, "sse-record-mp", [
+        {
+          name: "events",
+          manifestVersion: "2.0.0",
+          mcpJson: SSE_MCP_JSON,
+          ...(newerTree === "unavailable" && { hooksJson: "this is not JSON" }),
+          installed: sseRecord(enabled),
+        },
+      ]);
+      const resolver = makeLocationsResolver(scope.cwd, mcpImplementation);
+      const expectedRows = [{ name: "events", status, version: "1.0.0" }];
+
+      // act
+      const indexRows = await resolver.loadManifestForMarketplace("project", "sse-record-mp");
 
       // assert
       assert.deepStrictEqual(indexRows, expectedRows);

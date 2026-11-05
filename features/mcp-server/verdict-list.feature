@@ -166,3 +166,58 @@ Feature: MCP server verdict list
     Then the plugin completion set for "install --scope project " contains these suggestions:
       | label          | value                                      | description |
       | plain@fixtures | "install --scope project plain@fixtures "  |             |
+
+  @adapter-only
+  Scenario: Partial update completion offers an installed plugin with an sse server whose new version is unavailable, under pi-mcp-adapter (MREC-03)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | demo  | 1.0.0   |
+      | plain | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --partial", which did not fail
+    Given the user has run "/claude:plugin install plain@fixtures --scope project", which did not fail
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | demo  | 1.1.0   |
+      | plain | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "hooks/hooks.json" with this text:
+      """
+      this is not JSON
+      """
+    When the user requests plugin completions for "update --partial --scope project "
+    Then the plugin completion set for "update --partial --scope project " contains these suggestions:
+      | label          | value                                              | description |
+      | demo@fixtures  | "update --partial --scope project demo@fixtures "  |             |
+      | plain@fixtures | "update --partial --scope project plain@fixtures " |             |
+
+  @builtin-only
+  Scenario: Partial update completion leaves out an installed plugin with an sse server whose new version is unavailable, under Pi's built-in MCP (MREC-03)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | demo  | 1.0.0   |
+      | plain | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --partial", which did not fail
+    Given the user has run "/claude:plugin install plain@fixtures --scope project", which did not fail
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | demo  | 1.1.0   |
+      | plain | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "hooks/hooks.json" with this text:
+      """
+      this is not JSON
+      """
+    When the user requests plugin completions for "update --partial --scope project "
+    Then the plugin completion set for "update --partial --scope project " contains these suggestions:
+      | label          | value                                              | description |
+      | plain@fixtures | "update --partial --scope project plain@fixtures " |             |

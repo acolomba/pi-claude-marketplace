@@ -7,15 +7,21 @@
 // second classifier. A parity drift-guard test (test/orchestrators/edge-deps.test.ts)
 // asserts the two surfaces never diverge.
 //
-// PURITY (NFR-5): both functions take already-resolved inputs. They perform no
+// Both surfaces also share `candidateFor`, the active MCP implementation's view
+// of an upgrade candidate (D-P3-03, D-P6-22), so the two classify the same
+// candidate for the same implementation.
+//
+// PURITY (NFR-5): these functions take already-resolved inputs. They perform no
 // disk or network I/O -- the caller owns the no-network `resolveStrict` probe and
 // passes the result (or `undefined` on a probe failure) in. This keeps the
 // classifier free of the `platform`/network layers and lets the no-network
 // boundary stay at the caller, where the network-free ESLint block
 // (BLOCK F in `eslint.config.js`) enforces it.
 
+import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ResolvedPlugin } from "../../domain/resolver-types.ts";
 
 /**
@@ -69,7 +75,8 @@ export type ManifestEntryClassification =
  *   `partially-installed`. The `list` row passes the record's effective kinds
  *   for the active MCP implementation (D-P3-05), so a switch of
  *   implementation changes the row with no reinstall. The completion path in
- *   `edge-deps.ts` passes the stored kinds, because it has no run.
+ *   `edge-deps.ts` passes the same effective kinds, for the implementation
+ *   its resolver carries (D-P6-22).
  * - `enabled` is the recorded-but-disabled axis on its own (ENBL-05 -- the
  *   single `persistence/state-io.ts::isRecordedButDisabled`): a record with
  *   `enabled: false` was explicitly disabled and is version-frozen, so the
@@ -100,6 +107,23 @@ export interface InstalledRecordLike {
 export type UpgradeCandidate =
   | { readonly upgradable: false }
   | { readonly upgradable: true; readonly resolved: ResolvedPlugin | undefined };
+
+/**
+ * D-P3-03 / D-P6-22: the candidate as the active MCP implementation sees it,
+ * so a newer version degrades a row only when that implementation cannot run
+ * it. The resolver's own verdict is the neutral one (D-P3-01); an upgradable
+ * candidate with a resolution gets `resolutionFor`'s view of it, and any other
+ * candidate is returned as it is. `list` and completion both classify through
+ * this view, so the two agree for every implementation.
+ */
+export function candidateFor(
+  candidate: UpgradeCandidate,
+  active: ActiveMcpImplementation,
+): UpgradeCandidate {
+  return candidate.upgradable && candidate.resolved !== undefined
+    ? { upgradable: true, resolved: resolutionFor(candidate.resolved, active) }
+    : candidate;
+}
 
 /**
  * Classify a persisted install record into the finer installed-inventory state.

@@ -44,7 +44,8 @@ import { ownValue, setOwn } from "../shared/own-key.ts";
 
 import { probeManifestEntry } from "./plugin/git-source-probe.ts";
 import { upgradeCandidate } from "./plugin/list-installed-row.ts";
-import { classifyInstalledRecord } from "./plugin/plugin-state-classifier.ts";
+import { readRecordMcpVerdict } from "./plugin/mcp-verdict-read.ts";
+import { candidateFor, classifyInstalledRecord } from "./plugin/plugin-state-classifier.ts";
 
 import type { MarketplaceManifest } from "../domain/manifest.ts";
 import type { ActiveMcpImplementation } from "../domain/mcp-implementation.ts";
@@ -117,24 +118,51 @@ export interface LocationsResolverLike {
 }
 
 /**
+ * The marketplace facts an installed row reads: the resolve context its
+ * candidate resolves against, and the cached `marketplace.json` a legacy
+ * record re-resolves its MCP servers from (MREC-02).
+ */
+type InstalledRowMarketplace = Pick<
+  ResolveContext,
+  "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+> & { readonly manifestPath: string };
+
+/**
  * LIST-02 / D-67-02: build the cache row for ONE installed plugin via the
  * shared `classifyInstalledRecord`. Whether a newer candidate exists is list's
  * own rule (VER-01 / VER-02, D-PL7-09): `upgradeCandidate` reads the version
  * offline (NFR-5) from plugin.json, then the entry, then the commit, so
  * completion offers `update` for exactly the plugins `list` marks upgradable.
  * A candidate that fails to resolve degrades to plain `upgradable` (CR-01).
+ *
+ * D-P6-22 / MREC-03: the row is classified as `composeInstalledListRow`
+ * classifies it, for the resolver's implementation: the record's effective
+ * MCP verdict (`readRecordMcpVerdict`, offline) and that implementation's view
+ * of the candidate (`candidateFor`), never the stored neutral verdict.
  */
 async function classifyInstalledPluginRow(
   pluginName: string,
   installed: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
   scope: Scope,
-  marketplaceContext: Pick<
-    ResolveContext,
-    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
-  >,
+  marketplace: InstalledRowMarketplace,
   cwd: string,
+  mcpImplementation: ActiveMcpImplementation,
 ): Promise<PluginIndexRow> {
+  const { manifestPath, ...marketplaceContext } = marketplace;
+  const { effective } = await readRecordMcpVerdict(
+    installed,
+    {
+      marketplaceName: marketplaceContext.marketplaceName,
+      marketplace: {
+        manifestPath,
+        marketplaceRoot: marketplaceContext.marketplaceRoot,
+        source: marketplaceContext.marketplaceSource,
+      },
+      pluginName,
+    },
+    mcpImplementation,
+  );
   const candidate: UpgradeCandidate =
     manifestEntry === undefined
       ? { upgradable: false }
@@ -150,7 +178,10 @@ async function classifyInstalledPluginRow(
 
   return {
     name: pluginName,
-    status: classifyInstalledRecord(installed, candidate),
+    status: classifyInstalledRecord(
+      { enabled: installed.enabled, compatibility: { unsupported: effective.unsupported } },
+      candidateFor(candidate, mcpImplementation),
+    ),
     version: installed.version,
   };
 }
@@ -260,8 +291,9 @@ export function makeLocationsResolver(
         // Installed entries first. LIST-02 / D-67-02: the finer state
         // (installed | upgradable | partially-installed | partially-upgradable) is
         // derived by the SHARED classifier -- the same one the `list`
-        // orchestrator consumes -- so the completion cache never diverges from
-        // `list` (no provider-local reclassification).
+        // orchestrator consumes, over the same effective MCP verdict for the
+        // resolver's implementation (D-P6-22) -- so the completion cache never
+        // diverges from `list` (no provider-local reclassification).
         for (const [pluginName, installed] of Object.entries(mp.plugins)) {
           rows.push(
             // eslint-disable-next-line no-await-in-loop -- bounded by the marketplace's installed plugins, one row each
@@ -270,8 +302,9 @@ export function makeLocationsResolver(
               installed,
               parsed.plugins.find((p) => p.name === pluginName),
               scope,
-              marketplaceContext,
+              { ...marketplaceContext, manifestPath: mp.manifestPath },
               cwd,
+              mcpImplementation,
             ),
           );
         }
