@@ -983,6 +983,15 @@ the 36 json-output requirements in
 
 ### Validated
 
+- ✓ The combined mcp-builtin tree is ready to ship: the CHANGELOG, both
+  READMEs, and `docs/hooks-compatibility.md` describe built-in MCP support,
+  the three `requires` markers, and the naming divergence; no closed-set
+  entry goes unemitted; the switch scenario moves a plugin's server between
+  pi-mcp-adapter, no implementation (`{requires mcp}`), and Pi's built-in MCP
+  with no command that changes state (D-P6-18); and `npm run check`, both
+  cucumber profiles, `test:modules`, and CI (run 41960058038, every leg under
+  5 minutes) pass on the combined tree -- mcp-builtin Phase 6 (MDOC-02,
+  DUAL-04)
 - ✓ The extension runs on Pi 1.5.0, and each command run, load, and session
   sees one active MCP implementation: pi-mcp-adapter when it is loaded,
   otherwise Pi's built-in MCP when it is on, otherwise none. Install,
@@ -2080,6 +2089,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-11-05 after mcp-builtin Phase 6 completed. MDOC-02 and DUAL-04 are verified, and Validated gains the Phase 6 entry; the D-CF1-16 row records CI run 41960058038 on the combined tree (the 15-minute timeout stays). All six mcp-builtin phases are complete; the milestone audit and completion follow, and the version bump and pull request wait for the user (D-P6-17). Prior updates follow._
 
 _Last updated: 2026-11-05 during mcp-builtin Phase 6. Key Decisions gains D-MB-14 to D-MB-29 for Phase 2's settled choices, rows for D-P3-01/02, D-P3-06 to D-P3-08, D-P3-11/13, and D-P3-12 as corrected by P3-DC-112, and rows for D-P5-01 to D-P5-04 and D-P5-06/07, all pending the user's review; D-MB-03 and D-MB-12 gain Phase 4's implementation text, and D-MB-08 to D-MB-13 stay pending. Validated gains one entry each for mcp-builtin Phases 1 to 5 (PI15-01..03, MSEL-01..04, MREC-01..07, DUAL-01..03, MDEC-01, BLT-01..06, MDOC-01, MGRT-01..02, MHK-01..02); DUAL-04 and MDOC-02 wait for the Phase 6 verification. Prior updates follow._
 

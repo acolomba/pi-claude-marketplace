@@ -21,13 +21,13 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-04 after mcp-builtin Phase 1)
+See: `.planning/PROJECT.md` (updated 2026-11-05 after mcp-builtin Phase 6)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 06 — Release Docs and Combined Tree
-Phase 6 closes on the milestone branch. Still open from component-features:
+**Current focus:** mcp-builtin milestone audit and completion (all six phases complete)
+Phase 6 closed on the milestone branch; the root review log is `.planning/DUBIOUS-CHOICES.md`. Still open from component-features:
 the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 `acolomba/pi` and `acolomba/pi-subagents`.
 
@@ -830,7 +830,16 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Recent Decisions
 
-Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
+Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the user's review; D-CF1-01..17).
+
+- [mcp-builtin Phase 6] DUAL-04 reads `{requires mcp}` with one read-only
+  `/claude:plugin list` between the switches (D-P6-18); completions follow
+  the active implementation through a stamped single cache file (D-P6-22,
+  amended); the legacy reader refuses an uncontained root (UF-1, D-P6-23);
+  `SoftDepStatus.piMcpAdapterLoaded` is gone (D-P6-09); `.fallowrc.json`
+  has one entry and no `ignoreExports` (D-P6-21).
+- [mcp-builtin Phase 6] CI run 41960058038 on the combined tree: every leg
+  under 5 minutes, so `timeout-minutes: 15` stays (D-CF1-16, D-P6-25).
 
 - D-CF1-01..05: user-invoked bridged skills and commands get Claude Code's
   argument substitution, `` !`cmd` `` injection, description fallback, and
@@ -866,10 +875,12 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
   `{requires mcp}` until the user turns built-in MCP back on (D-MB-07). MSEL-02
   and DUAL-04 now say so, and DUAL-04 moved to Phase 6 because it needs
   Phase 2's registration and Phase 3's marker on the combined tree.
-- [mcp-builtin] Phases 4 and 5 prove their built-in legs with a Phase 1
-  stand-in server; re-run those scenarios after Phase 2 merges.
-- [mcp-builtin] Phase 3 merges last and merges the milestone branch before
-  its gate, because its `info` rows pick up Phase 2's built-in status tokens.
+- [mcp-builtin] Resolved 2026-11-05: Phases 4 and 5's built-in legs re-ran
+  on the combined tree (06-12 re-verification table), and Phase 3 merged last.
+- [mcp-builtin] Open for the user: the Pi 1.5.0 RPC `new_session` leak
+  (P6-DC-0503, unreported upstream), the 02-UAT.md manual checks, and the
+  version bump and pull request (D-P6-17). Decisions waiting are listed at
+  the top of `.planning/DUBIOUS-CHOICES.md`.
 - [component-features] No scenario may pin an unlicensed gap before the user
   decides; the pre-fan-out decisions are recorded (D-CF1-01..17).
 - [Phase 1] `.fallowrc.json` carries `dynamicallyLoaded` and `ignoreExports`
@@ -901,6 +912,6 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 
 ## Session Continuity
 
-Last session: 2026-11-04T18:00:00Z
-Stopped at: Phase 06 complete — all phases complete
+Last session: 2026-11-05T04:45:00Z
+Stopped at: Phase 06 complete — all phases complete; milestone audit next
 Resume file: None
