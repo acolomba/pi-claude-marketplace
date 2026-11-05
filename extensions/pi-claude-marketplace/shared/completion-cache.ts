@@ -82,6 +82,12 @@ import type { ActiveMcpImplementation } from "../platform/pi-api.ts";
 // same mismatch path, so rows classified for one implementation are never
 // served after a switch to another. The stamp is absent only when the read
 // named no implementation, and an absent stamp matches only such a read.
+// The stamp is a field, not part of the key or the file name: the cache stays
+// one file per scope and marketplace, so every cache drop unlinks the one
+// `pluginCacheFile` path. The cost is a shared file: Pi processes that read it
+// under different implementations, such as two projects that differ on
+// `builtin:mcp` and complete from one user-scope marketplace, rebuild and
+// rewrite it in turn on each lookup.
 const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
   schemaVersion: Type.Literal(7),
   lastRefreshedAt: Type.String(),
@@ -164,6 +170,7 @@ export class ManifestSoftFailError extends Error {
 // Helpers (private).
 // ---------------------------------------------------------------------------
 
+/** D-P6-22: the key names no implementation; the entry's stamp holds it. */
 function pluginIndexKey(scope: Scope, marketplace: string): string {
   return `${scope}::${marketplace}`;
 }

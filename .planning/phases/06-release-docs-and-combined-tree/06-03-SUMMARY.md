@@ -102,7 +102,7 @@ plan_head_after: 7d24997925d5915c0e4e10b613e47d1c01928f16
 
 # Phase 6 Plan 03: Completions Follow the Active MCP Implementation Summary
 
-**`/claude:plugin` argument completion now reads the active MCP implementation per lookup, classifies not-installed entries and installed records exactly as `list` does for it, and keys its plugin-index cache by that implementation (schemaVersion 7), closing P3-DC-22.**
+**`/claude:plugin` argument completion now reads the active MCP implementation per lookup, classifies not-installed entries and installed records exactly as `list` does for it, and stamps its plugin-index cache with that implementation (schemaVersion 7), closing P3-DC-22.**
 
 This plan ran in two executors. A container restart killed the first one after it committed Task 1 (29135b2) and while Task 2 was an uncommitted draft. The second executor fast-forwarded onto 29135b2, applied the saved Task 2 patch, finished and corrected it, committed it, then did Task 3 and this SUMMARY.
 

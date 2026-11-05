@@ -215,6 +215,9 @@ notes from child messages.
   under built-in MCP, so a user can see the change. It ships with a cucumber
   scenario that fails without it, and the completion cache file is keyed by
   the implementation too, not only the memory key.
+  Amended in execution: one cache file per scope and marketplace, stamped
+  with the implementation; a read under another implementation rebuilds it
+  (P6-PLN-03).
 - **D-P6-23 (amends D-P6-10, UF-1):** the containment check moves into
   `recorded-servers.ts`, and `LegacyServersSource` gains the scope's
   `ScopedLocations`, threaded through the call sites. The check is not

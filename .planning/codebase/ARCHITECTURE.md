@@ -181,7 +181,7 @@ A load changes no installation state (APL-D1). It reads, reports, and reloads re
 **State Management:**
 - Single source of truth is `<scopeRoot>/pi-claude-marketplace/state.json`, one file per scope (`user`/`project`), read/written exclusively through `persistence/state-io.ts` under the `proper-lockfile` guard
 - No in-memory caching of `state.json` across calls; every orchestrator entry point re-loads it inside its own lock acquisition
-- `shared/completion-cache.ts` is the sole exception — a short-lived, explicitly-invalidated (`dropMarketplaceCache`) cache for tab-completion data, not authoritative state. Its plugin index is stamped with the MCP implementation in memory and on disk (`schemaVersion` 7); a read under another implementation, an older file, or a row stamped for another implementation rebuilds it (D-P6-22)
+- `shared/completion-cache.ts` is the sole exception — a short-lived, explicitly-invalidated (`dropMarketplaceCache`) cache for tab-completion data, not authoritative state. Its plugin index is one file per scope and marketplace, stamped with the MCP implementation in memory and on disk (`schemaVersion` 7), not keyed by it; a read under another implementation, an older file, or a row stamped for another implementation rebuilds it (D-P6-22, P6-PLN-03)
 
 ## Key Abstractions
 
