@@ -13,7 +13,7 @@ pi-claude-marketplace/
 ├── extensions/pi-claude-marketplace/   # the extension source (268 .ts files, ~85k lines)
 │   ├── index.ts                        # extension factory entry point
 │   ├── edge/                           # CLI arg parsing, command dispatch, MCP tools
-│   ├── orchestrators/                  # install/uninstall/update/marketplace/import/reconcile logic
+│   ├── orchestrators/                  # install/uninstall/update/marketplace/import/reconcile logic, plus mcp/ session steps
 │   ├── bridges/                        # per-artifact-kind translation (skills/commands/agents/mcp/hooks/workflows)
 │   ├── domain/                         # pure resolution/validation (no disk writes)
 │   ├── transaction/                    # phase-ledger primitive + state-lock guard
@@ -34,6 +34,7 @@ pi-claude-marketplace/
 │   ├── platform/                       # 9 tests
 │   ├── shared/                         # 27 tests
 │   └── transaction/                    # 3 tests
+├── features/                           # cucumber behavioral tests: one directory per component kind, plus lib/, step_definitions/, support/
 ├── docs/                               # ADRs, PRDs, research, plans, style guides
 │   ├── adr/
 │   ├── prd/
@@ -58,17 +59,17 @@ pi-claude-marketplace/
 
 **`extensions/pi-claude-marketplace/orchestrators/`:**
 - Purpose: business logic for every mutating and read-only command
-- Contains: `plugin/*.ts` (51 files; split verbs pair a `<verb>-flow.ts` ledger entry point with leaf modules: `install-flow.ts` + `install-outcome`/`install-cascade`/`install-clone-probe`/`install-declared-enabled`/`install-disable-cascade`; `update-flow.ts` + `update-swap`/`update-preflight`/`update-cascade`/`update-row`/`update-constraint-gate`; `reinstall-flow.ts` + `reinstall-record`/`reinstall-targets`; `materialize-latest` (the update/reinstall/converge shared runner); `list-flow.ts` + `list-candidate-row`/`list-installed-row`/`list-orphan-fold`; single-file owners `uninstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `prune.ts` + `prune-rollback.ts`, `bootstrap.ts`; git/tag seams `clone-cache`, `clone-gc`, `git-source-probe`, `marketplace-tag-probe`, `dependency-tag-probe`; dependency helpers `dependency-declaration-read`, `dependency-index`; `operations.ts` (binds the real `runPhases` transaction), `plugin-state-classifier`, `discover-names`, `workflows-staging-gc`, `shared.ts`, plus a `*.messaging.ts` sibling per verb), `marketplace/*.ts` (add, remove, update, autoupdate, info, list, shared, plus `*.messaging.ts` siblings), `import/*.ts` (execute, execute.messaging, marketplaces, refs, settings, types, `index.ts` barrel), `reconcile/*.ts` (load, read-pass, apply, apply-outcomes, convergence, autoapply-setting, delisted-plugins, mcp-migration, plan, pending, notify, dependency-verdict, reconcile.messaging, types), top-level `discover.ts`, `edge-deps.ts`, `plugin-path.ts`, `auth-host.ts`, `scope-fanout.ts`, `skill-alias-state.ts`, `types.ts`
-- Key files: `orchestrators/plugin/install-outcome.ts` (inner 7-phase ledger), `install-cascade.ts` and `enable-disable.ts` (cascade ledgers), `orchestrators/reconcile/load.ts` (the read-only `resources_discover` pass, or `apply` when `autoapply` is on), `orchestrators/reconcile/apply.ts` (`/claude:plugin apply`)
+- Contains: `plugin/*.ts` (51 files; split verbs pair a `<verb>-flow.ts` ledger entry point with leaf modules: `install-flow.ts` + `install-outcome`/`install-cascade`/`install-clone-probe`/`install-declared-enabled`/`install-disable-cascade`; `update-flow.ts` + `update-swap`/`update-preflight`/`update-cascade`/`update-row`/`update-constraint-gate`; `reinstall-flow.ts` + `reinstall-record`/`reinstall-targets`; `materialize-latest` (the update/reinstall/converge shared runner); `list-flow.ts` + `list-candidate-row`/`list-installed-row`/`list-orphan-fold`; single-file owners `uninstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `prune.ts` + `prune-rollback.ts`, `bootstrap.ts`; git/tag seams `clone-cache`, `clone-gc`, `git-source-probe`, `marketplace-tag-probe`, `dependency-tag-probe`; dependency helpers `dependency-declaration-read`, `dependency-index`; `operations.ts` (binds the real `runPhases` transaction), MCP verdicts `mcp-verdict` (pure) and `mcp-verdict-read` (the one record verdict read), `plugin-state-classifier`, `discover-names`, `workflows-staging-gc`, `shared.ts`, plus a `*.messaging.ts` sibling per verb), `marketplace/*.ts` (add, remove, update, autoupdate, info, list, shared, plus `*.messaging.ts` siblings), `import/*.ts` (execute, execute.messaging, marketplaces, refs, settings, types, `index.ts` barrel), `mcp/*.ts` (session-materialize, the fixed-order `session_start` steps; builtin-registration-step, the built-in MCP registration and its post-load resync; agent-grants-step, the agent grant-form swap; recorded-servers, the one reader of a record's MCP servers and its legacy reader), `reconcile/*.ts` (load, read-pass, apply, apply-outcomes, convergence, autoapply-setting, delisted-plugins, mcp-migration, plan, pending, notify, dependency-verdict, reconcile.messaging, types), top-level `discover.ts`, `edge-deps.ts`, `plugin-path.ts`, `auth-host.ts`, `scope-fanout.ts`, `skill-alias-state.ts`, `types.ts`
+- Key files: `orchestrators/mcp/session-materialize.ts` (the MCP session steps), `orchestrators/plugin/install-outcome.ts` (inner 7-phase ledger), `install-cascade.ts` and `enable-disable.ts` (cascade ledgers), `orchestrators/reconcile/load.ts` (the read-only `resources_discover` pass, or `apply` when `autoapply` is on), `orchestrators/reconcile/apply.ts` (`/claude:plugin apply`)
 
 **`extensions/pi-claude-marketplace/bridges/`:**
 - Purpose: translate one Claude-plugin component kind into its Pi-native artifact
-- Contains: `agents/` (convert, discover, frontmatter, index-mutation, marker, stage, types, unstage, plus barrel `index.ts`), `commands/` (discover, stage, types, unstage, barrel `index.ts`), `mcp/` (collision-slots, marker, parse, safe-set, stage, substitute, types, unstage, barrel `index.ts`), `skills/` (discover, frontmatter-degrade, frontmatter-scan, rewrite-frontmatter, stage, types, unstage, barrel `index.ts`), `workflows/` (discover, stage, types, unstage, barrel `index.ts`), `hooks/` (dispatch, dispatch-exec, event-adapters, event-router, exec-result, exec-timer, hook-env, routing-state, runtime, settle, spawn-helpers, stage, stream-text, timeout, translation-context, wire-protocol, barrel `index.ts`, plus `if-field/` subdir — bash, glob, barrel `index.ts` — and `async-rewake/` subdir — pid-table, registry — and `payloads/` subdir with one file per Claude Code hook event)
+- Contains: `agents/` (convert, discover, frontmatter, grant-forms, grant-rewrite, index-mutation, legacy-grant-form, marker, mcp-async-warning, stage, types, unstage, plus barrel `index.ts`), `commands/` (discover, stage, types, unstage, barrel `index.ts`), `mcp/` (builtin-description, builtin-entry, builtin-escape, builtin-overrides, builtin-registration, collision-slots, marker, parse, safe-set, stage, substitute, types, unstage, barrel `index.ts`), `skills/` (discover, frontmatter-degrade, frontmatter-scan, rewrite-frontmatter, stage, types, unstage, barrel `index.ts`), `workflows/` (discover, stage, types, unstage, barrel `index.ts`), `hooks/` (dispatch, dispatch-exec, event-adapters, event-router, exec-result, exec-timer, hook-env, mcp-tool-view (the per-event built-in tool view, `createHookToolView(pi)`), routing-state, runtime, settle, spawn-helpers, stage, stream-text, timeout, translation-context, wire-protocol, barrel `index.ts`, plus `if-field/` subdir — bash, glob, barrel `index.ts` — and `async-rewake/` subdir — pid-table, registry — and `payloads/` subdir with one file per Claude Code hook event)
 - Key files: `bridges/hooks/routing-state.ts` (leaf module that broke the `event-router.ts` ↔ `dispatch.ts` ↔ `async-rewake/registry.ts` cycle)
 
 **`extensions/pi-claude-marketplace/domain/`:**
 - Purpose: pure, network-free resolution/validation — no disk writes
-- Contains: `plugin-resolver.ts` (the discriminated `installable` resolver) with `resolver-types.ts`, `unsupported-components.ts`, `component-paths.ts`, `mcp-resolution.ts`, `hooks-resolution.ts`, `dependencies.ts`, `dependency-closure.ts`, `dependency-orphans.ts`, `dependency-range.ts`, `release-tag.ts`, `skill-tokens.ts`, `manifest-path.ts`, `workflow-project-key.ts`, `workflow-script.ts`, `manifest.ts`, `manifest-cache.ts`, `manifest-lookup.ts`, `source.ts`, `version.ts`, `name.ts`, `plugin-root.ts`, `clone-key.ts`, `auth-registry.ts`, `github-auth.ts`, `components/` (hook-events, hook-if-targets, hook-tool-names, hooks, mcp, plugin, plus a `hooks/` subdir — typebox schemas, no barrel)
+- Contains: `plugin-resolver.ts` (the discriminated `installable` resolver) with `resolver-types.ts`, `unsupported-components.ts`, `component-paths.ts`, `mcp-resolution.ts`, `hooks-resolution.ts`, `dependencies.ts`, `dependency-closure.ts`, `dependency-orphans.ts`, `dependency-range.ts`, `release-tag.ts`, `skill-tokens.ts`, `manifest-path.ts`, `workflow-project-key.ts`, `workflow-script.ts`, `manifest.ts`, `manifest-cache.ts`, `manifest-lookup.ts`, `source.ts`, `version.ts`, `name.ts`, `plugin-root.ts`, `clone-key.ts`, `auth-registry.ts`, `github-auth.ts`, the MCP implementation family `mcp-implementation.ts`, `mcp-builtin-features.ts`, and `mcp-builtin-translation.ts`, `components/` (hook-events, hook-if-targets, hook-tool-names, hooks, mcp, plugin, plus a `hooks/` subdir that holds `builtin-mcp-tool-names.ts`, the built-in MCP tool names and matching rules — typebox schemas, no barrel)
 
 **`extensions/pi-claude-marketplace/transaction/`:**
 - Purpose: generic phase-ledger primitive + cross-process state-lock guard
@@ -80,7 +81,7 @@ pi-claude-marketplace/
 
 **`extensions/pi-claude-marketplace/platform/`:**
 - Purpose: thin typed wrappers over the Pi extension API and git
-- Contains: `pi-api.ts` (sole Pi-peer import site), `git.ts` (sole `isomorphic-git` import site), `git-credential.ts`, `git-auth-callbacks.ts`, `os.ts`, `workflow-home.ts`
+- Contains: `pi-api.ts` (sole Pi-peer import site), `git.ts` (sole `isomorphic-git` import site), `git-credential.ts`, `git-auth-callbacks.ts`, `os.ts`, `workflow-home.ts`, `mcp-builtin-status.ts` (status of the servers registered with Pi's built-in MCP), `subagent-child.ts` (the pi-subagents background child check)
 
 **`extensions/pi-claude-marketplace/shared/`:**
 - Purpose: cross-cutting leaf utilities, no upward dependencies
@@ -148,6 +149,11 @@ pi-claude-marketplace/
 - Generated: No — hand-authored fixture data
 - Committed: Yes
 - Contains no `.test.ts` files itself
+
+**`features/`:**
+- Purpose: the cucumber behavioral suite, run under two profiles (`adapter`, `builtin`); see `.agents/skills/cucumber/`
+- Contains: one directory of `.feature` files per component kind, `step_definitions/`, `support/` (the per-scenario world), and `lib/` (harness modules and stand-ins). `lib/upstream/` holds the projections of upstream output a scenario states: `mcp.ts`, `pi.ts`, `subagents.ts`, and `tool-search.ts`, which reduces Pi's `tool_search` result to the tools it loads
+- Committed: Yes
 
 **`test/live-uat/`:**
 - Purpose: standalone `.mjs` UAT drivers, excluded from the typed TypeScript tree (see the `eslint.config.js` ignored paths) and containing no `.test.ts` suites
