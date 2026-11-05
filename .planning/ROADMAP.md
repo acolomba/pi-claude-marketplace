@@ -524,17 +524,17 @@ Plans:
   3. On the combined tree, `npm run check`, both cucumber profiles, and `npm run test:modules` pass, `npx fallow dupes` reports no unreviewed clone group, and the CI behavioral jobs finish within their timeouts.
   4. Every child's parent lines are applied (PROJECT.md Key Decisions rows, BACKLOG entries), no closed-set entry remains that the combined tree never emits, and the phase dubious-choice logs are merged into the root log for the user's review.
 
-**Plans:** 13 plans in 5 waves (each wave's plans own disjoint files; the gate runs alone in Wave 4, and the records that read every SUMMARY run alone in Wave 5, after the gate, and change only `.planning/**/*.md`)
+**Plans:** 7/13 plans executed in 5 waves (each wave's plans own disjoint files; the gate runs alone in Wave 4, and the records that read every SUMMARY run alone in Wave 5, after the gate, and change only `.planning/**/*.md`)
 
 Plans:
 **Wave 1**
-- [ ] 06-01-PLAN.md — Wave 1 (tracer): the switch scenario's DUAL-04 read, `{requires mcp}` while no MCP implementation runs, with a red proof on `d1711fd` (DUAL-04)
-- [ ] 06-02-PLAN.md — Wave 1: an apply or autoupdate catalog move stages the active implementation's agent grant, with an `@builtin-only` apply scenario and its adapter twin (P4-DC-13, P4-DC-60; MGRT-01)
-- [ ] 06-03-PLAN.md — Wave 1: completions follow the active MCP implementation: the per-lookup snapshot, the stamped completion cache, and the installed-row verdict (P3-DC-22, D-P6-22; MREC-03)
-- [ ] 06-04-PLAN.md — Wave 1: the required MCP field encoder, the MANF-01 half for the built-in description reader, and the `tool_search` projection in `features/lib/upstream/` (BLT-01, BLT-02)
-- [ ] 06-05-PLAN.md — Wave 1: the bounded stand-in wait and the new-session scenario's tag, with a drafted Pi report if the scenario stays `@adapter-only` (P2-DC-77, D-P6-11; BLT-01)
-- [ ] 06-06-PLAN.md — Wave 1: README.md, README.es.md, `docs/hooks-compatibility.md`, and `docs/mcp-compatibility.md` describe built-in MCP support (MDOC-02)
-- [ ] 06-07-PLAN.md — Wave 1: the output catalog's `requires` blocks and fixtures, the catalog and JSON prose, and the closed-set emitter check (MDOC-02)
+- [x] 06-01-PLAN.md — Wave 1 (tracer): the switch scenario's DUAL-04 read, `{requires mcp}` while no MCP implementation runs, with a red proof on `d1711fd` (DUAL-04)
+- [x] 06-02-PLAN.md — Wave 1: an apply or autoupdate catalog move stages the active implementation's agent grant, with an `@builtin-only` apply scenario and its adapter twin (P4-DC-13, P4-DC-60; MGRT-01)
+- [x] 06-03-PLAN.md — Wave 1: completions follow the active MCP implementation: the per-lookup snapshot, the stamped completion cache, and the installed-row verdict (P3-DC-22, D-P6-22; MREC-03)
+- [x] 06-04-PLAN.md — Wave 1: the required MCP field encoder, the MANF-01 half for the built-in description reader, and the `tool_search` projection in `features/lib/upstream/` (BLT-01, BLT-02)
+- [x] 06-05-PLAN.md — Wave 1: the bounded stand-in wait and the new-session scenario's tag, with a drafted Pi report if the scenario stays `@adapter-only` (P2-DC-77, D-P6-11; BLT-01)
+- [x] 06-06-PLAN.md — Wave 1: README.md, README.es.md, `docs/hooks-compatibility.md`, and `docs/mcp-compatibility.md` describe built-in MCP support (MDOC-02)
+- [x] 06-07-PLAN.md — Wave 1: the output catalog's `requires` blocks and fixtures, the catalog and JSON prose, and the closed-set emitter check (MDOC-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 06-08-PLAN.md — Wave 2: the contained legacy MCP reader with its redacted log line (UF-1, UF-4), and the fallow entry and export cleanup (MREC-02)
@@ -561,7 +561,7 @@ Plans:
 | 3. Read-Time Verdicts | 9/9 | Complete    | 2026-11-04 |
 | 4. Agent Grants | 6/6 | Complete    | 2026-11-04 |
 | 5. Hook Tool Names | 4/4 | Complete    | 2026-11-04 |
-| 6. Release Docs and Combined Tree | 0/13 | Not started | - |
+| 6. Release Docs and Combined Tree | 7/13 | In Progress | - |
 
 ## Carried Forward
 
