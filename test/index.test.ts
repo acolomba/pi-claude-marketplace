@@ -206,6 +206,12 @@ const MODE_READS_PER_DISCOVER = 4;
  */
 const PROBES_PER_SESSION_START = 1;
 
+/**
+ * Soft-dependency probes per argument-completion lookup: the callback reads the
+ * active MCP implementation from one inventory snapshot (MSEL-01, D-P6-22).
+ */
+const PROBES_PER_COMPLETION = 1;
+
 /** `ctx.mode` reads per `session_start`: one before the session env, one before the MCP session steps. */
 const MODE_READS_PER_SESSION_START = 2;
 
@@ -1732,9 +1738,16 @@ test("keeps hook routing and command completion state inside each extension-load
   await seedBlockingHookPlugin(ownerCwd);
   const ownerMarketplace = await seedMarketplaceSource(ownerCwd, "owned-rows", "hello");
   process.chdir(ownerCwd);
-  // One probe: the command's notification run is the only one, and the add
-  // notification renders from its snapshot (D-05).
-  const owner = await loadExtension(1, 1, { value: ownerCwd, reads: 1 }, 3, undefined, 0);
+  // One probe for the command's notification run, which the add notification
+  // renders from (D-05), and one for the completion lookup.
+  const owner = await loadExtension(
+    1,
+    1 + PROBES_PER_COMPLETION,
+    { value: ownerCwd, reads: 1 },
+    3,
+    undefined,
+    0,
+  );
   const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
   await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
   const toolEvent: ToolCallEvent = {
@@ -1752,7 +1765,7 @@ test("keeps hook routing and command completion state inside each extension-load
   await owner.command.handler(`marketplace add ${ownerMarketplace} --scope project`, owner.ctx);
   const ownerCandidates = await owner.command.getArgumentCompletions?.("install --scope project ");
   process.chdir(peerCwd);
-  const peer = await loadExtension(0, 0);
+  const peer = await loadExtension(0, PROBES_PER_COMPLETION, undefined, 0, undefined, 0);
   const peerHookContext = hookContext(peerCwd, "peer-graph-session");
   await peer.bridgeSessionStart({ type: "session_start", reason: "startup" }, peerHookContext);
   const peerHookResult = await peer.toolCall(structuredClone(toolEvent), peerHookContext);
