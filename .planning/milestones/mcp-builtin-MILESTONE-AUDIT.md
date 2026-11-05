@@ -15,7 +15,7 @@ tech_debt:
   - phase: 02-built-in-materialization
     items:
       - "Nyquist PARTIAL: 02-VALIDATION.md withholds nyquist_compliant for BLT-01 (`/reload`, new session), MSEL-02 (`/reload`) and BLT-04 ('never silent'); the two manual checks in 02-UAT.md wait for the user (P2-DC-100, High). 06-05 lifted the new-session scenario to `@mcp`, so BLT-01's new-session half now has an automated scenario under both profiles."
-      - "02-VERIFICATION.md scores 5/7 must-haves verified (status passed, the two others routed to 02-UAT.md)."
+      - "02-VERIFICATION.md scores 5/7 must-haves verified. The combined-tree re-verification (c7a0358) reads `human_needed`: the `/reload` leg of BLT-01 and BLT-04 'never silent' wait for the two manual checks in 02-UAT.md. The earlier `passed` was an orchestrator disposition (P2-DC-100), which the re-verification did not keep."
   - phase: 06-release-docs-and-combined-tree
     items:
       - "Review info items IN-01, IN-02, IN-04 to IN-09 deferred (06-REVIEW-DISPOSITION.md): the cucumber completion step injects the profile's implementation (IN-01); D-P6-18, D-P6-22, P2-DC-53 and P2-DC-77 are cited in code but have no Key Decisions row (IN-02); the CHANGELOG names only `install` and `update --partial` completion (IN-04); schema literals repeated (IN-05); a grant test that cannot tell the run from the argument (IN-06); an optional cache stamp kept for fixtures (IN-07); a disabled branch no longer reached with stale comments (IN-08); edge-deps test cases that break cases.md (IN-09)."
@@ -73,7 +73,7 @@ REQUIREMENTS.md, listed in at least one SUMMARY's `requirements-completed`, and 
 | Phase | Verification | Score | Validation | Security |
 |-------|--------------|-------|------------|----------|
 | 01 Foundation and Pi 1.5.0 | passed | 5/5 | validated, compliant | 0 open |
-| 02 Built-in Materialization | passed | 5/7 | validated, partial | 0 open |
+| 02 Built-in Materialization | human_needed | 5/7 | validated, partial | 0 open |
 | 03 Read-Time Verdicts | passed | 5/5 | validated, compliant | 0 open |
 | 04 Agent Grants | passed | 3/3 | validated, compliant | 0 open |
 | 05 Hook Tool Names | passed | 6/6 | validated, compliant | 0 open |

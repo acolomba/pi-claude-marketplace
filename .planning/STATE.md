@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
-current_phase: 06
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 06 complete — all phases complete
-last_updated: "2026-11-05T04:29:07.853Z"
+last_updated: "2026-11-05T04:55:12.051Z"
 last_activity: 2026-11-05
-last_activity_desc: Phase 06 complete
-state_head: bca60d758d5cc405666b9e9ece7d0cbd18cfcc8b
+last_activity_desc: Milestone mcp-builtin completed and archived
+state_head: c7a0358499f663496eb3622f363e31b920db4164
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 55
   completed_plans: 55
   percent: 100
+current_phase: 06
 ---
 
 # Project State
@@ -33,12 +33,10 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 
 ## Current Position
 
-Phase: 06
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-11-05 — Phase 06 complete
-
-Progress: [██████████] 100%
+Phase: Milestone mcp-builtin complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-05 — Milestone mcp-builtin completed and archived
 
 
 ### mcp-4 closeout
@@ -136,6 +134,7 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| verification_override | Phase 02 (built-in materialization): `human_needed`, 5/7 must-haves at the combined-tree re-verification (c7a0358); the milestone closed with an override, MS-06 | acknowledged — waits for the user | 2026-11-05 | mcp-builtin |
 | uat_gaps       | 02/02-UAT.md: 2 pending manual scenarios (BLT-04 "reported, never silent" as `info` plus `/mcp`; `/reload` and `/new` in a real Pi with built-in MCP), P2-DC-100 | acknowledged — waits for the user | 2026-11-05 | mcp-builtin |
 | todos          | 2026-10-13-cucumber-rules-trial.md: try the cucumber rules on another repository (§3; reviewed in Phase 10 and not folded) | acknowledged — still pending | 2026-10-21 | marketplace-features |
 | deferred_items | 07/deferred-items.md: DEP-07-03-01 brace-expansion advisory in the root Pi tree; TEST-07-06-01 optional pi-subagents resolver skip | acknowledged — carried as BACKLOG DEPADV-01; WINDOWS #92 (was #89 before the main merge) | 2026-10-11 | json-output |
@@ -278,14 +277,17 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Plan and run Phase 1 in the parent session on `features/mcp-builtin`
-  (`/gsd-plan-phase 1`, or the `gsd-autonomous` skill with `--only 1`).
-- When Phase 1 is verified and pushed: create and push
-  `features/mcp-builtin-phase-2` to `-phase-5` at the milestone head, then
-  start one child session per phase with `.planning/CHILD-SESSION-BRIEF.md`
-  (Phase 3 first).
-- Merge the phase branches in the order 5, 4, 2, 3 with the post-merge gate
-  (`npm run check` plus both cucumber profiles), then run Phase 6.
+
+- Review with the user, interactively: the 12 High entries and 36 Pending
+  Key Decisions rows in `.planning/DUBIOUS-CHOICES.md`, and the session's
+  working log of questionable choices.
+- Run the two manual checks in
+  `.planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-UAT.md`
+  (the `/reload` leg of BLT-01, and BLT-04 "never silent"). Phase 2 closed
+  with a verification override (`human_needed`, 5/7).
+- Offer the version bump (`package.json`, `sonar-project.properties`,
+  `package-lock.json`) and open the PR for `features/mcp-builtin` (D-P6-17).
+- Then start the next milestone with the `new-gsd-milestone` skill.
 
 
 ## Performance Metrics

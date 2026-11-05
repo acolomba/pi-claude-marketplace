@@ -4,7 +4,7 @@
 
 ## What This Is
 
-`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artifacts (skills, commands, agents, hooks, MCP servers, workflows) into the equivalent Pi-native artifacts (Pi skills, Pi prompt templates, pi-subagents agents, staged Pi hook registrations, pi-mcp-adapter MCP entries, saved workflow-engine scripts) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
+`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artifacts (skills, commands, agents, hooks, MCP servers, workflows) into the equivalent Pi-native artifacts (Pi skills, Pi prompt templates, pi-subagents agents, staged Pi hook registrations, pi-mcp-adapter MCP entries or Pi built-in MCP registrations, saved workflow-engine scripts) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
 
 ## Core Value
 
@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Current Milestone: mcp-builtin -- MCP Built-in (branch: features/mcp-builtin, started 2026-11-04)
+## Previous Milestone: mcp-builtin -- MCP Built-in (branch: features/mcp-builtin, started 2026-11-04, completed 2026-11-05, no PR yet, no npm release yet)
 
 **Goal:** A plugin's MCP servers run through pi-mcp-adapter when it is
 installed and through Pi's built-in MCP when it is not. The two are equal
@@ -802,6 +802,23 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
+**Completed on branch `features/mcp-builtin`, no PR yet:** milestone
+`mcp-builtin` (2026-11-05, Phases 1-6, 55 plans, 31/31 requirements;
+archived to `.planning/milestones/mcp-builtin-*`). A plugin's MCP servers now
+run through pi-mcp-adapter when it is loaded and through Pi's built-in MCP
+when it is not, with Pi 1.5.0 as the floor. Install records every declared
+server before plugin-variable substitution, and verdicts, the partial state,
+`--partial` consent, and the `{requires mcp}`, `{requires pi-mcp-adapter}`,
+and `{requires builtin mcp}` markers are read against the active
+implementation. Generated agents' grants and plugin hooks' tool names follow
+the active implementation, and a switch needs no plugin command. The
+extension never edits Pi settings (D-MB-01). Every MCP scenario runs under an
+`adapter` and a `builtin` cucumber profile. Audit `tech_debt`, no blockers;
+closed with a verification override for Phase 2, whose two manual checks
+(the `/reload` leg of BLT-01, and BLT-04 "never silent") wait for the user,
+with 12 High review entries and 36 Pending Key Decisions rows in
+`.planning/DUBIOUS-CHOICES.md`.
+
 **Completed on branch `claude/quirky-planck-hhm592`, no PR yet:** milestone
 `component-features` (2026-11-03, Phases 1-8, 65 plans, 62/62 requirements;
 archived to `.planning/milestones/component-features-*`; first closed
@@ -967,8 +984,10 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-Milestone mcp-builtin is active; its requirements are in
-[REQUIREMENTS.md](REQUIREMENTS.md). Earlier milestones: the 62 component-features requirements are validated
+No milestone is active. The 31 mcp-builtin requirements are validated and
+archived in
+[milestones/mcp-builtin-REQUIREMENTS.md](milestones/mcp-builtin-REQUIREMENTS.md).
+Earlier milestones: the 62 component-features requirements are validated
 and archived in
 [milestones/component-features-REQUIREMENTS.md](milestones/component-features-REQUIREMENTS.md);
 the 64
@@ -1010,8 +1029,11 @@ the 36 json-output requirements in
   registers a server while pi-mcp-adapter or no implementation is active,
   adapter entries stay written, and plugins installed before the milestone
   need no reinstall. `docs/mcp-compatibility.md` has a built-in column. The
-  phase verification passed with its two human items accepted
-  provisionally (P2-DC-100) -- mcp-builtin Phase 2, 2026-11-04 (MSEL-02..04,
+  phase verification first passed with its two human items accepted
+  provisionally (P2-DC-100); the combined-tree re-verification at the
+  milestone close reads `human_needed`, because the `/reload` leg of BLT-01
+  and BLT-04's "never silent" still wait for the two manual checks in
+  `02-UAT.md` -- mcp-builtin Phase 2, 2026-11-04 (MSEL-02..04,
   MREC-02, BLT-01..06, MDOC-01).
 
 - ✓ A plugin's available or partially available state, its MCP server
@@ -1585,6 +1607,15 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 
 ## Context
 
+- **Codebase state at mcp-builtin close (2026-11-05):** `npm run check` passes
+  with 1603 adapter-profile and 133 builtin-profile cucumber scenarios, and
+  `test:modules` and CI pass (one known adapter flake, P3-DC-111, needed a
+  rerun). The milestone adds 32,543 lines and removes 3,077 across 344 files
+  outside `.planning/` (457 commits, 2026-11-04 to 2026-11-05). New
+  load-bearing surfaces: the MCP implementation tables in
+  `domain/mcp-implementation.ts`, the run snapshot's `mcpImplementation`, the
+  recorded-servers reader with its contained legacy fallback, the built-in
+  registration and agent-grants session steps, and the hook tool view.
 - **refine-unit-tests authority rule:** `.planning/reviews/unit-test-adversarial/`
   and the bundled backlog items are discovery evidence, not current truth. Line
   references anchor to pre-milestone commits and must be re-derived from the
@@ -2353,3 +2384,5 @@ _Last updated: 2026-11-02 after the component-features milestone was reopened fo
 _Last updated: 2026-11-03 after the component-features milestone closed again. 62/62 requirements validated (LOC-01..04 added by Phase 8); D-LOC-01 reworded as scope locality and extended to autoapply (DC-45); all requirements archived._
 
 _Last updated: 2026-11-04 after starting the mcp-builtin milestone._
+
+_Last updated: 2026-11-05 after the mcp-builtin milestone closed. 31/31 requirements validated and archived; Phase 2 closed with a verification override (two manual checks wait for the user)._
