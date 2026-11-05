@@ -4881,3 +4881,71 @@ Noted 2026-11-03 by the babysit-pr review of PR #295. `CommandMapEntrySchema` (`
 ## AGENTNAME-01: a nested and a flat agent can map to the same file name
 
 Noted 2026-11-03 by the babysit-pr review of PR #295. D-CF4-01 keeps `agents/review/security.md` (`demo:review:security`) and `agents/review-security.md` (`demo:review-security`) distinct, but `generatedAgentName` (`domain/name.ts`) joins namespace and name with `-`, so both become `pi-claude-marketplace-demo-review-security` and AG-12 keeps the first in `localeCompare` order with a warning. Claude Code loads both. Record the divergence as a decision next to D-CF4-01, or make the file name injective with a migration for existing marker and index names.
+
+## MCPV2-01: register and unregister built-in MCP servers at once
+
+Noted 2026-11-05 (mcp-builtin, MCPV2-01, D-MB-10). Under Pi's built-in MCP, the extension registers plugin MCP servers only at `session_start` and after the load reconcile. So a server that `install` or `enable` adds starts at the next start or `/reload`, and a server that `uninstall` or `disable` removes keeps running until then. The milestone deferred this because D-MB-10 settles on registration at session start. Candidate direction: call Pi's registration API from the install, uninstall, enable, and disable ledgers after the state commit, and keep the session-start pass as the reconciliation.
+
+## MCPV2-02: map Claude deny rules to hidden built-in MCP tools
+
+Noted 2026-11-05 (mcp-builtin, MCPV2-02). The extension does not map Claude deny rules for plugin MCP tools onto Pi's built-in MCP, so Pi exposes a denied tool like any other. The milestone kept deny rules out of its scope and named this a version 2 requirement. Candidate direction: at registration, map a Claude deny rule that names a plugin MCP tool or server to Pi's `toolExposure: "hidden"` for that tool or server.
+
+## MCPV2-03: let background pi-subagents children call plugin MCP tools under built-in MCP
+
+Noted 2026-11-05 (mcp-builtin, MCPV2-03, MCPBG-01). Under Pi's built-in MCP, a pi-subagents background child does not run the plugin MCP servers that the parent registered, so the child cannot call plugin MCP tools. The milestone deferred this because D-MB-12 keeps a background child from changing installation state, and the registration runs in the parent only. Candidate direction: register the recorded servers in a child without any state write, or ask pi-subagents to pass the parent's registrations to the child.
+
+## DENYPIN-01: re-pin the MCP variable deny-lists to Claude Code 2.1.318
+
+Noted 2026-11-05 (mcp-builtin, P2-DC-22, D-MB-27, AVAR-05). The variable deny-lists of the MCP value substitution stay pinned to Claude Code 2.1.291. The milestone compared behavior with Claude Code 2.1.318 elsewhere, and kept the lists so that this milestone changes no released substitution. Candidate direction: read the 2.1.318 deny-lists with `.agents/skills/claude-code-compat-research`, update both lists and their tests, and record the change in the CHANGELOG.
+
+## BLTNOTICE-01: a load notice for an overridden or refused built-in MCP registration
+
+Noted 2026-11-05 (mcp-builtin, P2-DC-08, D-MB-19, BLT-04). When an `mcp.json` entry overrides a plugin server, or the extension refuses a built-in registration, only `info` reports it. The load prints nothing. The milestone deferred a notice because it needs a closed-set reason and catalog states. Candidate direction: if Claude Code reports the same case, add one warning row per overridden or refused server to the load report, with its catalog states.
+
+## TOOLSEARCHOFF-01: a fallback when Pi's `tool_search` is turned off
+
+Noted 2026-11-05 (mcp-builtin, 02-08 item 4 (d)). Plugin MCP tools under Pi's built-in MCP reach the model through Pi's `tool_search`. When a user turns `tool_search` off, the model cannot find those tools. The milestone deferred this because no requirement covers it. Candidate direction: detect at registration that `tool_search` is off and register the plugin tools with direct exposure, or document the requirement.
+
+## BLTOWNER-01: tell another extension's same-name built-in registration apart in `info`
+
+Noted 2026-11-05 (mcp-builtin, P2-DC-46, D-MB-29). When another extension registers a built-in MCP server under the name of a plugin server first, `info` cannot tell that registration from this extension's own. D-MB-29 records it as a gap. The fix needs this extension's own `extensionPath`, so it changes the parameter of the built-in status reader (`createBuiltinMcpStatusReader`), which this milestone froze. Candidate direction: pass the extension's path to the reader and compare it with the source of the registration.
+
+## HOOKTOOLSEARCH-01: name Pi's `tool_search` as Claude Code's `ToolSearch` in hooks
+
+Noted 2026-11-05 (mcp-builtin, P5-DC-09, P5-DC-35, 05-CONTEXT deferred ideas). Hooks see Pi's `tool_search` tool under Pi's name, so a matcher written for Claude Code's `ToolSearch` does not fire. The milestone deferred this because Phase 5 covered MCP tool names only. Candidate direction: map the name in hook stdin and matchers, and change the `*` rows on `tool_search` in `features/hook/tool-use.feature`.
+
+## HOOKDETAILS-01: recover the original MCP tool segment from `details.tool`
+
+Noted 2026-11-05 (mcp-builtin, 05-CONTEXT deferred ideas). Under Pi's built-in MCP, the tool segment of a hook-facing name keeps Pi's change of `-` to `_`, because Pi does not report the original tool name. A tool result's `details.tool` holds it, but a PreToolUse event has no details, so the two events would disagree on the name. The milestone did not take this for that reason. Candidate direction: ask Pi to report the original tool name on the tool, then use it in both events.
+
+## HOOKPROXYBOTH-01: skip only adapter-registered tools as proxy calls when both MCP implementations are loaded
+
+Noted 2026-11-05 (mcp-builtin, T-05-07, P5-DC-15). When pi-mcp-adapter and Pi's built-in MCP are both loaded, a built-in tool whose name Pi cut inside the namespace, called with a string `tool` and no `action`, is still skipped as a proxy call, so its hooks do not run. The milestone deferred the hardening because the case needs both implementations loaded and a cut name. Candidate direction: skip only a tool that pi-mcp-adapter registered, never a tool whose `sourceInfo.path` is `builtin:mcp`.
+
+## HOOKMATCH-01: close the hook matcher parity gaps with Claude Code 2.1.318
+
+Noted 2026-11-05 (mcp-builtin, P5-DC-16). Claude Code 2.1.318 reads a matcher made only of `[a-zA-Z0-9_|, -]` as a list of exact names, with spaces and commas allowed, and any other matcher as an unanchored regex. This project accepts only `[A-Za-z0-9_|-]` and matches server prefixes with `startsWith`. The milestone deferred this because Phase 5 changed only the names that hooks see. Candidate direction: port the matcher rule of Claude Code, with scenarios for the list form and the regex form.
+
+## HOOKNOIMPL-01: a scenario for the proxy hook rule with no MCP implementation
+
+Noted 2026-11-05 (mcp-builtin, P5-DC-24, MHK-02). MHK-02's case with no MCP implementation loaded has unit tests only. A scenario needs a harness extension that registers a proxy-shaped tool while no MCP implementation is loaded, and that is a new stand-in. The milestone deferred it for that reason. Candidate direction: add the stand-in under `features/lib/` and an `@mcp` scenario in `features/hook/tool-use.feature`.
+
+## PENDAPPLY-01: `apply` refuses a declared install that `pending` previews as a partial install
+
+Noted 2026-11-05 (mcp-builtin, P3-DC-122). `pending` previews a declared install of a partially available plugin as `(will partially install)`, but `apply` refuses that install. The mismatch predates the milestone for every partially available kind. Phase 3 makes it reachable for an `sse` plugin under Pi's built-in MCP. Candidate direction: choose one behavior for both commands, from what Claude Code does with a declared plugin that installs only in part.
+
+## GRANTLEGACY-01: exact translation of legacy agent grants under built-in MCP
+
+Noted 2026-11-05 (mcp-builtin, P4-DC-06, P4-DC-30). An agent that an earlier release installed gets a textual translation of its MCP grants at the first built-in session. Two gaps remain. A per-tool `excludeTools` name longer than 64 characters stays in the pi-mcp-adapter form. A grant of a server that built-in MCP cannot run (`sse`) is translated instead of dropped with the staging warning. Candidate direction: compute Pi's hashed name for long names, and drop unsupported grants with the warning.
+
+## GRANTWARN-01: a load warning when the grants step cannot rewrite an agent
+
+Noted 2026-11-05 (mcp-builtin, P4-DC-09, P4-DC-32). When the session-start grants step cannot rewrite a generated agent (a user-edited file, a held lock, or a corrupt index row), it skips the agent and reports nothing. The milestone deferred a warning because it needs a closed-set reason and catalog states. Candidate direction: add one warning row per skipped agent to the load report.
+
+## SWITCHNOTICE-01: a load notice for a plugin whose state changed because of an MCP switch
+
+Noted 2026-11-05 (mcp-builtin, Phase 1 conditional (b), D-P3-14). When the user switches between pi-mcp-adapter and Pi's built-in MCP, a plugin can become partially available, or available again, and the load prints no notice. `list`, `info`, and `fetch` show the new state. D-P3-14 deferred the notice. Candidate direction: at load, compare the state of each plugin under the implementation of the previous session with its state under the current one, and print one row per change.
+
+## STRICTINSTALL-01: make the built-in twin installs strict
+
+Noted 2026-11-05 (mcp-builtin, 02-08 item 9, P2-DC-78). The built-in twin scenarios of `configuration.feature`, `invocation.feature`, `sources.feature`, `builtin-values.feature`, `builtin-direct.feature`, `builtin-trust.feature`, `project-scope.feature`, and the enable and update twins of `lifecycle.feature` install and enable with `which did not fail`. Phase 2 used that form because the MCP markers did not exist yet. Phase 3's markers have landed, so those installs can no longer warn and the strict form fits. Phase 6 did not change the scenarios because its plans own no such edit. Candidate direction: change each twin to the strict install step and run both profiles.
