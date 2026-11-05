@@ -1,6 +1,6 @@
 ---
 milestone: mcp-builtin
-audited: 2026-11-05T05:00:00Z
+audited: 2026-11-05T04:30:00Z
 status: tech_debt
 scores:
   requirements: 31/31
@@ -31,7 +31,7 @@ tech_debt:
     items:
       - "Decisions waiting on the user: 12 High entries and 36 Pending Key Decisions rows, listed at the top of `.planning/DUBIOUS-CHOICES.md`."
       - "Version bump, CHANGELOG PR number, and the pull request wait for the user (D-P6-17)."
-      - "CI re-run 41967152313 on 2b6f2f4 (after the review fixes) was in progress at audit time; the local `npm run check` and `test:modules` on the same build inputs passed."
+      - "CI re-run 41967152313 on 2b6f2f4 (after the review fixes) passed on attempt 2: attempt 1 failed one adapter-components scenario, BLT-01 at `lifecycle.feature:392`, the known adapter flake P3-DC-111 (pi-mcp-adapter had not listed the tool yet). The scenario is the one 06-05 lifted to `@mcp`; its stand-in wait does not cover the adapter's listing, so the flake stays open."
 nyquist:
   compliant_phases: [01, 03, 04, 05, 06]
   partial_phases: [02]
@@ -95,7 +95,8 @@ passed — and update/apply/completion). One warning, W1, is listed under tech d
   2b6f2f4; both trees have the same build inputs as the audited HEAD apart from `.planning/`.
 - Plan 06-12's gate (fresh ESLint cache, `test:modules`, e2e) passed on a7f73bf, and CI run
   41960058038 passed on 1bec91e (every behavioral leg under 5 minutes, `timeout-minutes: 15`
-  stays). The CI re-run on 2b6f2f4 was in progress when this audit was written.
+  stays). The CI re-run 41967152313 on 2b6f2f4 passed after one rerun of the flaky
+  adapter-components job (P3-DC-111); its legs ran 3 min 36 s, 4 min 30 s and 2 min 23 s.
 
 ## Tech debt
 

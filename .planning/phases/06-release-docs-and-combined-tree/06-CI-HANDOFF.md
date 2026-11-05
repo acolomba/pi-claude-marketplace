@@ -163,3 +163,14 @@ unverified until the parent records a successful run in `## CI timings`.
 - **Timeout:** every leg takes 10 minutes or less (slowest 4 min 35 s; 1.5 times is 6 min 53 s), so `timeout-minutes: 15` stays (D-CF1-16 as applied by D-P6-25).
 - **D-CF1-16:** the PROJECT.md row gains the 2026-11-05 measurement sentence.
 - **Status:** criterion 3's CI part and DUAL-03's re-measure on the combined tree are verified.
+
+- **Re-run after the code-review fixes:** CI run 41967152313 (`workflow_dispatch`, 2026-11-05, head `2b6f2f4c42a46eca539c4451a60cc66f661a2d2b`, build inputs of `71a37c4`). Attempt 1: 8 of 9 jobs `success`; `behavioral tests, adapter components (Node 24)` failed one scenario of 435, "A new session offers the plugin's tool again (BLT-01)" (`features/mcp-server/lifecycle.feature:392`, seed 944382), where pi-mcp-adapter had not listed the stub's tool yet: the known adapter flake P3-DC-111. Attempt 2 re-ran only that job: `success`. Conclusion: `success`.
+
+| Job | Attempt | Job duration | Step `Run the behavioral tests` |
+| --- | --- | --- | --- |
+| behavioral tests, adapter lifecycle (Node 24) | 1 | 3 min 36 s | 2 min 35 s |
+| behavioral tests, adapter components (Node 24) | 1 (failed, flake) | 4 min 33 s | 3 min 49 s |
+| behavioral tests, adapter components (Node 24) | 2 | 4 min 30 s | 3 min 46 s |
+| behavioral tests, builtin all (Node 24) | 1 | 2 min 23 s | 1 min 28 s |
+
+- **Timeout:** every leg is still under 10 minutes, so `timeout-minutes: 15` stays.
