@@ -454,24 +454,6 @@ async function prepareUpdateHandles(
   return handles as PrepHandles;
 }
 
-/**
- * MGRT-01 / P4-DC-13: the MCP implementation whose grant form the update
- * stages: a direct run's snapshot, else the snapshot of the command a
- * dependency move runs for, else `none`, which stages pi-mcp-adapter's form.
- * The marketplace autoupdate cascade and `apply`'s convergence carry neither
- * snapshot, so they stage that form; the agents index row stores both forms,
- * and the next load rewrites the file for the active implementation
- * (D-MB-03). When the update arguments carry the active implementation
- * themselves, a parent line repoints this function at that field.
- */
-function updateAgentImplementation(args: ThreePhaseArgs): ActiveMcpImplementation {
-  if (!args.cascade) {
-    return args.run.softDeps.mcpImplementation;
-  }
-
-  return args.preflightNotification?.run.softDeps.mcpImplementation ?? "none";
-}
-
 /** What the agents staging of an update reads from the handles prepared before it. */
 interface UpdateAgentsInputs {
   readonly pluginDataDir: string;
@@ -509,7 +491,11 @@ async function prepareUpdateAgents(
     // ANAME-02: the servers this update writes, mapped in agent tool lists.
     mcpServerNames: Object.keys(installable.mcpServers),
     mcpGrantForms: {
-      active: updateAgentImplementation(args),
+      // MGRT-01 / D-MB-03: the grant form of the implementation the arguments
+      // name, which every producer sets from its own run, so a direct update,
+      // a reinstall, a dependency move, the autoupdate cascade, and `apply`'s
+      // convergence each stage the form of the run that carries them.
+      active: args.mcpImplementation,
       declaredMcpServers: installable.declaredMcpServers,
     },
     // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
