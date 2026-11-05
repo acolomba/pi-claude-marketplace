@@ -1,6 +1,6 @@
 ---
 phase: 01-foundation-and-pi-1-5-0
-verified: 2026-11-04T11:10:00Z
+verified: 2026-11-05T09:00:00Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
@@ -42,31 +42,52 @@ covered_files:
   - extensions/pi-claude-marketplace/platform/pi-api.ts
   - package.json
   - scripts/check-features.mjs
-covered_digest: "v4:sha256:295616ac267b1c102762b50e2970c63536e77bf4ea483f4e12bb3df8c5216c75"
+covered_digest: "v4:sha256:385ec464842921a4ef0a6cd53e55bd935a8fff66daf59e66ef87bcab853f46ee"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 5/5
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 1: Foundation and Pi 1.5.0 Verification Report
 
 **Phase Goal:** Every parallel phase can start from frozen ground: the extension runs on Pi 1.5.0, each run knows its active MCP implementation, install records keep every declared server in its Claude form, both implementation profiles exist as pure code, and every MCP scenario runs under an adapter profile and a built-in profile. No user-visible output changes yet.
-**Verified:** 2026-11-04T11:10:00Z
+**Verified:** 2026-11-05T09:00:00Z
 **Status:** passed
-**Re-verification:** No, initial verification
+**Re-verification:** Yes. Milestone-close re-verification on the combined tree (`features/mcp-builtin`, HEAD `ca56636`). The 2026-11-04 report went stale only because Phases 2 to 6 changed files it covers.
 
 ## Goal Achievement
 
-### Observable Truths
+The five ROADMAP success criteria are the contract. Each was re-checked against the current code, not against the earlier report.
 
-The five ROADMAP success criteria are the contract. They were checked against the code at HEAD `75e4d97` (code identical to `8d03f4e`, which CI tested; later commits touch docs only).
+### What Phases 2 to 6 legitimately changed on the covered surface
+
+The covered files changed in four ways, and none of them weakens a Phase 1 truth. `01-FROZEN.md` already records the amendments as "Amended by mcp-builtin Phase 6".
+
+| Covered surface | Change since the Phase 1 gate (`8d03f4e`) | Why it is legitimate |
+| --- | --- | --- |
+| `platform/pi-api.ts` | `SoftDepStatus.piMcpAdapterLoaded` removed (3 lines). `mcpImplementation` and the adapter probe stay. | D-P6-09: no production code read the derived boolean. The probe order and counts are unchanged. |
+| `orchestrators/mcp/recorded-servers.ts` | `LegacyServersSource.locations`, the `uncontained` refusal, `isPluginRootContained`, a redacted debug line; the error class and its reason type are module-private. | UF-1/NFR-10, UF-4, D-P6-21, D-P6-23. The reader still answers `recorded`, `re-resolved`, or `unreadable`, and still writes nothing. |
+| `domain/mcp-implementation.ts` (since `f3ab832`) | `toolNamePrefix` returns `string \| undefined`. | CR-02 from the Phase 1 review, recorded in `01-FROZEN.md` before the Phase 1 gate closed. |
+| `persistence/state-io.ts` | Adds `replaceCompatibility` and a comment on `compatibilityBasis`. | WR-02, recorded in `01-FROZEN.md`. |
+| The "no-op seeds" | `builtin-registration-step.ts` (281 lines), `agent-grants-step.ts` (94), `platform/mcp-builtin-status.ts`, `info-mcp-status.ts` now have bodies. | Phase 1 criterion 5 required no-op seeds as frozen signatures; Phases 2 and 4 own the bodies. |
+| "No user-visible output changes yet" | Phases 2 to 5 now change output: markers, `{requires mcp}` rows, status tokens. | The sentence scoped Phase 1 only. Phase 1 added the closed-set entries and emitted none. The combined tree emits all six (`01-FROZEN.md` section 4). |
+
+The fallow `entry` and `ignoreExports` exemptions that Phase 1 added are gone: `.fallowrc.json` has one `entry` (the extension index) and no `ignoreExports`, because `effectiveMcpCompatibility` and `recordedMcpServers` now have consumers (`orchestrators/plugin/mcp-verdict-read.ts`, `builtin-registration-step.ts`, `orchestrators/reconcile/mcp-migration.ts`, `edge/handlers/plugin/info.ts`).
+
+### Observable Truths
 
 | #   | Truth | Status | Evidence |
 | --- | ----- | ------ | -------- |
-| 1 | Pi 1.5.0 raise (PI15-01..03): pins, lock, floor tests, version text, breakages fixed, suites pass on 1.5.0 | VERIFIED | `package.json` lines 19-21 and 62: pi-ai `1.5.0` exact, pi-coding-agent `^1.5.0` dev and `>=1.5.0` peer, pi-tui dev `^1.5.0`. `package-lock.json` root (lines 21-23, 44) matches and resolves pi-agent-core, pi-ai, pi-coding-agent at 1.5.0 (adds `pi-schema` 1.5.0). Installed `node_modules` all read 1.5.0. `test/architecture/peer-floor.test.ts` asserts `>=1.5.0`; `test/e2e/pi-json-output.test.ts` asserts 1.5.0 twice; `test/e2e/pi-peer-floor/package.json` pins 1.5.0. Version text: README.md and README.es.md line 38, AGENTS.md line 57, STACK.md lines 32-34, PROJECT.md line 1567, `docs/mcp-compatibility.md` line 9, `docs/workflows-compatibility.md`. The three breakages: no test quotes the moved pi-schema validation text (01-01-SUMMARY); 17 untrusted-start scenarios pass under the `isProjectTrusted()` fix; `clientRegistration` needs no code (D-MB-11). Unit, integration, and cucumber suites pass (see Spot-Checks). |
-| 2 | Each run reads one active MCP implementation from its run snapshot; an architecture test rejects a factory-time probe (MSEL-01) | VERIFIED | `platform/pi-api.ts` `softDepStatus` returns `mcpImplementation` from `activeMcpImplementation(adapterLoaded, hasLoadedBuiltinMcp(commands))` (adapter wins, then built-in only for an extension command `mcp` with `sourceInfo.path === "builtin:mcp"`, else `none`). `shared/notification-run.ts:72` and `openNotificationRun` take `softDepStatus(pi)` once per run; command, load, and hook runs open their runs through it (`edge/command-invocation.ts`, `index.ts:160`, `bridges/hooks/dispatch.ts:553`, `settle.ts:165`, `async-rewake/registry.ts:433`). `session-materialize.ts` runs at `session_start` (`index.ts:270-281`). `test/architecture/no-factory-time-probe.test.ts` runs the real factory against a recording Pi, fails on any `getCommands`/`getAllTools`/`getActiveTools`/`getMcpServers` read there, and requires a read at `session_start`; it passes in `test:unpaired`. |
-| 3 | Install, update, reinstall, enable, import record every declared non-malformed server in Claude form before substitution; no absolute path; legacy records load; output unchanged (MREC-01) | VERIFIED | Producers: `domain/mcp-resolution.ts:362` (`declaredMcpServers` in merge order, blocked servers included; `mcpBundle` at 372), `install-outcome.ts:1610-1611` (statePhase, used by install, reinstall, enable, import), `update-swap.ts:893-897` and `update-preflight.ts:780-798` (update, enabled and disabled). Schema in `persistence/state-io.ts:154-162` is optional and additive (no schema bump); `mcpServerConfigsOf` deep-copies unexpanded configs. Reader `orchestrators/mcp/recorded-servers.ts` answers `recorded`/`re-resolved`/`unreadable`. `test/integration/mcp-server-records.test.ts` drives the real operations for install, update, enable, disabled update, reinstall, and import and reads the saved `state.json`: 6/6 pass, unexpanded `${CLAUDE_PLUGIN_ROOT}` kept, blocked server recorded. No output change: see Truth 5 check. |
-| 4 | Cucumber has adapter and builtin profiles; shared steps; each profile's Pi proves its implementation; an architecture check fails on an untagged one-profile MCP scenario; restart steps and built-in stand-in exist; CI runs both profiles within timeouts (DUAL-01..03) | VERIFIED | `cucumber.json` defines `adapter` (`not @builtin-only`) and `builtin` (`(@mcp or @builtin-only) and not @adapter-only`) with `worldParameters.mcpImplementation`. `scripts/check-features.mjs:559-600` enforces exactly one implementation tag on an MCP scenario, bans naming pi-mcp-adapter in `@mcp`, and requires an ID on `@adapter-only`/`@builtin-only`; it runs in `check:static` and exits 0. `features/mcp-server/implementation-profiles.feature` holds the restart seeds (without adapter, adapter, built-in on, no mcp); the stand-in is `features/lib/builtin-mcp-stand-in/`. I ran the builtin profile (39/39 scenarios, 529 steps) and `features/mcp-server` under adapter (65/65, 879 steps). `ci.yml` has a profile axis (adapter lifecycle, adapter components, builtin all); `behavioral-shard-coverage.test.ts` passes. CI run 41812979607 (re-read with `gh`): all nine jobs success; adapter lifecycle 204 s, adapter components 248 s, builtin 79 s, all under the 15-minute `timeout-minutes`. |
-| 5 | Every frozen file and interface exists with no-op session seeds; adapter-only tags name owners; D-MB-01..07 in PROJECT.md; APL-D1 text updated; `npm run check` and both profiles pass (MDEC-01) | VERIFIED | `01-FROZEN.md` lists files and the ten interfaces as built; spot-checked against code: `domain/mcp-implementation.ts` (`profileFor`, `effectiveMcpCompatibility`, `RecordedMcpServers` union, `toolNamePrefix` returning `string \| undefined` per CR-02), `session-materialize.ts` (`createMcpSessionMaterializer`, two steps each in its own try/catch), `builtin-registration-step.ts`/`agent-grants-step.ts`/`platform/mcp-builtin-status.ts` seeds, `EdgeDeps.mcpStatus`, status call in `orchestrators/plugin/info.ts:3152`. PROJECT.md lines 1983-1995 carry D-MB-01..13; D-MB-03 amends APL-D1; D-CF1-16 amended for DUAL-03. Closed-set entries (`requires mcp`, `requires builtin mcp`, two statuses, two companions) appear in `docs/json-output.md` and the lock tests. `git diff 2799bd1..HEAD -- docs/output-catalog.md test/architecture/catalog-uat` prints nothing, so no catalog or visible output changed. The orchestrator's `npm run check` exit 0 (1558 adapter + 39 builtin scenarios) is corroborated by CI success on the same code. |
+| 1 | Pi 1.5.0 raise (PI15-01..03): pins, lock, floor tests, version text, breakages fixed, suites pass on 1.5.0 | VERIFIED | `package.json` lines 19-21 and 62: pi-ai `1.5.0` exact, pi-coding-agent `^1.5.0` dev and `>=1.5.0` peer, pi-tui dev `^1.5.0`. The lock root entry (read with `node`) matches, and `packages` resolve pi-coding-agent, pi-ai, pi-tui, pi-agent-core, and pi-schema at 1.5.0. The installed `node_modules` copies of the three packages all read 1.5.0. `test/architecture/peer-floor.test.ts` asserts `>=1.5.0` and the dev pins, and it passes here. `test/e2e/pi-json-output.test.ts` asserts 1.5.0 twice. `test/e2e/pi-peer-floor/package.json` pins 1.5.0. Version text: README.md and README.es.md line 38, AGENTS.md line 57, STACK.md lines 32-34, PROJECT.md lines 32 and 1619, `docs/mcp-compatibility.md` lines 9 and 11, `docs/workflows-compatibility.md` lines 13 and 208. The three breakages were fixed in Phase 1 (01-01-SUMMARY), and the combined-tree gate proves the suites on 1.5.0 (see Spot-Checks). |
+| 2 | Each run reads one active MCP implementation from its run snapshot; an architecture test rejects a factory-time probe (MSEL-01) | VERIFIED | `platform/pi-api.ts` `softDepStatus` (lines 361-370) returns `mcpImplementation` from `activeMcpImplementation(adapterLoaded, hasLoadedBuiltinMcp(commands))`: the adapter wins, built-in only for an extension command `mcp` with `sourceInfo.path === "builtin:mcp"`, else `none`. `shared/notification-run.ts:72` is the only production caller of `softDepStatus`. Command runs (`edge/command-invocation.ts:89`, `skill-aliases.ts:140`, `command-run.ts` injects `openRun`), the load (`index.ts:160`), and hook runs (`bridges/hooks/dispatch.ts:574`, `settle.ts:165`, `async-rewake/registry.ts:433`) open their runs through it. Tool runs read `openNotificationSnapshot` (`edge/handlers/tools.ts:161,511`; `bridges/hooks/mcp-tool-view.ts:103`). `index.ts:270-281` runs the session steps at `session_start`, and `index.ts:192` resyncs after `loadReconcile`. `register.ts` reads the implementation per completion lookup, not at registration. `test/architecture/no-factory-time-probe.test.ts` ran green here. |
+| 3 | Install, update, reinstall, enable, import record every declared non-malformed server in Claude form before substitution; no absolute path; legacy records load (MREC-01) | VERIFIED | Producers: `domain/mcp-resolution.ts:387` (`declaredMcpServers`, merge order) and `:397` (`mcpBundle`); `install-outcome.ts:1655-1656` (statePhase for install, reinstall, enable, import); `update-swap.ts:950-954` (update); `update-preflight.ts:841-862,930-934` (disabled update). The schema in `persistence/state-io.ts:154-162` is optional and additive. `mcpServerConfigsOf` deep-copies the unexpanded configs. `test/integration/mcp-server-records.test.ts` drives the real operations and reads the saved `state.json`: it passed here, with `${CLAUDE_PLUGIN_ROOT}` kept unexpanded and a blocked server recorded. `test/orchestrators/mcp/recorded-servers.test.ts` passed, including the legacy re-resolve and every refusal. The last clause of the criterion ("list, info, and install output is unchanged") held at the Phase 1 gate and is superseded for the combined tree by Phase 3's verdict rows, which is the point of those phases. |
+| 4 | Cucumber has adapter and builtin profiles with shared steps; each profile's Pi proves its implementation; an architecture check fails on an untagged one-profile MCP scenario; restart steps and built-in stand-in exist; CI runs both profiles within timeouts (DUAL-01..03) | VERIFIED | `cucumber.json` defines `adapter` (`not @builtin-only`) and `builtin` (`(@mcp or @builtin-only) and not @adapter-only`) with `worldParameters.mcpImplementation`. `scripts/check-features.mjs` enforces the implementation tags (including `@own-implementation`) and exits 0 on the current tree. I ran `features/mcp-server/implementation-profiles.feature` under both profiles: adapter 5/5 scenarios (58 steps), builtin 1/1 (13 steps); these cover the restart steps, the stand-in, and each Pi proving its implementation. `ci.yml` has the three-leg profile matrix (adapter lifecycle, adapter components, builtin all) with `timeout-minutes: 15` and `fail-fast: false`, unchanged since the Phase 1 gate; `behavioral-shard-coverage.test.ts` passes. Timings from CI run 41812979607 (204 s, 248 s, 79 s) stand and `01-FROZEN.md` records them. The combined-tree gate ran both profiles: adapter 1603/1603, builtin 133/133. CI run 41967152313 on `2b6f2f4` succeeded on attempt 2 after the known adapter flake P3-DC-111. |
+| 5 | Every frozen file and interface exists; adapter-only tags name owners; D-MB-01..07 in PROJECT.md; APL-D1 text updated; `npm run check` and both profiles pass (MDEC-01) | VERIFIED | Every path in the 01-FROZEN.md section 1 list exists. Their diffs since the Phase 1 gate are only the amendments in the table above, plus the closed-set emitters (`notify-reasons.ts`, `docs/json-output.md`) and the parent-line edits (`edge/register.ts`). The interface signatures in section 2 match the code, with the section's recorded Phase 6 amendments. PROJECT.md carries D-MB-01..13 (and later D-MB-14..29); D-MB-03 amends APL-D1 (line 1760 names it). `npm run check` exit 0 on `71a37c4` (static, unpaired, integration, cucumber adapter 1603/1603 and builtin 133/133, direct coverage), from the fix-gate log. `git diff --stat 71a37c4 HEAD` and `git diff --stat 2b6f2f4 HEAD`, both excluding `.planning/`, print nothing, so HEAD has the same build inputs as the gated trees. |
 
 **Score:** 5/5 truths verified (0 present, behavior-unverified)
 
@@ -74,54 +95,51 @@ The five ROADMAP success criteria are the contract. They were checked against th
 
 | Artifact | Expected | Status | Details |
 | -------- | -------- | ------ | ------- |
-| `package.json`, `package-lock.json` | Pi 1.5.0 pins | VERIFIED | Pins as in Truth 1; lock matches |
-| `extensions/pi-claude-marketplace/domain/mcp-implementation.ts` | Pure profiles, effective compatibility | VERIFIED | Substantive (profiles, hashing rule, effective read); consumed by `recorded-servers.ts`/tests; Phase 3 consumer expected (fallow `entry` exemption recorded in FROZEN section 3) |
-| `extensions/pi-claude-marketplace/domain/mcp-builtin-features.ts`, `mcp-server-features.ts` | Built-in scanner, `sse` split | VERIFIED | Imported by the profile file |
-| `extensions/pi-claude-marketplace/domain/name.ts` | `builtinMcpServerName` | VERIFIED | Used by both profile functions |
-| `extensions/pi-claude-marketplace/platform/pi-api.ts` | `mcpImplementation`, `PiMcpRegistry`, id types | VERIFIED | Lines 173-179, 336-369 |
-| `extensions/pi-claude-marketplace/persistence/state-io.ts` | Record fields, `mcpServerConfigsOf`, `replaceCompatibility` | VERIFIED | Wired into install, update, preflight, mcp-migration |
-| `extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts` | Only reader with legacy re-resolve | VERIFIED | Real reader with `version-mismatch` refusal and debug log; test pair passes |
-| `extensions/pi-claude-marketplace/orchestrators/mcp/session-materialize.ts` + two step seeds | No-op seeds, fixed order | VERIFIED | Composed in `index.ts:128`; seeds intentionally no-op (Phase 2 and 4 own bodies) |
-| `platform/mcp-builtin-status.ts`, `mcp-status.ts`, `edge/{types,register}.ts`, `info.ts` | Status reader pair and call | VERIFIED | `mcpStatus` readers wired; seed answers `no-snapshot` |
-| `shared/{notification-types,notification-wire,notify-reasons}.ts`, `docs/json-output.md` | Closed-set entries, not emitted | VERIFIED | Entries present, lock counts consistent, catalog unchanged |
-| `cucumber.json`, `scripts/check-features.mjs`, `.github/workflows/ci.yml`, `features/support/mcp-implementation.ts`, `features/lib/mcp-implementation.ts`, `features/lib/builtin-mcp-stand-in/**`, `features/mcp-server/implementation-profiles.feature` | Dual-profile harness | VERIFIED | Run green under both profiles |
-| `test/architecture/no-factory-time-probe.test.ts`, `behavioral-shard-coverage.test.ts` | Architecture tests | VERIFIED | Pass in `test:unpaired` |
+| `package.json`, `package-lock.json` | Pi 1.5.0 pins | VERIFIED | As in Truth 1 |
+| `domain/mcp-implementation.ts` | Pure profiles, effective compatibility | VERIFIED | Substantive and now consumed (`mcp-verdict-read.ts`, `builtin-registration-step.ts`, `mcp-migration.ts`, `info.ts`); unit pair `test/domain/mcp-implementation.test.ts` passes |
+| `domain/mcp-builtin-features.ts`, `mcp-server-features.ts`, `name.ts` | Built-in scanner, `sse` split, `builtinMcpServerName` | VERIFIED | Unchanged since `f3ab832` |
+| `platform/pi-api.ts` | `mcpImplementation`, `PiMcpRegistry`, id types | VERIFIED | Snapshot at lines 169-177 and 361-370; only the dead boolean was removed |
+| `persistence/state-io.ts` | Record fields, `mcpServerConfigsOf`, `replaceCompatibility` | VERIFIED | Wired into install, update, preflight, and `mcp-migration.ts` |
+| `orchestrators/mcp/recorded-servers.ts` | The one reader with the legacy re-resolve | VERIFIED | Hardened by UF-1 and UF-4; used by the registration step and the verdict read |
+| `orchestrators/mcp/session-materialize.ts` | Fixed-order session steps, each in its own try/catch | VERIFIED | Composed at `index.ts:128`; its test passes |
+| `cucumber.json`, `scripts/check-features.mjs`, `.github/workflows/ci.yml` | Dual-profile harness | VERIFIED | Unchanged since the gate; the check exits 0 |
+| `features/lib/mcp-implementation.ts`, `features/lib/builtin-mcp-stand-in/**`, `features/mcp-server/implementation-profiles.feature` | Harness, stand-in, restart seeds | VERIFIED | The feature runs green under both profiles |
+| `test/architecture/no-factory-time-probe.test.ts`, `behavioral-shard-coverage.test.ts` | Architecture tests | VERIFIED | Pass |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | ---- | -- | --- | ------ | ------- |
-| `index.ts` | `session-materialize.ts` + step modules | `createMcpSessionMaterializer` at `session_start` | WIRED | `index.ts:128`, `270-281` |
+| `index.ts` | `session-materialize.ts` and the step modules | `createMcpSessionMaterializer` at `session_start` | WIRED | `index.ts:128`, `270-281` |
 | `index.ts` | `resyncBuiltinRegistrations` | after `loadReconcile`, own try/catch | WIRED | `index.ts:192` |
-| `notification-run.ts` | `softDepStatus` | one probe per run | WIRED | `:72`, `openNotificationRun` |
-| `info.ts` | `EdgeDeps.mcpStatus` reader | `withServerStatus` picks reader by `run.softDeps.mcpImplementation` | WIRED | `info.ts:3152` |
-| install, update, preflight writers | `mcpServerConfigsOf` / `replaceCompatibility` | record producers | WIRED | grep list above; integration test reads `state.json` |
-| `recorded-servers.ts` | resolver `declaredMcpServers` | legacy re-resolve | WIRED | `recorded-servers.ts:181-185` |
+| `notification-run.ts` | `softDepStatus` | one probe per run | WIRED | `:72` |
+| `info.ts` | `EdgeDeps.mcpStatus` | reader chosen by `run.softDeps.mcpImplementation` | WIRED | `edge/register.ts`, `edge/types.ts`, `orchestrators/plugin/info.ts` |
+| install, update, preflight writers | `mcpServerConfigsOf`, `replaceCompatibility` | record producers | WIRED | grep list in Truth 3 |
+| `recorded-servers.ts` | resolver `declaredMcpServers` | legacy re-resolve | WIRED | `recordedMcpServers` calls `resolveStrict` |
 | `ci.yml` | `test:cucumber:profile` | matrix profile and shard | WIRED | `ci.yml:119-174` |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 | -------- | ------------- | ------ | ------------------ | ------ |
-| `state.json` record | `mcpServerConfigs` | resolver `declaredMcpServers` from the plugin's real `.mcp.json` and manifest | Yes (integration test reads saved file) | FLOWING |
-| Run snapshot | `mcpImplementation` | `pi.getCommands()` / `getAllTools()` at run open | Yes (builtin and adapter profile scenarios prove each Pi's implementation) | FLOWING |
-
-No consumer of `effectiveMcpCompatibility`, `recordedMcpServers`, or the status seed exists yet. That is by design: Phases 2 and 3 own those consumers, and `.fallowrc.json` carries the recorded `entry` exemptions that Phase 6 removes.
+| `state.json` record | `mcpServerConfigs` | resolver `declaredMcpServers` from the plugin's real `.mcp.json` and manifest | Yes (integration test reads the saved file) | FLOWING |
+| Run snapshot | `mcpImplementation` | `pi.getCommands()` and `getAllTools()` at run open | Yes (each profile's Pi proves its implementation) | FLOWING |
+| Profiles and `effectiveMcpCompatibility` | verdicts | read by the Phase 2 and 3 consumers listed above | Yes | FLOWING |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | -------- | ------- | ------ | ------ |
-| Records written by every operation | `node --test test/integration/mcp-server-records.test.ts` | 6 pass, 0 fail | PASS |
-| Feature-tag rules | `npm run check:features` | exit 0 | PASS |
-| Architecture and unpaired tests | `npm run test:unpaired` | exit 0 | PASS |
-| All module unit tests | `npm run test:modules` | exit 0 (132 s) | PASS |
-| Builtin profile | `npm run test:cucumber:profile -- --profile builtin features` | 39/39 scenarios, 529/529 steps | PASS |
-| Adapter profile, MCP features | `npm run test:cucumber:profile -- --profile adapter features/mcp-server` | 65/65 scenarios, 879/879 steps | PASS |
-| No visible output change | `git diff 2799bd1..HEAD --stat -- docs/output-catalog.md test/architecture/catalog-uat` | empty | PASS |
-| CI on the tested code | `gh run view 41812979607` | all jobs success on head 8d03f4e | PASS |
+| Probe ban, floor, shard coverage, record writes, reader, profiles, session steps | `node --test` over `no-factory-time-probe`, `peer-floor`, `behavioral-shard-coverage`, `mcp-server-records` (integration), `recorded-servers`, `mcp-implementation`, `session-materialize` | 97 pass, 0 fail | PASS |
+| Feature-tag rules | `node scripts/check-features.mjs` | exit 0 | PASS |
+| Adapter profile Pi proof and restarts | `cucumber-js --profile adapter features/mcp-server/implementation-profiles.feature` | 5/5 scenarios, 58/58 steps | PASS |
+| Builtin profile Pi proof | `cucumber-js --profile builtin features/mcp-server/implementation-profiles.feature` | 1/1 scenario, 13/13 steps | PASS |
+| Full gate on the combined tree | `npm run check` on `71a37c4` (log `fix-gate.log`) | EXIT=0; adapter 1603/1603 (17397 steps), builtin 133/133 (1681 steps) | PASS (reported by the caller, log read here) |
+| Module unit tests | `test:modules` on `2b6f2f4` | exit 0 (reported by the caller) | PASS (not re-run) |
+| CI | run 41967152313 on `2b6f2f4` | success on attempt 2 after the known adapter flake P3-DC-111 | PASS (reported by the caller) |
+| HEAD equals the gated build inputs | `git diff --stat 71a37c4 HEAD -- . ':(exclude).planning'`, same for `2b6f2f4` | empty | PASS |
 
-I did not re-run the full `npm run check` (513 s, run by the orchestrator at 8d03f4e). CI ran the same gates on that commit and the only later commits change documents.
+I did not re-run whole cucumber profiles or `npm run check`; the caller's instructions bar the first, and the gate evidence covers the second on identical build inputs.
 
 ### Probe Execution
 
@@ -130,45 +148,42 @@ Step 7c: SKIPPED. No PLAN declares a `probe-*.sh`, and `scripts/*/tests/probe-*.
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
-| ----------- | ----------- | ----------- | ------ | -------- |
+| ----------- | ---------- | ----------- | ------ | -------- |
 | PI15-01 | 01-01, 01-14 | Pins and lock at 1.5.0 | SATISFIED | Truth 1 |
-| PI15-02 | 01-01, 01-14 | Floor tests and docs name 1.5.0 | SATISFIED | Truth 1 (peer-floor, pi-json-output, README x2, AGENTS, STACK, PROJECT, compatibility docs) |
-| PI15-03 | 01-01, 01-14 | 1.5.0 breakages fixed; suites pass | SATISFIED | Truth 1; modules, unpaired, builtin, and adapter MCP runs green here; full check green in CI |
+| PI15-02 | 01-01, 01-14 | Floor tests and docs name 1.5.0 | SATISFIED | Truth 1 |
+| PI15-03 | 01-01, 01-14 | 1.5.0 breakages fixed; suites pass | SATISFIED | Truth 1; combined-tree gate |
 | MSEL-01 | 01-03, 01-05, 01-06, 01-11, 01-14 | One active implementation per run, no early probe | SATISFIED | Truth 2 |
 | MREC-01 | 01-03, 01-08, 01-12, 01-14 | Claude-form servers recorded, legacy loads | SATISFIED | Truth 3 |
 | DUAL-01 | 01-02, 01-07, 01-09, 01-10, 01-13, 01-14 | Two profiles, shared steps | SATISFIED | Truth 4 |
 | DUAL-02 | 01-07, 01-09, 01-13, 01-14 | Pi proves implementation; tag rule | SATISFIED | Truth 4 |
-| DUAL-03 | 01-13, 01-14 | CI within timeouts | SATISFIED | CI jobs 204 s, 248 s, 79 s; D-CF1-16 recorded |
-| MDEC-01 | 01-02, 01-04, 01-14 | Decision IDs in PROJECT.md | SATISFIED | PROJECT.md 1983-1995 (D-MB-01..13), APL-D1 amended by D-MB-03 |
+| DUAL-03 | 01-13, 01-14 | CI within timeouts | SATISFIED | Truth 4; CI timings in `01-FROZEN.md`; D-CF1-16 |
+| MDEC-01 | 01-02, 01-04, 01-14 | Decision IDs in PROJECT.md | SATISFIED | Truth 5 |
 
-All nine IDs in ROADMAP and in plan frontmatter are accounted for. Plans 01-05, 01-08, 01-09, 01-11 omit a `requirements:` line in their frontmatter but the ROADMAP plan list names the IDs they serve. No requirement mapped to Phase 1 in REQUIREMENTS.md is orphaned. DUAL-04 belongs to Phase 6.
-
-REQUIREMENTS.md still shows these nine as `[ ]` / `Pending`. The orchestrator should flip them when it commits the phase.
+All nine IDs in ROADMAP and in plan frontmatter are accounted for, and REQUIREMENTS.md marks all nine `[x]` / `Complete`. No requirement mapped to Phase 1 is orphaned. DUAL-04 belongs to Phase 6.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 | ---- | ---- | ------- | -------- | ------ |
-| `orchestrators/mcp/builtin-registration-step.ts`, `agent-grants-step.ts`, `platform/mcp-builtin-status.ts` | n/a | Empty/no-op bodies | Info | Intended seeds with frozen signatures; later phases own the bodies (ROADMAP success criterion 5 says "no-op seeds") |
-| `docs/mcp-compatibility.md` | 80 | Dated measurement still says "On Pi 1.4.0" | Info | A statement of a 2026-11-01 measurement, not a version claim; not stale text, but not re-measured on 1.5.0 |
-| `scripts/check-features.mjs` | 47-52, 552-556 | Tag-rule heuristics accept non-IDs (`UTF-8`) and miss `mcp__` names (IN-01) | Info | Out-of-scope review finding; no current scenario slips through (P1-DC-36) |
-| TBD/FIXME/XXX markers | n/a | none found in the changed extension files by the review and gate (`check:static` is green) | n/a | |
+| `scripts/check-features.mjs` | 47-52, 552-556 | Tag-rule heuristics accept non-IDs (`UTF-8`) and miss `mcp__` names (IN-01) | Info | Out-of-scope review finding; the check exits 0 on the combined tree (P1-DC-36) |
+| `docs/mcp-compatibility.md` | 80 | Dated measurement may still say "On Pi 1.4.0" | Info | A statement of a dated measurement, not a version claim (carried from the earlier report; not re-read this round) |
+| TBD/FIXME/XXX markers | n/a | None looked for beyond the diffs read; `check:static` is green in the gate | n/a | |
 
 ### Human Verification Required
 
-None. Every check above ran in this session or in CI.
+None, as in the earlier report. Every check above ran in this session or in the cited gate and CI runs.
 
 ### Gaps Summary
 
-No gaps. The phase goal holds: Pi 1.5.0 is pinned and exercised, the run snapshot carries the active implementation and no factory-time probe exists, records keep every declared server in Claude form through all five write paths, both profiles exist as pure code, and every MCP scenario runs under both cucumber profiles in CI inside the timeouts. No visible output changed.
+No gaps. The Phase 1 goal still holds on the combined tree: Pi 1.5.0 is pinned and exercised, the run snapshot carries the active implementation with no factory-time probe, records keep every declared server in Claude form through all write paths, both profiles exist as pure code and now have consumers, and every MCP scenario runs under both cucumber profiles inside the CI timeouts. The one clause that no longer holds literally, "no user-visible output changes", described Phase 1 alone and was superseded on purpose by Phases 2 to 5.
 
 Residual risks that do not fail the phase:
 
-- Review fixes CR-02 (`toolNamePrefix` may be `undefined`) and WR-01 (legacy reader `version-mismatch`) changed frozen interfaces after the plans ran. `01-FROZEN.md` records both, and unit tests pin them. Child sessions must read `01-FROZEN.md`, not the ROADMAP interface text.
-- Decisions D-MB-08..13 were settled autonomously and wait for the user's review (marked "pending user review" in PROJECT.md).
-- The adapter `toolName` rule matches pi-mcp-adapter 7.0.0; the built-in `grantSelector` is unchecked against pi-subagents' grant syntax (Phase 4).
+- Decisions D-MB-08..13 were settled autonomously in Phase 1 and are marked pending the user's review in PROJECT.md.
+- The built-in `grantSelector` was unchecked against pi-subagents' grant syntax at Phase 1; Phase 4 owns that check and its own verification covers it.
+- The CI check names changed in Phase 1 (P1-DC-36). A branch protection rule that names the old checks waits forever; check the required status checks before the pull request merges.
 
 ---
 
-_Verified: 2026-11-04T11:10:00Z_
+_Verified: 2026-11-05T09:00:00Z_
 _Verifier: Claude (gsd-verifier)_
