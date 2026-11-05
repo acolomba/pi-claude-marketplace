@@ -4,6 +4,10 @@ phase: 02-built-in-materialization
 source: [02-VERIFICATION.md]
 started: 2026-11-04T16:53:24Z
 updated: 2026-11-04T16:53:24Z
+audit_acknowledged:
+  milestone: mcp-builtin
+  at: 2026-11-05
+  gap_snapshot: "testing::scenarios=2"
 ---
 
 ## Current Test
