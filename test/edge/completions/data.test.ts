@@ -50,6 +50,7 @@ import {
   ManifestSoftFailError,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
+import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type {
   LocationsResolver,
   PluginRefCompletionMode,
@@ -68,6 +69,8 @@ interface ResolverSeed {
   readonly stateFailures?: Partial<Record<Scope, Error>>;
   /** Scoped marketplaces whose manifest read rejects with a specific error. */
   readonly manifestFailures?: Partial<Record<Scope, Record<string, Error>>>;
+  /** The implementation the resolver classifies for (default `adapter`). */
+  readonly mcpImplementation?: ActiveMcpImplementation;
 }
 
 interface SeededResolver {
@@ -127,7 +130,7 @@ async function seedResolver(
   installNetworkTrap(t);
 
   const resolver = {
-    mcpImplementation: "adapter",
+    mcpImplementation: seed.mcpImplementation ?? "adapter",
 
     pluginCachePath: (scope: Scope, marketplace: string): Promise<string> =>
       Promise.resolve(path.join(cacheRoot, scope, "plugins", `${marketplace}.json`)),
@@ -486,8 +489,12 @@ describe("getPluginRefCompletions candidate policy", () => {
     });
     const cache = createCompletionCache();
     const cachePath = await resolver.pluginCachePath("user", "official");
-    await cache.getPluginIndex(cachePath, "user", "official", () =>
-      Promise.resolve([{ name: "cache-row", status: "installed" }]),
+    await cache.getPluginIndex(
+      cachePath,
+      "user",
+      "official",
+      () => Promise.resolve([{ name: "cache-row", status: "installed" }]),
+      { mcpImplementation: "adapter" },
     );
     await rm(cachePath);
 
@@ -969,6 +976,60 @@ describe("getPluginRefCompletions candidate policy", () => {
       },
     );
   });
+});
+
+describe("getPluginRefCompletions MCP implementation stamp (D-P6-22)", () => {
+  for (const { mode, expected } of [
+    { mode: "install", expected: [{ label: "fresh-row@official", value: "fresh-row@official " }] },
+    { mode: "uninstall", expected: [{ label: "held-row@official", value: "held-row@official " }] },
+    {
+      mode: "info",
+      expected: [
+        { label: "fresh-row@official", value: "fresh-row@official " },
+        { label: "held-row@official", value: "held-row@official " },
+      ],
+    },
+  ] satisfies readonly {
+    readonly mode: PluginRefCompletionMode;
+    readonly expected: readonly { readonly label: string; readonly value: string }[];
+  }[]) {
+    test(`${mode} rebuilds rows a cache holds for another implementation`, async (t) => {
+      // arrange
+      const { completionCache, resolver } = await seedResolver(t, `stamp-${mode}`, {
+        marketplaces: { user: { official: {} } },
+        manifests: {
+          user: {
+            official: [
+              { name: "fresh-row", status: "available" },
+              { name: "held-row", status: "installed" },
+            ],
+          },
+        },
+        mcpImplementation: "builtin",
+      });
+      const cachePath = await resolver.pluginCachePath("user", "official");
+      await completionCache.getPluginIndex(
+        cachePath,
+        "user",
+        "official",
+        () =>
+          Promise.resolve([
+            { name: "stale-fresh", status: "available" },
+            { name: "stale-held", status: "installed" },
+          ]),
+        { mcpImplementation: "adapter" },
+      );
+
+      // act
+      const candidates = await getPluginRefCompletions(mode, "", "", resolver, completionCache, {
+        allowMarketplaceOnly: true,
+        targetScope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(candidates, expected);
+    });
+  }
 });
 
 describe("getPluginRefCompletions", () => {

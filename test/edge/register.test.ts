@@ -100,7 +100,10 @@ import type {
   NotificationContext,
   SessionStartEvent,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type {
+  CompletionCache,
+  GetPluginIndexOptions,
+} from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 import type {
@@ -110,6 +113,13 @@ import type {
 } from "@earendil-works/pi-tui";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
+
+/**
+ * D-P6-22: an empty Pi inventory names no MCP implementation, so every
+ * completion lookup against the strict handles below reads the `none` stamp.
+ * A case that seeds or reads a cache the lookups share uses the same stamp.
+ */
+const LOOKUP_STAMP = { mcpImplementation: "none" } satisfies GetPluginIndexOptions;
 type ImportDelegate = NonNullable<EdgeDeps["importClaudeSettings"]>;
 
 /** The options bag `registerCommand` receives, derived from the Pi surface. */
@@ -2114,10 +2124,6 @@ describe("registerClaudePluginCommand", () => {
     );
     const registration = commandOptions.value;
     assert.ok(registration !== undefined, "the registration glue installed no command");
-    const cachePath = await makeLocationsResolver(scope.cwd, "none").pluginCachePath(
-      "project",
-      marketplace,
-    );
     const expectedAdapterCandidates = [
       { label: "events@sse-mp", value: "install --scope project events@sse-mp " },
       { label: "plain@sse-mp", value: "install --scope project plain@sse-mp " },
@@ -2131,7 +2137,6 @@ describe("registerClaudePluginCommand", () => {
     const adapterCandidates = await registration.getArgumentCompletions?.(
       "install --scope project ",
     );
-    await completionCache.dropMarketplaceCache(cachePath, "project", marketplace);
     expectSoftDepProbes(pi, 1, [], [builtinMcpCommand()]);
     const builtinCandidates = await registration.getArgumentCompletions?.(
       "install --scope project ",
@@ -2152,12 +2157,20 @@ describe("registerClaudePluginCommand", () => {
     const cachePath = await resolver.pluginCachePath("project", marketplace);
     const ownerCache = createCompletionCache();
     const peerCache = createCompletionCache();
-    await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-      Promise.resolve([{ name: "owner-row", status: "installed" }]),
+    await ownerCache.getPluginIndex(
+      cachePath,
+      "project",
+      marketplace,
+      () => Promise.resolve([{ name: "owner-row", status: "installed" }]),
+      LOOKUP_STAMP,
     );
     await rm(cachePath);
-    await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-      Promise.resolve([{ name: "peer-row", status: "installed" }]),
+    await peerCache.getPluginIndex(
+      cachePath,
+      "project",
+      marketplace,
+      () => Promise.resolve([{ name: "peer-row", status: "installed" }]),
+      LOOKUP_STAMP,
     );
     await rm(cachePath);
     // MSEL-01: each registration's one lookup takes one inventory snapshot.
@@ -2216,8 +2229,12 @@ describe("registerClaudePluginCommand", () => {
     const pluginCachePath = await userLocations.pluginCacheFile("claude-plugins-official");
     const completionCache = createCompletionCache();
     const peerCompletionCache = createCompletionCache();
-    await completionCache.getPluginIndex(pluginCachePath, "user", "claude-plugins-official", () =>
-      Promise.resolve([{ name: "owner-stale", status: "available" }]),
+    await completionCache.getPluginIndex(
+      pluginCachePath,
+      "user",
+      "claude-plugins-official",
+      () => Promise.resolve([{ name: "owner-stale", status: "available" }]),
+      LOOKUP_STAMP,
     );
     await rm(pluginCachePath, { force: true });
     await peerCompletionCache.getPluginIndex(
@@ -2225,6 +2242,7 @@ describe("registerClaudePluginCommand", () => {
       "user",
       "claude-plugins-official",
       () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
+      LOOKUP_STAMP,
     );
     await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
     // The one run is the only probe: the add renders from it.
@@ -2262,12 +2280,14 @@ describe("registerClaudePluginCommand", () => {
       "user",
       "claude-plugins-official",
       () => Promise.resolve([{ name: "owner-fresh", status: "available" }]),
+      LOOKUP_STAMP,
     );
     const peerRows = await peerCompletionCache.getPluginIndex(
       pluginCachePath,
       "user",
       "claude-plugins-official",
       () => Promise.reject(new Error("the peer cache must retain its warmed row")),
+      LOOKUP_STAMP,
     );
 
     // assert
@@ -2348,12 +2368,20 @@ test("rebuilds completion rows through the cache that owns a successful register
   const cachePath = await resolver.pluginCachePath("project", marketplace);
   const ownerCache = createCompletionCache();
   const peerCache = createCompletionCache();
-  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "owner-stale", status: "available" }]),
+  await ownerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "owner-stale", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
-  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "peer-stale", status: "available" }]),
+  await peerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
   // The run takes one probe, and each completion lookup one more (MSEL-01).
@@ -2434,20 +2462,36 @@ test("rebuilds completion rows through the cache that owns a successful register
   const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
   const ownerCache = createCompletionCache();
   const peerCache = createCompletionCache();
-  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "owner-stale", status: "available" }]),
+  await ownerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "owner-stale", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
-  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "peer-stale", status: "available" }]),
+  await peerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
-  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
-    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  await ownerCache.getPluginIndex(
+    unrelatedCachePath,
+    "project",
+    unrelated,
+    () => Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(unrelatedCachePath, { force: true });
-  await peerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
-    Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+  await peerCache.getPluginIndex(
+    unrelatedCachePath,
+    "project",
+    unrelated,
+    () => Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(unrelatedCachePath, { force: true });
   // The run takes one probe, which the remove notification renders from, and
@@ -2538,20 +2582,36 @@ test("rebuilds completion rows through the cache that owns a successful register
   const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
   const ownerCache = createCompletionCache();
   const peerCache = createCompletionCache();
-  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "owner-stale", status: "available" }]),
+  await ownerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "owner-stale", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
-  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "peer-stale", status: "available" }]),
+  await peerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
-  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
-    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  await ownerCache.getPluginIndex(
+    unrelatedCachePath,
+    "project",
+    unrelated,
+    () => Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(unrelatedCachePath, { force: true });
-  await peerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
-    Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+  await peerCache.getPluginIndex(
+    unrelatedCachePath,
+    "project",
+    unrelated,
+    () => Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(unrelatedCachePath, { force: true });
   // The run takes one probe, which the update notification renders from, and
@@ -2754,20 +2814,36 @@ test("rebuilds completion rows through the cache that owns a successful register
   const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
   const ownerCache = createCompletionCache();
   const peerCache = createCompletionCache();
-  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "hello", status: "available" }]),
+  await ownerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "hello", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
-  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "hello", status: "available" }]),
+  await peerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "hello", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
-  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
-    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  await ownerCache.getPluginIndex(
+    unrelatedCachePath,
+    "project",
+    unrelated,
+    () => Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(unrelatedCachePath, { force: true });
-  await peerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
-    Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+  await peerCache.getPluginIndex(
+    unrelatedCachePath,
+    "project",
+    unrelated,
+    () => Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(unrelatedCachePath, { force: true });
   // D-05: the run takes one probe; the install stamps severity and renders
@@ -2809,8 +2885,12 @@ test("rebuilds completion rows through the cache that owns a successful register
   const peerInstallCandidates = await peer.registration.getArgumentCompletions?.(
     "install --scope project ",
   );
-  const peerRows = await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.reject(new Error("the peer cache must retain its warmed target row")),
+  const peerRows = await peerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.reject(new Error("the peer cache must retain its warmed target row")),
+    LOOKUP_STAMP,
   );
 
   // assert
@@ -2989,12 +3069,20 @@ test("rebuilds completion rows through the cache that owns a successful register
   const cachePath = await resolver.pluginCachePath("project", marketplace);
   const ownerCache = createCompletionCache();
   const peerCache = createCompletionCache();
-  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "owner-stale", status: "available" }]),
+  await ownerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "owner-stale", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
-  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "peer-stale", status: "available" }]),
+  await peerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
   // One run; the reinstall notification renders from it and probes nothing.
@@ -3094,16 +3182,28 @@ test("rebuilds completion rows through the cache that owns a successful register
   const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
   const ownerCache = createCompletionCache();
   const peerCache = createCompletionCache();
-  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "hello", status: "installed" }]),
+  await ownerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "hello", status: "installed" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
-  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
-    Promise.resolve([{ name: "hello", status: "installed" }]),
+  await peerCache.getPluginIndex(
+    cachePath,
+    "project",
+    marketplace,
+    () => Promise.resolve([{ name: "hello", status: "installed" }]),
+    LOOKUP_STAMP,
   );
   await rm(cachePath, { force: true });
-  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
-    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  await ownerCache.getPluginIndex(
+    unrelatedCachePath,
+    "project",
+    unrelated,
+    () => Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+    LOOKUP_STAMP,
   );
   await rm(unrelatedCachePath, { force: true });
   // One run; the uninstall notification renders from it and probes nothing.
