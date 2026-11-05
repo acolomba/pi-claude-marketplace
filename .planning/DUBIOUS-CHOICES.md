@@ -144,9 +144,10 @@ Follow-ups that need you:
   and `/new` in a real Pi with built-in MCP.
 - The version bump and the pull request offer (D-P6-17). AGENTS.md asks to
   offer the bump before the pull request is created.
-- The amendment of the D-CF1-16 row in `.planning/PROJECT.md` after the CI
-  run, from
-  `.planning/phases/06-release-docs-and-combined-tree/06-CI-HANDOFF.md`.
+- Done (e685108): the D-CF1-16 row in `.planning/PROJECT.md` records CI run
+  41960058038 on the combined tree (every leg under 5 minutes; the
+  15-minute timeout stays). Shown here only so the decision row can be
+  reviewed with the rest.
 
 ## Session-level choices
 
