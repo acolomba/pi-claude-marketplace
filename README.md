@@ -178,11 +178,11 @@ Pi's built-in MCP runs a server with `bareElicitationCapability: true`, and pi-m
 
 When no active MCP implementation can run every server of a plugin, the plugin's row in `/claude:plugin list` and in the install result shows a marker:
 
-| Marker                      | Meaning                                                                            | What you can do                                      |
-| --------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `{requires mcp}`            | No MCP implementation is active, and either one can run the servers of the plugin. | Turn on Pi's built-in MCP or install pi-mcp-adapter. |
-| `{requires pi-mcp-adapter}` | Only pi-mcp-adapter runs every server of the plugin.                               | Install pi-mcp-adapter.                              |
-| `{requires builtin mcp}`    | Only Pi's built-in MCP runs every server of the plugin.                            | Turn on Pi's built-in MCP.                           |
+| Marker                      | Meaning                                                                            | What you can do                                                                                                                                                 |
+| --------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{requires mcp}`            | No MCP implementation is active, and either one can run the servers of the plugin. | Turn on Pi's built-in MCP or install pi-mcp-adapter.                                                                                                            |
+| `{requires pi-mcp-adapter}` | Only pi-mcp-adapter runs every server of the plugin.                               | Install pi-mcp-adapter.                                                                                                                                         |
+| `{requires builtin mcp}`    | The plugin needs Pi's built-in MCP. Only it runs every server of the plugin.       | If pi-mcp-adapter is loaded, remove it. Then turn on Pi's built-in MCP. See [Choosing an implementation](docs/mcp-compatibility.md#choosing-an-implementation). |
 
 If the active implementation cannot run a server that the other one can run, the plugin shows `{unsupported mcp}` and the marker of the other implementation. A plugin with no MCP server gets no MCP marker. A server that neither implementation can run shows `{unsupported mcp}` and no `requires` marker.
 

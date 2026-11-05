@@ -178,11 +178,11 @@ El MCP integrado de Pi ejecuta un servidor con `bareElicitationCapability: true`
 
 Cuando ninguna implementación de MCP activa puede ejecutar todos los servidores de un complemento, la fila del complemento en `/claude:plugin list` y en el resultado de la instalación muestra un marcador:
 
-| Marcador                    | Significado                                                                                                         | Qué puedes hacer                                        |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `{requires mcp}`            | No hay ninguna implementación de MCP activa, y cualquiera de las dos puede ejecutar los servidores del complemento. | Activa el MCP integrado de Pi o instala pi-mcp-adapter. |
-| `{requires pi-mcp-adapter}` | Solo pi-mcp-adapter ejecuta todos los servidores del complemento.                                                   | Instala pi-mcp-adapter.                                 |
-| `{requires builtin mcp}`    | Solo el MCP integrado de Pi ejecuta todos los servidores del complemento.                                           | Activa el MCP integrado de Pi.                          |
+| Marcador                    | Significado                                                                                                         | Qué puedes hacer                                                                                                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `{requires mcp}`            | No hay ninguna implementación de MCP activa, y cualquiera de las dos puede ejecutar los servidores del complemento. | Activa el MCP integrado de Pi o instala pi-mcp-adapter.                                                                                                                        |
+| `{requires pi-mcp-adapter}` | Solo pi-mcp-adapter ejecuta todos los servidores del complemento.                                                   | Instala pi-mcp-adapter.                                                                                                                                                        |
+| `{requires builtin mcp}`    | El complemento necesita el MCP integrado de Pi. Solo él ejecuta todos los servidores del complemento.               | Si pi-mcp-adapter está cargado, elimínalo. Después, activa el MCP integrado de Pi. Consulta [Elegir una implementación](docs/mcp-compatibility.md#choosing-an-implementation). |
 
 Si la implementación activa no puede ejecutar un servidor que la otra sí puede ejecutar, el complemento muestra `{unsupported mcp}` y el marcador de la otra implementación. Un complemento sin servidores MCP no recibe ningún marcador de MCP. Un servidor que ninguna de las dos implementaciones puede ejecutar muestra `{unsupported mcp}` y ningún marcador `requires`.
 
