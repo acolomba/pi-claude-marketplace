@@ -160,6 +160,7 @@ async function classifyInstalledPluginRow(
         source: marketplaceContext.marketplaceSource,
       },
       pluginName,
+      locations: locationsFor(scope, cwd),
     },
     mcpImplementation,
   );

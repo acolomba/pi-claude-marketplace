@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
@@ -8,18 +7,28 @@ import { mock, verify, when } from "strong-mock";
 
 import {
   createLegacyServersReader,
-  LegacyServersUnreadableError,
   recordedMcpServers,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type {
   LegacyServersReader,
   LegacyServersSource,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 const RESOLVED_SHA = "a".repeat(40);
+
+/** A `pluginCloneKey` output: the clone entry of a git-source plugin. */
+const CLONE_KEY = "0123456789ab-0123456789ab";
+
+/** A `pluginMirrorKey` output: the mirror entry of a tag-pinned path-source plugin. */
+const MIRROR_KEY = "0123456789ab";
+
+const GITHUB_MARKETPLACE = { kind: "github", raw: "owner/mp" } as const;
 
 function installRecord(resolvedSource = "/abs/plugin-root"): PluginInstallRecord {
   return {
@@ -34,6 +43,10 @@ function installRecord(resolvedSource = "/abs/plugin-root"): PluginInstallRecord
   };
 }
 
+function gitRecord(resolvedSource: string): PluginInstallRecord {
+  return { ...installRecord(resolvedSource), resolvedSha: RESOLVED_SHA };
+}
+
 async function writeJson(filePath: string, document: unknown): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, JSON.stringify(document));
@@ -42,50 +55,55 @@ async function writeJson(filePath: string, document: unknown): Promise<void> {
 interface MarketplaceFixture {
   readonly root: string;
   readonly marketplaceRoot: string;
+  readonly locations: ScopedLocations;
   readonly source: LegacyServersSource;
 }
 
+/** Where a cloned fixture marketplace's recorded root lies. */
+type ClonedPlacement = "checkout" | "outside-checkout";
+
 /**
- * A path-source marketplace `mp` in a fresh directory, listing `entries`. Each
- * entry declares version 1.0.0, the version `installRecord` names, unless it
- * declares its own.
+ * A marketplace `mp` in a fresh hermetic environment, listing `entries`, read
+ * with the user scope's locations. Each entry declares version 1.0.0, the
+ * version `installRecord` names, unless it declares its own. Without
+ * `entries`, no manifest file exists. A path-source marketplace lives in a
+ * directory of its own. A cloned marketplace (`cloned`) records its root in
+ * the scope's `sources/mp/` checkout, or outside it.
  */
 async function marketplaceListing(
   t: TestContext,
-  entries: readonly Record<string, unknown>[],
+  entries: readonly Record<string, unknown>[] | undefined,
+  cloned?: ClonedPlacement,
 ): Promise<MarketplaceFixture> {
-  const root = await mkdtemp(path.join(tmpdir(), "recorded-servers-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const marketplaceRoot = path.join(root, "mp");
+  const environment = await createHermeticEnvironment(t, "recorded-servers-");
+  const locations = locationsFor("user", environment.cwd);
+  const marketplaceRoot =
+    cloned === "checkout"
+      ? path.join(locations.sourcesDir, "mp")
+      : path.join(environment.root, "mp");
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  await writeJson(manifestPath, {
-    name: "mp",
-    plugins: entries.map((entry) => ({ version: "1.0.0", ...entry })),
-  });
+  await mkdir(marketplaceRoot, { recursive: true });
+  if (entries !== undefined) {
+    await writeJson(manifestPath, {
+      name: "mp",
+      plugins: entries.map((entry) => ({ version: "1.0.0", ...entry })),
+    });
+  }
+
   return {
-    root,
+    root: environment.root,
     marketplaceRoot,
+    locations,
     source: {
       marketplaceName: "mp",
       marketplace: {
         manifestPath,
         marketplaceRoot,
-        source: { kind: "path", raw: marketplaceRoot },
+        source: cloned === undefined ? { kind: "path", raw: marketplaceRoot } : GITHUB_MARKETPLACE,
       },
       pluginName: "p1",
+      locations,
     },
-  };
-}
-
-/** Matches the reader's refusal of plugin `p1` of marketplace `mp` for `reason`. */
-function unreadableAs(reason: LegacyServersUnreadableError["reason"]): (error: unknown) => boolean {
-  return (error: unknown) => {
-    assert.ok(error instanceof LegacyServersUnreadableError);
-    assert.deepStrictEqual(
-      { reason: error.reason, plugin: error.plugin, marketplace: error.marketplace },
-      { reason, plugin: "p1", marketplace: "mp" },
-    );
-    return true;
   };
 }
 
@@ -196,6 +214,72 @@ describe("recordedMcpServers", () => {
     assert.deepStrictEqual(recorded, { kind: "unreadable" });
     assert.deepStrictEqual(logged, ["[mcp] recorded MCP servers unreadable: plugin root gone"]);
   });
+
+  test("UF-4: logs a legacy reader failure that names an absolute path without the path", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const record = installRecord();
+    const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
+    when(() => reader(installRecord())).thenReject(
+      new Error(
+        "ENOENT: no such file or directory, open '/home/someone/.pi/agent/pi-claude-marketplace/sources/mp/.claude-plugin/marketplace.json'",
+      ),
+    );
+
+    // act
+    const recorded = await recordedMcpServers(record, reader);
+
+    // assert
+    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(logged, [
+      "[mcp] recorded MCP servers unreadable: ENOENT: no such file or directory, open 'marketplace.json'",
+    ]);
+    verify(reader);
+  });
+
+  test("UF-1: reads a legacy record whose plugin root is outside its marketplace as unreadable", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(t, [{ name: "p1", source: "./plugin" }]);
+    const outside = path.join(marketplace.root, "outside", "plugin");
+    await writeJson(path.join(outside, ".mcp.json"), {
+      mcpServers: { escaped: { command: "escaped" } },
+    });
+    const logged = captureDebugLog(t);
+
+    // act
+    const recorded = await recordedMcpServers(
+      installRecord(outside),
+      createLegacyServersReader(marketplace.source),
+    );
+
+    // assert
+    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(logged, [
+      "[mcp] recorded MCP servers unreadable: cannot re-resolve the MCP servers of p1@mp: uncontained",
+    ]);
+  });
+
+  test("UF-1: returns the recorded servers of a record whose plugin root is outside its marketplace", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(t, undefined);
+    const record: PluginInstallRecord = {
+      ...installRecord(path.join(marketplace.root, "outside", "plugin")),
+      mcpServerConfigs: [{ name: "a", config: { command: "node" } }],
+    };
+
+    // act
+    const recorded = await recordedMcpServers(
+      record,
+      createLegacyServersReader(marketplace.source),
+    );
+
+    // assert
+    assert.deepStrictEqual(recorded, {
+      kind: "recorded",
+      servers: [{ name: "a", config: { command: "node" } }],
+      bundle: false,
+    });
+  });
 });
 
 describe("createLegacyServersReader", () => {
@@ -274,24 +358,20 @@ describe("createLegacyServersReader", () => {
     });
   });
 
-  test("NFR-5: re-resolves a git-source record from its recorded root without cloning or writing", async (t) => {
+  test("NFR-5: re-resolves a git-source record from its plugin clone without cloning or writing", async (t) => {
     // arrange
     const marketplace = await marketplaceListing(t, [
       { name: "p1", source: { source: "url", url: "https://git.example.com/p1.git" } },
     ]);
-    const pluginRoot = path.join(marketplace.root, "plugin-clones", "p1");
+    const pluginRoot = path.join(marketplace.locations.pluginClonesDir, CLONE_KEY);
     await writeJson(path.join(pluginRoot, ".mcp.json"), {
       mcpServers: { remote: { type: "http", url: "https://remote.example.com/mcp" } },
     });
-    const record: PluginInstallRecord = {
-      ...installRecord(pluginRoot),
-      resolvedSha: RESOLVED_SHA,
-    };
     const treeBefore = await treeOf(marketplace.root);
     const reader = createLegacyServersReader(marketplace.source);
 
     // act
-    const legacy = await reader(record);
+    const legacy = await reader(gitRecord(pluginRoot));
 
     // assert
     assert.deepStrictEqual(legacy, {
@@ -303,12 +383,12 @@ describe("createLegacyServersReader", () => {
     assert.deepStrictEqual(await treeOf(marketplace.root), treeBefore);
   });
 
-  test("MREC-02: re-resolves a git-source record without a recorded sha from its recorded root", async (t) => {
+  test("MREC-02: re-resolves a git-source record without a recorded sha from its marketplace", async (t) => {
     // arrange
     const marketplace = await marketplaceListing(t, [
       { name: "p1", source: { source: "github", repo: "owner/p1" } },
     ]);
-    const pluginRoot = path.join(marketplace.root, "plugin-clones", "p1");
+    const pluginRoot = path.join(marketplace.marketplaceRoot, "p1");
     await writeJson(path.join(pluginRoot, ".mcp.json"), {
       mcpServers: { local: { command: "node" } },
     });
@@ -328,18 +408,14 @@ describe("createLegacyServersReader", () => {
     // arrange
     const marketplace = await marketplaceListing(t, [{ name: "p1", source: "./plugin" }]);
     await mkdir(path.join(marketplace.marketplaceRoot, "plugin"), { recursive: true });
-    const pinnedRoot = path.join(marketplace.root, "plugin-clones", "mp-tag", "plugin");
+    const pinnedRoot = path.join(marketplace.locations.pluginClonesDir, MIRROR_KEY, "plugin");
     await writeJson(path.join(pinnedRoot, ".mcp.json"), {
       mcpServers: { pinned: { command: "pinned" } },
     });
-    const record: PluginInstallRecord = {
-      ...installRecord(pinnedRoot),
-      resolvedSha: RESOLVED_SHA,
-    };
     const reader = createLegacyServersReader(marketplace.source);
 
     // act
-    const legacy = await reader(record);
+    const legacy = await reader(gitRecord(pinnedRoot));
 
     // assert
     assert.deepStrictEqual(legacy, {
@@ -352,14 +428,13 @@ describe("createLegacyServersReader", () => {
     // arrange
     const marketplace = await marketplaceListing(t, [{ name: "p1", source: "./plugin" }]);
     await mkdir(path.join(marketplace.marketplaceRoot, "plugin"), { recursive: true });
-    const pinnedRoot = path.join(marketplace.root, "plugin-clones", "mp-tag", "plugin");
+    const pinnedRoot = path.join(marketplace.locations.pluginClonesDir, MIRROR_KEY, "plugin");
     await writeJson(path.join(pinnedRoot, ".mcp.json"), {
       mcpServers: { pinned: { command: "pinned" } },
     });
     const record: PluginInstallRecord = {
-      ...installRecord(pinnedRoot),
+      ...gitRecord(pinnedRoot),
       version: "1.0.0-aaaaaaaaaaaa",
-      resolvedSha: RESOLVED_SHA,
       resolvedVersion: "1.0.0",
     };
     const reader = createLegacyServersReader(marketplace.source);
@@ -374,6 +449,90 @@ describe("createLegacyServersReader", () => {
     });
   });
 
+  test("UF-1: re-resolves a path record of a cloned marketplace inside its checkout", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(
+      t,
+      [{ name: "p1", source: "./plugin" }],
+      "checkout",
+    );
+    const pluginRoot = path.join(marketplace.marketplaceRoot, "plugin");
+    await writeJson(path.join(pluginRoot, ".mcp.json"), {
+      mcpServers: { cloned: { command: "cloned" } },
+    });
+    const reader = createLegacyServersReader(marketplace.source);
+
+    // act
+    const legacy = await reader(installRecord(pluginRoot));
+
+    // assert
+    assert.deepStrictEqual(legacy, {
+      servers: [{ name: "cloned", config: { command: "cloned" } }],
+      bundle: false,
+    });
+  });
+
+  for (const { title, cloned, record } of [
+    {
+      title: "a git record whose plugin root runs through a symlink out of its clone",
+      cloned: undefined,
+      record: async ({ root, locations }: MarketplaceFixture) => {
+        const clone = path.join(locations.pluginClonesDir, CLONE_KEY);
+        const outside = path.join(root, "outside");
+        await mkdir(clone, { recursive: true });
+        await mkdir(path.join(outside, "p1"), { recursive: true });
+        await symlink(outside, path.join(clone, "linked"));
+        return gitRecord(path.join(clone, "linked", "p1"));
+      },
+    },
+    {
+      title: "a plugin root whose `..` segments climb out of its marketplace",
+      cloned: undefined,
+      record: ({ marketplaceRoot }: MarketplaceFixture) =>
+        Promise.resolve(
+          installRecord([marketplaceRoot, "plugin", "..", "..", "elsewhere"].join(path.sep)),
+        ),
+    },
+    {
+      title: "a git record under the plugin clones whose clone key is malformed",
+      cloned: undefined,
+      record: ({ locations }: MarketplaceFixture) =>
+        Promise.resolve(gitRecord(path.join(locations.pluginClonesDir, "shared", "p1"))),
+    },
+    {
+      title: "a record without a commit whose plugin root lies in the plugin clones",
+      cloned: undefined,
+      record: ({ locations }: MarketplaceFixture) =>
+        Promise.resolve(installRecord(path.join(locations.pluginClonesDir, CLONE_KEY, "p1"))),
+    },
+    {
+      title: "a path record whose plugin root is outside its marketplace root",
+      cloned: undefined,
+      record: ({ root }: MarketplaceFixture) =>
+        Promise.resolve(installRecord(path.join(root, "outside", "p1"))),
+    },
+    {
+      title: "a cloned marketplace whose recorded root is outside its checkout",
+      cloned: "outside-checkout",
+      record: ({ marketplaceRoot }: MarketplaceFixture) =>
+        Promise.resolve(installRecord(path.join(marketplaceRoot, "plugin"))),
+    },
+  ] as const) {
+    test(`UF-1: refuses ${title} before it reads the manifest`, async (t) => {
+      // arrange -- no manifest exists, so a read before the check fails differently
+      const marketplace = await marketplaceListing(t, undefined, cloned);
+      const reader = createLegacyServersReader(marketplace.source);
+
+      // act & assert
+      await assert.rejects(reader(await record(marketplace)), {
+        name: "LegacyServersUnreadableError",
+        reason: "uncontained",
+        plugin: "p1",
+        marketplace: "mp",
+      });
+    });
+  }
+
   test("MREC-02: refuses a re-resolution whose version is not the one the record names", async (t) => {
     // arrange -- `marketplace update` moved the live plugin directory to 1.1.0
     const marketplace = await marketplaceListing(t, [
@@ -386,7 +545,12 @@ describe("createLegacyServersReader", () => {
     const reader = createLegacyServersReader(marketplace.source);
 
     // act & assert
-    await assert.rejects(reader(installRecord(pluginRoot)), unreadableAs("version-mismatch"));
+    await assert.rejects(reader(installRecord(pluginRoot)), {
+      name: "LegacyServersUnreadableError",
+      reason: "version-mismatch",
+      plugin: "p1",
+      marketplace: "mp",
+    });
   });
 
   test("MREC-02: refuses a plugin the marketplace manifest no longer lists", async (t) => {
@@ -395,10 +559,12 @@ describe("createLegacyServersReader", () => {
     const reader = createLegacyServersReader(marketplace.source);
 
     // act & assert
-    await assert.rejects(
-      reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))),
-      unreadableAs("not-in-manifest"),
-    );
+    await assert.rejects(reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))), {
+      name: "LegacyServersUnreadableError",
+      reason: "not-in-manifest",
+      plugin: "p1",
+      marketplace: "mp",
+    });
   });
 
   test("MREC-02: refuses a re-resolution that resolves unavailable", async (t) => {
@@ -407,10 +573,12 @@ describe("createLegacyServersReader", () => {
     const reader = createLegacyServersReader(marketplace.source);
 
     // act & assert
-    await assert.rejects(
-      reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))),
-      unreadableAs("unavailable"),
-    );
+    await assert.rejects(reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))), {
+      name: "LegacyServersUnreadableError",
+      reason: "unavailable",
+      plugin: "p1",
+      marketplace: "mp",
+    });
   });
 
   test("MREC-02: refuses a re-resolved plugin root that differs from the recorded one", async (t) => {
@@ -421,9 +589,11 @@ describe("createLegacyServersReader", () => {
     const reader = createLegacyServersReader(marketplace.source);
 
     // act & assert
-    await assert.rejects(
-      reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))),
-      unreadableAs("root-mismatch"),
-    );
+    await assert.rejects(reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))), {
+      name: "LegacyServersUnreadableError",
+      reason: "root-mismatch",
+      plugin: "p1",
+      marketplace: "mp",
+    });
   });
 });

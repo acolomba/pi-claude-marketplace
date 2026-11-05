@@ -1334,7 +1334,7 @@ async function buildBlock(args: {
   // (D-99-02a) is reachable only on the successful-read path and answers
   // `declared` or `absent`, never "unknown".
   const installed = await readInstalledRecord(
-    { marketplaceName: marketplace, marketplace: mpRecord, pluginName },
+    { marketplaceName: marketplace, marketplace: mpRecord, pluginName, locations },
     mpRecord,
     mcpImplementation,
   );

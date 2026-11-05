@@ -489,7 +489,7 @@ async function recordMove(
 
   const { effective, recorded } = await readRecordMcpVerdict(
     record,
-    { marketplaceName: mp.name, marketplace: mp, pluginName: plugin },
+    { marketplaceName: mp.name, marketplace: mp, pluginName: plugin, locations: input.locations },
     input.mcpImplementation,
   );
   const { consent, excused } = candidateDrops(

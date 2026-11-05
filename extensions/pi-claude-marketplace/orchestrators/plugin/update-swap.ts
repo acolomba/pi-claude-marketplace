@@ -1799,7 +1799,12 @@ async function partialDegradeOf(
 
   const { effective, recorded } = await readRecordMcpVerdict(
     preflight.record,
-    { marketplaceName: args.marketplace, marketplace, pluginName: args.plugin },
+    {
+      marketplaceName: args.marketplace,
+      marketplace,
+      pluginName: args.plugin,
+      locations: args.locations,
+    },
     args.mcpImplementation,
   );
   const newlyDropped = newlyDroppedKinds(

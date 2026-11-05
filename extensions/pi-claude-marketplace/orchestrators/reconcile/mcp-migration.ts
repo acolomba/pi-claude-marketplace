@@ -408,6 +408,7 @@ async function ownerAction(
       marketplaceName: owner.marketplace,
       marketplace,
       pluginName: owner.plugin,
+      locations,
     }),
   );
   return { arm: "move", owner, record, resolved, recorded };
