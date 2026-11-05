@@ -75,7 +75,7 @@ For agents, `listing.steps.ts` is the shared step module: the agent `Given` step
 
 For slash commands, `listing.steps.ts` is the shared step module. The invocation, frontmatter, and model-run steps live in their own modules beside it.
 
-For hooks, `runs.steps.ts` stays the seed module and holds the runs `Then` steps (`the hooks record these runs in any order:` and `the hooks record no runs`). `session.steps.ts` holds the session `Given` and `When` steps, `tool-use.steps.ts` the stub MCP server `Given` steps, `messages.steps.ts` the hook notice steps (`the hooks show the user these messages:` and `the hooks show the user no messages`), and `prompt-and-stop.steps.ts` the Stop re-entry `When`.
+For hooks, `runs.steps.ts` stays the seed module and holds the runs `Then` steps (`the hooks record these runs in any order:` and `the hooks record no runs`). `session.steps.ts` holds the session `Given` and `When` steps, `tool-use.steps.ts` the stub MCP server `Given` steps, the profile-aware MCP call step, and the `mcp.json` step, `messages.steps.ts` the hook notice steps (`the hooks show the user these messages:` and `the hooks show the user no messages`), and `prompt-and-stop.steps.ts` the Stop re-entry `When`.
 
 For MCP servers, `listing.steps.ts` is the shared step module, and every MCP step module writes its fixtures through `features/lib/mcp-server-files.ts`. Its stub marker, an object whose one own member is `stub`, is read wherever it sits in a document. So a wrapped file whose only server is named `stub`, `{"mcpServers": {"stub": {...}}}`, cannot be written through the stub-marker `Given` steps: the marker becomes a server named `mcpServers`.
 
