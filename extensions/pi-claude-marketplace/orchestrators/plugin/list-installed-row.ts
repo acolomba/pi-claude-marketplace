@@ -1,4 +1,3 @@
-import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { declaredVersionWithPin, isSameVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -8,7 +7,7 @@ import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { resolveListCandidate } from "./list-candidate-version.ts";
 import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
 import { recordMcpDependency } from "./mcp-verdict.ts";
-import { classifyInstalledRecord } from "./plugin-state-classifier.ts";
+import { candidateFor, classifyInstalledRecord } from "./plugin-state-classifier.ts";
 
 import type { UpgradeCandidate } from "./plugin-state-classifier.ts";
 import type { ManifestLookup, ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
@@ -97,19 +96,6 @@ function partiallyInstalledReasons(
 ): PluginPartiallyInstalledMessage["reasons"] {
   const unsupported = narrowUnsupportedKinds(effectiveUnsupported);
   return notInManifest ? ["not in manifest", ...unsupported] : unsupported;
-}
-
-/**
- * D-P3-03: the candidate as the active implementation sees it, so a newer
- * version degrades the row only when that implementation cannot run it.
- */
-function candidateFor(
-  candidate: UpgradeCandidate,
-  active: ActiveMcpImplementation,
-): UpgradeCandidate {
-  return candidate.upgradable && candidate.resolved !== undefined
-    ? { upgradable: true, resolved: resolutionFor(candidate.resolved, active) }
-    : candidate;
 }
 
 function disabledReasonsField(notInManifest: boolean): Pick<PluginDisabledMessage, "reasons"> {

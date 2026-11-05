@@ -22,12 +22,14 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-containment.ts";
 
+import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type {
   GitHubSource,
   GitSubdirSource,
   UrlSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { ManifestEntry } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
+import type { ManifestEntryClassification } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 const SHA_A = "1111111111111111111111111111111111111111";
@@ -564,7 +566,7 @@ describe("probeManifestEntry", () => {
     const entry: ManifestEntry = { name: "github-plugin", source: "owner/repo" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations, "adapter");
 
     // assert
     assert.equal(result, "remote");
@@ -579,7 +581,7 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations, "adapter");
 
     // assert
     assert.equal(result, "remote");
@@ -594,7 +596,7 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations, "adapter");
 
     // assert
     assert.equal(result, "remote");
@@ -606,7 +608,7 @@ describe("probeManifestEntry", () => {
     const entry: ManifestEntry = { name: "missing-path", source: "./plugins/missing" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations, "adapter");
 
     // assert
     assert.equal(result, "unavailable");
@@ -619,7 +621,7 @@ describe("probeManifestEntry", () => {
     const entry: ManifestEntry = { name: "path-plugin", source: "./plugins/path-plugin" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations, "adapter");
 
     // assert
     assert.equal(result, "available");
@@ -632,7 +634,7 @@ describe("probeManifestEntry", () => {
     const entry: ManifestEntry = { name: "../escape", source: "./plugins/unsafe" };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations, "adapter");
 
     // assert
     assert.equal(result, "unavailable");
@@ -647,7 +649,7 @@ describe("probeManifestEntry", () => {
     const entry: ManifestEntry = { name: "corrupt-plugin", source: cloneUrl };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations, "adapter");
 
     // assert
     assert.equal(result, "unavailable");
@@ -664,7 +666,7 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations, "adapter");
 
     // assert
     assert.equal(result, "available");
@@ -685,7 +687,7 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations, "adapter");
 
     // assert
     assert.equal(result, "unavailable");
@@ -703,7 +705,7 @@ describe("probeManifestEntry", () => {
     };
 
     // act
-    const result = await probeManifestEntry(entry, marketplaceContext, locations);
+    const result = await probeManifestEntry(entry, marketplaceContext, locations, "adapter");
 
     // assert
     assert.equal(result, "partially-available");
@@ -724,6 +726,7 @@ describe("probeManifestEntry", () => {
       entry,
       { ...marketplaceContext, marketplaceName: "claude-plugins-official" },
       locations,
+      "adapter",
     );
 
     // assert
@@ -746,11 +749,108 @@ describe("probeManifestEntry", () => {
       entry,
       { ...marketplaceContext, marketplaceName: "claude-plugins-official" },
       locations,
+      "adapter",
     );
 
     // assert
     assert.equal(result, "partially-available");
   });
+});
+
+/** One sse server: pi-mcp-adapter runs it, Pi's built-in MCP cannot. */
+const SSE_MCP_JSON = JSON.stringify({
+  mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } },
+});
+
+describe("probeManifestEntry for each MCP implementation (D-P6-22, MREC-03)", () => {
+  const sseCases = [
+    { mcpImplementation: "adapter", expected: "available" },
+    { mcpImplementation: "builtin", expected: "partially-available" },
+    { mcpImplementation: "none", expected: "available" },
+  ] satisfies readonly {
+    readonly mcpImplementation: ActiveMcpImplementation;
+    readonly expected: ManifestEntryClassification;
+  }[];
+
+  for (const { mcpImplementation, expected } of sseCases) {
+    test(`classifies a path entry with an sse server as ${expected} for ${mcpImplementation}`, async (testContext) => {
+      // arrange
+      const { locations, marketplaceRoot, marketplaceContext } = await freshLocations(testContext);
+      const pluginRoot = path.join(marketplaceRoot, "plugins", "sse-plugin");
+      await mkdir(pluginRoot, { recursive: true });
+      await writeFile(path.join(pluginRoot, ".mcp.json"), SSE_MCP_JSON, "utf8");
+      const entry: ManifestEntry = { name: "sse-plugin", source: "./plugins/sse-plugin" };
+
+      // act
+      const result = await probeManifestEntry(
+        entry,
+        marketplaceContext,
+        locations,
+        mcpImplementation,
+      );
+
+      // assert
+      assert.equal(result, expected);
+    });
+
+    test(`classifies a warm git entry with an sse server as ${expected} for ${mcpImplementation}`, async (testContext) => {
+      // arrange
+      const { locations, marketplaceContext } = await freshLocations(testContext);
+      const cloneUrl = "https://example.com/sse-plugin";
+      const cloneDir = await cloneDirectory(locations, cloneUrl, SHA_A);
+      await writeFile(path.join(cloneDir, ".mcp.json"), SSE_MCP_JSON, "utf8");
+      const entry: ManifestEntry = {
+        name: "sse-plugin",
+        source: { source: "url", url: cloneUrl, sha: SHA_A },
+      };
+
+      // act
+      const result = await probeManifestEntry(
+        entry,
+        marketplaceContext,
+        locations,
+        mcpImplementation,
+      );
+
+      // assert
+      assert.equal(result, expected);
+    });
+
+    test(`keeps a cold git entry remote for ${mcpImplementation}`, async (testContext) => {
+      // arrange
+      const { locations, marketplaceContext } = await freshLocations(testContext);
+      const entry: ManifestEntry = { name: "cold-plugin", source: "acme/cold-plugin" };
+
+      // act
+      const result = await probeManifestEntry(
+        entry,
+        marketplaceContext,
+        locations,
+        mcpImplementation,
+      );
+
+      // assert
+      assert.equal(result, "remote");
+    });
+
+    test(`keeps an entry the resolver refuses unavailable for ${mcpImplementation}`, async (testContext) => {
+      // arrange
+      const { locations, marketplaceRoot, marketplaceContext } = await freshLocations(testContext);
+      await mkdir(path.join(marketplaceRoot, "plugins", "unsafe"), { recursive: true });
+      const entry: ManifestEntry = { name: "../escape", source: "./plugins/unsafe" };
+
+      // act
+      const result = await probeManifestEntry(
+        entry,
+        marketplaceContext,
+        locations,
+        mcpImplementation,
+      );
+
+      // assert
+      assert.equal(result, "unavailable");
+    });
+  }
 });
 
 /** A mirror the unpinned presence probe reads, and that read's HEAD sha. */

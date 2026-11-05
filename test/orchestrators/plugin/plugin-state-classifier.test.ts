@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  candidateFor,
   classifyInstalledRecord,
   classifyManifestEntry,
   type InstalledClassification,
@@ -10,6 +11,7 @@ import {
   type UpgradeCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts";
 
+import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { ResolvedPlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 void ("partially-installed-upgradable" satisfies InstalledClassification);
@@ -235,4 +237,79 @@ describe("classifyManifestEntry", () => {
       assert.strictEqual(manifestStatus, expectedStatus);
     });
   }
+});
+
+/** An installable resolution whose one sse server only pi-mcp-adapter runs. */
+function sseResolution(name: string): ResolvedPlugin {
+  const sse = { type: "sse", url: "http://127.0.0.1:9/sse" };
+  return {
+    state: "installable",
+    installable: true,
+    name,
+    pluginRoot: `/plugins/${name}`,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: { events: sse },
+    declaredMcpServers: { events: sse },
+    defaultEnabled: true,
+  };
+}
+
+describe("candidateFor", () => {
+  const viewCases = [
+    { active: "adapter", state: "installable", unsupported: [] },
+    { active: "builtin", state: "partially-available", unsupported: ["mcpServers"] },
+    { active: "none", state: "installable", unsupported: [] },
+  ] satisfies readonly {
+    readonly active: ActiveMcpImplementation;
+    readonly state: ResolvedPlugin["state"];
+    readonly unsupported: readonly string[];
+  }[];
+
+  for (const { active, state, unsupported } of viewCases) {
+    test(`gives an upgradable candidate the ${active} view of its resolution`, () => {
+      // arrange
+      const candidate: UpgradeCandidate = {
+        upgradable: true,
+        resolved: sseResolution("sse-candidate"),
+      };
+      const expectedView = { state, unsupported };
+
+      // act
+      const view = candidateFor(candidate, active);
+
+      // assert
+      const resolved = view.upgradable ? view.resolved : undefined;
+      assert.deepStrictEqual(
+        resolved === undefined || resolved.state === "unavailable"
+          ? resolved
+          : { state: resolved.state, unsupported: resolved.unsupported },
+        expectedView,
+      );
+    });
+  }
+
+  test("returns a candidate that is not upgradable as it is", () => {
+    // arrange
+    const candidate: UpgradeCandidate = { upgradable: false };
+
+    // act
+    const view = candidateFor(candidate, "builtin");
+
+    // assert
+    assert.strictEqual(view, candidate);
+  });
+
+  test("returns an upgradable candidate without a resolution as it is", () => {
+    // arrange
+    const candidate: UpgradeCandidate = { upgradable: true, resolved: undefined };
+
+    // act
+    const view = candidateFor(candidate, "builtin");
+
+    // assert
+    assert.strictEqual(view, candidate);
+  });
 });

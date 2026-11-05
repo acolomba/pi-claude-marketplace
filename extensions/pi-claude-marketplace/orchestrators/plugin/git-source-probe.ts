@@ -18,7 +18,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { canonicalCloneUrl, pluginCloneKey, pluginMirrorKey } from "../../domain/clone-key.ts";
-import { resolveStrict } from "../../domain/plugin-resolver.ts";
+import { resolutionFor, resolveStrict } from "../../domain/plugin-resolver.ts";
 import {
   parsePluginSource,
   type GitBackedSource,
@@ -35,6 +35,7 @@ import {
 } from "./plugin-state-classifier.ts";
 
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { GitPluginRootResult, ResolveContext } from "../../domain/resolver-types.ts";
 
 export type ManifestEntry = MarketplaceManifest["plugins"][number];
@@ -232,7 +233,11 @@ export function makeRecordedShaPresenceProbe(
 /**
  * RSTA-01 / RSTA-05 / RSTA-06 / NFR-5: classify a NOT-installed manifest entry
  * into the shared `ManifestEntryClassification` bucket, presence-derived and
- * network-free.
+ * network-free, as `mcpImplementation` sees it (D-P6-22, MREC-03): every
+ * resolved verdict goes through `resolutionFor`, the view `list` applies, so a
+ * server only that implementation blocks makes the entry
+ * `partially-available`. `remote` and `unavailable` hold for every
+ * implementation.
  *
  * A git-source entry (url / git-subdir / github) is classified from its fs-only
  * clone/mirror presence via `makePresenceProbe` (D-80-02):
@@ -240,7 +245,8 @@ export function makeRecordedShaPresenceProbe(
  *     is a valid install target (install performs the fetch), but there is no
  *     local tree to resolve, so it is NOT over-claimed `available`.
  *   - WARM (`materialized`) -> the real three-way resolution against the on-disk
- *     tree via `resolveStrict` with the presence probe injected:
+ *     tree via `resolveStrict` with the presence probe injected, viewed for
+ *     `mcpImplementation`:
  *     `available` (installable) / `partially-available` / `unavailable`. A
  *     `resolveStrict` throw folds to `unavailable`, and so does a presence-probe
  *     throw (a mirror dir that exists but is corrupt or concurrently modified,
@@ -250,8 +256,9 @@ export function makeRecordedShaPresenceProbe(
  * Manifest pin wins for pinned entries (exact per-sha key or `remote`), even if
  * stale clones of the same URL exist -- inherited from `makePresenceProbe`.
  *
- * Path / npm / unknown sources fall through to `resolveStrict` +
- * `classifyManifestEntry`; a `resolveStrict` throw folds to `unavailable`.
+ * Path / npm / unknown sources fall through to `resolveStrict`, the same
+ * implementation view, and `classifyManifestEntry`; a `resolveStrict` throw
+ * folds to `unavailable`.
  * Every throw folds internally, so `probeManifestEntry` never throws and
  * callers need no local try/catch.
  *
@@ -265,6 +272,7 @@ export async function probeManifestEntry(
     "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
   >,
   locations: ScopedLocations,
+  mcpImplementation: ActiveMcpImplementation,
 ): Promise<ManifestEntryClassification> {
   const parsedSource = parsePluginSource(entry.source);
   if (
@@ -283,7 +291,9 @@ export async function probeManifestEntry(
         ...marketplaceContext,
         resolveGitPluginRoot: probe,
       };
-      return classifyManifestEntry(await resolveStrict(entry, ctx));
+      return classifyManifestEntry(
+        resolutionFor(await resolveStrict(entry, ctx), mcpImplementation),
+      );
     } catch {
       // A presence-probe throw (corrupt / concurrently-modified mirror) folds
       // to `unavailable` exactly like a `resolveStrict` throw would.
@@ -292,7 +302,9 @@ export async function probeManifestEntry(
   }
 
   try {
-    return classifyManifestEntry(await resolveStrict(entry, marketplaceContext));
+    return classifyManifestEntry(
+      resolutionFor(await resolveStrict(entry, marketplaceContext), mcpImplementation),
+    );
   } catch {
     return "unavailable";
   }
