@@ -9,10 +9,11 @@ import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
 import { recordMcpDependency } from "./mcp-verdict.ts";
 import { candidateFor, classifyInstalledRecord } from "./plugin-state-classifier.ts";
 
-import type { UpgradeCandidate } from "./plugin-state-classifier.ts";
+import type { InstalledClassification, UpgradeCandidate } from "./plugin-state-classifier.ts";
 import type { ManifestLookup, ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
 import type {
   ActiveMcpImplementation,
+  EffectiveMcpCompatibility,
   RecordedMcpServers,
 } from "../../domain/mcp-implementation.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
@@ -119,7 +120,7 @@ function catalogVersion(entry: ManifestPluginEntry, marketplaceName: string): st
  * The verdict is the resolver's neutral one (D-P3-01); the list row takes the
  * active implementation's view of it.
  */
-export async function upgradeCandidate(
+async function upgradeCandidate(
   manifestEntry: ManifestPluginEntry,
   options: Omit<ComposeInstalledListRowOptions, "manifestPath" | "mcpImplementation">,
 ): Promise<UpgradeCandidate> {
@@ -143,35 +144,38 @@ export async function upgradeCandidate(
   return { upgradable: true, resolved: resolved?.resolved };
 }
 
-/** Composes one exact installed-inventory row without network access. */
-export async function composeInstalledListRow(
-  options: ComposeInstalledListRowOptions,
-): Promise<InstalledListRow> {
-  const { pluginName, pluginScope, marketplaceScope, record, lookup } = options;
-  const manifestEntry = lookup.kind === "declared" ? lookup.entry : undefined;
-  const notInManifest = lookup.kind === "absent";
-  const scopeField: { readonly scope?: Scope } =
-    pluginScope === marketplaceScope ? {} : { scope: pluginScope };
-  const descriptionField: { readonly description?: string } =
-    manifestEntry?.description === undefined ? {} : { description: manifestEntry.description };
-
-  if (isRecordedButDisabled(record)) {
-    return {
-      status: "disabled",
-      name: pluginName,
-      version: record.version,
-      ...scopeField,
-      ...descriptionField,
-      ...disabledReasonsField(notInManifest),
-      severity: "info",
-      needsReload: false,
+/**
+ * One installed record as the active MCP implementation sees it. A disabled
+ * record carries nothing more, because nothing more is read for it. Any other
+ * record carries its classification and the facts the classification read.
+ */
+export type InstalledRecordView =
+  | { readonly kind: "disabled" }
+  | {
+      readonly kind: "enabled";
+      readonly status: InstalledClassification;
+      readonly effective: EffectiveMcpCompatibility;
+      readonly recorded: RecordedMcpServers;
+      readonly candidate: UpgradeCandidate;
     };
+
+/**
+ * D-P6-22 / MREC-03: the one classification of an installed record that
+ * `list` and completion share, so the two cannot drift. A recorded-but-disabled
+ * record is version-frozen (ENBL-04), so it answers `disabled` before any MCP
+ * verdict read or candidate probe. Any other record joins its MCP verdict for
+ * the active implementation (D-P3-04 / D-P3-05), read offline, with that
+ * implementation's view of its upgrade candidate (`candidateFor`). The record
+ * and its marketplace record are in the plugin scope's state file (UF-1).
+ */
+export async function classifyInstalledForImplementation(
+  options: ComposeInstalledListRowOptions,
+): Promise<InstalledRecordView> {
+  const { pluginName, record, lookup } = options;
+  if (isRecordedButDisabled(record)) {
+    return { kind: "disabled" };
   }
 
-  // D-P3-04 / D-P3-05: the record's MCP verdict for the active
-  // implementation, read offline, decides the row, so a switch needs no
-  // reinstall. The record and its marketplace record are in the plugin
-  // scope's state file (UF-1).
   const { effective, recorded } = await readRecordMcpVerdict(
     record,
     {
@@ -187,16 +191,49 @@ export async function composeInstalledListRow(
     options.mcpImplementation,
   );
   const candidate = candidateFor(
-    manifestEntry === undefined
-      ? { upgradable: false }
-      : await upgradeCandidate(manifestEntry, options),
+    lookup.kind === "declared"
+      ? await upgradeCandidate(lookup.entry, options)
+      : { upgradable: false },
     options.mcpImplementation,
   );
-  const candidateResolved = candidate.upgradable ? candidate.resolved : undefined;
   const status = classifyInstalledRecord(
     { enabled: record.enabled, compatibility: { unsupported: effective.unsupported } },
     candidate,
   );
+
+  return { kind: "enabled", status, effective, recorded, candidate };
+}
+
+/** Composes one exact installed-inventory row without network access. */
+export async function composeInstalledListRow(
+  options: ComposeInstalledListRowOptions,
+): Promise<InstalledListRow> {
+  const { pluginName, pluginScope, marketplaceScope, record, lookup } = options;
+  const manifestEntry = lookup.kind === "declared" ? lookup.entry : undefined;
+  const notInManifest = lookup.kind === "absent";
+  const scopeField: { readonly scope?: Scope } =
+    pluginScope === marketplaceScope ? {} : { scope: pluginScope };
+  const descriptionField: { readonly description?: string } =
+    manifestEntry?.description === undefined ? {} : { description: manifestEntry.description };
+  const view = await classifyInstalledForImplementation(options);
+
+  if (view.kind === "disabled") {
+    return {
+      status: "disabled",
+      name: pluginName,
+      version: record.version,
+      ...scopeField,
+      ...descriptionField,
+      ...disabledReasonsField(notInManifest),
+      severity: "info",
+      needsReload: false,
+    };
+  }
+
+  // D-P3-04 / D-P3-05: the record's MCP verdict for the active
+  // implementation decides the row, so a switch needs no reinstall.
+  const { status, effective, recorded, candidate } = view;
+  const candidateResolved = candidate.upgradable ? candidate.resolved : undefined;
 
   if (status === "partially-installed" || status === "partially-installed-upgradable") {
     return {

@@ -4,11 +4,13 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import {
+  classifyInstalledForImplementation,
   composeInstalledListRow,
   type ComposeInstalledListRowOptions,
   type InstalledListRow,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { advanceWarmMirror, seedWarmMirror } from "./warm-mirror-seed.ts";
@@ -799,6 +801,66 @@ test("MREC-03: lists a disabled sse record as disabled under Pi's built-in MCP",
     description: "Alpha plugin.",
     severity: "info",
     needsReload: false,
+  });
+});
+
+test("D-P6-22 / ENBL-04: classifies a disabled record without reading its MCP verdict", async (testContext) => {
+  // arrange
+  const environment = await installedEnvironment(testContext);
+  const debugLines = captureDebugLog(testContext);
+
+  // act
+  const view = await classifyInstalledForImplementation({
+    ...environment,
+    mcpImplementation: "builtin",
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record: pluginRecord({
+      enabled: false,
+      resources: {
+        agents: [],
+        hooks: [],
+        mcpServers: ["events"],
+        prompts: [],
+        skills: [],
+        workflows: [],
+      },
+    }),
+    lookup: { kind: "absent" },
+  });
+
+  // assert
+  assert.deepStrictEqual(view, { kind: "disabled" });
+  assert.deepStrictEqual(debugLines, []);
+});
+
+test("D-P6-22: classifies an enabled record with the MCP verdict and candidate it read", async (testContext) => {
+  // arrange
+  const environment = await installedEnvironment(testContext);
+
+  // act
+  const view = await classifyInstalledForImplementation({
+    ...environment,
+    mcpImplementation: "builtin",
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record: neutralSseRecord(),
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(view, {
+    kind: "enabled",
+    status: "partially-installed",
+    effective: {
+      installable: false,
+      unsupported: ["mcpServers"],
+      blocked: [{ server: "events", feature: "sse" }],
+    },
+    recorded: { kind: "recorded", servers: [{ name: "events", config: EVENTS }], bundle: false },
+    candidate: { upgradable: false },
   });
 });
 

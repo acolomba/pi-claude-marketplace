@@ -26,6 +26,7 @@ import {
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { ManifestSoftFailError } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { InvalidMarketplaceManifestError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ActiveMcpImplementation } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
@@ -604,6 +605,51 @@ describe("loadManifestForMarketplace", () => {
       return true;
     });
   });
+});
+
+describe("loadManifestForMarketplace MCP verdict reads (D-P6-22, ENBL-04)", () => {
+  // A legacy record that names `mcpServers` and that the manifest no longer
+  // declares cannot re-resolve its servers, so a verdict read of it logs one
+  // `mcp` debug line. `list` reads no verdict of a disabled record.
+  const legacyCases = [
+    {
+      enabled: true,
+      status: "partially-installed",
+      logged: [
+        "[mcp] recorded MCP servers unreadable: cannot re-resolve the MCP servers of events@legacy-mp: not-in-manifest",
+      ],
+    },
+    { enabled: false, status: "installed", logged: [] },
+  ] satisfies readonly {
+    readonly enabled: boolean;
+    readonly status: PluginIndexRow["status"];
+    readonly logged: readonly string[];
+  }[];
+
+  for (const { enabled, status, logged } of legacyCases) {
+    const recordLabel = enabled ? "an enabled" : "a disabled";
+    test(`classifies ${recordLabel} legacy record as ${status} with ${logged.length} verdict read(s)`, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, `legacy-${String(enabled)}`);
+      await layoutMarketplace(scope.cwd, "legacy-mp", [
+        {
+          name: "events",
+          inManifest: false,
+          installed: { version: "1.0.0", enabled, unsupported: ["mcpServers"] },
+        },
+      ]);
+      const resolver = makeLocationsResolver(scope.cwd, "builtin");
+      const debugLines = captureDebugLog(t);
+      const expectedRows = [{ name: "events", status, version: "1.0.0" }];
+
+      // act
+      const indexRows = await resolver.loadManifestForMarketplace("project", "legacy-mp");
+
+      // assert
+      assert.deepStrictEqual(indexRows, expectedRows);
+      assert.deepStrictEqual(debugLines, logged);
+    });
+  }
 });
 
 describe("loadManifestForMarketplace for each MCP implementation (D-P6-22, MREC-03)", () => {

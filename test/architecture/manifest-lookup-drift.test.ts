@@ -34,7 +34,7 @@ import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 /**
  * The group in its declared order: the rule's definition site first, then the
- * three surfaces that judge absence, then the three that look an entry up for
+ * three surfaces that judge absence, then the two that look an entry up for
  * something else. The order is what aims each scan below, so the module
  * basenames are pinned inside the walk case (D-07-03) -- a member reordered,
  * added, or dropped in the registry would otherwise re-aim a scan at a file its
@@ -47,7 +47,6 @@ const [
   UPDATE_SURFACE,
   INSTALL_LOOKUP,
   PENDING_LOOKUP,
-  EDGE_DEPS_LOOKUP,
 ] = MANIFEST_LOOKUP_TARGETS;
 
 /** The module basenames the destructuring above binds, in registry order. */
@@ -58,7 +57,6 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "update-preflight.ts",
   "install-outcome.ts",
   "pending.ts",
-  "edge-deps.ts",
 ];
 
 /** The three surfaces that render an absence claim and must consume the rule. */
@@ -84,11 +82,6 @@ const NON_ABSENCE_LOOKUPS: ReadonlyArray<{ readonly rel: string; readonly purpos
     rel: PENDING_LOOKUP,
     purpose:
       "fetches the entry a pending install would materialize. A miss means `not a candidate` (returns undefined) -- the scan emits nothing, so no claim is made about the record.",
-  },
-  {
-    rel: EDGE_DEPS_LOOKUP,
-    purpose:
-      "feeds the completion cache's upgrade-candidate compare (PL-5 version diff). A miss reads as `not upgradable`; the cache row carries no absence reason.",
   },
 ];
 

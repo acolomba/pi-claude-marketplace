@@ -34,6 +34,7 @@
 //     The cache layer's getPluginIndex catches that discriminator and
 //     writes the TC-8 `_loadError` poison row (returning [] to callers).
 
+import { lookupDeclaredPlugin } from "../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../domain/manifest.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
@@ -43,15 +44,13 @@ import { errorMessage } from "../shared/errors.ts";
 import { ownValue, setOwn } from "../shared/own-key.ts";
 
 import { probeManifestEntry } from "./plugin/git-source-probe.ts";
-import { upgradeCandidate } from "./plugin/list-installed-row.ts";
-import { readRecordMcpVerdict } from "./plugin/mcp-verdict-read.ts";
-import { candidateFor, classifyInstalledRecord } from "./plugin/plugin-state-classifier.ts";
+import { classifyInstalledForImplementation } from "./plugin/list-installed-row.ts";
 
 import type { MarketplaceManifest } from "../domain/manifest.ts";
 import type { ActiveMcpImplementation } from "../domain/mcp-implementation.ts";
 import type { ResolveContext } from "../domain/resolver-types.ts";
+import type { InstalledRecordView } from "./plugin/list-installed-row.ts";
 import type { ScopedLocations } from "../persistence/locations.ts";
-import type { UpgradeCandidate } from "./plugin/plugin-state-classifier.ts";
 import type { ExtensionState } from "../persistence/state-io.ts";
 import type { PluginIndexRow } from "../shared/completion-cache.ts";
 import type { Scope } from "../shared/types.ts";
@@ -128,63 +127,43 @@ type InstalledRowMarketplace = Pick<
 > & { readonly manifestPath: string };
 
 /**
- * LIST-02 / D-67-02: build the cache row for ONE installed plugin via the
- * shared `classifyInstalledRecord`. Whether a newer candidate exists is list's
- * own rule (VER-01 / VER-02, D-PL7-09): `upgradeCandidate` reads the version
- * offline (NFR-5) from plugin.json, then the entry, then the commit, so
- * completion offers `update` for exactly the plugins `list` marks upgradable.
- * A candidate that fails to resolve degrades to plain `upgradable` (CR-01).
- *
- * D-P6-22 / MREC-03: the row is classified as `composeInstalledListRow`
- * classifies it, for the resolver's implementation: the record's effective
- * MCP verdict (`readRecordMcpVerdict`, offline) and that implementation's view
- * of the candidate (`candidateFor`), never the stored neutral verdict.
+ * ENBL-04: completion has no `disabled` token, so a disabled record,
+ * which `list` shows as `(disabled)`, is offered as `installed`: it stays in
+ * the no-`--partial` inventory set and never becomes an `update` target.
+ */
+function completionStatus(view: InstalledRecordView): PluginIndexRow["status"] {
+  return view.kind === "disabled" ? "installed" : view.status;
+}
+
+/**
+ * LIST-02 / D-67-02 / D-P6-22: build the cache row for ONE installed plugin
+ * through `classifyInstalledForImplementation`, the classification
+ * `composeInstalledListRow` uses, for the resolver's implementation. The
+ * manifest entry comes from `lookupDeclaredPlugin`, as `list` finds it, so
+ * completion offers `update` for exactly the plugins `list` marks upgradable
+ * (VER-01 / VER-02, D-PL7-09), and a disabled record reads no MCP verdict.
  */
 async function classifyInstalledPluginRow(
   pluginName: string,
   installed: ExtensionState["marketplaces"][string]["plugins"][string],
-  manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
+  manifest: MarketplaceManifest,
   scope: Scope,
   marketplace: InstalledRowMarketplace,
   cwd: string,
   mcpImplementation: ActiveMcpImplementation,
 ): Promise<PluginIndexRow> {
-  const { manifestPath, ...marketplaceContext } = marketplace;
-  const { effective } = await readRecordMcpVerdict(
-    installed,
-    {
-      marketplaceName: marketplaceContext.marketplaceName,
-      marketplace: {
-        manifestPath,
-        marketplaceRoot: marketplaceContext.marketplaceRoot,
-        source: marketplaceContext.marketplaceSource,
-      },
-      pluginName,
-      locations: locationsFor(scope, cwd),
-    },
+  const view = await classifyInstalledForImplementation({
+    pluginName,
+    pluginScope: scope,
+    marketplaceScope: scope,
+    ...marketplace,
+    record: installed,
+    lookup: lookupDeclaredPlugin(manifest, pluginName),
+    cwd,
     mcpImplementation,
-  );
-  const candidate: UpgradeCandidate =
-    manifestEntry === undefined
-      ? { upgradable: false }
-      : await upgradeCandidate(manifestEntry, {
-          pluginName,
-          pluginScope: scope,
-          marketplaceScope: scope,
-          ...marketplaceContext,
-          record: installed,
-          lookup: { kind: "declared", entry: manifestEntry },
-          cwd,
-        });
+  });
 
-  return {
-    name: pluginName,
-    status: classifyInstalledRecord(
-      { enabled: installed.enabled, compatibility: { unsupported: effective.unsupported } },
-      candidateFor(candidate, mcpImplementation),
-    ),
-    version: installed.version,
-  };
+  return { name: pluginName, status: completionStatus(view), version: installed.version };
 }
 
 /**
@@ -291,17 +270,16 @@ export function makeLocationsResolver(
 
         // Installed entries first. LIST-02 / D-67-02: the finer state
         // (installed | upgradable | partially-installed | partially-upgradable) is
-        // derived by the SHARED classifier -- the same one the `list`
-        // orchestrator consumes, over the same effective MCP verdict for the
-        // resolver's implementation (D-P6-22) -- so the completion cache never
-        // diverges from `list` (no provider-local reclassification).
+        // derived by the SHARED composition the `list` orchestrator uses, for
+        // the resolver's implementation (D-P6-22) -- so the completion cache
+        // never diverges from `list` (no provider-local reclassification).
         for (const [pluginName, installed] of Object.entries(mp.plugins)) {
           rows.push(
             // eslint-disable-next-line no-await-in-loop -- bounded by the marketplace's installed plugins, one row each
             await classifyInstalledPluginRow(
               pluginName,
               installed,
-              parsed.plugins.find((p) => p.name === pluginName),
+              parsed,
               scope,
               { ...marketplaceContext, manifestPath: mp.manifestPath },
               cwd,
