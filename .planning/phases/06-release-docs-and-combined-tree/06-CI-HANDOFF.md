@@ -150,3 +150,16 @@ Criterion 3's CI part and DUAL-03's re-measure on the combined tree stay
 unverified until the parent records a successful run in `## CI timings`.
 
 ## CI timings
+
+- **Run:** CI run 41960058038 (`workflow_dispatch` on `features/mcp-builtin`), 2026-11-05, head `1bec91e2120360b1d8a4c3d10e11fd0012ffa7f3`. Its build inputs are those of the gate commit `a7f73bf` (the diff outside `.planning/**/*.md` is empty). Conclusion: `success`, run attempt 1, all 9 jobs `success`, no rerun.
+
+| Job | Job duration | Step `Run the behavioral tests` | Scenarios |
+| --- | --- | --- | --- |
+| behavioral tests, adapter lifecycle (Node 24) | 3 min 17 s | 2 min 19 s | 1168 |
+| behavioral tests, adapter components (Node 24) | 4 min 35 s | 3 min 52 s | 435 |
+| behavioral tests, builtin all (Node 24) | 2 min 56 s | 1 min 54 s | 133 |
+| pinned e2e tests (Node 24) | 57 s | (Run pinned e2e tests: 12 s) | - |
+
+- **Timeout:** every leg takes 10 minutes or less (slowest 4 min 35 s; 1.5 times is 6 min 53 s), so `timeout-minutes: 15` stays (D-CF1-16 as applied by D-P6-25).
+- **D-CF1-16:** the PROJECT.md row gains the 2026-11-05 measurement sentence.
+- **Status:** criterion 3's CI part and DUAL-03's re-measure on the combined tree are verified.
