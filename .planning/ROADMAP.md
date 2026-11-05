@@ -524,7 +524,7 @@ Plans:
   3. On the combined tree, `npm run check`, both cucumber profiles, and `npm run test:modules` pass, `npx fallow dupes` reports no unreviewed clone group, and the CI behavioral jobs finish within their timeouts.
   4. Every child's parent lines are applied (PROJECT.md Key Decisions rows, BACKLOG entries), no closed-set entry remains that the combined tree never emits, and the phase dubious-choice logs are merged into the root log for the user's review.
 
-**Plans:** 8/13 plans executed in 5 waves (each wave's plans own disjoint files; the gate runs alone in Wave 4, and the records that read every SUMMARY run alone in Wave 5, after the gate, and change only `.planning/**/*.md`)
+**Plans:** 11/13 plans executed in 5 waves (each wave's plans own disjoint files; the gate runs alone in Wave 4, and the records that read every SUMMARY run alone in Wave 5, after the gate, and change only `.planning/**/*.md`)
 
 Plans:
 **Wave 1**
@@ -540,9 +540,9 @@ Plans:
 - [x] 06-08-PLAN.md — Wave 2: the contained legacy MCP reader with its redacted log line (UF-1, UF-4), and the fallow entry and export cleanup (MREC-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 06-09-PLAN.md — Wave 3: `SoftDepStatus.piMcpAdapterLoaded` removed, with no behavior change (MSEL-01)
-- [ ] 06-10-PLAN.md — Wave 3: the CHANGELOG entry, the BACKLOG entries, the window records, and the PROJECT.md decisions (MDOC-02)
-- [ ] 06-11-PLAN.md — Wave 3: the codebase maps and the cucumber skill notes (DUAL-01)
+- [x] 06-09-PLAN.md — Wave 3: `SoftDepStatus.piMcpAdapterLoaded` removed, with no behavior change (MSEL-01)
+- [x] 06-10-PLAN.md — Wave 3: the CHANGELOG entry, the BACKLOG entries, the window records, and the PROJECT.md decisions (MDOC-02)
+- [x] 06-11-PLAN.md — Wave 3: the codebase maps and the cucumber skill notes (DUAL-01)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 06-12-PLAN.md — Wave 4: the per-feature re-runs under both profiles, `fallow dupes`, the MDOC-02 cross-check, the whole gate on one commit, and the CI handoff (DUAL-04, MDOC-02, DUAL-03)
@@ -561,7 +561,7 @@ Plans:
 | 3. Read-Time Verdicts | 9/9 | Complete    | 2026-11-04 |
 | 4. Agent Grants | 6/6 | Complete    | 2026-11-04 |
 | 5. Hook Tool Names | 4/4 | Complete    | 2026-11-04 |
-| 6. Release Docs and Combined Tree | 8/13 | In Progress | - |
+| 6. Release Docs and Combined Tree | 11/13 | In Progress | - |
 
 ## Carried Forward
 
