@@ -707,20 +707,20 @@ Each source has exactly one branch. Branch-specific fields are absent from the o
 
 <!-- fields: plugin-info-row -->
 
-| Field path           | Type                                              | Presence    | Meaning                                                                                                                                             |
-| -------------------- | ------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`             | PluginInfoStatus                                  | required    | Plugin information state.                                                                                                                           |
-| `name`               | string                                            | required    | Plugin name.                                                                                                                                        |
-| `id`                 | string                                            | required    | Qualified address, `<name>@<marketplaceName>`. A failed `marketplace info` row stands for the marketplace, so its id is the marketplace name alone. |
-| `reasons`            | Reason[]                                          | required    | Resolved reasons. Empty means no reasons.                                                                                                           |
-| `version`            | string                                            | optional    | Plugin version.                                                                                                                                     |
-| `scope`              | Scope                                             | optional    | Plugin installation scope.                                                                                                                          |
-| `description`        | string                                            | optional    | Plugin description.                                                                                                                                 |
-| `notes`              | string[]                                          | optional    | Ordered advisory lines about component files.                                                                                                       |
-| `dependencies`       | string[]                                          | optional    | Dependency addresses with any version or SHA constraints, sorted by dependency name.                                                                |
-| `componentsResolved` | boolean                                           | required    | Selects the resolved (`true`) or unresolved (`false`) branch.                                                                                       |
-| `components`         | [Components](#components)                         | conditional | Required when `componentsResolved` is `true`. Absent when it is `false`.                                                                            |
-| `requires`           | [Companion requirement](#companion-requirement)[] | optional    | Companion extensions the resolved components need, sorted by name. Absent when none is needed and when `componentsResolved` is `false`.             |
+| Field path           | Type                                              | Presence    | Meaning                                                                                                                                                                                                                                                                    |
+| -------------------- | ------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`             | PluginInfoStatus                                  | required    | Plugin information state.                                                                                                                                                                                                                                                  |
+| `name`               | string                                            | required    | Plugin name.                                                                                                                                                                                                                                                               |
+| `id`                 | string                                            | required    | Qualified address, `<name>@<marketplaceName>`. A failed `marketplace info` row stands for the marketplace, so its id is the marketplace name alone.                                                                                                                        |
+| `reasons`            | Reason[]                                          | required    | Resolved reasons. Empty means no reasons.                                                                                                                                                                                                                                  |
+| `version`            | string                                            | optional    | Plugin version.                                                                                                                                                                                                                                                            |
+| `scope`              | Scope                                             | optional    | Plugin installation scope.                                                                                                                                                                                                                                                 |
+| `description`        | string                                            | optional    | Plugin description.                                                                                                                                                                                                                                                        |
+| `notes`              | string[]                                          | optional    | Ordered advisory lines about component files.                                                                                                                                                                                                                              |
+| `dependencies`       | string[]                                          | optional    | Dependency addresses with any version or SHA constraints, sorted by dependency name.                                                                                                                                                                                       |
+| `componentsResolved` | boolean                                           | required    | Selects the resolved (`true`) or unresolved (`false`) branch.                                                                                                                                                                                                              |
+| `components`         | [Components](#components)                         | conditional | Required when `componentsResolved` is `true`. Absent when it is `false`.                                                                                                                                                                                                   |
+| `requires`           | [Companion requirement](#companion-requirement)[] | optional    | Companions (extensions or MCP implementations) the resolved components need, sorted by name. The MCP entry names `mcp` (either implementation runs every server), `pi-mcp-adapter`, or `builtin mcp`. Absent when none is needed and when `componentsResolved` is `false`. |
 
 <!-- /fields -->
 
@@ -747,13 +747,13 @@ A server that a partial install leaves out has `unsupportedFeature` and no state
 
 <!-- fields: mcp-server -->
 
-| Field path           | Type            | Presence | Meaning                                                                     |
-| -------------------- | --------------- | -------- | --------------------------------------------------------------------------- |
-| `name`               | string          | required | Server name, `plugin:<plugin>:<server>`.                                    |
-| `unsupportedFeature` | string          | optional | Claude Code MCP feature that pi-mcp-adapter cannot run.                     |
-| `unsetVariables`     | string[]        | optional | Referenced environment variables that are not set. Names only.              |
-| `withheldVariables`  | string[]        | optional | Credential variables written as empty values. Names only.                   |
-| `status`             | McpServerStatus | optional | pi-mcp-adapter's last known state of a server that an install record lists. |
+| Field path           | Type            | Presence | Meaning                                                                                    |
+| -------------------- | --------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `name`               | string          | required | Server name, `plugin:<plugin>:<server>`.                                                   |
+| `unsupportedFeature` | string          | optional | Claude Code MCP feature that the active MCP implementation cannot run.                     |
+| `unsetVariables`     | string[]        | optional | Referenced environment variables that are not set. Names only.                             |
+| `withheldVariables`  | string[]        | optional | Credential variables written as empty values. Names only.                                  |
+| `status`             | McpServerStatus | optional | The active MCP implementation's last known state of a server that an install record lists. |
 
 <!-- /fields -->
 
@@ -761,10 +761,10 @@ A server that a partial install leaves out has `unsupportedFeature` and no state
 
 <!-- fields: companion-requirement -->
 
-| Field path  | Type      | Presence | Meaning                                     |
-| ----------- | --------- | -------- | ------------------------------------------- |
-| `companion` | Companion | required | Companion extension that a component needs. |
-| `missing`   | boolean   | required | Whether the companion was not loaded.       |
+| Field path  | Type      | Presence | Meaning                                                                                                                                              |
+| ----------- | --------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `companion` | Companion | required | Companion extension or MCP implementation that a component needs: `pi-subagents`, `pi-dynamic-workflows`, `mcp`, `pi-mcp-adapter`, or `builtin mcp`. |
+| `missing`   | boolean   | required | Whether the companion was not loaded.                                                                                                                |
 
 <!-- /fields -->
 
@@ -949,6 +949,8 @@ These are native wire values, including spaces and hyphens. They are not the lab
 `Reason`: `up-to-date`, `not found`, `already installed`, `already added`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp-adapter`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`, `unsupported mcp`, `marketplace in local layer only`, `marketplace in base layer only`, `plugin in local layer only`, `plugin in base layer only`, `already installed in base layer`, `already installed in local layer`, `still installed in base layer`, `still installed in local layer`, `disabled in local layer`, `enabled in local layer`, `network error`, `requires mcp`, `requires builtin mcp`.
 
 `McpServerStatus`: `connected`, `cached, connects on first use`, `needs authentication`, `pending approval`, `disabled`, `not connected`, `failed`, `status unknown`, `not loaded`, `overridden by project scope`, `overridden by mcp.json`, `project not trusted`.
+
+The `McpServerStatus` tokens depend on the MCP implementation that Pi runs. pi-mcp-adapter gives `connected`, `cached, connects on first use`, `needs authentication`, `pending approval`, `disabled`, `not connected`, `failed`, `status unknown`, `not loaded`, and `overridden by project scope`. Pi's built-in MCP gives `connected`, `disabled`, `not connected`, `not loaded`, `overridden by mcp.json`, `project not trusted`, and `overridden by project scope`. With no MCP implementation, every server has `status unknown`.
 
 `Companion`: `pi-dynamic-workflows`, `pi-mcp-adapter`, `pi-subagents`, `mcp`, `builtin mcp`.
 
