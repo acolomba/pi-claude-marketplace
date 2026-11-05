@@ -24,9 +24,9 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`.
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). An agent's MCP grants follow the MCP implementation in use. Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`.
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
-- MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
+- MCP servers. Run through Pi's built-in MCP or through [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP implementations](#mcp-implementations) and [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
 
 Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
@@ -37,7 +37,7 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 - [Pi Coding Agent](https://pi.dev) 1.5.0 or newer
 - [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 or a later 7.x release (optional but recommended, `pi install npm:pi-mcp-adapter`).
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 or a later 7.x release (optional, `pi install npm:pi-mcp-adapter`). Pi's built-in MCP runs plugin MCP servers without it.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 or newer (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Usage
@@ -123,13 +123,14 @@ Skills use Pi's `/skill:` form and also have aliases in interactive sessions and
 
 The aliases are the names that Claude Code gives a skill. The skill name is the name of the skill's folder. If the skill's frontmatter sets `name`, the skill also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon.
 
-Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`.
+Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. Pi's built-in MCP registers each server as `plugin_<plugin>_<server>`, with no `_` at the end. Under Pi's built-in MCP, the model sees each `-` of a tool name as `_`, and Pi cuts a tool name that is longer than 64 characters. For more information, see [Name length](docs/mcp-compatibility.md#name-length). `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`. Plugin hooks see the server part of a tool name as Claude Code writes it. For more information, see [Tool name mapping](docs/hooks-compatibility.md#tool-name-mapping).
 
-| Plugin name | `mcpServers` key | Adapter server key  | Tool names                      | Name shown by `info` |
-| ----------- | ---------------- | ------------------- | ------------------------------- | -------------------- |
-| `foo`       | `api`            | `plugin_foo_api_`   | `mcp__plugin_foo_api__<tool>`   | `plugin:foo:api`     |
-| `foo`       | `my.db`          | `plugin_foo_my_db_` | `mcp__plugin_foo_my_db__<tool>` | `plugin:foo:my.db`   |
-| `bar`       | `api`            | `plugin_bar_api_`   | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`     |
+| Plugin name | `mcpServers` key | Adapter server key  | Built-in server name | Tool names                                                                            | Name shown by `info` |
+| ----------- | ---------------- | ------------------- | -------------------- | ------------------------------------------------------------------------------------- | -------------------- |
+| `foo`       | `api`            | `plugin_foo_api_`   | `plugin_foo_api`     | `mcp__plugin_foo_api__<tool>`                                                         | `plugin:foo:api`     |
+| `foo`       | `my.db`          | `plugin_foo_my_db_` | `plugin_foo_my_db`   | `mcp__plugin_foo_my_db__<tool>`                                                       | `plugin:foo:my.db`   |
+| `foo`       | `my-db`          | `plugin_foo_my-db_` | `plugin_foo_my-db`   | `mcp__plugin_foo_my-db__<tool>` (adapter), `mcp__plugin_foo_my_db__<tool>` (built-in) | `plugin:foo:my-db`   |
+| `bar`       | `api`            | `plugin_bar_api_`   | `plugin_bar_api`     | `mcp__plugin_bar_api__<tool>`                                                         | `plugin:bar:api`     |
 
 ### Scoping
 
@@ -141,7 +142,7 @@ You can also install the same plugin in both the user and project scopes. Then t
 
 ### Partially available plugins
 
-Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, an MCP server that uses a feature pi-mcp-adapter cannot run, or an MCP bundle. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
+Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, an MCP server that the MCP implementation Pi runs cannot run (pi-mcp-adapter or Pi's built-in MCP), or an MCP bundle. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
 
 List partially available plugins.
 
@@ -154,6 +155,36 @@ Install a partially available plugin. Put `--partial` first to enable argument c
 ```text
 /claude:plugin install --partial hookify@claude-plugins-official
 ```
+
+### MCP implementations
+
+Pi's built-in MCP runs plugin MCP servers without pi-mcp-adapter. At each start and each `/reload`, this extension registers the servers of your installed plugins with it. It registers project-scope servers only in a project that Pi trusts.
+
+To use plugin MCP servers, turn on Pi's built-in MCP or install pi-mcp-adapter. For the steps, see [Choosing an implementation](docs/mcp-compatibility.md#choosing-an-implementation). Pi's built-in MCP is on unless the `extensions` of your Pi settings hold `-builtin:mcp`, an entry that pi-mcp-adapter adds. You change your Pi settings yourself. This extension never edits them.
+
+When both are loaded, pi-mcp-adapter runs the plugin servers, and this extension registers none with Pi. To switch, change what Pi loads and start Pi again. You do not need a plugin command.
+
+pi-mcp-adapter adds these features to what Pi's built-in MCP does:
+
+- It runs servers of type `sse`. See [Partially available plugins](docs/mcp-compatibility.md#partially-available-plugins).
+- The model can reach plugin tools through its `mcp` tool when Pi's `tool_search` tool is off. See [Tool search](docs/mcp-compatibility.md#tool-search).
+- `/claude:plugin info` shows more server states, such as `pending approval` and `needs authentication`. See [Server status in info](docs/mcp-compatibility.md#server-status-in-info).
+- Your changes to a server entry in `mcp-adapter.json` stay after plugin updates. See [User overrides](docs/mcp-compatibility.md#user-overrides).
+- `/mcp-adapter disable` turns a server off until you turn it on again. Pi's `/mcp` turns a server off for the current session only. See [Tool search and /mcp](docs/mcp-compatibility.md#tool-search-and-mcp).
+- It asks you to approve each project-scope server. See [Project-scope servers](docs/mcp-compatibility.md#project-scope-servers).
+- Tool names keep each `-`, and pi-mcp-adapter does not cut them. See [Name length](docs/mcp-compatibility.md#name-length).
+
+Pi's built-in MCP runs a server with `bareElicitationCapability: true`, and pi-mcp-adapter does not. See [Partially available plugins](docs/mcp-compatibility.md#partially-available-plugins).
+
+When no active MCP implementation can run every server of a plugin, the plugin's row in `/claude:plugin list` and in the install result shows a marker:
+
+| Marker                      | Meaning                                                                            | What you can do                                      |
+| --------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `{requires mcp}`            | No MCP implementation is active, and either one can run the servers of the plugin. | Turn on Pi's built-in MCP or install pi-mcp-adapter. |
+| `{requires pi-mcp-adapter}` | Only pi-mcp-adapter runs every server of the plugin.                               | Install pi-mcp-adapter.                              |
+| `{requires builtin mcp}`    | Only Pi's built-in MCP runs every server of the plugin.                            | Turn on Pi's built-in MCP.                           |
+
+If the active implementation cannot run a server that the other one can run, the plugin shows `{unsupported mcp}` and the marker of the other implementation. A plugin with no MCP server gets no MCP marker. A server that neither implementation can run shows `{unsupported mcp}` and no `requires` marker.
 
 ## Configuration files
 
