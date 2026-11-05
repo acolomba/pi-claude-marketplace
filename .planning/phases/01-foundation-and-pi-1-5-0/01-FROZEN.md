@@ -185,7 +185,6 @@ File `platform/pi-api.ts`:
 ```ts
 export interface SoftDepStatus {
   piSubagentsLoaded: boolean;
-  piMcpAdapterLoaded: boolean; // equals mcpImplementation === "adapter"
   mcpImplementation: ActiveMcpImplementation;
   workflowEngineLoaded: boolean;
 }
@@ -202,6 +201,13 @@ counts: one `getCommands()` and three `getAllTools()` calls. `session_start`
 opens its own notification run for the session steps (P1-DC-23). Nothing
 probes before `session_start`: `test/architecture/no-factory-time-probe.test.ts`
 enforces it.
+
+Amended by mcp-builtin Phase 6 (2026-11-04): `SoftDepStatus` has three
+members, `piSubagentsLoaded`, `mcpImplementation`, and `workflowEngineLoaded`.
+Phase 6 removed the derived boolean for the adapter, which no production code
+read, and the code block above now shows the interface as it is (D-P6-09).
+The adapter probe still runs, because `mcpImplementation` needs it, so the
+probe order and counts do not change.
 
 ### 3. The record field and its only reader
 
@@ -230,16 +236,19 @@ export async function recordedMcpServers(
   record: PluginInstallRecord,
   reader: LegacyServersReader,
 ): Promise<RecordedMcpServers>;
-export interface LegacyServersSource {
-  readonly marketplaceName: string;
-  readonly marketplace: Pick<ExtensionState["marketplaces"][string], "manifestPath" | "marketplaceRoot" | "source">;
-  readonly pluginName: string;
-}
-export type LegacyServersUnreadableReason =
-  | "not-in-manifest" | "unavailable" | "root-mismatch" | "version-mismatch";
-export class LegacyServersUnreadableError extends Error { /* reason, plugin, marketplace */ }
+export interface LegacyServersSource { readonly marketplaceName: string; readonly marketplace: Pick<ExtensionState["marketplaces"][string], "manifestPath" | "marketplaceRoot" | "source">; readonly pluginName: string; readonly locations: ScopedLocations }
+type LegacyServersUnreadableReason = "not-in-manifest" | "unavailable" | "root-mismatch" | "version-mismatch" | "uncontained"; // module-private
+class LegacyServersUnreadableError extends Error { /* reason, plugin, marketplace */ } // module-private
 export function createLegacyServersReader(source: LegacyServersSource): LegacyServersReader;
 ```
+
+Amended by mcp-builtin Phase 6 (2026-11-04): the code block above shows the
+reader as the combined tree has it. `LegacyServersSource` gained `locations`,
+the scope's `ScopedLocations`, and the reader refuses with the reason
+`uncontained` before it reads any file when the record's plugin root is
+outside its owning clone root (UF-1, NFR-10, D-P6-23). The error class and its
+reason type are module-private now, so the block no longer shows them as
+exports; a caller sees every refusal only as `unreadable` (D-P6-21).
 
 Differences: `mcpBundle` and `compatibilityBasis` are new record fields
 (P1-DC-18), and `compatibilityBasis` sits at the record's top level, not
@@ -256,8 +265,12 @@ Review fixes:
   `replaceCompatibility`, which clears the basis; a writer of the neutral
   verdict sets `compatibilityBasis = "neutral"` after that call. The update
   swap, the update intent mark, the disabled pin refresh, and the AMIG-01
-  dropped-server write use it. An install writes a new record without the
-  basis.
+  dropped-server write use it. An install writes
+  `compatibilityBasis: "neutral"` (D-P3-02).
+  Amended by mcp-builtin Phase 6 (2026-11-04): this sentence replaces the
+  Phase 1 statement about the basis an install writes. Since Phase 3, install
+  stores the neutral verdict, so it writes the neutral basis (D-P3-02, the
+  03-09 parent line).
 - The disabled pin refresh's field list is the exported `DISABLED_PIN_FIELDS`
   in `update-preflight.ts` (version, resolvedSource, resolvedSha,
   resolvedVersion, compatibility, compatibilityBasis, mcpServerConfigs,
@@ -271,6 +284,9 @@ Review fixes:
   release tag.
 - `recordedMcpServers` logs a reader failure to the `mcp` debug channel
   before it answers `unreadable` (WR-03).
+  Amended by mcp-builtin Phase 6 (2026-11-04): the debug line is redacted.
+  `redactAbsolutePaths` cuts each absolute path in the reader's error message
+  to its last segment (UF-4).
 
 ### 4. The resolver's declared servers
 
@@ -306,7 +322,7 @@ export interface AgentGrantsStepInput {
   readonly ctx: ExtensionContext;
   readonly snapshot: NotificationRun;
 }
-export function agentGrantsStep(_input: AgentGrantsStepInput): Promise<void>;
+export async function agentGrantsStep(input: AgentGrantsStepInput, env: SubagentChildEnv = process.env): Promise<void>;
 // session-materialize.ts
 export type McpSessionMaterializer = (pi: ExtensionAPI, ctx: ExtensionContext) => Promise<void>;
 export function createMcpSessionMaterializer(steps: {
@@ -322,6 +338,16 @@ a ready `materializeMcpSession` (P1-DC-30). The materializer runs the
 registration step, then the grants step, each in its own try/catch. `index.ts`
 calls `resyncBuiltinRegistrations({ pi, ctx, snapshot: run })` after
 `loadReconcile`, behind a mode check in its own try/catch (P1-DC-30).
+
+Amended by mcp-builtin Phase 6 (2026-11-04): the grants step now takes a
+second, optional `env` parameter, where it reads the pi-subagents child marker
+(MGRT-02), and the code block above shows its signature as the combined tree
+has it. It can still be assigned to the materializer's one-argument step
+type, and the materializer passes only `input` (P4-DC-14). The unowned
+`createLoadReconcile(reader, applyReconcile, env: SubagentChildEnv = process.env)`
+takes an optional third `env` parameter, and the frozen `index.ts` call does
+not change (P4-DC-08). `SubagentChildEnv` comes from
+`platform/subagent-child.ts`.
 
 ### 6. Pi's MCP registry and the status reader
 
@@ -502,6 +528,12 @@ The one source marker Phase 1 added,
 `features/lib/builtin-mcp-stand-in/extension.ts`, stays: Pi's `--extension`
 loader reads that default, as it does for the registry probe (P1-DC-20).
 
+Amended by mcp-builtin Phase 6 (2026-11-04): Phase 6 removed every entry and
+every export exemption above once the combined tree consumed their exports.
+An export that still had no consumer lost its `export` keyword instead
+(D-P6-08, D-P6-21). `.fallowrc.json` now names only the extension entry point
+`extensions/pi-claude-marketplace/index.ts` and has no `ignoreExports` key.
+
 ## 4. Closed-set entries added and not yet emitted
 
 One commit (`7992ccf`, plan 01-04) appended these entries. No product code
@@ -517,6 +549,13 @@ emits.
   `{"companion":"mcp","missing":true}` (P1-DC-07).
 - Lock counts: Reason 80, McpServerStatus 12. The catalog counters are
   unchanged (324 states, 54652 UTF-8 bytes), because no entry is emitted.
+
+Amended by mcp-builtin Phase 6 (2026-11-04): the combined tree emits all six
+entries, so Phase 6 removed none (D-P6-20). The emitters are the ones that
+`.planning/phases/06-release-docs-and-combined-tree/06-07-SUMMARY.md` records
+under `## Closed-set emitters`: `shared/concerns/soft-dep.ts` for both reasons
+and both companions, and `orchestrators/plugin/info-mcp-status.ts` for both
+statuses. The lock counts stay at Reason 80 and McpServerStatus 12.
 
 ## CI timings
 

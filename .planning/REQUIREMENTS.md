@@ -121,6 +121,7 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 - [x] **DUAL-02**: Each profile's Pi proves which implementation is active, and an architecture test fails when an MCP scenario runs under only one profile without an implementation tag
 - [x] **DUAL-03**: CI runs both profiles within the behavioral job timeouts
 - [ ] **DUAL-04**: A switch scenario installs a plugin and reaches its server under the adapter; after the adapter is removed it shows `{requires mcp}` while built-in MCP is off; after built-in MCP is on it reaches the server under built-in; and after the adapter is added again it reaches the server under the adapter, with no plugin command in between
+  - Reading (D-P6-18): a read-only `/claude:plugin list` between the restarts is not a plugin command in this requirement's sense, because it changes no installation state and uses no network (NFR-5).
 
 ### Documentation and decisions
 
