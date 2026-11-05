@@ -323,7 +323,7 @@ changes their names or shapes.
 - [x] **Phase 3: Read-Time Verdicts** - State, per-server verdicts, markers, and `--partial` consent follow the active implementation, computed at read time from neutral records (completed 2026-11-04)
 - [x] **Phase 4: Agent Grants** - Generated agents carry the active implementation's MCP grant, rewritten at load after a switch and never from a background child (completed 2026-11-04)
 - [x] **Phase 5: Hook Tool Names** - Plugin hooks fire on built-in MCP tool calls with Claude's server segment, and the adapter proxy rule applies only under the adapter (completed 2026-11-04)
-- [ ] **Phase 6: Release Docs and Combined Tree** - The CHANGELOG and READMEs describe built-in MCP support, closed sets are clean, and the combined tree passes under both profiles
+- [x] **Phase 6: Release Docs and Combined Tree** - The CHANGELOG and READMEs describe built-in MCP support, closed sets are clean, and the combined tree passes under both profiles (completed 2026-11-05)
 
 ## Phase Details
 
@@ -524,7 +524,7 @@ Plans:
   3. On the combined tree, `npm run check`, both cucumber profiles, and `npm run test:modules` pass, `npx fallow dupes` reports no unreviewed clone group, and the CI behavioral jobs finish within their timeouts.
   4. Every child's parent lines are applied (PROJECT.md Key Decisions rows, BACKLOG entries), no closed-set entry remains that the combined tree never emits, and the phase dubious-choice logs are merged into the root log for the user's review.
 
-**Plans:** 13/13 plans executed in 5 waves (each wave's plans own disjoint files; the gate runs alone in Wave 4, and the records that read every SUMMARY run alone in Wave 5, after the gate, and change only `.planning/**/*.md`)
+**Plans:** 13/13 plans complete in 5 waves (each wave's plans own disjoint files; the gate runs alone in Wave 4, and the records that read every SUMMARY run alone in Wave 5, after the gate, and change only `.planning/**/*.md`)
 
 Plans:
 **Wave 1**
@@ -561,7 +561,7 @@ Plans:
 | 3. Read-Time Verdicts | 9/9 | Complete    | 2026-11-04 |
 | 4. Agent Grants | 6/6 | Complete    | 2026-11-04 |
 | 5. Hook Tool Names | 4/4 | Complete    | 2026-11-04 |
-| 6. Release Docs and Combined Tree | 13/13 | In Progress | - |
+| 6. Release Docs and Combined Tree | 13/13 | Complete    | 2026-11-05 |
 
 ## Carried Forward
 

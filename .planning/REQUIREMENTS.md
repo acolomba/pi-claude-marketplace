@@ -120,13 +120,13 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 - [x] **DUAL-01**: The cucumber suite has an adapter profile and a built-in profile; every MCP feature runs under both with shared step definitions, and implementation-specific expectations live in their own tagged scenarios
 - [x] **DUAL-02**: Each profile's Pi proves which implementation is active, and an architecture test fails when an MCP scenario runs under only one profile without an implementation tag
 - [x] **DUAL-03**: CI runs both profiles within the behavioral job timeouts
-- [ ] **DUAL-04**: A switch scenario installs a plugin and reaches its server under the adapter; after the adapter is removed it shows `{requires mcp}` while built-in MCP is off; after built-in MCP is on it reaches the server under built-in; and after the adapter is added again it reaches the server under the adapter, with no plugin command in between
+- [x] **DUAL-04**: A switch scenario installs a plugin and reaches its server under the adapter; after the adapter is removed it shows `{requires mcp}` while built-in MCP is off; after built-in MCP is on it reaches the server under built-in; and after the adapter is added again it reaches the server under the adapter, with no plugin command in between
   - Reading (D-P6-18): a read-only `/claude:plugin list` between the restarts is not a plugin command in this requirement's sense, because it changes no installation state and uses no network (NFR-5).
 
 ### Documentation and decisions
 
 - [x] **MDOC-01**: `docs/mcp-compatibility.md` has a built-in column, and each built-in statement cites a scenario or the Pi 1.5.0 source
-- [ ] **MDOC-02**: CHANGELOG, README, `README.es.md`, and `docs/hooks-compatibility.md` describe built-in MCP support, the three `requires` markers, and the naming divergence; the docs say to turn on built-in MCP or install pi-mcp-adapter, and list what the adapter adds
+- [x] **MDOC-02**: CHANGELOG, README, `README.es.md`, and `docs/hooks-compatibility.md` describe built-in MCP support, the three `requires` markers, and the naming divergence; the docs say to turn on built-in MCP or install pi-mcp-adapter, and list what the adapter adds
 - [x] **MDEC-01**: D-MB-01 to D-MB-07 and the defaults above carry IDs in PROJECT.md Key Decisions, and the APL-D1 and Current Milestone text reflect them
 
 ## v2 Requirements
@@ -177,9 +177,9 @@ parent may edit the CHANGELOG, the READMEs, and closed-set entries.
 | DUAL-01 | Phase 1 | Complete |
 | DUAL-02 | Phase 1 | Complete |
 | DUAL-03 | Phase 1 | Complete |
-| DUAL-04 | Phase 6 | Pending |
+| DUAL-04 | Phase 6 | Complete |
 | MDOC-01 | Phase 2 | Complete |
-| MDOC-02 | Phase 6 | Pending |
+| MDOC-02 | Phase 6 | Complete |
 | MDEC-01 | Phase 1 | Complete |
 
 **Coverage:**
