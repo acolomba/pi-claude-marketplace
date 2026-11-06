@@ -1200,7 +1200,7 @@ async function installOnePlannedPlugin(
       // The collapsed `failed` status carries the typed Error directly. Narrow
       // on `instanceof PluginShapeError` plus `.kind` to recover the specific
       // failure class; everything else falls through to the unexpected bucket.
-      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
+      dispatchFailedOutcome(result, plugin, outcome.error, {
         rollbackPartials: outcome.rollbackPartials ?? [],
       });
       return "install-failed";
@@ -1337,7 +1337,7 @@ async function enableOnePlannedPlugin(
     case "failed":
       // AFILE-04: a failed enable can still have rewritten the MCP config.
       result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
-      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
+      dispatchFailedOutcome(result, plugin, outcome.error, {
         rollbackPartials: outcome.rollbackPartials ?? [],
       });
       return "install-failed";
@@ -2312,14 +2312,16 @@ function runtimeFailureReason(
  * `status: "failed"` outcome. `PluginShapeError.kind === "already-installed"`
  * and `ConcurrentInstallError` both route to the skip bucket;
  * `not-in-manifest` and `(no-)not-installable` route to the
- * unavailable / uninstallable warnings, carrying the caller's pre-formatted
- * `cause` text verbatim (`ImportWarningOutcome.cause` has no rendered
- * cause-chain slot, so there is nothing to double-render there); a
- * `DependencyCascadeError` (RESV-06) routes to `unexpectedPluginFailures`
- * with `reason: "dependency-failed"`; everything else lands there with
- * `reason: "unexpected-failure"`. Both `unexpectedPluginFailures` pushes go
- * through `pushUnexpectedFailure`, which derives its head and cause chain
- * from `error` directly rather than from the pre-formatted `cause` string.
+ * unavailable / uninstallable warnings. IMPORTCAUSE-01: each warning builds
+ * its cause once from the typed `PluginShapeError`. The not-in-manifest
+ * warning uses the message the constructor wrote. The uninstallable warning
+ * uses install's not-installable wording over the reasons IMP-08 narrows.
+ * The warning cause has no rendered slot (D-15-01), so it never reaches a
+ * row. A `StateLockHeldError` (IMP-07) routes to `unexpectedPluginFailures`
+ * with `reason: "lock-held"`; a `DependencyCascadeError` (RESV-06) routes
+ * there with `reason: "dependency-failed"`; everything else lands there with
+ * `reason: "unexpected-failure"`. Both of the last two pushes go through
+ * `pushUnexpectedFailure`, which builds its head and cause chain from `error`.
  *
  * Mirrors the instanceof ladder in
  * `orchestrators/reconcile/apply-outcomes.ts::classifyOrchestratorThrow`,
@@ -2329,7 +2331,6 @@ function dispatchFailedOutcome(
   result: MutableImportResult,
   plugin: PlannedPluginImport,
   error: Error,
-  cause: string,
   options: { readonly rollbackPartials: readonly RollbackPartial[] },
 ): void {
   if (error instanceof DependencyCascadeError) {
@@ -2365,7 +2366,7 @@ function dispatchFailedOutcome(
         pushAlreadyInstalled(result, plugin);
         return;
       case "not-in-manifest":
-        pushPluginWarning(result, plugin, "unavailable", cause);
+        pushPluginWarning(result, plugin, "unavailable", error.message);
         return;
       case "not-installable":
       case "no-longer-installable": {

@@ -880,8 +880,8 @@ export type InstallPluginOutcome =
        * `unavailable`, `uninstallable`, `unexpected-failure`) map here.
        * `error` is the typed dispatch surface -- consumers narrow on
        * `instanceof PluginShapeError` and `.shape.kind` to recover the
-       * specific failure class. `cause` preserves the formatted user-visible
-       * text for callers in orchestrated mode that render it directly.
+       * specific failure class. `cause` is `error` as text: its message
+       * followed by its cause chain, as `formatOrchestratedCause` writes it.
        */
       readonly status: "failed";
       readonly error: Error;

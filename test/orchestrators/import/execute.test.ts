@@ -1904,25 +1904,24 @@ function uninstallable(cause: string, reasons: readonly ContentReason[]): Warnin
   };
 }
 
+/** The message of install's not-in-manifest error for `target@mp`. */
+const TARGET_NOT_IN_MANIFEST = 'Plugin "target" not found in marketplace "mp".';
+
 // A typed install failure the dispatcher recognises as unavailable or
 // uninstallable becomes a warning row. IMP-08: an uninstallable plugin carries
-// the reasons `install` narrows from the same resolver verdict. The fault sits
+// the reasons `install` narrows from the same resolver verdict.
+// IMPORTCAUSE-01: each stubbed install cause differs from the expected warning
+// cause, so a warning that copies install's text fails. The fault sits
 // in the MIDDLE of a three-plugin batch, so the plugin installed before it
 // keeps its outcome and the plugin after it is still attempted.
 for (const { cause, error, token, title, warning } of [
   {
-    cause: 'Plugin "target" not found in marketplace "mp".',
+    cause: `${TARGET_NOT_IN_MANIFEST}\n\ncause: ${TARGET_NOT_IN_MANIFEST}`,
     error: (): Error =>
       new PluginShapeError({ kind: "not-in-manifest", marketplace: "mp", plugin: "target" }),
     token: "not in manifest",
     title: "the plugin is absent from the manifest",
-    warning: warned(
-      "target",
-      "mp",
-      "project",
-      "unavailable",
-      'Plugin "target" not found in marketplace "mp".',
-    ),
+    warning: warned("target", "mp", "project", "unavailable", TARGET_NOT_IN_MANIFEST),
   },
   {
     cause: "unsupported hooks: PreToolUse",
@@ -6157,7 +6156,15 @@ test("IMP-05: an enable that fails or finds the plugin enabled is reported, not 
         cause: lockError.message,
       },
     ],
-    warnings: [warned("gone", "mp", "project", "unavailable", "gone is not in the manifest")],
+    warnings: [
+      warned(
+        "gone",
+        "mp",
+        "project",
+        "unavailable",
+        'Plugin "gone" not found in marketplace "mp".',
+      ),
+    ],
   });
   assert.deepStrictEqual(notifications[0], {
     message:
