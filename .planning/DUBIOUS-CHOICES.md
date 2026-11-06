@@ -45,6 +45,7 @@ The log of the previous milestone is archived, unchanged, at
 - **Pending rows, batch 1:** D-MB-09, D-MB-10, D-MB-12, D-MB-13, D-MB-15, D-MB-16, D-MB-17, and D-MB-18 are Locked.
 - **Pending rows, batch 2:** D-MB-20 to D-MB-28 are Locked. DENYPIN-01 (re-pin the deny-lists to 2.1.318) stays in BACKLOG.
 - **Pending rows, batch 3:** D-P3-01/02, D-P3-11/13, D-P3-12, and D-P5-06/07 are Locked. No mcp-builtin Key Decisions row is Pending.
+- **Audit tech debt:** as proposed. **Fix, queued:** W1 (`info-mcp-status.ts` reads servers through `recordedMcpServers`); P6-SEC-02 (`recordedMcpServers` checks clone-root containment); P3-DC-111 (the harness waits for pi-mcp-adapter's tool listing); IN-02 (Key Decisions rows for D-P6-18, D-P6-22, P2-DC-53, P2-DC-77), IN-04 (CHANGELOG names every completion change), IN-08 (stale comments on the unreached disabled branch); `01-FROZEN.md` interface 3 text. **Draft only:** an upstream report for Pi 1.5.0's double `session_start` on RPC `new_session` (P6-DC-0503), for the user to send. **Leave in BACKLOG:** IN-01, IN-05, IN-06, IN-07, IN-09; P3-DC-122; the `isPluginRootContained` catch-all; a double-registration test; the `PI_SUBAGENT_CHILD` name dependency.
 
 ## Decisions waiting on you
 
