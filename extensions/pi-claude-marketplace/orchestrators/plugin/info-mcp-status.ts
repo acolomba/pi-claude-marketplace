@@ -28,11 +28,13 @@
 //
 // Under `builtin` (D-MB-13) the lookup key is the registered built-in name,
 // `profileFor("builtin").serverName(plugin, server)`, which has no trailing
-// `_`, and the stamped servers are the names in the record's
-// `mcpServerConfigs`: every server the registration step reads, the ones the
-// adapter blocks included. A record that predates that key falls back to
-// `resources.mcpServers`, because the call is synchronous and the
-// asynchronous legacy reader is out of reach.
+// `_`, and the stamped servers are the record's servers as
+// `recordedMcpServers` reads them for the registration step, the ones the
+// adapter blocks included. Info hands in that read as a port. For a record
+// that predates `mcpServerConfigs`, they are the servers the legacy reader
+// re-resolves (MREC-02). When the read answers `unreadable`, the step
+// registers none of them, and the stamped servers are the ones install wrote,
+// `resources.mcpServers`.
 //
 // BLT-05: under `builtin` the stamps run in a fixed order. A project row
 // reads `project not trusted` while Pi does not trust the project (D-MB-09).
@@ -60,6 +62,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { builtinServerOwner } from "../../platform/mcp-builtin-status.ts";
 
+import type { RecordedMcpServers } from "../../domain/mcp-implementation.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type {
   McpServerRuntimeStatus,
@@ -146,8 +149,13 @@ function stampAdapterEntries(
 }
 
 // MREC-02: the servers a record lists for Pi's built-in MCP, by declared name.
-function builtinRecordedServers(record: PluginInstallRecord): readonly string[] {
-  return record.mcpServerConfigs?.map(({ name }) => name) ?? record.resources.mcpServers;
+function builtinRecordedServers(
+  record: PluginInstallRecord,
+  recorded: RecordedMcpServers,
+): readonly string[] {
+  return recorded.kind === "unreadable"
+    ? record.resources.mcpServers
+    : recorded.servers.map(({ name }) => name);
 }
 
 // D-MB-09: Pi reads the project's `mcp.json` only while it trusts the project.
@@ -197,14 +205,15 @@ function builtinStatus(
   return ownedElsewhere(block, name) ?? statusToken(reader.lookup(name));
 }
 
-function stampBuiltinEntries(
+async function stampBuiltinEntries(
   block: PluginInfoMessage,
   entries: readonly McpServerSummaryEntry[],
   record: PluginInstallRecord,
   lookup: McpStatusLookup,
-): McpServerSummaryEntry[] {
+  readServers: (record: PluginInstallRecord) => Promise<RecordedMcpServers>,
+): Promise<McpServerSummaryEntry[]> {
   const plugin = block.plugin.name;
-  const recorded = builtinRecordedServers(record);
+  const recorded = builtinRecordedServers(record, await readServers(record));
   // D-MB-09: the extension registers no project server while Pi does not
   // trust the project, so a project row reads `project not trusted` first.
   if (block.marketplaceScope === "project" && !lookup.projectTrusted) {
@@ -224,15 +233,18 @@ function stampBuiltinEntries(
  * stamped. `projectRecord` is the same plugin's installation record in the
  * project scope; under pi-mcp-adapter it decides which servers of a user row
  * the project entry overrides. Under Pi's built-in MCP the registration
- * step's own decision does. The input is never mutated, and the row status, reasons and
+ * step's own decision does. `readServers` reads one record's MCP servers as
+ * the registration step reads them (MREC-02); it is called only under Pi's
+ * built-in MCP. The input is never mutated, and the row status, reasons and
  * severity are left as they are.
  */
-export function withMcpServerStatus(
+export async function withMcpServerStatus(
   block: PluginInfoMessage,
   record: PluginInstallRecord | undefined,
   lookup: McpStatusLookup,
   projectRecord: PluginInstallRecord | undefined,
-): PluginInfoMessage {
+  readServers: (record: PluginInstallRecord) => Promise<RecordedMcpServers>,
+): Promise<PluginInfoMessage> {
   const plugin = block.plugin;
   const stampable = plugin.status === "installed" || plugin.status === "partially-installed";
   if (!stampable || !plugin.componentsResolved || record === undefined) {
@@ -246,7 +258,7 @@ export function withMcpServerStatus(
 
   const mcp =
     lookup.implementation === "builtin"
-      ? stampBuiltinEntries(block, entries, record, lookup)
+      ? await stampBuiltinEntries(block, entries, record, lookup, readServers)
       : stampAdapterEntries(block, entries, record, lookup, projectRecord);
   return { ...block, plugin: { ...plugin, components: { ...plugin.components, mcp } } };
 }

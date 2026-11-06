@@ -107,6 +107,7 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { crossScopeFlag, marketplaceNotAddedMessage } from "../marketplace/shared.ts";
+import { createLegacyServersReader, recordedMcpServers } from "../mcp/recorded-servers.ts";
 import { collectMarketplaceRecordsByScope, type ScopedMarketplaceRecord } from "../scope-fanout.ts";
 
 import {
@@ -3331,14 +3332,17 @@ function withCompanionRequirements(built: InfoBlock, softDeps: SoftDepStatus): I
  * the built-in one only under `builtin`; under `adapter` and `none` it is
  * pi-mcp-adapter's, so with no adapter loaded every row reads
  * `status unknown`. The lookup carries the project's trust and cwd for the
- * built-in statuses (BLT-05).
+ * built-in statuses (BLT-05). MREC-02: under `builtin` the servers come from
+ * the record as the registration step reads them, through
+ * `recordedMcpServers` and the legacy reader of the block's own marketplace
+ * and scope, so info stamps exactly the servers the step registers.
  */
-function withServerStatus(
+async function withServerStatus(
   built: InfoBlock,
-  record: PluginInstallRecord | undefined,
+  scoped: ScopedMarketplaceRecord,
   opts: GetPluginInfoOptions,
   projectRecord: PluginInstallRecord | undefined,
-): InfoBlock {
+): Promise<InfoBlock> {
   const implementation = opts.run.softDeps.mcpImplementation;
   const lookup: McpStatusLookup = {
     reader: implementation === "builtin" ? opts.mcpStatus.builtin : opts.mcpStatus.adapter,
@@ -3346,7 +3350,20 @@ function withServerStatus(
     projectTrusted: opts.projectTrusted,
     cwd: opts.cwd,
   };
-  return { ...built, block: withMcpServerStatus(built.block, record, lookup, projectRecord) };
+  const legacySource = {
+    marketplaceName: opts.marketplace,
+    marketplace: scoped.record,
+    pluginName: opts.plugin,
+    locations: locationsFor(scoped.scope, opts.cwd),
+  };
+  const block = await withMcpServerStatus(
+    built.block,
+    ownValue(scoped.record.plugins, opts.plugin),
+    lookup,
+    projectRecord,
+    (record) => recordedMcpServers(record, legacySource, createLegacyServersReader),
+  );
+  return { ...built, block };
 }
 
 /**
@@ -3461,9 +3478,9 @@ async function getPluginInfoWithReader(
       mcpImplementation: opts.run.softDeps.mcpImplementation,
       ...(fetchCtx !== undefined && { fetchCtx }),
     });
-    const built = withServerStatus(
+    const built = await withServerStatus(
       withCompanionRequirements(soleBlock, opts.run.softDeps),
-      ownValue(sole.record.plugins, opts.plugin),
+      sole,
       opts,
       projectRecord,
     );
@@ -3504,7 +3521,7 @@ async function getPluginInfoWithReader(
       });
       return withServerStatus(
         withCompanionRequirements(scopeBlock, opts.run.softDeps),
-        ownValue(f.record.plugins, opts.plugin),
+        f,
         opts,
         projectRecord,
       );

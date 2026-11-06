@@ -9,6 +9,7 @@ import { withMcpServerStatus } from "../../../extensions/pi-claude-marketplace/o
 import { noteBuiltinServerOwners } from "../../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
+import type { RecordedMcpServers } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   McpStatusLookup,
@@ -79,6 +80,12 @@ function answering(answer: ReturnType<McpStatusReader["lookup"]>): McpStatusLook
   return lookupThrough({ lookup: () => answer } satisfies McpStatusReader);
 }
 
+/** The port that reads one record's MCP servers for the built-in stamp. */
+type ServersPort = Parameters<typeof withMcpServerStatus>[4];
+
+/** MSEL-01: the port for the adapter and `none` cases, whose stamp never reads it. */
+const notRead: ServersPort = () => Promise.resolve<RecordedMcpServers>({ kind: "unreadable" });
+
 for (const { answer, token } of [
   { answer: "connected", token: "connected" },
   { answer: "cached", token: "cached, connects on first use" },
@@ -94,16 +101,17 @@ for (const { answer, token } of [
   answer: ReturnType<McpStatusReader["lookup"]>;
   token: McpServerStatus;
 }[]) {
-  test(`ASTAT-01: an installed row's recorded server answering ${answer} reads ${token}`, () => {
+  test(`ASTAT-01: an installed row's recorded server answering ${answer} reads ${token}`, async () => {
     // arrange
     const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
     // act
-    const stamped = withMcpServerStatus(
+    const stamped = await withMcpServerStatus(
       block,
       installRecord(["api"]),
       answering(answer),
       undefined,
+      notRead,
     );
 
     // assert
@@ -114,16 +122,17 @@ for (const { answer, token } of [
   });
 }
 
-test("ASTAT-01: a partially-installed row's recorded server is stamped", () => {
+test("ASTAT-01: a partially-installed row's recorded server is stamped", async () => {
   // arrange
   const block = infoBlock("partially-installed", [{ name: "plugin:alpha:api" }]);
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
     installRecord(["api"]),
     answering("cached"),
     undefined,
+    notRead,
   );
 
   // assert
@@ -143,16 +152,17 @@ for (const status of [
   "unavailable",
   "failed",
 ] as const) {
-  test(`ASTAT-01: a ${status} row gets no server state`, () => {
+  test(`ASTAT-01: a ${status} row gets no server state`, async () => {
     // arrange
     const block = infoBlock(status, [{ name: "plugin:alpha:api" }]);
 
     // act
-    const stamped = withMcpServerStatus(
+    const stamped = await withMcpServerStatus(
       block,
       installRecord(["api"]),
       answering("connected"),
       undefined,
+      notRead,
     );
 
     // assert
@@ -160,7 +170,7 @@ for (const status of [
   });
 }
 
-test("ASTAT-01: an installed row with unresolved components is left as it is", () => {
+test("ASTAT-01: an installed row with unresolved components is left as it is", async () => {
   // arrange
   const block: PluginInfoMessage = {
     kind: "plugin-info",
@@ -171,11 +181,12 @@ test("ASTAT-01: an installed row with unresolved components is left as it is", (
   };
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
     installRecord(["api"]),
     answering("connected"),
     undefined,
+    notRead,
   );
 
   // assert
@@ -188,34 +199,41 @@ test("ASTAT-01: an installed row with unresolved components is left as it is", (
   });
 });
 
-test("ASTAT-01: an installed row without an installation record is left as it is", () => {
+test("ASTAT-01: an installed row without an installation record is left as it is", async () => {
   // arrange
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
   // act
-  const stamped = withMcpServerStatus(block, undefined, answering("connected"), undefined);
+  const stamped = await withMcpServerStatus(
+    block,
+    undefined,
+    answering("connected"),
+    undefined,
+    notRead,
+  );
 
   // assert
   assert.deepStrictEqual(stamped, infoBlock("installed", [{ name: "plugin:alpha:api" }]));
 });
 
-test("ASTAT-01: an installed row without an mcp list is left as it is", () => {
+test("ASTAT-01: an installed row without an mcp list is left as it is", async () => {
   // arrange
   const block = infoBlock("installed", undefined);
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
     installRecord(["api"]),
     answering("connected"),
     undefined,
+    notRead,
   );
 
   // assert
   assert.deepStrictEqual(stamped, infoBlock("installed", undefined));
 });
 
-test("ASTAT-01: a left-out server keeps only its unsupported feature and an unrecorded server gets no state", () => {
+test("ASTAT-01: a left-out server keeps only its unsupported feature and an unrecorded server gets no state", async () => {
   // arrange
   const block = infoBlock("partially-installed", [
     { name: "plugin:alpha:api" },
@@ -224,11 +242,12 @@ test("ASTAT-01: a left-out server keeps only its unsupported feature and an unre
   ]);
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
     installRecord(["api", "live"]),
     answering("failed"),
     undefined,
+    notRead,
   );
 
   // assert
@@ -243,7 +262,7 @@ test("ASTAT-01: a left-out server keeps only its unsupported feature and an unre
 });
 
 for (const implementation of ["adapter", "none"] as const) {
-  test(`ANAME-01 / ASTAT-01 / MSEL-01: under ${implementation} the lookup's reader is asked for the recorded server's generated adapter key`, () => {
+  test(`ANAME-01 / ASTAT-01 / MSEL-01: under ${implementation} the lookup's reader is asked for the recorded server's generated adapter key`, async () => {
     // arrange
     const reader = mock<McpStatusReader>({ exactParams: true, name: "mcp status" });
     when(() => reader.lookup("plugin_alpha_my_api_"))
@@ -252,11 +271,12 @@ for (const implementation of ["adapter", "none"] as const) {
     const block = infoBlock("installed", [{ name: "plugin:alpha:my.api" }]);
 
     // act
-    const stamped = withMcpServerStatus(
+    const stamped = await withMcpServerStatus(
       block,
       installRecord(["my.api"]),
       lookupThrough(reader, implementation),
       undefined,
+      notRead,
     );
 
     // assert
@@ -268,7 +288,7 @@ for (const implementation of ["adapter", "none"] as const) {
   });
 }
 
-test("ASTAT-01: stamping keeps the entry order and the unset and withheld lists, and leaves its input alone", () => {
+test("ASTAT-01: stamping keeps the entry order and the unset and withheld lists, and leaves its input alone", async () => {
   // arrange
   const entries = (): McpServerSummaryEntry[] => [
     { name: "plugin:alpha:zeta", unsetVariables: ["ZETA_TOKEN"] },
@@ -277,11 +297,12 @@ test("ASTAT-01: stamping keeps the entry order and the unset and withheld lists,
   const block = infoBlock("installed", entries());
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
     installRecord(["beta", "zeta"]),
     answering("needs-auth"),
     undefined,
+    notRead,
   );
 
   // assert
@@ -318,16 +339,17 @@ for (const { answer, token } of [
   answer: ReturnType<McpStatusReader["lookup"]>;
   token: McpServerStatus;
 }[]) {
-  test(`ASTAT-01: a user row's server the enabled project record lists, answering ${answer}, reads ${token}`, () => {
+  test(`ASTAT-01: a user row's server the enabled project record lists, answering ${answer}, reads ${token}`, async () => {
     // arrange
     const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
     // act
-    const stamped = withMcpServerStatus(
+    const stamped = await withMcpServerStatus(
       block,
       installRecord(["api"]),
       answering(answer),
       installRecord(["api"]),
+      notRead,
     );
 
     // assert
@@ -338,16 +360,17 @@ for (const { answer, token } of [
   });
 }
 
-test("ASTAT-01: a project row is never overridden by its own project record", () => {
+test("ASTAT-01: a project row is never overridden by its own project record", async () => {
   // arrange
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }], "project");
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
     installRecord(["api"]),
     answering("connected"),
     installRecord(["api"]),
+    notRead,
   );
 
   // assert
@@ -368,16 +391,17 @@ for (const { label, projectRecord } of [
   label: string;
   projectRecord: PluginInstallRecord | undefined;
 }[]) {
-  test(`ENBL-08 / ASTAT-01: with ${label} the user row's server keeps the snapshot's state`, () => {
+  test(`ENBL-08 / ASTAT-01: with ${label} the user row's server keeps the snapshot's state`, async () => {
     // arrange
     const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
     // act
-    const stamped = withMcpServerStatus(
+    const stamped = await withMcpServerStatus(
       block,
       installRecord(["api"]),
       answering("failed"),
       projectRecord,
+      notRead,
     );
 
     // assert
@@ -388,16 +412,17 @@ for (const { label, projectRecord } of [
   });
 }
 
-test("ASTAT-01: only the user row's server the project record lists reads overridden by project scope", () => {
+test("ASTAT-01: only the user row's server the project record lists reads overridden by project scope", async () => {
   // arrange
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }, { name: "plugin:alpha:db" }]);
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
     installRecord(["api", "db"]),
     answering("connected"),
     installRecord(["api"]),
+    notRead,
   );
 
   // assert
@@ -420,6 +445,16 @@ function serverConfigs(
 /** An enabled install record for `alpha` whose `mcpServerConfigs` lists `servers`. */
 function builtinRecord(servers: readonly string[]): PluginInstallRecord {
   return { ...installRecord([]), mcpServerConfigs: serverConfigs(servers) };
+}
+
+/** MREC-02: a recorded-servers port that answers `servers` as the record's own. */
+function recording(servers: readonly string[]): ServersPort {
+  return () =>
+    Promise.resolve<RecordedMcpServers>({
+      kind: "recorded",
+      servers: serverConfigs(servers),
+      bundle: false,
+    });
 }
 
 function answeringReader(answer: ReturnType<McpStatusReader["lookup"]>): McpStatusReader {
@@ -458,7 +493,13 @@ test("D-MB-13 / MSEL-01: under builtin the lookup's reader is asked for the reco
   const block = infoBlock("installed", [{ name: "plugin:alpha:my.api" }]);
 
   // act
-  const stamped = withMcpServerStatus(block, installRecord(["my.api"]), lookup, undefined);
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord([]),
+    lookup,
+    undefined,
+    recording(["my.api"]),
+  );
 
   // assert
   assert.deepStrictEqual(
@@ -483,7 +524,13 @@ for (const { answer, token } of [
     const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
     // act
-    const stamped = withMcpServerStatus(block, installRecord(["api"]), lookup, undefined);
+    const stamped = await withMcpServerStatus(
+      block,
+      installRecord([]),
+      lookup,
+      undefined,
+      recording(["api"]),
+    );
 
     // assert
     assert.deepStrictEqual(
@@ -493,7 +540,7 @@ for (const { answer, token } of [
   });
 }
 
-test("BLT-05: under builtin every server the record's mcpServerConfigs names is stamped, the ones the adapter blocks included", async (t) => {
+test("BLT-05: under builtin every server the record's servers read names is stamped, the ones the adapter blocks included", async (t) => {
   // arrange
   const { lookup } = await builtinLookup(t, answeringReader("connected"));
   const block = infoBlock("partially-installed", [
@@ -502,13 +549,15 @@ test("BLT-05: under builtin every server the record's mcpServerConfigs names is 
     { name: "plugin:alpha:extra" },
     { name: "plugin:alpha:live", unsupportedFeature: "ws" },
   ]);
-  const record = {
-    ...installRecord(["api"]),
-    mcpServerConfigs: serverConfigs(["api", "elicit", "live"]),
-  };
 
   // act
-  const stamped = withMcpServerStatus(block, record, lookup, undefined);
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord(["api"]),
+    lookup,
+    undefined,
+    recording(["api", "elicit", "live"]),
+  );
 
   // assert
   assert.deepStrictEqual(
@@ -522,13 +571,56 @@ test("BLT-05: under builtin every server the record's mcpServerConfigs names is 
   );
 });
 
-test("MREC-02: under builtin a record without mcpServerConfigs stamps the servers it wrote", async (t) => {
+test("MREC-02: under builtin each server the record's servers read names is stamped, one install did not write included", async (t) => {
+  // arrange
+  const { lookup } = await builtinLookup(t, answeringReader("connected"));
+  const block = infoBlock("installed", [
+    { name: "plugin:alpha:api" },
+    { name: "plugin:alpha:elicit" },
+    { name: "plugin:alpha:extra" },
+  ]);
+  const readServers = (() =>
+    Promise.resolve<RecordedMcpServers>({
+      kind: "re-resolved",
+      servers: serverConfigs(["api", "elicit"]),
+      bundle: false,
+    })) satisfies ServersPort;
+
+  // act
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord(["api"]),
+    lookup,
+    undefined,
+    readServers,
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    stamped,
+    infoBlock("installed", [
+      { name: "plugin:alpha:api", status: "connected" },
+      { name: "plugin:alpha:elicit", status: "connected" },
+      { name: "plugin:alpha:extra" },
+    ]),
+  );
+});
+
+test("MREC-02: under builtin, when the record's servers cannot be read, the servers install wrote are stamped", async (t) => {
   // arrange
   const { lookup } = await builtinLookup(t, answeringReader("not-connected"));
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }, { name: "plugin:alpha:db" }]);
+  const readServers = (() =>
+    Promise.resolve<RecordedMcpServers>({ kind: "unreadable" })) satisfies ServersPort;
 
   // act
-  const stamped = withMcpServerStatus(block, installRecord(["db"]), lookup, undefined);
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord(["db"]),
+    lookup,
+    undefined,
+    readServers,
+  );
 
   // assert
   assert.deepStrictEqual(
@@ -539,6 +631,62 @@ test("MREC-02: under builtin a record without mcpServerConfigs stamps the server
     ]),
   );
 });
+
+test("MREC-02: under builtin the servers are read from the row's own record", async (t) => {
+  // arrange
+  const record = installRecord(["api"]);
+  const readServers = mock<ServersPort>({ exactParams: true, name: "recorded servers" });
+  when(() => readServers(record))
+    .thenResolve({ kind: "recorded", servers: serverConfigs(["api"]), bundle: false })
+    .times(1);
+  const { lookup } = await builtinLookup(t, answeringReader("failed"));
+  const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
+
+  // act
+  const stamped = await withMcpServerStatus(
+    block,
+    record,
+    lookup,
+    builtinRecord(["api", "db"]),
+    readServers,
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    stamped,
+    infoBlock("installed", [{ name: "plugin:alpha:api", status: "failed" }]),
+  );
+  verify(readServers);
+});
+
+for (const implementation of ["adapter", "none"] as const) {
+  test(`MSEL-01: under ${implementation} the record's servers are not read for the stamp`, async () => {
+    // arrange
+    const readServers = mock<ServersPort>({ exactParams: true, name: "recorded servers" });
+    const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
+    const reader = mock<McpStatusReader>({ exactParams: true, name: "mcp status" });
+    when(() => reader.lookup("plugin_alpha_api_"))
+      .thenReturn("disabled")
+      .times(1);
+
+    // act
+    const stamped = await withMcpServerStatus(
+      block,
+      installRecord(["api"]),
+      lookupThrough(reader, implementation),
+      undefined,
+      readServers,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      stamped,
+      infoBlock("installed", [{ name: "plugin:alpha:api", status: "disabled" }]),
+    );
+    verify(reader);
+    verify(readServers);
+  });
+}
 
 test("BLT-04 / T-02-19: under builtin a server the user's mcp.json configures under its folded name reads overridden by mcp.json, without asking the reader", async (t) => {
   // arrange
@@ -554,7 +702,13 @@ test("BLT-04 / T-02-19: under builtin a server the user's mcp.json configures un
   ]);
 
   // act
-  const stamped = withMcpServerStatus(block, builtinRecord(["my-api", "db"]), lookup, undefined);
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord([]),
+    lookup,
+    undefined,
+    recording(["my-api", "db"]),
+  );
 
   // assert
   assert.deepStrictEqual(
@@ -576,7 +730,13 @@ test("BLT-04 / D-MB-09: under builtin a server the trusted project's mcp.json co
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
   // act
-  const stamped = withMcpServerStatus(block, builtinRecord(["api"]), lookup, undefined);
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord([]),
+    lookup,
+    undefined,
+    recording(["api"]),
+  );
 
   // assert
   assert.deepStrictEqual(
@@ -592,7 +752,13 @@ test("D-MB-09 / T-02-17: under builtin the mcp.json of a project Pi does not tru
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
   // act
-  const stamped = withMcpServerStatus(block, builtinRecord(["api"]), lookup, undefined);
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord([]),
+    lookup,
+    undefined,
+    recording(["api"]),
+  );
 
   // assert
   assert.deepStrictEqual(
@@ -608,7 +774,13 @@ test("T-02-18: under builtin an unreadable user mcp.json reads as no override", 
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
   // act
-  const stamped = withMcpServerStatus(block, builtinRecord(["api"]), lookup, undefined);
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord([]),
+    lookup,
+    undefined,
+    recording(["api"]),
+  );
 
   // assert
   assert.deepStrictEqual(
@@ -629,7 +801,13 @@ test("D-MB-09: under builtin a project row reads project not trusted while Pi do
   );
 
   // act
-  const stamped = withMcpServerStatus(block, builtinRecord(["api", "db"]), lookup, undefined);
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord([]),
+    lookup,
+    undefined,
+    recording(["api", "db"]),
+  );
 
   // assert
   assert.deepStrictEqual(
@@ -672,11 +850,12 @@ test("BLT-05: under builtin a trusted project row whose record owns the name rea
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }], "project");
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
-    builtinRecord(["api"]),
+    installRecord([]),
     lookup,
     builtinRecord(["api"]),
+    recording(["api"]),
   );
 
   // assert
@@ -700,11 +879,12 @@ test("ASTAT-01 / P2-DC-14: under builtin only the user row's server that a proje
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }, { name: "plugin:alpha:db" }]);
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
-    builtinRecord(["api", "db"]),
+    installRecord([]),
     lookup,
     builtinRecord(["api"]),
+    recording(["api", "db"]),
   );
 
   // assert
@@ -757,7 +937,13 @@ for (const { label, owner, scope, token } of [
     const block = infoBlock("installed", [{ name: "plugin:alpha:api" }], scope);
 
     // act
-    const stamped = withMcpServerStatus(block, builtinRecord(["api"]), lookup, undefined);
+    const stamped = await withMcpServerStatus(
+      block,
+      installRecord([]),
+      lookup,
+      undefined,
+      recording(["api"]),
+    );
 
     // assert
     assert.deepStrictEqual(
@@ -775,11 +961,12 @@ test("P2-DC-14: under builtin a server the trusted project record lists but the 
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
-    builtinRecord(["api"]),
+    installRecord([]),
     lookup,
     builtinRecord(["api"]),
+    recording(["api"]),
   );
 
   // assert
@@ -797,11 +984,12 @@ test("BLT-05: under builtin an mcp.json override comes before a project override
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
   // act
-  const stamped = withMcpServerStatus(
+  const stamped = await withMcpServerStatus(
     block,
-    builtinRecord(["api"]),
+    installRecord([]),
     lookup,
     builtinRecord(["api"]),
+    recording(["api"]),
   );
 
   // assert
@@ -839,7 +1027,13 @@ for (const { label, projectRecord, projectTrusted } of [
     const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
     // act
-    const stamped = withMcpServerStatus(block, builtinRecord(["api"]), lookup, projectRecord);
+    const stamped = await withMcpServerStatus(
+      block,
+      installRecord([]),
+      lookup,
+      projectRecord,
+      recording(["api"]),
+    );
 
     // assert
     assert.deepStrictEqual(

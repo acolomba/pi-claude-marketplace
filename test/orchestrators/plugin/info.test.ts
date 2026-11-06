@@ -11094,6 +11094,66 @@ for (const { implementation, statusLine, mcpLine, requiresLine } of [
   });
 }
 
+test("MREC-02 / BLT-05: under builtin info stamps a server of an earlier record that the legacy reader re-resolves", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const scopeRoot = path.join(home, ".pi", "agent");
+    const pluginRoot = path.join(scopeRoot, "marketplaces", "mp", "alpha");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }] },
+      installed: {
+        alpha: {
+          version: "1.0.0",
+          resolvedSource: pluginRoot,
+          resources: { skills: [], mcpServers: [] },
+        },
+      },
+      installablePluginDirs: ["alpha"],
+    });
+    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "alpha",
+        mcpServers: { ask: { command: "ask-server", bareElicitationCapability: true } },
+      }),
+      "utf8",
+    );
+    const mcpStatus = statusReaders({
+      builtin: statusSnapshot([{ name: "plugin_alpha_ask", status: "not-connected" }]),
+    });
+    const { ctx, run, notifications } = makeCtx(1, IMPLEMENTATION_INVENTORY.builtin);
+
+    // act
+    await getPluginInfo({
+      ctx,
+      run,
+      mcpStatus,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.strictEqual(run.softDeps.mcpImplementation, "builtin");
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed)",
+          "    mcp: plugin:alpha:ask (not connected)",
+          "    requires: builtin mcp",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 for (const implementation of ["adapter", "builtin", "none"] as const) {
   test(`MREC-04: under ${implementation} a ws server reads as left out`, async () => {
     await withHermeticHome(async ({ home, cwd }) => {
