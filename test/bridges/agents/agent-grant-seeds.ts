@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type {
+  AgentGrantForm,
+  AgentsIndexRow,
+} from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import type { AgentsIndexEntry } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -59,19 +63,22 @@ export function builtinBlock(name = NAME): string {
   return agentBlock("tools: read,mcp:plugin_demo_stub/echo", [BUILTIN_ASYNC], name);
 }
 
-/** A row that stores both forms and records `recorded` as the form its file holds. */
-export function storedRow(
-  targetPath: string,
-  recorded: "adapter" | "builtin",
-  name = NAME,
-): AgentsIndexEntry {
-  const adapter = { frontmatter: adapterBlock(name), warnings: [ADAPTER_ASYNC], droppedTools: [] };
-  const builtin = {
+/** The stored adapter form of the agent `name`. */
+function adapterForm(name: string): AgentGrantForm {
+  return { frontmatter: adapterBlock(name), warnings: [ADAPTER_ASYNC], droppedTools: [] };
+}
+
+/** The stored built-in form of the agent `name`; it drops the tool of an `sse` server. */
+export function builtinForm(name = NAME): AgentGrantForm {
+  return {
     frontmatter: builtinBlock(name),
     warnings: [BUILTIN_ASYNC, "sse server dropped"],
     droppedTools: ["mcp__plugin_demo_events__tail"],
   };
-  const current = recorded === "adapter" ? adapter : builtin;
+}
+
+/** A row of the agent `name` with no stored forms, and the warnings and dropped tools of `form`. */
+function helperRow(targetPath: string, form: AgentGrantForm, name: string): AgentsIndexRow {
   return {
     plugin: "demo",
     marketplace: "mp",
@@ -81,10 +88,51 @@ export function storedRow(
     targetPath,
     sourceHash: "sha256:helper",
     droppedFields: [],
-    droppedTools: [...current.droppedTools],
-    warnings: [...current.warnings],
+    droppedTools: [...form.droppedTools],
+    warnings: [...form.warnings],
+  };
+}
+
+/** A row that stores both forms and records `recorded` as the form its file holds. */
+export function storedRow(
+  targetPath: string,
+  recorded: "adapter" | "builtin",
+  name = NAME,
+): AgentsIndexEntry {
+  const adapter = adapterForm(name);
+  const builtin = builtinForm(name);
+  const current = recorded === "adapter" ? adapter : builtin;
+  return {
+    ...helperRow(targetPath, current, name),
     mcpImplementation: recorded,
     mcpForms: { adapter, builtin },
+  };
+}
+
+/**
+ * A row that stores only the form its file holds. A staging writes such a row
+ * when the other implementation maps the agent's explicit `tools:` list to
+ * nothing (AG-11).
+ */
+export function heldOnlyRow(
+  targetPath: string,
+  held: "adapter" | "builtin",
+  name = NAME,
+): AgentsIndexRow {
+  if (held === "adapter") {
+    const adapter = adapterForm(name);
+    return {
+      ...helperRow(targetPath, adapter, name),
+      mcpImplementation: "adapter",
+      mcpForms: { adapter },
+    };
+  }
+
+  const builtin = builtinForm(name);
+  return {
+    ...helperRow(targetPath, builtin, name),
+    mcpImplementation: "builtin",
+    mcpForms: { builtin },
   };
 }
 
@@ -105,7 +153,7 @@ export function legacyRow(
   targetPath: string,
   warnings: readonly string[],
   droppedTools: readonly string[] = [],
-): AgentsIndexEntry {
+): AgentsIndexRow {
   return {
     plugin: "demo",
     marketplace: "mp",

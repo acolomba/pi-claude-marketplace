@@ -1357,12 +1357,11 @@ async function runInstallLedgerBody(
         // we explicitly default to false so generated agents omit
         // `model:` (the default behavior).
         mapModel: opts.mapModel ?? false,
-        // ANAME-02: the servers this install writes. The mcp phase runs
-        // later, so the set comes from the resolver, not the mcp stage.
-        mcpServerNames: Object.keys(installCtx.resolved.mcpServers),
         // MGRT-01: the file gets the active implementation's grant form, and
         // the row stores both forms so a later switch can swap them. The run
         // snapshot is the only source of the active implementation (D-05).
+        // ANAME-02: each form maps the declared servers its implementation
+        // runs. The mcp phase runs later, so they come from the resolver.
         mcpGrantForms: {
           active: opts.run.softDeps.mcpImplementation,
           declaredMcpServers: installCtx.resolved.declaredMcpServers,

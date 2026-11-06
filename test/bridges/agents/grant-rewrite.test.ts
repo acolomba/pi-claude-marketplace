@@ -10,6 +10,7 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { StateLockCompromisedError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import {
@@ -20,6 +21,8 @@ import {
   BODY,
   BUILTIN_ASYNC,
   builtinBlock,
+  builtinForm,
+  heldOnlyRow,
   indexPath,
   legacyRow,
   NAME,
@@ -135,6 +138,24 @@ describe("needsAgentGrantRewrite", () => {
     assert.strictEqual(needed, false);
   });
 
+  test("RECON-05: a candidate whose target fails containment is no work and leaves one mcp debug line", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const renamed = agentPath(locations, OTHER_NAME);
+    await writeAgent(renamed, adapterBlock() + BODY);
+    await writeIndex(locations, [storedRow(renamed, "adapter")]);
+    const debugLines = captureDebugLog(t);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, false);
+    assert.deepStrictEqual(debugLines, [
+      `[mcp] agent ${NAME}: grant rewrite check skipped: agent target ${renamed} is not named ${NAME}.md`,
+    ]);
+  });
+
   test("AG-4: is false when the only candidate's stored active form is malformed", async (t) => {
     // arrange
     const locations = await userScope(t);
@@ -192,19 +213,6 @@ describe("needsAgentGrantRewrite", () => {
       { ...row, mcpForms: { adapter: row.mcpForms?.adapter } },
       plainRow(agentPath(locations, "pi-claude-marketplace-demo-plain")),
     ]);
-
-    // act
-    const needed = await needsAgentGrantRewrite(locations, "builtin");
-
-    // assert
-    assert.strictEqual(needed, false);
-  });
-
-  test("MGRT-01: is false when the row does not store the form its file holds", async (t) => {
-    // arrange
-    const locations = await userScope(t);
-    const row = storedRow(agentPath(locations), "adapter");
-    await writeIndex(locations, [{ ...row, mcpForms: { builtin: row.mcpForms?.builtin } }]);
 
     // act
     const needed = await needsAgentGrantRewrite(locations, "builtin");
@@ -340,6 +348,34 @@ describe("rewriteAgentGrantForms", () => {
     assert.strictEqual(await readFile(target, "utf8"), builtinBlock() + BODY);
     assert.deepStrictEqual(await readIndexRows(locations), [editedRow, swappedRow(row, "builtin")]);
   });
+
+  for (const { held, active, heldBlock, activeBlock } of [
+    { held: "adapter", active: "builtin", heldBlock: adapterBlock, activeBlock: builtinBlock },
+    { held: "builtin", active: "adapter", heldBlock: builtinBlock, activeBlock: adapterBlock },
+  ] as const) {
+    test(`GRANTFORMGAP-01 / AG-11: a switch to ${active} leaves a row that stores no ${active} form, and its file, as they are`, async (t) => {
+      // arrange
+      const locations = await userScope(t);
+      const target = agentPath(locations);
+      const other = agentPath(locations, OTHER_NAME);
+      const heldOnly = heldOnlyRow(target, held);
+      const otherRow = storedRow(other, held, OTHER_NAME);
+      await writeAgent(target, heldBlock() + BODY);
+      await writeAgent(other, heldBlock(OTHER_NAME) + BODY);
+      await writeIndex(locations, [heldOnly, otherRow]);
+
+      // act
+      await rewriteAgentGrantForms(locations, active, createRemovalOps(), lockHeld);
+
+      // assert
+      assert.strictEqual(await readFile(target, "utf8"), heldBlock() + BODY);
+      assert.strictEqual(await readFile(other, "utf8"), activeBlock(OTHER_NAME) + BODY);
+      assert.deepStrictEqual(await readIndexRows(locations), [
+        heldOnly,
+        swappedRow(otherRow, active),
+      ]);
+    });
+  }
 
   test("MGRT-01: a row whose file is missing is left as it is", async (t) => {
     // arrange
@@ -549,6 +585,33 @@ describe("rewriteAgentGrantForms", () => {
     assert.deepStrictEqual(await readIndexRows(locations), [
       {
         ...row,
+        warnings: [BUILTIN_ASYNC],
+        mcpImplementation: "builtin",
+        mcpForms: {
+          adapter: { frontmatter: adapterBlock(), warnings: [ADAPTER_ASYNC], droppedTools: [] },
+          builtin: { frontmatter: builtinBlock(), warnings: [BUILTIN_ASYNC], droppedTools: [] },
+        },
+      },
+    ]);
+  });
+
+  test("AGENTIDXFORM-01 / P4-DC-06: a row whose stored forms leave out its file's form is rewritten as a legacy row", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    const stored = storedRow(target, "adapter");
+    const row: AgentsIndexEntry = { ...stored, mcpForms: { builtin: builtinForm() } };
+    await writeAgent(target, adapterBlock() + BODY);
+    await writeIndex(locations, [row]);
+
+    // act
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
+
+    // assert
+    assert.strictEqual(await readFile(target, "utf8"), builtinBlock() + BODY);
+    assert.deepStrictEqual(await readIndexRows(locations), [
+      {
+        ...legacyRow(target, [ADAPTER_ASYNC]),
         warnings: [BUILTIN_ASYNC],
         mcpImplementation: "builtin",
         mcpForms: {

@@ -209,6 +209,12 @@ const stageAgentsInputWithUnknownImplementation: StageAgentsInput = {
   mcpGrantForms: { active: "other", declaredMcpServers: {} },
 };
 void stageAgentsInputWithUnknownImplementation;
+const stageAgentsInputWithServerList: StageAgentsInput = {
+  ...stageAgentsInputWithGrantForms,
+  // @ts-expect-error ANAME-02: each grant form takes its servers from the declared servers, never from a separate list
+  mcpServerNames: ["db"],
+};
+void stageAgentsInputWithServerList;
 // @ts-expect-error a staged record always identifies its target path
 const stagedAgentRecordWithoutTargetPath: StagedAgentRecord = {
   generatedName: "pi-claude-marketplace-acme-reviewer",

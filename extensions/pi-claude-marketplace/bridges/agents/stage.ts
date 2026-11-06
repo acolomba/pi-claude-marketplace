@@ -51,7 +51,7 @@ import type {
   StagedAgentRecord,
   UnstageAgentFailure,
 } from "./types.ts";
-import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+import type { AgentsIndexRow } from "../../persistence/agents-index-io.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
@@ -138,7 +138,6 @@ export async function prepareStagePluginAgents(
         sourceHash: d.sourceHash,
         mapModel: mapModel ?? false,
         projectDir,
-        mcpServerNames: input.mcpServerNames,
         skillPreloads,
       },
       input.mcpGrantForms,
@@ -194,8 +193,8 @@ export async function prepareStagePluginAgents(
   // content is present, surface via failed[] (NOT throw); preserve the
   // index row so commit can keep recording it.
   const ag5Failures: UnstageAgentFailure[] = [];
-  const safePreviousEntries: AgentsIndexEntry[] = [];
-  const foreignPreservedEntries: AgentsIndexEntry[] = [];
+  const safePreviousEntries: AgentsIndexRow[] = [];
+  const foreignPreservedEntries: AgentsIndexRow[] = [];
   for (const entry of previousEntries) {
     // eslint-disable-next-line no-await-in-loop -- bounded by this plugin's prior agents, one ownership read each
     const safety = await isOwnedAgentFile(entry.targetPath);
@@ -216,7 +215,7 @@ export async function prepareStagePluginAgents(
   await mkdir(stagingDir, { recursive: true });
 
   const stagedFilePaths: { from: string; to: string }[] = [];
-  const newEntries: AgentsIndexEntry[] = [];
+  const newEntries: AgentsIndexRow[] = [];
 
   try {
     await assertPathInside(locations.agentsStagingDir, stagingDir, "agents staging dir");
@@ -234,7 +233,7 @@ export async function prepareStagePluginAgents(
       stagedFilePaths.push({ from: stagedFile, to: targetFile });
 
       // Step 8: build new index entry.
-      const entry: AgentsIndexEntry = {
+      const entry: AgentsIndexRow = {
         plugin: pluginName,
         marketplace: marketplaceName,
         sourceAgent: c.sourceName,
@@ -327,7 +326,7 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
 function partitionPreviousEntries(
   prepared: PreparedAgentsStaged,
   options: { readonly force?: boolean } | undefined,
-): { readonly replaced: readonly AgentsIndexEntry[]; readonly kept: readonly AgentsIndexEntry[] } {
+): { readonly replaced: readonly AgentsIndexRow[]; readonly kept: readonly AgentsIndexRow[] } {
   if (options?.force !== true) {
     return { replaced: prepared.previousEntries, kept: prepared.foreignPreservedEntries };
   }
@@ -335,7 +334,7 @@ function partitionPreviousEntries(
   const stagedTargets = new Map(
     prepared.newEntries.map((entry) => [entry.generatedName, entry.targetPath]),
   );
-  const isOverwritten = (entry: AgentsIndexEntry): boolean =>
+  const isOverwritten = (entry: AgentsIndexRow): boolean =>
     stagedTargets.get(entry.generatedName) === entry.targetPath;
   return {
     replaced: [
@@ -385,7 +384,7 @@ export async function assertAgentCommitTargets(
  */
 async function assertForcedTargetsContained(
   prepared: PreparedAgentsStaged,
-  previous: { readonly replaced: readonly AgentsIndexEntry[] },
+  previous: { readonly replaced: readonly AgentsIndexRow[] },
   options: { readonly force?: boolean } | undefined,
 ): Promise<void> {
   if (options?.force !== true) {

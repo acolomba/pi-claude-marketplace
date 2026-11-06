@@ -491,13 +491,12 @@ async function prepareUpdateAgents(
     // cascade entrypoint never sets `args.mapModel`, so cascade re-
     // installs always resolve to false (omit `model:`).
     mapModel: args.mapModel ?? false,
-    // ANAME-02: the servers this update writes, mapped in agent tool lists.
-    mcpServerNames: Object.keys(installable.mcpServers),
     mcpGrantForms: {
       // MGRT-01 / D-MB-03: the grant form of the implementation the arguments
       // name, which every producer sets from its own run, so a direct update,
       // a reinstall, a dependency move, the autoupdate cascade, and `apply`'s
       // convergence each stage the form of the run that carries them.
+      // ANAME-02: each form maps the declared servers its implementation runs.
       active: args.mcpImplementation,
       declaredMcpServers: installable.declaredMcpServers,
     },
