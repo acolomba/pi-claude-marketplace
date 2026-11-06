@@ -175,7 +175,7 @@ describe("prepareStagePluginAgents", () => {
     });
   });
 
-  test("ANAME-02: passes the written MCP server names to conversion and reports the async warning", async (t) => {
+  test("ANAME-02: maps the declared servers pi-mcp-adapter runs and reports the async warning", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
       t,
@@ -195,7 +195,7 @@ describe("prepareStagePluginAgents", () => {
       pluginRoot,
       pluginDataDir,
       agentsDirs: [agentsSourceDir],
-      mcpServerNames: ["db"],
+      mcpGrantForms: { active: "adapter", declaredMcpServers: { db: { command: "node" } } },
     });
 
     // assert
@@ -254,7 +254,6 @@ describe("prepareStagePluginAgents", () => {
       pluginRoot,
       pluginDataDir,
       agentsDirs: [agentsSourceDir],
-      mcpServerNames: ["db"],
       mcpGrantForms: { active: "builtin", declaredMcpServers: { db: { command: "node" } } },
     });
     const leak = await commitPreparedAgents(createRemovalOps(), prepared);
@@ -296,7 +295,6 @@ describe("prepareStagePluginAgents", () => {
       pluginRoot,
       pluginDataDir,
       agentsDirs: [agentsSourceDir],
-      mcpServerNames: ["db", "web"],
       mcpGrantForms: {
         active: "builtin",
         declaredMcpServers: {
@@ -329,7 +327,6 @@ describe("prepareStagePluginAgents", () => {
       pluginRoot,
       pluginDataDir,
       agentsDirs: [agentsSourceDir],
-      mcpServerNames: ["db"],
       mcpGrantForms: { active: "builtin", declaredMcpServers: { db: { command: "node" } } },
     });
 
@@ -1732,7 +1729,6 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       agentsDirs: [agentsSourceDir],
-      mcpServerNames: ["db"],
       mcpGrantForms: { active: "adapter", declaredMcpServers: { db: { command: "node" } } },
     });
 
@@ -1781,7 +1777,6 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       agentsDirs: [agentsSourceDir],
-      mcpServerNames: ["db"],
       mcpGrantForms: { active: "builtin", declaredMcpServers: { db: { command: "node" } } },
     });
 
@@ -1835,7 +1830,6 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       agentsDirs: [agentsSourceDir],
-      mcpServerNames: ["db"],
     };
     const declaredMcpServers = { db: { command: "node" } };
     await commitPreparedAgents(

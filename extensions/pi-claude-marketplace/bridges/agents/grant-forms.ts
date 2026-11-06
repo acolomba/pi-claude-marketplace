@@ -5,11 +5,11 @@
 // the agent's index row when they differ, so a load after a switch can swap
 // the file's frontmatter block without converting the agent again.
 //
-//   1. The adapter form maps the servers the caller passes as
-//      `mcpServerNames`, the adapter-supported subset (ANAME-02).
-//   2. The built-in form maps the declared servers whose built-in verdict is
-//      supported, in declaration order. A grant of any other server is
-//      dropped with the converter's usual warning.
+//   1. Each form maps the declared servers its implementation's profile
+//      supports, in declaration order. For the adapter form these are the
+//      servers the mcp phase writes (ANAME-02).
+//   2. A grant of any other server is dropped from that form with the
+//      converter's usual warning.
 //   3. AG-11 per form: the file's form converts through `convertAgent`, so an
 //      explicit `tools:` list that maps to nothing fails the staging; the
 //      other form converts through `convertAgentForm`, and an empty list
@@ -32,31 +32,35 @@ import type { ConvertedAgent, StageAgentsInput } from "./types.ts";
 import type { McpImplementationId } from "../../domain/mcp-implementation.ts";
 import type { AgentGrantForm, AgentGrantFormFields } from "../../persistence/agents-index-io.ts";
 
+/** The conversion input both forms share; each form adds its implementation and servers. */
+export type GrantFormInput = Omit<ConvertAgentInput, "mcpServerNames" | "mcpImplementation">;
+
 /**
- * MGRT-01: converts one agent for the stage. `input` is the adapter form's
- * conversion input; its `mcpServerNames` is the adapter's server set. With
- * no `grantForms` the agent converts as before and the row records nothing.
- * Otherwise the file gets the built-in form when the active implementation
- * is built-in and the adapter form otherwise (`none` included), and
- * `recorded` holds the row's `mcpImplementation` and `mcpForms` when the two
- * forms' frontmatter blocks differ.
+ * MGRT-01 / ANAME-02: converts one agent for the stage. Each form maps the
+ * declared servers its implementation's profile supports; the adapter
+ * form's servers are the ones the mcp phase writes. With no `grantForms`
+ * the plugin declares no MCP server: the agent converts in the adapter form
+ * over no server, and the row records nothing. Otherwise the file gets the
+ * built-in form when the active implementation is built-in and the adapter
+ * form otherwise (`none` included), and `recorded` holds the row's
+ * `mcpImplementation` and `mcpForms` when the two forms' frontmatter blocks
+ * differ.
  */
 export function convertAgentGrantForms(
-  input: ConvertAgentInput,
+  input: GrantFormInput,
   grantForms: StageAgentsInput["mcpGrantForms"],
 ): {
   readonly agent: ConvertedAgent;
   readonly recorded: AgentGrantFormFields;
 } {
   if (grantForms === undefined) {
-    return { agent: convertAgent(input), recorded: {} };
+    return { agent: convertAgent(formInput(input, "adapter", {})), recorded: {} };
   }
 
   const fileForm: McpImplementationId = grantForms.active === "builtin" ? "builtin" : "adapter";
   const otherForm: McpImplementationId = fileForm === "builtin" ? "adapter" : "builtin";
-  const builtinServers = builtinServerNames(grantForms.declaredMcpServers);
-  const agent = convertAgent(formInput(input, fileForm, builtinServers));
-  const other = convertAgentForm(formInput(input, otherForm, builtinServers));
+  const agent = convertAgent(formInput(input, fileForm, grantForms.declaredMcpServers));
+  const other = convertAgentForm(formInput(input, otherForm, grantForms.declaredMcpServers));
   if (other?.frontmatter === agent.frontmatter) {
     return { agent, recorded: {} };
   }
@@ -72,25 +76,31 @@ export function convertAgentGrantForms(
 }
 
 /**
- * The declared servers Pi's built-in MCP can run, in declaration order.
- * `Object.entries` reads own keys only, so a server named `__proto__` stays
- * a server.
+ * ANAME-02 / MGRT-01: the declared servers `implementation` can run, in
+ * declaration order. `Object.entries` reads own keys only, so a server named
+ * `__proto__` stays a server.
  */
-function builtinServerNames(declaredMcpServers: Readonly<Record<string, unknown>>): string[] {
-  const builtin = profileFor("builtin");
+function serverNamesFor(
+  implementation: McpImplementationId,
+  declaredMcpServers: Readonly<Record<string, unknown>>,
+): string[] {
+  const profile = profileFor(implementation);
   return Object.entries(declaredMcpServers)
-    .filter(([, config]) => builtin.classify(config).kind === "supported")
+    .filter(([, config]) => profile.classify(config).kind === "supported")
     .map(([name]) => name);
 }
 
+/** The conversion input of `implementation`'s form, over the servers it runs. */
 function formInput(
-  input: ConvertAgentInput,
-  form: McpImplementationId,
-  builtinServers: readonly string[],
+  input: GrantFormInput,
+  implementation: McpImplementationId,
+  declaredMcpServers: Readonly<Record<string, unknown>>,
 ): ConvertAgentInput {
-  return form === "builtin"
-    ? { ...input, mcpImplementation: "builtin", mcpServerNames: builtinServers }
-    : { ...input, mcpImplementation: "adapter" };
+  return {
+    ...input,
+    mcpImplementation: implementation,
+    mcpServerNames: serverNamesFor(implementation, declaredMcpServers),
+  };
 }
 
 /** A form as the row stores it: copies, so the row shares no array with the agent. */

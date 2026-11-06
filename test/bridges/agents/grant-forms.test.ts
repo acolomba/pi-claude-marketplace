@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { convertAgentGrantForms } from "../../../extensions/pi-claude-marketplace/bridges/agents/grant-forms.ts";
 
-import type { ConvertAgentInput } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
+import type { GrantFormInput } from "../../../extensions/pi-claude-marketplace/bridges/agents/grant-forms.ts";
 import type { RawAgentFrontmatter } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 const ADAPTER_ASYNC_WARNING =
@@ -14,10 +14,7 @@ const BUILTIN_ASYNC_WARNING =
 
 const BODY = "\nBody content.\n";
 
-function agentInput(
-  raw: RawAgentFrontmatter,
-  mcpServerNames: readonly string[] | undefined,
-): ConvertAgentInput {
+function agentInput(raw: RawAgentFrontmatter): GrantFormInput {
   return {
     pluginName: "acme",
     pluginRoot: "/root",
@@ -33,7 +30,6 @@ function agentInput(
     },
     sourceHash: "abc",
     mapModel: false,
-    mcpServerNames,
   };
 }
 
@@ -78,6 +74,12 @@ const ADAPTER_QUERY_FRONTMATTER = expectedFrontmatter({
   warnings: [ADAPTER_ASYNC_WARNING],
 });
 
+/** A stdio server that asks for elicitation, which pi-mcp-adapter cannot run, and a plain one. */
+const ELICITING_AND_PLAIN_SERVERS = {
+  asker: { command: "node", bareElicitationCapability: true },
+  db: { command: "node" },
+};
+
 const BUILTIN_QUERY_FRONTMATTER = expectedFrontmatter({
   toolsLine: "tools: read,mcp:plugin_acme_db/query",
   inheritSkills: false,
@@ -88,7 +90,7 @@ const BUILTIN_QUERY_FRONTMATTER = expectedFrontmatter({
 
 test("MGRT-01: a built-in run writes the built-in form and records both forms on the row", () => {
   // arrange
-  const input = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_db__query" }, ["db"]);
+  const input = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_db__query" });
 
   // act
   const { agent, recorded } = convertAgentGrantForms(input, {
@@ -119,9 +121,7 @@ test("MGRT-01: a built-in run writes the built-in form and records both forms on
 for (const active of ["adapter", "none"] as const) {
   test(`MGRT-01: an active implementation of ${active} writes the adapter form and records both forms on the row`, () => {
     // arrange
-    const input = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_db__query" }, [
-      "db",
-    ]);
+    const input = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_db__query" });
 
     // act
     const { agent, recorded } = convertAgentGrantForms(input, {
@@ -159,7 +159,7 @@ test("MGRT-01: an agent that renders the same in both forms records neither fiel
       droppedTools: [],
       warnings: [],
     }) + BODY;
-  const input = agentInput({ description: "d", tools: "Read" }, ["db"]);
+  const input = agentInput({ description: "d", tools: "Read" });
 
   // act
   const { agent, recorded } = convertAgentGrantForms(input, {
@@ -186,7 +186,7 @@ test("D-CF6-10: an omitted tools list in a plugin with a stdio server records bo
     droppedTools: [],
     warnings: [BUILTIN_ASYNC_WARNING],
   });
-  const input = agentInput({ description: "d" }, ["db"]);
+  const input = agentInput({ description: "d" });
 
   // act
   const { agent, recorded } = convertAgentGrantForms(input, {
@@ -229,7 +229,7 @@ test("MGRT-01: an sse grant stays in the adapter form and is dropped from the bu
     droppedTools: [],
     warnings: [ADAPTER_ASYNC_WARNING],
   });
-  const input = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_web__get" }, ["web"]);
+  const input = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_web__get" });
 
   // act
   const { agent, recorded } = convertAgentGrantForms(input, {
@@ -259,7 +259,7 @@ test("MGRT-01: an sse grant stays in the adapter form and is dropped from the bu
 
 test("AG-11: a built-in run fails when the built-in form maps an explicit tools list to nothing", () => {
   // arrange
-  const input = agentInput({ description: "d", tools: "mcp__plugin_acme_web__get" }, ["web"]);
+  const input = agentInput({ description: "d", tools: "mcp__plugin_acme_web__get" });
 
   // act & assert
   assert.throws(
@@ -284,7 +284,7 @@ for (const active of ["adapter", "none"] as const) {
       droppedTools: [],
       warnings: [ADAPTER_ASYNC_WARNING],
     });
-    const input = agentInput({ description: "d", tools: "mcp__plugin_acme_web__get" }, ["web"]);
+    const input = agentInput({ description: "d", tools: "mcp__plugin_acme_web__get" });
 
     // act
     const { agent, recorded } = convertAgentGrantForms(input, {
@@ -307,15 +307,101 @@ for (const active of ["adapter", "none"] as const) {
   });
 }
 
-test("MGRT-01: without grant forms the agent converts in the adapter form and the row records nothing", () => {
+test("ANAME-02 / MGRT-01: each form maps only the declared servers its implementation runs", () => {
   // arrange
-  const input = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_db__query" }, ["db"]);
+  const adapterFrontmatter = expectedFrontmatter({
+    toolsLine: "tools: read,mcp:plugin_acme_db_/query",
+    inheritSkills: false,
+    async: true,
+    droppedTools: ["mcp__plugin_acme_asker__ask"],
+    warnings: [ADAPTER_ASYNC_WARNING],
+  });
+  const builtinFrontmatter = expectedFrontmatter({
+    toolsLine: "tools: read,mcp:plugin_acme_asker/ask,mcp:plugin_acme_db/query",
+    inheritSkills: false,
+    async: true,
+    droppedTools: [],
+    warnings: [BUILTIN_ASYNC_WARNING],
+  });
+  const input = agentInput({
+    description: "d",
+    tools: "Read, mcp__plugin_acme_asker__ask, mcp__plugin_acme_db__query",
+  });
+
+  // act
+  const { agent, recorded } = convertAgentGrantForms(input, {
+    active: "adapter",
+    declaredMcpServers: ELICITING_AND_PLAIN_SERVERS,
+  });
+
+  // assert
+  assert.strictEqual(agent.fileContent, adapterFrontmatter + BODY);
+  assert.deepStrictEqual(agent.droppedTools, ["mcp__plugin_acme_asker__ask"]);
+  assert.deepStrictEqual(recorded, {
+    mcpImplementation: "adapter",
+    mcpForms: {
+      adapter: {
+        frontmatter: adapterFrontmatter,
+        warnings: [ADAPTER_ASYNC_WARNING],
+        droppedTools: ["mcp__plugin_acme_asker__ask"],
+      },
+      builtin: {
+        frontmatter: builtinFrontmatter,
+        warnings: [BUILTIN_ASYNC_WARNING],
+        droppedTools: [],
+      },
+    },
+  });
+});
+
+test("AG-11: a built-in run leaves out an adapter form that maps an explicit tools list to nothing", () => {
+  // arrange
+  const builtinFrontmatter = expectedFrontmatter({
+    toolsLine: "tools: mcp:plugin_acme_asker/ask",
+    inheritSkills: false,
+    async: true,
+    droppedTools: [],
+    warnings: [BUILTIN_ASYNC_WARNING],
+  });
+  const input = agentInput({ description: "d", tools: "mcp__plugin_acme_asker__ask" });
+
+  // act
+  const { agent, recorded } = convertAgentGrantForms(input, {
+    active: "builtin",
+    declaredMcpServers: ELICITING_AND_PLAIN_SERVERS,
+  });
+
+  // assert
+  assert.strictEqual(agent.fileContent, builtinFrontmatter + BODY);
+  assert.deepStrictEqual(recorded, {
+    mcpImplementation: "builtin",
+    mcpForms: {
+      builtin: {
+        frontmatter: builtinFrontmatter,
+        warnings: [BUILTIN_ASYNC_WARNING],
+        droppedTools: [],
+      },
+    },
+  });
+});
+
+test("ANAME-02 / MGRT-01: without grant forms the agent maps no MCP server and the row records nothing", () => {
+  // arrange
+  const expectedFileContent =
+    expectedFrontmatter({
+      toolsLine: "tools: read",
+      inheritSkills: false,
+      async: false,
+      droppedTools: ["mcp__plugin_acme_db__query"],
+      warnings: [],
+    }) + BODY;
+  const input = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_db__query" });
 
   // act
   const { agent, recorded } = convertAgentGrantForms(input, undefined);
 
   // assert
-  assert.strictEqual(agent.fileContent, ADAPTER_QUERY_FRONTMATTER + BODY);
+  assert.strictEqual(agent.fileContent, expectedFileContent);
   assert.deepStrictEqual(recorded, {});
 });
 
@@ -333,13 +419,10 @@ test("MGRT-01: the built-in form maps every supported declared server, one named
     web: { type: "sse", url: "https://web.example/sse" },
     ["__proto__"]: { command: "proto" },
   };
-  const input = agentInput(
-    {
-      description: "d",
-      tools: "mcp__plugin_acme___proto__, mcp__plugin_acme_zed, mcp__plugin_acme_web",
-    },
-    [],
-  );
+  const input = agentInput({
+    description: "d",
+    tools: "mcp__plugin_acme___proto__, mcp__plugin_acme_zed, mcp__plugin_acme_web",
+  });
 
   // act
   const { agent } = convertAgentGrantForms(input, { active: "builtin", declaredMcpServers });

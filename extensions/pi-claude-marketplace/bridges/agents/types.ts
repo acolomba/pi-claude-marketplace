@@ -99,19 +99,14 @@ export interface StageAgentsInput {
    */
   readonly mapModel?: boolean;
   /**
-   * ANAME-02: the declared names of the MCP servers this install writes.
-   * `convertAgent` maps an agent's `mcp__` tool names that name one of these
-   * servers to pi-subagents `mcp:` entries.
-   */
-  readonly mcpServerNames?: readonly string[] | undefined;
-  /**
-   * MGRT-01: the run's active MCP implementation and every non-malformed
-   * declared MCP server, keyed by declared name in declaration order.
-   * Present, the stage renders both grant forms of each agent, writes the
-   * active implementation's form (`none` writes the adapter form, the form
-   * every earlier release wrote), and records both forms on the agent's index
-   * row when they differ; `mcpServerNames` stays the adapter form's server
-   * set. Absent, the stage renders the adapter form and records no form.
+   * MGRT-01 / ANAME-02: the run's active MCP implementation and every
+   * non-malformed declared MCP server, keyed by declared name in declaration
+   * order. The stage renders both grant forms of each agent, each over the
+   * declared servers its implementation runs, writes the active
+   * implementation's form (`none` writes the adapter form), and records both
+   * forms on the agent's index row when they differ. Absent means the plugin
+   * declares no MCP server: the stage renders the adapter form, maps no MCP
+   * server, and records no form.
    */
   readonly mcpGrantForms?:
     | {
