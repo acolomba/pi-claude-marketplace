@@ -424,6 +424,15 @@ tools are listed is the only connection signal Pi's built-in MCP gives
 serves both `adapter` and `none` (P1-DC-20). Phase 2 owns the body of
 `withMcpServerStatus` in `orchestrators/plugin/info-mcp-status.ts`.
 
+Amended after the mcp-builtin milestone (2026-11-06, W1 and D-MB-29): the
+call in `withServerStatus` is now awaited. `withMcpServerStatus` is `async`,
+returns `Promise<PluginInfoMessage>`, and takes a fifth argument,
+`readServers: (record: PluginInstallRecord) => Promise<RecordedMcpServers>`,
+which it calls only under `builtin`. `info.ts` binds it to
+`(record) => recordedMcpServers(record, legacySource, createLegacyServersReader)`,
+the read the registration step makes, so `info` stamps the servers the step
+registers (MREC-02). A name Pi refused reads `not loaded` (D-MB-29).
+
 ### 8. The built-in server name and the tool-name rule
 
 File `domain/name.ts`:

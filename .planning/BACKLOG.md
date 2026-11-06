@@ -4910,6 +4910,8 @@ Noted 2026-11-05 (mcp-builtin, 02-08 item 4 (d)). Plugin MCP tools under Pi's bu
 
 Noted 2026-11-05 (mcp-builtin, P2-DC-46, D-MB-29). When another extension registers a built-in MCP server under the name of a plugin server first, `info` cannot tell that registration from this extension's own. D-MB-29 records it as a gap. The fix needs this extension's own `extensionPath`, so it changes the parameter of the built-in status reader (`createBuiltinMcpStatusReader`), which this milestone froze. Candidate direction: pass the extension's path to the reader and compare it with the source of the registration.
 
+Narrowed 2026-11-06 (quick 261106-m02): a registration Pi refuses now reads `not loaded` in `info`. Two cases stay open. A foreign registration whose config equals the plugin server's makes the sync attempt nothing, so no refusal is noted and `info` reads that server's state. And a changed config that Pi rejects while an older registration of this extension stays listed reads `not loaded` although the older server still runs (T-m02-05).
+
 ## HOOKTOOLSEARCH-01: name Pi's `tool_search` as Claude Code's `ToolSearch` in hooks
 
 Noted 2026-11-05 (mcp-builtin, P5-DC-09, P5-DC-35, 05-CONTEXT deferred ideas). Hooks see Pi's `tool_search` tool under Pi's name, so a matcher written for Claude Code's `ToolSearch` does not fire. The milestone deferred this because Phase 5 covered MCP tool names only. Candidate direction: map the name in hook stdin and matchers, and change the `*` rows on `tool_search` in `features/hook/tool-use.feature`.
