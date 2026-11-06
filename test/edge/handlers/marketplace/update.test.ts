@@ -19,7 +19,7 @@
 // identical port objects the handler was constructed with reached the workflow.
 //
 // D-10-18 adds a second promise to the shim: the handler IS the autoupdate
-// cascade's run boundary, so it calls `deps.beginPluginUpdateRun()` once per
+// cascade's run boundary, so it calls `deps.beginPluginUpdateRun({ ctx, run })` once per
 // command and never while the handler is being built. One case counts those
 // calls; the rest inject a factory whose return value is fixed, so only the
 // counting case can see the difference between a per-command allocation and a

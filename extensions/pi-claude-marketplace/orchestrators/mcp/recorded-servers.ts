@@ -1,8 +1,8 @@
 // orchestrators/mcp/recorded-servers.ts
 //
 // MREC-01 / D-MB-04: the one reader of a plugin record's `mcpServerConfigs`.
-// The built-in registration and the effective compatibility read take a
-// record's MCP servers from here, and from nowhere else.
+// Every reader of a record's MCP servers goes through here: the built-in
+// registration, the effective compatibility read, info, and mcp-migration.
 //
 // MREC-02: a record without the field predates it. Absence never means "no
 // servers": the legacy reader re-resolves the declaration from the recorded
@@ -56,7 +56,8 @@ export type LegacyServersReader = (record: PluginInstallRecord) => Promise<Legac
  * A record with the field answers `recorded` with the field as stored; the
  * values are the record's own, so a caller must not change them. When the
  * record's plugin root is outside its owning clone root, the stored servers
- * are refused as `uncontained` (UF-1, NFR-10). A record without the field
+ * are refused as `uncontained` (UF-1, NFR-10), and an uncontained stored
+ * record answers `unreadable`. A record without the field
  * answers `re-resolved` from the legacy reader. A refusal or any failure of
  * that reader answers `unreadable`, so the stored compatibility verdict
  * stands. The reason goes to the `mcp` debug channel.

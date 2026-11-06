@@ -6,9 +6,8 @@
 // name with `-` folded to `_`), so info reports such a plugin server as
 // `overridden by mcp.json` (P2-DC-08).
 //
-// P2-DC-26: the read is synchronous, the only `readFileSync` in the
-// extension, because the frozen info call that stamps the status is
-// synchronous and cannot await a read.
+// P2-DC-26: the read is synchronous; it is the only `readFileSync` in the
+// extension.
 //
 // P2-DC-15: the checks follow Pi 1.5.0's `readConfigFile`
 // (`dist/extensions/mcp/config.js`): a leading BOM is stripped, the text is

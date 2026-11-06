@@ -1,7 +1,7 @@
 /**
  * The agent MCP grants step.
  *
- * Its name, input, and call site are fixed: `session-materialize.ts` runs it at
+ * `session-materialize.ts` runs it at
  * every `session_start`, after the built-in registration step. A switch
  * between MCP implementations is installing or removing pi-mcp-adapter, which
  * runs no plugin command, so this step is what brings the generated agent

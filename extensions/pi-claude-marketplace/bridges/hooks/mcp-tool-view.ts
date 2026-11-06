@@ -25,8 +25,8 @@ import type { McpToolIdentity } from "../../domain/components/hooks/builtin-mcp-
 import type { ExtensionAPI } from "../../platform/pi-api.ts";
 
 // Pi loads its built-in MCP extension from this path, so every tool it
-// registers carries it as `sourceInfo.path`. The frozen platform probe that
-// compares the same literal is private to its module.
+// registers carries it as `sourceInfo.path`. Another module holds a private
+// copy of the same literal.
 const BUILTIN_MCP_SOURCE_PATH = "builtin:mcp";
 
 type PiTool = ReturnType<ExtensionAPI["getAllTools"]>[number];

@@ -8,10 +8,6 @@
  *
  * NFR-2: each step runs in its own try/catch. A step that throws or rejects is
  * debug-logged, the next step still runs, and the materializer resolves.
- *
- * The extension entry point composes the production materializer from the two
- * step modules; the steps fill their own bodies, so neither this module nor
- * the entry point changes when they do.
  */
 
 import { hookDebugLog } from "../../shared/debug-log.ts";

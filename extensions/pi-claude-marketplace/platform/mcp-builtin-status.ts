@@ -70,8 +70,8 @@ function isHidden(tool: ToolInventoryItem): boolean {
   return "exposure" in tool && tool.exposure === "hidden";
 }
 
-// The names whose last registration in this Pi process replaced a listed
-// config of another shape. A fresh registration or a removal clears a name,
+// The names whose last accepted registration in this Pi process replaced a
+// listed config of another shape. A fresh registration or a removal clears a name,
 // and Pi starts each session with no registration, so a name from an earlier
 // session is cleared when it registers again.
 const replacedRegistrations = new Set<string>();
@@ -88,18 +88,18 @@ export interface BuiltinServerOwner {
 }
 
 // ASTAT-01 / P2-DC-14: the owner of each name the registration step's last
-// sync registers, as it decided: the user records first, then the trusted
+// sync asked Pi to register, as it decided: the user records first, then the trusted
 // project's, a later record of the same server name winning. The marketplace
 // is not part of the name, and two plugin and server pairs can fold to one
 // name, so another record can own a name.
 let serverOwners: ReadonlyMap<string, BuiltinServerOwner> = new Map();
 
-/** Records the owner of each name the registration step's sync registers. */
+/** Records the owner of each name the registration step's sync asked Pi to register. */
 export function noteBuiltinServerOwners(owners: ReadonlyMap<string, BuiltinServerOwner>): void {
   serverOwners = owners;
 }
 
-/** The owner the last sync gave `serverName`, or `undefined` when it registers no such name. */
+/** The owner the last sync gave `serverName`, or `undefined` when it asked Pi to register no such name. */
 export function builtinServerOwner(serverName: string): BuiltinServerOwner | undefined {
   return serverOwners.get(serverName);
 }

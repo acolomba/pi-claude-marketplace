@@ -3335,7 +3335,7 @@ function withCompanionRequirements(built: InfoBlock, softDeps: SoftDepStatus): I
  * built-in statuses (BLT-05). MREC-02: under `builtin` the servers come from
  * the record as the registration step reads them, through
  * `recordedMcpServers` and the legacy reader of the block's own marketplace
- * and scope, so info stamps exactly the servers the step registers.
+ * and scope, so info stamps the same recorded servers the step reads.
  */
 async function withServerStatus(
   built: InfoBlock,
