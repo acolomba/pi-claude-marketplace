@@ -33,11 +33,12 @@
 //     translated in place (T-04-16): there is no stored form to compare.
 
 import { builtinMcpServerName } from "../../domain/name.ts";
+import { storedGrantForms } from "../../persistence/agents-index-io.ts";
 
 import { GENERATED_AGENT_MARKER } from "./marker.ts";
 import { mcpAsyncWarning } from "./mcp-async-warning.ts";
 
-import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+import type { AgentGrantForm, AgentsIndexRow } from "../../persistence/agents-index-io.ts";
 
 const OPENING_LINE = "---\n";
 const CLOSING_LINE = "\n---\n";
@@ -139,8 +140,8 @@ function translateBlock(block: string, serverPrefix: string): string | undefined
  */
 export function deriveLegacyGrantForms(
   fileText: string,
-  row: AgentsIndexEntry,
-): AgentsIndexEntry | undefined {
+  row: AgentsIndexRow,
+): AgentsIndexRow | undefined {
   const block = generatedBlock(fileText);
   if (block === undefined) {
     return undefined;
@@ -148,20 +149,19 @@ export function deriveLegacyGrantForms(
 
   // Every adapter key of the plugin starts with its built-in name prefix.
   const serverPrefix = builtinMcpServerName(row.plugin, "");
-  const adapter = {
+  const adapter: AgentGrantForm = {
     frontmatter: block,
     warnings: [...row.warnings],
     droppedTools: [...row.droppedTools],
   };
   const translated = translateBlock(block, serverPrefix);
-  if (translated === undefined) {
-    return { ...row, mcpImplementation: "adapter", mcpForms: { adapter } };
-  }
-
-  const builtin = {
-    frontmatter: translated,
-    warnings: row.warnings.map((warning) => translateWarning(warning, serverPrefix)),
-    droppedTools: [...row.droppedTools],
-  };
-  return { ...row, mcpImplementation: "adapter", mcpForms: { adapter, builtin } };
+  const builtin: AgentGrantForm | undefined =
+    translated === undefined
+      ? undefined
+      : {
+          frontmatter: translated,
+          warnings: row.warnings.map((warning) => translateWarning(warning, serverPrefix)),
+          droppedTools: [...row.droppedTools],
+        };
+  return { ...row, ...storedGrantForms("adapter", adapter, builtin) };
 }

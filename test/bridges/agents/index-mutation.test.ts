@@ -7,12 +7,12 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts";
 import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
-import type { AgentsIndexEntry } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+import type { AgentsIndexRow } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 
 describe("partitionByOwner", () => {
   test("partitions exact owners without disturbing other owners or input order", () => {
     // arrange
-    const entries: AgentsIndexEntry[] = [
+    const entries: AgentsIndexRow[] = [
       {
         plugin: "target-plugin",
         marketplace: "target-marketplace",
@@ -170,8 +170,8 @@ describe("partitionByOwner", () => {
         },
       ],
     } satisfies {
-      previous: readonly AgentsIndexEntry[];
-      other: readonly AgentsIndexEntry[];
+      previous: readonly AgentsIndexRow[];
+      other: readonly AgentsIndexRow[];
     };
 
     // act
@@ -183,7 +183,7 @@ describe("partitionByOwner", () => {
 
   test("returns frozen empty partitions for an empty index", () => {
     // arrange
-    const entries: AgentsIndexEntry[] = [];
+    const entries: AgentsIndexRow[] = [];
     const expectedPartition = { previous: [], other: [] };
 
     // act
@@ -210,7 +210,7 @@ describe("assertAgentNamesUnclaimed", () => {
   test("reports every foreign claim in incoming order without index paths or metadata", () => {
     // arrange
     const owner = { marketplace: "catalog", plugin: "acme" };
-    const foreign: AgentsIndexEntry = {
+    const foreign: AgentsIndexRow = {
       marketplace: "other",
       plugin: "acme",
       sourceAgent: "bot",
@@ -253,7 +253,7 @@ describe("assertAgentNamesUnclaimed", () => {
 
   test("reports complete conflicts in incoming generated-name order", () => {
     // arrange
-    const otherEntries: AgentsIndexEntry[] = [
+    const otherEntries: AgentsIndexRow[] = [
       {
         plugin: "alpha-plugin",
         marketplace: "alpha-marketplace",
@@ -370,7 +370,7 @@ describe("assertAgentNamesUnclaimed", () => {
 
   test("admits incoming names that foreign index rows do not claim", () => {
     // arrange
-    const otherEntries: AgentsIndexEntry[] = [
+    const otherEntries: AgentsIndexRow[] = [
       {
         plugin: "existing-plugin",
         marketplace: "existing-marketplace",
@@ -398,7 +398,7 @@ describe("assertAgentNamesUnclaimed", () => {
 
   test("uses the last repeated owner row for every repeated incoming name", () => {
     // arrange
-    const otherEntries: AgentsIndexEntry[] = [
+    const otherEntries: AgentsIndexRow[] = [
       {
         plugin: "first-plugin",
         marketplace: "first-marketplace",
@@ -487,7 +487,7 @@ describe("assertAgentNamesUnclaimed", () => {
 
   test("detects conflicts only across the non-owner merge boundary", () => {
     // arrange
-    const entries: AgentsIndexEntry[] = [
+    const entries: AgentsIndexRow[] = [
       {
         plugin: "target-plugin",
         marketplace: "target-marketplace",

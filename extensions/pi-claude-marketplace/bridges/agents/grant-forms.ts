@@ -13,16 +13,24 @@
 //   3. AG-11 per form: the file's form converts through `convertAgent`, so an
 //      explicit `tools:` list that maps to nothing fails the staging; the
 //      other form converts through `convertAgentForm`, and an empty list
-//      leaves that form out of the row.
+//      leaves that form out of the row. GRANTFORMGAP-01: a switch to the
+//      implementation whose form the row leaves out keeps the agent's file
+//      and row as they are. The index cannot store an empty form, because
+//      pi-subagents cannot express "no tools" (AG-11). pi-subagents 0.84.0
+//      refuses to launch such an agent, with an error that names the `mcp:`
+//      selectors it cannot resolve, under both implementations. `list` and
+//      `info` mark the plugin for the server the new implementation cannot
+//      run.
 
 import { profileFor } from "../../domain/mcp-implementation.ts";
+import { storedGrantForms } from "../../persistence/agents-index-io.ts";
 
 import { convertAgent, convertAgentForm } from "./convert.ts";
 
 import type { ConvertAgentInput } from "./convert.ts";
 import type { ConvertedAgent, StageAgentsInput } from "./types.ts";
 import type { McpImplementationId } from "../../domain/mcp-implementation.ts";
-import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+import type { AgentGrantForm, AgentGrantFormFields } from "../../persistence/agents-index-io.ts";
 
 /**
  * MGRT-01: converts one agent for the stage. `input` is the adapter form's
@@ -38,7 +46,7 @@ export function convertAgentGrantForms(
   grantForms: StageAgentsInput["mcpGrantForms"],
 ): {
   readonly agent: ConvertedAgent;
-  readonly recorded: Pick<AgentsIndexEntry, "mcpImplementation" | "mcpForms">;
+  readonly recorded: AgentGrantFormFields;
 } {
   if (grantForms === undefined) {
     return { agent: convertAgent(input), recorded: {} };
@@ -53,12 +61,14 @@ export function convertAgentGrantForms(
     return { agent, recorded: {} };
   }
 
-  const mcpForms: NonNullable<AgentsIndexEntry["mcpForms"]> = { [fileForm]: storedForm(agent) };
-  if (other !== undefined) {
-    mcpForms[otherForm] = storedForm(other);
-  }
-
-  return { agent, recorded: { mcpImplementation: fileForm, mcpForms } };
+  return {
+    agent,
+    recorded: storedGrantForms(
+      fileForm,
+      storedForm(agent),
+      other === undefined ? undefined : storedForm(other),
+    ),
+  };
 }
 
 /**
@@ -84,11 +94,7 @@ function formInput(
 }
 
 /** A form as the row stores it: copies, so the row shares no array with the agent. */
-function storedForm(agent: ConvertedAgent): {
-  frontmatter: string;
-  warnings: string[];
-  droppedTools: string[];
-} {
+function storedForm(agent: ConvertedAgent): AgentGrantForm {
   return {
     frontmatter: agent.frontmatter,
     warnings: [...agent.warnings],
