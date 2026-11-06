@@ -12,8 +12,9 @@
 // UF-1 / NFR-10: a record's plugin root must lie inside its own clone root
 // before any of its files is read: a git record's own `plugin-clones/<key>/`
 // entry, any other record's marketplace root, which for a cloned marketplace
-// must itself lie inside the scope's `sources/<marketplace>/` checkout. The
-// legacy reader and the built-in registration step share the one check here.
+// must itself lie inside the scope's `sources/<marketplace>/` checkout. One
+// check here guards a record's stored servers, the legacy reader's
+// re-resolution, and the built-in registration step.
 //
 // The read changes nothing: it writes no file and no state, and it reaches no
 // network (NFR-5). This module is outside BLOCK F's NETWORK_SEAMS, so it can
@@ -47,28 +48,26 @@ export interface LegacyServers {
 export type LegacyServersReader = (record: PluginInstallRecord) => Promise<LegacyServers>;
 
 /**
- * MREC-01 / MREC-02: a plugin record's MCP servers. A record with
- * `mcpServerConfigs` answers `recorded` with the field as stored; the values
- * are the record's own, so a caller must not change them. A record without
- * the field answers `re-resolved` from the legacy reader, and any failure of
+ * MREC-01 / MREC-02: a plugin record's MCP servers. `source` names the
+ * marketplace record that lists the plugin and the locations of the scope
+ * whose state file holds both. `readerFor` builds the legacy reader for that
+ * source, and it is called only for a record without `mcpServerConfigs`.
+ *
+ * A record with the field answers `recorded` with the field as stored; the
+ * values are the record's own, so a caller must not change them. When the
+ * record's plugin root is outside its owning clone root, the stored servers
+ * are refused as `uncontained` (UF-1, NFR-10). A record without the field
+ * answers `re-resolved` from the legacy reader. A refusal or any failure of
  * that reader answers `unreadable`, so the stored compatibility verdict
- * stands. The failure goes to the `mcp` debug channel.
+ * stands. The reason goes to the `mcp` debug channel.
  */
 export async function recordedMcpServers(
   record: PluginInstallRecord,
-  reader: LegacyServersReader,
+  source: LegacyServersSource,
+  readerFor: (source: LegacyServersSource) => LegacyServersReader,
 ): Promise<RecordedMcpServers> {
-  if (record.mcpServerConfigs !== undefined) {
-    return {
-      kind: "recorded",
-      servers: record.mcpServerConfigs,
-      bundle: record.mcpBundle === true,
-    };
-  }
-
   try {
-    const legacy = await reader(record);
-    return { kind: "re-resolved", servers: legacy.servers, bundle: legacy.bundle };
+    return await readRecordedServers(record, source, readerFor);
   } catch (err) {
     // MREC-02: an unreadable declaration leaves the stored verdict standing.
     // The debug channel keeps why, since a caller sees only `unreadable`.
@@ -80,6 +79,30 @@ export async function recordedMcpServers(
     );
     return { kind: "unreadable" };
   }
+}
+
+/** The servers `recordedMcpServers` answers with; throws for every `unreadable` answer. */
+async function readRecordedServers(
+  record: PluginInstallRecord,
+  source: LegacyServersSource,
+  readerFor: (source: LegacyServersSource) => LegacyServersReader,
+): Promise<RecordedMcpServers> {
+  if (record.mcpServerConfigs === undefined) {
+    const legacy = await readerFor(source)(record);
+    return { kind: "re-resolved", servers: legacy.servers, bundle: legacy.bundle };
+  }
+
+  // UF-1 / NFR-10: stored servers name commands and arguments from the
+  // plugin's own files, so they are trusted only for a contained root.
+  if (!(await isPluginRootContained(record, source))) {
+    throw refusal(source, "uncontained");
+  }
+
+  return {
+    kind: "recorded",
+    servers: record.mcpServerConfigs,
+    bundle: record.mcpBundle === true,
+  };
 }
 
 /** The plugin a legacy reader re-resolves: its name and the marketplace that lists it. */
@@ -104,7 +127,8 @@ type LegacyServersUnreadableReason =
   "not-in-manifest" | "unavailable" | "root-mismatch" | "version-mismatch" | "uncontained";
 
 /**
- * MREC-02: the legacy reader refuses to re-resolve a record's declaration.
+ * MREC-02: the legacy reader refuses to re-resolve a record's declaration,
+ * or `recordedMcpServers` refuses a record's stored servers (UF-1).
  * `recordedMcpServers` reads every refusal as `unreadable`.
  */
 class LegacyServersUnreadableError extends Error {
@@ -118,6 +142,14 @@ class LegacyServersUnreadableError extends Error {
     this.plugin = plugin;
     this.marketplace = marketplace;
   }
+}
+
+/** The refusal for `source`'s plugin, for `reason`. */
+function refusal(
+  source: LegacyServersSource,
+  reason: LegacyServersUnreadableReason,
+): LegacyServersUnreadableError {
+  return new LegacyServersUnreadableError(reason, source.pluginName, source.marketplaceName);
 }
 
 /** `pluginCloneKey` (`<12hex>-<sha12>`) and `pluginMirrorKey` (`<12hex>`) outputs. */
@@ -246,27 +278,24 @@ function recordedRootContext(
  * before plugin-variable substitution (D-MB-04).
  */
 export function createLegacyServersReader(source: LegacyServersSource): LegacyServersReader {
-  const refuse = (reason: LegacyServersUnreadableReason): LegacyServersUnreadableError =>
-    new LegacyServersUnreadableError(reason, source.pluginName, source.marketplaceName);
-
   return async (record) => {
     if (!(await isPluginRootContained(record, source))) {
-      throw refuse("uncontained");
+      throw refusal(source, "uncontained");
     }
 
     const manifest = await loadMarketplaceManifest(source.marketplace.manifestPath);
     const lookup = lookupDeclaredPlugin(manifest, source.pluginName);
     if (lookup.kind === "absent") {
-      throw refuse("not-in-manifest");
+      throw refusal(source, "not-in-manifest");
     }
 
     const resolved = await resolveStrict(lookup.entry, recordedRootContext(source, record));
     if (resolved.state === "unavailable") {
-      throw refuse("unavailable");
+      throw refusal(source, "unavailable");
     }
 
     if (resolved.pluginRoot !== record.resolvedSource) {
-      throw refuse("root-mismatch");
+      throw refusal(source, "root-mismatch");
     }
 
     const version = await deriveInstallVersion({
@@ -281,7 +310,7 @@ export function createLegacyServersReader(source: LegacyServersSource): LegacySe
       resolvedVersion: record.resolvedVersion,
     });
     if (!isSameVersion(record.version, version, record.resolvedSha)) {
-      throw refuse("version-mismatch");
+      throw refusal(source, "version-mismatch");
     }
 
     return {

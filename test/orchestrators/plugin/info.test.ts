@@ -11201,15 +11201,23 @@ for (const { implementation, requiresLine } of [
 
 /**
  * D-P3-02: gives the user-scope `alpha` record of `mp` the neutral verdict of
- * an install: every declared server in its Claude form, with the basis.
+ * an install: every declared server in its Claude form, with the basis. The
+ * record's plugin root becomes the `alpha` directory under `mp`'s
+ * `marketplaceRoot` in the same state file, where an install leaves it.
  */
 async function recordNeutralVerdict(cwd: string, servers: Record<string, unknown>): Promise<void> {
   const statePath = path.join(locationsFor("user", cwd).extensionRoot, "state.json");
   const state = JSON.parse(await readFile(statePath, "utf8")) as {
-    marketplaces: Record<string, { plugins: Record<string, Record<string, unknown>> }>;
+    marketplaces: Record<
+      string,
+      { marketplaceRoot: string; plugins: Record<string, Record<string, unknown>> }
+    >;
   };
-  const record = state.marketplaces.mp?.plugins.alpha;
-  assert.ok(record !== undefined);
+  const marketplace = state.marketplaces.mp;
+  const record = marketplace?.plugins.alpha;
+  assert.ok(marketplace !== undefined && record !== undefined);
+  // UF-1: stored servers are read only for a plugin root inside its marketplace.
+  record.resolvedSource = path.join(marketplace.marketplaceRoot, "alpha");
   record.mcpServerConfigs = Object.entries(servers).map(([name, config]) => ({ name, config }));
   record.compatibilityBasis = "neutral";
   await writeFile(statePath, JSON.stringify(state), "utf8");

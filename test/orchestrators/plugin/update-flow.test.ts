@@ -85,7 +85,10 @@ import type {
   GitAuthBundle,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import type { UpdatePluginsFn } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
+import type {
+  UpdateNotification,
+  UpdatePluginsFn,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import type {
   UpdateCloneCacheSeam,
   UpdatePluginsOptions,
@@ -111,7 +114,7 @@ function updatePlugins(options: UpdatePluginsOptions): Promise<void> {
 }
 
 const updateSinglePlugin: PluginUpdateFn = (plugin, marketplace, scope) =>
-  createUpdateOperations().beginPluginUpdateRun()(plugin, marketplace, scope);
+  createUpdateOperations().beginPluginUpdateRun(commandNotification())(plugin, marketplace, scope);
 
 const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",
@@ -287,6 +290,15 @@ async function createCaseDir(prefix: string): Promise<string> {
   return realpath(await mkdtemp(path.join(tmpdir(), prefix)));
 }
 
+/**
+ * The notification of a command run with no MCP implementation, which every
+ * autoupdate run that does not state its own command takes.
+ */
+function commandNotification(): UpdateNotification {
+  const { ctx, run } = makeCtx();
+  return { ctx, run };
+}
+
 function makeCtx(softDeps?: Partial<SoftDepStatus>): {
   ctx: NotificationContext;
   run: NotificationRun;
@@ -341,7 +353,7 @@ function observeStateTransition(
   return {
     fired: () => didFire,
     updatePlugins: operations.updatePlugins,
-    updateSinglePlugin: operations.beginPluginUpdateRun(),
+    updateSinglePlugin: operations.beginPluginUpdateRun(commandNotification()),
   };
 }
 
@@ -371,7 +383,10 @@ function mutateAtFirstLockedLoad(mutate: (state: ExtensionState) => void): {
       },
     },
   );
-  return { fired: () => didFire, updateSinglePlugin: operations.beginPluginUpdateRun() };
+  return {
+    fired: () => didFire,
+    updateSinglePlugin: operations.beginPluginUpdateRun(commandNotification()),
+  };
 }
 
 function makeCredentialOps(): ReturnType<typeof createCredentialOpsFake>["credentialOps"] {
@@ -3882,15 +3897,15 @@ for (const { mcpImplementation, version, notification } of [
   });
 }
 
-for (const { title, notification, partialDegrade } of [
+for (const { title, mcpImplementation, partialDegrade } of [
   {
     title: "a command run under Pi's built-in MCP reports the sse server as a new degrade",
-    notification: true,
+    mcpImplementation: "builtin",
     partialDegrade: { kinds: ["mcpServers"], newlyDegraded: true },
   },
   {
-    title: "a run with no command reads the neutral view and reports no degrade",
-    notification: false,
+    title: "a command run with no MCP implementation reads the neutral view and reports no degrade",
+    mcpImplementation: "none",
     partialDegrade: undefined,
   },
 ] as const) {
@@ -3901,10 +3916,8 @@ for (const { title, notification, partialDegrade } of [
       try {
         // arrange
         await seedSseUpdate(cwd);
-        const { ctx, run } = makeCtx({ mcpImplementation: "builtin" });
-        const updateOne = createUpdateOperations().beginPluginUpdateRun(
-          notification ? { ctx, run } : undefined,
-        );
+        const { ctx, run } = makeCtx({ mcpImplementation });
+        const updateOne = createUpdateOperations().beginPluginUpdateRun({ ctx, run });
         process.chdir(cwd);
 
         // act
@@ -8035,7 +8048,11 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
       );
 
       // act
-      const cascadeOutcome = await operations.beginPluginUpdateRun()("hello", "mp", "user");
+      const cascadeOutcome = await operations.beginPluginUpdateRun(commandNotification())(
+        "hello",
+        "mp",
+        "user",
+      );
 
       // assert
       assert.equal(cascadeOutcome.partition, "updated");
@@ -9764,9 +9781,9 @@ test("D-10-18: a tag published between two cascade runs is visible to the second
 
       // act -- two cascade runs through ONE binding, with the release tag
       // published between them.
-      await operations.beginPluginUpdateRun()("pathfoo", "mp", "project");
+      await operations.beginPluginUpdateRun(commandNotification())("pathfoo", "mp", "project");
       await git.tag({ fs, dir: marketplaceRoot, ref: "pathfoo--v1.2.0", object: oid });
-      await operations.beginPluginUpdateRun()("pathfoo", "mp", "project");
+      await operations.beginPluginUpdateRun(commandNotification())("pathfoo", "mp", "project");
 
       // assert -- run one listed no tag and fell back to the marketplace's
       // current copy; run two pins the published tag. A memo bound to the
@@ -10660,7 +10677,8 @@ test("GHB-03: the cascade's single-plugin update rethrows an invalid base", asyn
 
     // act & assert
     await assert.rejects(
-      () => createUpdateOperations().beginPluginUpdateRun()("gp", "mp", "project"),
+      () =>
+        createUpdateOperations().beginPluginUpdateRun(commandNotification())("gp", "mp", "project"),
       (error: unknown) => {
         assert.deepStrictEqual(
           error,
@@ -13561,7 +13579,7 @@ test("owns plugin update flow composition", () => {
   );
 
   // act
-  const pluginUpdateRun = operations.beginPluginUpdateRun();
+  const pluginUpdateRun = operations.beginPluginUpdateRun(commandNotification());
 
   // assert
   assert.strictEqual(typeof operations.updatePlugins, "function");
@@ -13589,7 +13607,11 @@ test("UPR-04: routes a not-installed preflight failure through the flow owner", 
       process.chdir(cwd);
 
       // act
-      const outcome = await operations.beginPluginUpdateRun()("present", "mp", "project");
+      const outcome = await operations.beginPluginUpdateRun(commandNotification())(
+        "present",
+        "mp",
+        "project",
+      );
 
       // assert
       assert.strictEqual(outcome.partition, "failed");
@@ -15174,48 +15196,43 @@ test("UPD-DEP-D1: a named update settles the new version's dependencies in the c
   });
 });
 
-for (const { label, notified, expected } of [
-  { label: "with the command's context settles", notified: true, expected: ["hello"] },
-  { label: "without a context settles no", notified: false, expected: [] },
-]) {
-  test(`UPD-DEP-D1: an autoupdate run ${label} dependencies`, async () => {
-    await withHermeticHome(async () => {
-      const cwd = await createCaseDir("autoupdate-settles-dependencies-");
-      const previousCwd = process.cwd();
-      try {
-        // arrange
-        await seedPathMarketplace({
-          cwd,
-          marketplaceRoot: path.join(cwd, "mp-src"),
-          marketplaceName: "mp",
-          manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
-          installedVersions: { hello: "1.0.0" },
-        });
-        process.chdir(cwd);
-        const { ctx, run } = makeCtx();
-        const settled: string[] = [];
-        const operations = createPluginUpdateOperations(
-          createHooksRouting(createHooksRuntime(), { readHooksJson }),
-          createCompletionCache(),
-          undefined,
-          {},
-          (args) => {
-            settled.push(args.plugin);
-            return Promise.resolve({ kind: "settled", rows: [] });
-          },
-        );
-        const updateOne = operations.beginPluginUpdateRun(notified ? { ctx, run } : undefined);
+test("UPD-DEP-D1: an autoupdate run settles the new version's dependencies in the command's context", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("autoupdate-settles-dependencies-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      process.chdir(cwd);
+      const { ctx, run } = makeCtx();
+      const settled: unknown[] = [];
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        {},
+        (args, _prepared, notification) => {
+          settled.push([args.plugin, notification.ctx === ctx, notification.run === run]);
+          return Promise.resolve({ kind: "settled", rows: [] });
+        },
+      );
+      const updateOne = operations.beginPluginUpdateRun({ ctx, run });
 
-        // act
-        const outcome = await updateOne("hello", "mp", "project");
+      // act
+      const outcome = await updateOne("hello", "mp", "project");
 
-        // assert
-        assert.strictEqual(outcome.partition, "updated");
-        assert.deepStrictEqual(settled, expected);
-      } finally {
-        process.chdir(previousCwd);
-        await rm(cwd, { recursive: true, force: true });
-      }
-    });
+      // assert
+      assert.strictEqual(outcome.partition, "updated");
+      assert.deepStrictEqual(settled, [["hello", true, true]]);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
-}
+});

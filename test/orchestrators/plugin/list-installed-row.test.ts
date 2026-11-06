@@ -75,7 +75,12 @@ async function installedEnvironment(testContext: TestContext): Promise<{
   readonly mcpImplementation: "adapter";
 }> {
   const environment = await createHermeticEnvironment(testContext, "list-installed-row-");
-  const marketplaceRoot = path.join(environment.cwd, "marketplace");
+  // UF-1: the undefined `marketplaceSource` reads as a cloned marketplace, whose
+  // root lies in the scope's checkout.
+  const marketplaceRoot = path.join(
+    locationsFor("user", environment.cwd).sourcesDir,
+    "third-party",
+  );
   await mkdir(marketplaceRoot, { recursive: true });
   return {
     cwd: environment.cwd,
@@ -734,7 +739,10 @@ test("MREC-03: lists a neutral sse record as installed under pi-mcp-adapter", as
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: neutralSseRecord(),
+    record: {
+      ...neutralSseRecord(),
+      resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
+    },
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -762,7 +770,10 @@ test("MREC-03 / D-P3-05: lists the same record as partially installed under Pi's
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: neutralSseRecord(),
+    record: {
+      ...neutralSseRecord(),
+      resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
+    },
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -846,7 +857,10 @@ test("D-P6-22: classifies an enabled record with the MCP verdict and candidate i
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: neutralSseRecord(),
+    record: {
+      ...neutralSseRecord(),
+      resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
+    },
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -928,6 +942,7 @@ test("D-P3-10: an installed row over a record whose staged server is a ws server
         workflows: [],
       },
     }),
+    resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
     mcpServerConfigs: [{ name: "live", config: { type: "ws", url: "wss://mcp.example.com/ws" } }],
   };
 
@@ -959,6 +974,7 @@ test("D-P3-10 / D-MB-07: an installed row under Pi's built-in MCP carries the se
   const environment = await installedEnvironment(testContext);
   const record: PluginInstallRecord = {
     ...pluginRecord(),
+    resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
     compatibilityBasis: "neutral",
     mcpServerConfigs: [
       { name: "asker", config: { command: "node", bareElicitationCapability: true } },
@@ -994,6 +1010,7 @@ test("D-P3-07 / D-MB-07: a partially-installed row under pi-mcp-adapter carries 
   const environment = await installedEnvironment(testContext);
   const record: PluginInstallRecord = {
     ...pluginRecord(),
+    resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
     compatibilityBasis: "neutral",
     mcpServerConfigs: [
       { name: "asker", config: { command: "node", bareElicitationCapability: true } },
@@ -1034,6 +1051,7 @@ test("MREC-07: a partially-installed row over a ws server neither implementation
         unsupported: ["mcpServers"],
       },
     }),
+    resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
     compatibilityBasis: "neutral",
     mcpServerConfigs: [{ name: "live", config: { type: "ws", url: "ws://127.0.0.1:9/" } }],
   };
@@ -1080,6 +1098,7 @@ test("D-P3-07: a partially-installed row carries only its MCP dependency, never 
         workflows: ["flow"],
       },
     }),
+    resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
     compatibilityBasis: "neutral",
     mcpServerConfigs: [{ name: "tools", config: { command: "node" } }],
   };

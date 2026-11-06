@@ -11,7 +11,8 @@ import assert from "node:assert/strict";
 
 import { Given, Then } from "@cucumber/cucumber";
 
-import { dropRecordedMcpServers, recordedPlugin } from "../../lib/mcp-builtin-earlier-record.ts";
+import { readPluginRecord } from "../../lib/installation-record.ts";
+import { dropRecordedMcpServers } from "../../lib/mcp-builtin-earlier-record.ts";
 import { waitForStubListing } from "../../lib/mcp-implementation.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 
@@ -36,7 +37,7 @@ Given(
   async function (this: ScenarioWorld, pluginId: string, scope: string) {
     const scopeRoot = this.scopeRoot(scope);
     await dropRecordedMcpServers(scopeRoot, pluginId);
-    const record = await recordedPlugin(scopeRoot, pluginId);
+    const record = await readPluginRecord(scopeRoot, pluginId);
     assert.deepStrictEqual(
       ["mcpServerConfigs", "mcpBundle"].filter((member) => Object.hasOwn(record, member)),
       [],

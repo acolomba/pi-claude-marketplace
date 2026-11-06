@@ -5131,7 +5131,8 @@ const SSE_EVENTS = { type: "sse", url: "https://mcp.example.com/sse" };
 
 /**
  * D-P3-02: a user-scope marketplace `mp1` listing `alpha` 1.0.0, whose record
- * an install stored with the neutral verdict and its one sse server.
+ * an install stored with the neutral verdict and its one sse server, under
+ * the plugin root the install left.
  */
 async function seedNeutralSseRecord(home: string, cwd: string): Promise<void> {
   await seedMarketplace({
@@ -5145,8 +5146,12 @@ async function seedNeutralSseRecord(home: string, cwd: string): Promise<void> {
   });
   const { extensionRoot } = locationsFor("user", cwd);
   const state = await loadState(extensionRoot);
-  const record = state.marketplaces.mp1?.plugins.alpha;
+  const marketplace = state.marketplaces.mp1;
+  assert.ok(marketplace !== undefined);
+  const record = marketplace.plugins.alpha;
   assert.ok(record !== undefined);
+  // UF-1: stored servers are read only for a plugin root inside its marketplace.
+  record.resolvedSource = path.join(marketplace.marketplaceRoot, "alpha");
   record.compatibilityBasis = "neutral";
   record.mcpServerConfigs = [{ name: "events", config: SSE_EVENTS }];
   await saveState(extensionRoot, state);

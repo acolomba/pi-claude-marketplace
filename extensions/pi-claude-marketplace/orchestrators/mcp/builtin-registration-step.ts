@@ -166,7 +166,7 @@ async function recordRegistrations(
 
   // MREC-02: a record without `mcpServerConfigs` is re-resolved read-only
   // against its own marketplace record.
-  const recorded = await recordedMcpServers(source.record, createLegacyServersReader(legacySource));
+  const recorded = await recordedMcpServers(source.record, legacySource, createLegacyServersReader);
   if (recorded.kind === "unreadable") {
     debugLog(`MCP servers of ${plugin} not registered: its servers are unreadable`);
     return [];

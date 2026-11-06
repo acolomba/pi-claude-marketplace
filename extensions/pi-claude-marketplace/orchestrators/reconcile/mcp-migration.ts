@@ -404,12 +404,8 @@ async function ownerAction(
 
   const recorded = await recordedMcpServers(
     record,
-    createLegacyServersReader({
-      marketplaceName: owner.marketplace,
-      marketplace,
-      pluginName: owner.plugin,
-      locations,
-    }),
+    { marketplaceName: owner.marketplace, marketplace, pluginName: owner.plugin, locations },
+    createLegacyServersReader,
   );
   return { arm: "move", owner, record, resolved, recorded };
 }
