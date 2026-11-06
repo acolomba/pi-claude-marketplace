@@ -144,6 +144,14 @@ const LONG_NAME_ROWS: readonly LongNameRow[] = [
   },
   {
     title:
+      "D-MB-13: the built-in profile promises no prefix for a 56-character namespace, one past the kept length",
+    id: "builtin",
+    server: "confluence-apis",
+    toolNamePrefix: undefined,
+    toolName: "mcp__plugin_atlassian_confluence_tools_confluence_apis__56e6bbc3",
+  },
+  {
+    title:
       "D-MB-13: the built-in profile promises no prefix for a namespace that a cut tool name loses",
     id: "builtin",
     server: "confluence-cloud",

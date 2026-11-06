@@ -1810,6 +1810,49 @@ describe("migrateLegacyMcpEntries", () => {
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBytes);
   });
 
+  test("AMIG-01: a record already not installable for another kind gains the MCP kind from the neutral verdict", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "unsupported-other-kind");
+    const { cwd, locations } = scope;
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" }, live: WS_SERVER } },
+    });
+    const record = pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]);
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: {
+          ...record,
+          compatibility: { ...record.compatibility, installable: false, unsupported: ["hooks"] },
+        },
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...record,
+        compatibility: {
+          installable: false,
+          notes: [],
+          supported: ["mcpServers"],
+          unsupported: ["hooks", "mcpServers"],
+        },
+        mcpServerConfigs: [
+          { name: "srv", config: { command: "srv" } },
+          { name: "live", config: WS_SERVER },
+        ],
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
   test("AMIG-01: a plugin whose MCP config is malformed has every legacy entry removed, none written, and its inventory emptied", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "malformed");
