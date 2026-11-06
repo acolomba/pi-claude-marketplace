@@ -10,8 +10,11 @@ import {
   resyncBuiltinRegistrations,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/builtin-registration-step.ts";
 import {
+  builtinRegistrationRefused,
   builtinServerOwner,
   noteBuiltinServerOwners,
+  noteFreshBuiltinRegistration,
+  noteRefusedBuiltinRegistration,
 } from "../../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -752,6 +755,9 @@ describe("builtinRegistrationStep", () => {
 
   test("NFR-2: a refused registration is logged with each absolute path cut to its last segment", async (t) => {
     // arrange
+    t.after(() => {
+      noteFreshBuiltinRegistration("plugin_demo_stub");
+    });
     const fixture = await session(t);
     const logged = captureDebugLog(t);
     await writeState(fixture, "user", { demo: installRecord(fixture.pluginRoot) });
@@ -772,6 +778,54 @@ describe("builtinRegistrationStep", () => {
     assert.deepStrictEqual(logged, [
       '[mcp] MCP server plugin_demo_stub not registered: MCP server "plugin_demo_stub" is already registered by extension "other.ts"',
     ]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-MB-29: a registration Pi refuses is noted as refused", async (t) => {
+    // arrange
+    t.after(() => {
+      noteFreshBuiltinRegistration("plugin_demo_stub");
+    });
+    const fixture = await session(t);
+    captureDebugLog(t);
+    await writeState(fixture, "user", { demo: installRecord(fixture.pluginRoot) });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_stub", stubConfig(fixture, "user", fixture.pluginRoot));
+    }).thenThrow(
+      new Error('MCP server "plugin_demo_stub" is already registered by extension "other.ts"'),
+    );
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.strictEqual(builtinRegistrationRefused("plugin_demo_stub"), true);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-MB-29: a registration Pi accepts clears an earlier refusal", async (t) => {
+    // arrange
+    t.after(() => {
+      noteFreshBuiltinRegistration("plugin_demo_stub");
+    });
+    noteRefusedBuiltinRegistration("plugin_demo_stub");
+    const fixture = await session(t);
+    await writeState(fixture, "user", { demo: installRecord(fixture.pluginRoot) });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_stub", stubConfig(fixture, "user", fixture.pluginRoot));
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.strictEqual(builtinRegistrationRefused("plugin_demo_stub"), false);
     verify(pi);
     verify(ctx);
   });

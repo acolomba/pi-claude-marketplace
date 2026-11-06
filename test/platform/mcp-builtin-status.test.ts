@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  builtinRegistrationRefused,
   builtinServerOwner,
   createBuiltinMcpStatusReader,
   noteBuiltinServerOwners,
   noteFreshBuiltinRegistration,
+  noteRefusedBuiltinRegistration,
   noteReplacedBuiltinRegistration,
 } from "../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
 
@@ -274,4 +276,51 @@ test("P2-DC-14: a later sync's owners replace every earlier owner", (t) => {
 
   // assert
   assert.deepStrictEqual(owners, [undefined, user]);
+});
+
+test("D-MB-29: a refused registration reads as refused and another name does not", (t) => {
+  // arrange
+  t.after(() => {
+    noteFreshBuiltinRegistration("plugin_alpha_api");
+  });
+  noteRefusedBuiltinRegistration("plugin_alpha_api");
+
+  // act
+  const refused = [
+    builtinRegistrationRefused("plugin_alpha_api"),
+    builtinRegistrationRefused("plugin_alpha_db"),
+  ];
+
+  // assert
+  assert.deepStrictEqual(refused, [true, false]);
+});
+
+test("D-MB-29: a fresh registration or a removal clears a refusal", (t) => {
+  // arrange
+  t.after(() => {
+    noteFreshBuiltinRegistration("plugin_alpha_api");
+  });
+  noteRefusedBuiltinRegistration("plugin_alpha_api");
+  const before = builtinRegistrationRefused("plugin_alpha_api");
+
+  // act
+  noteFreshBuiltinRegistration("plugin_alpha_api");
+
+  // assert
+  assert.deepStrictEqual([before, builtinRegistrationRefused("plugin_alpha_api")], [true, false]);
+});
+
+test("D-MB-29: a replacement clears a refusal", (t) => {
+  // arrange
+  t.after(() => {
+    noteFreshBuiltinRegistration("plugin_alpha_api");
+  });
+  noteRefusedBuiltinRegistration("plugin_alpha_api");
+  const before = builtinRegistrationRefused("plugin_alpha_api");
+
+  // act
+  noteReplacedBuiltinRegistration("plugin_alpha_api");
+
+  // assert
+  assert.deepStrictEqual([before, builtinRegistrationRefused("plugin_alpha_api")], [true, false]);
 });

@@ -48,8 +48,10 @@
 // step's own decision, so a project server the step skipped, as blocked,
 // malformed, outside its clone root, or unreadable, overrides nothing, and
 // the owner's marketplace and plugin count, because the registered name does
-// not name the marketplace and can fold two plugins together. Otherwise the
-// server reads the reader's answer.
+// not name the marketplace and can fold two plugins together. Then a server
+// whose registration Pi refused reads `not loaded`, because another extension
+// registered the name first and Pi lists that extension's server under it
+// (D-MB-29, P2-DC-46). Otherwise the server reads the reader's answer.
 
 import { readMcpJsonServerNamespaces } from "../../bridges/mcp/index.ts";
 import { profileFor } from "../../domain/mcp-implementation.ts";
@@ -60,7 +62,10 @@ import {
 } from "../../domain/name.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
-import { builtinServerOwner } from "../../platform/mcp-builtin-status.ts";
+import {
+  builtinRegistrationRefused,
+  builtinServerOwner,
+} from "../../platform/mcp-builtin-status.ts";
 
 import type { RecordedMcpServers } from "../../domain/mcp-implementation.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
@@ -189,7 +194,8 @@ function ownedElsewhere(block: PluginInfoMessage, name: string): McpServerStatus
  * BLT-05: one server's built-in state, in a fixed order: an `mcp.json`
  * server that holds its namespace (BLT-04, T-02-19), so a same-named
  * `mcp.json` server never reads as the plugin's; then a name another record
- * owns; then the reader's answer under the registered name.
+ * owns; then a name whose registration Pi refused (D-MB-29); then the
+ * reader's answer under the registered name.
  */
 function builtinStatus(
   block: PluginInfoMessage,
@@ -202,7 +208,18 @@ function builtinStatus(
     return "overridden by mcp.json";
   }
 
-  return ownedElsewhere(block, name) ?? statusToken(reader.lookup(name));
+  const owned = ownedElsewhere(block, name);
+  if (owned !== undefined) {
+    return owned;
+  }
+
+  // D-MB-29: another extension holds the name, so Pi lists its server, not
+  // the plugin's.
+  if (builtinRegistrationRefused(name)) {
+    return "not loaded";
+  }
+
+  return statusToken(reader.lookup(name));
 }
 
 async function stampBuiltinEntries(

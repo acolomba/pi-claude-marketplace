@@ -38,9 +38,10 @@ function unregister(
  * a registration in place of a listed config of another shape, `fresh` for
  * any other registration or a removal (P2-DC-10). A
  * `registerMcpServer` throw (another extension's name, a `-`/`_` clash, a
- * config Pi refuses) or an `unregisterMcpServer` throw goes to `log` with the
- * server name and Pi's message, never a config value, and the other servers
- * still change. A `getMcpServers` throw leaves nothing to compare, so it
+ * config Pi refuses) goes to `log` and to `notes.refused` (D-MB-29). An
+ * `unregisterMcpServer` throw goes to `log` only. A log line names the server
+ * and Pi's message, never a config value, and the other servers still
+ * change. A `getMcpServers` throw leaves nothing to compare, so it
  * propagates and the whole sync is skipped.
  */
 export function syncBuiltinRegistrations(
@@ -50,6 +51,7 @@ export function syncBuiltinRegistrations(
   notes: {
     readonly replaced: (serverName: string) => void;
     readonly fresh: (serverName: string) => void;
+    readonly refused: (serverName: string) => void;
   },
 ): void {
   const listed = new Map<string, string>();
@@ -75,6 +77,7 @@ export function syncBuiltinRegistrations(
       }
     } catch (error: unknown) {
       log(`MCP server ${name} not registered: ${errorMessage(error)}`);
+      notes.refused(name);
     }
   }
 }

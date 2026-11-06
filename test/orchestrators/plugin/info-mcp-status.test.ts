@@ -6,7 +6,11 @@ import test from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import { withMcpServerStatus } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info-mcp-status.ts";
-import { noteBuiltinServerOwners } from "../../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
+import {
+  noteBuiltinServerOwners,
+  noteFreshBuiltinRegistration,
+  noteRefusedBuiltinRegistration,
+} from "../../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { RecordedMcpServers } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
@@ -1042,3 +1046,112 @@ for (const { label, projectRecord, projectTrusted } of [
     );
   });
 }
+
+/** Notes Pi's refusal of each registered name, as the registration step's sync does, for this case. */
+function refused(t: TestContext, ...names: readonly string[]): void {
+  t.after(() => {
+    for (const name of names) {
+      noteFreshBuiltinRegistration(name);
+    }
+  });
+  for (const name of names) {
+    noteRefusedBuiltinRegistration(name);
+  }
+}
+
+test("D-MB-29: under builtin a server whose registration Pi refused reads not loaded, and another server keeps the reader's answer", async (t) => {
+  // arrange
+  refused(t, "plugin_alpha_api");
+  const reader = mock<McpStatusReader>({ exactParams: true, name: "mcp status" });
+  when(() => reader.lookup("plugin_alpha_db"))
+    .thenReturn("connected")
+    .times(1);
+  const { lookup } = await builtinLookup(t, reader);
+  const block = infoBlock("installed", [{ name: "plugin:alpha:api" }, { name: "plugin:alpha:db" }]);
+
+  // act
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord([]),
+    lookup,
+    undefined,
+    recording(["api", "db"]),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    stamped,
+    infoBlock("installed", [
+      { name: "plugin:alpha:api", status: "not loaded" },
+      { name: "plugin:alpha:db", status: "connected" },
+    ]),
+  );
+  verify(reader);
+});
+
+test("D-MB-29: under builtin an mcp.json override comes before a refused registration", async (t) => {
+  // arrange
+  refused(t, "plugin_alpha_api");
+  const { lookup, environment } = await builtinLookup(t, answeringReader("connected"));
+  await writeMcpJson(environment.agentDir, { plugin_alpha_api: { command: "node" } });
+  const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
+
+  // act
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord([]),
+    lookup,
+    undefined,
+    recording(["api"]),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    stamped,
+    infoBlock("installed", [{ name: "plugin:alpha:api", status: "overridden by mcp.json" }]),
+  );
+});
+
+test("D-MB-29 / P2-DC-14: under builtin a user row's server that a project record owns reads overridden by project scope, also when Pi refused the name", async (t) => {
+  // arrange
+  ownedBy(t, { plugin_alpha_api: ["project", "mp", "alpha"] });
+  refused(t, "plugin_alpha_api");
+  const { lookup } = await builtinLookup(t, answeringReader("connected"));
+  const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
+
+  // act
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord([]),
+    lookup,
+    builtinRecord(["api"]),
+    recording(["api"]),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    stamped,
+    infoBlock("installed", [{ name: "plugin:alpha:api", status: "overridden by project scope" }]),
+  );
+});
+
+test("D-MB-29: under adapter a refused built-in name leaves the adapter's answer", async (t) => {
+  // arrange
+  refused(t, "plugin_alpha_api");
+  const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
+
+  // act
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord(["api"]),
+    answering("connected"),
+    undefined,
+    notRead,
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    stamped,
+    infoBlock("installed", [{ name: "plugin:alpha:api", status: "connected" }]),
+  );
+});
