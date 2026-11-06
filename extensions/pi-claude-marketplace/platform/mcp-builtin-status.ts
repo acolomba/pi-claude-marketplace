@@ -71,9 +71,9 @@ function isHidden(tool: ToolInventoryItem): boolean {
 }
 
 // The names whose last accepted registration in this Pi process replaced a
-// listed config of another shape. A fresh registration or a removal clears a name,
-// and Pi starts each session with no registration, so a name from an earlier
-// session is cleared when it registers again.
+// listed config of another shape. A fresh registration or a removal clears a
+// name, and Pi starts each session with no registration, so a name from an
+// earlier session is cleared when it registers again.
 const replacedRegistrations = new Set<string>();
 
 // D-MB-29: the names whose last registration attempt in this Pi process Pi
@@ -88,18 +88,19 @@ export interface BuiltinServerOwner {
 }
 
 // ASTAT-01 / P2-DC-14: the owner of each name the registration step's last
-// sync asked Pi to register, as it decided: the user records first, then the trusted
-// project's, a later record of the same server name winning. The marketplace
-// is not part of the name, and two plugin and server pairs can fold to one
-// name, so another record can own a name.
+// sync asked Pi to register, as it decided: the user records first, then the
+// trusted project's, a later record of the same server name winning. A server
+// whose record could not be read keeps its earlier owner. The marketplace is
+// not part of the name, and two plugin and server pairs can fold to one name,
+// so another record can own a name.
 let serverOwners: ReadonlyMap<string, BuiltinServerOwner> = new Map();
 
-/** Records the owner of each name the registration step's sync asked Pi to register. */
+/** Records the owner of each name the registration step's last sync decided. */
 export function noteBuiltinServerOwners(owners: ReadonlyMap<string, BuiltinServerOwner>): void {
   serverOwners = owners;
 }
 
-/** The owner the last sync gave `serverName`, or `undefined` when it asked Pi to register no such name. */
+/** The owner the last sync gave `serverName`, or `undefined` when it gave that name none. */
 export function builtinServerOwner(serverName: string): BuiltinServerOwner | undefined {
   return serverOwners.get(serverName);
 }

@@ -1,10 +1,9 @@
 /**
  * The built-in MCP registration step and its resync.
  *
- * `session-materialize.ts` runs
- * `builtinRegistrationStep` at every `session_start`, and the extension runs
- * `resyncBuiltinRegistrations` after each load reconcile (D-MB-10). Both run
- * one sync: they register each runnable MCP server of each enabled plugin
+ * `session-materialize.ts` runs `builtinRegistrationStep` at every
+ * `session_start`, and the extension runs `resyncBuiltinRegistrations` after
+ * each load reconcile (D-MB-10). Both run one sync: they register each runnable MCP server of each enabled plugin
  * record with Pi's own MCP for the session, under Claude Code's server name
  * (D-MB-02, D-MB-13), and unregister the plugin servers no record wants any
  * more. A server's values are resolved here from the session environment
@@ -190,6 +189,9 @@ async function recordRegistrations(
   // MREC-02: a record without `mcpServerConfigs` is re-resolved read-only
   // against its own marketplace record.
   const recorded = await recordedMcpServers(source.record, legacySource, createLegacyServersReader);
+  // An unreadable record is a skip, not a read failure: `unreadable` also
+  // answers a plugin root outside its clone root, which must never keep a
+  // registration (UF-1, NFR-10), so its live servers are unregistered.
   if (recorded.kind === "unreadable") {
     debugLog(`MCP servers of ${plugin} not registered: its servers are unreadable`);
     return [];
@@ -306,6 +308,7 @@ function retainedOwners(
   for (const { name } of pi.getMcpServers()) {
     const owner = builtinServerOwner(name);
     if (owner !== undefined && failures.some((failure) => isOwnedByFailure(owner, failure))) {
+      debugLog(`MCP server ${name} kept registered: its owner could not be read`);
       retained.set(name, owner);
     }
   }

@@ -41,8 +41,10 @@ import { adapterCommand, builtinMcpCommand } from "../../platform/pi-inventory-s
 import { expectSoftDepProbes } from "../notification-boundary.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { CommandInventoryItem } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { ExtensionAPI } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  CommandInventoryItem,
+  ExtensionAPI,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   PluginStatus,
   Reason,

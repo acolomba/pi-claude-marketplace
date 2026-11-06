@@ -202,8 +202,17 @@ test("MREC-01: replacing a record's compatibility with the neutral basis writes 
   );
 
   // assert
-  assert.equal(record.compatibilityBasis, "neutral");
-  assert.equal(record.compatibility.installable, true);
+  assert.deepStrictEqual(record, {
+    version: "1.0.0",
+    resolvedSource: "/plugin",
+    compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+    compatibilityBasis: "neutral",
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
 });
 
 test("disables a plugin while preserving its complete inventory", () => {

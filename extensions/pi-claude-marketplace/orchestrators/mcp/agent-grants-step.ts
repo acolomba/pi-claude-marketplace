@@ -1,9 +1,8 @@
 /**
  * The agent MCP grants step.
  *
- * `session-materialize.ts` runs it at
- * every `session_start`, after the built-in registration step. A switch
- * between MCP implementations is installing or removing pi-mcp-adapter, which
+ * `session-materialize.ts` runs it at every `session_start`, after the built-in
+ * registration step. A switch between MCP implementations is installing or removing pi-mcp-adapter, which
  * runs no plugin command, so this step is what brings the generated agent
  * files in line with the active implementation: it swaps each file whose
  * stored grant form differs for the active form (MGRT-01, D-MB-03). The file

@@ -57,10 +57,9 @@ export type LegacyServersReader = (record: PluginInstallRecord) => Promise<Legac
  * values are the record's own, so a caller must not change them. When the
  * record's plugin root is outside its owning clone root, the stored servers
  * are refused as `uncontained` (UF-1, NFR-10), and an uncontained stored
- * record answers `unreadable`. A record without the field
- * answers `re-resolved` from the legacy reader. A refusal or any failure of
- * that reader answers `unreadable`, so the stored compatibility verdict
- * stands. The reason goes to the `mcp` debug channel.
+ * record answers `unreadable`. A record without the field answers
+ * `re-resolved` from the legacy reader. A refusal or any failure of that
+ * reader answers `unreadable`, so the stored compatibility verdict stands. The reason goes to the `mcp` debug channel.
  */
 export async function recordedMcpServers(
   record: PluginInstallRecord,

@@ -168,8 +168,7 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   //
   // The basis describes the `compatibility` beside it. So every write that
   // replaces or changes `compatibility` also writes the basis:
-  // `replaceCompatibility` clears it, and only a writer that computed the
-  // neutral verdict sets it again.
+  // `replaceCompatibility` takes it as an argument and writes both together.
   compatibilityBasis: Type.Optional(Type.Literal("neutral")),
   compatibility: Type.Object({
     installable: Type.Boolean(),
