@@ -59,6 +59,7 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { HostedManifestFetch } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { UpdateNotification } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import type {
   PluginUpdateFn,
   PluginUpdateOutcome,
@@ -88,11 +89,12 @@ const VALID_MANIFEST_JSON = JSON.stringify({
   ],
 });
 
-function createUpdateSinglePlugin(): PluginUpdateFn {
+/** The autoupdate run of the command whose notification is `notification`, as the handler binds it. */
+function createUpdateSinglePlugin(notification: UpdateNotification): PluginUpdateFn {
   return createPluginUpdateOperations(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
-  ).beginPluginUpdateRun();
+  ).beginPluginUpdateRun(notification);
 }
 
 interface MarketplaceGitOpsSeed {
@@ -2765,7 +2767,7 @@ test("LIFE-06: autoupdate cascade through the REAL single-plugin update renders 
         gitOps,
         // The REAL implementation, so the skip travels its whole route: the
         // shared preflight originates it and the cascade mapper re-narrows it.
-        pluginUpdate: createUpdateSinglePlugin(),
+        pluginUpdate: createUpdateSinglePlugin({ ctx, run }),
       });
 
       // assert
@@ -2867,7 +2869,7 @@ test("WR-10: an autoupdate cascade over a disabled record whose pin moved render
         scope: "user",
         cwd,
         gitOps,
-        pluginUpdate: createUpdateSinglePlugin(),
+        pluginUpdate: createUpdateSinglePlugin({ ctx, run }),
       });
 
       // assert

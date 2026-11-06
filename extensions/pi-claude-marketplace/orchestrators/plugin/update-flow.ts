@@ -4,8 +4,9 @@
 // NFR-2 + NFR-3.
 //
 // Three entrypoints, bound by `createPluginUpdateOperations` (D-09 corollary):
-//  1. beginPluginUpdateRun(): PluginUpdateFn -- the autoupdate cascade;
-//     cascade-safe, throws only an invalid GitHub base override (GHB-03)
+//  1. beginPluginUpdateRun(notification): PluginUpdateFn -- the autoupdate
+//     cascade; cascade-safe, throws only an invalid GitHub base override
+//     (GHB-03)
 //  2. convergePlugin: PluginConvergeFn -- `apply`'s catalog move (D-26),
 //     under the same cascade-safe contract
 //  3. updatePlugins(opts) -- direct entrypoint; PUP-1 three forms
@@ -1425,9 +1426,12 @@ export interface PluginUpdateOperations {
    * caller invokes this once per `marketplace update` command and drives
    * every plugin of that command through the returned function, which is
    * what bounds the D-10-18 tag memos to the run (see
-   * `createPluginUpdateOperations`).
+   * `createPluginUpdateOperations`). `notification` is the command's
+   * notification context, and it is required: its run names the MCP
+   * implementation the cascade reads (D-P3-12), and a dependency install
+   * reports through it (UPD-DEP-D1).
    */
-  readonly beginPluginUpdateRun: (notification?: UpdateNotification) => PluginUpdateFn;
+  readonly beginPluginUpdateRun: (notification: UpdateNotification) => PluginUpdateFn;
   /** D-26: materializes one catalog move for `apply` under the converge policy. */
   readonly convergePlugin: PluginConvergeFn;
 }
@@ -1525,8 +1529,8 @@ export function createPluginUpdateOperations(
   // version they move to, in the notification context of the command that
   // runs them. `apply`'s catalog moves do not: its plan installs, enables and
   // moves the dependencies first, as `pending` previews them.
-  const settling = (notification: UpdateNotification | undefined): UpdatePluginRunner =>
-    resolveDependencies === undefined || notification === undefined
+  const settling = (notification: UpdateNotification): UpdatePluginRunner =>
+    resolveDependencies === undefined
       ? run
       : (args) =>
           run({
@@ -1546,13 +1550,12 @@ export function createPluginUpdateOperations(
   // pushed between two runs is visible to the second. The pair spans every
   // plugin of one run, so a marketplace common to several of them is listed
   // once and the cascade's warm-cache expectation for path sources holds.
-  const beginPluginUpdateRun = (notification?: UpdateNotification): PluginUpdateFn => {
+  const beginPluginUpdateRun = (notification: UpdateNotification): PluginUpdateFn => {
     const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
     const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
     const runner = settling(notification);
-    // D-P3-12: the implementation of the command's run. A run with no command
-    // has no snapshot, so it reads the neutral view.
-    const mcpImplementation = notification?.run.softDeps.mcpImplementation ?? "none";
+    // D-P3-12: the run reads the MCP implementation of its command's run.
+    const mcpImplementation = notification.run.softDeps.mcpImplementation;
     return (plugin, marketplace, scope) =>
       updateSinglePluginWith(
         bindings,
