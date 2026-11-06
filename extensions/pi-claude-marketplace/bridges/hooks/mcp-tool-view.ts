@@ -4,8 +4,9 @@
 // Pi's built-in MCP folds `-` in a server's name to `_` in its tool names,
 // while Claude Code keeps `-`. Pi's tool list keeps the registered server
 // name as the namespace alias of each tool its built-in MCP serves, so the
-// view reads that list when a tool event's hooks are about to run and gives
-// them the tool under Claude's server segment.
+// view reads that list when a tool event's hooks are about to run and names
+// the server of the tool. `claudeFormToolName` then gives the hooks the tool
+// under Claude's server segment.
 //
 // The view reads nothing when it is created, so a bridge generation can make
 // one at registration (MSEL-01), and nothing for a tool whose name is not an
@@ -14,10 +15,7 @@
 // pi-mcp-adapter's proxy rule applies. That answer comes from the first probe
 // whose reads all succeed (MHK-02, D-P5-06, D-P5-07, HOOKTOOLREAD-01).
 
-import {
-  claudeFormToolName,
-  MCP_TOOL_PREFIX,
-} from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
+import { MCP_TOOL_PREFIX } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { openNotificationSnapshot } from "../../shared/notification-run.ts";
@@ -32,19 +30,10 @@ const BUILTIN_MCP_SOURCE_PATH = "builtin:mcp";
 
 type PiTool = ReturnType<ExtensionAPI["getAllTools"]>[number];
 
-/** The tool of a tool event, with the name every hook sees (D-P5-03). */
-export interface HookTool extends McpToolIdentity {
-  /**
-   * The tool name of the hook's stdin, its notice label, and every label the
-   * model reads: Claude's form for a tool of Pi's built-in MCP, else Pi's name.
-   */
-  readonly name: string;
-}
-
 /** The dispatch-time view of the tools Pi lists. */
 export interface HookToolView {
   /** The tool the event names `piName`, read from Pi's tool list once per call. */
-  identify(piName: string): HookTool;
+  identify(piName: string): McpToolIdentity;
   /**
    * MHK-02, D-P5-06: whether pi-mcp-adapter is the active MCP implementation,
    * so that its proxy rule (D-CF5-12) applies. Under Pi's built-in MCP, or
@@ -53,28 +42,19 @@ export interface HookToolView {
   proxyRuleApplies(): boolean;
 }
 
-function asPiNames(piName: string): HookTool {
-  return { piName, name: piName, builtinServer: undefined };
+function asPiNames(piName: string): McpToolIdentity {
+  return { piName, builtinServer: undefined };
 }
 
 // D-P5-01: a tool counts as a tool of Pi's built-in MCP only when Pi's own
 // loader registered it and its namespace keeps the server's registered name.
-function hookToolFor(piName: string, tool: PiTool | undefined): HookTool {
-  const namespace = tool?.namespace;
-  const server = namespace?.aliases?.[0];
-  if (
-    tool?.sourceInfo.path !== BUILTIN_MCP_SOURCE_PATH ||
-    namespace === undefined ||
-    server === undefined
-  ) {
+function hookToolFor(piName: string, tool: PiTool | undefined): McpToolIdentity {
+  const server = tool?.namespace?.aliases?.[0];
+  if (tool?.sourceInfo.path !== BUILTIN_MCP_SOURCE_PATH || server === undefined) {
     return asPiNames(piName);
   }
 
-  return {
-    piName,
-    name: claudeFormToolName(piName, namespace.name, server),
-    builtinServer: server,
-  };
+  return { piName, builtinServer: server };
 }
 
 // HOOKTOOLREAD-01: Pi's own reads, with each read that throws recorded in

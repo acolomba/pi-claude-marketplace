@@ -193,12 +193,10 @@ describe("serverPrefixNames", () => {
 describe("claudeFormToolName", () => {
   test("puts the registered server name in place of Pi's namespace (D-P5-02)", () => {
     // arrange
-    const piName = "mcp__plugin_hook_demo_stub_server__echo";
-    const namespace = "mcp__plugin_hook_demo_stub_server";
-    const server = "plugin_hook-demo_stub-server";
+    const tool = hookDemoTool();
 
     // act
-    const hookToolName = claudeFormToolName(piName, namespace, server);
+    const hookToolName = claudeFormToolName(tool);
 
     // assert
     assert.strictEqual(hookToolName, "mcp__plugin_hook-demo_stub-server__echo");
@@ -206,10 +204,10 @@ describe("claudeFormToolName", () => {
 
   test("keeps Pi's name when Pi cut it inside the namespace (D-P5-02)", () => {
     // arrange
-    const namespace = "mcp__plugin_hook_proxy_shaped_tool_names_of_a_long_plugin_stub_server";
+    const tool = { piName: LONG_PI_NAME, builtinServer: LONG_SERVER };
 
     // act
-    const hookToolName = claudeFormToolName(LONG_PI_NAME, namespace, LONG_SERVER);
+    const hookToolName = claudeFormToolName(tool);
 
     // assert
     assert.strictEqual(hookToolName, LONG_PI_NAME);
@@ -217,12 +215,23 @@ describe("claudeFormToolName", () => {
 
   test("keeps the hash as the tool segment when Pi's cut ends just past the namespace (D-P5-02)", () => {
     // arrange
-    const piName = `${EDGE_NAMESPACE}__f5437d26`;
+    const tool = { piName: `${EDGE_NAMESPACE}__f5437d26`, builtinServer: EDGE_SERVER };
 
     // act
-    const hookToolName = claudeFormToolName(piName, EDGE_NAMESPACE, EDGE_SERVER);
+    const hookToolName = claudeFormToolName(tool);
 
     // assert
     assert.strictEqual(hookToolName, `mcp__${EDGE_SERVER}__f5437d26`);
+  });
+
+  test("keeps Pi's name of a tool that no built-in server serves (D-P5-05)", () => {
+    // arrange
+    const tool = hookDemoTool();
+
+    // act
+    const hookToolName = claudeFormToolName({ ...tool, builtinServer: undefined });
+
+    // assert
+    assert.strictEqual(hookToolName, "mcp__plugin_hook_demo_stub_server__echo");
   });
 });

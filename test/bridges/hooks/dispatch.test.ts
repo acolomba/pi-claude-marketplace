@@ -24,14 +24,12 @@ import type {
   HookExecutor,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
-import type {
-  HookTool,
-  HookToolView,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts";
+import type { HookToolView } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts";
 import type { ClaudeSessionEndEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import type { McpToolIdentity } from "../../../extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -3188,7 +3186,7 @@ function createProxyRuleView(applies: boolean, log: string[]): HookToolView {
   return {
     identify: (piName) => {
       log.push(`identify ${piName}`);
-      return { piName, name: piName, builtinServer: undefined };
+      return { piName, builtinServer: undefined };
     },
     proxyRuleApplies: () => {
       log.push("proxyRuleApplies");
@@ -4175,15 +4173,13 @@ describe("tool hook context (HOOK-04 / D-CF5-13)", () => {
 const BUILTIN_PI_NAME = "mcp__plugin_hook_demo_stub_server__echo";
 const BUILTIN_CLAUDE_NAME = "mcp__plugin_hook-demo_stub-server__echo";
 
-const BUILTIN_TOOLS: Readonly<Partial<Record<string, HookTool>>> = {
+const BUILTIN_TOOLS: Readonly<Partial<Record<string, McpToolIdentity>>> = {
   [BUILTIN_PI_NAME]: {
     piName: BUILTIN_PI_NAME,
-    name: BUILTIN_CLAUDE_NAME,
     builtinServer: "plugin_hook-demo_stub-server",
   },
   mcp__echo_server__echo_text: {
     piName: "mcp__echo_server__echo_text",
-    name: "mcp__echo-server__echo_text",
     builtinServer: "echo-server",
   },
 };
@@ -4197,7 +4193,7 @@ function createBuiltinToolView(identified: string[]): HookToolView {
   return {
     identify: (piName) => {
       identified.push(piName);
-      return BUILTIN_TOOLS[piName] ?? { piName, name: piName, builtinServer: undefined };
+      return BUILTIN_TOOLS[piName] ?? { piName, builtinServer: undefined };
     },
     proxyRuleApplies: () => false,
   };
