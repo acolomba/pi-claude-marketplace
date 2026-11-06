@@ -4932,7 +4932,7 @@ Noted 2026-11-05 (mcp-builtin, P5-DC-24, MHK-02). MHK-02's case with no MCP impl
 
 ## PENDAPPLY-01: `apply` refuses a declared install that `pending` previews as a partial install
 
-Noted 2026-11-05 (mcp-builtin, P3-DC-122). `pending` previews a declared install of a partially available plugin as `(will partially install)`, but `apply` refuses that install. The mismatch predates the milestone for every partially available kind. Phase 3 makes it reachable for an `sse` plugin under Pi's built-in MCP. Candidate direction: choose one behavior for both commands, from what Claude Code does with a declared plugin that installs only in part.
+Noted 2026-11-05 (mcp-builtin, P3-DC-122). `pending` previews a declared install of a partially available plugin as `(will partially install)`, but `apply` refuses that install. The mismatch predates the milestone for every partially available kind. Phase 3 makes it reachable for an `sse` plugin under Pi's built-in MCP. Candidate direction: choose one behavior for both commands, from what Claude Code does with a declared plugin that installs only in part. The user's review on 2026-11-06 left it in BACKLOG.
 
 ## GRANTLEGACY-01: exact translation of legacy agent grants under built-in MCP
 
@@ -4949,3 +4949,35 @@ Noted 2026-11-05 (mcp-builtin, Phase 1 conditional (b), D-P3-14). When the user 
 ## STRICTINSTALL-01: make the built-in twin installs strict
 
 Noted 2026-11-05 (mcp-builtin, 02-08 item 9, P2-DC-78). The built-in twin scenarios of `configuration.feature`, `invocation.feature`, `sources.feature`, `builtin-values.feature`, `builtin-direct.feature`, `builtin-trust.feature`, `project-scope.feature`, and the enable and update twins of `lifecycle.feature` install and enable with `which did not fail`. Phase 2 used that form because the MCP markers did not exist yet. Phase 3's markers have landed, so those installs can no longer warn and the strict form fits. Phase 6 did not change the scenarios because its plans own no such edit. Candidate direction: change each twin to the strict install step and run both profiles.
+
+## COMPLIMPL-01: a completion scenario that reads the MCP implementation from Pi
+
+Noted 2026-11-06 (mcp-builtin, `06-REVIEW.md` IN-01, D-P6-22). The step `the user requests plugin completions for {string}` calls the completion provider in the test process with the implementation of the scenario's profile (`features/lib/plugin-completions.ts`). So no scenario covers how the registered command reads the implementation from Pi at each lookup (`edge/register.ts`). Only `test/edge/register.test.ts` covers it. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: drive one built-in completion scenario through the completion provider that the profile Pi registers, or record the gap as a known limit.
+
+## STAMPTYPE-01: derive the completion cache stamp values from the MCP implementation type
+
+Noted 2026-11-06 (mcp-builtin, `06-REVIEW.md` IN-05, D-P6-22). The schema of the completion cache in `shared/completion-cache.ts` lists the stamp values `adapter`, `builtin`, and `none` itself. It does not derive them from `ActiveMcpImplementation`. If a fourth implementation is added, the schema rejects its stamp, and the compiler does not report it. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: add a compile-time check that the static type of the stamp schema equals `ActiveMcpImplementation`, or build both from one exported tuple.
+
+## GRANTRUNARG-01: make the direct-swap grant test tell the run from the argument
+
+Noted 2026-11-06 (mcp-builtin, `06-REVIEW.md` IN-06, MGRT-01, D-MB-03). In `test/orchestrators/plugin/update-swap.test.ts`, the direct-swap case for Pi's built-in MCP passes a built-in run and `mcpImplementation: "builtin"`. The two values agree, so the test cannot tell which one the swap reads. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: give the case a run that names another implementation, and keep `mcpImplementation: "builtin"`.
+
+## STAMPREQ-01: make the completion cache stamp option required
+
+Noted 2026-11-06 (mcp-builtin, `06-REVIEW.md` IN-07, P6-PLN-04). `GetPluginIndexOptions.mcpImplementation` in `shared/completion-cache.ts` is optional only so that test fixtures can read a file without a stamp. Every production caller passes it. A later caller that leaves it out still compiles, and its reads rebuild the file each time, because they never match the stamp that production writes. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: make the option required, and stamp the test seeds with `"none"`.
+
+## EDGEDEPSCASES-01: restructure the `loadManifestForMarketplace` test cases
+
+Noted 2026-11-06 (mcp-builtin, `06-REVIEW.md` IN-09). `test/orchestrators/edge-deps.test.ts` has four top-level `describe` blocks for `loadManifestForMarketplace`, and two of their loops choose a label with a conditional in the loop body. Both break `.agents/skills/typescript-unit-tests/rules/cases.md`. The title "with N verdict read(s)" counts debug lines, which equal the reads only for its legacy-record fixture. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: put the label in each data row, title each row by the lines it logs, and merge the four blocks into one.
+
+## CONTAINCATCH-01: `isPluginRootContained` reads every error as an uncontained plugin root
+
+Noted 2026-11-06 (mcp-builtin, UF-1, NFR-10, D-P6-23). `isPluginRootContained` in `orchestrators/mcp/recorded-servers.ts` catches every error and answers false. The legacy reader, the stored-servers path of `recordedMcpServers`, and the built-in registration step ask it before they read the servers of a record. So an error that is not a containment refusal, such as an unexpected file-system error, reads as a plugin root outside its clone root, and the debug line names that cause instead of the real one. The answer stays safe, because the caller then reads no file of the plugin. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: answer false only for a refusal of the containment check, and report any other error with its own message, while each caller still skips only that record.
+
+## BLTREPEAT-01: a test that a second built-in registration pass changes nothing
+
+Noted 2026-11-06 (mcp-builtin, D-MB-10, MSEL-02, BLT-06). The extension registers built-in MCP servers at `session_start` (`builtinRegistrationStep`) and again after the load reconcile (`resyncBuiltinRegistrations`), both in `orchestrators/mcp/builtin-registration-step.ts`. The sync skips a server whose listed config has the same JSON text, so the second pass is meant to change nothing. A config that Pi lists with its keys in another order registers again (MSEL-02). No test runs both passes against one registry and checks that the second pass registers and unregisters nothing. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: a unit test of the step that runs both passes over one recording registry with the same records, and asserts that the second pass makes no registry call.
+
+## SUBCHILDVAR-01: the background-child check depends on the name `PI_SUBAGENT_CHILD`
+
+Noted 2026-11-06 (mcp-builtin, MGRT-02, D-MB-12). `platform/subagent-child.ts` tells a pi-subagents background child by the variable `PI_SUBAGENT_CHILD=1`, which pi-subagents 0.84.0 sets. pi-subagents is a soft dependency that the extension never imports. If pi-subagents renames the variable, the check fails silently. A child then runs autoapply when it is on, the AMIG-01 MCP move, and the agent grants step, so it can change installation state. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: a test that reads the name from the pi-subagents floor that `scripts/install-test-peers.mjs` installs, or a request that pi-subagents export the name.
