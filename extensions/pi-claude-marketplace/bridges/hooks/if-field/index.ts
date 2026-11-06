@@ -503,7 +503,7 @@ export function ifFires(
   event: unknown,
   ctx: ExtensionContext,
   _claudeEvent: BucketAEvent,
-  tool: McpToolIdentity = { piName: extractToolName(event), builtinServer: undefined },
+  tool?: McpToolIdentity,
 ): boolean {
   switch (predicate.kind) {
     case "match-all":
@@ -547,9 +547,14 @@ export function ifFires(
     }
 
     case "mcp-literal":
-      return toolLiteralNames(predicate.toolName, tool);
+      return toolLiteralNames(predicate.toolName, tool ?? eventTool(event));
 
     case "mcp-server-prefix":
-      return serverPrefixNames(predicate.serverPrefix, tool);
+      return serverPrefixNames(predicate.serverPrefix, tool ?? eventTool(event));
   }
+}
+
+// The event's own tool name with no built-in server, for a caller that names no tool.
+function eventTool(event: unknown): McpToolIdentity {
+  return { piName: extractToolName(event), builtinServer: undefined };
 }
