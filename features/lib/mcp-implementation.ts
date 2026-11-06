@@ -89,6 +89,14 @@ const TOOL_LISTING_TIMEOUT_MS = 15_000;
 // listing deadline.
 const REGISTRY_QUIET_MS = 250;
 
+// A new session can start before pi-mcp-adapter saved its listing of a stub.
+// The adapter then lists the stub again after the session started, and it
+// registers the stub's tools with Pi only after that listing (P3-DC-111). So
+// the listing of the tools Pi offers waits this long for them; the margin
+// covers a loaded CI runner. When the wait ends, the step keeps its report,
+// so the step that compares the tools fails with its own message.
+const ADAPTER_TOOLS_WAIT_MS = 10_000;
+
 /**
  * What a profile Pi loads for the MCP implementation of a profile, beside the
  * real extension, the scripted model, and the registry probe.
@@ -452,6 +460,22 @@ export async function settledRegistry(pi: PiProcess): Promise<RegistrySnapshot> 
   }
 }
 
+// Whether `name` is a tool that `implementation` names for the stub `server`
+// of `plugin`: one that starts with the server's tool prefix, or, when the
+// implementation cannot promise a prefix, the full name of a stub tool.
+function isStubTool(
+  implementation: McpProfile,
+  name: string,
+  plugin: string,
+  server: string,
+): boolean {
+  const profile = profileFor(implementation);
+  const prefix = profile.toolNamePrefix(plugin, server);
+  return prefix === undefined
+    ? STUB_TOOL_NAMES.some((tool) => profile.toolName(plugin, server, tool) === name)
+    : name.startsWith(prefix);
+}
+
 // Whether `implementation` finished listing the tools of the stub. The
 // adapter lists them over a connection that it closes, so it is done once the
 // stub logged a tools/list and no stub runs. Pi's built-in MCP keeps the
@@ -461,15 +485,6 @@ export async function settledRegistry(pi: PiProcess): Promise<RegistrySnapshot> 
 // name of a stub tool. `plugin` is the argument the stub logs: a stub started
 // with the plugin root is named by that path, whose last segment is the
 // plugin's name.
-// Whether `name` is a built-in MCP tool name of the stub `server` of `plugin`.
-function isBuiltinStubTool(name: string, plugin: string, server: string): boolean {
-  const profile = profileFor("builtin");
-  const prefix = profile.toolNamePrefix(plugin, server);
-  return prefix === undefined
-    ? STUB_TOOL_NAMES.some((tool) => profile.toolName(plugin, server, tool) === name)
-    : name.startsWith(prefix);
-}
-
 async function listingDone(
   implementation: McpProfile,
   pi: PiProcess,
@@ -486,7 +501,7 @@ async function listingDone(
   }
 
   const { allTools } = await probedRegistry(pi);
-  return allTools.some((tool) => isBuiltinStubTool(tool.name, path.basename(plugin), server));
+  return allTools.some((tool) => isStubTool("builtin", tool.name, path.basename(plugin), server));
 }
 
 /**
@@ -520,4 +535,58 @@ export async function waitForStubListing(
 
     await delay(POLL_MS);
   }
+}
+
+// The MCP implementation that the Pi of `snapshot` runs, by the extension's
+// own rule over the slash commands the probe reported (DUAL-02).
+function reportedImplementation(snapshot: RegistrySnapshot): McpImplementation {
+  return classifyMcpImplementation(
+    snapshot.commands.map(({ name, source, path: sourcePath }) => ({ name, source, sourcePath })),
+  );
+}
+
+// Whether the Pi of `snapshot` runs pi-mcp-adapter and has no tool of some
+// stub server whose tools/list a stub logged in `harness`. A stub logs the
+// plugin argument it started with, and the last segment of that argument is
+// the plugin's name.
+async function adapterToolMissing(snapshot: RegistrySnapshot, harness: string): Promise<boolean> {
+  if (reportedImplementation(snapshot) !== "adapter") {
+    return false;
+  }
+
+  const listings = (await readStubRequests(harness)).filter(
+    (request) => request.method === "tools/list",
+  );
+  return listings.some(
+    ({ plugin, server }) =>
+      !snapshot.allTools.some((tool) =>
+        isStubTool("adapter", tool.name, path.basename(plugin), server),
+      ),
+  );
+}
+
+/**
+ * Returns the registry probe's report from the profile Pi `pi`, as
+ * `settledRegistry` does. When the Pi runs pi-mcp-adapter, it first reads the
+ * registry every `POLL_MS` until Pi has a tool of every stub server whose
+ * tools/list a stub logged in `harness`, for at most `ADAPTER_TOOLS_WAIT_MS`.
+ * Every pass reads the registry; there is no fixed sleep. The wait itself
+ * never fails, so a missing tool fails the step that compares the tools
+ * (P3-DC-111).
+ */
+export async function registryAfterListing(
+  pi: PiProcess,
+  harness: string,
+): Promise<RegistrySnapshot> {
+  const deadline = Date.now() + ADAPTER_TOOLS_WAIT_MS;
+  for (;;) {
+    const missing = await adapterToolMissing(await probedRegistry(pi), harness);
+    if (!missing || Date.now() >= deadline) {
+      break;
+    }
+
+    await delay(POLL_MS);
+  }
+
+  return settledRegistry(pi);
 }
