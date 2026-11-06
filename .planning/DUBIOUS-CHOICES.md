@@ -33,6 +33,7 @@ The log of the previous milestone is archived, unchanged, at
 ## Review outcomes (user, 2026-11-06)
 
 - **P1-DC-12:** kept. No `oauth.clientName`, so Pi keeps CIMD; D-MB-11 is Locked.
+- **P1-DC-21:** accepted. Re-checked 2026-11-06: the three Pi 1.5.0 packages are published by GitHub Actions from `earendil-works/pi` with SLSA provenance, their lockfile integrity matches the registry, and none has an install script.
 
 ## Decisions waiting on you
 
