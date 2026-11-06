@@ -32,11 +32,10 @@ import type { ResolvedPlugin } from "../../domain/resolver-types.ts";
  * answers a recorded-but-disabled record ahead of the call (D-54-01 /
  * ENBL-04), through the same single `isRecordedButDisabled` predicate this
  * module consumes for its own short-circuit. `list` renders it as the
- * distinct `(disabled)` token; completion has no `disabled` token and offers
- * it as `installed` (WR-01) -- keeping it in the no-`--partial` inventory set
- * while excluding it from the `update --partial`
- * (upgradable/partially-upgradable) candidates. The classifier collapses such
- * a record to `installed` the same way.
+ * distinct `(disabled)` token. Completion has no `disabled` token, so
+ * `completionStatus` in `orchestrators/edge-deps.ts` offers it as `installed`
+ * (WR-01). It stays in the no-`--partial` inventory set and is never an
+ * `update --partial` candidate.
  *
  * `partially-installed-upgradable` is a partially-installed record (already degraded)
  * that ALSO carries a meaningful upgrade candidate -- a newer, NON-unavailable
@@ -82,7 +81,10 @@ export type ManifestEntryClassification =
  *   single `persistence/state-io.ts::isRecordedButDisabled`): a record with
  *   `enabled: false` was explicitly disabled and is version-frozen, so the
  *   classifier short-circuits it to `installed` (WR-01) -- it must never split
- *   into `upgradable`/`partially-upgradable`. A record's `installable` flag is
+ *   into `upgradable`/`partially-upgradable`.
+ *   `classifyInstalledForImplementation` answers a disabled record before it
+ *   calls the classifier, so production always passes `enabled: true`, and
+ *   the short-circuit guards a direct caller. A record's `installable` flag is
  *   a caller-side concern and never decides disabled-ness, so this view does
  *   not declare it.
  */
@@ -151,14 +153,15 @@ export function classifyInstalledRecord(
   // WR-01 / ENBL-05 / D-54-01: a recorded-but-disabled record (the explicit
   // `enabled: false` marker the single `isRecordedButDisabled` reads) is
   // version-frozen while disabled, so it must never split into
-  // `upgradable`/`partially-upgradable`. `classifyInstalledForImplementation`
-  // answers such a record before it calls this classifier; the collapse to
-  // `installed` here matches what completion offers for it -- it stays in the
-  // no-`--partial` inventory set but is excluded from `update --partial`.
+  // `upgradable`/`partially-upgradable`. Production never reaches this branch,
+  // because `classifyInstalledForImplementation` answers such a record before
+  // it calls this classifier. The branch stays as a guard, so a direct caller
+  // cannot split a frozen record. Completion offers a disabled record as
+  // `installed` through `completionStatus` in `orchestrators/edge-deps.ts`.
   //
-  // Checked BEFORE the `unsupported.length` branch, and that precedence is now
-  // load-bearing rather than incidental: a DEGRADED record can also be disabled,
-  // and it must report `installed` (frozen), never `partially-installed`.
+  // Checked BEFORE the `unsupported.length` branch: a DEGRADED record can also
+  // be disabled, and it must report `installed` (frozen), never
+  // `partially-installed`.
   if (isRecordedButDisabled(record)) {
     return "installed";
   }

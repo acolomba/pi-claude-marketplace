@@ -22,7 +22,7 @@
   - Under Pi's built-in MCP, plugin hooks now see MCP tools under Claude Code's names, `mcp__<server>__<tool>`, with the server's `-` kept.
   - The tool segment keeps Pi's change of `-` to `_`, and a name over 64 characters keeps Pi's cut to 55 characters and a hash.
   - A proxy `mcp` call now skips hooks only while pi-mcp-adapter is active, and under Pi's built-in MCP every tool call runs its hooks.
-  - Tab completion of `install` and `update --partial` now follows the MCP implementation Pi runs, as `list` does.
+  - Tab completion of plugin names now follows the MCP implementation Pi runs, as `list` does.
 
 ## [0.22.0] - 2026-11-03
 
