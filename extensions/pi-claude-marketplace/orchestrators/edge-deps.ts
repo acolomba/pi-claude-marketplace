@@ -128,8 +128,13 @@ type InstalledRowMarketplace = Pick<
 
 /**
  * ENBL-04: completion has no `disabled` token, so a disabled record,
- * which `list` shows as `(disabled)`, is offered as `installed`: it stays in
- * the no-`--partial` inventory set and never becomes an `update` target.
+ * which `list` shows as `(disabled)`, is offered as `installed`. It stays in
+ * the no-`--partial` inventory set and is never an `update --partial`
+ * candidate. Plain `update` completion does offer it
+ * (`INSTALLED_INVENTORY_STATUSES` in `edge/completions/data.ts`). This
+ * function is the one place where completion maps a disabled record, because
+ * `classifyInstalledForImplementation` answers such a record before the
+ * classifier runs.
  */
 function completionStatus(view: InstalledRecordView): PluginIndexRow["status"] {
   return view.kind === "disabled" ? "installed" : view.status;

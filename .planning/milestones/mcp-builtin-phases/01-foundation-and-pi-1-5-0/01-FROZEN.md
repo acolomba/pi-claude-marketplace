@@ -234,9 +234,14 @@ export interface LegacyServers { readonly servers: readonly RecordedMcpServer[];
 export type LegacyServersReader = (record: PluginInstallRecord) => Promise<LegacyServers>;
 export async function recordedMcpServers(
   record: PluginInstallRecord,
-  reader: LegacyServersReader,
+  source: LegacyServersSource,
+  readerFor: (source: LegacyServersSource) => LegacyServersReader,
 ): Promise<RecordedMcpServers>;
 export interface LegacyServersSource { readonly marketplaceName: string; readonly marketplace: Pick<ExtensionState["marketplaces"][string], "manifestPath" | "marketplaceRoot" | "source">; readonly pluginName: string; readonly locations: ScopedLocations }
+export async function isPluginRootContained(
+  record: PluginInstallRecord,
+  source: LegacyServersSource,
+): Promise<boolean>;
 type LegacyServersUnreadableReason = "not-in-manifest" | "unavailable" | "root-mismatch" | "version-mismatch" | "uncontained"; // module-private
 class LegacyServersUnreadableError extends Error { /* reason, plugin, marketplace */ } // module-private
 export function createLegacyServersReader(source: LegacyServersSource): LegacyServersReader;
@@ -249,6 +254,17 @@ the scope's `ScopedLocations`, and the reader refuses with the reason
 outside its owning clone root (UF-1, NFR-10, D-P6-23). The error class and its
 reason type are module-private now, so the block no longer shows them as
 exports; a caller sees every refusal only as `unreadable` (D-P6-21).
+
+Amended after the mcp-builtin milestone (2026-11-06, P6-SEC-02): the code
+block above shows `recordedMcpServers` and `isPluginRootContained` as the code
+has them. `recordedMcpServers` takes the record's `LegacyServersSource` and a
+reader factory, `readerFor`, in place of a built reader. It calls `readerFor`
+only for a record without `mcpServerConfigs`. Before it returns the stored
+`mcpServerConfigs` of a record, it asks `isPluginRootContained`. For a plugin
+root outside its owning clone root, it answers `unreadable` and logs the same
+redacted debug line (UF-1, NFR-10). The legacy reader and the built-in
+registration step ask the same check. `isPluginRootContained` is exported
+since D-P6-23, and the block lists it.
 
 Differences: `mcpBundle` and `compatibilityBasis` are new record fields
 (P1-DC-18), and `compatibilityBasis` sits at the record's top level, not
