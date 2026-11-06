@@ -32,11 +32,11 @@
 // A name Pi does not list answers `unlisted` (rendered `not loaded`), even
 // when hidden tools of an earlier registration in the session remain.
 //
-// P2-DC-46 (recorded gap): when another extension registered a server under
-// the same name first, Pi refuses this extension's registration and the
-// lookup answers from the other extension's server. Its registration names
-// its `extensionPath`, but this reader cannot learn its own through the
-// frozen parameter, so it cannot tell the two apart.
+// D-MB-29: when another extension registered a server under the same name
+// first, Pi refuses this extension's registration. The registration sync
+// notes the refusal here, and info reads such a name as `not loaded`. This
+// reader still answers for whatever server Pi lists under the name, because
+// it cannot learn its own `extensionPath` through the frozen parameter.
 //
 // MSEL-01: `index.ts` builds this reader once per extension load, at factory
 // time, before every extension has loaded, so building it must not read `pi`.
@@ -75,6 +75,10 @@ function isHidden(tool: ToolInventoryItem): boolean {
 // session is cleared when it registers again.
 const replacedRegistrations = new Set<string>();
 
+// D-MB-29: the names whose last registration attempt in this Pi process Pi
+// refused. A later registration Pi accepts, or a removal, clears a name.
+const refusedRegistrations = new Set<string>();
+
 /** The record whose server the built-in registration step registers under a name. */
 export interface BuiltinServerOwner {
   readonly scope: Scope;
@@ -102,11 +106,23 @@ export function builtinServerOwner(serverName: string): BuiltinServerOwner | und
 /** Notes that the sync registered `serverName` in place of a listed config of another shape. */
 export function noteReplacedBuiltinRegistration(serverName: string): void {
   replacedRegistrations.add(serverName);
+  refusedRegistrations.delete(serverName);
 }
 
 /** Notes that the sync registered `serverName` fresh, or removed it. */
 export function noteFreshBuiltinRegistration(serverName: string): void {
   replacedRegistrations.delete(serverName);
+  refusedRegistrations.delete(serverName);
+}
+
+/** D-MB-29: notes that Pi refused the sync's registration of `serverName`. */
+export function noteRefusedBuiltinRegistration(serverName: string): void {
+  refusedRegistrations.add(serverName);
+}
+
+/** D-MB-29: whether Pi refused the sync's last registration of `serverName`. */
+export function builtinRegistrationRefused(serverName: string): boolean {
+  return refusedRegistrations.has(serverName);
 }
 
 /**

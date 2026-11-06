@@ -1,8 +1,10 @@
 /**
  * @fileoverview Steps about the state plugin info shows for a plugin's MCP
  * servers under Pi's built-in MCP: a server the user's own Pi `mcp.json`
- * configures under the plugin server's name, and a server the user disables
- * for the session in Pi's terminal `/mcp` manager (BLT-04, BLT-05).
+ * configures under the plugin server's name, a server another Pi extension
+ * registers under that name before the extension does (D-MB-29), and a
+ * server the user disables for the session in Pi's terminal `/mcp` manager
+ * (BLT-04, BLT-05).
  */
 
 import assert from "node:assert/strict";
@@ -12,6 +14,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { Given, Then, When } from "@cucumber/cucumber";
 
+import { nameStandInServer } from "../../lib/builtin-mcp-stand-in/servers.ts";
 import { MCP_STUB_SERVER, readStubRequests } from "../../lib/mcp-stub-server.ts";
 import { writeScenarioFile } from "../../lib/scenario-file.ts";
 import { harnessDirectory } from "../../lib/turn-records.ts";
@@ -88,6 +91,17 @@ Given(
       2,
     )}\n`;
     await writeScenarioFile(this, file, text);
+  },
+);
+
+// D-MB-29: the built-in stand-in plays the other extension. It registers an
+// entry marked `first` when Pi loads it, before the extension registers at
+// `session_start`, so this precedes the profile Pi. Pi then refuses the
+// extension's registration of the name.
+Given(
+  "another pi extension registers the stub mcp server {string} of the plugin {string} with pi's built-in mcp before the extension does",
+  async function (this: ScenarioWorld, server: string, plugin: string) {
+    await nameStandInServer(this, { plugin, server, first: true });
   },
 );
 

@@ -14,7 +14,9 @@
  * project on this call, the project scope's (D-MB-09). A project server
  * replaces the user server of the same name in place (P2-DC-14), so a user
  * server the project lacks still registers. A background child runs the same
- * steps for its own session (D-MB-12).
+ * steps for its own session (D-MB-12). A name whose registration Pi refuses,
+ * because another extension registered it first, is noted for the session, so
+ * info reads it as `not loaded` (D-MB-29).
  *
  * MSEL-03: under pi-mcp-adapter, or with no implementation active, both steps
  * return before they read the context, the state, or Pi's registry. Pi reports
@@ -47,6 +49,7 @@ import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts"
 import {
   noteBuiltinServerOwners,
   noteFreshBuiltinRegistration,
+  noteRefusedBuiltinRegistration,
   noteReplacedBuiltinRegistration,
 } from "../../platform/mcp-builtin-status.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -99,10 +102,13 @@ type Registration = readonly [name: string, config: McpServerConfig, owner: Buil
 const BUILTIN_PROFILE = profileFor("builtin");
 
 // P2-DC-10: the status reader reads a replaced server's hidden tools as a
-// reconnect, not a `/mcp` disable.
+// reconnect, not a `/mcp` disable. D-MB-29: info reads a name whose
+// registration Pi refused as `not loaded`, not as the other extension's
+// server.
 const REGISTRATION_NOTES = {
   replaced: noteReplacedBuiltinRegistration,
   fresh: noteFreshBuiltinRegistration,
+  refused: noteRefusedBuiltinRegistration,
 };
 
 function debugLog(detail: string): void {
