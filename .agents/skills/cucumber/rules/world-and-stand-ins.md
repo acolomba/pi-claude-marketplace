@@ -83,10 +83,11 @@ In an `@own-implementation` scenario, the world removes the harness onboarding s
 The built-in stand-in is a harness Pi extension under `features/lib/builtin-mcp-stand-in/` (P1-DC-05):
 
 - Only `pi runs with the scripted model and the mcp implementation` loads it, through `extraExtensions`, and only under the builtin profile.
-- It registers in its `session_start` handler, never when Pi loads it. It loads after the real extension, so its handler runs after the extension's.
+- It registers in its `session_start` handler. It loads after the real extension, so its handler runs after the extension's.
+- One exception: an entry that a step marks `first` stands in for another Pi extension that holds a plugin server's name. The stand-in registers that entry when Pi loads it, before any session starts, so Pi refuses the extension's own registration of that name (D-MB-29). `Given another pi extension registers the stub mcp server {string} of the plugin {string} with pi's built-in mcp before the extension does`, in `features/step_definitions/mcp-server/builtin-status.steps.ts`, writes such an entry. Like the stand-in step, it comes before the step that starts the profile Pi.
 - For each stub server that the stand-in step named, it registers `builtinMcpServerName(plugin, server)` with the stub's command and `exposure: "deferred"` (D-MB-02).
 - It skips a name when Pi already has a registration or an `mcp.json` server of that name. It compares names with `-` and `_` folded. So it serves built-in scenarios before the extension registers servers itself, and steps aside once the extension does.
-- It never throws. The scenarios that prove the extension's own registration (BLT-01 to BLT-06) never name it.
+- It never throws. The scenarios that prove the extension's own registration (BLT-01 to BLT-06) never name it. The D-MB-29 scenario in `features/mcp-server/builtin-status.feature` names it as the other extension.
 
 ### The scripted model
 
