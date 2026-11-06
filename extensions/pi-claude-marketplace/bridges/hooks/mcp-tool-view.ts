@@ -16,17 +16,13 @@
 // whose reads all succeed (MHK-02, D-P5-06, D-P5-07, HOOKTOOLREAD-01).
 
 import { MCP_TOOL_PREFIX } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
+import { BUILTIN_MCP_SOURCE_PATH } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { openNotificationSnapshot } from "../../shared/notification-run.ts";
 
 import type { McpToolIdentity } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import type { ExtensionAPI, PiInventory } from "../../platform/pi-api.ts";
-
-// Pi loads its built-in MCP extension from this path, so every tool it
-// registers carries it as `sourceInfo.path`. Another module holds a private
-// copy of the same literal.
-const BUILTIN_MCP_SOURCE_PATH = "builtin:mcp";
 
 type PiTool = ReturnType<ExtensionAPI["getAllTools"]>[number];
 
