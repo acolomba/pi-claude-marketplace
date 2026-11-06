@@ -4,6 +4,7 @@ import test from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import { createHookToolView } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import {
   adapterCommand,
   adapterProxyTool,
@@ -21,6 +22,8 @@ const PI_NAME = "mcp__plugin_hook_demo_stub_server__echo";
 const SERVER = "plugin_hook-demo_stub-server";
 const LONG_SERVER = "plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server";
 const LONG_PI_NAME = "mcp__plugin_hook_proxy_shaped_tool_names_of_a_long_plug_b152d32d";
+const READ_FAILURE_LINE =
+  "[mcp] mcp-tool-view: a read of Pi's tools or commands failed (logged once per bridge load): no session";
 
 function hookDemoBuiltinTool(): ToolInfo {
   return {
@@ -249,5 +252,108 @@ test("keeps the first answer of the proxy rule for the view's generation (D-P5-0
 
   // assert
   assert.deepStrictEqual(answers, [true, true]);
+  verify(pi);
+});
+
+test("probes the proxy rule again after a probe whose tool read threw, and keeps the next answer (HOOKTOOLREAD-01, D-P5-07)", () => {
+  // arrange
+  const pi = mock<ToolSource>({ exactParams: true, name: "extension api" });
+  when(() => pi.getAllTools())
+    .thenThrow(new Error("no session"))
+    .times(3);
+  when(() => pi.getAllTools())
+    .thenReturn([])
+    .times(3);
+  when(() => pi.getCommands()).thenReturn([]);
+  when(() => pi.getCommands()).thenReturn([adapterCommand()]);
+  const hookToolView = createHookToolView(pi);
+
+  // act
+  const answers = [
+    hookToolView.proxyRuleApplies(),
+    hookToolView.proxyRuleApplies(),
+    hookToolView.proxyRuleApplies(),
+  ];
+
+  // assert
+  assert.deepStrictEqual(answers, [false, true, true]);
+  verify(pi);
+});
+
+test("probes the proxy rule again after a probe whose command read threw, and keeps the next answer (HOOKTOOLREAD-01, D-P5-07)", () => {
+  // arrange
+  const pi = mock<ToolSource>({ exactParams: true, name: "extension api" });
+  when(() => pi.getAllTools())
+    .thenReturn([])
+    .times(6);
+  when(() => pi.getCommands()).thenThrow(new Error("no session"));
+  when(() => pi.getCommands()).thenReturn([adapterCommand()]);
+  const hookToolView = createHookToolView(pi);
+
+  // act
+  const answers = [
+    hookToolView.proxyRuleApplies(),
+    hookToolView.proxyRuleApplies(),
+    hookToolView.proxyRuleApplies(),
+  ];
+
+  // assert
+  assert.deepStrictEqual(answers, [false, true, true]);
+  verify(pi);
+});
+
+test("writes one mcp debug line for a generation whose tool reads keep failing (HOOKTOOLREAD-01, OBS-01)", (t) => {
+  // arrange
+  const logged = captureDebugLog(t);
+  const pi = mock<ToolSource>({ exactParams: true, name: "extension api" });
+  when(() => pi.getAllTools())
+    .thenThrow(new Error("no session"))
+    .times(8);
+  when(() => pi.getCommands())
+    .thenReturn([])
+    .times(2);
+  const hookToolView = createHookToolView(pi);
+
+  // act
+  const outcomes = [
+    hookToolView.identify(PI_NAME),
+    hookToolView.proxyRuleApplies(),
+    hookToolView.proxyRuleApplies(),
+    hookToolView.identify(PI_NAME),
+  ];
+
+  // assert
+  assert.deepStrictEqual(outcomes, [
+    { piName: PI_NAME, name: PI_NAME, builtinServer: undefined },
+    false,
+    false,
+    { piName: PI_NAME, name: PI_NAME, builtinServer: undefined },
+  ]);
+  assert.deepStrictEqual(
+    logged.filter((line) => line.startsWith("[mcp] mcp-tool-view:")),
+    [READ_FAILURE_LINE],
+  );
+  verify(pi);
+});
+
+test("writes the debug line once for each generation's view (HOOKTOOLREAD-01)", (t) => {
+  // arrange
+  const logged = captureDebugLog(t);
+  const pi = mock<ToolSource>({ exactParams: true, name: "extension api" });
+  when(() => pi.getAllTools())
+    .thenThrow(new Error("no session"))
+    .times(2);
+  const firstView = createHookToolView(pi);
+  const secondView = createHookToolView(pi);
+
+  // act
+  const tools = [firstView.identify(PI_NAME), secondView.identify(PI_NAME)];
+
+  // assert
+  assert.deepStrictEqual(tools, [
+    { piName: PI_NAME, name: PI_NAME, builtinServer: undefined },
+    { piName: PI_NAME, name: PI_NAME, builtinServer: undefined },
+  ]);
+  assert.deepStrictEqual(logged, [READ_FAILURE_LINE, READ_FAILURE_LINE]);
   verify(pi);
 });
