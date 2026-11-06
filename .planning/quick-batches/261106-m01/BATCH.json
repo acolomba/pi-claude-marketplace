@@ -125,14 +125,24 @@
       "client_id": null,
       "description": "Review docs and comment cleanups (IN-02, IN-04, IN-08, the frozen record, BACKLOG). (1) IN-02: add `.planning/PROJECT.md` Key Decisions rows (status Locked, mcp-builtin) for D-P6-18, D-P6-22 (as amended: the completion cache is one stamped file, P6-PLN-03), P2-DC-53, and P2-DC-77, each cited in code but without a row; read their text from `.planning/milestones/mcp-builtin-phases/`. (2) IN-04: the `CHANGELOG.md` Unreleased entry names only `install` and `update --partial` completion; it must also name plain `update`, `fetch`, and `install --partial` completion following the active MCP implementation (use the `changelog` skill). (3) IN-08: `classifyInstalledRecord`'s disabled branch is no longer reached in production (completion now uses `classifyInstalledForImplementation` in `orchestrators/plugin/list-installed-row.ts`); fix the comments that say completion relies on it, without changing behavior. (4) `.planning/milestones/mcp-builtin-phases/01-foundation-and-pi-1-5-0/01-FROZEN.md` interface 3 says an install writes no `compatibilityBasis`; amend it to say install writes `compatibilityBasis: \"neutral\"` (Phase 3). (5) Add BACKLOG entries for the items the user left: review info items IN-01, IN-05, IN-06, IN-07, IN-09 (`.planning/milestones/mcp-builtin-phases/06-release-docs-and-combined-tree/06-REVIEW.md`); P3-DC-122 (`pending` and `apply` previews can disagree after an implementation switch); `isPluginRootContained` maps every error to uncontained; no test pins that two built-in registrations leave Pi's registry unchanged; the background-child check depends on pi-subagents 0.84.0's `PI_SUBAGENT_CHILD` name.",
       "status": "pending",
-      "depends_on": [],
-      "planned_files": [],
+      "depends_on": [
+        "261106-m04"
+      ],
+      "planned_files": [
+        "extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts",
+        "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts",
+        "CHANGELOG.md",
+        ".planning/PROJECT.md",
+        ".planning/BACKLOG.md",
+        ".planning/milestones/mcp-builtin-phases/01-foundation-and-pi-1-5-0/01-FROZEN.md",
+        ".planning/quick/261106-m06-review-docs-and-comment-cleanups-in-02-in-04-in-08-the-froze/261106-m06-SUMMARY.md"
+      ],
       "directory": null,
       "worktree": null,
       "dispatched_worktree": null,
       "dispatched_branch": null,
       "dispatched_base": null,
-      "wave": 0,
+      "wave": 1,
       "commit": null,
       "failure_reason": null
     }
