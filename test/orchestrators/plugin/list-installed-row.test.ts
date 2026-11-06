@@ -16,7 +16,11 @@ import { createHermeticEnvironment } from "../../platform/hermetic-environment.t
 import { advanceWarmMirror, seedWarmMirror } from "./warm-mirror-seed.ts";
 
 import type { ManifestPluginEntry } from "../../../extensions/pi-claude-marketplace/domain/manifest-lookup.ts";
-import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type ComposeInstalledListRow = (
   options: ComposeInstalledListRowOptions,
@@ -66,17 +70,33 @@ function manifestEntry(overrides: ManifestEntryOverrides = {}): ManifestPluginEn
   };
 }
 
-async function installedEnvironment(testContext: TestContext): Promise<{
+type MarketplaceRecord = ExtensionState["marketplaces"][string];
+
+/** Which plugin a test marketplace record lists, the scope it names, and its name. */
+interface MarketplaceRecordOverrides {
+  readonly plugin?: string;
+  readonly scope?: Scope;
+  readonly name?: string;
+}
+
+interface InstalledEnvironment {
   readonly cwd: string;
   readonly marketplaceRoot: string;
-  readonly marketplaceName: string;
-  readonly marketplaceSource: unknown;
-  readonly manifestPath: string;
+  /**
+   * The marketplace record `third-party` of `scope` (default `user`), which
+   * lists `record` as `plugin` (default `alpha`).
+   */
+  readonly marketplaceFor: (
+    record: PluginInstallRecord,
+    overrides?: MarketplaceRecordOverrides,
+  ) => MarketplaceRecord;
   readonly mcpImplementation: "adapter";
-}> {
+}
+
+async function installedEnvironment(testContext: TestContext): Promise<InstalledEnvironment> {
   const environment = await createHermeticEnvironment(testContext, "list-installed-row-");
-  // UF-1: the undefined `marketplaceSource` reads as a cloned marketplace, whose
-  // root lies in the scope's checkout.
+  // UF-1: the undefined `source` reads as a cloned marketplace, whose root
+  // lies in the scope's checkout.
   const marketplaceRoot = path.join(
     locationsFor("user", environment.cwd).sourcesDir,
     "third-party",
@@ -85,9 +105,15 @@ async function installedEnvironment(testContext: TestContext): Promise<{
   return {
     cwd: environment.cwd,
     marketplaceRoot,
-    marketplaceName: "third-party",
-    marketplaceSource: undefined,
-    manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    marketplaceFor: (record, { plugin = "alpha", scope = "user", name = "third-party" } = {}) => ({
+      name,
+      scope,
+      source: undefined,
+      addedFromCwd: environment.cwd,
+      manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      marketplaceRoot,
+      plugins: { [plugin]: record },
+    }),
     mcpImplementation: "adapter",
   };
 }
@@ -114,7 +140,7 @@ test("composes a same-scope installed row with exact dependencies and descriptio
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record,
+    marketplace: environment.marketplaceFor(record),
     lookup: { kind: "declared", entry },
   });
 
@@ -141,7 +167,7 @@ test("composes a cross-scope state-only row with the exact absence reason", asyn
     pluginName: "alpha",
     pluginScope: "project",
     marketplaceScope: "user",
-    record: pluginRecord(),
+    marketplace: environment.marketplaceFor(pluginRecord(), { scope: "project" }),
     lookup: { kind: "absent" },
   });
 
@@ -169,7 +195,7 @@ test("does not claim manifest absence when the manifest is unverified", async (t
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: pluginRecord(),
+    marketplace: environment.marketplaceFor(pluginRecord()),
     lookup: { kind: "unverified" },
   });
 
@@ -205,7 +231,7 @@ test("composes a disabled row before version drift and partial state", async (te
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record,
+    marketplace: environment.marketplaceFor(record),
     lookup: { kind: "declared", entry },
   });
 
@@ -240,7 +266,7 @@ test("composes a manifest-absent disabled row with no suspended reasons", async 
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record,
+    marketplace: environment.marketplaceFor(record),
     lookup: { kind: "absent" },
   });
 
@@ -274,7 +300,7 @@ test("composes a degraded row with exact ordered reasons", async (testContext) =
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record,
+    marketplace: environment.marketplaceFor(record),
     lookup: { kind: "absent" },
   });
 
@@ -308,7 +334,7 @@ test("keeps a degraded row partially installed when a newer candidate is clean",
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record,
+    marketplace: environment.marketplaceFor(record),
     lookup: { kind: "declared", entry },
   });
 
@@ -335,7 +361,7 @@ test("composes a partially upgradable row from a newly degraded candidate", asyn
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: pluginRecord(),
+    marketplace: environment.marketplaceFor(pluginRecord()),
     lookup: { kind: "declared", entry },
   });
 
@@ -362,7 +388,7 @@ test("composes an upgradable row for a clean newer candidate", async (testContex
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: pluginRecord(),
+    marketplace: environment.marketplaceFor(pluginRecord()),
     lookup: { kind: "declared", entry },
   });
 
@@ -388,7 +414,7 @@ test("degrades a candidate probe failure to an upgradable row", async (testConte
     pluginName: "bad/name",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: pluginRecord(),
+    marketplace: environment.marketplaceFor(pluginRecord(), { plugin: "bad/name" }),
     lookup: { kind: "declared", entry },
   });
 
@@ -423,7 +449,7 @@ test("VER-02: a path plugin at its plugin.json version lists as installed althou
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: pluginRecord({ version: "2.0.0" }),
+    marketplace: environment.marketplaceFor(pluginRecord({ version: "2.0.0" })),
     lookup: { kind: "declared", entry },
   });
 
@@ -452,7 +478,7 @@ test("VER-02: a path plugin whose plugin.json moved past the record lists as upg
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: pluginRecord({ version: "2.0.0" }),
+    marketplace: environment.marketplaceFor(pluginRecord({ version: "2.0.0" })),
     lookup: { kind: "declared", entry },
   });
 
@@ -469,10 +495,7 @@ test("VER-02: a path plugin whose plugin.json moved past the record lists as upg
 test("flags binaries on an upgrade candidate of an official marketplace", async (testContext) => {
   // arrange
   const composeInstalledListRow = await loadComposeInstalledListRow();
-  const environment = {
-    ...(await installedEnvironment(testContext)),
-    marketplaceName: "claude-plugins-official",
-  };
+  const environment = await installedEnvironment(testContext);
   await mkdir(path.join(environment.marketplaceRoot, "alpha"), { recursive: true });
   const entry = manifestEntry({ version: "2.0.0", binaries: { tool: "https://example.com/tool" } });
 
@@ -482,7 +505,7 @@ test("flags binaries on an upgrade candidate of an official marketplace", async 
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: pluginRecord(),
+    marketplace: environment.marketplaceFor(pluginRecord(), { name: "claude-plugins-official" }),
     lookup: { kind: "declared", entry },
   });
 
@@ -514,7 +537,10 @@ test("VER-01: a git plugin at its warm tree's plugin.json version lists as insta
     pluginName: "warm-plugin",
     pluginScope: "project",
     marketplaceScope: "project",
-    record: pluginRecord({ version: "1.0.0" }),
+    marketplace: environment.marketplaceFor(pluginRecord({ version: "1.0.0" }), {
+      plugin: "warm-plugin",
+      scope: "project",
+    }),
     lookup: { kind: "declared", entry },
   });
 
@@ -548,7 +574,10 @@ test("VER-01: an undeclared git plugin whose warm mirror moved to a new commit l
     pluginName: "warm-plugin",
     pluginScope: "project",
     marketplaceScope: "project",
-    record: pluginRecord({ version: recordedVersion }),
+    marketplace: environment.marketplaceFor(pluginRecord({ version: recordedVersion }), {
+      plugin: "warm-plugin",
+      scope: "project",
+    }),
     lookup: { kind: "declared", entry },
   });
 
@@ -577,7 +606,10 @@ test("GV-02: an undeclared git plugin recorded as sha- at its warm mirror's comm
     pluginName: "warm-plugin",
     pluginScope: "project",
     marketplaceScope: "project",
-    record: pluginRecord({ version: recordedVersion }),
+    marketplace: environment.marketplaceFor(pluginRecord({ version: recordedVersion }), {
+      plugin: "warm-plugin",
+      scope: "project",
+    }),
     lookup: { kind: "declared", entry },
   });
 
@@ -604,7 +636,10 @@ test("a git plugin with no mirror and no entry version lists as installed", asyn
     pluginName: "cold-plugin",
     pluginScope: "project",
     marketplaceScope: "project",
-    record: pluginRecord({ version: "0123456789ab" }),
+    marketplace: environment.marketplaceFor(pluginRecord({ version: "0123456789ab" }), {
+      plugin: "cold-plugin",
+      scope: "project",
+    }),
     lookup: { kind: "declared", entry },
   });
 
@@ -633,11 +668,14 @@ test("GV-01: a pinned plugin directory entry with no mirror matches its record's
   // act
   const row = await composeInstalledListRow({
     ...environment,
-    marketplaceName: "anthropic-plugin-directory",
     pluginName: "cold-plugin",
     pluginScope: "project",
     marketplaceScope: "project",
-    record: pluginRecord({ version: "1.0.0-0123456789ab" }),
+    marketplace: environment.marketplaceFor(pluginRecord({ version: "1.0.0-0123456789ab" }), {
+      plugin: "cold-plugin",
+      scope: "project",
+      name: "anthropic-plugin-directory",
+    }),
     lookup: { kind: "declared", entry },
   });
 
@@ -665,11 +703,14 @@ test("GV-01: a git plugin recorded at a release tag's commit is upgradable to it
     pluginName: "cold-plugin",
     pluginScope: "project",
     marketplaceScope: "project",
-    record: pluginRecord({
-      version: "2.0.0-0123456789ab",
-      resolvedSha: tagCommit,
-      resolvedVersion: "2.0.0",
-    }),
+    marketplace: environment.marketplaceFor(
+      pluginRecord({
+        version: "2.0.0-0123456789ab",
+        resolvedSha: tagCommit,
+        resolvedVersion: "2.0.0",
+      }),
+      { plugin: "cold-plugin", scope: "project" },
+    ),
     lookup: { kind: "declared", entry },
   });
 
@@ -694,7 +735,10 @@ test("a git plugin with no mirror falls back to the entry version and lists as u
     pluginName: "cold-plugin",
     pluginScope: "project",
     marketplaceScope: "project",
-    record: pluginRecord({ version: "1.0.0" }),
+    marketplace: environment.marketplaceFor(pluginRecord({ version: "1.0.0" }), {
+      plugin: "cold-plugin",
+      scope: "project",
+    }),
     lookup: { kind: "declared", entry },
   });
 
@@ -739,10 +783,10 @@ test("MREC-03: lists a neutral sse record as installed under pi-mcp-adapter", as
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: {
+    marketplace: environment.marketplaceFor({
       ...neutralSseRecord(),
       resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
-    },
+    }),
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -770,10 +814,10 @@ test("MREC-03 / D-P3-05: lists the same record as partially installed under Pi's
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: {
+    marketplace: environment.marketplaceFor({
       ...neutralSseRecord(),
       resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
-    },
+    }),
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -800,7 +844,7 @@ test("MREC-03: lists a disabled sse record as disabled under Pi's built-in MCP",
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: neutralSseRecord({ enabled: false }),
+    marketplace: environment.marketplaceFor(neutralSseRecord({ enabled: false })),
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -827,17 +871,19 @@ test("D-P6-22 / ENBL-04: classifies a disabled record without reading its MCP ve
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: pluginRecord({
-      enabled: false,
-      resources: {
-        agents: [],
-        hooks: [],
-        mcpServers: ["events"],
-        prompts: [],
-        skills: [],
-        workflows: [],
-      },
-    }),
+    marketplace: environment.marketplaceFor(
+      pluginRecord({
+        enabled: false,
+        resources: {
+          agents: [],
+          hooks: [],
+          mcpServers: ["events"],
+          prompts: [],
+          skills: [],
+          workflows: [],
+        },
+      }),
+    ),
     lookup: { kind: "absent" },
   });
 
@@ -857,10 +903,10 @@ test("D-P6-22: classifies an enabled record with the MCP verdict and candidate i
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record: {
+    marketplace: environment.marketplaceFor({
       ...neutralSseRecord(),
       resolvedSource: path.join(environment.marketplaceRoot, "alpha"),
-    },
+    }),
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -918,7 +964,7 @@ for (const { mcpImplementation, expectedRow } of [
       pluginName: "alpha",
       pluginScope: "user",
       marketplaceScope: "user",
-      record: pluginRecord(),
+      marketplace: environment.marketplaceFor(pluginRecord()),
       lookup: { kind: "declared", entry: manifestEntry({ version: "2.0.0" }) },
     });
 
@@ -952,7 +998,7 @@ test("D-P3-10: an installed row over a record whose staged server is a ws server
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record,
+    marketplace: environment.marketplaceFor(record),
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -988,7 +1034,7 @@ test("D-P3-10 / D-MB-07: an installed row under Pi's built-in MCP carries the se
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record,
+    marketplace: environment.marketplaceFor(record),
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -1023,7 +1069,7 @@ test("D-P3-07 / D-MB-07: a partially-installed row under pi-mcp-adapter carries 
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record,
+    marketplace: environment.marketplaceFor(record),
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -1063,7 +1109,7 @@ test("MREC-07: a partially-installed row over a ws server neither implementation
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record,
+    marketplace: environment.marketplaceFor(record),
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 
@@ -1110,7 +1156,7 @@ test("D-P3-07: a partially-installed row carries only its MCP dependency, never 
     pluginName: "alpha",
     pluginScope: "user",
     marketplaceScope: "user",
-    record,
+    marketplace: environment.marketplaceFor(record),
     lookup: { kind: "declared", entry: manifestEntry() },
   });
 

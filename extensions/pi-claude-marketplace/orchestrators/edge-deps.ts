@@ -117,16 +117,6 @@ export interface LocationsResolverLike {
 }
 
 /**
- * The marketplace facts an installed row reads: the resolve context its
- * candidate resolves against, and the cached `marketplace.json` a legacy
- * record re-resolves its MCP servers from (MREC-02).
- */
-type InstalledRowMarketplace = Pick<
-  ResolveContext,
-  "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
-> & { readonly manifestPath: string };
-
-/**
  * ENBL-04: completion has no `disabled` token, so a disabled record,
  * which `list` shows as `(disabled)`, is offered as `installed`. It stays in
  * the no-`--partial` inventory set and is never an `update --partial`
@@ -153,7 +143,7 @@ async function classifyInstalledPluginRow(
   installed: ExtensionState["marketplaces"][string]["plugins"][string],
   manifest: MarketplaceManifest,
   scope: Scope,
-  marketplace: InstalledRowMarketplace,
+  mp: ExtensionState["marketplaces"][string],
   cwd: string,
   mcpImplementation: ActiveMcpImplementation,
 ): Promise<PluginIndexRow> {
@@ -161,8 +151,7 @@ async function classifyInstalledPluginRow(
     pluginName,
     pluginScope: scope,
     marketplaceScope: scope,
-    ...marketplace,
-    record: installed,
+    marketplace: mp,
     lookup: lookupDeclaredPlugin(manifest, pluginName),
     cwd,
     mcpImplementation,
@@ -286,7 +275,7 @@ export function makeLocationsResolver(
               installed,
               parsed,
               scope,
-              { ...marketplaceContext, manifestPath: mp.manifestPath },
+              mp,
               cwd,
               mcpImplementation,
             ),

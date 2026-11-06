@@ -121,6 +121,7 @@ import {
   withStateGuard,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
+import { legacyServersSourceFor } from "../mcp/recorded-servers.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
@@ -1799,13 +1800,7 @@ async function partialDegradeOf(
   }
 
   const { effective, recorded } = await readRecordMcpVerdict(
-    preflight.record,
-    {
-      marketplaceName: args.marketplace,
-      marketplace,
-      pluginName: args.plugin,
-      locations: args.locations,
-    },
+    legacyServersSourceFor(args.locations, marketplace, args.plugin),
     args.mcpImplementation,
   );
   const newlyDropped = newlyDroppedKinds(

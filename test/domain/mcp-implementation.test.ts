@@ -332,7 +332,7 @@ const EFFECTIVE_ROWS: readonly EffectiveRow[] = [
   ...IMPLEMENTATIONS.map((active): EffectiveRow => ({
     title: `MREC-01: unreadable recorded servers keep the stored verdict under ${active}`,
     stored: storedVerdict(false, ["hooks", "mcpServers"], { neutral: true }),
-    recorded: { kind: "unreadable" },
+    recorded: { kind: "unreadable", reason: "read-failed" },
     active,
     effective: { installable: false, unsupported: ["hooks", "mcpServers"], blocked: [] },
   })),

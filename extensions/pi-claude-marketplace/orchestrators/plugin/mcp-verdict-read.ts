@@ -17,7 +17,8 @@
 
 import { effectiveMcpCompatibility } from "../../domain/mcp-implementation.ts";
 import {
-  createLegacyServersReader,
+  legacyServersSourceFor,
+  readLegacyServers,
   recordedMcpServers,
   type LegacyServersReader,
   type LegacyServersSource,
@@ -32,7 +33,6 @@ import type {
   RecordedMcpServers,
 } from "../../domain/mcp-implementation.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 
 /**
@@ -42,40 +42,39 @@ import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
  * loading the manifest. Any other record re-resolves its declaration, because
  * a neutral verdict does not record a server only one implementation blocks.
  */
-function legacyReaderFor(source: LegacyServersSource): LegacyServersReader {
-  const reader = createLegacyServersReader(source);
-  return (record) =>
-    record.compatibilityBasis === undefined &&
+const readTracedLegacyServers: LegacyServersReader = (source) => {
+  const { record } = source;
+  return record.compatibilityBasis === undefined &&
     record.resources.mcpServers.length === 0 &&
     !record.compatibility.unsupported.includes("mcpServers")
-      ? Promise.resolve({ servers: [], bundle: false })
-      : reader(record);
-}
+    ? Promise.resolve({ servers: [], bundle: false })
+    : readLegacyServers(source);
+};
 
 /**
- * D-P3-04 / MREC-03: a plugin record's MCP verdict for the active
- * implementation, read offline. `source` names the marketplace record that
- * lists the plugin, which a legacy record re-resolves against, and the
- * locations of the scope whose state file holds both, inside whose clone
- * root the record's plugin root must lie (UF-1). The result also carries the
+ * D-P3-04 / MREC-03: the MCP verdict of `source`'s record for the active
+ * implementation, read offline. A legacy record re-resolves against the
+ * source's marketplace record, and the record's plugin root must lie inside
+ * a clone root of the source's scope (UF-1). The result also carries the
  * servers the verdict was read from.
  */
 export async function readRecordMcpVerdict(
-  record: PluginInstallRecord,
   source: LegacyServersSource,
   active: ActiveMcpImplementation,
 ): Promise<{
   readonly effective: EffectiveMcpCompatibility;
   readonly recorded: RecordedMcpServers;
 }> {
-  const recorded = await recordedMcpServers(record, source, legacyReaderFor);
-  return { effective: effectiveMcpCompatibility(record, recorded, active), recorded };
+  const recorded = await recordedMcpServers(source, readTracedLegacyServers);
+  return { effective: effectiveMcpCompatibility(source.record, recorded, active), recorded };
 }
 
 /**
  * D-P3-13: the degrade baseline reader for `active`, which reads a record's
  * MCP verdict as `readRecordMcpVerdict` does. `locations` are those of the
- * scope whose state file holds the records it reads (UF-1).
+ * scope whose state file holds the records it reads (UF-1). The source is
+ * built from the marketplace record and plugin name the port receives; the
+ * port's record gives only the verdict's basis.
  */
 export function recordDegradeBaselineReader(
   active: ActiveMcpImplementation,
@@ -83,8 +82,7 @@ export function recordDegradeBaselineReader(
 ): RecordDegradeBaselineReader {
   return async (record, marketplace, plugin) => {
     const { effective, recorded } = await readRecordMcpVerdict(
-      record,
-      { marketplaceName: marketplace.name, marketplace, pluginName: plugin, locations },
+      legacyServersSourceFor(locations, marketplace, plugin),
       active,
     );
     return degradeBaselineOf(effective, recorded, record, active);
@@ -92,13 +90,16 @@ export function recordDegradeBaselineReader(
 }
 
 /**
- * D-P3-10 / D-MB-07: a plugin record's MCP dependency, read offline from its
- * recorded servers with the same guarded reader as `readRecordMcpVerdict`. An
- * unreadable read keeps the stored adapter reading (P3-DC-24).
+ * D-P3-10 / D-MB-07: the MCP dependency of `source`'s record, read offline
+ * from its recorded servers with the same guarded reader as
+ * `readRecordMcpVerdict`. An unreadable read keeps the stored adapter reading
+ * (P3-DC-24).
  */
 export async function readRecordMcpDependency(
-  record: PluginInstallRecord,
   source: LegacyServersSource,
 ): Promise<McpDependency | false> {
-  return recordMcpDependency(await recordedMcpServers(record, source, legacyReaderFor), record);
+  return recordMcpDependency(
+    await recordedMcpServers(source, readTracedLegacyServers),
+    source.record,
+  );
 }

@@ -147,14 +147,42 @@ export interface RecordedMcpServer {
   readonly config: unknown;
 }
 
-/** The recorded MCP servers of one plugin record, or why they cannot be read. */
+/** Why a plugin record's MCP servers could not be read. */
+export type UnreadableMcpServersReason =
+  /** UF-1 / NFR-10: the plugin root is outside its owning clone root. */
+  | "uncontained"
+  /** MREC-02: the cached marketplace manifest no longer lists the plugin. */
+  | "not-in-manifest"
+  /** MREC-02: the manifest entry no longer resolves. */
+  | "unavailable"
+  /** MREC-02: the entry resolves to a plugin root other than the recorded one. */
+  | "root-mismatch"
+  /** MREC-02: the entry resolves to a version other than the recorded one. */
+  | "version-mismatch"
+  /** A file the read needs could not be read or parsed. */
+  | "read-failed";
+
+/**
+ * The recorded MCP servers of one plugin record, or why they cannot be read.
+ *
+ * The unreadable arm carries its reason because the built-in registration
+ * step words its skip from it: an uncontained record is logged apart from
+ * one whose servers are unreadable. Every other reader treats every reason
+ * alike. It keeps the stored verdict, shows the servers install staged, or
+ * keeps the stored adapter reading of the dependency.
+ *
+ * `recorded` (MREC-01, read from `mcpServerConfigs`) and `re-resolved`
+ * (MREC-02, read again from the plugin's own files) stay one arm. Both carry
+ * the same servers and bundle, and no reader branches on which one it got.
+ * The kind tells a test or a debug reader which read answered.
+ */
 export type RecordedMcpServers =
   | {
       readonly kind: "recorded" | "re-resolved";
       readonly servers: readonly RecordedMcpServer[];
       readonly bundle: boolean;
     }
-  | { readonly kind: "unreadable" };
+  | { readonly kind: "unreadable"; readonly reason: UnreadableMcpServersReason };
 
 /**
  * The structural view of a plugin record that the effective read takes, so a

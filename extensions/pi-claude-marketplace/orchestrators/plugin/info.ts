@@ -108,7 +108,11 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { crossScopeFlag, marketplaceNotAddedMessage } from "../marketplace/shared.ts";
-import { createLegacyServersReader, recordedMcpServers } from "../mcp/recorded-servers.ts";
+import {
+  legacyServersSourceFor,
+  readLegacyServers,
+  recordedMcpServers,
+} from "../mcp/recorded-servers.ts";
 import { collectMarketplaceRecordsByScope, type ScopedMarketplaceRecord } from "../scope-fanout.ts";
 
 import {
@@ -1335,11 +1339,7 @@ async function buildBlock(args: {
   // rescue that block (BOUND-01) -- which is why `lookupDeclaredPlugin`
   // (D-99-02a) is reachable only on the successful-read path and answers
   // `declared` or `absent`, never "unknown".
-  const installed = await readInstalledRecord(
-    { marketplaceName: marketplace, marketplace: mpRecord, pluginName, locations },
-    mpRecord,
-    mcpImplementation,
-  );
+  const installed = await readInstalledRecord(locations, mpRecord, pluginName, mcpImplementation);
   const lookup = lookupDeclaredPlugin(manifest, pluginName);
   if (lookup.kind === "absent") {
     if (installed !== undefined) {
@@ -1499,18 +1499,29 @@ interface InstalledRecordView {
   readonly verdict: Awaited<ReturnType<typeof readRecordMcpVerdict>>;
 }
 
-/** The block's installation record and its effective MCP verdict, when one exists. */
+/**
+ * The block's installation record and its effective MCP verdict, when one
+ * exists. `locations` are those of the scope whose state file holds
+ * `mpRecord` (UF-1).
+ */
 async function readInstalledRecord(
-  source: Parameters<typeof readRecordMcpVerdict>[1],
+  locations: ScopedLocations,
   mpRecord: MarketplaceRecord,
+  pluginName: string,
   active: ActiveMcpImplementation,
 ): Promise<InstalledRecordView | undefined> {
-  const record = ownValue(mpRecord.plugins, source.pluginName);
+  const record = ownValue(mpRecord.plugins, pluginName);
   if (record === undefined) {
     return undefined;
   }
 
-  return { record, verdict: await readRecordMcpVerdict(record, source, active) };
+  return {
+    record,
+    verdict: await readRecordMcpVerdict(
+      legacyServersSourceFor(locations, mpRecord, pluginName),
+      active,
+    ),
+  };
 }
 
 /** Recognizes the stub used for an invalid marketplace entry. */
@@ -3336,8 +3347,8 @@ function withCompanionRequirements(built: InfoBlock, softDeps: SoftDepStatus): I
  * carries the project's trust and cwd, for the built-in statuses (BLT-05).
  * MREC-02: under `builtin` the servers come from the record as the
  * registration step reads them, through `recordedMcpServers` and the legacy
- * reader of the block's own marketplace and scope, so info stamps the same
- * recorded servers the step reads.
+ * reader, with a source built from the block's own marketplace record and
+ * scope, so info stamps the same recorded servers the step reads.
  */
 async function withServerStatus(
   built: InfoBlock,
@@ -3349,18 +3360,18 @@ async function withServerStatus(
     projectTrusted: opts.projectTrusted,
     cwd: opts.cwd,
   });
-  const legacySource = {
-    marketplaceName: opts.marketplace,
-    marketplace: scoped.record,
-    pluginName: opts.plugin,
-    locations: locationsFor(scoped.scope, opts.cwd),
-  };
+  // `withMcpServerStatus` reads the servers only for a record that exists,
+  // which is the record the block's marketplace record lists.
   const block = await withMcpServerStatus(
     built.block,
     ownValue(scoped.record.plugins, opts.plugin),
     lookup,
     projectRecord,
-    (record) => recordedMcpServers(record, legacySource, createLegacyServersReader),
+    () =>
+      recordedMcpServers(
+        legacyServersSourceFor(locationsFor(scoped.scope, opts.cwd), scoped.record, opts.plugin),
+        readLegacyServers,
+      ),
   );
   return { ...built, block };
 }

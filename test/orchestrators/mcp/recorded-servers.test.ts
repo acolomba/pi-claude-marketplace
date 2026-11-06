@@ -6,7 +6,8 @@ import { describe, test, type TestContext } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import {
-  createLegacyServersReader,
+  legacyServersSourceFor,
+  readLegacyServers,
   recordedMcpServers,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -18,7 +19,10 @@ import type {
   LegacyServersSource,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 const RESOLVED_SHA = "a".repeat(40);
 
@@ -56,7 +60,8 @@ interface MarketplaceFixture {
   readonly root: string;
   readonly marketplaceRoot: string;
   readonly locations: ScopedLocations;
-  readonly source: LegacyServersSource;
+  /** The servers source of `record`, which the marketplace record `mp` lists as `p1`. */
+  readonly sourceFor: (record: PluginInstallRecord) => LegacyServersSource;
 }
 
 /** Where a cloned fixture marketplace's recorded root lies. */
@@ -64,8 +69,9 @@ type ClonedPlacement = "checkout" | "outside-checkout";
 
 /**
  * A marketplace `mp` in a fresh hermetic environment, listing `entries`, read
- * with the user scope's locations. Each entry declares version 1.0.0, the
- * version `installRecord` names, unless it declares its own. Without
+ * with the user scope's locations, the scope its marketplace record names.
+ * Each entry declares version 1.0.0, the version `installRecord` names,
+ * unless it declares its own. Without
  * `entries`, no manifest file exists. A path-source marketplace lives in a
  * directory of its own. A cloned marketplace (`cloned`) records its root in
  * the scope's `sources/mp/` checkout, or outside it.
@@ -94,16 +100,20 @@ async function marketplaceListing(
     root: environment.root,
     marketplaceRoot,
     locations,
-    source: {
-      marketplaceName: "mp",
-      marketplace: {
-        manifestPath,
-        marketplaceRoot,
-        source: cloned === undefined ? { kind: "path", raw: marketplaceRoot } : GITHUB_MARKETPLACE,
-      },
-      pluginName: "p1",
-      locations,
-    },
+    sourceFor: (record) =>
+      legacyServersSourceFor(
+        locations,
+        {
+          name: "mp",
+          scope: "user",
+          manifestPath,
+          marketplaceRoot,
+          source:
+            cloned === undefined ? { kind: "path", raw: marketplaceRoot } : GITHUB_MARKETPLACE,
+          plugins: { p1: record },
+        },
+        "p1",
+      ),
   };
 }
 
@@ -121,8 +131,75 @@ async function treeOf(root: string): Promise<Record<string, string | null>> {
   return tree;
 }
 
-/** The legacy reader factory `recordedMcpServers` takes. */
-type LegacyServersReaderFactory = (source: LegacyServersSource) => LegacyServersReader;
+/** A marketplace record `mp` of the user scope that lists `plugins`. */
+function marketplaceRecord(
+  plugins: ExtensionState["marketplaces"][string]["plugins"],
+): ExtensionState["marketplaces"][string] {
+  return {
+    name: "mp",
+    scope: "user",
+    source: GITHUB_MARKETPLACE,
+    addedFromCwd: "/abs/cwd",
+    manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
+    marketplaceRoot: "/abs/mp",
+    plugins,
+  };
+}
+
+/**
+ * The servers source of `record` over a path-source marketplace record `mp`
+ * that names the project scope, read with the fixture's user-scope locations.
+ */
+function projectMarketplaceSource(
+  marketplace: MarketplaceFixture,
+  record: PluginInstallRecord,
+): LegacyServersSource {
+  return legacyServersSourceFor(
+    marketplace.locations,
+    {
+      name: "mp",
+      scope: "project",
+      manifestPath: path.join(marketplace.marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      marketplaceRoot: marketplace.marketplaceRoot,
+      source: { kind: "path", raw: marketplace.marketplaceRoot },
+      plugins: { p1: record },
+    },
+    "p1",
+  );
+}
+
+describe("legacyServersSourceFor", () => {
+  test("UF-1: builds a plugin's servers source from the record its marketplace record lists", async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "recorded-servers-");
+    const locations = locationsFor("user", environment.cwd);
+    const record = installRecord();
+    const marketplace = marketplaceRecord({ p1: record });
+
+    // act
+    const source = legacyServersSourceFor(locations, marketplace, "p1");
+
+    // assert
+    assert.equal(source.record, record);
+    assert.equal(source.marketplace, marketplace);
+    assert.equal(source.marketplace.name, "mp");
+    assert.equal(source.pluginName, "p1");
+    assert.equal(source.locations, locations);
+  });
+
+  test("UF-1: refuses to build the servers source of a plugin its marketplace record does not list", async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "recorded-servers-");
+    const locations = locationsFor("user", environment.cwd);
+    const marketplace = marketplaceRecord({ p1: installRecord() });
+
+    // act & assert
+    assert.throws(() => legacyServersSourceFor(locations, marketplace, "p9"), {
+      name: "Error",
+      message: "the marketplace record mp lists no plugin p9",
+    });
+  });
+});
 
 describe("recordedMcpServers", () => {
   test("MREC-01: returns the recorded servers and bundle without calling the legacy reader", async (t) => {
@@ -139,7 +216,7 @@ describe("recordedMcpServers", () => {
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
 
     // act
-    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
+    const recorded = await recordedMcpServers(marketplace.sourceFor(record), reader);
 
     // assert
     assert.deepStrictEqual(recorded, {
@@ -163,7 +240,7 @@ describe("recordedMcpServers", () => {
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
 
     // act
-    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
+    const recorded = await recordedMcpServers(marketplace.sourceFor(record), reader);
 
     // assert
     assert.deepStrictEqual(recorded, { kind: "recorded", servers: [], bundle: false });
@@ -173,15 +250,15 @@ describe("recordedMcpServers", () => {
   test("MREC-02: re-resolves a record that predates the field through the legacy reader", async (t) => {
     // arrange
     const marketplace = await marketplaceListing(t, undefined);
-    const record = installRecord();
+    const source = marketplace.sourceFor(installRecord());
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
-    when(() => reader(installRecord())).thenResolve({
+    when(() => reader(source)).thenResolve({
       servers: [{ name: "a", config: { command: "node" } }],
       bundle: true,
     });
 
     // act
-    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
+    const recorded = await recordedMcpServers(source, reader);
 
     // assert
     assert.deepStrictEqual(recorded, {
@@ -196,15 +273,15 @@ describe("recordedMcpServers", () => {
     // arrange
     const marketplace = await marketplaceListing(t, undefined);
     const logged = captureDebugLog(t);
-    const record = installRecord();
+    const source = marketplace.sourceFor(installRecord());
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
-    when(() => reader(installRecord())).thenReject(new Error("manifest gone"));
+    when(() => reader(source)).thenReject(new Error("manifest gone"));
 
     // act
-    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
+    const recorded = await recordedMcpServers(source, reader);
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "read-failed" });
     assert.deepStrictEqual(logged, ["[mcp] recorded MCP servers unreadable: manifest gone"]);
     verify(reader);
   });
@@ -213,16 +290,16 @@ describe("recordedMcpServers", () => {
     // arrange
     const marketplace = await marketplaceListing(t, undefined);
     const logged = captureDebugLog(t);
-    const record = installRecord();
+    const source = marketplace.sourceFor(installRecord());
     const reader: LegacyServersReader = () => {
       throw new Error("plugin root gone");
     };
 
     // act
-    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
+    const recorded = await recordedMcpServers(source, reader);
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "read-failed" });
     assert.deepStrictEqual(logged, ["[mcp] recorded MCP servers unreadable: plugin root gone"]);
   });
 
@@ -230,19 +307,19 @@ describe("recordedMcpServers", () => {
     // arrange
     const marketplace = await marketplaceListing(t, undefined);
     const logged = captureDebugLog(t);
-    const record = installRecord();
+    const source = marketplace.sourceFor(installRecord());
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
-    when(() => reader(installRecord())).thenReject(
+    when(() => reader(source)).thenReject(
       new Error(
         "ENOENT: no such file or directory, open '/home/someone/.pi/agent/pi-claude-marketplace/sources/mp/.claude-plugin/marketplace.json'",
       ),
     );
 
     // act
-    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
+    const recorded = await recordedMcpServers(source, reader);
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "read-failed" });
     assert.deepStrictEqual(logged, [
       "[mcp] recorded MCP servers unreadable: ENOENT: no such file or directory, open 'marketplace.json'",
     ]);
@@ -260,15 +337,14 @@ describe("recordedMcpServers", () => {
 
     // act
     const recorded = await recordedMcpServers(
-      installRecord(outside),
-      marketplace.source,
-      createLegacyServersReader,
+      marketplace.sourceFor(installRecord(outside)),
+      readLegacyServers,
     );
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "uncontained" });
     assert.deepStrictEqual(logged, [
-      "[mcp] recorded MCP servers unreadable: cannot re-resolve the MCP servers of p1@mp: uncontained",
+      "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of p1@mp: uncontained",
     ]);
   });
 
@@ -280,20 +356,17 @@ describe("recordedMcpServers", () => {
       ...installRecord(path.join(marketplace.root, "outside", "plugin")),
       mcpServerConfigs: [{ name: "a", config: { command: "node" } }],
     };
-    const readerFor = mock<LegacyServersReaderFactory>({
-      exactParams: true,
-      name: "legacy reader factory",
-    });
+    const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
 
     // act
-    const recorded = await recordedMcpServers(record, marketplace.source, readerFor);
+    const recorded = await recordedMcpServers(marketplace.sourceFor(record), reader);
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "uncontained" });
     assert.deepStrictEqual(logged, [
-      "[mcp] recorded MCP servers unreadable: cannot re-resolve the MCP servers of p1@mp: uncontained",
+      "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of p1@mp: uncontained",
     ]);
-    verify(readerFor);
+    verify(reader);
   });
 
   test("UF-1: reads the stored servers of a record whose plugin root runs through a symlink out of its marketplace as unreadable", async (t) => {
@@ -306,17 +379,14 @@ describe("recordedMcpServers", () => {
       ...installRecord(path.join(marketplace.marketplaceRoot, "linked", "plugin")),
       mcpServerConfigs: [{ name: "a", config: { command: "node" } }],
     };
-    const readerFor = mock<LegacyServersReaderFactory>({
-      exactParams: true,
-      name: "legacy reader factory",
-    });
+    const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
 
     // act
-    const recorded = await recordedMcpServers(record, marketplace.source, readerFor);
+    const recorded = await recordedMcpServers(marketplace.sourceFor(record), reader);
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
-    verify(readerFor);
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "uncontained" });
+    verify(reader);
   });
 
   test("UF-1: returns the stored servers of a git record inside its own plugin clone", async (t) => {
@@ -326,13 +396,10 @@ describe("recordedMcpServers", () => {
       ...gitRecord(path.join(marketplace.locations.pluginClonesDir, CLONE_KEY)),
       mcpServerConfigs: [{ name: "a", config: { command: "node" } }],
     };
-    const readerFor = mock<LegacyServersReaderFactory>({
-      exactParams: true,
-      name: "legacy reader factory",
-    });
+    const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
 
     // act
-    const recorded = await recordedMcpServers(record, marketplace.source, readerFor);
+    const recorded = await recordedMcpServers(marketplace.sourceFor(record), reader);
 
     // assert
     assert.deepStrictEqual(recorded, {
@@ -340,11 +407,35 @@ describe("recordedMcpServers", () => {
       servers: [{ name: "a", config: { command: "node" } }],
       bundle: false,
     });
-    verify(readerFor);
+    verify(reader);
+  });
+
+  test("UF-1 / NFR-10: reads the stored servers of a record whose marketplace record names another scope as unreadable", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(t, undefined);
+    const logged = captureDebugLog(t);
+    const record: PluginInstallRecord = {
+      ...installRecord(path.join(marketplace.marketplaceRoot, "plugin")),
+      mcpServerConfigs: [{ name: "a", config: { command: "node" } }],
+    };
+    const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
+
+    // act
+    const recorded = await recordedMcpServers(
+      projectMarketplaceSource(marketplace, record),
+      reader,
+    );
+
+    // assert
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "uncontained" });
+    assert.deepStrictEqual(logged, [
+      "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of p1@mp: uncontained",
+    ]);
+    verify(reader);
   });
 });
 
-describe("createLegacyServersReader", () => {
+describe("readLegacyServers", () => {
   test("MREC-02: re-resolves a path-source plugin's .mcp.json and plugin.json servers in merge order", async (t) => {
     // arrange
     const marketplace = await marketplaceListing(t, [{ name: "p1", source: "./plugin" }]);
@@ -359,10 +450,9 @@ describe("createLegacyServersReader", () => {
       name: "p1",
       mcpServers: { gamma: { command: "gamma" }, alpha: { command: "python" } },
     });
-    const reader = createLegacyServersReader(marketplace.source);
 
     // act
-    const legacy = await reader(installRecord(pluginRoot));
+    const legacy = await readLegacyServers(marketplace.sourceFor(installRecord(pluginRoot)));
 
     // assert
     assert.deepStrictEqual(legacy, {
@@ -386,10 +476,9 @@ describe("createLegacyServersReader", () => {
     ]);
     const pluginRoot = path.join(marketplace.marketplaceRoot, "plugin");
     await mkdir(pluginRoot, { recursive: true });
-    const reader = createLegacyServersReader(marketplace.source);
 
     // act
-    const legacy = await reader(installRecord(pluginRoot));
+    const legacy = await readLegacyServers(marketplace.sourceFor(installRecord(pluginRoot)));
 
     // assert
     assert.deepStrictEqual(legacy, {
@@ -408,10 +497,9 @@ describe("createLegacyServersReader", () => {
       name: "p1",
       mcpServers: ["server.mcpb", { local: { command: "node" } }],
     });
-    const reader = createLegacyServersReader(marketplace.source);
 
     // act
-    const legacy = await reader(installRecord(pluginRoot));
+    const legacy = await readLegacyServers(marketplace.sourceFor(installRecord(pluginRoot)));
 
     // assert
     assert.deepStrictEqual(legacy, {
@@ -430,10 +518,9 @@ describe("createLegacyServersReader", () => {
       mcpServers: { remote: { type: "http", url: "https://remote.example.com/mcp" } },
     });
     const treeBefore = await treeOf(marketplace.root);
-    const reader = createLegacyServersReader(marketplace.source);
 
     // act
-    const legacy = await reader(gitRecord(pluginRoot));
+    const legacy = await readLegacyServers(marketplace.sourceFor(gitRecord(pluginRoot)));
 
     // assert
     assert.deepStrictEqual(legacy, {
@@ -454,10 +541,9 @@ describe("createLegacyServersReader", () => {
     await writeJson(path.join(pluginRoot, ".mcp.json"), {
       mcpServers: { local: { command: "node" } },
     });
-    const reader = createLegacyServersReader(marketplace.source);
 
     // act
-    const legacy = await reader(installRecord(pluginRoot));
+    const legacy = await readLegacyServers(marketplace.sourceFor(installRecord(pluginRoot)));
 
     // assert
     assert.deepStrictEqual(legacy, {
@@ -474,10 +560,9 @@ describe("createLegacyServersReader", () => {
     await writeJson(path.join(pinnedRoot, ".mcp.json"), {
       mcpServers: { pinned: { command: "pinned" } },
     });
-    const reader = createLegacyServersReader(marketplace.source);
 
     // act
-    const legacy = await reader(gitRecord(pinnedRoot));
+    const legacy = await readLegacyServers(marketplace.sourceFor(gitRecord(pinnedRoot)));
 
     // assert
     assert.deepStrictEqual(legacy, {
@@ -499,10 +584,9 @@ describe("createLegacyServersReader", () => {
       version: "1.0.0-aaaaaaaaaaaa",
       resolvedVersion: "1.0.0",
     };
-    const reader = createLegacyServersReader(marketplace.source);
 
     // act
-    const legacy = await reader(record);
+    const legacy = await readLegacyServers(marketplace.sourceFor(record));
 
     // assert
     assert.deepStrictEqual(legacy, {
@@ -522,10 +606,9 @@ describe("createLegacyServersReader", () => {
     await writeJson(path.join(pluginRoot, ".mcp.json"), {
       mcpServers: { cloned: { command: "cloned" } },
     });
-    const reader = createLegacyServersReader(marketplace.source);
 
     // act
-    const legacy = await reader(installRecord(pluginRoot));
+    const legacy = await readLegacyServers(marketplace.sourceFor(installRecord(pluginRoot)));
 
     // assert
     assert.deepStrictEqual(legacy, {
@@ -583,11 +666,11 @@ describe("createLegacyServersReader", () => {
     test(`UF-1: refuses ${title} before it reads the manifest`, async (t) => {
       // arrange -- no manifest exists, so a read before the check fails differently
       const marketplace = await marketplaceListing(t, undefined, cloned);
-      const reader = createLegacyServersReader(marketplace.source);
+      const source = marketplace.sourceFor(await record(marketplace));
 
       // act & assert
-      await assert.rejects(reader(await record(marketplace)), {
-        name: "LegacyServersUnreadableError",
+      await assert.rejects(readLegacyServers(source), {
+        name: "RecordedServersUnreadableError",
         reason: "uncontained",
         plugin: "p1",
         marketplace: "mp",
@@ -604,11 +687,10 @@ describe("createLegacyServersReader", () => {
     await writeJson(path.join(pluginRoot, ".mcp.json"), {
       mcpServers: { added: { command: "added" } },
     });
-    const reader = createLegacyServersReader(marketplace.source);
 
     // act & assert
-    await assert.rejects(reader(installRecord(pluginRoot)), {
-      name: "LegacyServersUnreadableError",
+    await assert.rejects(readLegacyServers(marketplace.sourceFor(installRecord(pluginRoot))), {
+      name: "RecordedServersUnreadableError",
       reason: "version-mismatch",
       plugin: "p1",
       marketplace: "mp",
@@ -618,11 +700,13 @@ describe("createLegacyServersReader", () => {
   test("MREC-02: refuses a plugin the marketplace manifest no longer lists", async (t) => {
     // arrange
     const marketplace = await marketplaceListing(t, [{ name: "other", source: "./other" }]);
-    const reader = createLegacyServersReader(marketplace.source);
+    const source = marketplace.sourceFor(
+      installRecord(path.join(marketplace.marketplaceRoot, "plugin")),
+    );
 
     // act & assert
-    await assert.rejects(reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))), {
-      name: "LegacyServersUnreadableError",
+    await assert.rejects(readLegacyServers(source), {
+      name: "RecordedServersUnreadableError",
       reason: "not-in-manifest",
       plugin: "p1",
       marketplace: "mp",
@@ -632,11 +716,13 @@ describe("createLegacyServersReader", () => {
   test("MREC-02: refuses a re-resolution that resolves unavailable", async (t) => {
     // arrange
     const marketplace = await marketplaceListing(t, [{ name: "p1", source: "./plugin" }]);
-    const reader = createLegacyServersReader(marketplace.source);
+    const source = marketplace.sourceFor(
+      installRecord(path.join(marketplace.marketplaceRoot, "plugin")),
+    );
 
     // act & assert
-    await assert.rejects(reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))), {
-      name: "LegacyServersUnreadableError",
+    await assert.rejects(readLegacyServers(source), {
+      name: "RecordedServersUnreadableError",
       reason: "unavailable",
       plugin: "p1",
       marketplace: "mp",
@@ -648,12 +734,31 @@ describe("createLegacyServersReader", () => {
     const marketplace = await marketplaceListing(t, [{ name: "p1", source: "./moved" }]);
     await mkdir(path.join(marketplace.marketplaceRoot, "moved"), { recursive: true });
     await mkdir(path.join(marketplace.marketplaceRoot, "plugin"), { recursive: true });
-    const reader = createLegacyServersReader(marketplace.source);
+    const source = marketplace.sourceFor(
+      installRecord(path.join(marketplace.marketplaceRoot, "plugin")),
+    );
 
     // act & assert
-    await assert.rejects(reader(installRecord(path.join(marketplace.marketplaceRoot, "plugin"))), {
-      name: "LegacyServersUnreadableError",
+    await assert.rejects(readLegacyServers(source), {
+      name: "RecordedServersUnreadableError",
       reason: "root-mismatch",
+      plugin: "p1",
+      marketplace: "mp",
+    });
+  });
+
+  test("UF-1: refuses a record whose marketplace record names another scope before it reads the manifest", async (t) => {
+    // arrange -- no manifest exists, so a read before the check fails differently
+    const marketplace = await marketplaceListing(t, undefined);
+    const source = projectMarketplaceSource(
+      marketplace,
+      installRecord(path.join(marketplace.marketplaceRoot, "plugin")),
+    );
+
+    // act & assert
+    await assert.rejects(readLegacyServers(source), {
+      name: "RecordedServersUnreadableError",
+      reason: "uncontained",
       plugin: "p1",
       marketplace: "mp",
     });

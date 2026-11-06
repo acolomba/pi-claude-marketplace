@@ -114,13 +114,13 @@ const RECORD_ROWS: readonly RecordRow[] = [
   },
   {
     title: "P3-DC-24: an unreadable read of a record that staged a server keeps the adapter",
-    recorded: { kind: "unreadable" },
+    recorded: { kind: "unreadable", reason: "read-failed" },
     staged: ["events"],
     expectedDependency: { kind: "mcp", runEvery: ["adapter"] },
   },
   {
     title: "P3-DC-24: an unreadable read of a record that staged no server gives no dependency",
-    recorded: { kind: "unreadable" },
+    recorded: { kind: "unreadable", reason: "uncontained" },
     staged: [],
     expectedDependency: false,
   },

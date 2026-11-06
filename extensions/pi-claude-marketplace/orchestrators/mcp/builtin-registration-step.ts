@@ -58,8 +58,8 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { SCOPES } from "../../shared/types.ts";
 
 import {
-  createLegacyServersReader,
-  isPluginRootContained,
+  legacyServersSourceFor,
+  readLegacyServers,
   recordedMcpServers,
 } from "./recorded-servers.ts";
 
@@ -180,20 +180,23 @@ async function recordRegistrations(
   session: SessionFacts,
 ): Promise<Registration[]> {
   const plugin = `${source.pluginName}@${source.marketplaceName}`;
-  const legacySource = { ...source, locations };
-  if (!(await isPluginRootContained(source.record, legacySource))) {
-    debugLog(`MCP servers of ${plugin} not registered: its plugin root is outside its sources`);
-    return [];
-  }
-
   // MREC-02: a record without `mcpServerConfigs` is re-resolved read-only
-  // against its own marketplace record.
-  const recorded = await recordedMcpServers(source.record, legacySource, createLegacyServersReader);
+  // against its own marketplace record. UF-1 / NFR-10: the read refuses an
+  // uncontained record before it reads any of its files.
+  const recorded = await recordedMcpServers(
+    legacyServersSourceFor(locations, source.marketplace, source.pluginName),
+    readLegacyServers,
+  );
   // An unreadable record is a skip, not a read failure: `unreadable` also
   // answers a plugin root outside its clone root, which must never keep a
-  // registration (UF-1, NFR-10), so its live servers are unregistered.
+  // registration (UF-1, NFR-10), so its live servers are unregistered. The
+  // reason words the debug line.
   if (recorded.kind === "unreadable") {
-    debugLog(`MCP servers of ${plugin} not registered: its servers are unreadable`);
+    debugLog(
+      recorded.reason === "uncontained"
+        ? `MCP servers of ${plugin} not registered: its plugin root is outside its sources`
+        : `MCP servers of ${plugin} not registered: its servers are unreadable`,
+    );
     return [];
   }
 

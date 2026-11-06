@@ -3,6 +3,7 @@ import { declaredVersionWithPin, isSameVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { legacyServersSourceFor } from "../mcp/recorded-servers.ts";
 
 import { resolveListCandidate } from "./list-candidate-version.ts";
 import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
@@ -26,6 +27,7 @@ import type {
   PluginUpgradableMessage,
 } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { LegacyServersSource } from "../mcp/recorded-servers.ts";
 
 export type InstalledListRow =
   | PluginDisabledMessage
@@ -39,12 +41,8 @@ export interface ComposeInstalledListRowOptions {
   readonly pluginName: string;
   readonly pluginScope: Scope;
   readonly marketplaceScope: Scope;
-  readonly marketplaceRoot: string;
-  readonly marketplaceName: string;
-  readonly marketplaceSource: unknown;
-  /** The marketplace's cached `marketplace.json`, which a legacy record re-resolves against. */
-  readonly manifestPath: string;
-  readonly record: PluginInstallRecord;
+  /** The marketplace record from the plugin scope's state file, which lists the plugin (UF-1). */
+  readonly marketplace: Parameters<typeof legacyServersSourceFor>[1];
   readonly lookup: ManifestLookup;
   readonly cwd: string;
   /** D-P3-05: the run's active MCP implementation, whose view the row shows. */
@@ -122,22 +120,23 @@ function catalogVersion(entry: ManifestPluginEntry, marketplaceName: string): st
  */
 async function upgradeCandidate(
   manifestEntry: ManifestPluginEntry,
-  options: Omit<ComposeInstalledListRowOptions, "manifestPath" | "mcpImplementation">,
+  source: LegacyServersSource,
 ): Promise<UpgradeCandidate> {
+  const { marketplace } = source;
   const candidate = await resolveListCandidate(
     manifestEntry,
     {
-      marketplaceRoot: options.marketplaceRoot,
-      marketplaceName: options.marketplaceName,
-      marketplaceSource: options.marketplaceSource,
+      marketplaceRoot: marketplace.marketplaceRoot,
+      marketplaceName: marketplace.name,
+      marketplaceSource: marketplace.source,
     },
-    locationsFor(options.pluginScope, options.cwd),
+    source.locations,
   ).catch((): undefined => undefined);
   const resolved = candidate?.kind === "resolved" ? candidate : undefined;
-  const version = resolved?.version ?? catalogVersion(manifestEntry, options.marketplaceName);
+  const version = resolved?.version ?? catalogVersion(manifestEntry, marketplace.name);
   // GV-01: Claude Code compares the recorded string with the catalog's, so a
   // record at a release tag's commit (`<v>-<commit 12>`) is not `<v>`.
-  if (version === undefined || isSameVersion(options.record.version, version)) {
+  if (version === undefined || isSameVersion(source.record.version, version)) {
     return { upgradable: false };
   }
 
@@ -159,6 +158,15 @@ export type InstalledRecordView =
       readonly candidate: UpgradeCandidate;
     };
 
+/** The servers source of the row's plugin, read with the plugin scope's locations (UF-1). */
+function rowSource(options: ComposeInstalledListRowOptions): LegacyServersSource {
+  return legacyServersSourceFor(
+    locationsFor(options.pluginScope, options.cwd),
+    options.marketplace,
+    options.pluginName,
+  );
+}
+
 /**
  * D-P6-22 / MREC-03: the one classification of an installed record that
  * `list` and completion share, so the two cannot drift. A recorded-but-disabled
@@ -171,28 +179,24 @@ export type InstalledRecordView =
 export async function classifyInstalledForImplementation(
   options: ComposeInstalledListRowOptions,
 ): Promise<InstalledRecordView> {
-  const { pluginName, record, lookup } = options;
+  return classifySource(rowSource(options), options);
+}
+
+/** `classifyInstalledForImplementation` over the source the row already built. */
+async function classifySource(
+  source: LegacyServersSource,
+  options: ComposeInstalledListRowOptions,
+): Promise<InstalledRecordView> {
+  const { record } = source;
+  const { lookup } = options;
   if (isRecordedButDisabled(record)) {
     return { kind: "disabled" };
   }
 
-  const { effective, recorded } = await readRecordMcpVerdict(
-    record,
-    {
-      marketplaceName: options.marketplaceName,
-      marketplace: {
-        manifestPath: options.manifestPath,
-        marketplaceRoot: options.marketplaceRoot,
-        source: options.marketplaceSource,
-      },
-      pluginName,
-      locations: locationsFor(options.pluginScope, options.cwd),
-    },
-    options.mcpImplementation,
-  );
+  const { effective, recorded } = await readRecordMcpVerdict(source, options.mcpImplementation);
   const candidate = candidateFor(
     lookup.kind === "declared"
-      ? await upgradeCandidate(lookup.entry, options)
+      ? await upgradeCandidate(lookup.entry, source)
       : { upgradable: false },
     options.mcpImplementation,
   );
@@ -208,14 +212,16 @@ export async function classifyInstalledForImplementation(
 export async function composeInstalledListRow(
   options: ComposeInstalledListRowOptions,
 ): Promise<InstalledListRow> {
-  const { pluginName, pluginScope, marketplaceScope, record, lookup } = options;
+  const { pluginName, pluginScope, marketplaceScope, lookup } = options;
+  const source = rowSource(options);
+  const { record } = source;
   const manifestEntry = lookup.kind === "declared" ? lookup.entry : undefined;
   const notInManifest = lookup.kind === "absent";
   const scopeField: { readonly scope?: Scope } =
     pluginScope === marketplaceScope ? {} : { scope: pluginScope };
   const descriptionField: { readonly description?: string } =
     manifestEntry?.description === undefined ? {} : { description: manifestEntry.description };
-  const view = await classifyInstalledForImplementation(options);
+  const view = await classifySource(source, options);
 
   if (view.kind === "disabled") {
     return {
