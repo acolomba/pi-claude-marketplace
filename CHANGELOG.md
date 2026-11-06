@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- Plugin MCP servers now also run through Pi's built-in MCP, switching between it and pi-mcp-adapter needs no plugin command, and Pi 1.5.0 is required.
+## [0.23.0] - 2026-11-06
+
+- Plugin MCP servers now also run through Pi's built-in MCP, switching between it and pi-mcp-adapter needs no plugin command, and Pi 1.5.0 is required. (#303)
 
   - The extension now needs Pi 1.5.0 or newer.
   - Without pi-mcp-adapter, the extension registers plugin MCP servers with Pi's built-in MCP at each start and `/reload`, and project servers only in a trusted project.
