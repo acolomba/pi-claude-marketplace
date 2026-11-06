@@ -62,8 +62,9 @@ async function rewriteScope(scope: Scope, cwd: string, active: McpImplementation
     await withExistingScopeLock(locations, async (assertLockHeld) => {
       await rewriteAgentGrantForms(locations, active, createRemovalOps(), assertLockHeld);
     });
-  } catch (err) {
-    const reason = err instanceof StateLockHeldError ? "its state lock is held" : errorMessage(err);
+  } catch (error: unknown) {
+    const reason =
+      error instanceof StateLockHeldError ? "its state lock is held" : errorMessage(error);
     hookDebugLog(`agent grants of the ${scope} scope skipped: ${reason}`, "mcp");
   }
 }
@@ -71,11 +72,11 @@ async function rewriteScope(scope: Scope, cwd: string, active: McpImplementation
 /**
  * MGRT-01 / D-MB-03: brings the generated agent files' MCP grants in line with
  * the active implementation. `env` is where the pi-subagents child marker is
- * read (MGRT-02); the materializer passes only `input`.
+ * read (MGRT-02).
  */
 export async function agentGrantsStep(
   input: AgentGrantsStepInput,
-  env: SubagentChildEnv = process.env,
+  env: SubagentChildEnv,
 ): Promise<void> {
   const active = input.snapshot.softDeps.mcpImplementation;
   if (isSubagentChild(env) || active === "none") {
@@ -88,7 +89,7 @@ export async function agentGrantsStep(
     if (input.ctx.isProjectTrusted()) {
       await rewriteScope("project", cwd, active);
     }
-  } catch (err) {
-    hookDebugLog(`agent grants skipped: ${errorMessage(err)}`, "mcp");
+  } catch (error: unknown) {
+    hookDebugLog(`agent grants skipped: ${errorMessage(error)}`, "mcp");
   }
 }

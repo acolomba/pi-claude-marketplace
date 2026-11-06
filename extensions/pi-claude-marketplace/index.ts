@@ -127,7 +127,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // from Pi (MSEL-01).
   const materializeMcpSession = createMcpSessionMaterializer({
     builtinRegistrationStep,
-    agentGrantsStep,
+    agentGrantsStep: (input) => agentGrantsStep(input, process.env),
   });
 
   // DISP-01 / DISP-02 / D-59-02 / D-59-03: register the hooks bridge at

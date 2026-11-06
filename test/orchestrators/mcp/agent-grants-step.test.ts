@@ -88,7 +88,7 @@ test("MGRT-01: with no active implementation, reads nothing from the context and
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
 
   // act
-  await agentGrantsStep({ pi, ctx, snapshot: runFor("none") });
+  await agentGrantsStep({ pi, ctx, snapshot: runFor("none") }, NOT_A_CHILD);
 
   // assert
   assert.strictEqual(await readFile(agentPath(user), "utf8"), adapterBlock() + BODY);
