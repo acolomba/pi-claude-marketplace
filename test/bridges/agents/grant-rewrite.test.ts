@@ -10,6 +10,7 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { StateLockCompromisedError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import {
@@ -135,6 +136,24 @@ describe("needsAgentGrantRewrite", () => {
 
     // assert
     assert.strictEqual(needed, false);
+  });
+
+  test("RECON-05: a candidate whose target fails containment is no work and leaves one mcp debug line", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const renamed = agentPath(locations, OTHER_NAME);
+    await writeAgent(renamed, adapterBlock() + BODY);
+    await writeIndex(locations, [storedRow(renamed, "adapter")]);
+    const debugLines = captureDebugLog(t);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, false);
+    assert.deepStrictEqual(debugLines, [
+      `[mcp] agent ${NAME}: grant rewrite check skipped: agent target ${renamed} is not named ${NAME}.md`,
+    ]);
   });
 
   test("AG-4: is false when the only candidate's stored active form is malformed", async (t) => {

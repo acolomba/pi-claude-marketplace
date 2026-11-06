@@ -45,8 +45,10 @@
 //      from `legacy-grant-form.ts` under the lock, then the same swap; a
 //      translation that gives up records the adapter form only, so the row
 //      is not retried at every load.
-//   7. Silent: every skip is debug-logged on the `mcp` channel and nothing
-//      reaches the user (RECON-05).
+//   7. Silent: the locked pass debug-logs every row it leaves, and
+//      `needsAgentGrantRewrite` debug-logs a candidate whose target fails
+//      containment or whose file it cannot read. Both write on the `mcp`
+//      channel, and nothing reaches the user (RECON-05).
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -196,7 +198,11 @@ function changesRow(row: AgentsIndexRow, active: McpImplementationId, text: stri
   return held === "recorded" || held === "active";
 }
 
-/** Whether the locked pass changes `row`; read without the lock, so a failure is no work. */
+/**
+ * Whether the locked pass changes `row`; read without the lock. A candidate
+ * whose target fails containment or whose file cannot be read is no work,
+ * and it writes one `mcp` debug line (RECON-05).
+ */
 async function isRewritable(
   locations: ScopedLocations,
   row: AgentsIndexRow,
@@ -209,7 +215,11 @@ async function isRewritable(
   try {
     await assertRowContained(locations, row);
     return changesRow(row, active, await readFile(row.targetPath, "utf8"));
-  } catch {
+  } catch (err) {
+    hookDebugLog(
+      `agent ${row.generatedName}: grant rewrite check skipped: ${errorMessage(err)}`,
+      "mcp",
+    );
     return false;
   }
 }
