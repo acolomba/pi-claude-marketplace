@@ -950,7 +950,7 @@ These are native wire values, including spaces and hyphens. They are not the lab
 
 `McpServerStatus`: `connected`, `cached, connects on first use`, `needs authentication`, `pending approval`, `disabled`, `not connected`, `failed`, `status unknown`, `not loaded`, `overridden by project scope`, `overridden by mcp.json`, `project not trusted`.
 
-The `McpServerStatus` tokens depend on the MCP implementation that Pi runs. pi-mcp-adapter gives `connected`, `cached, connects on first use`, `needs authentication`, `pending approval`, `disabled`, `not connected`, `failed`, `status unknown`, `not loaded`, and `overridden by project scope`. Pi's built-in MCP gives `connected`, `disabled`, `not connected`, `not loaded`, `overridden by mcp.json`, `project not trusted`, and `overridden by project scope`. With no MCP implementation, every server has `status unknown`.
+The `McpServerStatus` tokens depend on the MCP implementation that Pi runs. pi-mcp-adapter gives `connected`, `cached, connects on first use`, `needs authentication`, `pending approval`, `disabled`, `not connected`, `failed`, `status unknown`, `not loaded`, and `overridden by project scope`. Pi's built-in MCP gives `connected`, `disabled`, `not connected`, `not loaded`, `overridden by mcp.json`, `project not trusted`, and `overridden by project scope`. It also gives `status unknown` for a server whose state cannot be read, because Pi's MCP registry or tool list cannot be read. With no MCP implementation, every server has `status unknown`.
 
 `Companion`: `pi-dynamic-workflows`, `pi-mcp-adapter`, `pi-subagents`, `mcp`, `builtin mcp`.
 
