@@ -66,6 +66,7 @@ import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
 import type { RpcGitEnvironment, RpcRecord, RpcRequest } from "../lib/pi-process.ts";
 import type { RegistrySnapshot } from "../lib/pi-registry-probe/snapshot.ts";
+import type { PiTuiOptions } from "../lib/pi-tui.ts";
 import type { PluginCompletion } from "../lib/plugin-completions.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
@@ -95,6 +96,22 @@ const ADAPTER_ONBOARDING_TIMEOUT_MS = 10_000;
 const SCRIPTED_MODEL_EXTENSION = fileURLToPath(
   new URL("../lib/scripted-model/extension.ts", import.meta.url),
 );
+
+// The profile Pi selects the scripted model over RPC; a terminal Pi selects it
+// on its command line.
+const SCRIPTED_MODEL_ARGUMENTS = ["--provider", "faux", "--model", "faux-1"];
+
+// D-CF2-12: with the scripted model selected, a terminal Pi never prints its
+// default readiness text. Pi lists its loaded resources, ending with
+// `[Extensions]`, only after the extensions' `session_start` handlers ran and
+// its autocomplete was set up, so a completion exists before the first
+// keystroke.
+const SCRIPTED_TUI_READY_TEXT = "[Extensions]";
+
+// The profile Pi already compiled every extension into the shared jiti cache,
+// so a terminal Pi with the scripted model starts in seconds; a minute covers
+// a slow worker.
+const SCRIPTED_TUI_READY_MS = 60_000;
 
 /** The bytes of a scope's base config and installation record. */
 export interface ScopeBytes {
@@ -738,8 +755,15 @@ export class ScenarioWorld extends World {
     this.tuiVariables[name] = value;
   }
 
-  /** Starts one contained production TUI and registers its release before waiting for readiness. */
-  async startTuiSession(): Promise<PiTuiSession> {
+  /**
+   * Starts one contained production TUI and registers its release before
+   * waiting for readiness. With `model` set to `scripted`, the TUI also loads
+   * and selects the scripted model beside this scenario's profile Pi: it plays
+   * the profile Pi's script from the same harness directory, and its `TMPDIR`
+   * reuses the profile Pi's compile cache. That fails when no profile Pi
+   * started.
+   */
+  async startTuiSession(model: "none" | "scripted" = "none"): Promise<PiTuiSession> {
     if (this.tuiSession !== undefined) {
       throw new Error("a TUI session already started in this scenario");
     }
@@ -749,10 +773,11 @@ export class ScenarioWorld extends World {
       sandbox: run.sandbox,
       git: this.tuiEnvironment ?? run.piEnvironment,
       variables: this.tuiVariables,
+      ...(model === "scripted" ? this.scriptedModelTuiOptions() : {}),
     });
     this.onRelease(() => tui.stop());
     this.tuiSession = tui;
-    await tui.waitUntilReady();
+    await tui.waitUntilReady(model === "scripted" ? SCRIPTED_TUI_READY_MS : undefined);
     return tui;
   }
 
@@ -851,6 +876,22 @@ export class ScenarioWorld extends World {
     const text = `${JSON.stringify({ [await realpath(sandbox.cwd)]: true }, null, 2)}\n`;
     await writeFile(file, text, { flag: "wx" });
     assert.strictEqual(await readFile(file, "utf8"), text);
+  }
+
+  // What a TUI adds to run the scripted model: the model's extension, its
+  // selection, the readiness text Pi then prints, and the temporary directory
+  // of the profile Pi, whose harness the model reads.
+  private scriptedModelTuiOptions(): Pick<
+    PiTuiOptions,
+    "variables" | "extensions" | "arguments" | "readyText"
+  > {
+    this.profileHarness();
+    return {
+      variables: { ...this.tuiVariables, TMPDIR: path.join(currentRun().sandbox.home, "tmp") },
+      extensions: [SCRIPTED_MODEL_EXTENSION],
+      arguments: SCRIPTED_MODEL_ARGUMENTS,
+      readyText: SCRIPTED_TUI_READY_TEXT,
+    };
   }
 
   // Starts a Pi in the run's sandbox with `environment`, stops it with the
