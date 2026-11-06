@@ -745,7 +745,7 @@ export async function resolveStrict(
 
 /**
  * D-P3-03: one MCP implementation's view of a materializable resolution. The
- * frozen effective read recomputes the MCP part from the declared servers,
+ * effective read recomputes the MCP part from the declared servers,
  * as `list` does for a stored neutral record, so a fresh resolution and a
  * record read agree on every kind and on its order.
  */

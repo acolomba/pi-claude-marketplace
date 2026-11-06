@@ -490,7 +490,7 @@ function resolveTarget(p: string, ctx: ExtensionContext): string {
  *
  * `tool` is the event's tool as the dispatch named it once for the event
  * (D-P5-01). Without it, the event's own tool name, with no built-in
- * server, is compared, as before.
+ * server, is compared.
  *
  * `claudeEvent` is accepted for symmetry with `compileIfPredicate` (the
  * parse-time entry compiles an `if` on a non-tool event to the

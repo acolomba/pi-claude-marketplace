@@ -332,7 +332,7 @@ export interface PluginEnableFailedOutcome extends PluginOutcomeBase {
  * install-disabled cascade (DFEN-04 -- the install ran whole and then unstaged
  * because the plugin's own `defaultEnabled` said so). The three optional fields
  * below are what tell the two apart on the rendered row; the toggle path omits
- * all three and stays byte-frozen.
+ * all three.
  */
 export interface PluginDisabledOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-disabled";
@@ -346,7 +346,7 @@ export interface PluginDisabledOutcome extends PluginOutcomeBase {
    */
   readonly reasons?: readonly ContentReason[];
   /**
-   * OUT-04 / D-102-10: request the frozen trailer naming the `enable` verb. Set
+   * OUT-04 / D-102-10: request the trailer naming the `enable` verb. Set
    * by the install-disabled cascade for the same reason the standalone install
    * row sets it -- the user did not ask for a disable, so the row has to name
    * the remedy. The toggle path omits it: a user who declared `enabled: false`

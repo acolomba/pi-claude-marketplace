@@ -435,9 +435,8 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    * `never` so a producer cannot populate a second spelling of a fact the
    * outcome already carries. `never` still satisfies the inherited optional
    * `boolean` / `McpDependency` / `string[]`, so the inheritance itself is
-   * untouched and a signal
-   * ADDED to `LedgerDegradationSignals` tomorrow still lands here unpinned --
-   * which is the property the inheritance exists for.
+   * untouched and a signal ADDED to `LedgerDegradationSignals` tomorrow still
+   * lands here unpinned -- which is the property the inheritance exists for.
    *
    *  - the inherited `unsupported` array is `partialDegrade.kinds` here, which
    *    pairs the dropped kinds with the `newlyDegraded` verdict that makes them

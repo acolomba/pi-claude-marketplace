@@ -36,13 +36,12 @@ function unregister(
  * registers each desired server whose config differs from the one Pi lists,
  * in `desired` order. Each change Pi accepts goes to `notes`: `replaced` for
  * a registration in place of a listed config of another shape, `fresh` for
- * any other registration or a removal (P2-DC-10). A
- * `registerMcpServer` throw (another extension's name, a `-`/`_` clash, a
- * config Pi refuses) goes to `log` and to `notes.refused` (D-MB-29). An
- * `unregisterMcpServer` throw goes to `log` only. A log line names the server
- * and Pi's message, never a config value, and the other servers still
- * change. A `getMcpServers` throw leaves nothing to compare, so it
- * propagates and the whole sync is skipped.
+ * any other registration or a removal (P2-DC-10). A `registerMcpServer`
+ * throw (another extension's name, a `-`/`_` clash, a config Pi refuses) goes
+ * to `log` and to `notes.refused` (D-MB-29). An `unregisterMcpServer` throw
+ * goes to `log` only. A log line names the server and Pi's message, never a
+ * config value, and the other servers still change. A `getMcpServers` throw
+ * leaves nothing to compare, so it propagates and the whole sync is skipped.
  */
 export function syncBuiltinRegistrations(
   registry: PiMcpRegistry,

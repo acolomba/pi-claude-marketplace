@@ -1,8 +1,8 @@
 // orchestrators/plugin/mcp-verdict-read.ts
 //
 // D-P3-04: the one read of a plugin record's MCP verdict for the active MCP
-// implementation. It joins the record's servers, read through the frozen
-// `recordedMcpServers`, with the frozen `effectiveMcpCompatibility`. When the
+// implementation. It joins the record's servers, read through
+// `recordedMcpServers`, with `effectiveMcpCompatibility`. When the
 // servers cannot be read, the stored verdict stands (MREC-02).
 //
 // The read writes no file and no state, and it reaches no network (NFR-5): a

@@ -26,12 +26,11 @@
 // (MSEL-04, D-P3-16). The record gets the neutral verdict of the servers its
 // recorded version declares, with its basis and those servers (D-P3-02): it
 // becomes partially installed, as `install --partial` leaves it, only for a
-// server no implementation runs. The servers come through the frozen record
-// read (MREC-02), which never returns the servers of a version the record
-// does not name. When it cannot read them, as when the source moved past the
-// recorded version, the record keeps its stored verdict, with no basis and
-// no server configs, so every later read refuses it the same way. A plugin
-// whose MCP
+// server no implementation runs. The servers come through `recordedMcpServers`
+// (MREC-02), which never returns the servers of a version the record does not
+// name. When it cannot read them, as when the source moved past the recorded
+// version, the record keeps its stored verdict, with no basis and no server
+// configs, so every later read refuses it the same way. A plugin whose MCP
 // config is malformed has every legacy entry removed and none written, and
 // its record lists no MCP server, as a fresh install refuses it. A disabled
 // plugin's entries are removed with no re-stage and no record change

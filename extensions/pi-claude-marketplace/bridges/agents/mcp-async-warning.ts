@@ -14,7 +14,8 @@ const MCP_ASYNC_WARNING_LEAD =
   "foreground; ";
 
 const MCP_ASYNC_WARNINGS: Readonly<Record<McpImplementationId, string>> = Object.freeze({
-  // The text every release before MGRT-01 wrote, byte for byte.
+  // Stored rows carry this exact text, and `grant-rewrite.ts` and
+  // `legacy-grant-form.ts` recognize them by it, so its bytes stay fixed.
   adapter: `${MCP_ASYNC_WARNING_LEAD}a launch before pi-mcp-adapter has cached the server's tools still fails`,
   // pi-subagents resolves a built-in selector against the parent's tools at
   // launch, so a launch before Pi's built-in MCP lists them finds none.

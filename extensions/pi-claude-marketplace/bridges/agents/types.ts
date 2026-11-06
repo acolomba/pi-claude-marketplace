@@ -111,8 +111,7 @@ export interface StageAgentsInput {
    * active implementation's form (`none` writes the adapter form, the form
    * every earlier release wrote), and records both forms on the agent's index
    * row when they differ; `mcpServerNames` stays the adapter form's server
-   * set. Absent, the stage renders the adapter form and records no form, as
-   * before.
+   * set. Absent, the stage renders the adapter form and records no form.
    */
   readonly mcpGrantForms?:
     | {

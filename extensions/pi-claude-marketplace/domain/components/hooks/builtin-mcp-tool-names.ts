@@ -10,8 +10,8 @@
 // registered name as the tool's namespace alias, but not the tool's own name
 // (D-MB-08), so only the server segment can be compared in Claude's form.
 //
-// The frozen implementation profile has its own copy of that computation,
-// which takes a plugin and its server; it cannot name the tools of a server
+// The implementation profile in `domain/mcp-implementation.ts` has its own
+// copy of that computation, which takes a plugin and its server; it cannot name the tools of a server
 // that Pi's `mcp.json` configures, so this module does not reuse it.
 
 import { createHash } from "node:crypto";

@@ -8,8 +8,8 @@
 // P3-DC-24: a record whose servers cannot be read keeps the stored adapter
 // reading: its staged servers, which only the adapter was asked to run.
 //
-// Pure: it does no I/O. It must never import `mcp-verdict-read.ts` or the
-// frozen `recorded-servers.ts`, which reach `install-outcome.ts`, so any module
+// Pure: it does no I/O. It must never import `mcp-verdict-read.ts` or
+// `recorded-servers.ts`, which reach `install-outcome.ts`, so any module
 // may import it without closing a cycle.
 
 import { profileFor } from "../../domain/mcp-implementation.ts";

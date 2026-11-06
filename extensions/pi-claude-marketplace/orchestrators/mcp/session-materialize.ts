@@ -29,8 +29,8 @@ export type McpSessionMaterializer = (pi: ExtensionAPI, ctx: ExtensionContext) =
 async function runStep(name: string, step: () => Promise<void>): Promise<void> {
   try {
     await step();
-  } catch (err) {
-    hookDebugLog(`${name} skipped: ${errorMessage(err)}`, "mcp");
+  } catch (error: unknown) {
+    hookDebugLog(`${name} skipped: ${errorMessage(error)}`, "mcp");
   }
 }
 

@@ -177,9 +177,8 @@ export function degradationFromEnable(
  * from the ledger's signals -- the same derivation `install-flow.ts` runs off
  * `installCtx.stagedAgentNames` / `stagedWorkflowNames` and the declared
  * servers' `McpDependency` (D-P3-10), which this list carries itself, for the
- * same ledger run. Shared by the standalone
- * enable row and the reconcile enable projection so the two row composers
- * cannot drift.
+ * same ledger run. Shared by the standalone enable row and the reconcile enable
+ * projection so the two row composers cannot drift.
  *
  * WR-01: all three picked members are OPTIONAL, so every shape that inherits
  * `LedgerDegradationSignals` matched this parameter structurally -- including

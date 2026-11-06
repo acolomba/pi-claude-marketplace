@@ -110,10 +110,10 @@ interface McpGrantMatch {
 
 /**
  * MGRT-01: the `excludeTools` name of one per-tool MCP disallow. The adapter
- * form keeps the Claude token verbatim, the bytes every earlier release wrote
- * (a `.` in the tool part included). The built-in form takes Pi's own tool
- * name, which differs from the Claude name whenever the server name holds a
- * `-` or the name passes 64 characters.
+ * form keeps the Claude token verbatim (a `.` in the tool part included),
+ * because the Claude name is the delivered tool name there (ANAME-02). The
+ * built-in form takes Pi's own tool name, which differs from the Claude name
+ * whenever the server name holds a `-` or the name passes 64 characters.
  */
 function excludeNameFor(
   id: McpImplementationId,
@@ -561,10 +561,10 @@ function perToolMcpName(token: string, grants: readonly McpGrant[]): string | un
  * pi-mcp-adapter's MCP tools). disallowedTools narrows that default set via
  * excludeTools (pi-subagents 0.62.0; earlier versions store-and-ignore the
  * key). A per-tool MCP name of a written server joins excludeTools in the
- * form's spelling (ANAME-02, MGRT-01). Both degradations on that path warn: a disallow token with no
- * such mapping cannot narrow anything, and an emitted excludeTools is inert
- * below the version floor -- each is an author-written restriction that must
- * not weaken without a trace.
+ * form's spelling (ANAME-02, MGRT-01). Both degradations on that path warn:
+ * a disallow token with no such mapping cannot narrow anything, and an
+ * emitted excludeTools is inert below the version floor -- each is an
+ * author-written restriction that must not weaken without a trace.
  */
 function omittedToolMapping(
   disallowedTokens: readonly string[],
@@ -861,8 +861,7 @@ export interface ConvertAgentInput {
   /**
    * MGRT-01: the MCP implementation whose grant form the file gets: the
    * `mcp:` selectors, the per-tool `excludeTools` names, and the D-CF6-10
-   * async warning. Absent means the adapter form, the form every earlier
-   * release wrote.
+   * async warning. Absent means the adapter form.
    */
   mcpImplementation?: McpImplementationId | undefined;
   /**

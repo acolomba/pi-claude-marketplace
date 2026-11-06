@@ -36,7 +36,8 @@
 // first, Pi refuses this extension's registration. The registration sync
 // notes the refusal here, and info reads such a name as `not loaded`. This
 // reader still answers for whatever server Pi lists under the name, because
-// it cannot learn its own `extensionPath` through the frozen parameter.
+// `lookup` receives only the server name and cannot learn its own
+// `extensionPath`.
 //
 // MSEL-01: `index.ts` builds this reader once per extension load, at factory
 // time, before every extension has loaded, so building it must not read `pi`.

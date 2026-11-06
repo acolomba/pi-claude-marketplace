@@ -938,7 +938,8 @@ export function planListNeedsApply(plans: readonly ReconcilePlan[]): boolean {
 // successful enable re-materializes the plugin via installPlugin, so the
 // projection emits the `installed` row, deriving its `dependencies` from the
 // ledger's signals (the staged counts, and the `McpDependency` of the declared
-// servers, D-P3-10) exactly as the install arm derives its own (SEV-01 / WR-06). The reverse asymmetry (a successful disable maps to
+// servers, D-P3-10) exactly as the install arm derives its own (SEV-01 /
+// WR-06). The reverse asymmetry (a successful disable maps to
 // `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES. This
 // belongs to the token mapping above rather than to either row builder below:
 // it is the asymmetry BETWEEN them, and as a `/** */` block stacked above

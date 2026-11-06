@@ -68,13 +68,13 @@ export async function recordedMcpServers(
 ): Promise<RecordedMcpServers> {
   try {
     return await readRecordedServers(record, source, readerFor);
-  } catch (err) {
+  } catch (error: unknown) {
     // MREC-02: an unreadable declaration leaves the stored verdict standing.
     // The debug channel keeps why, since a caller sees only `unreadable`.
     // UF-4: manifest and plugin file errors name absolute paths, which the
     // line cuts to their last segment.
     hookDebugLog(
-      redactAbsolutePaths(`recorded MCP servers unreadable: ${errorMessage(err)}`),
+      redactAbsolutePaths(`recorded MCP servers unreadable: ${errorMessage(error)}`),
       "mcp",
     );
     return { kind: "unreadable" };
@@ -266,10 +266,10 @@ function recordedRootContext(
  * plugin root outside its owning clone root (UF-1, NFR-10): both root
  * callbacks answer the recorded root, so the root-mismatch check below
  * cannot catch such a root for a git or tag-pinned record. It refuses when
- * the manifest no longer lists the plugin, when the re-resolution is unavailable, when the
- * re-resolved plugin root is not `record.resolvedSource`, and when the
- * version install would record for the re-resolution is not the record's
- * `version`. The last check matters for an unpinned path source, whose
+ * the manifest no longer lists the plugin, when the re-resolution is
+ * unavailable, when the re-resolved plugin root is not `record.resolvedSource`,
+ * and when the version install would record for the re-resolution is not the
+ * record's `version`. The last check matters for an unpinned path source, whose
  * recorded root is the live directory that `marketplace update` moves
  * forward, and for a manifest entry that changed after the install: the
  * reader never returns the servers of a version the record does not name.

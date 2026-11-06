@@ -11,8 +11,7 @@
 // `softDepStatus` is the probe that `openNotificationRun` takes once per run
 // (D-05). It reads `pi.getCommands()` once and hands that one list to both MCP
 // arms, the adapter's and the built-in's, so a snapshot makes the same reads
-// it made before the run gained its active MCP implementation (MSEL-01). The
-// run's `SoftDepStatus` snapshot decides whether a plugin row whose
+// in every state (MSEL-01). The run's `SoftDepStatus` snapshot decides whether a plugin row whose
 // `dependencies` declare a kind carries the `requires pi-subagents` /
 // `requires pi-mcp-adapter` / `requires pi-dynamic-workflows` marker.
 
@@ -354,8 +353,7 @@ function activeMcpImplementation(
 /**
  * Snapshots which optional companion extensions Pi has loaded and which MCP
  * implementation the run uses. One snapshot reads `pi.getCommands()` once and
- * `pi.getAllTools()` three times, whatever Pi has loaded, in the order the
- * snapshot read them before it named the MCP implementation.
+ * `pi.getAllTools()` three times, whatever Pi has loaded.
  */
 export function softDepStatus(pi: PiInventory): SoftDepStatus {
   const piSubagentsLoaded = hasLoadedPiSubagents(pi);

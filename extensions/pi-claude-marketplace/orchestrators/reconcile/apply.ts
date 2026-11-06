@@ -1990,9 +1990,9 @@ async function restorePin(
     for (const mp of Object.values(fresh.marketplaces)) {
       for (const [plugin, record] of Object.entries(mp.plugins)) {
         if (`${plugin}@${mp.name}` === key) {
-          pins.forEach((pin) => {
+          for (const pin of pins) {
             restorePinFields(record, pin);
-          });
+          }
         }
       }
     }
