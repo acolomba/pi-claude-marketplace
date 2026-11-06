@@ -36,6 +36,7 @@ The log of the previous milestone is archived, unchanged, at
 - **P1-DC-21:** accepted. Re-checked 2026-11-06: the three Pi 1.5.0 packages are published by GitHub Actions from `earendil-works/pi` with SLSA provenance, their lockfile integrity matches the registry, and none has an install script.
 - **P1-DC-40:** kept, all six: CR-02 (`undefined` prefix above 55 characters), CR-01 (pin fields derived from `DisabledPin`), WR-02 (`compatibilityBasis` stays top-level), WR-01 (version-mismatch refusal), the jiti cache fix for the CI flake, and the adapter loaded in every adapter-profile shared Pi.
 - **P2-DC-02:** kept. The extension resolves built-in values at registration; D-MB-14 is Locked.
+- **P2-DC-08 / P2-DC-46 (D-MB-19, D-MB-29; 02-UAT check 1):** option 2. An `mcp.json` override stays reported by `info` and Pi's `/mcp` only (upstream reports a suppressed duplicate in `/plugin`). A registration Pi refuses because another extension owns the name gets a fix: the registration step remembers refused names for the session, and `info` shows `not loaded` for them instead of the other extension's state. No new message kind. **Follow-up fix, queued** (with a cucumber scenario that fails without it).
 
 ## Decisions waiting on you
 
