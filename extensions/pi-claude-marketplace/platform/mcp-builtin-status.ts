@@ -3,7 +3,8 @@
 // BLT-05: the status reader for the MCP servers the extension registers with
 // Pi's built-in MCP. It lives in platform/ because Pi's MCP registry is an
 // external-system boundary; it imports only this zone's `mcp-status.ts` and
-// `pi-api.ts` types and the shared `Scope` type.
+// `pi-api.ts` types, the shared `Scope` type, and the shared debug log,
+// error message, and path redaction helpers.
 //
 // P2-DC-10: Pi gives extensions no connection state and emits no status
 // event, so a lookup infers the state from what Pi exposes, within the view
@@ -32,6 +33,12 @@
 // A name Pi does not list answers `unlisted` (rendered `not loaded`), even
 // when hidden tools of an earlier registration in the session remain.
 //
+// ASTAT-02: a lookup never throws. When Pi's MCP registry or tool list cannot
+// be read, because Pi refuses a read from a stale runtime or a tool another
+// extension registered cannot be read, it answers `no-snapshot`. info shows
+// that as `status unknown`, the existing token for a state info cannot read.
+// The reason goes to the `mcp` debug channel, never to the user.
+//
 // D-MB-29: when another extension registered a server under the same name
 // first, Pi refuses this extension's registration. The registration sync
 // notes the refusal here, and info reads such a name as `not loaded`. This
@@ -43,6 +50,10 @@
 // time, before every extension has loaded, so building it must not read `pi`.
 // Every read happens inside `lookup`, which runs inside an info command,
 // after every extension has loaded.
+
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
+import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 
 import type { McpStatusReader } from "./mcp-status.ts";
 import type { PiInventory, PiMcpRegistry, ToolInventoryItem } from "./pi-api.ts";
@@ -127,6 +138,29 @@ export function builtinRegistrationRefused(serverName: string): boolean {
   return refusedRegistrations.has(serverName);
 }
 
+// The answer for `serverName` from what Pi lists now. It throws when Pi's
+// registry or tool list cannot be read.
+function readStatus(
+  pi: Pick<PiMcpRegistry, "getMcpServers"> & Pick<PiInventory, "getAllTools">,
+  serverName: string,
+): ReturnType<McpStatusReader["lookup"]> {
+  if (!pi.getMcpServers().some((server) => server.name === serverName)) {
+    return "unlisted";
+  }
+
+  const namespace = namespaceOf(serverName);
+  const tools = pi.getAllTools().filter((tool) => namespaceNameOf(tool) === namespace);
+  if (tools.length === 0) {
+    return "not-connected";
+  }
+
+  if (!tools.every(isHidden)) {
+    return "connected";
+  }
+
+  return replacedRegistrations.has(serverName) ? "not-connected" : "disabled";
+}
+
 /**
  * Returns the built-in MCP status reader for one extension load. Building it
  * reads nothing from `pi`.
@@ -136,21 +170,20 @@ export function createBuiltinMcpStatusReader(
 ): McpStatusReader {
   return {
     lookup(serverName) {
-      if (!pi.getMcpServers().some((server) => server.name === serverName)) {
-        return "unlisted";
+      try {
+        return readStatus(pi, serverName);
+      } catch (error: unknown) {
+        // ASTAT-02: info only uses this answer to annotate a row, so a failed
+        // read must not fail info. UF-4: the error can name absolute paths,
+        // which the line cuts to their last segment.
+        hookDebugLog(
+          redactAbsolutePaths(
+            `status of MCP server ${serverName} unreadable: ${errorMessage(error)}`,
+          ),
+          "mcp",
+        );
+        return "no-snapshot";
       }
-
-      const namespace = namespaceOf(serverName);
-      const tools = pi.getAllTools().filter((tool) => namespaceNameOf(tool) === namespace);
-      if (tools.length === 0) {
-        return "not-connected";
-      }
-
-      if (!tools.every(isHidden)) {
-        return "connected";
-      }
-
-      return replacedRegistrations.has(serverName) ? "not-connected" : "disabled";
     },
   };
 }
