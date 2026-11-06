@@ -325,9 +325,7 @@ export function composePromotedRow(args: {
 
 /**
  * Format the orchestrated-mode `cause` string for the
- * `InstallPluginOutcome.cause` field. The import cascade caller at
- * `orchestrators/import/execute.ts` reads this string for its
- * `dispatchFailedOutcome` rendering. Follows the D-CMC-12 join
+ * `InstallPluginOutcome.cause` field. Follows the D-CMC-12 join
  * discipline: `<errorMessage>` plus the depth-5 cause-chain trailer
  * (shared/errors.ts::causeChainTrailer) joined with a blank line when
  * present. Standalone-mode trailers are emitted by `notify()` from
