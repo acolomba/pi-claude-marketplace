@@ -17,7 +17,7 @@ import path from "node:path";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import { settledRegistry, waitForStubListing } from "../../lib/mcp-implementation.ts";
+import { registryAfterListing, waitForStubListing } from "../../lib/mcp-implementation.ts";
 import {
   LATE_TAG_ENVIRONMENT,
   linkPublishedMcpFile,
@@ -147,9 +147,12 @@ Given(
   },
 );
 
+// pi-mcp-adapter registers a server's tools with Pi only after its listing
+// ends, and after a new session it can list a server again. So, when Pi runs
+// the adapter, the step waits for at most 10 seconds until Pi has a tool of
+// every stub server that a stub listed (P3-DC-111).
 When("the user lists the mcp tools pi offers", async function (this: ScenarioWorld) {
-  this.profileHarness();
-  this.registrySnapshot = await settledRegistry(this.pi);
+  this.registrySnapshot = await registryAfterListing(this.pi, this.profileHarness());
 });
 
 // One row per message the stub received, in arrival order: whether it was a
