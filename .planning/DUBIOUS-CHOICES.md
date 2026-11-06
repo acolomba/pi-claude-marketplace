@@ -30,6 +30,10 @@ the full text:
 The log of the previous milestone is archived, unchanged, at
 `.planning/milestones/component-features-DUBIOUS-CHOICES.md`.
 
+## Review outcomes (user, 2026-11-06)
+
+- **P1-DC-12:** kept. No `oauth.clientName`, so Pi keeps CIMD; D-MB-11 is Locked.
+
 ## Decisions waiting on you
 
 The short list. Each line names the entry and the file with its full text.
