@@ -14,7 +14,9 @@
 // entry, any other record's marketplace root, which for a cloned marketplace
 // must itself lie inside the scope's `sources/<marketplace>/` checkout. One
 // check here guards a record's stored servers, the legacy reader's
-// re-resolution, and the built-in registration step.
+// re-resolution, and the built-in registration step. Every read takes a
+// source that only `legacyServersSourceFor` builds, so the record and the
+// marketplace name come from the marketplace record the check trusts.
 //
 // The read changes nothing: it writes no file and no state, and it reaches no
 // network (NFR-5). This module is outside BLOCK F's NETWORK_SEAMS, so it can
@@ -28,6 +30,7 @@ import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { isSameVersion } from "../../domain/version.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { deriveInstallVersion } from "../plugin/install-outcome.ts";
@@ -44,14 +47,12 @@ export interface LegacyServers {
   readonly bundle: boolean;
 }
 
-/** Re-resolves the declared MCP servers of a record that predates `mcpServerConfigs`. */
-export type LegacyServersReader = (record: PluginInstallRecord) => Promise<LegacyServers>;
+/** Re-resolves the MCP servers of `source`'s record, which predates `mcpServerConfigs`. */
+export type LegacyServersReader = (source: LegacyServersSource) => Promise<LegacyServers>;
 
 /**
- * MREC-01 / MREC-02: a plugin record's MCP servers. `source` names the
- * marketplace record that lists the plugin and the locations of the scope
- * whose state file holds both. `readerFor` builds the legacy reader for that
- * source, and it is called only for a record without `mcpServerConfigs`.
+ * MREC-01 / MREC-02: the MCP servers of `source`'s record. `readLegacy` is
+ * called only for a record without `mcpServerConfigs`.
  *
  * A record with the field answers `recorded` with the field as stored; the
  * values are the record's own, so a caller must not change them. When the
@@ -62,12 +63,11 @@ export type LegacyServersReader = (record: PluginInstallRecord) => Promise<Legac
  * reader answers `unreadable`, so the stored compatibility verdict stands. The reason goes to the `mcp` debug channel.
  */
 export async function recordedMcpServers(
-  record: PluginInstallRecord,
   source: LegacyServersSource,
-  readerFor: (source: LegacyServersSource) => LegacyServersReader,
+  readLegacy: LegacyServersReader,
 ): Promise<RecordedMcpServers> {
   try {
-    return await readRecordedServers(record, source, readerFor);
+    return await readRecordedServers(source, readLegacy);
   } catch (error: unknown) {
     // MREC-02: an unreadable declaration leaves the stored verdict standing.
     // The debug channel keeps why, since a caller sees only `unreadable`.
@@ -83,18 +83,18 @@ export async function recordedMcpServers(
 
 /** The servers `recordedMcpServers` answers with; throws for every `unreadable` answer. */
 async function readRecordedServers(
-  record: PluginInstallRecord,
   source: LegacyServersSource,
-  readerFor: (source: LegacyServersSource) => LegacyServersReader,
+  readLegacy: LegacyServersReader,
 ): Promise<RecordedMcpServers> {
+  const { record } = source;
   if (record.mcpServerConfigs === undefined) {
-    const legacy = await readerFor(source)(record);
+    const legacy = await readLegacy(source);
     return { kind: "re-resolved", servers: legacy.servers, bundle: legacy.bundle };
   }
 
   // UF-1 / NFR-10: stored servers name commands and arguments from the
   // plugin's own files, so they are trusted only for a contained root.
-  if (!(await isPluginRootContained(record, source))) {
+  if (!(await isPluginRootContained(source))) {
     throw refusal(source, "uncontained");
   }
 
@@ -105,21 +105,61 @@ async function readRecordedServers(
   };
 }
 
-/** The plugin a legacy reader re-resolves: its name and the marketplace that lists it. */
+/** Unique brand symbol; only `legacyServersSourceFor` builds a source. */
+const LEGACY_SERVERS_SOURCE_BRAND: unique symbol = Symbol("LegacyServersSource");
+
+/**
+ * UF-1 / NFR-10: the plugin whose record's MCP servers are read. Only
+ * `legacyServersSourceFor` builds one, so its marketplace name, plugin name,
+ * and record come from one marketplace record, and its locations are those of
+ * the scope whose state file the caller read.
+ */
 export interface LegacyServersSource {
-  /** The registered marketplace name, the `<marketplace>` of `<plugin>@<marketplace>`. */
-  readonly marketplaceName: string;
+  readonly [LEGACY_SERVERS_SOURCE_BRAND]: true;
+  /**
+   * The marketplace record that lists the plugin. Its `name` is the
+   * `<marketplace>` of `<plugin>@<marketplace>`.
+   */
   readonly marketplace: Pick<
     ExtensionState["marketplaces"][string],
-    "manifestPath" | "marketplaceRoot" | "source"
+    "name" | "scope" | "manifestPath" | "marketplaceRoot" | "source"
   >;
   readonly pluginName: string;
+  /** The plugin record that `marketplace` lists under `pluginName`. */
+  readonly record: PluginInstallRecord;
   /**
-   * UF-1 / NFR-10: the locations of the scope whose state file holds the
-   * record and its marketplace record. They name the clone root the record's
-   * plugin root must lie in.
+   * The locations of the scope whose state file holds the record and its
+   * marketplace record. They name the clone root the record's plugin root
+   * must lie in.
    */
   readonly locations: ScopedLocations;
+}
+
+/**
+ * UF-1 / NFR-10: the servers source of `pluginName`, read with the record
+ * that `marketplace` lists under that name and with `locations`, the
+ * locations of the scope whose state file holds `marketplace`. Every caller
+ * passes a plugin its marketplace record lists, so the throw for an unlisted
+ * plugin marks a programming mistake.
+ */
+export function legacyServersSourceFor(
+  locations: ScopedLocations,
+  marketplace: LegacyServersSource["marketplace"] &
+    Pick<ExtensionState["marketplaces"][string], "plugins">,
+  pluginName: string,
+): LegacyServersSource {
+  const record = ownValue(marketplace.plugins, pluginName);
+  if (record === undefined) {
+    throw new Error(`the marketplace record ${marketplace.name} lists no plugin ${pluginName}`);
+  }
+
+  return {
+    [LEGACY_SERVERS_SOURCE_BRAND]: true as const,
+    marketplace,
+    pluginName,
+    record,
+    locations,
+  };
 }
 
 /** Why the legacy reader could not re-resolve a record's declaration. */
@@ -149,7 +189,7 @@ function refusal(
   source: LegacyServersSource,
   reason: LegacyServersUnreadableReason,
 ): LegacyServersUnreadableError {
-  return new LegacyServersUnreadableError(reason, source.pluginName, source.marketplaceName);
+  return new LegacyServersUnreadableError(reason, source.pluginName, source.marketplace.name);
 }
 
 /** `pluginCloneKey` (`<12hex>-<sha12>`) and `pluginMirrorKey` (`<12hex>`) outputs. */
@@ -188,11 +228,8 @@ function isPathMarketplace(source: unknown): boolean {
  * so it must itself lie inside the scope's checkout of that marketplace.
  * Throws when the record names no such root.
  */
-async function owningRoot(
-  record: PluginInstallRecord,
-  source: LegacyServersSource,
-): Promise<string> {
-  const { locations, marketplace } = source;
+async function owningRoot(source: LegacyServersSource): Promise<string> {
+  const { locations, marketplace, record } = source;
   const cloneKey = cloneKeyOf(record, locations.pluginClonesDir);
   if (cloneKey !== undefined) {
     if (!CLONE_KEY.test(cloneKey)) {
@@ -203,7 +240,7 @@ async function owningRoot(
   }
 
   if (!isPathMarketplace(marketplace.source)) {
-    const checkout = await locations.sourceCloneDir(source.marketplaceName);
+    const checkout = await locations.sourceCloneDir(marketplace.name);
     await assertPathInside(checkout, marketplace.marketplaceRoot, "marketplace root");
   }
 
@@ -211,17 +248,14 @@ async function owningRoot(
 }
 
 /**
- * UF-1 / NFR-10: whether `record`'s plugin root lies inside its owning clone
- * root, the record's `plugin-clones/<key>/` entry or its marketplace root.
- * Reads no file but the path segments it walks.
+ * UF-1 / NFR-10: whether the plugin root of `source`'s record lies inside its
+ * owning clone root, the record's `plugin-clones/<key>/` entry or its
+ * marketplace root. Reads no file but the path segments it walks.
  */
-export async function isPluginRootContained(
-  record: PluginInstallRecord,
-  source: LegacyServersSource,
-): Promise<boolean> {
+export async function isPluginRootContained(source: LegacyServersSource): Promise<boolean> {
   try {
-    const root = await owningRoot(record, source);
-    await assertPathInside(root, record.resolvedSource, "plugin root");
+    const root = await owningRoot(source);
+    await assertPathInside(root, source.record.resolvedSource, "plugin root");
     return true;
   } catch {
     // Any refusal, a traversal, a path outside, a symlinked segment, or a
@@ -239,10 +273,8 @@ export async function isPluginRootContained(
  * source without a recorded sha resolves under the marketplace root, as
  * install resolved it.
  */
-function recordedRootContext(
-  source: LegacyServersSource,
-  record: PluginInstallRecord,
-): ResolveContext {
+function recordedRootContext(source: LegacyServersSource): ResolveContext {
+  const { record } = source;
   const recordedRoot = (): Promise<GitPluginRootResult> =>
     Promise.resolve({
       kind: "materialized",
@@ -251,7 +283,7 @@ function recordedRootContext(
     });
   return {
     marketplaceRoot: source.marketplace.marketplaceRoot,
-    marketplaceName: source.marketplaceName,
+    marketplaceName: source.marketplace.name,
     marketplaceSource: source.marketplace.source,
     resolveGitPluginRoot: recordedRoot,
     resolvePathPluginRoot: recordedRoot,
@@ -260,7 +292,8 @@ function recordedRootContext(
 }
 
 /**
- * MREC-02: the production legacy reader for one plugin. It reads the cached
+ * MREC-02: the production legacy reader. It answers the declared MCP servers
+ * of `source`'s record, which predates `mcpServerConfigs`. It reads the cached
  * `marketplace.json` and the plugin's own files, and re-runs `resolveStrict`
  * pinned to the recorded plugin root. Before it reads anything, it refuses a
  * plugin root outside its owning clone root (UF-1, NFR-10): both root
@@ -277,48 +310,47 @@ function recordedRootContext(
  * install did. The servers come back in D-CF6-01 merge order, as declared,
  * before plugin-variable substitution (D-MB-04).
  */
-export function createLegacyServersReader(source: LegacyServersSource): LegacyServersReader {
-  return async (record) => {
-    if (!(await isPluginRootContained(record, source))) {
-      throw refusal(source, "uncontained");
-    }
+export async function readLegacyServers(source: LegacyServersSource): Promise<LegacyServers> {
+  if (!(await isPluginRootContained(source))) {
+    throw refusal(source, "uncontained");
+  }
 
-    const manifest = await loadMarketplaceManifest(source.marketplace.manifestPath);
-    const lookup = lookupDeclaredPlugin(manifest, source.pluginName);
-    if (lookup.kind === "absent") {
-      throw refusal(source, "not-in-manifest");
-    }
+  const { record } = source;
+  const manifest = await loadMarketplaceManifest(source.marketplace.manifestPath);
+  const lookup = lookupDeclaredPlugin(manifest, source.pluginName);
+  if (lookup.kind === "absent") {
+    throw refusal(source, "not-in-manifest");
+  }
 
-    const resolved = await resolveStrict(lookup.entry, recordedRootContext(source, record));
-    if (resolved.state === "unavailable") {
-      throw refusal(source, "unavailable");
-    }
+  const resolved = await resolveStrict(lookup.entry, recordedRootContext(source));
+  if (resolved.state === "unavailable") {
+    throw refusal(source, "unavailable");
+  }
 
-    if (resolved.pluginRoot !== record.resolvedSource) {
-      throw refusal(source, "root-mismatch");
-    }
+  if (resolved.pluginRoot !== record.resolvedSource) {
+    throw refusal(source, "root-mismatch");
+  }
 
-    const version = await deriveInstallVersion({
-      entry: lookup.entry,
-      installable: resolved,
-      marketplace: {
-        marketplaceName: source.marketplaceName,
-        marketplaceRoot: source.marketplace.marketplaceRoot,
-      },
-      resolvedSha: record.resolvedSha,
-      pinVersionOverride: undefined,
-      resolvedVersion: record.resolvedVersion,
-    });
-    if (!isSameVersion(record.version, version, record.resolvedSha)) {
-      throw refusal(source, "version-mismatch");
-    }
+  const version = await deriveInstallVersion({
+    entry: lookup.entry,
+    installable: resolved,
+    marketplace: {
+      marketplaceName: source.marketplace.name,
+      marketplaceRoot: source.marketplace.marketplaceRoot,
+    },
+    resolvedSha: record.resolvedSha,
+    pinVersionOverride: undefined,
+    resolvedVersion: record.resolvedVersion,
+  });
+  if (!isSameVersion(record.version, version, record.resolvedSha)) {
+    throw refusal(source, "version-mismatch");
+  }
 
-    return {
-      servers: Object.entries(resolved.declaredMcpServers).map(([name, config]) => ({
-        name,
-        config,
-      })),
-      bundle: resolved.mcpBundle === true,
-    };
+  return {
+    servers: Object.entries(resolved.declaredMcpServers).map(([name, config]) => ({
+      name,
+      config,
+    })),
+    bundle: resolved.mcpBundle === true,
   };
 }

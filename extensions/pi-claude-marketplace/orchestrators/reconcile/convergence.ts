@@ -31,6 +31,7 @@ import { atCatalogVersion, isRecordedButDisabled } from "../../persistence/state
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { legacyServersSourceFor } from "../mcp/recorded-servers.ts";
 import { admitResolvedVersion, foldDeclaredConstraint } from "../plugin/constraint-fold.ts";
 import {
   installedCopyReadOptions,
@@ -488,8 +489,7 @@ async function recordMove(
   }
 
   const { effective, recorded } = await readRecordMcpVerdict(
-    record,
-    { marketplaceName: mp.name, marketplace: mp, pluginName: plugin, locations: input.locations },
+    legacyServersSourceFor(input.locations, mp, plugin),
     input.mcpImplementation,
   );
   const { consent, excused } = candidateDrops(

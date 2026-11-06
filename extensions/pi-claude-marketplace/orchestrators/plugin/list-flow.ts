@@ -357,17 +357,13 @@ async function enumerateMarketplacePlugins(args: {
   const installedNames = new Set(Object.keys(installedRecords));
 
   // Installed bucket.
-  for (const [pluginName, record] of Object.entries(installedRecords)) {
+  for (const pluginName of Object.keys(installedRecords)) {
     // eslint-disable-next-line no-await-in-loop -- bounded by the marketplace's installed records, one row each
     const row = await composeInstalledListRow({
       pluginName,
       pluginScope,
       marketplaceScope,
-      marketplaceRoot: mpRecord.marketplaceRoot,
-      marketplaceSource: mpRecord.source,
-      marketplaceName: mpName,
-      manifestPath: mpRecord.manifestPath,
-      record,
+      marketplace: mpRecord,
       lookup: manifestLookupFor(scopedManifest, pluginName),
       cwd: opts.cwd,
       mcpImplementation: opts.mcpImplementation,

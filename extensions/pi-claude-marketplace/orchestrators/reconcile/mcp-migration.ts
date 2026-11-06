@@ -99,7 +99,11 @@ import {
   withExistingScopeLock,
   withLockedStateTransaction,
 } from "../../transaction/with-state-guard.ts";
-import { createLegacyServersReader, recordedMcpServers } from "../mcp/recorded-servers.ts";
+import {
+  legacyServersSourceFor,
+  readLegacyServers,
+  recordedMcpServers,
+} from "../mcp/recorded-servers.ts";
 import { makeRecordedShaPresenceProbe } from "../plugin/git-source-probe.ts";
 
 import type { McpMigrationInput, ReconcilePlan } from "./types.ts";
@@ -402,9 +406,8 @@ async function ownerAction(
   }
 
   const recorded = await recordedMcpServers(
-    record,
-    { marketplaceName: owner.marketplace, marketplace, pluginName: owner.plugin, locations },
-    createLegacyServersReader,
+    legacyServersSourceFor(locations, marketplace, owner.plugin),
+    readLegacyServers,
   );
   return { arm: "move", owner, record, resolved, recorded };
 }

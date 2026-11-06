@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import { legacyServersSourceFor } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import {
   readRecordMcpDependency,
   readRecordMcpVerdict,
@@ -12,7 +13,11 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { LegacyServersSource } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
-import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 const EVENTS = { type: "sse", url: "https://mcp.example.com/sse" };
 const LIVE = { type: "ws", url: "wss://mcp.example.com/ws" };
@@ -39,17 +44,24 @@ async function writeJson(filePath: string, document: unknown): Promise<void> {
   await writeFile(filePath, JSON.stringify(document));
 }
 
+type MarketplaceRecord = ExtensionState["marketplaces"][string];
+
 interface MarketplaceFixture {
   readonly root: string;
   readonly pluginRoot: string;
-  readonly source: LegacyServersSource;
+  readonly manifestPath: string;
+  readonly locations: ScopedLocations;
+  /** The user scope's marketplace record `mp`, which lists `record` as `p1`. */
+  readonly marketplaceFor: (record: PluginInstallRecord) => MarketplaceRecord;
+  /** The servers source of `record`, which the marketplace record `mp` lists as `p1`. */
+  readonly sourceFor: (record: PluginInstallRecord) => LegacyServersSource;
 }
 
 /**
  * A path-source marketplace `mp` in a fresh hermetic environment, read with
- * the user scope's locations. With `listed`, its manifest lists plugin `p1`
- * at version 1.0.0 with one sse server in `.mcp.json`; without it, no
- * manifest file exists.
+ * the user scope's locations, the scope its marketplace record names. With
+ * `listed`, its manifest lists plugin `p1` at version 1.0.0 with one sse
+ * server in `.mcp.json`; without it, no manifest file exists.
  */
 async function marketplaceFixture(t: TestContext, listed: boolean): Promise<MarketplaceFixture> {
   const environment = await createHermeticEnvironment(t, "mcp-verdict-read-");
@@ -65,19 +77,23 @@ async function marketplaceFixture(t: TestContext, listed: boolean): Promise<Mark
     await writeJson(path.join(pluginRoot, ".mcp.json"), { mcpServers: { events: EVENTS } });
   }
 
+  const locations = locationsFor("user", environment.cwd);
+  const marketplaceFor = (record: PluginInstallRecord): MarketplaceRecord => ({
+    name: "mp",
+    scope: "user",
+    source: { kind: "path", raw: marketplaceRoot },
+    addedFromCwd: environment.cwd,
+    manifestPath,
+    marketplaceRoot,
+    plugins: { p1: record },
+  });
   return {
     root,
     pluginRoot,
-    source: {
-      marketplaceName: "mp",
-      marketplace: {
-        manifestPath,
-        marketplaceRoot,
-        source: { kind: "path", raw: marketplaceRoot },
-      },
-      pluginName: "p1",
-      locations: locationsFor("user", environment.cwd),
-    },
+    manifestPath,
+    locations,
+    marketplaceFor,
+    sourceFor: (record) => legacyServersSourceFor(locations, marketplaceFor(record), "p1"),
   };
 }
 
@@ -98,7 +114,7 @@ test("MREC-03: reads a record's own server configs without the manifest", async 
   });
 
   // act
-  const verdict = await readRecordMcpVerdict(record, marketplace.source, "builtin");
+  const verdict = await readRecordMcpVerdict(marketplace.sourceFor(record), "builtin");
 
   // assert
   assert.deepStrictEqual(verdict, {
@@ -117,8 +133,7 @@ test("MREC-03: reads a legacy record with no MCP trace as no servers without the
 
   // act
   const verdict = await readRecordMcpVerdict(
-    legacyRecord(marketplace.pluginRoot),
-    marketplace.source,
+    marketplace.sourceFor(legacyRecord(marketplace.pluginRoot)),
     "builtin",
   );
 
@@ -135,7 +150,7 @@ test("MREC-02: re-resolves a neutral record without server configs that staged n
   const record = legacyRecord(marketplace.pluginRoot, { compatibilityBasis: "neutral" });
 
   // act
-  const verdict = await readRecordMcpVerdict(record, marketplace.source, "builtin");
+  const verdict = await readRecordMcpVerdict(marketplace.sourceFor(record), "builtin");
 
   // assert
   assert.deepStrictEqual(verdict, {
@@ -163,7 +178,7 @@ test("MREC-02: re-resolves a legacy record with a staged server from the cached 
   });
 
   // act
-  const verdict = await readRecordMcpVerdict(record, marketplace.source, "builtin");
+  const verdict = await readRecordMcpVerdict(marketplace.sourceFor(record), "builtin");
 
   // assert
   assert.deepStrictEqual(verdict, {
@@ -189,7 +204,7 @@ test("MREC-02: re-resolves a legacy record that stored the mcpServers kind", asy
   });
 
   // act
-  const verdict = await readRecordMcpVerdict(record, marketplace.source, "adapter");
+  const verdict = await readRecordMcpVerdict(marketplace.sourceFor(record), "adapter");
 
   // assert
   assert.deepStrictEqual(verdict, {
@@ -219,7 +234,7 @@ test("MREC-02: keeps the stored verdict when the legacy reader cannot read the m
   });
 
   // act
-  const verdict = await readRecordMcpVerdict(record, marketplace.source, "builtin");
+  const verdict = await readRecordMcpVerdict(marketplace.sourceFor(record), "builtin");
 
   // assert
   assert.deepStrictEqual(verdict, {
@@ -231,7 +246,7 @@ test("MREC-02: keeps the stored verdict when the legacy reader cannot read the m
 test("UF-1: keeps the stored verdict of a git record whose plugin root is outside its clones", async (t) => {
   // arrange -- the git root callback answers the recorded root, so only containment refuses it
   const marketplace = await marketplaceFixture(t, false);
-  await writeJson(marketplace.source.marketplace.manifestPath, {
+  await writeJson(marketplace.manifestPath, {
     name: "mp",
     plugins: [
       {
@@ -262,7 +277,7 @@ test("UF-1: keeps the stored verdict of a git record whose plugin root is outsid
   });
 
   // act
-  const verdict = await readRecordMcpVerdict(record, marketplace.source, "builtin");
+  const verdict = await readRecordMcpVerdict(marketplace.sourceFor(record), "builtin");
 
   // assert
   assert.deepStrictEqual(verdict, {
@@ -304,7 +319,7 @@ for (const { active, unsupported, blocked } of [
     });
 
     // act
-    const verdict = await readRecordMcpVerdict(record, marketplace.source, active);
+    const verdict = await readRecordMcpVerdict(marketplace.sourceFor(record), active);
 
     // assert
     assert.deepStrictEqual(verdict.effective, { installable: false, unsupported, blocked });
@@ -326,7 +341,7 @@ test("P3-DC-24: reads an unreadable legacy record that staged a server as the ad
   });
 
   // act
-  const dependency = await readRecordMcpDependency(record, marketplace.source);
+  const dependency = await readRecordMcpDependency(marketplace.sourceFor(record));
 
   // assert
   assert.deepStrictEqual(dependency, { kind: "mcp", runEvery: ["adapter"] });
@@ -344,7 +359,7 @@ test("D-P3-10: reads a neutral record's dependency from its recorded servers", a
   });
 
   // act
-  const dependency = await readRecordMcpDependency(record, marketplace.source);
+  const dependency = await readRecordMcpDependency(marketplace.sourceFor(record));
 
   // assert
   assert.deepStrictEqual(dependency, { kind: "mcp", runEvery: ["adapter"] });
@@ -377,22 +392,10 @@ for (const { title, marketplaceListed, active, baseline } of [
         workflows: [],
       },
     });
-    const readBaseline = recordDegradeBaselineReader(active, marketplace.source.locations);
+    const readBaseline = recordDegradeBaselineReader(active, marketplace.locations);
 
     // act
-    const degradeBaseline = await readBaseline(
-      record,
-      {
-        name: "mp",
-        scope: "project",
-        source: marketplace.source.marketplace.source,
-        addedFromCwd: marketplace.pluginRoot,
-        manifestPath: marketplace.source.marketplace.manifestPath,
-        marketplaceRoot: marketplace.source.marketplace.marketplaceRoot,
-        plugins: {},
-      },
-      "p1",
-    );
+    const degradeBaseline = await readBaseline(record, marketplace.marketplaceFor(record), "p1");
 
     // assert
     assert.deepStrictEqual(degradeBaseline, baseline);
@@ -440,7 +443,7 @@ test("UF-1: the degrade baseline reader reads a git record from the clone its lo
       addedFromCwd: environment.cwd,
       manifestPath,
       marketplaceRoot,
-      plugins: {},
+      plugins: { p1: record },
     },
     "p1",
   );

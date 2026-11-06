@@ -14,6 +14,7 @@ import {
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { legacyServersSourceFor } from "../mcp/recorded-servers.ts";
 
 import { supersedePinRefreshes } from "./dependency-move.ts";
 import { movedFromRow } from "./dependency-settle.ts";
@@ -376,12 +377,9 @@ export async function promoteDependencyRecord(
     return {
       version: record.version,
       declaresAgents: record.resources.agents.length > 0,
-      declaresMcp: await readRecordMcpDependency(record, {
-        marketplaceName: marketplace,
-        marketplace: marketplaceRecord,
-        pluginName: plugin,
-        locations: args.locations,
-      }),
+      declaresMcp: await readRecordMcpDependency(
+        legacyServersSourceFor(args.locations, marketplaceRecord, plugin),
+      ),
       declaresWorkflows: record.resources.workflows.length > 0,
       materialized: [],
       mcpConfigNotices: [],
@@ -935,12 +933,9 @@ export async function declareInstalledPlugin(args: {
   return {
     kind: "declared",
     record,
-    mcpDependency: await readRecordMcpDependency(record, {
-      marketplaceName: marketplace,
-      marketplace: marketplaceRecord,
-      pluginName: plugin,
-      locations: args.locations,
-    }),
+    mcpDependency: await readRecordMcpDependency(
+      legacyServersSourceFor(args.locations, marketplaceRecord, plugin),
+    ),
     reason: selection.targetIsLocal
       ? "already installed in base layer"
       : "already installed in local layer",
