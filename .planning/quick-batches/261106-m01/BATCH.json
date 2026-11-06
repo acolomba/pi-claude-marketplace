@@ -59,9 +59,9 @@
       ],
       "directory": null,
       "worktree": null,
-      "dispatched_worktree": "/home/user/pi-claude-marketplace/.claude/worktrees/agent-adadf1f42cd12ee81",
-      "dispatched_branch": "worktree-agent-adadf1f42cd12ee81",
-      "dispatched_base": "66b0afc",
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
       "wave": 0,
       "commit": null,
       "failure_reason": null
