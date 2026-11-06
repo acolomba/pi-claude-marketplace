@@ -67,3 +67,53 @@ Feature: MCP server verdict update
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.1.0   | true    |
+
+  @builtin-only
+  Scenario: Reinstalling a plugin whose new version adds an sse server reports the dropped server, under Pi's built-in MCP (D-P3-12)
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | true                                |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status              | reasons                                  | scope   | from  | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled         | unsupported mcp, requires pi-mcp-adapter | project | 1.0.0 | 1.1.0   |
+
+  @adapter-only
+  Scenario: Reinstalling a plugin whose new version adds an sse server reports it reinstalled, under pi-mcp-adapter (D-P3-12)
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | from  | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0 | 1.1.0   |
+
+  @builtin-only
+  Scenario: A marketplace autoupdate that adds an sse server reports the plugin partially installed, under Pi's built-in MCP (D-P3-12)
+    Given the user has run "/claude:plugin marketplace autoupdate fixtures --scope project", which did not fail
+    Given the marketplace "fixtures" has the description "A refreshed catalog with an sse server"
+    When the user runs "/claude:plugin marketplace update fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | true                                |
+      | summary      | A plugin operation needs attention. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status              | reasons                                  | scope   | from  | version |
+      | fixtures         | project           | updated            | demo@fixtures | demo | partially-installed | unsupported mcp, requires pi-mcp-adapter | project | 1.0.0 | 1.1.0   |
+
+  @adapter-only
+  Scenario: A marketplace autoupdate that adds an sse server reports the plugin updated, under pi-mcp-adapter (D-P3-12)
+    Given the user has run "/claude:plugin marketplace autoupdate fixtures --scope project", which did not fail
+    Given the marketplace "fixtures" has the description "A refreshed catalog with an sse server"
+    When the user runs "/claude:plugin marketplace update fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | updated            | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |

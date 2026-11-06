@@ -3529,6 +3529,125 @@ test("AVAR-04 / AVAR-05: with pi-mcp-adapter loaded, an import reports an info r
   verifyBoundary();
 });
 
+/**
+ * MREC-06: a marketplace whose one plugin declares an sse MCP server, named by
+ * the project's Claude settings. Pi's built-in MCP cannot run an sse server;
+ * pi-mcp-adapter can.
+ */
+async function seedSsePlugin(t: TestContext): Promise<{ cwd: string }> {
+  const { cwd } = await createHermeticScopes(t, "mcp-sse-plugin");
+  const marketplaceRoot = path.join(cwd, "fixture-mp");
+  await writeUnder(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "fixture-mp",
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
+    }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "hello", ".mcp.json"),
+    JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+  );
+  await writeUnder(
+    path.join(cwd, ".claude", "settings.json"),
+    settingsNaming(marketplaceRoot, { "hello@fixture-mp": true }),
+  );
+  return { cwd };
+}
+
+test("MREC-06: an import leaves a plugin with an sse server unavailable under Pi's built-in MCP, which cannot run an sse server", async (t) => {
+  // arrange
+  const { cwd } = await seedSsePlugin(t);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    mcpImplementation: "builtin",
+    workflowEngineLoaded: false,
+  });
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    run,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("fixture-mp", "project")],
+    warnings: [
+      {
+        kind: "plugin-warning",
+        scope: "project",
+        plugin: "hello",
+        marketplace: "fixture-mp",
+        ref: "hello@fixture-mp",
+        cause: 'Plugin "hello" is not installable: \n\ncause: Plugin "hello" is not installable: ',
+        reason: "uninstallable",
+        reasons: ["unsupported mcp"],
+      },
+    ],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● fixture-mp [project] (added)\n" +
+        "  ⊘ hello (unavailable) {unsupported mcp}\n\n" +
+        "Import: 1 warning, 1 success",
+      severity: "warning",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("MREC-06: an import installs a plugin with an sse server under pi-mcp-adapter, which runs it", async (t) => {
+  // arrange
+  const { cwd } = await seedSsePlugin(t);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    mcpImplementation: "adapter",
+    workflowEngineLoaded: false,
+  });
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    run,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("fixture-mp", "project")],
+    installedPlugins: [installed("hello", "fixture-mp", "project", { agents: false, mcp: true })],
+    changedResources: true,
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● fixture-mp [project] (added)\n" +
+        "  ● hello v1.0.0 (installed)\n\n" +
+        "Import: 2 successes\n\n" +
+        "/reload to pick up changes",
+    },
+  ]);
+  verifyBoundary();
+});
+
 test("reports no changed resources when every install left the Pi resource set alone", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "no-resource-change");

@@ -110,6 +110,79 @@ Feature: MCP server verdict install
       | marketplace name | marketplace scope | id            | name | status              | reasons                                  | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp, requires pi-mcp-adapter | project | 1.0.0   |
 
+  @builtin-only
+  Scenario: Importing a plugin with an sse server reports it unavailable, under Pi's built-in MCP (MREC-06)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}}}
+      """
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                             |
+      | severity            | warning                             |
+      | summary             | A plugin operation needs attention. |
+      | needs reload        | false                               |
+      | tally label         | Import                              |
+      | tally failures      | 0                                   |
+      | tally warnings      | 1                                   |
+      | tally success count | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status      | reasons         |
+      | fixtures         | user              | added              | demo@fixtures | demo | unavailable | unsupported mcp |
+    Then the user scope has no installed plugins
+
+  @adapter-only
+  Scenario: Importing a plugin with an sse server installs it, under pi-mcp-adapter (MREC-06)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}}}
+      """
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | true    |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 2       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | added              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
   @own-implementation
   Scenario: Enabling under Pi's built-in MCP a plugin with an sse server, installed without --partial, needs no --partial (MREC-06, D-MB-06)
     Given the marketplace "fixtures" is published as a dir source
