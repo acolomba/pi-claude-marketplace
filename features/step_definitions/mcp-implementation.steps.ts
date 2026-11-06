@@ -16,11 +16,10 @@
  */
 
 import assert from "node:assert/strict";
-import { rm } from "node:fs/promises";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import { readStandInServers, writeStandInServers } from "../lib/builtin-mcp-stand-in/servers.ts";
+import { nameStandInServer } from "../lib/builtin-mcp-stand-in/servers.ts";
 import { mcpImplementationLaunch, waitForStubListing } from "../lib/mcp-implementation.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
@@ -40,12 +39,7 @@ async function restart(world: ScenarioWorld, change: PiRestart): Promise<void> {
 Given(
   "a stand-in registers the stub mcp server {string} of the plugin {string} with pi's built-in mcp",
   async function (this: ScenarioWorld, server: string, plugin: string) {
-    assert.ok(!this.profilePiStarted, "a profile Pi already started in this scenario");
-    const { home } = this.tokens;
-    const servers = [...(await readStandInServers(home)), { plugin, server }];
-    const file = await writeStandInServers(home, servers);
-    this.onRelease(() => rm(file, { force: true }));
-    assert.deepStrictEqual(await readStandInServers(home), servers);
+    await nameStandInServer(this, { plugin, server });
   },
 );
 

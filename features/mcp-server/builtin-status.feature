@@ -2,7 +2,7 @@
 Feature: MCP server builtin status
 
   Plugin info shows each server's state as far as Pi's built-in MCP exposes it (BLT-05, BLT-04, D-MB-09), against a stub server, a scripted model, and a local marketplace.
-  For a plugin an earlier release installed, it shows the state of each server the extension registers, read as the registration reads them (MREC-02).
+  For a plugin an earlier release installed, it shows each server the extension registers (MREC-02), and a name another Pi extension registered first, played by the built-in stand-in, reads not loaded (D-MB-29).
   Each scenario compares the full info fields (P2-DC-16), which are re-verified after the read-time verdicts merge.
 
   Scenario: Plugin info shows a connected built-in server as connected (BLT-05)
@@ -258,3 +258,33 @@ Feature: MCP server builtin status
       | plugin status                  | installed                                               |
       | plugin version                 | 1.0.0                                                   |
       | severity                       | info                                                    |
+
+  Scenario: Plugin info shows a server whose name another extension registered first as not loaded (D-MB-29)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given another pi extension registers the stub mcp server "stub" of the plugin "demo" with pi's built-in mcp before the extension does
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    When the user runs "/claude:plugin info demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind                           | plugin-info                                         |
+      | marketplace details autoupdate | false                                               |
+      | marketplace name               | fixtures                                            |
+      | marketplace scope              | user                                                |
+      | needs reload                   | false                                               |
+      | plugin components mcp          | [{"name":"plugin:demo:stub","status":"not loaded"}] |
+      | plugin components resolved     | true                                                |
+      | plugin components skills       | demo-skill                                          |
+      | plugin id                      | demo@fixtures                                       |
+      | plugin name                    | demo                                                |
+      | plugin reasons                 |                                                     |
+      | plugin requires                | [{"companion":"mcp","missing":false}]               |
+      | plugin scope                   | user                                                |
+      | plugin status                  | installed                                           |
+      | plugin version                 | 1.0.0                                               |
+      | severity                       | info                                                |

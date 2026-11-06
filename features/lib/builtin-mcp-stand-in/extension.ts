@@ -6,12 +6,21 @@
  * Built-in scenarios need a plugin MCP tool that Pi's built-in MCP serves
  * before the extension registers servers itself. Only the MCP implementation
  * step loads this file, and only under the builtin profile, after every other
- * extension. It registers in its `session_start` handler, never when Pi
- * loads it, so the extension's own registration, made first, keeps the name.
+ * extension. It registers in its `session_start` handler, after the
+ * extension's own registration, made first, which keeps the name.
  * It skips a server when Pi already has a registration of that name, or a
  * server of that name in `<agent dir>/mcp.json` or `<project>/.pi/mcp.json`,
  * comparing names with `-` and `_` folded. So it steps aside once the
  * extension registers its servers.
+ *
+ * An entry marked `first` is the exception: it stands in for another Pi
+ * extension that holds a plugin server's name. The stand-in registers it
+ * when Pi loads the stand-in, before any `session_start` handler runs, so Pi
+ * refuses the extension's own registration of that name (D-MB-29). Pi
+ * applies a registration made at load when the factory returns, and it
+ * starts the session only after every extension has loaded. The harness
+ * starts Pi in the sandbox project, so the load reads the project directory
+ * from `process.cwd()`.
  *
  * It never throws: every failure goes to its log, one JSON line per
  * decision, so a scenario that relied on it fails on the missing tool and
@@ -110,8 +119,19 @@ function register(
   }
 }
 
-async function decide(pi: ExtensionAPI, home: string, cwd: string): Promise<Decision[]> {
-  const servers = await readStandInServers(home);
+// The entries one pass registers: the ones marked `first` at load, the others at `session_start`.
+type Pass = (server: StandInServer) => boolean;
+
+const AT_LOAD: Pass = (server) => server.first === true;
+const AT_SESSION_START: Pass = (server) => server.first !== true;
+
+async function decide(
+  pi: ExtensionAPI,
+  home: string,
+  cwd: string,
+  pass: Pass,
+): Promise<Decision[]> {
+  const servers = (await readStandInServers(home)).filter(pass);
   if (servers.length === 0) {
     return [];
   }
@@ -130,11 +150,11 @@ async function decide(pi: ExtensionAPI, home: string, cwd: string): Promise<Deci
   return servers.map((server) => register(pi, server, registered, configured));
 }
 
-async function registerStandIns(pi: ExtensionAPI, cwd: string): Promise<void> {
+async function registerStandIns(pi: ExtensionAPI, cwd: string, pass: Pass): Promise<void> {
   const home = process.env.HOME ?? "";
   let decisions: Decision[];
   try {
-    decisions = await decide(pi, home, cwd);
+    decisions = await decide(pi, home, cwd, pass);
   } catch (error: unknown) {
     decisions = [{ decision: "failed", error: errorText(error) }];
   }
@@ -153,8 +173,9 @@ async function registerStandIns(pi: ExtensionAPI, cwd: string): Promise<void> {
 }
 
 // fallow-ignore-next-line unused-export -- Pi's --extension loader reads this default.
-export default function builtinMcpStandIn(pi: ExtensionAPI): void {
+export default async function builtinMcpStandIn(pi: ExtensionAPI): Promise<void> {
+  await registerStandIns(pi, process.cwd(), AT_LOAD);
   pi.on("session_start", async (_event, ctx) => {
-    await registerStandIns(pi, ctx.cwd);
+    await registerStandIns(pi, ctx.cwd, AT_SESSION_START);
   });
 }
