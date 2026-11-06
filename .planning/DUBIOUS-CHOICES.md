@@ -41,6 +41,7 @@ The log of the previous milestone is archived, unchanged, at
 - **P3-DC-06 and P3-DC-07:** kept. Partially-installed `list` rows carry the other implementation's `requires` marker, and `info`'s `requires:` names the D-MB-07 marker (`mcp`) also when it is met, JSON included. The D-P3-06/07/08 row is Locked.
 - **P4-DC-60 and P4-DC-76:** accepted as fixed by `670f742` (06-02), confirmed by the Phase 4 re-verification. **MS-05 follow-up, queued:** make `beginPluginUpdateRun()`'s notification argument required, so no caller can fall back to the adapter form.
 - **P4-DC-06:** kept. Legacy agents get the textual adapter-to-built-in translation at their first built-in session, with the two known gaps (over-64-character excluded tool names, `sse` grants translated rather than dropped).
+- **P5-DC-03:** kept. A matcher or `if` literal with Claude's tool name, `-` included, fires on the built-in tool; only stdin's `tool_name` keeps Pi's fold. D-MB-08 and D-P5-01 to D-P5-04 are Locked with that reading. D-MB-19 and D-MB-29 are Locked by the P2-DC-08 answer.
 
 ## Decisions waiting on you
 
