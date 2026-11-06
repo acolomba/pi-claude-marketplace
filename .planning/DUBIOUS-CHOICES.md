@@ -38,6 +38,7 @@ The log of the previous milestone is archived, unchanged, at
 - **P2-DC-02:** kept. The extension resolves built-in values at registration; D-MB-14 is Locked.
 - **P2-DC-08 / P2-DC-46 (D-MB-19, D-MB-29; 02-UAT check 1):** option 2. An `mcp.json` override stays reported by `info` and Pi's `/mcp` only (upstream reports a suppressed duplicate in `/plugin`). A registration Pi refuses because another extension owns the name gets a fix: the registration step remembers refused names for the session, and `info` shows `not loaded` for them instead of the other extension's state. No new message kind. **Follow-up fix, queued** (with a cucumber scenario that fails without it).
 - **P2-DC-100 (02-UAT check 2):** option 1. The new-session half is automated (06-05). For the `/reload` half, add a builtin-profile scenario that installs a plugin with a server, runs `/reload` in the terminal-driven Pi (as `features/step_definitions/hook/session.steps.ts` does), and calls the tool; then close 02-UAT and re-verify Phase 2. **Follow-up fix, queued.**
+- **P3-DC-06 and P3-DC-07:** kept. Partially-installed `list` rows carry the other implementation's `requires` marker, and `info`'s `requires:` names the D-MB-07 marker (`mcp`) also when it is met, JSON included. The D-P3-06/07/08 row is Locked.
 
 ## Decisions waiting on you
 
