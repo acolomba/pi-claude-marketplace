@@ -43,6 +43,7 @@ The log of the previous milestone is archived, unchanged, at
 - **P4-DC-06:** kept. Legacy agents get the textual adapter-to-built-in translation at their first built-in session, with the two known gaps (over-64-character excluded tool names, `sse` grants translated rather than dropped).
 - **P5-DC-03:** kept. A matcher or `if` literal with Claude's tool name, `-` included, fires on the built-in tool; only stdin's `tool_name` keeps Pi's fold. D-MB-08 and D-P5-01 to D-P5-04 are Locked with that reading. D-MB-19 and D-MB-29 are Locked by the P2-DC-08 answer.
 - **Pending rows, batch 1:** D-MB-09, D-MB-10, D-MB-12, D-MB-13, D-MB-15, D-MB-16, D-MB-17, and D-MB-18 are Locked.
+- **Pending rows, batch 2:** D-MB-20 to D-MB-28 are Locked. DENYPIN-01 (re-pin the deny-lists to 2.1.318) stays in BACKLOG.
 
 ## Decisions waiting on you
 
