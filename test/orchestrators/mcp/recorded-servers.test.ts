@@ -121,11 +121,15 @@ async function treeOf(root: string): Promise<Record<string, string | null>> {
   return tree;
 }
 
+/** The legacy reader factory `recordedMcpServers` takes. */
+type LegacyServersReaderFactory = (source: LegacyServersSource) => LegacyServersReader;
+
 describe("recordedMcpServers", () => {
-  test("MREC-01: returns the recorded servers and bundle without calling the legacy reader", async () => {
+  test("MREC-01: returns the recorded servers and bundle without calling the legacy reader", async (t) => {
     // arrange
+    const marketplace = await marketplaceListing(t, undefined);
     const record: PluginInstallRecord = {
-      ...installRecord(),
+      ...installRecord(path.join(marketplace.marketplaceRoot, "plugin")),
       mcpServerConfigs: [
         { name: "a", config: { command: "node", args: ["a.js"] } },
         { name: "b", config: { type: "http", url: "https://mcp.example.com" } },
@@ -135,7 +139,7 @@ describe("recordedMcpServers", () => {
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
 
     // act
-    const recorded = await recordedMcpServers(record, reader);
+    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
 
     // assert
     assert.deepStrictEqual(recorded, {
@@ -149,21 +153,26 @@ describe("recordedMcpServers", () => {
     verify(reader);
   });
 
-  test("MREC-01: reads a present empty list as no servers without calling the legacy reader", async () => {
+  test("MREC-01: reads a present empty list as no servers without calling the legacy reader", async (t) => {
     // arrange
-    const record: PluginInstallRecord = { ...installRecord(), mcpServerConfigs: [] };
+    const marketplace = await marketplaceListing(t, undefined);
+    const record: PluginInstallRecord = {
+      ...installRecord(path.join(marketplace.marketplaceRoot, "plugin")),
+      mcpServerConfigs: [],
+    };
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
 
     // act
-    const recorded = await recordedMcpServers(record, reader);
+    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
 
     // assert
     assert.deepStrictEqual(recorded, { kind: "recorded", servers: [], bundle: false });
     verify(reader);
   });
 
-  test("MREC-02: re-resolves a record that predates the field through the legacy reader", async () => {
+  test("MREC-02: re-resolves a record that predates the field through the legacy reader", async (t) => {
     // arrange
+    const marketplace = await marketplaceListing(t, undefined);
     const record = installRecord();
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
     when(() => reader(installRecord())).thenResolve({
@@ -172,7 +181,7 @@ describe("recordedMcpServers", () => {
     });
 
     // act
-    const recorded = await recordedMcpServers(record, reader);
+    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
 
     // assert
     assert.deepStrictEqual(recorded, {
@@ -185,13 +194,14 @@ describe("recordedMcpServers", () => {
 
   test("MREC-02: reads a legacy reader that rejects as unreadable and logs why", async (t) => {
     // arrange
+    const marketplace = await marketplaceListing(t, undefined);
     const logged = captureDebugLog(t);
     const record = installRecord();
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
     when(() => reader(installRecord())).thenReject(new Error("manifest gone"));
 
     // act
-    const recorded = await recordedMcpServers(record, reader);
+    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
 
     // assert
     assert.deepStrictEqual(recorded, { kind: "unreadable" });
@@ -201,6 +211,7 @@ describe("recordedMcpServers", () => {
 
   test("MREC-02: reads a legacy reader that throws as unreadable and logs why", async (t) => {
     // arrange
+    const marketplace = await marketplaceListing(t, undefined);
     const logged = captureDebugLog(t);
     const record = installRecord();
     const reader: LegacyServersReader = () => {
@@ -208,7 +219,7 @@ describe("recordedMcpServers", () => {
     };
 
     // act
-    const recorded = await recordedMcpServers(record, reader);
+    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
 
     // assert
     assert.deepStrictEqual(recorded, { kind: "unreadable" });
@@ -217,6 +228,7 @@ describe("recordedMcpServers", () => {
 
   test("UF-4: logs a legacy reader failure that names an absolute path without the path", async (t) => {
     // arrange
+    const marketplace = await marketplaceListing(t, undefined);
     const logged = captureDebugLog(t);
     const record = installRecord();
     const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
@@ -227,7 +239,7 @@ describe("recordedMcpServers", () => {
     );
 
     // act
-    const recorded = await recordedMcpServers(record, reader);
+    const recorded = await recordedMcpServers(record, marketplace.source, () => reader);
 
     // assert
     assert.deepStrictEqual(recorded, { kind: "unreadable" });
@@ -249,7 +261,8 @@ describe("recordedMcpServers", () => {
     // act
     const recorded = await recordedMcpServers(
       installRecord(outside),
-      createLegacyServersReader(marketplace.source),
+      marketplace.source,
+      createLegacyServersReader,
     );
 
     // assert
@@ -259,19 +272,67 @@ describe("recordedMcpServers", () => {
     ]);
   });
 
-  test("UF-1: returns the recorded servers of a record whose plugin root is outside its marketplace", async (t) => {
+  test("UF-1 / NFR-10: reads the stored servers of a record whose plugin root is outside its marketplace as unreadable", async (t) => {
     // arrange
     const marketplace = await marketplaceListing(t, undefined);
+    const logged = captureDebugLog(t);
     const record: PluginInstallRecord = {
       ...installRecord(path.join(marketplace.root, "outside", "plugin")),
       mcpServerConfigs: [{ name: "a", config: { command: "node" } }],
     };
+    const readerFor = mock<LegacyServersReaderFactory>({
+      exactParams: true,
+      name: "legacy reader factory",
+    });
 
     // act
-    const recorded = await recordedMcpServers(
-      record,
-      createLegacyServersReader(marketplace.source),
-    );
+    const recorded = await recordedMcpServers(record, marketplace.source, readerFor);
+
+    // assert
+    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(logged, [
+      "[mcp] recorded MCP servers unreadable: cannot re-resolve the MCP servers of p1@mp: uncontained",
+    ]);
+    verify(readerFor);
+  });
+
+  test("UF-1: reads the stored servers of a record whose plugin root runs through a symlink out of its marketplace as unreadable", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(t, undefined);
+    const outside = path.join(marketplace.root, "outside");
+    await mkdir(path.join(outside, "plugin"), { recursive: true });
+    await symlink(outside, path.join(marketplace.marketplaceRoot, "linked"));
+    const record: PluginInstallRecord = {
+      ...installRecord(path.join(marketplace.marketplaceRoot, "linked", "plugin")),
+      mcpServerConfigs: [{ name: "a", config: { command: "node" } }],
+    };
+    const readerFor = mock<LegacyServersReaderFactory>({
+      exactParams: true,
+      name: "legacy reader factory",
+    });
+
+    // act
+    const recorded = await recordedMcpServers(record, marketplace.source, readerFor);
+
+    // assert
+    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    verify(readerFor);
+  });
+
+  test("UF-1: returns the stored servers of a git record inside its own plugin clone", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(t, undefined, "checkout");
+    const record: PluginInstallRecord = {
+      ...gitRecord(path.join(marketplace.locations.pluginClonesDir, CLONE_KEY)),
+      mcpServerConfigs: [{ name: "a", config: { command: "node" } }],
+    };
+    const readerFor = mock<LegacyServersReaderFactory>({
+      exactParams: true,
+      name: "legacy reader factory",
+    });
+
+    // act
+    const recorded = await recordedMcpServers(record, marketplace.source, readerFor);
 
     // assert
     assert.deepStrictEqual(recorded, {
@@ -279,6 +340,7 @@ describe("recordedMcpServers", () => {
       servers: [{ name: "a", config: { command: "node" } }],
       bundle: false,
     });
+    verify(readerFor);
   });
 });
 

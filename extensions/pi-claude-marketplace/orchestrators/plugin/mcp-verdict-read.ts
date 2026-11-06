@@ -68,7 +68,7 @@ export async function readRecordMcpVerdict(
   readonly effective: EffectiveMcpCompatibility;
   readonly recorded: RecordedMcpServers;
 }> {
-  const recorded = await recordedMcpServers(record, legacyReaderFor(source));
+  const recorded = await recordedMcpServers(record, source, legacyReaderFor);
   return { effective: effectiveMcpCompatibility(record, recorded, active), recorded };
 }
 
@@ -100,5 +100,5 @@ export async function readRecordMcpDependency(
   record: PluginInstallRecord,
   source: LegacyServersSource,
 ): Promise<McpDependency | false> {
-  return recordMcpDependency(await recordedMcpServers(record, legacyReaderFor(source)), record);
+  return recordMcpDependency(await recordedMcpServers(record, source, legacyReaderFor), record);
 }

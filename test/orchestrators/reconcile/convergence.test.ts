@@ -72,7 +72,8 @@ async function writeUnder(filePath: string, bytes: string): Promise<void> {
 }
 
 function marketplaceRootOf(fixture: Fixture, marketplace: string): string {
-  return path.join(fixture.locations.extensionRoot, "marketplaces", marketplace);
+  // UF-1: an `acme/<name>` source reads as cloned, so its root is the scope's checkout.
+  return path.join(fixture.locations.sourcesDir, marketplace);
 }
 
 /**
