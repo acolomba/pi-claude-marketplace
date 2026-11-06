@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: mcp-builtin
 milestone_name: MCP Built-in
 status: Awaiting next milestone
-stopped_at: Milestone mcp-builtin archived — user review next
+stopped_at: Milestone mcp-builtin archived and reviewed; PR #303 open
 last_updated: "2026-11-05T04:55:12.051Z"
-last_activity: 2026-11-05
-last_activity_desc: Milestone mcp-builtin completed and archived
+last_activity: 2026-11-06
+last_activity_desc: PR #303 reviewed and hardened (babysit-pr); waits for the merge
 state_head: c7a0358499f663496eb3622f363e31b920db4164
 progress:
   total_phases: 6
@@ -36,7 +36,7 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 Phase: Milestone mcp-builtin complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-05 — Milestone mcp-builtin completed and archived
+Last activity: 2026-11-06 — PR #303 reviewed and hardened; waits for the merge
 
 
 ### mcp-4 closeout
@@ -278,8 +278,11 @@ archived milestone artifacts.
 ## Operator Next Steps
 
 
-- Offer the version bump (`package.json`, `sonar-project.properties`,
-  `package-lock.json`) and open the PR for `features/mcp-builtin` (D-P6-17).
+- Squash-merge PR #303 (version 0.23.0) when the user says so, then record
+  the merge date and squash SHA in ROADMAP.md, MILESTONES.md, PROJECT.md and
+  RETROSPECTIVE.md, and tag `v0.23.0` to publish.
+- Decide BACKLOG GRANTFORMGAP-01 (an agent whose other grant form maps to
+  nothing keeps stale grants after a switch).
 - Then start the next milestone with the `new-gsd-milestone` skill.
 
 

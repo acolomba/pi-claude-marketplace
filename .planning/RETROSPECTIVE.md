@@ -4,7 +4,7 @@
 
 ## Milestone: mcp-builtin -- MCP Built-in
 
-**Completed:** 2026-11-05 on `features/mcp-builtin` (no PR yet, no npm release yet; closed autonomously, user review pending)
+**Completed:** 2026-11-05 on `features/mcp-builtin` (PR [#303](https://github.com/acolomba/pi-claude-marketplace/pull/303), version 0.23.0, not yet merged; closed autonomously, reviewed with the user on 2026-11-06)
 **Phases:** 6 | **Plans:** 55 | **Tasks:** 133 | **Requirements:** 31/31 | **Audit:** `tech_debt`, no blockers (integration 9/9, flows 8/8); Phase 2 closed with a verification override
 
 ### What Was Built

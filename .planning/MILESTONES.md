@@ -2,7 +2,7 @@
 
 ## mcp-builtin MCP Built-in (Shipped: 2026-11-05)
 
-**Branch:** `features/mcp-builtin` (also pushed as `claude/lucid-pasteur-df51ms`; no PR yet, no npm release yet). Closed autonomously; the user's review of the recorded choices is pending.
+**Branch:** `features/mcp-builtin` (also pushed as `claude/lucid-pasteur-df51ms`; PR [#303](https://github.com/acolomba/pi-claude-marketplace/pull/303), version 0.23.0, not yet merged). Closed autonomously, then reviewed with the user on 2026-11-06.
 
 **Phases completed:** 6 phases, 55 plans, 133 tasks
 

@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Previous Milestone: mcp-builtin -- MCP Built-in (branch: features/mcp-builtin, started 2026-11-04, completed 2026-11-05, no PR yet, no npm release yet)
+## Previous Milestone: mcp-builtin -- MCP Built-in (branch: features/mcp-builtin, started 2026-11-04, completed 2026-11-05, PR [#303](https://github.com/acolomba/pi-claude-marketplace/pull/303), version 0.23.0, not yet merged)
 
 **Goal:** A plugin's MCP servers run through pi-mcp-adapter when it is
 installed and through Pi's built-in MCP when it is not. The two are equal
@@ -802,7 +802,7 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**Completed on branch `features/mcp-builtin`, no PR yet:** milestone
+**Completed on branch `features/mcp-builtin`, PR [#303](https://github.com/acolomba/pi-claude-marketplace/pull/303) open:** milestone
 `mcp-builtin` (2026-11-05, Phases 1-6, 55 plans, 31/31 requirements;
 archived to `.planning/milestones/mcp-builtin-*`). A plugin's MCP servers now
 run through pi-mcp-adapter when it is loaded and through Pi's built-in MCP

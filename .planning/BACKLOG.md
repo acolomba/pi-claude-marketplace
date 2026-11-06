@@ -4910,7 +4910,7 @@ Noted 2026-11-05 (mcp-builtin, 02-08 item 4 (d)). Plugin MCP tools under Pi's bu
 
 Noted 2026-11-05 (mcp-builtin, P2-DC-46, D-MB-29). When another extension registers a built-in MCP server under the name of a plugin server first, `info` cannot tell that registration from this extension's own. D-MB-29 records it as a gap. The fix needs this extension's own `extensionPath`, so it changes the parameter of the built-in status reader (`createBuiltinMcpStatusReader`), which this milestone froze. Candidate direction: pass the extension's path to the reader and compare it with the source of the registration.
 
-Narrowed 2026-11-06 (quick 261106-m02): a registration Pi refuses now reads `not loaded` in `info`. Two cases stay open. A foreign registration whose config equals the plugin server's makes the sync attempt nothing, so no refusal is noted and `info` reads that server's state. And a changed config that Pi rejects while an older registration of this extension stays listed reads `not loaded` although the older server still runs (T-m02-05).
+Narrowed 2026-11-06 (quick 261106-m02): a registration Pi refuses now reads `not loaded` in `info`. Two cases stay open. A foreign registration whose config equals the plugin server's makes the sync attempt nothing, so no refusal is noted and `info` reads that server's state. And a changed config that Pi rejects while an older registration of this extension stays listed reads `not loaded` although the older server still runs (T-m02-05). The PR #303 review closed the second case: a refused re-registration now removes the older registration, so `not loaded` matches what runs. The first case stays open.
 
 ## HOOKTOOLSEARCH-01: name Pi's `tool_search` as Claude Code's `ToolSearch` in hooks
 
@@ -4983,3 +4983,31 @@ Noted 2026-11-06 (mcp-builtin, D-MB-10, MSEL-02, BLT-06). The extension register
 ## SUBCHILDVAR-01: the background-child check depends on the name `PI_SUBAGENT_CHILD`
 
 Noted 2026-11-06 (mcp-builtin, MGRT-02, D-MB-12). `platform/subagent-child.ts` tells a pi-subagents background child by the variable `PI_SUBAGENT_CHILD=1`, which pi-subagents 0.84.0 sets. pi-subagents is a soft dependency that the extension never imports. If pi-subagents renames the variable, the check fails silently. A child then runs autoapply when it is on, the AMIG-01 MCP move, and the agent grants step, so it can change installation state. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: a test that reads the name from the pi-subagents floor that `scripts/install-test-peers.mjs` installs, or a request that pi-subagents export the name.
+
+## AGENTIDXFORM-01: let the agents-index row's type carry its grant-form invariant
+
+Noted 2026-11-06 (mcp-builtin, PR #303 type review). `persistence/agents-index-schema.ts` stores `mcpImplementation` and `mcpForms` as two independent optional fields, and the row-level `warnings` and `droppedTools` repeat the active form's. The type allows a row with an implementation but no forms, forms without an implementation, or forms without the active key; `bridges/agents/grant-rewrite.ts` guards each at run time. Deferred because reshaping it changes the saved index file. Candidate direction: one optional sub-object whose shape requires the active form.
+
+## LEGACYSRC-01: build a `LegacyServersSource` from one scoped record
+
+Noted 2026-11-06 (mcp-builtin, PR #303 type review). `LegacyServersSource` in `orchestrators/mcp/recorded-servers.ts` carries `marketplaceName` beside the marketplace record that already holds the name, a plugin name not tied to the record passed beside it, and scope locations with no scope. The containment check (UF-1, NFR-10) trusts that callers pair them correctly. `LegacyServersUnreadableError` is also used for stored servers, which are not legacy. Candidate direction: one constructor that takes the scope, the marketplace record and the plugin name, and a neutral error name.
+
+## STATUSLOOKUP-01: make `McpStatusLookup` a discriminated union
+
+Noted 2026-11-06 (mcp-builtin, PR #303 type review). `McpStatusLookup` in `platform/mcp-status.ts` lets `reader` and `implementation` disagree, and its `projectTrusted` and `cwd` mean something only for the built-in arm. Candidate direction: one arm per implementation, built by a single function that picks the reader from `McpStatusReaders`.
+
+## HOOKTOOLREAD-01: report a failed tool-list read in the hooks bridge
+
+Noted 2026-11-06 (mcp-builtin, PR #303 error-handling review). `bridges/hooks/mcp-tool-view.ts` falls back to Pi's tool name when `pi.getAllTools()` throws, so a matcher written with Claude Code's name for a built-in MCP tool does not fire, and the proxy rule caches the answer of a failed probe for the bridge generation. Pi 1.5.0 has no path that throws there, so the review left it. Candidate direction: do not cache a probe that failed, and report the failure once per generation.
+
+## GRANTFORMGAP-01: an agent whose other grant form maps to nothing keeps stale grants after a switch
+
+Noted 2026-11-06 (mcp-builtin, PR #303 error-handling review; waits for the user). When an agent's explicit `tools:` list maps to no tool under the inactive MCP implementation, `bridges/agents/grant-forms.ts` leaves that form out (the AG-11 rule), so the agent is never a rewrite candidate. After the user switches implementations, the agent file keeps the previous implementation's `mcp:` selectors and `excludeTools` names with no notice. Decide whether the empty form should be stored (so the switch removes the grants) or warned about.
+
+## IMPORTCAUSE-01: the import warning's cause repeats itself with an empty reason
+
+Noted 2026-11-06 (PR #303 test review). An import whose plugin is not installable reports a warning `cause` of `Plugin "<name>" is not installable: \n\ncause: Plugin "<name>" is not installable: `, the not-installable message repeated with an empty reason list. The text predates mcp-builtin; `test/orchestrators/import/execute.test.ts` pins it. Candidate direction: build the cause from the narrowed reasons once.
+
+## REVIEWSUGG-01: PR #303 review suggestions left open
+
+Noted 2026-11-06 (mcp-builtin, PR #303 toolkit review, all rated Suggestion). Types: `RecordedMcpServers` merges `recorded` and `re-resolved` and drops the unreadable reason; `McpDependency.runEvery` is an array for four states; `toolNamePrefix` cannot say the adapter always returns one; declaration order kept in a `Record` reorders integer-like server names; `mcpServerNames` and `mcpGrantForms` are coupled by convention; `HookTool.name` is derivable and `builtin:mcp` is defined twice; `SoftDepStatus` fields are mutable; `"none"` can be read as the adapter by a new consumer; `mcpBundle` is an optional literal. Error handling: a server whose built-in config is `undefined` reads a bare `not loaded`; two servers folding to one name overwrite silently; a failed unregister logs only to debug; owners are noted before the sync; probe, `mcp.json`, description and rewrite-probe reads swallow errors without a trace; the built-in status lookup is unguarded. Tests: apply's toggle and deferred-enable sites and convergence lack a `none` case; no scenario shows the split `runEvery` marker or `none` for update, reinstall and completion. Performance: tab completion takes a soft-dependency snapshot per lookup (accepted as AR-06-02).
