@@ -16,7 +16,9 @@
 // check here guards a record's stored servers, the legacy reader's
 // re-resolution, and the built-in registration step. Every read takes a
 // source that only `legacyServersSourceFor` builds, so the record and the
-// marketplace name come from the marketplace record the check trusts.
+// marketplace name come from the marketplace record the check trusts. The
+// check trusts a source only with the locations of the scope its marketplace
+// record names.
 //
 // The read changes nothing: it writes no file and no state, and it reaches no
 // network (NFR-5). This module is outside BLOCK F's NETWORK_SEAMS, so it can
@@ -232,13 +234,20 @@ function isPathMarketplace(source: unknown): boolean {
 }
 
 /**
- * UF-1 / NFR-10: the one clone root a record's plugin root must lie in. A
- * cloned marketplace's root is taken from the same state file as the record,
- * so it must itself lie inside the scope's checkout of that marketplace.
- * Throws when the record names no such root.
+ * UF-1 / NFR-10: the one clone root a record's plugin root must lie in. It
+ * comes from the source's locations only when they are those of the scope
+ * its marketplace record names. A cloned marketplace's root is taken from the
+ * same state file as the record, so it must itself lie inside the scope's
+ * checkout of that marketplace. Throws when the record names no such root.
  */
 async function owningRoot(source: LegacyServersSource): Promise<string> {
   const { locations, marketplace, record } = source;
+  if (marketplace.scope !== locations.scope) {
+    throw new Error(
+      `the marketplace record ${marketplace.name} names the ${marketplace.scope} scope, not the ${locations.scope} scope`,
+    );
+  }
+
   const cloneKey = cloneKeyOf(record, locations.pluginClonesDir);
   if (cloneKey !== undefined) {
     if (!CLONE_KEY.test(cloneKey)) {
@@ -259,7 +268,9 @@ async function owningRoot(source: LegacyServersSource): Promise<string> {
 /**
  * UF-1 / NFR-10: whether the plugin root of `source`'s record lies inside its
  * owning clone root, the record's `plugin-clones/<key>/` entry or its
- * marketplace root. Reads no file but the path segments it walks.
+ * marketplace root. A source whose locations are not those of the scope its
+ * marketplace record names is never contained. Reads no file but the path
+ * segments it walks.
  */
 async function isPluginRootContained(source: LegacyServersSource): Promise<boolean> {
   try {

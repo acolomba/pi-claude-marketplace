@@ -5,9 +5,10 @@ Feature: MCP server verdict list
   reinstall, and its marker names the implementation that runs a server the
   active one cannot (D-MB-07). Argument completion offers the plugins the list
   shows for the same implementation (D-P6-22). A plugin whose installation
-  record names a plugin root outside its marketplace lists with the verdict
-  its install recorded (UF-1). A local marketplace stands in for a published
-  one, and each sse server points at a loopback port that nothing listens on.
+  record names a plugin root outside its marketplace, or whose marketplace
+  record names another scope, lists with the verdict its install recorded
+  (UF-1). A local marketplace stands in for a published one, and each sse
+  server points at a loopback port that nothing listens on.
 
   @adapter-only
   Scenario: An installed plugin with an sse server lists as installed, under pi-mcp-adapter (MREC-03)
@@ -236,6 +237,32 @@ Feature: MCP server verdict list
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project --partial", which did not fail
     Given the installation record of the plugin "demo@fixtures" in the project scope names a plugin root outside its marketplace
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  @mcp
+  Scenario: A plugin whose marketplace record names another scope lists with the verdict its install recorded (UF-1, NFR-10)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"asker": {"command": "node", "bareElicitationCapability": true}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --partial", which did not fail
+    Given the project scope's record of the marketplace "fixtures" names the user scope
     When the user runs "/claude:plugin list"
     Then the result has these fields:
       | kind                | cascade     |

@@ -146,6 +146,28 @@ function marketplaceRecord(
   };
 }
 
+/**
+ * The servers source of `record` over a path-source marketplace record `mp`
+ * that names the project scope, read with the fixture's user-scope locations.
+ */
+function projectMarketplaceSource(
+  marketplace: MarketplaceFixture,
+  record: PluginInstallRecord,
+): LegacyServersSource {
+  return legacyServersSourceFor(
+    marketplace.locations,
+    {
+      name: "mp",
+      scope: "project",
+      manifestPath: path.join(marketplace.marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      marketplaceRoot: marketplace.marketplaceRoot,
+      source: { kind: "path", raw: marketplace.marketplaceRoot },
+      plugins: { p1: record },
+    },
+    "p1",
+  );
+}
+
 describe("legacyServersSourceFor", () => {
   test("UF-1: builds a plugin's servers source from the record its marketplace record lists", async (t) => {
     // arrange
@@ -385,6 +407,30 @@ describe("recordedMcpServers", () => {
       servers: [{ name: "a", config: { command: "node" } }],
       bundle: false,
     });
+    verify(reader);
+  });
+
+  test("UF-1 / NFR-10: reads the stored servers of a record whose marketplace record names another scope as unreadable", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(t, undefined);
+    const logged = captureDebugLog(t);
+    const record: PluginInstallRecord = {
+      ...installRecord(path.join(marketplace.marketplaceRoot, "plugin")),
+      mcpServerConfigs: [{ name: "a", config: { command: "node" } }],
+    };
+    const reader = mock<LegacyServersReader>({ exactParams: true, name: "legacy reader" });
+
+    // act
+    const recorded = await recordedMcpServers(
+      projectMarketplaceSource(marketplace, record),
+      reader,
+    );
+
+    // assert
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "uncontained" });
+    assert.deepStrictEqual(logged, [
+      "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of p1@mp: uncontained",
+    ]);
     verify(reader);
   });
 });
@@ -696,6 +742,23 @@ describe("readLegacyServers", () => {
     await assert.rejects(readLegacyServers(source), {
       name: "RecordedServersUnreadableError",
       reason: "root-mismatch",
+      plugin: "p1",
+      marketplace: "mp",
+    });
+  });
+
+  test("UF-1: refuses a record whose marketplace record names another scope before it reads the manifest", async (t) => {
+    // arrange -- no manifest exists, so a read before the check fails differently
+    const marketplace = await marketplaceListing(t, undefined);
+    const source = projectMarketplaceSource(
+      marketplace,
+      installRecord(path.join(marketplace.marketplaceRoot, "plugin")),
+    );
+
+    // act & assert
+    await assert.rejects(readLegacyServers(source), {
+      name: "RecordedServersUnreadableError",
+      reason: "uncontained",
       plugin: "p1",
       marketplace: "mp",
     });

@@ -13,8 +13,9 @@
  * agent file, delete the cached clones of git plugins, write a file of the
  * user's own in the scope's shared `agents/` directory, where an install
  * writes the agents of every plugin, plant an agents index entry that claims
- * a file there, and move a plugin's recorded plugin root outside its
- * marketplace, as a hand edit of the installation record can. The other steps
+ * a file there, move a plugin's recorded plugin root outside its
+ * marketplace, and set the scope a marketplace's record names, as a hand edit
+ * of the installation record can. The other steps
  * only read; one of them lists the files of that `agents/` directory, and one
  * checks that the user scope holds no record of project installs.
  *
@@ -31,7 +32,12 @@ import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { isPlainObject } from "../../lib/field-rows.ts";
 import { readGitClones } from "../../lib/git-clones.ts";
-import { readPluginRecord, relocatePluginRoot } from "../../lib/installation-record.ts";
+import {
+  readMarketplaceRecord,
+  readPluginRecord,
+  relocatePluginRoot,
+  rewriteMarketplaceRecord,
+} from "../../lib/installation-record.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -303,6 +309,20 @@ Given(
     await relocatePluginRoot(scopeRoot, id, copy);
     const record = await readPluginRecord(scopeRoot, id);
     assert.equal(record.resolvedSource, copy);
+  },
+);
+
+Given(
+  "the {word} scope's record of the marketplace {string} names the {word} scope",
+  async function (this: ScenarioWorld, scope: string, marketplace: string, named: string) {
+    const scopeRoot = this.scopeRoot(scope);
+    assert.ok(named === "user" || named === "project", `${named} is not a scope`);
+    await rewriteMarketplaceRecord(scopeRoot, marketplace, (record) => ({
+      ...record,
+      scope: named,
+    }));
+    const record = await readMarketplaceRecord(scopeRoot, marketplace);
+    assert.equal(record.scope, named);
   },
 );
 
