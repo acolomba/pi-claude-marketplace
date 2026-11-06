@@ -4,9 +4,9 @@ Feature: MCP server implementation profiles
   DUAL-01); the harness checks each Pi against the implementation its launch implies
   (DUAL-02). A local marketplace and the scripted model stand in for real ones.
   Under the builtin profile, a stand-in registers a stub server with Pi's built-in
-  MCP for the built-in agent and hook scenarios (MGRT-01, MHK-01) until the extension
-  registers servers itself; under the adapter profile pi-mcp-adapter serves the same
-  stub, and the stand-in step has no effect (DUAL-01).
+  MCP for the built-in agent and hook scenarios (MGRT-01, MHK-01), and steps aside
+  for a server the extension registers itself; under the adapter profile
+  pi-mcp-adapter serves the same stub, and the stand-in step has no effect (DUAL-01).
 
   @own-implementation
   Scenario: Restarting pi without pi-mcp-adapter keeps the installed plugins and reports nothing

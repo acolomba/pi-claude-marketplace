@@ -2,7 +2,8 @@
  * @fileoverview Steps that run `/claude:plugin` commands in a headless Pi and
  * check the JSON results of the last `When` step, a command or a new session.
  *
- * A `Given` command is setup and must succeed, unless its text says it failed.
+ * A `Given` command is setup and must succeed, unless its text says it
+ * failed, warned, or did not fail.
  * A `When` command is the action under test, and its result is kept on the
  * world for the `Then` steps.
  *

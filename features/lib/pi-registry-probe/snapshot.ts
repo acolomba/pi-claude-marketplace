@@ -7,8 +7,8 @@
  * of the active tools, every slash command Pi offers, and every MCP server
  * an extension registered with Pi, in Pi's order. The reader requires
  * exactly one such entry among a request's custom entries and validates all
- * four fields, so an empty list is always an empty array that
- * a step compares, never a missing field read as empty.
+ * four fields, so an empty list is always an empty array that a step
+ * compares, never a missing field read as empty.
  */
 
 import { fileURLToPath } from "node:url";

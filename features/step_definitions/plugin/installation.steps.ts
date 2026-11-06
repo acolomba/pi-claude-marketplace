@@ -15,9 +15,8 @@
  * writes the agents of every plugin, plant an agents index entry that claims
  * a file there, and move a plugin's recorded plugin root outside its
  * marketplace, as a hand edit of the installation record can. The other steps
- * only read; one of them lists the files
- * of that `agents/` directory, and one checks that the user scope holds no
- * record of project installs.
+ * only read; one of them lists the files of that `agents/` directory, and one
+ * checks that the user scope holds no record of project installs.
  *
  * A missing installation record fails the step; it never reads as no plugins.
  * A scope that has a marketplace added always has one.

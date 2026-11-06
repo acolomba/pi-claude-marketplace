@@ -13,6 +13,7 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 
 import type { ActiveMcpImplementation } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 
+/** One suggestion the registered command provider offers. */
 export interface PluginCompletion {
   readonly label: string;
   readonly value: string;

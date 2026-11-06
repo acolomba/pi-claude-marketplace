@@ -20,8 +20,8 @@ const TOOL_LINE_PATTERN = /^-\s*(\S+?):\s?(.*)$/;
 const LOADED_PATTERN = /\bloaded\s+\d+\s+tools?\b/i;
 const NONE_PATTERN = /\bno matching tools?\b/i;
 
-// Ids drawn for each run and U+200B, projected as the frozen calls step
-// projects them.
+// Ids drawn for each run and U+200B, projected as the `the model receives
+// these calls:` step in `model.steps.ts` projects them.
 const RUN_ID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gu;
 const INPUT_MARK_PATTERN = /\u200B/gu;
 
@@ -81,8 +81,9 @@ function projectedText(text: string, tokens: RunTokens): string {
 
 /**
  * The `[call, role, text]` rows of a turn's model calls with the run tokens,
- * run ids, and input marks projected as the frozen calls step projects them,
- * and each tool search reduced to the tools it loads.
+ * run ids, and input marks projected as the `the model receives these calls:`
+ * step in `model.steps.ts` projects them, and each tool search reduced to the
+ * tools it loads.
  */
 export function toolSearchCallRows(
   rows: readonly (readonly [string, string, string])[],

@@ -59,7 +59,7 @@ const UNSET_PATTERN = /\b(?:default|ambient|inherits?)\b/iu;
 // It matches only a whole name that starts the text or follows a space, `(`,
 // `:`, or `,`, and that no name character or `/` continues. So an adapter
 // whole-server key `plugin_<plugin>_<server>_` and a path piece such as
-// `/x/plugin_cache/y` project nothing, as they did before MGRT-01.
+// `/x/plugin_cache/y` project nothing.
 const OWNED_ERROR_VALUE_PATTERN =
   /\b(?:[a-z0-9-]+\/claude-[A-Za-z0-9.[\]-]*[A-Za-z0-9\]]|plugin_[A-Za-z0-9_-]*_\/[A-Za-z0-9_-]+|(?<=^|[\s(:,])plugin_[A-Za-z0-9_-]*[A-Za-z0-9-](?:\/[A-Za-z0-9_-]+)?(?![A-Za-z0-9_/-]))/gu;
 

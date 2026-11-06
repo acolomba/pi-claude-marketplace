@@ -4,7 +4,7 @@
  * through pi-mcp-adapter's `mcp` proxy, and the wait for the adapter's first
  * listing of that server (HOOK-08, D-CF5-12).
  *
- * The plugin's `.mcp.json` names one stdio server that runs the frozen MCP
+ * The plugin's `.mcp.json` names one stdio server that runs the MCP
  * stub with this process's Node, given the plugin and server names, so the
  * stub logs which server it is. When a session starts, pi-mcp-adapter lists
  * the tools of a server it has not cached and then disconnects, in the

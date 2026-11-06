@@ -147,9 +147,9 @@ Feature: MCP server verdict list
     Given the marketplace "fixtures" is added to the project scope
     When the user requests plugin completions for "install --scope project "
     Then the plugin completion set for "install --scope project " contains these suggestions:
-      | label          | value                                      | description |
-      | demo@fixtures  | "install --scope project demo@fixtures "   |             |
-      | plain@fixtures | "install --scope project plain@fixtures "  |             |
+      | label          | value                                     | description |
+      | demo@fixtures  | "install --scope project demo@fixtures "  |             |
+      | plain@fixtures | "install --scope project plain@fixtures " |             |
 
   @builtin-only
   Scenario: Install completion leaves out a plugin with an sse server, which Pi's built-in MCP can only partially install (MREC-03)
@@ -165,8 +165,8 @@ Feature: MCP server verdict list
     Given the marketplace "fixtures" is added to the project scope
     When the user requests plugin completions for "install --scope project "
     Then the plugin completion set for "install --scope project " contains these suggestions:
-      | label          | value                                      | description |
-      | plain@fixtures | "install --scope project plain@fixtures "  |             |
+      | label          | value                                     | description |
+      | plain@fixtures | "install --scope project plain@fixtures " |             |
 
   @adapter-only
   Scenario: Partial update completion offers an installed plugin with an sse server whose new version is unavailable, under pi-mcp-adapter (MREC-03)

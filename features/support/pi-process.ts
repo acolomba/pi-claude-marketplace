@@ -162,8 +162,8 @@ BeforeAll({ timeout: RUN_START_TIMEOUT_MS }, async (): Promise<void> => {
       await mkdir(temporary);
       // A Pi started without a TMPDIR, such as a terminal Pi, compiles the
       // extension into Node's default `/tmp/jiti`. The shared Pi warms that
-      // cache, as it did before it needed a TMPDIR, so a worker's first
-      // terminal Pi does not compile cold under load.
+      // cache, so a worker's first terminal Pi does not compile cold under
+      // load.
       await mkdir(DEFAULT_COMPILE_CACHE, { recursive: true });
       await symlink(DEFAULT_COMPILE_CACHE, path.join(temporary, "jiti"));
       piProfile = { extensions: [adapter.entry], environment: { TMPDIR: temporary } };

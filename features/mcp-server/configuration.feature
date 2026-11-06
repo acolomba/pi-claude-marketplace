@@ -500,13 +500,13 @@ Feature: MCP server configuration
       | Done. |                             |                   |
     When the user prompts "call the stub"
     Then the model receives these calls, with each tool search reduced to the tools it loads:
-      | call | role        | text                                                                                                                                 |
-      | 1    | user        | call the stub                                                                                                                        |
-      | 2    | user        | call the stub                                                                                                                        |
-      | 2    | assistant   | tool call tool_search {"query":"echo"}                                                                                               |
-      | 2    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given.                                                |
-      | 3    | user        | call the stub                                                                                                                        |
-      | 3    | assistant   | tool call tool_search {"query":"echo"}                                                                                               |
-      | 3    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given.                                                |
-      | 3    | assistant   | tool call mcp__plugin_demo_stub__echo {"text":"ping"}                                                                                |
+      | call | role        | text                                                                                                                                           |
+      | 1    | user        | call the stub                                                                                                                                  |
+      | 2    | user        | call the stub                                                                                                                                  |
+      | 2    | assistant   | tool call tool_search {"query":"echo"}                                                                                                         |
+      | 2    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given.                                                          |
+      | 3    | user        | call the stub                                                                                                                                  |
+      | 3    | assistant   | tool call tool_search {"query":"echo"}                                                                                                         |
+      | 3    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given.                                                          |
+      | 3    | assistant   | tool call mcp__plugin_demo_stub__echo {"text":"ping"}                                                                                          |
       | 3    | tool result | mcp__plugin_demo_stub__echo returned: {home}/marketplaces/fixtures/plugins/demo,{agent dir}/pi-claude-marketplace/data/fixtures/demo:echo:ping |

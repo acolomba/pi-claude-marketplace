@@ -1,7 +1,8 @@
 /**
- * @fileoverview A new revision of a plugin a git repository on the git host
- * holds, which writes one file into the plugin's directory, such as the
- * `.mcp.json` that gives it an MCP server (MREC-03, P3-DC-25).
+ * @fileoverview Pushes a new revision of a plugin that a git repository on
+ * the git host holds. The revision writes one file into the plugin's
+ * directory, such as the `.mcp.json` that gives the plugin an MCP server
+ * (MREC-03, P3-DC-25).
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -29,7 +30,12 @@ export async function pushPluginFile(
   const pluginRoot = repositoryPluginRoot(repository, pluginName);
   const target = path.resolve(pluginRoot, file);
   const inPlugin = path.relative(pluginRoot, target);
-  if (inPlugin === "" || inPlugin.startsWith("..") || path.isAbsolute(inPlugin)) {
+  if (
+    inPlugin === "" ||
+    inPlugin === ".." ||
+    inPlugin.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(inPlugin)
+  ) {
     throw new Error(`${file} lies outside the plugin ${pluginName} of ${repository.name}`);
   }
 

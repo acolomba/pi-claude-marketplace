@@ -1,10 +1,11 @@
 /**
  * @fileoverview Steps about switching the MCP implementation that serves an
- * installed plugin's servers: a plugin record an earlier release wrote, before
- * records held the plugin's MCP servers (MREC-02), and the wait for the
- * implementation a restart brought in to list a stub server's tools
- * (MSEL-02, MSEL-04), and the extension errors Pi reported since it started,
- * which include a registration no implementation serves (MSEL-03).
+ * installed plugin's servers. They cover a plugin record that an earlier
+ * release wrote, before records held the plugin's MCP servers (MREC-02); the
+ * wait for the implementation that a restart brought in to list a stub
+ * server's tools (MSEL-02, MSEL-04); and the extension errors that Pi
+ * reported since it started, which include a registration that no
+ * implementation serves (MSEL-03).
  */
 
 import assert from "node:assert/strict";

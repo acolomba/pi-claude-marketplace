@@ -6,8 +6,8 @@
  * Every profile Pi loads this file with `--extension`. Its command appends
  * one entry with every tool, the active tool names, every slash command, and
  * every MCP server an extension registered, each projected to plain JSON
- * records in Pi's order. It filters nothing and
- * removes no duplicate, so a step sees exactly what Pi offers.
+ * records in Pi's order. It filters nothing and removes no duplicate, so a
+ * step sees exactly what Pi offers.
  */
 
 import { REGISTRY_PROBE_COMMAND, REGISTRY_PROBE_ENTRY } from "./snapshot.ts";

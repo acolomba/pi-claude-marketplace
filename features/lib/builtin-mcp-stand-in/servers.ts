@@ -59,7 +59,7 @@ export async function readStandInServers(home: string): Promise<StandInServer[]>
   try {
     text = await readFile(serversFile(home), "utf8");
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return [];
     }
 

@@ -162,8 +162,8 @@ Feature: MCP server verdict install
       | needs reload | true                                |
       | summary      | A plugin operation needs attention. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status              | reasons                                                            | scope | version | from  | cause chain                                                           | cause truncated | leaks | rollback partial |
-      | tools            | user              | app@tools | app       | installed           |                                                                    | user  | 1.0.0   |       |                                                                       |                 |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status              | reasons                                                           | scope | version | from  | cause chain                                                           | cause truncated | leaks | rollback partial |
+      | tools            | user              | app@tools | app       | installed           |                                                                   | user  | 1.0.0   |       |                                                                       |                 |       |                  |
       | tools            | user              | lib@tools | lib@tools | partially-installed | dependency current copy, unsupported mcp, requires pi-mcp-adapter | user  | 2.0.0   | 1.2.0 | constrained to the combined range (^2.0.0) -- required by "app@tools" | false           |       |                  |
     Then the installation record of the user scope holds these plugins:
       | id        | version | enabled |

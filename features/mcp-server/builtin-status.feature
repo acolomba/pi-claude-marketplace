@@ -3,7 +3,7 @@ Feature: MCP server builtin status
 
   Plugin info shows each server's state as far as Pi's built-in MCP exposes it (BLT-05, BLT-04, D-MB-09), against a stub server, a scripted model, and a local marketplace.
   For a plugin an earlier release installed, it shows each server the extension registers (MREC-02), and a name another Pi extension registered first, played by the built-in stand-in, reads not loaded (D-MB-29).
-  Each scenario compares the full info fields (P2-DC-16), which are re-verified after the read-time verdicts merge.
+  Each scenario but the disabled one compares the full info fields (P2-DC-16), which are re-verified after the read-time verdicts merge. The disabled one reads the server line in Pi's terminal.
 
   Scenario: Plugin info shows a connected built-in server as connected (BLT-05)
     Given the marketplace "fixtures" is published as a dir source

@@ -3,15 +3,15 @@
  * stub MCP servers a step named with Pi's built-in MCP, under the names the
  * extension will register them under (P1-DC-05, D-MB-02, D-MB-13).
  *
- * Built-in scenarios need a plugin MCP tool that Pi's built-in MCP serves
- * before the extension registers servers itself. Only the MCP implementation
+ * Built-in scenarios use it for a plugin MCP tool that Pi's built-in MCP
+ * serves without the extension's own registration. Only the MCP implementation
  * step loads this file, and only under the builtin profile, after every other
- * extension. It registers in its `session_start` handler, after the
- * extension's own registration, made first, which keeps the name.
- * It skips a server when Pi already has a registration of that name, or a
- * server of that name in `<agent dir>/mcp.json` or `<project>/.pi/mcp.json`,
- * comparing names with `-` and `_` folded. So it steps aside once the
- * extension registers its servers.
+ * extension. It registers in its `session_start` handler, which runs after
+ * the extension's own handler, so a name the extension registered first stays
+ * the extension's. It skips a server when Pi already has a registration of
+ * that name, or a server of that name in `<agent dir>/mcp.json` or
+ * `<project>/.pi/mcp.json`, comparing names with `-` and `_` folded. So it
+ * steps aside once the extension registers its servers.
  *
  * An entry marked `first` is the exception: it stands in for another Pi
  * extension that holds a plugin server's name. The stand-in registers it
@@ -62,7 +62,7 @@ async function mcpJsonServers(file: string): Promise<string[]> {
   try {
     text = await readFile(file, "utf8");
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return [];
     }
 

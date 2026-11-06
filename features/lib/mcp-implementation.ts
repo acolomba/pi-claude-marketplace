@@ -6,10 +6,10 @@
  * command, else Pi's built-in MCP when it lists an `/mcp` command from
  * `builtin:mcp`, else none: the precedence the extension itself applies
  * (MSEL-01), read through the extension's own `softDepStatus` so the harness
- * cannot drift from it. The harness compares that with what the Pi's launch implies
- * (P1-DC-14): the adapter when the launch loads it, else none when Pi starts
- * with `--no-mcp` or the user or project settings hold `-builtin:mcp`, else
- * built-in.
+ * cannot drift from it. The harness compares that with what the Pi's launch
+ * implies (P1-DC-14): the adapter when the launch loads it, else none when Pi
+ * starts with `--no-mcp` or the user or project settings hold `-builtin:mcp`,
+ * else built-in.
  *
  * pi-mcp-adapter turns Pi's built-in MCP off once per adapter version: at
  * `session_start`, unless `<agent dir>/mcp-onboarding.json` records its

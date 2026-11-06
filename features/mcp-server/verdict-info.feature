@@ -21,22 +21,22 @@ Feature: MCP server verdict info
     Given the user has run "/claude:plugin install demo@fixtures --scope user --partial", which did not fail
     When the user runs "/claude:plugin info demo@fixtures --scope user"
     Then the result has these fields:
-      | kind                           | plugin-info                                                                                                       |
-      | marketplace details autoupdate | false                                                                                                             |
-      | marketplace name               | fixtures                                                                                                          |
-      | marketplace scope              | user                                                                                                              |
-      | needs reload                   | false                                                                                                             |
-      | plugin components mcp          | [{"name":"plugin:demo:events","unsupportedFeature":"sse"},{"name":"plugin:demo:tools","status":"not loaded"}]     |
-      | plugin components resolved     | true                                                                                                              |
-      | plugin components skills       | demo-skill                                                                                                        |
-      | plugin id                      | demo@fixtures                                                                                                     |
-      | plugin name                    | demo                                                                                                              |
-      | plugin reasons                 | unsupported mcp                                                                                                   |
-      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]                                                                   |
-      | plugin scope                   | user                                                                                                              |
-      | plugin status                  | partially-installed                                                                                               |
-      | plugin version                 | 1.0.0                                                                                                             |
-      | severity                       | info                                                                                                              |
+      | kind                           | plugin-info                                                                                                   |
+      | marketplace details autoupdate | false                                                                                                         |
+      | marketplace name               | fixtures                                                                                                      |
+      | marketplace scope              | user                                                                                                          |
+      | needs reload                   | false                                                                                                         |
+      | plugin components mcp          | [{"name":"plugin:demo:events","unsupportedFeature":"sse"},{"name":"plugin:demo:tools","status":"not loaded"}] |
+      | plugin components resolved     | true                                                                                                          |
+      | plugin components skills       | demo-skill                                                                                                    |
+      | plugin id                      | demo@fixtures                                                                                                 |
+      | plugin name                    | demo                                                                                                          |
+      | plugin reasons                 | unsupported mcp                                                                                               |
+      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]                                                               |
+      | plugin scope                   | user                                                                                                          |
+      | plugin status                  | partially-installed                                                                                           |
+      | plugin version                 | 1.0.0                                                                                                         |
+      | severity                       | info                                                                                                          |
 
   @adapter-only
   Scenario: Plugin info shows an sse server as written, under pi-mcp-adapter (MREC-04)

@@ -138,10 +138,10 @@ Feature: MCP server verdict markers
     Given the mcp-adapter.json file of the project scope holds a comment
     When the user runs "/claude:plugin apply --scope project"
     Then the command reports these results:
-      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | header                                                           | lines                                                                                                                                  | notices                                                                   |
-      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |                                                                  |                                                                                                                                        |                                                                           |
-      | diagnostic                | warning  | false        |             |                |                |                     | Plugin "lib" [project] updated; 1 declared component has a note. | skill source "skill" in "[redacted path]                                                                                               |                                                                           |
-      | mcp-config-notices        | warning  | false        |             |                |                |                     |                                                                  |                                                                                                                                        | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | header                                                           | lines                                    | notices                                                                   |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |                                                                  |                                          |                                                                           |
+      | diagnostic                | warning  | false        |             |                |                |                     | Plugin "lib" [project] updated; 1 declared component has a note. | skill source "skill" in "[redacted path] |                                                                           |
+      | mcp-config-notices        | warning  | false        |             |                |                |                     |                                                                  |                                          | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status  | reasons | scope   | from  | to    |
       | tools            | project           | lib@tools | lib  | updated |         | project | 1.0.0 | 2.0.0 |
@@ -295,8 +295,8 @@ Feature: MCP server verdict markers
     Given the mcp-adapter.json file of the project scope holds a comment
     When the user runs "/claude:plugin install app@fixtures --scope project"
     Then the command reports these results:
-      | kind               | severity | needs reload | summary                             | notices                                                               |
-      | cascade            | error    | true         | Some plugin operations have failed. |                                                                       |
+      | kind               | severity | needs reload | summary                             | notices                                                                   |
+      | cascade            | error    | true         | Some plugin operations have failed. |                                                                           |
       | mcp-config-notices | warning  | false        |                                     | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name          | status    | reasons           | scope   | version | cause chain                        | cause truncated | leaks | rollback partial |

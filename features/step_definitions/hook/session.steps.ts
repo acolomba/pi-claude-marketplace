@@ -208,8 +208,8 @@ Given(
     await waitForStartupRun(harness);
   },
 );
-
-// A new session's payloads become the last results, as the frozen session
+// A new session's payloads become the last results, as the plain new-session
+// `When` keeps them, so a payload no step states still fails the scenario.
 // `When` keeps them, so a payload no step states still fails the scenario.
 When(
   "the user starts a new pi session with the hooks recording",

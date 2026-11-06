@@ -33,9 +33,9 @@ Feature: MCP server implementation switch
     Given pi runs with the scripted model
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given the scripted model plays these steps:
-      | reply | tool | arguments                                                          |
+      | reply | tool | arguments                                                         |
       |       | mcp  | {"tool": "mcp__plugin_demo_stub__echo", "args": {"text": "ping"}} |
-      | Done. |      |                                                                    |
+      | Done. |      |                                                                   |
     When the user restarts pi with pi-mcp-adapter
     Then the session reports no results
     Then pi-mcp-adapter lists the tools of the stub mcp server "stub" of the plugin "demo"
@@ -61,14 +61,14 @@ Feature: MCP server implementation switch
       | pi-mcp-adapter |
     Given pi-mcp-adapter has listed the tools of the stub mcp server "stub" of the plugin "demo"
     Given the scripted model plays these steps:
-      | reply | tool                        | arguments                                                          |
+      | reply | tool                        | arguments                                                         |
       |       | mcp                         | {"tool": "mcp__plugin_demo_stub__echo", "args": {"text": "ping"}} |
-      | Done. |                             |                                                                    |
-      |       | tool_search                 | {"query": "echo"}                                                  |
-      |       | mcp__plugin_demo_stub__echo | {"text": "ping"}                                                   |
-      | Done. |                             |                                                                    |
+      | Done. |                             |                                                                   |
+      |       | tool_search                 | {"query": "echo"}                                                 |
+      |       | mcp__plugin_demo_stub__echo | {"text": "ping"}                                                  |
+      | Done. |                             |                                                                   |
       |       | mcp                         | {"tool": "mcp__plugin_demo_stub__echo", "args": {"text": "ping"}} |
-      | Done. |                             |                                                                    |
+      | Done. |                             |                                                                   |
     When the user prompts "call the stub"
     Then the model receives these calls:
       | call | role        | text                                                                        |
