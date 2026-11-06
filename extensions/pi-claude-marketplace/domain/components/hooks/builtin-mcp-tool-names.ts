@@ -104,14 +104,21 @@ export function serverPrefixNames(prefix: string, tool: McpToolIdentity): boolea
 }
 
 /**
- * D-P5-02: the name a hook sees for the tool `piName` of Pi's built-in MCP,
- * whose namespace is `namespace` (Pi's `mcp__<server with - folded>`) and whose
- * server registered as `server`: `mcp__<server>__<the rest of Pi's name>`. When
- * Pi cut the name inside the namespace, the hook sees Pi's name.
+ * D-P5-02, D-P5-03: the name every hook sees for `tool`. For a tool of Pi's
+ * built-in MCP it is `mcp__<server>__<the rest of Pi's name>`, where the rest
+ * follows the server segment as Pi folds it into each name of the server's
+ * tools. The folded `mcp__<server>__` is Pi's namespace of the server plus
+ * `__`. When Pi cut the name inside that segment, and for every other tool,
+ * the hook sees Pi's name (D-P5-05).
  */
-export function claudeFormToolName(piName: string, namespace: string, server: string): string {
-  const piPrefix = `${namespace}${SEGMENT_SEPARATOR}`;
-  return piName.startsWith(piPrefix)
-    ? `${claudeServerPrefix(server)}${piName.slice(piPrefix.length)}`
-    : piName;
+export function claudeFormToolName(tool: McpToolIdentity): string {
+  if (tool.builtinServer === undefined) {
+    return tool.piName;
+  }
+
+  const claudePrefix = claudeServerPrefix(tool.builtinServer);
+  const piPrefix = claudePrefix.replaceAll(PI_FOLDED_CHARACTER, "_");
+  return tool.piName.startsWith(piPrefix)
+    ? `${claudePrefix}${tool.piName.slice(piPrefix.length)}`
+    : tool.piName;
 }

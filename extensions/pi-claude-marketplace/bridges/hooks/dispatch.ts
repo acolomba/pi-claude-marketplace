@@ -49,6 +49,7 @@
 // generation changed while its hooks ran folds to noop.
 
 import {
+  claudeFormToolName,
   MCP_TOOL_PREFIX,
   serverPrefixNames,
   toolLiteralNames,
@@ -81,7 +82,7 @@ import { compactTrigger } from "./payloads/compact-trigger.ts";
 import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { HookBlock } from "./hook-labels.ts";
-import type { HookTool, HookToolView } from "./mcp-tool-view.ts";
+import type { HookToolView } from "./mcp-tool-view.ts";
 import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
 import type { RoutingEntry } from "./routing-state.ts";
@@ -717,8 +718,7 @@ function dropStalePromptContext(runtime: HooksRuntime, event: InputEvent): void 
  * into every call here, so a test can register the real bridge against a spy
  * and assert on dispatch without spawning a child (see `HookExecutor`).
  *
- * `tools` names a PreToolUse event's tool as the hooks see it (D-P5-01) and
- * says whether pi-mcp-adapter's proxy rule applies (D-P5-06); it defaults to
+ * `tools` identifies a PreToolUse event's tool (D-P5-01) and says whether pi-mcp-adapter's proxy rule applies (D-P5-06); it defaults to
  * a view over `pi`, which reads nothing until a tool event's bucket has hooks.
  * The router passes one view to both tool handlers of a generation (D-P5-07).
  */
@@ -775,8 +775,8 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
  * `adaptToolResultResult` (D-60-03).
  *
  * `executor` is the same injected seam `compositeHandlerFor` takes, defaulted
- * and forwarded identically, and so is `tools`, which names the event's tool
- * as the hooks see it (D-P5-01).
+ * and forwarded identically, and so is `tools`, which identifies the event's
+ * tool (D-P5-01).
  */
 export function toolResultCompositeHandler(
   runtime: HooksRuntime,
@@ -926,12 +926,12 @@ function matchValue(claudeEvent: CompositeDispatchEvent, event: unknown): string
  */
 interface HookEventView {
   readonly event: unknown;
-  readonly tool: HookTool | undefined;
+  readonly tool: McpToolIdentity | undefined;
 }
 
 /**
- * D-P5-03: a tool event with its tool named as the hooks see it, once per
- * event. Pi's event itself when the names agree, else a shallow copy that
+ * D-P5-03: a tool event with the name `claudeFormToolName` derives for its
+ * tool, once per event. Pi's event itself when the names agree, else a shallow copy that
  * shares Pi's `input` and `content`, so an input rewrite still reaches Pi.
  * Only an `mcp__` name changes, and Pi types such an event as its open-ended
  * custom tool event, whose `toolName` is any string, so the copy keeps the
@@ -945,13 +945,14 @@ interface HookEventView {
 function toolEventView<T extends ToolCallEvent | ToolResultEvent>(
   event: T,
   tools: HookToolView,
-): { readonly event: T; readonly tool: HookTool } | undefined {
+): { readonly event: T; readonly tool: McpToolIdentity } | undefined {
   if (isMcpProxyCall(event) && tools.proxyRuleApplies()) {
     return undefined;
   }
 
   const tool = tools.identify(event.toolName);
-  return { event: tool.name === event.toolName ? event : { ...event, toolName: tool.name }, tool };
+  const toolName = claudeFormToolName(tool);
+  return { event: toolName === event.toolName ? event : { ...event, toolName }, tool };
 }
 
 function hookEventView(

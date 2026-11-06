@@ -313,15 +313,21 @@ function hasLoadedPiMcpAdapter(
   return viaCommands || viaTools;
 }
 
-// MSEL-01: Pi marks each of its own built-in extensions with the source path
-// `builtin:<name>`. A third extension that registers `/mcp` makes Pi leave the
-// built-in out, and its command carries that extension's own path, so it does
-// not read as the built-in.
+/**
+ * MSEL-01, D-P5-01: the `sourceInfo.path` of every command and tool that Pi's
+ * built-in MCP extension registers. Pi marks each of its own built-in
+ * extensions with the source path `builtin:<name>`.
+ */
+export const BUILTIN_MCP_SOURCE_PATH = "builtin:mcp";
+
+// MSEL-01: a third extension that registers `/mcp` makes Pi leave the built-in
+// out, and its command carries that extension's own path, so it does not read
+// as the built-in.
 function isBuiltinMcpCommand(command: CommandInventoryItem): boolean {
   return (
     command.source === "extension" &&
     command.name === "mcp" &&
-    command.sourceInfo?.path === "builtin:mcp"
+    command.sourceInfo?.path === BUILTIN_MCP_SOURCE_PATH
   );
 }
 
