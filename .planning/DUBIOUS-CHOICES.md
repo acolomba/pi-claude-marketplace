@@ -34,6 +34,7 @@ The log of the previous milestone is archived, unchanged, at
 
 - **P1-DC-12:** kept. No `oauth.clientName`, so Pi keeps CIMD; D-MB-11 is Locked.
 - **P1-DC-21:** accepted. Re-checked 2026-11-06: the three Pi 1.5.0 packages are published by GitHub Actions from `earendil-works/pi` with SLSA provenance, their lockfile integrity matches the registry, and none has an install script.
+- **P1-DC-40:** kept, all six: CR-02 (`undefined` prefix above 55 characters), CR-01 (pin fields derived from `DisabledPin`), WR-02 (`compatibilityBasis` stays top-level), WR-01 (version-mismatch refusal), the jiti cache fix for the CI flake, and the adapter loaded in every adapter-profile shared Pi.
 
 ## Decisions waiting on you
 
