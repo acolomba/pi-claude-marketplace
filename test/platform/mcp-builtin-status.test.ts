@@ -11,6 +11,8 @@ import {
   noteReplacedBuiltinRegistration,
 } from "../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
 
+import { captureDebugLog } from "./debug-log-capture.ts";
+
 import type { McpStatusReader } from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import type {
   PiInventory,
@@ -148,6 +150,63 @@ for (const { label, servers, tools, answer } of [
 
     // assert
     assert.strictEqual(status, answer);
+  });
+}
+
+// A tool another extension registered whose namespace name cannot be read.
+function unreadableNamespaceTool(): PiTool {
+  return {
+    name: "unreadable_namespace_tool",
+    namespace: {
+      get name(): string {
+        throw new Error("namespace of /home/user/extensions/other/tools.ts unreadable");
+      },
+    },
+    exposure: "hidden",
+  };
+}
+
+for (const { label, pi, line } of [
+  {
+    label: "Pi's MCP registry throws",
+    pi: {
+      getMcpServers: () => {
+        throw new Error("stale runtime of /home/user/extensions/pi-claude-marketplace/index.ts");
+      },
+      getAllTools: () => [],
+    },
+    line: "[mcp] status of MCP server plugin_alpha_api unreadable: stale runtime of index.ts",
+  },
+  {
+    label: "Pi's tool list throws",
+    pi: {
+      getMcpServers: () => [registered("plugin_alpha_api")],
+      getAllTools: () => {
+        throw new Error("stale runtime of /home/user/extensions/pi-claude-marketplace/index.ts");
+      },
+    },
+    line: "[mcp] status of MCP server plugin_alpha_api unreadable: stale runtime of index.ts",
+  },
+  {
+    label: "a tool in Pi's list has a namespace whose name throws",
+    pi: {
+      getMcpServers: () => [registered("plugin_alpha_api")],
+      getAllTools: () => [unreadableNamespaceTool(), mcpTool("mcp__plugin_alpha_api", "direct")],
+    },
+    line: "[mcp] status of MCP server plugin_alpha_api unreadable: namespace of tools.ts unreadable",
+  },
+] as const satisfies readonly { label: string; pi: BuiltinPi; line: string }[]) {
+  test(`BLT-05 / ASTAT-02: the built-in status reader answers no-snapshot when ${label}, and logs why on the mcp channel`, (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const reader = createBuiltinMcpStatusReader(pi);
+
+    // act
+    const status = reader.lookup("plugin_alpha_api");
+
+    // assert
+    assert.strictEqual(status, "no-snapshot");
+    assert.deepStrictEqual(logged, [line]);
   });
 }
 

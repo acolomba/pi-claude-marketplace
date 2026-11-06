@@ -19,7 +19,6 @@ import type {
   McpStatusLookup,
   McpStatusReader,
 } from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
-import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   McpServerStatus,
   McpServerSummaryEntry,
@@ -72,12 +71,12 @@ function installRecord(mcpServers: readonly string[]): PluginInstallRecord {
   } satisfies PluginInstallRecord;
 }
 
-/** MSEL-01: a status lookup through `reader` under `implementation`. */
+/** STATUSLOOKUP-01 / MSEL-01: a status lookup through `reader` under `implementation`. */
 function lookupThrough(
   reader: McpStatusReader,
-  implementation: ActiveMcpImplementation = "adapter",
+  implementation: "adapter" | "none" = "adapter",
 ): McpStatusLookup {
-  return { reader, implementation, projectTrusted: true, cwd: "/work/project" };
+  return { reader, implementation };
 }
 
 function answering(answer: ReturnType<McpStatusReader["lookup"]>): McpStatusLookup {
@@ -518,6 +517,7 @@ for (const { answer, token } of [
   { answer: "disabled", token: "disabled" },
   { answer: "not-connected", token: "not connected" },
   { answer: "unlisted", token: "not loaded" },
+  { answer: "no-snapshot", token: "status unknown" },
 ] as const satisfies readonly {
   answer: ReturnType<McpStatusReader["lookup"]>;
   token: McpServerStatus;

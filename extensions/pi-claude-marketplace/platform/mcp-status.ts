@@ -19,6 +19,11 @@
 // and no shutdown handler is needed.
 //
 // The handler never throws: Pi's bus prints a handler throw to stderr (IL-2).
+//
+// STATUSLOOKUP-01 / MSEL-01: the file also holds what info hands its
+// server-status stamp, one lookup arm per MCP implementation, and
+// `mcpStatusLookup`, which builds it from the readers of both
+// implementations.
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";
@@ -65,14 +70,15 @@ export interface McpStatusReader {
    * status this release does not know; `"unlisted"` when a usable snapshot
    * does not list it; `"no-snapshot"` when there is no usable snapshot
    * (nothing published yet in this extension load, an empty snapshot, or a
-   * malformed one).
+   * malformed one). The built-in reader also answers `"no-snapshot"` when
+   * Pi's MCP registry or tool list cannot be read. A lookup never throws.
    */
   lookup(serverName: string): McpServerRuntimeStatus | "unrecognized" | "unlisted" | "no-snapshot";
 }
 
 /**
  * MSEL-01: the status readers of the two MCP implementations, built once per
- * extension load. info picks one by the run's active implementation.
+ * extension load. info picks one through `mcpStatusLookup`.
  */
 export interface McpStatusReaders {
   readonly adapter: McpStatusReader;
@@ -80,16 +86,47 @@ export interface McpStatusReaders {
 }
 
 /**
- * MSEL-01 / BLT-05: what info hands the server-status stamp: the reader of
- * the run's active implementation, that implementation, and the project's
- * trust and working directory, which the built-in statuses
- * `project not trusted` and `overridden by mcp.json` depend on (D-MB-09).
+ * STATUSLOOKUP-01 / MSEL-01: what info hands the server-status stamp, one arm
+ * per MCP implementation, each with the reader of that implementation. Only
+ * the `builtin` arm carries the project's trust and working directory,
+ * because only the built-in statuses `project not trusted` and
+ * `overridden by mcp.json` depend on them (D-MB-09, BLT-05).
  */
-export interface McpStatusLookup {
-  readonly reader: McpStatusReader;
-  readonly implementation: ActiveMcpImplementation;
-  readonly projectTrusted: boolean;
-  readonly cwd: string;
+export type McpStatusLookup =
+  | { readonly implementation: "adapter"; readonly reader: McpStatusReader }
+  | { readonly implementation: "none"; readonly reader: McpStatusReader }
+  | {
+      readonly implementation: "builtin";
+      readonly reader: McpStatusReader;
+      readonly projectTrusted: boolean;
+      readonly cwd: string;
+    };
+
+/**
+ * STATUSLOOKUP-01 / MSEL-01: the status lookup of `implementation`, with the
+ * reader of that implementation from `readers`. The project's trust and
+ * working directory go only into the `builtin` arm.
+ */
+export function mcpStatusLookup(
+  readers: McpStatusReaders,
+  implementation: ActiveMcpImplementation,
+  project: { readonly projectTrusted: boolean; readonly cwd: string },
+): McpStatusLookup {
+  switch (implementation) {
+    case "builtin":
+      return {
+        implementation,
+        reader: readers.builtin,
+        projectTrusted: project.projectTrusted,
+        cwd: project.cwd,
+      };
+    // MSEL-01: under `none` no implementation is active. With no adapter
+    // loaded its tracker holds no snapshot, so every server reads
+    // `status unknown`.
+    case "adapter":
+    case "none":
+      return { implementation, reader: readers.adapter };
+  }
 }
 
 // An empty `servers` list is the adapter's session-start and shutdown

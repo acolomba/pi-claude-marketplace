@@ -72,6 +72,7 @@ import {
   type ExtensionState,
   type PluginInstallRecord,
 } from "../../persistence/state-io.ts";
+import { mcpStatusLookup } from "../../platform/mcp-status.ts";
 import { companionRequirements, type McpDependency } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -133,7 +134,7 @@ import type {
   ResolvedPluginUnavailable,
   ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver-types.ts";
-import type { McpStatusLookup, McpStatusReaders } from "../../platform/mcp-status.ts";
+import type { McpStatusReaders } from "../../platform/mcp-status.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -3328,14 +3329,15 @@ function withCompanionRequirements(built: InfoBlock, softDeps: SoftDepStatus): I
 /**
  * ASTAT-01 / MSEL-01: stamps the block's written MCP servers with the state
  * the run's active MCP implementation last reported, read against the block's
- * own scope record and the same plugin's project-scope record. The reader is
- * the built-in one only under `builtin`; under `adapter` and `none` it is
- * pi-mcp-adapter's, so with no adapter loaded every row reads
- * `status unknown`. The lookup carries the project's trust and cwd for the
- * built-in statuses (BLT-05). MREC-02: under `builtin` the servers come from
- * the record as the registration step reads them, through
- * `recordedMcpServers` and the legacy reader of the block's own marketplace
- * and scope, so info stamps the same recorded servers the step reads.
+ * own scope record and the same plugin's project-scope record.
+ * `mcpStatusLookup` picks the reader (STATUSLOOKUP-01): the built-in one only
+ * under `builtin`; under `adapter` and `none` pi-mcp-adapter's, so with no
+ * adapter loaded every row reads `status unknown`. Only the built-in lookup
+ * carries the project's trust and cwd, for the built-in statuses (BLT-05).
+ * MREC-02: under `builtin` the servers come from the record as the
+ * registration step reads them, through `recordedMcpServers` and the legacy
+ * reader of the block's own marketplace and scope, so info stamps the same
+ * recorded servers the step reads.
  */
 async function withServerStatus(
   built: InfoBlock,
@@ -3343,13 +3345,10 @@ async function withServerStatus(
   opts: GetPluginInfoOptions,
   projectRecord: PluginInstallRecord | undefined,
 ): Promise<InfoBlock> {
-  const implementation = opts.run.softDeps.mcpImplementation;
-  const lookup: McpStatusLookup = {
-    reader: implementation === "builtin" ? opts.mcpStatus.builtin : opts.mcpStatus.adapter,
-    implementation,
+  const lookup = mcpStatusLookup(opts.mcpStatus, opts.run.softDeps.mcpImplementation, {
     projectTrusted: opts.projectTrusted,
     cwd: opts.cwd,
-  };
+  });
   const legacySource = {
     marketplaceName: opts.marketplace,
     marketplace: scoped.record,

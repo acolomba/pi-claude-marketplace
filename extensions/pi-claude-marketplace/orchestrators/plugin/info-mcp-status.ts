@@ -7,8 +7,12 @@
 // NFR-5: network-free. This module is outside `NETWORK_SEAMS` and names no git
 // surface.
 //
-// MSEL-01: info hands in the reader of the run's active implementation as
-// part of an `McpStatusLookup`, and `lookup.implementation` picks the arm.
+// MSEL-01 / STATUSLOOKUP-01: info hands in an `McpStatusLookup` that
+// `mcpStatusLookup` built, one arm per MCP implementation, and
+// `lookup.implementation` picks the stamp. The reader always belongs to its
+// arm's implementation; `none` reads pi-mcp-adapter's reader by its own case.
+// Only the builtin arm carries the project's trust and cwd, which the D-MB-09
+// and `mcp.json` stamps read, so no adapter or none stamp can read them.
 // Only the servers the installation record lists get a state: the manifest
 // arm lists the current declaration, which can differ from what install
 // wrote. A disabled record's servers are out of every implementation's
@@ -52,6 +56,12 @@
 // whose registration Pi refused reads `not loaded`, because another extension
 // registered the name first and Pi lists that extension's server under it
 // (D-MB-29, P2-DC-46). Otherwise the server reads the reader's answer.
+//
+// BLT-05 / BLT-02: a server the registration step does not register, because
+// a variable in its `command` or `args` resolves to a value that starts with
+// `~`, is one Pi does not list, so it reads `not loaded`, as a refused name
+// does. A read of Pi's MCP registry or tool list that fails reads
+// `status unknown` (ASTAT-02).
 
 import { readMcpJsonServerNamespaces } from "../../bridges/mcp/index.ts";
 import { profileFor } from "../../domain/mcp-implementation.ts";
@@ -79,6 +89,11 @@ import type {
   McpServerSummaryEntry,
   PluginInfoMessage,
 } from "../../shared/notification-types.ts";
+
+// STATUSLOOKUP-01: the lookup arm of Pi's built-in MCP, and the arms of
+// pi-mcp-adapter and of no active implementation.
+type BuiltinLookup = Extract<McpStatusLookup, { readonly implementation: "builtin" }>;
+type AdapterLookup = Exclude<McpStatusLookup, BuiltinLookup>;
 
 const RUNTIME_STATUS_TOKENS = {
   connected: "connected",
@@ -140,7 +155,7 @@ function stampAdapterEntries(
   block: PluginInfoMessage,
   entries: readonly McpServerSummaryEntry[],
   record: PluginInstallRecord,
-  lookup: McpStatusLookup,
+  lookup: AdapterLookup,
   projectRecord: PluginInstallRecord | undefined,
 ): McpServerSummaryEntry[] {
   const plugin = block.plugin.name;
@@ -164,7 +179,7 @@ function builtinRecordedServers(
 }
 
 // D-MB-09: Pi reads the project's `mcp.json` only while it trusts the project.
-function mcpJsonFiles(lookup: McpStatusLookup): readonly string[] {
+function mcpJsonFiles(lookup: BuiltinLookup): readonly string[] {
   const user = locationsFor("user", lookup.cwd).mcpJsonPath;
   return lookup.projectTrusted ? [user, locationsFor("project", lookup.cwd).mcpJsonPath] : [user];
 }
@@ -226,7 +241,7 @@ async function stampBuiltinEntries(
   block: PluginInfoMessage,
   entries: readonly McpServerSummaryEntry[],
   record: PluginInstallRecord,
-  lookup: McpStatusLookup,
+  lookup: BuiltinLookup,
   readServers: (record: PluginInstallRecord) => Promise<RecordedMcpServers>,
 ): Promise<McpServerSummaryEntry[]> {
   const plugin = block.plugin.name;

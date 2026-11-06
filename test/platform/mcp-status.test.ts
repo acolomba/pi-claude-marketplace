@@ -3,9 +3,16 @@ import test from "node:test";
 
 import { It, mock, verify, when } from "strong-mock";
 
-import { createMcpStatusTracker } from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
+import {
+  createMcpStatusTracker,
+  mcpStatusLookup,
+} from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 
-import type { McpServerRuntimeStatus } from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
+import type {
+  McpServerRuntimeStatus,
+  McpStatusLookup,
+  McpStatusReaders,
+} from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import type { PiEventSource } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /**
@@ -347,3 +354,65 @@ test("ASTAT-02: a status that turns into an unknown string after the check answe
   // assert
   assert.strictEqual(tracker.lookup("plugin_alpha_api_"), "unrecognized");
 });
+
+// STATUSLOOKUP-01: only the builtin arm carries the project's trust and
+// working directory, so the adapter and none arms reject them.
+void ({
+  implementation: "adapter",
+  reader: { lookup: () => "no-snapshot" },
+  // @ts-expect-error -- STATUSLOOKUP-01: the adapter arm carries no project trust.
+  projectTrusted: true,
+  cwd: "/work/project",
+} satisfies McpStatusLookup);
+void ({
+  implementation: "none",
+  reader: { lookup: () => "no-snapshot" },
+  // @ts-expect-error -- STATUSLOOKUP-01: the none arm carries no project trust.
+  projectTrusted: true,
+  cwd: "/work/project",
+} satisfies McpStatusLookup);
+
+/** MSEL-01: two readers that answer differently, so a case can tell which one a lookup holds. */
+function readerPair(): McpStatusReaders {
+  return {
+    adapter: { lookup: () => "connected" },
+    builtin: { lookup: () => "disabled" },
+  } satisfies McpStatusReaders;
+}
+
+for (const implementation of ["adapter", "none"] as const) {
+  test(`STATUSLOOKUP-01 / MSEL-01: under ${implementation} the status lookup carries the adapter reader and nothing of the project`, () => {
+    // arrange
+    const readers = readerPair();
+
+    // act
+    const lookup = mcpStatusLookup(readers, implementation, {
+      projectTrusted: false,
+      cwd: "/work/one",
+    });
+
+    // assert
+    assert.deepStrictEqual(lookup, { implementation, reader: readers.adapter });
+  });
+}
+
+for (const { projectTrusted, cwd } of [
+  { projectTrusted: false, cwd: "/work/one" },
+  { projectTrusted: true, cwd: "/work/two" },
+]) {
+  test(`STATUSLOOKUP-01 / MSEL-01: under builtin the status lookup carries the builtin reader, trust ${projectTrusted}, and the working directory ${cwd}`, () => {
+    // arrange
+    const readers = readerPair();
+
+    // act
+    const lookup = mcpStatusLookup(readers, "builtin", { projectTrusted, cwd });
+
+    // assert
+    assert.deepStrictEqual(lookup, {
+      implementation: "builtin",
+      reader: readers.builtin,
+      projectTrusted,
+      cwd,
+    });
+  });
+}

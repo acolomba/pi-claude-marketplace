@@ -4,7 +4,8 @@
  * configures under the plugin server's name, a server another Pi extension
  * registers under that name before the extension does (D-MB-29), and a
  * server the user disables for the session in Pi's terminal `/mcp` manager
- * (BLT-04, BLT-05).
+ * (BLT-04, BLT-05), and a tool of another Pi extension that makes Pi's tool
+ * list unreadable to the extension (BLT-05).
  */
 
 import assert from "node:assert/strict";
@@ -18,6 +19,11 @@ import { nameStandInServer } from "../../lib/builtin-mcp-stand-in/servers.ts";
 import { MCP_STUB_SERVER, readStubRequests } from "../../lib/mcp-stub-server.ts";
 import { writeScenarioFile } from "../../lib/scenario-file.ts";
 import { harnessDirectory } from "../../lib/turn-records.ts";
+import {
+  readUnreadableNamespaceToolLog,
+  UNREADABLE_NAMESPACE_TOOL_EXTENSION,
+} from "../../lib/unreadable-namespace-tool.ts";
+import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { PiTuiSession } from "../../lib/pi-tui.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -102,6 +108,23 @@ Given(
   "another pi extension registers the stub mcp server {string} of the plugin {string} with pi's built-in mcp before the extension does",
   async function (this: ScenarioWorld, server: string, plugin: string) {
     await nameStandInServer(this, { plugin, server, first: true });
+  },
+);
+
+// BLT-05: the extension registers the plugin's server itself, so no stand-in
+// loads. A trusted profile Pi loads each extension once, so the log holds
+// one registration.
+Given(
+  "pi runs with the scripted model and another pi extension that registers a tool whose namespace cannot be read",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({
+      companions: [],
+      extraExtensions: [UNREADABLE_NAMESPACE_TOOL_EXTENSION],
+    });
+    assert.deepStrictEqual(await readUnreadableNamespaceToolLog(this.profileHarness()), [
+      '{"decision":"registered","tool":"unreadable_namespace_tool"}',
+    ]);
   },
 );
 
