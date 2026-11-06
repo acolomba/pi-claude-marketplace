@@ -1,7 +1,7 @@
 /**
  * The built-in MCP registration step and its resync.
  *
- * Their names, input, and call sites are fixed: `session-materialize.ts` runs
+ * `session-materialize.ts` runs
  * `builtinRegistrationStep` at every `session_start`, and the extension runs
  * `resyncBuiltinRegistrations` after each load reconcile (D-MB-10). Both run
  * one sync: they register each runnable MCP server of each enabled plugin
@@ -47,6 +47,7 @@ import { profileFor } from "../../domain/mcp-implementation.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import {
+  builtinServerOwner,
   noteBuiltinServerOwners,
   noteFreshBuiltinRegistration,
   noteRefusedBuiltinRegistration,
@@ -98,6 +99,22 @@ interface SessionFacts {
 }
 
 type Registration = readonly [name: string, config: McpServerConfig, owner: BuiltinServerOwner];
+
+/**
+ * A scope, or one record of it, whose state or servers could not be read. A
+ * live server it owns keeps its registration on this pass.
+ */
+interface ReadFailure {
+  readonly scope: Scope;
+  readonly marketplace?: string;
+  readonly plugin?: string;
+}
+
+/** The registrations a scope or record wants, and what it failed to read. */
+interface Outcome {
+  readonly registrations: Registration[];
+  readonly failures: ReadFailure[];
+}
 
 const BUILTIN_PROFILE = profileFor("builtin");
 
@@ -205,36 +222,47 @@ async function recordRegistrations(
   });
 }
 
-/** One record's registrations; a record that fails registers nothing and is logged. */
+/**
+ * One record's registrations. A record whose read throws registers nothing
+ * new, is logged, and is reported as a failure, so its live servers stay.
+ */
 async function guardedRecordRegistrations(
   source: RecordSource,
   locations: ScopedLocations,
   session: SessionFacts,
-): Promise<Registration[]> {
+): Promise<Outcome> {
   try {
-    return await recordRegistrations(source, locations, session);
+    return { registrations: await recordRegistrations(source, locations, session), failures: [] };
   } catch (error: unknown) {
     const plugin = `${source.pluginName}@${source.marketplaceName}`;
     debugLog(`MCP servers of ${plugin} not registered: ${errorMessage(error)}`);
-    return [];
+    return {
+      registrations: [],
+      failures: [
+        { scope: locations.scope, marketplace: source.marketplaceName, plugin: source.pluginName },
+      ],
+    };
   }
 }
 
 /** The registrations of one scope's enabled records, in record order. */
-async function scopeRegistrations(scope: Scope, session: SessionFacts): Promise<Registration[]> {
+async function scopeRegistrations(scope: Scope, session: SessionFacts): Promise<Outcome> {
   const locations = locationsFor(scope, session.cwd);
   let state: ExtensionState;
   try {
     state = await loadState(locations.extensionRoot, { persistMigration: false });
   } catch (error: unknown) {
     debugLog(`MCP servers of the ${scope} scope not registered: ${errorMessage(error)}`);
-    return [];
+    return { registrations: [], failures: [{ scope }] };
   }
 
   const perRecord = await Promise.all(
     enabledRecords(state).map((source) => guardedRecordRegistrations(source, locations, session)),
   );
-  return perRecord.flat();
+  return {
+    registrations: perRecord.flatMap((outcome) => outcome.registrations),
+    failures: perRecord.flatMap((outcome) => outcome.failures),
+  };
 }
 
 /**
@@ -245,10 +273,44 @@ async function scopeRegistrations(scope: Scope, session: SessionFacts): Promise<
 async function desiredRegistrations(
   session: SessionFacts,
   projectTrusted: boolean,
-): Promise<Registration[]> {
+): Promise<Outcome> {
   const scopes: readonly Scope[] = projectTrusted ? SCOPES : ["user"];
   const perScope = await Promise.all(scopes.map((scope) => scopeRegistrations(scope, session)));
-  return perScope.flat();
+  return {
+    registrations: perScope.flatMap((outcome) => outcome.registrations),
+    failures: perScope.flatMap((outcome) => outcome.failures),
+  };
+}
+
+function isOwnedByFailure(owner: BuiltinServerOwner, failure: ReadFailure): boolean {
+  return (
+    owner.scope === failure.scope &&
+    (failure.marketplace === undefined ||
+      (owner.marketplace === failure.marketplace && owner.plugin === failure.plugin))
+  );
+}
+
+/**
+ * The listed servers whose last-noted owner a read failure covers: they keep
+ * their registration and their owner on this pass.
+ */
+function retainedOwners(
+  pi: PiMcpRegistry,
+  failures: readonly ReadFailure[],
+): Map<string, BuiltinServerOwner> {
+  const retained = new Map<string, BuiltinServerOwner>();
+  if (failures.length === 0) {
+    return retained;
+  }
+
+  for (const { name } of pi.getMcpServers()) {
+    const owner = builtinServerOwner(name);
+    if (owner !== undefined && failures.some((failure) => isOwnedByFailure(owner, failure))) {
+      retained.set(name, owner);
+    }
+  }
+
+  return retained;
 }
 
 async function syncSession({ pi, ctx, snapshot }: BuiltinRegistrationStepInput): Promise<void> {
@@ -257,19 +319,28 @@ async function syncSession({ pi, ctx, snapshot }: BuiltinRegistrationStepInput):
   }
 
   try {
-    // The composition root: the only read of the process environment. Trust
-    // is asked on every call, since the user can trust a project mid-session.
-    const desired = await desiredRegistrations(
+    // The step's only read of the process environment. Trust is asked on
+    // every call, since the user can trust a project mid-session.
+    const { registrations, failures } = await desiredRegistrations(
       { cwd: ctx.cwd, env: process.env },
       ctx.isProjectTrusted(),
     );
+    // A scope or record that failed to read keeps its live servers: they are
+    // neither unregistered nor dropped from the owner map.
+    const retained = retainedOwners(pi, failures);
     // P2-DC-14: info reads which record each name belongs to from here.
-    noteBuiltinServerOwners(new Map(desired.map(([name, , owner]) => [name, owner])));
+    noteBuiltinServerOwners(
+      new Map([
+        ...retained,
+        ...registrations.map(([name, , owner]): [string, BuiltinServerOwner] => [name, owner]),
+      ]),
+    );
     syncBuiltinRegistrations(
       pi,
-      new Map(desired.map(([name, config]) => [name, config])),
+      new Map(registrations.map(([name, config]) => [name, config])),
       debugLog,
       REGISTRATION_NOTES,
+      new Set(retained.keys()),
     );
   } catch (error: unknown) {
     debugLog(`MCP built-in registration skipped: ${errorMessage(error)}`);

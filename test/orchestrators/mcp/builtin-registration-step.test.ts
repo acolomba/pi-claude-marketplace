@@ -21,11 +21,13 @@ import { createHermeticEnvironment } from "../../platform/hermetic-environment.t
 import { runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { BuiltinServerOwner } from "../../../extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts";
 import type {
   ActiveMcpImplementation,
   ExtensionContext,
   McpServerConfig,
   PiMcpRegistry,
+  RegisteredMcpServer,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { HermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -192,6 +194,19 @@ function emptyRegistry(): PiMcpRegistry {
   const pi = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
   when(() => pi.getMcpServers()).thenReturn([]);
   return pi;
+}
+
+/** A registry that lists `servers` for the step's read and again for the sync's. */
+function registryListedTwice(servers: readonly RegisteredMcpServer[]): PiMcpRegistry {
+  const pi = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+  when(() => pi.getMcpServers())
+    .thenReturn(servers)
+    .twice();
+  return pi;
+}
+
+function listedServer(name: string): RegisteredMcpServer {
+  return { name, config: { command: "old" }, extensionPath: "/extensions/builtin.ts" };
 }
 
 for (const { name, step } of STEPS) {
@@ -391,7 +406,7 @@ describe("builtinRegistrationStep", () => {
     const projectState = path.join(fixture.roots.project, "state.json");
     await writeJson(projectState, { schemaVersion: 9, marketplaces: {} });
     const ctx = sessionContext(fixture, true);
-    const pi = emptyRegistry();
+    const pi = registryListedTwice([]);
     when(() => {
       pi.registerMcpServer("plugin_demo_stub", stubConfig(fixture, "user", fixture.pluginRoot));
     }).thenReturn(undefined);
@@ -414,7 +429,7 @@ describe("builtinRegistrationStep", () => {
     const statePath = path.join(fixture.roots.user, "state.json");
     await writeJson(statePath, { schemaVersion: 9, marketplaces: {} });
     const ctx = sessionContext(fixture, false);
-    const pi = emptyRegistry();
+    const pi = registryListedTwice([]);
 
     // act
     await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
@@ -423,6 +438,109 @@ describe("builtinRegistrationStep", () => {
     assert.deepStrictEqual(logged, [
       "[mcp] MCP servers of the user scope not registered: state.json at state.json has an unsupported schema version",
     ]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("NFR-2: an unreadable user state keeps the user scope's live servers registered and owned", async (t) => {
+    // arrange
+    const owner = { scope: "user", marketplace: "mp", plugin: "demo" } as const;
+    const projectOwner = { scope: "project", marketplace: "mp", plugin: "demo" } as const;
+    noteBuiltinServerOwners(
+      new Map<string, BuiltinServerOwner>([
+        ["plugin_demo_stub", owner],
+        ["plugin_demo_other", projectOwner],
+      ]),
+    );
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+      noteFreshBuiltinRegistration("plugin_demo_other");
+    });
+    const fixture = await session(t);
+    captureDebugLog(t);
+    await writeJson(path.join(fixture.roots.user, "state.json"), {
+      schemaVersion: 9,
+      marketplaces: {},
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = registryListedTwice([
+      listedServer("plugin_demo_stub"),
+      listedServer("plugin_demo_other"),
+    ]);
+    when(() => {
+      pi.unregisterMcpServer("plugin_demo_other");
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(builtinServerOwner("plugin_demo_stub"), owner);
+    assert.strictEqual(builtinServerOwner("plugin_demo_other"), undefined);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("NFR-2: a record whose read throws keeps its live servers while another record's gone server goes", async (t) => {
+    // arrange
+    const owner = { scope: "user", marketplace: "mp", plugin: ".." } as const;
+    noteBuiltinServerOwners(
+      new Map([
+        ["plugin_dots_stub", owner],
+        ["plugin_gone_stub", { scope: "user", marketplace: "mp", plugin: "gone" }],
+      ]),
+    );
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+      noteFreshBuiltinRegistration("plugin_gone_stub");
+    });
+    const fixture = await session(t);
+    captureDebugLog(t);
+    await writeState(fixture, "user", { "..": installRecord(fixture.pluginRoot) });
+    const ctx = sessionContext(fixture, false);
+    const pi = registryListedTwice([
+      listedServer("plugin_dots_stub"),
+      listedServer("plugin_gone_stub"),
+    ]);
+    when(() => {
+      pi.unregisterMcpServer("plugin_gone_stub");
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(builtinServerOwner("plugin_dots_stub"), owner);
+    assert.strictEqual(builtinServerOwner("plugin_gone_stub"), undefined);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("MREC-02: an unreadable legacy record still unregisters its live servers", async (t) => {
+    // arrange
+    noteBuiltinServerOwners(
+      new Map([["plugin_demo_stub", { scope: "user", marketplace: "mp", plugin: "demo" }]]),
+    );
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+      noteFreshBuiltinRegistration("plugin_demo_stub");
+    });
+    const fixture = await session(t);
+    captureDebugLog(t);
+    await writeManifest(fixture, []);
+    await writeState(fixture, "user", { demo: legacyRecord(fixture.pluginRoot) });
+    const ctx = sessionContext(fixture, false);
+    const pi = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+    when(() => pi.getMcpServers()).thenReturn([listedServer("plugin_demo_stub")]);
+    when(() => {
+      pi.unregisterMcpServer("plugin_demo_stub");
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.strictEqual(builtinServerOwner("plugin_demo_stub"), undefined);
     verify(pi);
     verify(ctx);
   });
@@ -740,7 +858,7 @@ describe("builtinRegistrationStep", () => {
     const logged = captureDebugLog(t);
     await writeState(fixture, "user", { "..": installRecord(fixture.pluginRoot) });
     const ctx = sessionContext(fixture, false);
-    const pi = emptyRegistry();
+    const pi = registryListedTwice([]);
 
     // act
     await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });

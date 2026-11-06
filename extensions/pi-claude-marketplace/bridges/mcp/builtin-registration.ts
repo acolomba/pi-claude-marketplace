@@ -38,8 +38,11 @@ function unregister(
  * a registration in place of a listed config of another shape, `fresh` for
  * any other registration or a removal (P2-DC-10). A `registerMcpServer`
  * throw (another extension's name, a `-`/`_` clash, a config Pi refuses) goes
- * to `log` and to `notes.refused` (D-MB-29). An `unregisterMcpServer` throw
- * goes to `log` only. A log line names the server and Pi's message, never a
+ * to `log` and to `notes.refused` (D-MB-29); when Pi already listed that name,
+ * the old registration is unregistered too, so the old config does not keep
+ * running while info reads the name as not loaded. An `unregisterMcpServer`
+ * throw goes to `log` only. A name in `retained` is never unregistered: the
+ * caller could not read the record that owns it, so its registration stays. A log line names the server and Pi's message, never a
  * config value, and the other servers still change. A `getMcpServers` throw
  * leaves nothing to compare, so it propagates and the whole sync is skipped.
  */
@@ -52,11 +55,16 @@ export function syncBuiltinRegistrations(
     readonly fresh: (serverName: string) => void;
     readonly refused: (serverName: string) => void;
   },
+  retained: ReadonlySet<string> = new Set(),
 ): void {
   const listed = new Map<string, string>();
   for (const server of registry.getMcpServers()) {
     listed.set(server.name, JSON.stringify(server.config));
-    if (server.name.startsWith(PLUGIN_SERVER_PREFIX) && !desired.has(server.name)) {
+    if (
+      server.name.startsWith(PLUGIN_SERVER_PREFIX) &&
+      !desired.has(server.name) &&
+      !retained.has(server.name)
+    ) {
       unregister(registry, server.name, log, notes);
     }
   }
@@ -76,6 +84,10 @@ export function syncBuiltinRegistrations(
       }
     } catch (error: unknown) {
       log(`MCP server ${name} not registered: ${errorMessage(error)}`);
+      if (previous !== undefined) {
+        unregister(registry, name, log, notes);
+      }
+
       notes.refused(name);
     }
   }

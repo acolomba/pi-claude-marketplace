@@ -256,3 +256,81 @@ test("D-MB-12: a refused removal is logged with its name and Pi's message, noted
   verify(registry);
   verify(log);
 });
+
+test("D-MB-12: a name in the retained set is not unregistered", () => {
+  // arrange
+  const registry = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+  const log = mock<DebugLog>({ exactParams: true, name: "debug log" });
+  when(() => registry.getMcpServers()).thenReturn([
+    listed("plugin_kept_s", stdioConfig("kept")),
+    listed("plugin_gone_s", stdioConfig("gone")),
+  ]);
+  when(() => {
+    registry.unregisterMcpServer("plugin_gone_s");
+  }).thenReturn(undefined);
+  const { notes, noted } = noteRecorder();
+
+  // act
+  syncBuiltinRegistrations(registry, new Map(), log, notes, new Set(["plugin_kept_s"]));
+
+  // assert
+  assert.deepStrictEqual(noted, [["plugin_gone_s", "fresh"]]);
+  verify(registry);
+  verify(log);
+});
+
+test("D-MB-29: a refused replacement of a listed name unregisters the old registration", () => {
+  // arrange
+  const registry = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+  const log = mock<DebugLog>({ exactParams: true, name: "debug log" });
+  when(() => registry.getMcpServers()).thenReturn([listed("plugin_demo_a", stdioConfig("old"))]);
+  when(() => {
+    registry.registerMcpServer("plugin_demo_a", stdioConfig("a"));
+  }).thenThrow(new Error("config refused"));
+  when(() => {
+    log("MCP server plugin_demo_a not registered: config refused");
+  }).thenReturn(undefined);
+  when(() => {
+    registry.unregisterMcpServer("plugin_demo_a");
+  }).thenReturn(undefined);
+  const { notes, noted } = noteRecorder();
+
+  // act
+  syncBuiltinRegistrations(registry, new Map([["plugin_demo_a", stdioConfig("a")]]), log, notes);
+
+  // assert
+  assert.deepStrictEqual(noted, [
+    ["plugin_demo_a", "fresh"],
+    ["plugin_demo_a", "refused"],
+  ]);
+  verify(registry);
+  verify(log);
+});
+
+test("D-MB-29: a refused replacement whose old registration cannot be removed logs both", () => {
+  // arrange
+  const registry = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+  const log = mock<DebugLog>({ exactParams: true, name: "debug log" });
+  when(() => registry.getMcpServers()).thenReturn([listed("plugin_demo_a", stdioConfig("old"))]);
+  when(() => {
+    registry.registerMcpServer("plugin_demo_a", stdioConfig("a"));
+  }).thenThrow(new Error("config refused"));
+  when(() => {
+    log("MCP server plugin_demo_a not registered: config refused");
+  }).thenReturn(undefined);
+  when(() => {
+    registry.unregisterMcpServer("plugin_demo_a");
+  }).thenThrow(new Error("runtime is stale"));
+  when(() => {
+    log("MCP server plugin_demo_a not unregistered: runtime is stale");
+  }).thenReturn(undefined);
+  const { notes, noted } = noteRecorder();
+
+  // act
+  syncBuiltinRegistrations(registry, new Map([["plugin_demo_a", stdioConfig("a")]]), log, notes);
+
+  // assert
+  assert.deepStrictEqual(noted, [["plugin_demo_a", "refused"]]);
+  verify(registry);
+  verify(log);
+});
