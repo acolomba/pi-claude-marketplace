@@ -57,11 +57,11 @@ Unit pairs live under `test/`. "Feature" means `features/mcp-server/<name>.featu
 | MSEL-02 | Switch adapter → none → built-in → adapter, no plugin command | cucumber (`@own-implementation`) | `npm run test:cucumber:profile -- --profile adapter features/mcp-server/implementation-switch.feature` (3 scenarios) | ✅ | ⚠️ green with a gap: restarts stand in for `/reload`, which no run drives (P2-DC-88) |
 | MSEL-04 | Installed under built-in, reached under adapter after restart | cucumber | same file, scenario "(MSEL-04)" | ✅ | ✅ green |
 | MREC-02 | Legacy record (no `mcpServerConfigs`) reaches its server | unit + cucumber | `node --test test/orchestrators/mcp/builtin-registration-step.test.ts`; `implementation-switch.feature` `@mcp` scenario "(MREC-02)", both profiles | ✅ | ✅ green |
-| BLT-01 | Registered at startup and `/reload`; deferred via `tool_search`, `alwaysLoad` direct | unit + cucumber | `node --test test/bridges/mcp/builtin-registration.test.ts test/orchestrators/mcp/builtin-registration-step.test.ts`; builtin profile on `listing.feature`, `invocation.feature`, `builtin-direct.feature` | ✅ | ⚠️ startup leg green; `/reload` leg not run (P2-DC-88); new-session-in-running-Pi scenario is `@adapter-only` (P2-DC-77) |
+| BLT-01 | Registered at startup and `/reload`; deferred via `tool_search`, `alwaysLoad` direct | unit + cucumber | `node --test test/bridges/mcp/builtin-registration.test.ts test/orchestrators/mcp/builtin-registration-step.test.ts`; builtin profile on `listing.feature`, `invocation.feature`, `builtin-direct.feature` | ✅ | ✅ green (updated 2026-11-06): startup leg; the `/reload` leg in `builtin-reload.feature` (terminal Pi, builtin profile, quick 261106-m03); the new-session leg in `lifecycle.feature:392`, `@mcp` since 06-05 |
 | BLT-02 | Transports, fields, expansion, `$`/`!`, timeout seconds, OAuth | unit + integration + cucumber | `node --test test/domain/mcp-builtin-translation.test.ts test/bridges/mcp/builtin-escape.test.ts test/bridges/mcp/builtin-entry.test.ts test/integration/mcp-builtin-encoding-conformance.test.ts`; builtin profile on `configuration.feature`, `sources.feature`, `builtin-values.feature` | ✅ | ✅ green |
 | BLT-02 | Adapter output byte-identical | unit + integration | `node --test test/bridges/mcp/substitute.test.ts test/bridges/mcp/adapter-entry.test.ts test/integration/adapter-expansion-conformance.test.ts` | ✅ | ✅ green |
 | BLT-03 | Project servers only while trusted | unit + cucumber | `test/orchestrators/mcp/builtin-registration-step.test.ts`; builtin profile on `project-scope.feature` and `builtin-trust.feature` | ✅ | ✅ green |
-| BLT-04 | Names, fold, overrides reported | unit + cucumber | `test/bridges/mcp/builtin-overrides.test.ts`; builtin profile on `listing.feature` (name, fold, 64-char cut) and `builtin-status.feature` (`overridden by mcp.json`) | ✅ | ⚠️ names and fold green; "never silent" met by pull surfaces only (`info`, Pi `/mcp`); a foreign-extension name collision is debug-logged only (P2-DC-08, P2-DC-46); product decision pending in `02-UAT.md` |
+| BLT-04 | Names, fold, overrides reported | unit + cucumber | `test/bridges/mcp/builtin-overrides.test.ts`; builtin profile on `listing.feature` (name, fold, 64-char cut) and `builtin-status.feature` (`overridden by mcp.json`) | ✅ | ✅ green (updated 2026-11-06): names and fold; "never silent" is met by `info` and Pi's `/mcp` by the user's decision (02-UAT check 1, D-MB-19, D-MB-29); a name another extension holds reads `not loaded` (`builtin-status.feature`, quick 261106-m02) |
 | BLT-05 | `info` statuses | unit + cucumber | `node --test test/orchestrators/plugin/info-mcp-status.test.ts test/platform/mcp-builtin-status.test.ts`; builtin profile on `builtin-status.feature` (one scenario per token) | ✅ | ✅ green; WR-03 and WR-04 race and cross-marketplace rows are unit-only (P2-DC-97) |
 | BLT-06 | Disable, uninstall, enable, update take effect next session | cucumber both profiles | `npm run test:cucumber:profile -- --profile builtin features/mcp-server/lifecycle.feature` (and adapter) | ✅ | ✅ green |
 | MDOC-01 | Built-in column with a citation per statement | docs lint + review | `pre-commit run --files docs/mcp-compatibility.md`; the citation scan by the verifier found no missing path | ✅ | ✅ green (lint); citation accuracy stays manual, see below |
@@ -88,8 +88,6 @@ Files all exist on the final tree; the flag stays `false` as found in the draft,
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
 | Each built-in statement in `docs/mcp-compatibility.md` cites a scenario or the Pi 1.5.0 source | MDOC-01 | Citation accuracy is a reading check | Read each built-in cell and open the cited scenario or file |
-| `/reload` in a running Pi under built-in MCP re-registers the plugin's servers; a new session in a running Pi does too (P2-DC-88, P2-DC-77) | BLT-01, MSEL-02 | No builtin scenario drives `/reload`; the new-session scenario is `@adapter-only` because Pi 1.5.0's RPC `new_session` emits `session_start` twice and leaks a second built-in MCP connection | Install a plugin with a stub server, run `/reload`, list registered servers, prompt the model to `tool_search` and call the tool; repeat with a new session |
-| An override or name collision is reported without the user running `info` or `/mcp` | BLT-04 | Product decision (P2-DC-08, P2-DC-46), tracked in `02-UAT.md`; no load-time notice exists | Decide whether pull surfaces count as "reported"; if not, add a load-time notice in a later phase |
 
 ## Deferred / Unit-Only Gaps
 
@@ -97,6 +95,7 @@ Files all exist on the final tree; the flag stays `false` as found in the draft,
 |-----|-------------|-------------|
 | `companion-missing.feature:61` red under builtin (reads `not loaded`, expects `status unknown`) | BLT-05 | Deferred to Phase 3 (MREC-05); builtin profile 97/98 until then (P2-DC-43) |
 | WR-03 (replaced-registration race) and WR-04 (cross-marketplace owner) have no scenario | BLT-05 | Unit-only by design (P2-DC-97); unit rows pass |
+| A switch of implementation made by `/reload` in a running Pi | MSEL-02 | Open (updated 2026-11-06): restarts stand in for `/reload` in `implementation-switch.feature` (P2-DC-88). `builtin-reload.feature` proves the registration path a `/reload` runs, which the switch also uses, but no scenario changes the loaded implementation and then runs `/reload` |
 
 ---
 
@@ -107,6 +106,6 @@ Files all exist on the final tree; the flag stays `false` as found in the draft,
 - [x] Wave 0 covers all MISSING references
 - [x] No watch-mode flags
 - [x] Feedback latency < 120s for a task-level check
-- [ ] `nyquist_compliant: true` set in frontmatter — withheld: BLT-01 (`/reload`, new session), MSEL-02 (`/reload`) and BLT-04 ("never silent") lack full automated verification
+- [ ] `nyquist_compliant: true` set in frontmatter — withheld: MSEL-02's `/reload` switch has no scenario (see Deferred). BLT-01 and BLT-04 were closed on 2026-11-06 by quick 261106-m02 and 261106-m03 and the user's 02-UAT decisions
 
 **Approval:** validated with gaps, 2026-11-04 (not Nyquist-compliant)

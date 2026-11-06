@@ -814,10 +814,10 @@ implementation. Generated agents' grants and plugin hooks' tool names follow
 the active implementation, and a switch needs no plugin command. The
 extension never edits Pi settings (D-MB-01). Every MCP scenario runs under an
 `adapter` and a `builtin` cucumber profile. Audit `tech_debt`, no blockers;
-closed with a verification override for Phase 2, whose two manual checks
-(the `/reload` leg of BLT-01, and BLT-04 "never silent") wait for the user,
-with 12 High review entries and 36 Pending Key Decisions rows in
-`.planning/DUBIOUS-CHOICES.md`.
+closed with a verification override for Phase 2. The user's review on
+2026-11-06 settled every entry in `.planning/DUBIOUS-CHOICES.md`, and quick
+batch 261106-m01 fixed what it queued; Phase 2 then re-verified `passed`
+(7/7) with 02-UAT 2/2.
 
 **Completed on branch `claude/quirky-planck-hhm592`, no PR yet:** milestone
 `component-features` (2026-11-03, Phases 1-8, 65 plans, 62/62 requirements;

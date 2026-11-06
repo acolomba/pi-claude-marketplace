@@ -134,8 +134,8 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
-| verification_override | Phase 02 (built-in materialization): `human_needed`, 5/7 must-haves at the combined-tree re-verification (c7a0358); the milestone closed with an override, MS-06 | acknowledged — waits for the user | 2026-11-05 | mcp-builtin |
-| uat_gaps       | 02/02-UAT.md: 2 pending manual scenarios (BLT-04 "reported, never silent" as `info` plus `/mcp`; `/reload` and `/new` in a real Pi with built-in MCP), P2-DC-100 | acknowledged — waits for the user | 2026-11-05 | mcp-builtin |
+| verification_override | Phase 02 (built-in materialization): `human_needed`, 5/7 must-haves at the combined-tree re-verification (c7a0358); the milestone closed with an override, MS-06 | resolved 2026-11-06 — re-verified `passed` 7/7 after the review fixes | 2026-11-05 | mcp-builtin |
+| uat_gaps       | 02/02-UAT.md: 2 pending manual scenarios (BLT-04 "reported, never silent" as `info` plus `/mcp`; `/reload` and `/new` in a real Pi with built-in MCP), P2-DC-100 | resolved 2026-11-06 — 02-UAT 2/2 passed (283db43) | 2026-11-05 | mcp-builtin |
 | todos          | 2026-10-13-cucumber-rules-trial.md: try the cucumber rules on another repository (§3; reviewed in Phase 10 and not folded) | acknowledged — still pending | 2026-10-21 | marketplace-features |
 | deferred_items | 07/deferred-items.md: DEP-07-03-01 brace-expansion advisory in the root Pi tree; TEST-07-06-01 optional pi-subagents resolver skip | acknowledged — carried as BACKLOG DEPADV-01; WINDOWS #92 (was #89 before the main merge) | 2026-10-11 | json-output |
 | deferred_items | 08/deferred-items.md: DEF-08-04-01 `windows status --pick` fails when stdout is a pipe | acknowledged — upstream gsd-tools, out of scope | 2026-10-11 | json-output |
@@ -278,13 +278,6 @@ archived milestone artifacts.
 ## Operator Next Steps
 
 
-- Review with the user, interactively: the 12 High entries and 36 Pending
-  Key Decisions rows in `.planning/DUBIOUS-CHOICES.md`, and the session's
-  working log of questionable choices.
-- Run the two manual checks in
-  `.planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-UAT.md`
-  (the `/reload` leg of BLT-01, and BLT-04 "never silent"). Phase 2 closed
-  with a verification override (`human_needed`, 5/7).
 - Offer the version bump (`package.json`, `sonar-project.properties`,
   `package-lock.json`) and open the PR for `features/mcp-builtin` (D-P6-17).
 - Then start the next milestone with the `new-gsd-milestone` skill.

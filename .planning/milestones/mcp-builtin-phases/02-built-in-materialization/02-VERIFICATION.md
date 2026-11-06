@@ -1,27 +1,27 @@
 ---
 phase: 02-built-in-materialization
-verified: 2026-11-05T09:00:00Z
-status: human_needed
-score: 5/7 must-haves verified
+verified: 2026-11-06T20:00:00Z
+status: passed
+score: 7/7 must-haves verified
 covered_files:
-  - ".planning/phases/02-built-in-materialization/02-01-PLAN.md"
-  - ".planning/phases/02-built-in-materialization/02-01-SUMMARY.md"
-  - ".planning/phases/02-built-in-materialization/02-02-PLAN.md"
-  - ".planning/phases/02-built-in-materialization/02-02-SUMMARY.md"
-  - ".planning/phases/02-built-in-materialization/02-03-PLAN.md"
-  - ".planning/phases/02-built-in-materialization/02-03-SUMMARY.md"
-  - ".planning/phases/02-built-in-materialization/02-04-PLAN.md"
-  - ".planning/phases/02-built-in-materialization/02-04-SUMMARY.md"
-  - ".planning/phases/02-built-in-materialization/02-05-PLAN.md"
-  - ".planning/phases/02-built-in-materialization/02-05-SUMMARY.md"
-  - ".planning/phases/02-built-in-materialization/02-06-PLAN.md"
-  - ".planning/phases/02-built-in-materialization/02-06-SUMMARY.md"
-  - ".planning/phases/02-built-in-materialization/02-07-PLAN.md"
-  - ".planning/phases/02-built-in-materialization/02-07-SUMMARY.md"
-  - ".planning/phases/02-built-in-materialization/02-08-PLAN.md"
-  - ".planning/phases/02-built-in-materialization/02-08-SUMMARY.md"
-  - ".planning/phases/02-built-in-materialization/02-09-PLAN.md"
-  - ".planning/phases/02-built-in-materialization/02-09-SUMMARY.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-01-PLAN.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-01-SUMMARY.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-02-PLAN.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-02-SUMMARY.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-03-PLAN.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-03-SUMMARY.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-04-PLAN.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-04-SUMMARY.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-05-PLAN.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-05-SUMMARY.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-06-PLAN.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-06-SUMMARY.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-07-PLAN.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-07-SUMMARY.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-08-PLAN.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-08-SUMMARY.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-09-PLAN.md"
+  - ".planning/milestones/mcp-builtin-phases/02-built-in-materialization/02-09-SUMMARY.md"
   - "docs/mcp-compatibility.md"
   - "extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts"
   - "extensions/pi-claude-marketplace/bridges/mcp/builtin-description.ts"
@@ -35,13 +35,17 @@ covered_files:
   - "extensions/pi-claude-marketplace/orchestrators/mcp/builtin-registration-step.ts"
   - "extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/info-mcp-status.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
   - "extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts"
   - "features/lib/mcp-builtin-config-probe/extension.ts"
   - "features/lib/mcp-builtin-config-probe/snapshot.ts"
   - "features/lib/mcp-builtin-earlier-record.ts"
+  - "features/lib/pi-tui.ts"
+  - "features/lib/scripted-model/terminal-turn.ts"
   - "features/lib/turn-records.ts"
   - "features/lib/upstream/tool-search.ts"
   - "features/mcp-server/builtin-direct.feature"
+  - "features/mcp-server/builtin-reload.feature"
   - "features/mcp-server/builtin-status.feature"
   - "features/mcp-server/builtin-trust.feature"
   - "features/mcp-server/builtin-values.feature"
@@ -57,6 +61,7 @@ covered_files:
   - "features/step_definitions/mcp-server/builtin-values.steps.ts"
   - "features/step_definitions/mcp-server/configuration.steps.ts"
   - "features/step_definitions/mcp-server/implementation-switch.steps.ts"
+  - "features/step_definitions/session.steps.ts"
   - "test/bridges/mcp/builtin-description.test.ts"
   - "test/bridges/mcp/builtin-entry.test.ts"
   - "test/bridges/mcp/builtin-escape.test.ts"
@@ -71,126 +76,103 @@ covered_files:
   - "test/orchestrators/plugin/info-mcp-status.test.ts"
   - "test/orchestrators/plugin/info.test.ts"
   - "test/platform/mcp-builtin-status.test.ts"
-covered_digest: "v4:sha256:2cf420864eedc6c531fc5a41042beccb07041ed74f743d7c1e16dd241d4b77ae"
-behavior_unverified: 1
+covered_digest: "v4:sha256:f667c1c2ac7818409d520c4a501f0309e444597072aabac025b59dcab9188a12"
+behavior_unverified: 0
 overrides_applied: 0
 re_verification:
-  previous_status: passed
+  previous_status: human_needed
   previous_score: 5/7
   gaps_closed:
-    - "New-session leg of BLT-01 under built-in: 'A new session offers the plugin's tool again (BLT-01)' now runs @mcp (both profiles) after the bounded stand-in wait (230b60d, P2-DC-77 resolved for the harness); passes under the builtin profile"
-    - "Deferred item companion-missing.feature:61 (red under builtin): the file is now @own-implementation (Phase 3 rewrite), so no builtin scenario reads the old cell"
+    - "Truth 1b (the /reload leg of BLT-01): features/mcp-server/builtin-reload.feature (quick 261106-m03, 1b5a90d) drives /reload in a terminal Pi under the builtin profile; passes in my run"
+    - "Truth 3b (BLT-04 'never silent'): the user chose option 2 on 2026-11-06 (02-UAT.md check 1, D-MB-29). An mcp.json override is reported by info and Pi's /mcp; a registration refused because another extension holds the name now reads 'not loaded' in info (quick 261106-m02, 202ef11)"
   gaps_remaining: []
   regressions: []
-behavior_unverified_items:
-  - truth: "Under built-in, every enabled plugin's servers are registered again after /reload in a running Pi (BLT-01, SC 1)"
-    test: "Under Pi's built-in MCP, install a plugin with a stub server, run /reload in the running Pi, then search for and call the tool through tool_search"
-    expected: "The registry holds plugin_<plugin>_<server> again, the tool is found through tool_search, and the stub receives the call, with no plugin command in between"
-    why_human: "Pi's RPC mode cannot run the /reload builtin (it is terminal-only), so every built-in lifecycle scenario starts a fresh Pi, the project's stand-in for /reload (D-CF6-11). The new-session leg is now proven by a scenario; /reload itself is not (P2-DC-88). The code path is shared (the session_start handler, then resyncBuiltinRegistrations after loadReconcile at index.ts:192), so risk is low, but presence checks cannot show it."
 gaps: []
-human_verification:
-  - test: "Decide whether BLT-04 / SC 3 'a name collision or an mcp.json entry that overrides a plugin server is reported, never silent' is met by an info-only report (P2-DC-08) and, for a same-name registration by another extension, by a debug-log line only (P2-DC-46)"
-    expected: "Either accept info plus Pi's own /mcp override list as 'reported', and accept the foreign-owner collision as a recorded gap, or open a follow-up for a load-time notice (a new closed-set message, listed under CONTEXT 'Deferred Ideas')"
-    why_human: "Product decision. Code and tests match the recorded design: an mcp.json override shows 'overridden by mcp.json' in info and Pi's /mcp. A plugin-to-plugin collision is refused at install (ANAME-03). A registration refused because another extension owns the name is only debug-logged. A user who never runs info or /mcp does not learn of the override. The requirement text 'never silent' can be read either way. No later phase added a load-time notice (grep of the closed sets finds none)."
-  - test: "Run /reload in a running Pi under Pi's built-in MCP with an installed plugin (the BLT-01 /reload leg)"
-    expected: "The plugin's server is registered and its tool reachable through tool_search"
-    why_human: "See behavior_unverified_items. UAT item 2 should now read '/reload only': the new-session half is proven by lifecycle.feature:392 under the builtin profile."
 deferred: []
 ---
 
 # Phase 2: Built-in Materialization Verification Report
 
 **Phase Goal:** Without pi-mcp-adapter and with Pi's built-in MCP on, every enabled plugin's MCP servers connect through built-in on every startup and `/reload`, with the values and names Claude Code would give them, gated on project trust and visible in `info`; a switch between the adapter and built-in needs no plugin action (turning built-in MCP back on after the adapter turned it off is the user's step, D-MB-01).
-**Verified:** 2026-11-05T09:00:00Z
-**Status:** human_needed
-**Re-verification:** Yes. Milestone-close re-verification on the combined tree (branch `features/mcp-builtin`, HEAD `ca56636`). The earlier report (2026-11-04, branch `features/mcp-builtin-phase-2`, HEAD `e6f22d7`) set `passed` by orchestrator disposition (P2-DC-100), not by evidence; the two human items it carried are unchanged in substance, so the status here is the honest one, `human_needed`.
+**Verified:** 2026-11-06T20:00:00Z
+**Status:** passed
+**Re-verification:** Yes. Second milestone-close re-verification on branch `features/mcp-builtin`, HEAD `9893782`, after the user's review fixes. The previous report (2026-11-05, `human_needed`, 5/7) carried one behavior-unverified truth (the `/reload` leg) and one uncertain truth (BLT-04 "never silent"). Both are now closed by evidence this run re-checked.
 
 ## Goal Achievement
 
-No truth is FAILED. Every claim was re-checked against the current code and re-run, not read from SUMMARY files. The combined tree strengthened the covered surface in three places and weakened none.
+No truth is FAILED, UNCERTAIN, or PRESENT_BEHAVIOR_UNVERIFIED. I read the changed code and re-ran the focused tests and scenarios on this tree. SUMMARY claims were not taken as evidence.
 
-### What later phases changed in the covered surface
+### What changed since the last report (c7a0358 to HEAD)
 
 | Change | Commit | Effect on Phase 2 |
 | ------ | ------ | ----------------- |
-| `substituteAndInject` takes a required `McpFieldEncoder` (no adapter default) | `c5445ba` (06-04) | Strengthens SC 2 and SC 4: both callers name their encoder (`adapter-entry.ts:188` passes the adapter one, `builtin-entry.ts:63` the built-in one); omission is now a type error (P2-DC-53). |
-| Clone-root containment moved into `recorded-servers.ts` as `isPluginRootContained`, shared by the step and the legacy reader; the reader refuses an `uncontained` record before reading any file | `41bc6ae` (06-08) | Moved, not removed. `recordRegistrations` calls it at `builtin-registration-step.ts:162` before any read or expansion, and the reader re-checks (`recorded-servers.ts:253`). Code is the same logic as the removed `owningRoot`/`cloneKeyOf`/`CLONE_KEY`. Strengthens MREC-02 (UF-1, NFR-10). |
-| Stand-in check waits up to 10 s; the BLT-01 new-session scenario lifted from `@adapter-only` to `@mcp` | `230b60d` (06-05) | Closes the new-session half of the old behavior-unverified item. I ran it under the builtin profile: 1 scenario, 13 steps, passed. |
-| `tool_search` projection moved to `features/lib/upstream/tool-search.ts` | `ed1b7a7` (06-04) | Housekeeping. Old path gone; the step module and the fingerprint list use the new one. |
-| Built-in status rows expect `requires mcp` (read-time verdicts); the switch scenario shows `requires mcp` between implementations | `7a2285a`, `58ab863` (Phase 3 merge) | Strengthens SC 5: the `list` row is asserted between the two restarts. `list` is read-only, so DUAL-04's "no plugin command" holds (D-P6-18). |
-| `docs/mcp-compatibility.md` describes built-in agent grants and cites decision IDs | `8969c18` | Additive. Every cited `features/...`, `extensions/...` and Pi `dist/...` path exists (scripted check; the one "missing" hit, `docs/configuration.md`, is a path inside an external pi-mcp-adapter URL). |
-| `SoftDepStatus.piMcpAdapterLoaded` dropped | `aeb9c7e` | The built-in gate reads `softDeps.mcpImplementation` only (`builtin-registration-step.ts:249`); no reader depends on the dropped flag. |
+| `refused` note: `syncBuiltinRegistrations` calls `notes.refused(name)` when `registerMcpServer` throws; `platform/mcp-builtin-status.ts` keeps `refusedRegistrations`, cleared by a later replaced or fresh registration; `info-mcp-status.ts` reads such a name as `not loaded` after the mcp.json and other-owner checks | quick 261106-m02 (`8d318b0`, `1c8839f`, `9b4f606`, merged `202ef11`) | Closes the foreign-owner half of BLT-04 (P2-DC-46, D-MB-29). `info` also stamps the servers the registration step reads (`recordedMcpServers` passed in as `readServers`), so a legacy record is stamped as the step registers it (MREC-02). |
+| `recordedMcpServers(record, source, readerFor)` refuses stored servers of a record whose plugin root is outside its owning clone root | quick 261106-m04 | Strengthens UF-1 and NFR-10. The same `isPluginRootContained` check now guards stored servers, the legacy reader, and the registration step (`recorded-servers.ts`). |
+| New `@builtin-only` scenario that runs `/reload` in a terminal Pi | quick 261106-m03 (`39f0a28`, `1b5a90d`) | Closes truth 1b. Test-only; no `extensions/` change. |
+| Harness waits for pi-mcp-adapter's tool listing | quick 261106-m05 | Test harness only. |
+| Docs and comments only | quick 261106-m06, `2f04e5b`, `96b36a9`, `aee2da4`, `9893782` | No behavior change. |
+| `02-UAT.md` `status: complete`, 2/2 pass | `283db43` | User's record of the two human items; not edited by me. |
 
 ### Observable Truths
 
-The five ROADMAP success criteria are the contract. SC 1 and SC 3 each hold two separable claims, so they are scored as two truths each. The new-session leg that the earlier report placed in 1b now counts under 1a.
+The five ROADMAP success criteria are the contract. SC 1 and SC 3 each hold two separable claims, so they are scored as two truths each.
 
 | #  | Truth | Status | Evidence |
 | -- | ----- | ------ | -------- |
-| 1a | SC 1: under built-in, after each startup **and each new session in a running Pi**, every enabled plugin's runnable servers are registered and the scripted model calls their tools (deferred through `tool_search`, `alwaysLoad: true` directly); after disable or uninstall the next start has no such server, enable restores it, update replaces it (BLT-01, BLT-06) | ✓ VERIFIED | `syncSession` (`builtin-registration-step.ts:248`) registers `enabledRecords` (excludes disabled and `dependencyDisabled`) at `session_start` (`index.ts:128`, `createMcpSessionMaterializer`) and again after `loadReconcile` (`index.ts:192`). Run by me under `--profile builtin`: `lifecycle.feature`, `listing.feature`, `invocation.feature`, `configuration.feature`, `project-scope.feature`, `sources.feature`: 43/43 scenarios, 564/564 steps (seed 812534), including the builtin twins for disable, uninstall, enable, update, published change, autoapply-in-load, and `lifecycle.feature:392` "A new session offers the plugin's tool again" (re-run alone, 1/1, seed 726526). `builtin-direct.feature` covers the direct `alwaysLoad` call. |
-| 1b | SC 1, the `/reload` leg of "after each startup and `/reload`" (BLT-01) | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | `/reload` and the new-session path run the same two calls (`session_start` handler, then `resyncBuiltinRegistrations`). Pi's RPC mode cannot run the `/reload` builtin, so no scenario drives it (P2-DC-88). Fresh-Pi starts stand in for it by convention (D-CF6-11). See `behavior_unverified_items`. |
-| 2  | SC 2: a built-in server receives what Claude Code would give it: stdio and streamable HTTP, `command`, `args`, `url`, `env`, `headers` with `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${VAR}`, `${VAR:-default}` expanded as upstream does, `timeout` in seconds, OAuth fields; a literal `$` or leading `!` unchanged; project-scope servers register only while Pi trusts the project (BLT-02, BLT-03) | ✓ VERIFIED | `domain/mcp-builtin-translation.ts` (closed table, `timeout` = ms / 1000, `redirectUri` to `callbackUrl`, `exposure`, no Pi-only fields); `bridges/mcp/builtin-escape.ts` (resolves each reference by Claude's rule, then `$` to `$$` and a leading `!` to `$!` in `env` and `headers` only); `builtin-entry.ts` (refuses a stdio value that resolves to a leading `~`). Trust: `syncSession` asks `ctx.isProjectTrusted()` on every call and drops the project scope when false (`:258`, `:243`). Proof: `test/integration/mcp-builtin-encoding-conformance.test.ts` (drives Pi 1.5.0's real resolver and validator) passed in my run; `builtin-values.feature`, `builtin-trust.feature`, `configuration.feature` builtin twins and `project-scope.feature` trust twins all passed (see 1a). The phase unit pairs: 298/298. |
-| 3a | SC 3: server named `plugin_<plugin>_<server>`, tools `mcp__plugin_<plugin>_<server>__<tool>` with the `-` to `_` fold recorded as a divergence; `info` shows connected, not connected, disabled, overridden by `mcp.json`, project not trusted (BLT-04, BLT-05) | ✓ VERIFIED | `profileFor("builtin").serverName` is the one naming source; `listing.feature` pins the registry name, the fold and the 64-character cut; `docs/mcp-compatibility.md` lists the fold under divergences. `platform/mcp-builtin-status.ts` plus `info-mcp-status.ts` give one passing scenario per token in `builtin-status.feature` (16/16 scenarios across the four builtin-owned files, seed 743940). `info.test.ts` (489 lines added by Phase 3 for read-time verdicts) still passes with the built-in arm: 331/331 with the conformance test. |
-| 3b | SC 3: "a name collision or an `mcp.json` entry that overrides a plugin server is reported, never silent" (BLT-04) | ? UNCERTAIN | Unchanged by the combined tree. Reported only through pull surfaces: an `mcp.json` override in `info` and Pi's `/mcp` (P2-DC-08, High, open); a plugin-to-plugin collision is refused at install (ANAME-03); a name another extension already owns is refused by Pi and only debug-logged (P2-DC-46). No load-time notice exists in the closed sets. Human decision requested. |
-| 4  | SC 4: while the adapter is active or no implementation is active the extension registers nothing and Pi reports no extension error; install keeps writing adapter entries under built-in; a plugin installed before this milestone reaches its servers under either implementation with no reinstall (MSEL-03, MSEL-04, MREC-02) | ✓ VERIFIED | Gate: `syncSession` returns before reading context, state or registry unless `softDeps.mcpImplementation === "builtin"` (`:249`). Scenarios: `implementation-switch.feature` 3/3 under `--profile adapter` (61 steps, seed 56771): the MREC-02 scenario (`@mcp`, record rewritten with no `mcpServerConfigs`), the MSEL-04 scenario, and the switch scenario's `none` leg (empty registry, no tool, `pi reports no extension error`). The MREC-02 scenario also runs under the builtin profile through the legacy reader, whose containment check now lives in `recorded-servers.ts`; `recorded-servers.test.ts` passes. |
-| 5  | SC 5: `implementation-switch.feature` installs a plugin, reaches its server under the adapter, then under built-in after the adapter is removed and built-in MCP is on, then under the adapter again, with no plugin command in between; `docs/mcp-compatibility.md` has a built-in column whose statements each cite a scenario or the Pi 1.5.0 source (MSEL-02, MDOC-01) | ✓ VERIFIED | The switch scenario (lines 50-130) has one `install` step and then only restarts (adapter, none, built-in with `tool_search` plus a direct call, adapter) and a read-only `/claude:plugin list` (asserted `requires mcp`, no state change). Passed in my run. Docs: built-in columns in the naming, search and field tables, a "Pi's built-in MCP" section, and a status table with a built-in meaning column; every cited feature, source and Pi `dist/` path exists. |
+| 1a | SC 1: under built-in, after each startup and each new session in a running Pi, every enabled plugin's runnable servers are registered and the scripted model calls their tools (deferred through `tool_search`, `alwaysLoad: true` directly); after disable or uninstall the next start has no such server, enable restores it, update replaces it (BLT-01, BLT-06) | ✓ VERIFIED | `syncSession` registers the enabled records at `session_start` and again after `loadReconcile`. Run by me under `--profile builtin`: `lifecycle.feature`, `listing.feature`, `invocation.feature`, `configuration.feature`, `project-scope.feature`, `sources.feature`: 43/43 scenarios, 564/564 steps (seed 154119), including the builtin twins for disable, uninstall, enable, update, autoapply-in-load, and `lifecycle.feature:392` "A new session offers the plugin's tool again". `builtin-direct.feature` covers the direct `alwaysLoad` call (in the 19/19 run below). |
+| 1b | SC 1, the `/reload` leg of "after each startup and `/reload`" (BLT-01) | ✓ VERIFIED | `features/mcp-server/builtin-reload.feature` "The plugin's tool answers through tool search after a reload in the terminal (BLT-01, D-MB-10)": installs a plugin with a stdio stub, starts a terminal Pi with the scripted model, types `/reload` (step "the user reloads pi in the terminal and then prompts", `session.steps.ts:136`, waits on Pi's `Reloaded keybindings` status via `PiTuiSession.reload`), then the model finds the tool through `tool_search` and calls it; the stub answers `echo:ping`. Passed in my run (builtin profile, 19 scenarios, 220 steps, seed 449029, with `builtin-status`, `builtin-direct`, `builtin-trust`, `builtin-values`). The quick summary records a negative control: with `session_start` and the resync both skipped on a reload, the scenario fails at its Then; with either path alone it still passes, since the two paths are redundant by design. I did not re-run that control; I read the diffs in the summary and the production wiring at `index.ts:128` and `index.ts:192`. |
+| 2  | SC 2: a built-in server receives what Claude Code would give it: stdio and streamable HTTP, `command`, `args`, `url`, `env`, `headers` with `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${VAR}`, `${VAR:-default}` expanded as upstream does, `timeout` in seconds, OAuth fields; a literal `$` or leading `!` unchanged; project-scope servers register only while Pi trusts the project (BLT-02, BLT-03) | ✓ VERIFIED | Translation, escape, and entry modules unchanged since the last report except for comments. `test/integration/mcp-builtin-encoding-conformance.test.ts` (drives Pi 1.5.0's real resolver and validator) passed in this run's 661-test unit and integration batch. `builtin-values.feature`, `builtin-trust.feature` (19/19 run), and the `configuration` and `project-scope` builtin twins (43/43 run) passed. |
+| 3a | SC 3: server named `plugin_<plugin>_<server>`, tools `mcp__plugin_<plugin>_<server>__<tool>` with the `-` to `_` fold recorded as a divergence; `info` shows connected, not connected, disabled, overridden by `mcp.json`, project not trusted (BLT-04, BLT-05) | ✓ VERIFIED | `builtin-status.feature` now holds the foreign-owner scenario beside the token scenarios; all passed in the 19/19 run. `info-mcp-status.test.ts`, `info.test.ts`, `mcp-builtin-status.test.ts` passed (661/661 batch). Naming and the fold are pinned by `listing.feature` (43/43 run) and recorded in `docs/mcp-compatibility.md`. |
+| 3b | SC 3: "a name collision or an `mcp.json` entry that overrides a plugin server is reported, never silent" (BLT-04) | ✓ VERIFIED (by recorded user decision) | The user resolved this on 2026-11-06 (`02-UAT.md` check 1, option 2; PROJECT.md D-MB-20 and D-MB-29 rows, "Locked"): the report is `info` and Pi's `/mcp`, as Claude Code reports a suppressed duplicate in `/plugin`; no load-time notice, no new message kind. Code and scenarios match that decision. An `mcp.json` override reads `overridden by mcp.json` (scenario in `builtin-status.feature`). A name another extension registered first reads `not loaded` (`info-mcp-status.ts:builtinStatus`, set by `notes.refused` in `builtin-registration.ts:80`; scenario "Plugin info shows a server whose name another extension registered first as not loaded (D-MB-29)" passed). A plugin-to-plugin collision is refused at install (ANAME-03). Residual: a user who never runs `info` or `/mcp` sees no load-time message; this is the accepted reading, and BACKLOG BLTOWNER-01 (narrowed) tracks what stays open. This is a decision-backed pass, not an automated proof of "never silent" in the strictest sense. |
+| 4  | SC 4: while the adapter is active or no implementation is active the extension registers nothing and Pi reports no extension error; install keeps writing adapter entries under built-in; a plugin installed before this milestone reaches its servers under either implementation with no reinstall (MSEL-03, MSEL-04, MREC-02) | ✓ VERIFIED | `syncSession` returns before reading context, state, or registry unless `softDeps.mcpImplementation === "builtin"`. `--profile adapter` on `lifecycle.feature` and `implementation-switch.feature`: 12/12 scenarios, 192/192 steps (seed 193736), including the MREC-02, MSEL-04, and switch-through-`none` scenarios. `recorded-servers.test.ts` (with the new containment-on-stored-configs cases) passed. |
+| 5  | SC 5: `implementation-switch.feature` installs a plugin, reaches its server under the adapter, then under built-in after the adapter is removed and built-in MCP is on, then under the adapter again, with no plugin command in between; `docs/mcp-compatibility.md` has a built-in column whose statements each cite a scenario or the Pi 1.5.0 source (MSEL-02, MDOC-01) | ✓ VERIFIED | The switch scenario passed (adapter run above). Docs unchanged in substance since the last report (comment and decision-ID edits only); the earlier citation scan stands. |
 
-**Score:** 5/7 truths verified (1 present, behavior-unverified; 1 uncertain)
+**Score:** 7/7 truths verified (0 behavior-unverified; truth 3b rests on the user's recorded decision)
 
 ### Deferred Items
 
-None. The earlier deferred item (`companion-missing.feature:61` red under the builtin profile) is closed: Phase 3 rewrote that file, every scenario in it is now `@own-implementation`, and the builtin profile selects none of them (my run: 0 scenarios, as expected).
+None.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 | -------- | -------- | ------ | ------- |
-| `domain/mcp-builtin-translation.ts` | Closed field table | ✓ VERIFIED | 88 lines, pure, used by `builtin-entry.ts` |
-| `bridges/mcp/builtin-escape.ts`, `substitute.ts` | Built-in encoder, required encoder parameter | ✓ VERIFIED | Both callers pass an encoder; no default |
-| `bridges/mcp/builtin-entry.ts`, `builtin-description.ts` | Config builder, description reader | ✓ VERIFIED | Used by the step |
-| `bridges/mcp/builtin-registration.ts` | Idempotent sync | ✓ VERIFIED | Wired from `syncSession` |
-| `bridges/mcp/builtin-overrides.ts` | Synchronous `mcp.json` reader | ✓ VERIFIED | Used by `info-mcp-status.ts` |
-| `orchestrators/mcp/builtin-registration-step.ts` | Step and resync | ✓ VERIFIED | Both entry points call one `syncSession`; containment now delegated to `recorded-servers.ts` |
-| `orchestrators/mcp/recorded-servers.ts` | Recorded and legacy reader, shared containment | ✓ VERIFIED | `isPluginRootContained` exported and used twice |
-| `platform/mcp-builtin-status.ts` | Status reader | ✓ VERIFIED | Built at factory time without reading `pi` (`index.ts:105`) |
-| `orchestrators/plugin/info-mcp-status.ts` | Built-in `info` arm | ✓ VERIFIED | Picks the arm by implementation |
-| `docs/mcp-compatibility.md` | Built-in column | ✓ VERIFIED | See truth 5 |
-| Feature files, step modules, libs | Lifted and new scenarios | ✓ VERIFIED | All present; `features/lib/mcp-builtin-tool-search.ts` moved to `features/lib/upstream/tool-search.ts` |
+| `domain/mcp-builtin-translation.ts`, `bridges/mcp/builtin-{escape,entry,description,overrides,registration}.ts`, `substitute.ts`, `adapter-entry.ts` | Translation, encoders, config builder, sync | ✓ VERIFIED | Present, used, unit pairs pass. `builtin-registration.ts` gained the `refused` note. |
+| `orchestrators/mcp/builtin-registration-step.ts`, `recorded-servers.ts` | Step, shared reader and containment | ✓ VERIFIED | Step passes `REGISTRATION_NOTES.refused`; `recordedMcpServers(record, source, readerFor)` checks containment on stored configs. |
+| `platform/mcp-builtin-status.ts`, `orchestrators/plugin/info-mcp-status.ts`, `info.ts` | Status reader, info arm | ✓ VERIFIED | `builtinRegistrationRefused` read in `builtinStatus`; `readServers` supplied by `info.ts`. |
+| `docs/mcp-compatibility.md` | Built-in column | ✓ VERIFIED | See truth 5. |
+| `features/mcp-server/builtin-reload.feature`, `builtin-status.feature`, harness libs | New and extended scenarios | ✓ VERIFIED | Present and green. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | ---- | -- | --- | ------ | ------- |
-| `index.ts` factory | `builtinRegistrationStep` | `createMcpSessionMaterializer` at `session_start` | WIRED | `index.ts:128-131` |
-| `resources_discover` handler | `resyncBuiltinRegistrations` | after `loadReconcile`, own try/catch | WIRED | `index.ts:188-195` |
-| `index.ts` | `createBuiltinMcpStatusReader(pi)` | `mcpStatus.builtin` | WIRED | `index.ts:103-106` |
-| registration step | `isPluginRootContained`, `recordedMcpServers`, `createLegacyServersReader` | containment, MREC-02 | WIRED | `builtin-registration-step.ts:162-169` |
-| registration step | status owner and replaced-name notes | `noteBuiltinServerOwners`, `REGISTRATION_NOTES` | WIRED | `:261-267`; read by the status reader and `info-mcp-status.ts` |
-| `substituteAndInject` | both encoders | required parameter | WIRED | `adapter-entry.ts:188`, `builtin-entry.ts:63` |
+| `index.ts` | `builtinRegistrationStep` | `createMcpSessionMaterializer` at `session_start` | WIRED | `index.ts:128` |
+| `resources_discover` | `resyncBuiltinRegistrations` | after `loadReconcile`, own try/catch | WIRED | `index.ts:188-195` |
+| `syncBuiltinRegistrations` | `noteRefusedBuiltinRegistration` | `notes.refused` in the `registerMcpServer` catch | WIRED | `builtin-registration.ts:80`, `builtin-registration-step.ts` `REGISTRATION_NOTES` |
+| `info-mcp-status.ts` | `builtinRegistrationRefused` | `builtinStatus` after the other-owner check | WIRED | read once per server |
+| `info.ts` | `withMcpServerStatus` | `readServers` port, backed by `recordedMcpServers` | WIRED | unit and scenario coverage |
+| registration step and legacy reader | `isPluginRootContained` | `recorded-servers.ts` | WIRED | now also guards stored servers |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 | -------- | ------------- | ------ | ------------------ | ------ |
-| Registered config | `desired` map | `state.json` records, recorded or legacy-read configs, real `process.env`, `ctx.cwd`, data dir | Yes: scenarios show the stub receiving resolved `env`, `args`, `headers` | ✓ FLOWING |
-| `info` built-in status | reader answer | Pi's live `getMcpServers()` and `getAllTools()` per lookup | Yes: one scenario per token | ✓ FLOWING |
-| Override and owner stamps | `configured`, `serverOwners` | `mcp.json` files read synchronously; the step's last sync | Yes (P2-DC-92) | ✓ FLOWING |
+| Registered config | `desired` map | `state.json` records, recorded or legacy-read configs, real `process.env`, `ctx.cwd` | Yes: scenarios show the stub receiving resolved values | ✓ FLOWING |
+| `info` built-in status | reader answer plus `refusedRegistrations`, owners | Pi's live `getMcpServers()` and `getAllTools()`; the step's last sync | Yes: one scenario per token plus the refusal scenario | ✓ FLOWING |
 
 ### Behavioral Spot-Checks
 
-All run by me on the combined tree, one file group per call, no whole profile.
+All run by me on HEAD `9893782`, one group per call, no whole profile. Npm commands used the `npm_config_script_shell` and `NODE_OPTIONS` prefix from the task.
 
 | Behavior | Command | Result | Status |
 | -------- | ------- | ------ | ------ |
-| Phase unit pairs (bridges/mcp builtin-*, index, substitute; translation; step; recorded-servers; info-mcp-status; status reader) | `node --test` on those 12 files | 298/298 | ✓ PASS |
-| Pi 1.5.0 resolver conformance and `info` | `node --test test/integration/mcp-builtin-encoding-conformance.test.ts test/orchestrators/plugin/info.test.ts` | 331/331 | ✓ PASS |
-| Builtin direct, status, trust, values | `cucumber-js --profile builtin` on the four files | 16 scenarios, 185 steps (seed 743940) | ✓ PASS |
-| Builtin lifecycle, listing, invocation, configuration, project-scope, sources | `cucumber-js --profile builtin` on the six files | 43 scenarios, 564 steps (seed 812534) | ✓ PASS |
-| BLT-01 new session under built-in | `cucumber-js --profile builtin features/mcp-server/lifecycle.feature:392` | 1 scenario, 13 steps (seed 726526) | ✓ PASS |
-| Switch scenario (adapter, none, built-in, adapter) | `cucumber-js --profile adapter features/mcp-server/implementation-switch.feature` | 3 scenarios, 61 steps (seed 56771) | ✓ PASS |
-| Old deferred item | `cucumber-js --profile builtin features/mcp-server/companion-missing.feature` | 0 scenarios selected (all `@own-implementation`) | ✓ closed |
+| Phase unit pairs, Pi 1.5.0 conformance, info, status reader | `node --test` on `test/bridges/mcp/builtin-*.test.ts`, `index`, `substitute`, `test/domain/mcp-builtin-translation.test.ts`, `test/orchestrators/mcp/*.test.ts`, `info-mcp-status`, `info`, `test/platform/mcp-builtin-status.test.ts`, the conformance test | 661 pass, 0 fail | ✓ PASS |
+| Builtin status (incl. D-MB-29), reload, direct, trust, values | `test:cucumber:profile -- --profile builtin` on the five files | 19 scenarios, 220 steps (seed 449029) | ✓ PASS |
+| Builtin lifecycle, listing, invocation, configuration, project-scope, sources | same, six files | 43 scenarios, 564 steps (seed 154119) | ✓ PASS |
+| Adapter lifecycle and switch | `--profile adapter` on `lifecycle.feature` and `implementation-switch.feature` | 12 scenarios, 192 steps (seed 193736) | ✓ PASS |
 
-Gate evidence cited, not re-run: `npm run check` exit 0 on 71a37c4 (same build inputs as HEAD apart from `.planning/`; static, unpaired, integration, cucumber adapter 1603/1603 and builtin 133/133, direct coverage); `test:modules` exit 0 on 2b6f2f4; CI run 41967152313 green on 2b6f2f4 after one known adapter flake (P3-DC-111, `lifecycle.feature:392` under the adapter profile).
+Gate evidence cited, not re-run: `npm run check` passed on `c3547b8` (1604 adapter, 137 builtin scenarios) with quick tasks m02 to m05 merged. A second `npm run check` on `883e085` (m06, comments and docs only) was running in the parent session when this report was written.
 
 ### Probe Execution
 
@@ -200,48 +182,37 @@ Step 7c: SKIPPED. The phase declares no `probe-*.sh` scripts.
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | ----------- | ----------- | ----------- | ------ | -------- |
-| MSEL-02 | 02-07 | Switch needs no plugin action | ✓ SATISFIED | Switch scenario passes; `/reload` alone not run (1b) |
-| MSEL-03 | 02-01, 02-07 | No registration under adapter or none | ✓ SATISFIED | Gate at `:249`; listing and switch scenarios |
-| MSEL-04 | 02-07 | Adapter entries still written at install | ✓ SATISFIED | MSEL-04 scenario passes |
-| MREC-02 | 02-01, 02-07 | Pre-milestone record works with no reinstall | ✓ SATISFIED | `@mcp` scenario; shared containment in `recorded-servers.ts` |
-| BLT-01 | 02-01, 02-02, 02-03, 02-06, 02-09 | Registered on every startup and `/reload`; tools callable | ✓ SATISFIED for startup and new session; `/reload` leg is a human item | Truths 1a, 1b |
+| MSEL-02 | 02-07 | Switch needs no plugin action | ✓ SATISFIED | Switch scenario; `/reload` scenario |
+| MSEL-03 | 02-01, 02-07 | No registration under adapter or none | ✓ SATISFIED | Gate in `syncSession`; adapter-profile run |
+| MSEL-04 | 02-07 | Adapter entries still written at install | ✓ SATISFIED | MSEL-04 scenario |
+| MREC-02 | 02-01, 02-07 | Pre-milestone record works with no reinstall | ✓ SATISFIED | `@mcp` scenario; info now stamps by the step's own read |
+| BLT-01 | 02-01, 02-02, 02-03, 02-06, 02-09 | Registered on every startup and `/reload`; tools callable | ✓ SATISFIED | Truths 1a, 1b |
 | BLT-02 | 02-01, 02-02, 02-03 | Claude's values, no Pi reinterpretation | ✓ SATISFIED | Truth 2 |
-| BLT-03 | 02-05 | Project servers only when trusted | ✓ SATISFIED | `builtin-trust.feature`, `project-scope.feature` |
-| BLT-04 | 02-01, 02-04, 02-09 | Names, fold recorded, collision or override reported | ? NEEDS HUMAN | Names and fold verified; "never silent" is truth 3b |
+| BLT-03 | 02-05 | Project servers only when trusted | ✓ SATISFIED | trust and project-scope scenarios |
+| BLT-04 | 02-01, 02-04, 02-09 | Names, fold recorded, collision or override reported | ✓ SATISFIED (user-accepted reading) | Truths 3a, 3b |
 | BLT-05 | 02-04 | `info` status tokens | ✓ SATISFIED | `builtin-status.feature` |
 | BLT-06 | 02-06 | Disable, uninstall, enable, update effects | ✓ SATISFIED | `lifecycle.feature` builtin twins |
 | MDOC-01 | 02-08 | Built-in column with citations | ✓ SATISFIED | Truth 5 |
 
-All 11 phase IDs appear in a PLAN `requirements:` field and a SUMMARY `requirements-completed:`. REQUIREMENTS.md maps exactly these 11 to Phase 2 and marks them complete. No orphans.
+All 11 phase IDs appear in a PLAN `requirements:` field. No orphans.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 | ---- | ---- | ------- | -------- | ------ |
-| Phase source, docs, features | n/a | `TBD`, `FIXME`, `XXX`, `TODO`, `HACK` | None found | Debt-marker gate clear (grep over every covered source, doc and feature file) |
-| `builtin-registration-step.ts`, `platform/mcp-builtin-status.ts` | n/a | Process-level mutable state (replaced names, owners) | ℹ️ Info | P2-DC-92; unit-tested |
-| `info-mcp-status.ts` | `ownedElsewhere` | Foreign-extension collision not detectable | ⚠️ Warning | P2-DC-46; part of 3b |
-| `builtin-registration-step.ts:162`, `recorded-servers.ts:253` | n/a | The containment check runs twice for a legacy record (step, then reader) | ℹ️ Info | Redundant path walk, no behavior effect |
+| Phase source, docs, features | n/a | `TBD`, `FIXME`, `XXX`, `TODO`, `HACK` | None found in the files changed since the last report (diff scan) | Debt-marker gate clear |
+| `platform/mcp-builtin-status.ts` | `refusedRegistrations` | Third process-level mutable set (beside replaced names and owners) | ℹ️ Info | D-MB-29, P2-DC-92; unit-tested, cleared by a later accepted registration or removal |
+| `info-mcp-status.ts` | `builtinStatus` | A refused name reads `not loaded` only within the process that attempted the registration | ℹ️ Info | Matches the decision; the state is process-local by design |
 
 ### Human Verification Required
 
-#### 1. Is an info-only report "never silent" for BLT-04?
-
-**Test:** Decide whether the recorded design satisfies "a name collision or an `mcp.json` entry that overrides a plugin server is reported, never silent".
-**Expected:** Either accept `info` plus Pi's `/mcp` as the report and the foreign-extension collision as a documented gap (P2-DC-08, P2-DC-46), or schedule a load-time notice (new closed-set message).
-**Why human:** Product judgment. Behavior matches the recorded design and passes its scenarios.
-
-#### 2. `/reload` leg of BLT-01 under built-in
-
-**Test:** Under Pi's built-in MCP, run `/reload` in a running Pi with an installed plugin, then search for and call the plugin's tool.
-**Expected:** The server is registered again and the call reaches the stub, with no plugin command.
-**Why human:** Pi's RPC mode cannot run `/reload`. The new-session half of the earlier item is now covered by `lifecycle.feature:392` under the builtin profile, so `02-UAT.md` item 2 can be narrowed to `/reload` alone. I left `02-UAT.md` unchanged because it is the user's record.
+None. The two items of the previous report are closed: the `/reload` leg by `builtin-reload.feature` (truth 1b), and the BLT-04 reading by the user's decision (truth 3b, `02-UAT.md` 2/2 pass).
 
 ### Gaps Summary
 
-No blocking gap. The combined tree keeps every Phase 2 deliverable wired and behaviorally exercised, and it closes two earlier open items (the built-in new-session leg and the `companion-missing` deferral). The score stays 5/7 because the same two judgment items remain: truth 1b (`/reload` itself, not drivable over RPC) and truth 3b (the "never silent" reading of BLT-04). Both stay routed to `02-UAT.md` for the user.
+No gap. Every Phase 2 deliverable is present, wired, and exercised by a passing test or scenario on HEAD `9893782`. The score rises from 5/7 to 7/7. Open follow-ups are recorded elsewhere and do not block the phase: BACKLOG BLTOWNER-01 (narrowed), and the stale `02-VALIDATION.md` (see the report's Dubious Choices).
 
 ---
 
-_Verified: 2026-11-05T09:00:00Z_
+_Verified: 2026-11-06T20:00:00Z_
 _Verifier: Claude (gsd-verifier)_
