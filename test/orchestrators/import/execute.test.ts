@@ -1935,7 +1935,9 @@ for (const { cause, error, token, title, warning } of [
       }),
     token: "unsupported hooks",
     title: "the plugin is not installable",
-    warning: uninstallable("unsupported hooks: PreToolUse", ["unsupported hooks"]),
+    warning: uninstallable('Plugin "target" is not installable: unsupported hooks', [
+      "unsupported hooks",
+    ]),
   },
   {
     cause: "contains outputStyles",
@@ -1949,7 +1951,9 @@ for (const { cause, error, token, title, warning } of [
       }),
     token: "unsupported component",
     title: "the plugin is only partially available",
-    warning: uninstallable("contains outputStyles", ["unsupported component"]),
+    warning: uninstallable('Plugin "target" is no longer installable: unsupported component', [
+      "unsupported component",
+    ]),
   },
 ] satisfies readonly {
   readonly cause: string;
@@ -3590,7 +3594,7 @@ test("MREC-06: an import leaves a plugin with an sse server unavailable under Pi
         plugin: "hello",
         marketplace: "fixture-mp",
         ref: "hello@fixture-mp",
-        cause: 'Plugin "hello" is not installable: \n\ncause: Plugin "hello" is not installable: ',
+        cause: 'Plugin "hello" is not installable: unsupported mcp',
         reason: "uninstallable",
         reasons: ["unsupported mcp"],
       },

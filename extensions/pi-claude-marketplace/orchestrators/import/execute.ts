@@ -2368,19 +2368,22 @@ function dispatchFailedOutcome(
         pushPluginWarning(result, plugin, "unavailable", cause);
         return;
       case "not-installable":
-      case "no-longer-installable":
-        // IMP-08: install's own narrowing, so a fresh import reads what
-        // `install` reads for the same plugin.
+      case "no-longer-installable": {
+        // IMP-08, IMPORTCAUSE-01: the warning carries install's narrowing.
+        // Its cause states the refusal once, in install's words, over the
+        // same tokens.
+        const reasons = narrowResolverReasons(
+          error.shape.reasons,
+          error.shape.unsupportedKinds,
+          error.shape.partialable,
+        );
         result.warnings.push({
-          ...warningBase(plugin, cause),
+          ...warningBase(plugin, new PluginShapeError({ ...error.shape, reasons }).message),
           reason: "uninstallable",
-          reasons: narrowResolverReasons(
-            error.shape.reasons,
-            error.shape.unsupportedKinds,
-            error.shape.partialable,
-          ),
+          reasons,
         });
         return;
+      }
     }
   }
 
