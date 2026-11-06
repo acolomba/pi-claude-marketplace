@@ -157,12 +157,16 @@ test("MREC-01: replacing a record's compatibility removes the neutral basis besi
   };
 
   // act
-  replaceCompatibility(record, {
-    installable: true,
-    notes: ["note"],
-    supported: ["skills"],
-    unsupported: [],
-  });
+  replaceCompatibility(
+    record,
+    {
+      installable: true,
+      notes: ["note"],
+      supported: ["skills"],
+      unsupported: [],
+    },
+    undefined,
+  );
 
   // assert
   assert.deepStrictEqual(record, {
@@ -175,6 +179,31 @@ test("MREC-01: replacing a record's compatibility removes the neutral basis besi
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   });
+});
+
+test("MREC-01: replacing a record's compatibility with the neutral basis writes the basis beside it", () => {
+  // arrange
+  const record: PluginInstallRecord = {
+    version: "1.0.0",
+    resolvedSource: "/plugin",
+    compatibility: { installable: false, notes: [], supported: [], unsupported: ["mcpServers"] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  // act
+  replaceCompatibility(
+    record,
+    { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+    "neutral",
+  );
+
+  // assert
+  assert.equal(record.compatibilityBasis, "neutral");
+  assert.equal(record.compatibility.installable, true);
 });
 
 test("disables a plugin while preserving its complete inventory", () => {

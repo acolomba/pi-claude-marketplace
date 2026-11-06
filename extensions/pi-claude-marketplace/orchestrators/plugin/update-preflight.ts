@@ -921,11 +921,8 @@ async function refreshDisabledRecord(
         record.resolvedVersion = preflight.resolvedVersion;
       }
 
-      // MREC-01 / D-P3-02: the refresh writes the neutral verdict, and
-      // `replaceCompatibility` clears the basis, so the basis is set after it
-      // in the same locked save.
-      replaceCompatibility(record, next.compatibility);
-      record.compatibilityBasis = "neutral";
+      // MREC-01 / D-P3-02: the refresh writes the neutral verdict.
+      replaceCompatibility(record, next.compatibility, "neutral");
       // MREC-01: the declared MCP servers of the version the record now names.
       record.mcpServerConfigs = next.mcpServerConfigs;
       if (next.mcpBundle) {

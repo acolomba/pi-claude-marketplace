@@ -308,17 +308,22 @@ export function mcpServerConfigsOf(
 }
 
 /**
- * MREC-01: replaces a record's `compatibility` with an adapter-basis verdict
- * and removes its `compatibilityBasis`, because the basis describes the
- * `compatibility` beside it. A writer of the neutral verdict sets the basis
- * after this call.
+ * MREC-01: replaces a record's `compatibility` and its `compatibilityBasis` in
+ * one call, because the basis describes the `compatibility` beside it. A
+ * `basis` of `"neutral"` marks the verdict as the neutral one; `undefined`
+ * removes the basis, which marks an adapter-basis verdict.
  */
 export function replaceCompatibility(
   record: Pick<PluginInstallRecord, "compatibility" | "compatibilityBasis">,
   compatibility: PluginInstallRecord["compatibility"],
+  basis: PluginInstallRecord["compatibilityBasis"],
 ): void {
   record.compatibility = compatibility;
-  delete record.compatibilityBasis;
+  if (basis === undefined) {
+    delete record.compatibilityBasis;
+  } else {
+    record.compatibilityBasis = basis;
+  }
 }
 
 /**

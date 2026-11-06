@@ -94,6 +94,10 @@ import {
 } from "../../bridges/workflows/index.ts";
 import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
+import {
+  UPDATE_IN_PROGRESS_NOTE,
+  type ActiveMcpImplementation,
+} from "../../domain/mcp-implementation.ts";
 import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { mcpServerConfigsOf, replaceCompatibility } from "../../persistence/state-io.ts";
@@ -133,7 +137,6 @@ import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
-import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -678,8 +681,6 @@ function appendCleanupFailure(
 // (record copy, not rendering), so no notify-rendering test is at risk.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
-
 // D-63-01: hooks slot lands between agents and mcp -- mirrors install-outcome.ts
 // runPhases literal-array order.
 const PHASE3_FAILURE_PHASES = [
@@ -772,19 +773,19 @@ async function markUpdateInProgress(
       // MREC-01 / D-P3-02: the intent mark changes only the notes of the
       // verdict it carries forward, so the record keeps its basis: a neutral
       // record stays neutral, and a legacy record keeps no basis.
-      const basis = sRecord.compatibilityBasis;
-      replaceCompatibility(sRecord, {
-        installable: false,
-        notes: [UPDATE_IN_PROGRESS_NOTE],
-        // Carry forward from EXISTING sRecord, NOT from
-        // preflight.installable -- the pre-update arrays are the truthful
-        // view during the intent-mark window.
-        supported: [...sRecord.compatibility.supported],
-        unsupported: [...sRecord.compatibility.unsupported],
-      });
-      if (basis !== undefined) {
-        sRecord.compatibilityBasis = basis;
-      }
+      replaceCompatibility(
+        sRecord,
+        {
+          installable: false,
+          notes: [UPDATE_IN_PROGRESS_NOTE],
+          // Carry forward from EXISTING sRecord, NOT from
+          // preflight.installable -- the pre-update arrays are the truthful
+          // view during the intent-mark window.
+          supported: [...sRecord.compatibility.supported],
+          unsupported: [...sRecord.compatibility.unsupported],
+        },
+        sRecord.compatibilityBasis,
+      );
 
       // CR-02: `resources.workflows` is the ONE inventory this window widens, to
       // the union of the names already recorded and the names about to be
@@ -934,16 +935,17 @@ function applyPerBridgeResources(
 function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: PluginPreflight): void {
   const { installable, toVersion, resolvedSha } = preflight;
   sRecord.version = toVersion;
-  // MREC-01 / D-P3-02: the swap records the neutral verdict for `toVersion`,
-  // and `replaceCompatibility` clears the basis, so the basis is set after it
-  // in the same locked save.
-  replaceCompatibility(sRecord, {
-    installable: installable.state === "installable",
-    notes: [...installable.notes],
-    supported: [...installable.supported],
-    unsupported: [...installable.unsupported],
-  });
-  sRecord.compatibilityBasis = "neutral";
+  // MREC-01 / D-P3-02: the swap records the neutral verdict for `toVersion`.
+  replaceCompatibility(
+    sRecord,
+    {
+      installable: installable.state === "installable",
+      notes: [...installable.notes],
+      supported: [...installable.supported],
+      unsupported: [...installable.unsupported],
+    },
+    "neutral",
+  );
   // MREC-01 / D-MB-04: the declared MCP servers of `toVersion`, written
   // beside `compatibility` so a failed update keeps the previous servers next
   // to the intent mark.

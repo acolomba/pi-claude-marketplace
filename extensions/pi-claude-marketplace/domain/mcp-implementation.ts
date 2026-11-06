@@ -179,9 +179,8 @@ export interface EffectiveMcpCompatibility {
 }
 
 // TR-04: the note `markUpdateInProgress` in orchestrators/plugin/update-swap.ts
-// writes into `compatibility.notes` while an update is in flight. domain/
-// cannot import orchestrators/, so the literal is repeated here.
-const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
+// writes into `compatibility.notes` while an update is in flight.
+export const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
 
 // The typed unsupported kind of a blocked MCP server or a bundle (ANAME-07).
 const MCP_SERVERS_KIND = "mcpServers";

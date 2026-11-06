@@ -564,13 +564,15 @@ function applyNeutralVerdict(action: OwnerAction): boolean {
     return false;
   }
 
-  // `replaceCompatibility` clears the basis, so the basis is set after it.
-  replaceCompatibility(record, {
-    ...compatibility,
-    installable: neutral.installable,
-    unsupported: [...neutral.unsupported],
-  });
-  record.compatibilityBasis = "neutral";
+  replaceCompatibility(
+    record,
+    {
+      ...compatibility,
+      installable: neutral.installable,
+      unsupported: [...neutral.unsupported],
+    },
+    "neutral",
+  );
   record.mcpServerConfigs = servers;
   if (bundle) {
     record.mcpBundle = true;
