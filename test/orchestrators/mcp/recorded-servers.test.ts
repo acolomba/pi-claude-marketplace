@@ -259,7 +259,7 @@ describe("recordedMcpServers", () => {
     const recorded = await recordedMcpServers(source, reader);
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "read-failed" });
     assert.deepStrictEqual(logged, ["[mcp] recorded MCP servers unreadable: manifest gone"]);
     verify(reader);
   });
@@ -277,7 +277,7 @@ describe("recordedMcpServers", () => {
     const recorded = await recordedMcpServers(source, reader);
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "read-failed" });
     assert.deepStrictEqual(logged, ["[mcp] recorded MCP servers unreadable: plugin root gone"]);
   });
 
@@ -297,7 +297,7 @@ describe("recordedMcpServers", () => {
     const recorded = await recordedMcpServers(source, reader);
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "read-failed" });
     assert.deepStrictEqual(logged, [
       "[mcp] recorded MCP servers unreadable: ENOENT: no such file or directory, open 'marketplace.json'",
     ]);
@@ -320,9 +320,9 @@ describe("recordedMcpServers", () => {
     );
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "uncontained" });
     assert.deepStrictEqual(logged, [
-      "[mcp] recorded MCP servers unreadable: cannot re-resolve the MCP servers of p1@mp: uncontained",
+      "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of p1@mp: uncontained",
     ]);
   });
 
@@ -340,9 +340,9 @@ describe("recordedMcpServers", () => {
     const recorded = await recordedMcpServers(marketplace.sourceFor(record), reader);
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "uncontained" });
     assert.deepStrictEqual(logged, [
-      "[mcp] recorded MCP servers unreadable: cannot re-resolve the MCP servers of p1@mp: uncontained",
+      "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of p1@mp: uncontained",
     ]);
     verify(reader);
   });
@@ -363,7 +363,7 @@ describe("recordedMcpServers", () => {
     const recorded = await recordedMcpServers(marketplace.sourceFor(record), reader);
 
     // assert
-    assert.deepStrictEqual(recorded, { kind: "unreadable" });
+    assert.deepStrictEqual(recorded, { kind: "unreadable", reason: "uncontained" });
     verify(reader);
   });
 
@@ -624,7 +624,7 @@ describe("readLegacyServers", () => {
 
       // act & assert
       await assert.rejects(readLegacyServers(source), {
-        name: "LegacyServersUnreadableError",
+        name: "RecordedServersUnreadableError",
         reason: "uncontained",
         plugin: "p1",
         marketplace: "mp",
@@ -644,7 +644,7 @@ describe("readLegacyServers", () => {
 
     // act & assert
     await assert.rejects(readLegacyServers(marketplace.sourceFor(installRecord(pluginRoot))), {
-      name: "LegacyServersUnreadableError",
+      name: "RecordedServersUnreadableError",
       reason: "version-mismatch",
       plugin: "p1",
       marketplace: "mp",
@@ -660,7 +660,7 @@ describe("readLegacyServers", () => {
 
     // act & assert
     await assert.rejects(readLegacyServers(source), {
-      name: "LegacyServersUnreadableError",
+      name: "RecordedServersUnreadableError",
       reason: "not-in-manifest",
       plugin: "p1",
       marketplace: "mp",
@@ -676,7 +676,7 @@ describe("readLegacyServers", () => {
 
     // act & assert
     await assert.rejects(readLegacyServers(source), {
-      name: "LegacyServersUnreadableError",
+      name: "RecordedServersUnreadableError",
       reason: "unavailable",
       plugin: "p1",
       marketplace: "mp",
@@ -694,7 +694,7 @@ describe("readLegacyServers", () => {
 
     // act & assert
     await assert.rejects(readLegacyServers(source), {
-      name: "LegacyServersUnreadableError",
+      name: "RecordedServersUnreadableError",
       reason: "root-mismatch",
       plugin: "p1",
       marketplace: "mp",

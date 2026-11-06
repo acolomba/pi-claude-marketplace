@@ -239,7 +239,7 @@ test("MREC-02: keeps the stored verdict when the legacy reader cannot read the m
   // assert
   assert.deepStrictEqual(verdict, {
     effective: { installable: false, unsupported: ["hooks"], blocked: [] },
-    recorded: { kind: "unreadable" },
+    recorded: { kind: "unreadable", reason: "read-failed" },
   });
 });
 
@@ -282,7 +282,7 @@ test("UF-1: keeps the stored verdict of a git record whose plugin root is outsid
   // assert
   assert.deepStrictEqual(verdict, {
     effective: { installable: false, unsupported: ["hooks"], blocked: [] },
-    recorded: { kind: "unreadable" },
+    recorded: { kind: "unreadable", reason: "uncontained" },
   });
 });
 

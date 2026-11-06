@@ -606,15 +606,15 @@ describe("loadManifestForMarketplace", () => {
     });
   });
 
-  // A legacy record that names `mcpServers` and that the manifest no longer
-  // declares cannot re-resolve its servers, so a verdict read of it logs one
-  // `mcp` debug line. `list` reads no verdict of a disabled record.
+  // The servers of a legacy record that names `mcpServers` and that the
+  // manifest no longer declares cannot be re-resolved, so a verdict read of it
+  // logs one `mcp` debug line. `list` reads no verdict of a disabled record.
   const legacyCases = [
     {
       enabled: true,
       status: "partially-installed",
       logged: [
-        "[mcp] recorded MCP servers unreadable: cannot re-resolve the MCP servers of events@legacy-mp: not-in-manifest",
+        "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of events@legacy-mp: not-in-manifest",
       ],
     },
     { enabled: false, status: "installed", logged: [] },

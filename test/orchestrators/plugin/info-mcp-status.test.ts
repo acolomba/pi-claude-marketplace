@@ -87,7 +87,8 @@ function answering(answer: ReturnType<McpStatusReader["lookup"]>): McpStatusLook
 type ServersPort = Parameters<typeof withMcpServerStatus>[4];
 
 /** MSEL-01: the port for the adapter and `none` cases, whose stamp never reads it. */
-const notRead: ServersPort = () => Promise.resolve<RecordedMcpServers>({ kind: "unreadable" });
+const notRead: ServersPort = () =>
+  Promise.resolve<RecordedMcpServers>({ kind: "unreadable", reason: "read-failed" });
 
 for (const { answer, token } of [
   { answer: "connected", token: "connected" },
@@ -615,7 +616,10 @@ test("MREC-02: under builtin, when the record's servers cannot be read, the serv
   const { lookup } = await builtinLookup(t, answeringReader("not-connected"));
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }, { name: "plugin:alpha:db" }]);
   const readServers = (() =>
-    Promise.resolve<RecordedMcpServers>({ kind: "unreadable" })) satisfies ServersPort;
+    Promise.resolve<RecordedMcpServers>({
+      kind: "unreadable",
+      reason: "read-failed",
+    })) satisfies ServersPort;
 
   // act
   const stamped = await withMcpServerStatus(

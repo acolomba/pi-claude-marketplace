@@ -35,7 +35,11 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { deriveInstallVersion } from "../plugin/install-outcome.ts";
 
-import type { RecordedMcpServer, RecordedMcpServers } from "../../domain/mcp-implementation.ts";
+import type {
+  RecordedMcpServer,
+  RecordedMcpServers,
+  UnreadableMcpServersReason,
+} from "../../domain/mcp-implementation.ts";
 import type { GitPluginRootResult, ResolveContext } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
@@ -60,7 +64,9 @@ export type LegacyServersReader = (source: LegacyServersSource) => Promise<Legac
  * are refused as `uncontained` (UF-1, NFR-10), and an uncontained stored
  * record answers `unreadable`. A record without the field answers
  * `re-resolved` from the legacy reader. A refusal or any failure of that
- * reader answers `unreadable`, so the stored compatibility verdict stands. The reason goes to the `mcp` debug channel.
+ * reader answers `unreadable`, so the stored compatibility verdict stands.
+ * The answer carries the refusal's reason, or `read-failed` for any other
+ * failure; the message goes to the `mcp` debug channel.
  */
 export async function recordedMcpServers(
   source: LegacyServersSource,
@@ -70,14 +76,17 @@ export async function recordedMcpServers(
     return await readRecordedServers(source, readLegacy);
   } catch (error: unknown) {
     // MREC-02: an unreadable declaration leaves the stored verdict standing.
-    // The debug channel keeps why, since a caller sees only `unreadable`.
+    // The caller sees only the reason; the debug channel keeps the message.
     // UF-4: manifest and plugin file errors name absolute paths, which the
     // line cuts to their last segment.
     hookDebugLog(
       redactAbsolutePaths(`recorded MCP servers unreadable: ${errorMessage(error)}`),
       "mcp",
     );
-    return { kind: "unreadable" };
+    return {
+      kind: "unreadable",
+      reason: error instanceof RecordedServersUnreadableError ? error.reason : "read-failed",
+    };
   }
 }
 
@@ -162,22 +171,22 @@ export function legacyServersSourceFor(
   };
 }
 
-/** Why the legacy reader could not re-resolve a record's declaration. */
-type LegacyServersUnreadableReason =
-  "not-in-manifest" | "unavailable" | "root-mismatch" | "version-mismatch" | "uncontained";
+/** Why a read refuses a record's servers; any other failure is `read-failed`. */
+type RefusalReason = Exclude<UnreadableMcpServersReason, "read-failed">;
 
 /**
- * MREC-02: the legacy reader refuses to re-resolve a record's declaration,
- * or `recordedMcpServers` refuses a record's stored servers (UF-1).
- * `recordedMcpServers` reads every refusal as `unreadable`.
+ * A read refuses a record's MCP servers: the legacy reader refuses to
+ * re-resolve its declaration (MREC-02), or the stored path refuses an
+ * uncontained record (UF-1). `recordedMcpServers` answers every refusal as
+ * `unreadable` with the refusal's reason.
  */
-class LegacyServersUnreadableError extends Error {
-  readonly reason: LegacyServersUnreadableReason;
+class RecordedServersUnreadableError extends Error {
+  readonly reason: RefusalReason;
   readonly plugin: string;
   readonly marketplace: string;
-  constructor(reason: LegacyServersUnreadableReason, plugin: string, marketplace: string) {
-    super(`cannot re-resolve the MCP servers of ${plugin}@${marketplace}: ${reason}`);
-    this.name = "LegacyServersUnreadableError";
+  constructor(reason: RefusalReason, plugin: string, marketplace: string) {
+    super(`cannot read the MCP servers of ${plugin}@${marketplace}: ${reason}`);
+    this.name = "RecordedServersUnreadableError";
     this.reason = reason;
     this.plugin = plugin;
     this.marketplace = marketplace;
@@ -187,9 +196,9 @@ class LegacyServersUnreadableError extends Error {
 /** The refusal for `source`'s plugin, for `reason`. */
 function refusal(
   source: LegacyServersSource,
-  reason: LegacyServersUnreadableReason,
-): LegacyServersUnreadableError {
-  return new LegacyServersUnreadableError(reason, source.pluginName, source.marketplace.name);
+  reason: RefusalReason,
+): RecordedServersUnreadableError {
+  return new RecordedServersUnreadableError(reason, source.pluginName, source.marketplace.name);
 }
 
 /** `pluginCloneKey` (`<12hex>-<sha12>`) and `pluginMirrorKey` (`<12hex>`) outputs. */
@@ -252,7 +261,7 @@ async function owningRoot(source: LegacyServersSource): Promise<string> {
  * owning clone root, the record's `plugin-clones/<key>/` entry or its
  * marketplace root. Reads no file but the path segments it walks.
  */
-export async function isPluginRootContained(source: LegacyServersSource): Promise<boolean> {
+async function isPluginRootContained(source: LegacyServersSource): Promise<boolean> {
   try {
     const root = await owningRoot(source);
     await assertPathInside(root, source.record.resolvedSource, "plugin root");

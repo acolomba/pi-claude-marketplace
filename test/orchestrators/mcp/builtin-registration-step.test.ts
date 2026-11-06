@@ -579,7 +579,7 @@ describe("builtinRegistrationStep", () => {
 
     // assert
     assert.deepStrictEqual(logged, [
-      "[mcp] recorded MCP servers unreadable: cannot re-resolve the MCP servers of demo@mp: not-in-manifest",
+      "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of demo@mp: not-in-manifest",
       "[mcp] MCP servers of demo@mp not registered: its servers are unreadable",
     ]);
     verify(pi);
@@ -651,6 +651,7 @@ describe("builtinRegistrationStep", () => {
 
       // assert
       assert.deepStrictEqual(logged, [
+        "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of demo@mp: uncontained",
         "[mcp] MCP servers of demo@mp not registered: its plugin root is outside its sources",
       ]);
       verify(pi);
@@ -700,6 +701,7 @@ describe("builtinRegistrationStep", () => {
 
     // assert
     assert.deepStrictEqual(logged, [
+      "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of demo@mp: uncontained",
       "[mcp] MCP servers of demo@mp not registered: its plugin root is outside its sources",
     ]);
     verify(pi);
@@ -720,6 +722,7 @@ describe("builtinRegistrationStep", () => {
 
     // assert
     assert.deepStrictEqual(logged, [
+      "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of demo@mp: uncontained",
       "[mcp] MCP servers of demo@mp not registered: its plugin root is outside its sources",
     ]);
     verify(pi);
@@ -744,6 +747,7 @@ describe("builtinRegistrationStep", () => {
 
     // assert
     assert.deepStrictEqual(logged, [
+      "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of demo@mp: uncontained",
       "[mcp] MCP servers of demo@mp not registered: its plugin root is outside its sources",
     ]);
     verify(pi);
