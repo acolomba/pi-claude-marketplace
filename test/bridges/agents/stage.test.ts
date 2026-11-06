@@ -31,16 +31,12 @@ import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marke
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
+import { ADAPTER_ASYNC, BUILTIN_ASYNC } from "./agent-grant-seeds.ts";
+
 import type {
   AgentsIndex,
   AgentsIndexEntry,
 } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
-
-const ADAPTER_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails";
-
-const BUILTIN_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before Pi's built-in MCP has listed the server's tools still fails";
 
 const BOT_QUERY_SOURCE =
   "---\nname: bot\ndescription: Bot\ntools: Read, mcp__plugin_acme_db__query\n---\n\nBody.\n";
@@ -50,7 +46,7 @@ const BOT_QUERY_SOURCE_HASH = createHash("sha256").update(BOT_QUERY_SOURCE).dige
 /** The frontmatter block of `BOT_QUERY_SOURCE` in one MCP implementation's grant form. */
 function botQueryFrontmatter(sourcePath: string, form: "adapter" | "builtin"): string {
   const selector = form === "builtin" ? "mcp:plugin_acme_db/query" : "mcp:plugin_acme_db_/query";
-  const asyncWarning = form === "builtin" ? BUILTIN_ASYNC_WARNING : ADAPTER_ASYNC_WARNING;
+  const asyncWarning = form === "builtin" ? BUILTIN_ASYNC : ADAPTER_ASYNC;
   return `---\nname: acme:bot\ndescription: Bot\naliases: pi-claude-marketplace-acme-bot\ntools: read,${selector}\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - ${asyncWarning}\n---\n`;
 }
 
@@ -233,17 +229,17 @@ describe("prepareStagePluginAgents", () => {
       sourceHash: BOT_QUERY_SOURCE_HASH,
       droppedFields: [],
       droppedTools: [],
-      warnings: [BUILTIN_ASYNC_WARNING],
+      warnings: [BUILTIN_ASYNC],
       mcpImplementation: "builtin",
       mcpForms: {
         builtin: {
           frontmatter: builtinFrontmatter,
-          warnings: [BUILTIN_ASYNC_WARNING],
+          warnings: [BUILTIN_ASYNC],
           droppedTools: [],
         },
         adapter: {
           frontmatter: botQueryFrontmatter(sourcePath, "adapter"),
-          warnings: [ADAPTER_ASYNC_WARNING],
+          warnings: [ADAPTER_ASYNC],
           droppedTools: [],
         },
       },
@@ -266,7 +262,7 @@ describe("prepareStagePluginAgents", () => {
     // assert
     assert.strictEqual(leak, undefined);
     assert.deepStrictEqual(prepared.result.warnings, [
-      { kind: "hygiene", message: `[bot] ${BUILTIN_ASYNC_WARNING}` },
+      { kind: "hygiene", message: `[bot] ${BUILTIN_ASYNC}` },
     ]);
     assert.strictEqual(await readFile(targetPath, "utf8"), `${builtinFrontmatter}\nBody.\n`);
     assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
@@ -312,7 +308,7 @@ describe("prepareStagePluginAgents", () => {
 
     // assert
     assert.deepStrictEqual(prepared.result.warnings, [
-      { kind: "hygiene", message: `[bot] ${BUILTIN_ASYNC_WARNING}` },
+      { kind: "hygiene", message: `[bot] ${BUILTIN_ASYNC}` },
       { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_acme_web__get" },
     ]);
   });
@@ -1711,17 +1707,17 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
           sourceHash: BOT_QUERY_SOURCE_HASH,
           droppedFields: [],
           droppedTools: [],
-          warnings: [ADAPTER_ASYNC_WARNING],
+          warnings: [ADAPTER_ASYNC],
           mcpImplementation: "adapter",
           mcpForms: {
             adapter: {
               frontmatter: botQueryFrontmatter(sourcePath, "adapter"),
-              warnings: [ADAPTER_ASYNC_WARNING],
+              warnings: [ADAPTER_ASYNC],
               droppedTools: [],
             },
             builtin: {
               frontmatter: botQueryFrontmatter(sourcePath, "builtin"),
-              warnings: [BUILTIN_ASYNC_WARNING],
+              warnings: [BUILTIN_ASYNC],
               droppedTools: [],
             },
           },
@@ -1876,17 +1872,17 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
           sourceHash: BOT_QUERY_SOURCE_HASH,
           droppedFields: [],
           droppedTools: [],
-          warnings: [ADAPTER_ASYNC_WARNING],
+          warnings: [ADAPTER_ASYNC],
           mcpImplementation: "adapter",
           mcpForms: {
             adapter: {
               frontmatter: botQueryFrontmatter(sourcePath, "adapter"),
-              warnings: [ADAPTER_ASYNC_WARNING],
+              warnings: [ADAPTER_ASYNC],
               droppedTools: [],
             },
             builtin: {
               frontmatter: botQueryFrontmatter(sourcePath, "builtin"),
-              warnings: [BUILTIN_ASYNC_WARNING],
+              warnings: [BUILTIN_ASYNC],
               droppedTools: [],
             },
           },

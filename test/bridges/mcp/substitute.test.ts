@@ -526,7 +526,7 @@ test("AVAR-05: a deny-listed header variable set to the empty string is blanked 
   });
 });
 
-test("BLT-02: routes command, args, and url as plain, env and headers as secret, and literals", () => {
+test("BLT-02: passes each field to the encoder with its secret flag and writes literals through it", () => {
   // arrange
   const encoder: McpFieldEncoder = {
     expanded: (segments, secret, env) =>

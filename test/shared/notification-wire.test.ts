@@ -604,6 +604,16 @@ for (const { title, status, expectedValid } of [
     expectedValid: true,
   },
   {
+    title: "accepts an MCP server a same-named mcp.json entry replaces",
+    status: "overridden by mcp.json",
+    expectedValid: true,
+  },
+  {
+    title: "accepts an MCP server of a project Pi does not trust",
+    status: "project not trusted",
+    expectedValid: true,
+  },
+  {
     title: "rejects an MCP server whose status is outside its closed set",
     status: "online",
     expectedValid: false,
@@ -636,6 +646,52 @@ for (const { title, status, expectedValid } of [
 
     // assert
     assert.strictEqual(valid, expectedValid);
+  });
+}
+
+for (const companion of ["mcp", "builtin mcp"]) {
+  test(`D-MB-07: accepts the ${companion} companion on a requires entry`, () => {
+    // arrange
+    const payload = {
+      schemaVersion: 1,
+      origin: { kind: "load" },
+      kind: "plugin-info",
+      severity: "info",
+      needsReload: false,
+      marketplaceName: "mp",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "installed",
+        name: "p",
+        id: "p@mp",
+        reasons: [],
+        componentsResolved: true,
+        components: {},
+        requires: [{ companion, missing: true }],
+      },
+    };
+    const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+    // act
+    const valid = validator.Check(payload);
+
+    // assert
+    assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
+  });
+}
+
+for (const reason of ["requires mcp", "requires builtin mcp"]) {
+  test(`D-MB-07: accepts the ${reason} soft-dependency reason`, () => {
+    // arrange
+    const payload = cascadePayloadWith({ ...failedRow(), reasons: [reason] });
+    const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+    // act
+    const valid = validator.Check(payload);
+
+    // assert
+    assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
   });
 }
 

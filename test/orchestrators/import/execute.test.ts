@@ -98,10 +98,6 @@ type ImportState = Awaited<ReturnType<LoadState>>;
 type MarketplaceRecord = ImportState["marketplaces"][string];
 type MarketplaceSource = MarketplaceRecord["source"];
 type PluginRecord = MarketplaceRecord["plugins"][string];
-
-// D-P3-10: the MCP dependency a boolean `mcp` row maps to, which renders the
-// `requires pi-mcp-adapter` marker exactly as a declared MCP kind did.
-const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
 type AddOutcome = Awaited<ReturnType<AddMarketplace>>;
 type InstallOutcome = Awaited<ReturnType<InstallPlugin>>;
 type AddOptions = Parameters<AddMarketplace>[0];
@@ -109,6 +105,10 @@ type InstallOptions = Parameters<InstallPlugin>[0];
 type Diagnostic = ClaudeImportExecutionResult["diagnostics"][number];
 type Collaborators = Required<ImportDeps>;
 type TestImportOptions = Omit<ImportClaudeSettingsOptions, "completionCache">;
+
+// D-P3-10: the MCP dependency a boolean `mcp` row maps to, which renders the
+// `requires pi-mcp-adapter` marker exactly as a declared MCP kind did.
+const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
 
 for (const mode of ["json", "rpc"] as const) {
   test(`appends import diagnostics after the cascade in ${mode}`, async (t) => {

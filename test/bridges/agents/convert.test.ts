@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { describe, test } from "node:test";
 
 import {
@@ -10,6 +9,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 
+import type { ConvertAgentInput } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 import type {
   ConvertedAgent,
   RawAgentFrontmatter,
@@ -26,12 +26,13 @@ const BUILTIN_MCP_ASYNC_WARNING =
 const EXCLUDE_TOOLS_FLOOR_WARNING =
   "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set";
 
-function convertMcpAgent(
+function mcpAgentInput(
   raw: RawAgentFrontmatter,
   mcpServerNames: readonly string[] | undefined,
   mcpImplementation?: McpImplementationId,
-): ConvertedAgent {
-  return convertAgent({
+  body = "Body content.\n",
+): ConvertAgentInput {
+  return {
     pluginName: "acme",
     pluginRoot: "/root",
     pluginDataDir: "/data",
@@ -42,13 +43,21 @@ function convertMcpAgent(
       sourcePath: "/abs/path/source.md",
       sourceHash: "abc123",
       raw,
-      body: "Body content.\n",
+      body,
     },
     sourceHash: "abc",
     mapModel: false,
     mcpServerNames,
     mcpImplementation,
-  });
+  };
+}
+
+function convertMcpAgent(
+  raw: RawAgentFrontmatter,
+  mcpServerNames: readonly string[] | undefined,
+  mcpImplementation?: McpImplementationId,
+): ConvertedAgent {
+  return convertAgent(mcpAgentInput(raw, mcpServerNames, mcpImplementation));
 }
 
 function yamlList(items: readonly string[]): string {
@@ -2800,10 +2809,8 @@ describe("MGRT-01 grant form per MCP implementation", () => {
   test("MGRT-01: a built-in per-tool exclude longer than 64 characters is cut and hashed as Pi 1.5.0 does", () => {
     // arrange
     const tool = "list_every_table_in_the_warehouse_with_its_row_counts";
-    const fullName = `mcp__plugin_acme_db__${tool}`;
-    const hash = createHash("sha256").update(`plugin_acme_db\0${tool}`).digest("hex").slice(0, 8);
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: `excludeTools: ${fullName.slice(0, 55)}_${hash}`,
+      toolsField: "excludeTools: mcp__plugin_acme_db__list_every_table_in_the_warehouse__36d788b4",
       inheritSkills: true,
       async: true,
       droppedTools: [],
@@ -3022,22 +3029,14 @@ provenance:
 `;
 
     // act
-    const agent = convertAgent({
-      pluginName: "acme",
-      pluginRoot: "/root",
-      pluginDataDir: "/data",
-      knownSkills: [],
-      discovered: {
-        sourceName: "bot",
-        generatedName: "pi-claude-marketplace-acme-bot",
-        sourcePath: "/abs/path/source.md",
-        sourceHash: "abc123",
-        raw: { description: "d", tools: "Read" },
-        body: "Before.\n---\nname: injected\n---\nAfter.\n",
-      },
-      sourceHash: "abc",
-      mapModel: false,
-    });
+    const agent = convertAgent(
+      mcpAgentInput(
+        { description: "d", tools: "Read" },
+        undefined,
+        undefined,
+        "Before.\n---\nname: injected\n---\nAfter.\n",
+      ),
+    );
 
     // assert
     assert.deepStrictEqual(
@@ -3056,24 +3055,7 @@ describe("convertAgentForm", () => {
     const raw = { description: "d", tools: "mcp__plugin_acme_web__get, WebFetch" };
 
     // act
-    const agent = convertAgentForm({
-      pluginName: "acme",
-      pluginRoot: "/root",
-      pluginDataDir: "/data",
-      knownSkills: [],
-      discovered: {
-        sourceName: "bot",
-        generatedName: "pi-claude-marketplace-acme-bot",
-        sourcePath: "/abs/path/source.md",
-        sourceHash: "abc123",
-        raw,
-        body: "Body content.\n",
-      },
-      sourceHash: "abc",
-      mapModel: false,
-      mcpServerNames: [],
-      mcpImplementation: "builtin",
-    });
+    const agent = convertAgentForm(mcpAgentInput(raw, [], "builtin"));
 
     // assert
     assert.strictEqual(agent, undefined);
@@ -3091,24 +3073,13 @@ describe("convertAgentForm", () => {
     const body = "\nBody content.\n";
 
     // act
-    const agent = convertAgentForm({
-      pluginName: "acme",
-      pluginRoot: "/root",
-      pluginDataDir: "/data",
-      knownSkills: [],
-      discovered: {
-        sourceName: "bot",
-        generatedName: "pi-claude-marketplace-acme-bot",
-        sourcePath: "/abs/path/source.md",
-        sourceHash: "abc123",
-        raw: { description: "d", tools: "Read, WebFetch, mcp__plugin_acme_db__query" },
-        body: "Body content.\n",
-      },
-      sourceHash: "abc",
-      mapModel: false,
-      mcpServerNames: ["db"],
-      mcpImplementation: "builtin",
-    });
+    const agent = convertAgentForm(
+      mcpAgentInput(
+        { description: "d", tools: "Read, WebFetch, mcp__plugin_acme_db__query" },
+        ["db"],
+        "builtin",
+      ),
+    );
 
     // assert
     assert.deepStrictEqual(agent, {

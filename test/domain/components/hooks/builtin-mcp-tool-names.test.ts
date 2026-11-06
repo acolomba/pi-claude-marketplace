@@ -193,39 +193,36 @@ describe("serverPrefixNames", () => {
 describe("claudeFormToolName", () => {
   test("puts the registered server name in place of Pi's namespace (D-P5-02)", () => {
     // arrange
+    const piName = "mcp__plugin_hook_demo_stub_server__echo";
+    const namespace = "mcp__plugin_hook_demo_stub_server";
+    const server = "plugin_hook-demo_stub-server";
 
     // act
-    const name = claudeFormToolName(
-      "mcp__plugin_hook_demo_stub_server__echo",
-      "mcp__plugin_hook_demo_stub_server",
-      "plugin_hook-demo_stub-server",
-    );
+    const hookToolName = claudeFormToolName(piName, namespace, server);
 
     // assert
-    assert.strictEqual(name, "mcp__plugin_hook-demo_stub-server__echo");
+    assert.strictEqual(hookToolName, "mcp__plugin_hook-demo_stub-server__echo");
   });
 
   test("keeps Pi's name when Pi cut it inside the namespace (D-P5-02)", () => {
     // arrange
+    const namespace = "mcp__plugin_hook_proxy_shaped_tool_names_of_a_long_plugin_stub_server";
 
     // act
-    const name = claudeFormToolName(
-      LONG_PI_NAME,
-      "mcp__plugin_hook_proxy_shaped_tool_names_of_a_long_plugin_stub_server",
-      LONG_SERVER,
-    );
+    const hookToolName = claudeFormToolName(LONG_PI_NAME, namespace, LONG_SERVER);
 
     // assert
-    assert.strictEqual(name, LONG_PI_NAME);
+    assert.strictEqual(hookToolName, LONG_PI_NAME);
   });
 
   test("keeps the hash as the tool segment when Pi's cut ends just past the namespace (D-P5-02)", () => {
     // arrange
+    const piName = `${EDGE_NAMESPACE}__f5437d26`;
 
     // act
-    const name = claudeFormToolName(`${EDGE_NAMESPACE}__f5437d26`, EDGE_NAMESPACE, EDGE_SERVER);
+    const hookToolName = claudeFormToolName(piName, EDGE_NAMESPACE, EDGE_SERVER);
 
     // assert
-    assert.strictEqual(name, `mcp__${EDGE_SERVER}__f5437d26`);
+    assert.strictEqual(hookToolName, `mcp__${EDGE_SERVER}__f5437d26`);
   });
 });

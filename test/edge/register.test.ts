@@ -113,6 +113,7 @@ import type {
 } from "@earendil-works/pi-tui";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
+type ImportDelegate = NonNullable<EdgeDeps["importClaudeSettings"]>;
 
 /**
  * D-P6-22: an empty Pi inventory names no MCP implementation, so every
@@ -120,7 +121,6 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
  * A case that seeds or reads a cache the lookups share uses the same stamp.
  */
 const LOOKUP_STAMP = { mcpImplementation: "none" } satisfies GetPluginIndexOptions;
-type ImportDelegate = NonNullable<EdgeDeps["importClaudeSettings"]>;
 
 /** The options bag `registerCommand` receives, derived from the Pi surface. */
 type CommandRegistration = Parameters<ExtensionAPI["registerCommand"]>[1];
@@ -307,7 +307,7 @@ async function seedProjectMarketplaces(
 }
 
 /**
- * Lay out the catalog of the marketplace `marketplaceRecordIn` records: an
+ * Lays out the catalog of the marketplace `marketplaceRecordIn` records: an
  * `events` plugin whose one server is sse, which pi-mcp-adapter runs and Pi's
  * built-in MCP cannot, and a `plain` plugin with no server.
  */

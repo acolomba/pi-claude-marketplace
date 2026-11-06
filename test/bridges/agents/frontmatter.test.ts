@@ -1078,7 +1078,7 @@ Body.
 });
 
 describe("emitGeneratedAgentFrontmatter", () => {
-  const fields = {
+  const agentFields = {
     frontmatter: {
       name: "acme:reviewer",
       description: "Reviews files",
@@ -1120,7 +1120,7 @@ provenance:
 
   test("MGRT-01: returns the frontmatter block from the opening through the closing --- line", () => {
     // act
-    const frontmatter = emitGeneratedAgentFrontmatter(fields);
+    const frontmatter = emitGeneratedAgentFrontmatter(agentFields);
 
     // assert
     assert.strictEqual(frontmatter, expectedFrontmatter);
@@ -1145,7 +1145,7 @@ provenance:
   ]) {
     test(`MGRT-01: the file is the frontmatter block followed by ${label}`, () => {
       // act
-      const agentFile = emitGeneratedAgentFile({ ...fields, body });
+      const agentFile = emitGeneratedAgentFile({ ...agentFields, body });
 
       // assert
       assert.strictEqual(agentFile, expectedFrontmatter + expectedBody);

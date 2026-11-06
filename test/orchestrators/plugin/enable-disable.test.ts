@@ -3387,7 +3387,7 @@ test("WR-02: an enable whose persisted installable gate is stale names the dropp
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     // The row names the dropped kind through the same `narrowUnsupportedKinds`
-    // seam the list `(partially-upgradable)` row uses, and carries the frozen
+    // seam the list `(partially-upgradable)` row uses, and carries the
     // stale-gate remediation trailer -- `update --partial` is the remedy that
     // re-pins the record against the current manifest entry. CR-01: the trailer
     // NAMES `update`; the command that just failed is `enable`, which rejects

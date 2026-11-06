@@ -1,16 +1,3 @@
-import assert from "node:assert/strict";
-import test, { type TestContext } from "node:test";
-
-import { SessionManager } from "@earendil-works/pi-coding-agent";
-
-import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
-import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
-
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-
 /**
  * test/architecture/no-factory-time-probe.test.ts -- the extension factory reads
  * none of Pi's tool, command, or MCP-server inventory.
@@ -40,6 +27,19 @@ import type {
  *   probe moved to `session_start`, not that the extension stopped probing.
  */
 
+import assert from "node:assert/strict";
+import { test, type TestContext } from "node:test";
+
+import { SessionManager } from "@earendil-works/pi-coding-agent";
+
+import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
+
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
 /** The inventory reads the ban covers. */
 const INVENTORY_READS = new Set(["getCommands", "getAllTools", "getActiveTools", "getMcpServers"]);
 
@@ -68,6 +68,7 @@ function createRecordingPi(): RecordingPi {
     on: () => () => undefined,
     emit: () => undefined,
   };
+  // The proxy answers every member, so it stands in for the whole API.
   const pi = new Proxy(
     {},
     {
@@ -110,6 +111,7 @@ function sessionContext(cwd: string): ExtensionContext {
     ["isProjectTrusted", () => true],
     ["ui", new Proxy({}, { get: () => () => undefined })],
   ]);
+  // Only the members `session_start` handlers read are answered.
   return new Proxy(
     {},
     {
@@ -138,12 +140,12 @@ test("MSEL-01: the extension factory reads no inventory, and session_start does"
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "factory-probe-");
   restoreTouchedEnv(t);
-  const recording = createRecordingPi();
+  const { pi, inventoryReads, handlers } = createRecordingPi();
 
   // act
-  await claudeMarketplaceExtension(recording.pi);
-  const factoryReads = [...recording.inventoryReads];
-  for (const handler of recording.handlers("session_start")) {
+  await claudeMarketplaceExtension(pi);
+  const factoryReads = [...inventoryReads];
+  for (const handler of handlers("session_start")) {
     // Pi runs session_start handlers one after another, in registration order.
     await handler({ type: "session_start", reason: "startup" }, sessionContext(cwd));
   }
@@ -151,7 +153,7 @@ test("MSEL-01: the extension factory reads no inventory, and session_start does"
   // assert
   assert.deepStrictEqual(factoryReads, []);
   assert.ok(
-    recording.inventoryReads.length > 0,
+    inventoryReads.length > 0,
     "no session_start handler read the inventory, so the probe ban proves nothing",
   );
 });

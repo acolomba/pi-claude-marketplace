@@ -605,9 +605,7 @@ describe("loadManifestForMarketplace", () => {
       return true;
     });
   });
-});
 
-describe("loadManifestForMarketplace MCP verdict reads (D-P6-22, ENBL-04)", () => {
   // A legacy record that names `mcpServers` and that the manifest no longer
   // declares cannot re-resolve its servers, so a verdict read of it logs one
   // `mcp` debug line. `list` reads no verdict of a disabled record.
@@ -650,9 +648,7 @@ describe("loadManifestForMarketplace MCP verdict reads (D-P6-22, ENBL-04)", () =
       assert.deepStrictEqual(debugLines, logged);
     });
   }
-});
 
-describe("loadManifestForMarketplace for each MCP implementation (D-P6-22, MREC-03)", () => {
   const implementationCases = [
     { mcpImplementation: "adapter", sseStatus: "available" },
     { mcpImplementation: "builtin", sseStatus: "partially-available" },
@@ -683,9 +679,7 @@ describe("loadManifestForMarketplace for each MCP implementation (D-P6-22, MREC-
       assert.deepStrictEqual(indexRows, expectedRows);
     });
   }
-});
 
-describe("loadManifestForMarketplace installed records for each MCP implementation (D-P6-22, MREC-03)", () => {
   /** One recorded sse server: pi-mcp-adapter runs it, Pi's built-in MCP cannot. */
   const sseRecord = (enabled: boolean): InstalledFixture => ({
     version: "1.0.0",

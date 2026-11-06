@@ -5020,10 +5020,21 @@ function neutralResolution(
   };
 }
 
-const LOCAL = { command: "node" };
-const EVENTS = { type: "sse", url: "https://mcp.example.com/sse" };
-const ASKER = { command: "node", bareElicitationCapability: true };
-const LIVE = { type: "ws", url: "wss://mcp.example.com/ws" };
+function localServer(): Record<string, unknown> {
+  return { command: "node" };
+}
+
+function eventsServer(): Record<string, unknown> {
+  return { type: "sse", url: "https://mcp.example.com/sse" };
+}
+
+function askerServer(): Record<string, unknown> {
+  return { command: "node", bareElicitationCapability: true };
+}
+
+function liveServer(): Record<string, unknown> {
+  return { type: "ws", url: "wss://mcp.example.com/ws" };
+}
 
 describe("resolutionFor", () => {
   test("D-P3-03: the none view deep-equals the neutral resolution", () => {
@@ -5031,8 +5042,13 @@ describe("resolutionFor", () => {
     const neutral = neutralResolution({
       state: "partially-available",
       unsupported: ["mcpServers"],
-      mcpServers: { local: LOCAL, events: EVENTS },
-      declaredMcpServers: { local: LOCAL, events: EVENTS, asker: ASKER, live: LIVE },
+      mcpServers: { local: localServer(), events: eventsServer() },
+      declaredMcpServers: {
+        local: localServer(),
+        events: eventsServer(),
+        asker: askerServer(),
+        live: liveServer(),
+      },
       droppedMcpServers: [{ server: "live", feature: "ws" }],
     });
 
@@ -5046,8 +5062,8 @@ describe("resolutionFor", () => {
   test("D-P3-03: the builtin view of an sse plugin is partially available with the sse server dropped", () => {
     // arrange
     const neutral = neutralResolution({
-      mcpServers: { events: EVENTS },
-      declaredMcpServers: { events: EVENTS },
+      mcpServers: { events: eventsServer() },
+      declaredMcpServers: { events: eventsServer() },
     });
 
     // act
@@ -5059,8 +5075,8 @@ describe("resolutionFor", () => {
       neutralResolution({
         state: "partially-available",
         unsupported: ["mcpServers"],
-        mcpServers: { events: EVENTS },
-        declaredMcpServers: { events: EVENTS },
+        mcpServers: { events: eventsServer() },
+        declaredMcpServers: { events: eventsServer() },
         droppedMcpServers: [{ server: "events", feature: "sse" }],
       }),
     );
@@ -5072,7 +5088,7 @@ describe("resolutionFor", () => {
       state: "partially-available",
       unsupported: ["hooks"],
       notes: ["contains hooks"],
-      declaredMcpServers: { asker: ASKER },
+      declaredMcpServers: { asker: askerServer() },
     });
 
     // act
@@ -5085,7 +5101,7 @@ describe("resolutionFor", () => {
         state: "partially-available",
         unsupported: ["hooks", "mcpServers"],
         notes: ["contains hooks"],
-        declaredMcpServers: { asker: ASKER },
+        declaredMcpServers: { asker: askerServer() },
         droppedMcpServers: [{ server: "asker", feature: "bareElicitationCapability" }],
       }),
     );
@@ -5096,16 +5112,20 @@ describe("resolutionFor", () => {
     const neutral = neutralResolution({
       state: "partially-available",
       unsupported: ["mcpServers"],
-      mcpServers: { local: LOCAL },
-      declaredMcpServers: { local: LOCAL },
+      mcpServers: { local: localServer() },
+      declaredMcpServers: { local: localServer() },
       mcpBundle: true,
     });
 
     // act
-    const views = [resolutionFor(neutral, "adapter"), resolutionFor(neutral, "builtin")];
+    const views = [
+      resolutionFor(neutral, "adapter"),
+      resolutionFor(neutral, "builtin"),
+      resolutionFor(neutral, "none"),
+    ];
 
     // assert
-    assert.deepStrictEqual(views, [neutral, neutral]);
+    assert.deepStrictEqual(views, [neutral, neutral, neutral]);
   });
 
   test("D-P3-03: an unavailable resolution returns unchanged", () => {
@@ -5128,8 +5148,8 @@ describe("resolutionFor", () => {
     test(`D-P3-03: the ${active} view of a stdio plugin deep-equals the neutral resolution`, () => {
       // arrange
       const neutral = neutralResolution({
-        mcpServers: { local: LOCAL },
-        declaredMcpServers: { local: LOCAL },
+        mcpServers: { local: localServer() },
+        declaredMcpServers: { local: localServer() },
       });
 
       // act

@@ -305,9 +305,10 @@ test("D-MB-29: a fresh registration or a removal clears a refusal", (t) => {
 
   // act
   noteFreshBuiltinRegistration("plugin_alpha_api");
+  const after = builtinRegistrationRefused("plugin_alpha_api");
 
   // assert
-  assert.deepStrictEqual([before, builtinRegistrationRefused("plugin_alpha_api")], [true, false]);
+  assert.deepStrictEqual([before, after], [true, false]);
 });
 
 test("D-MB-29: a replacement clears a refusal", (t) => {
@@ -320,7 +321,8 @@ test("D-MB-29: a replacement clears a refusal", (t) => {
 
   // act
   noteReplacedBuiltinRegistration("plugin_alpha_api");
+  const after = builtinRegistrationRefused("plugin_alpha_api");
 
   // assert
-  assert.deepStrictEqual([before, builtinRegistrationRefused("plugin_alpha_api")], [true, false]);
+  assert.deepStrictEqual([before, after], [true, false]);
 });

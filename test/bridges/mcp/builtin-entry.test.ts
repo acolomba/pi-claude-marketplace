@@ -24,15 +24,12 @@ test("BLT-02: a stdio server gets the plugin variables in its env and deferred e
   const config = builtinServerConfig(server, CONTEXT, undefined);
 
   // assert
-  assert.strictEqual(
-    JSON.stringify(config),
-    JSON.stringify({
-      command: "/plugins/a$b/server",
-      args: ["--project", "/work/project"],
-      env: { CLAUDE_PLUGIN_ROOT: "/plugins/a$$b", CLAUDE_PLUGIN_DATA: "/data/mp/a", TOKEN: "t$$1" },
-      exposure: "deferred",
-    }),
-  );
+  assert.deepStrictEqual(config, {
+    command: "/plugins/a$b/server",
+    args: ["--project", "/work/project"],
+    env: { CLAUDE_PLUGIN_ROOT: "/plugins/a$$b", CLAUDE_PLUGIN_DATA: "/data/mp/a", TOKEN: "t$$1" },
+    exposure: "deferred",
+  });
 });
 
 test("BLT-02: an http server resolves its url and headers and carries the description", () => {
@@ -48,16 +45,13 @@ test("BLT-02: an http server resolves its url and headers and carries the descri
   const config = builtinServerConfig(server, CONTEXT, "Demo plugin");
 
   // assert
-  assert.strictEqual(
-    JSON.stringify(config),
-    JSON.stringify({
-      type: "http",
-      url: "https://mcp.example.test/mcp",
-      headers: { Authorization: "Bearer t$$1" },
-      exposure: "direct",
-      description: "Demo plugin",
-    }),
-  );
+  assert.deepStrictEqual(config, {
+    type: "http",
+    url: "https://mcp.example.test/mcp",
+    headers: { Authorization: "Bearer t$$1" },
+    exposure: "direct",
+    description: "Demo plugin",
+  });
 });
 
 for (const { title, server } of [
@@ -112,13 +106,10 @@ test("BLT-02: a ~ that is not leading, or that names a user, is kept as Pi keeps
   const config = builtinServerConfig(server, HOME_CONTEXT, undefined);
 
   // assert
-  assert.strictEqual(
-    JSON.stringify(config),
-    JSON.stringify({
-      command: "node",
-      args: ["a~/b", "~user"],
-      env: { CLAUDE_PLUGIN_ROOT: "/plugins/a$$b", CLAUDE_PLUGIN_DATA: "/data/mp/a" },
-      exposure: "deferred",
-    }),
-  );
+  assert.deepStrictEqual(config, {
+    command: "node",
+    args: ["a~/b", "~user"],
+    env: { CLAUDE_PLUGIN_ROOT: "/plugins/a$$b", CLAUDE_PLUGIN_DATA: "/data/mp/a" },
+    exposure: "deferred",
+  });
 });

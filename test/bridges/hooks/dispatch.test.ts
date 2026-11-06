@@ -3197,86 +3197,117 @@ function createProxyRuleView(applies: boolean, log: string[]): HookToolView {
   };
 }
 
-interface ProxyCase {
+interface ProxyRuleRow {
   readonly name: string;
   readonly toolName: string;
   readonly input: Readonly<Record<string, unknown>>;
-  readonly proxyShaped: boolean;
-}
-
-interface ProxyRuleRow {
-  readonly title: (claudeEvent: "PreToolUse" | "PostToolUse") => string;
-  readonly toolName: string;
-  readonly input: Readonly<Record<string, unknown>>;
+  /** Whether the view's proxy rule applies (pi-mcp-adapter is the active implementation). */
   readonly applies: boolean;
-  /** One element when the hook runs, none when it does not. */
-  readonly runs: readonly true[];
+  readonly runs: boolean;
   /** The view reads the call makes, in order. */
   readonly reads: readonly string[];
 }
 
-/**
- * MHK-02, D-P5-06: each call under a view whose proxy rule applies and under
- * one whose rule does not. Only a proxy-shaped call reads the rule, and only a
- * call that runs its hooks reads its tool (D-P5-07).
- */
-function proxyRuleRows(cases: readonly ProxyCase[]): ProxyRuleRow[] {
-  return cases.flatMap(({ name, toolName, input, proxyShaped }) =>
-    [
-      { rule: "the proxy rule applies (pi-mcp-adapter)", applies: true },
-      { rule: "the proxy rule does not apply (built-in MCP or none)", applies: false },
-    ].map(({ rule, applies }) => {
-      const runs = !(proxyShaped && applies);
-      const verb = runs ? "runs" : "runs no";
-      return {
-        title: (claudeEvent: "PreToolUse" | "PostToolUse") =>
-          `${verb} ${claudeEvent} hook for ${name} when ${rule}`,
-        toolName,
-        input,
-        applies,
-        runs: runs ? [true] : [],
-        reads: [
-          ...(proxyShaped ? ["proxyRuleApplies"] : []),
-          ...(runs ? [`identify ${toolName}`] : []),
-        ],
-      };
-    }),
-  );
+function proxyRuleTitle(
+  claudeEvent: "PreToolUse" | "PostToolUse",
+  { name, applies, runs }: ProxyRuleRow,
+): string {
+  const rule = applies
+    ? "the proxy rule applies (pi-mcp-adapter)"
+    : "the proxy rule does not apply (built-in MCP or none)";
+  return `${runs ? "runs" : "runs no"} ${claudeEvent} hook for ${name} when ${rule}`;
 }
 
 describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
-  const PROXY_CASES = [
+  // MHK-02, D-P5-06: each call under a view whose proxy rule applies and under
+  // one whose rule does not. Only a proxy-shaped call reads the rule, and only
+  // a call that runs its hooks reads its tool (D-P5-07).
+  const PROXY_ROWS: readonly ProxyRuleRow[] = [
     {
       name: "a call through the mcp proxy",
       toolName: "mcp",
       input: { tool: "mcp__plugin_demo_stub__echo", args: { text: "ping" } },
-      proxyShaped: true,
+      applies: true,
+      runs: false,
+      reads: ["proxyRuleApplies"],
+    },
+    {
+      name: "a call through the mcp proxy",
+      toolName: "mcp",
+      input: { tool: "mcp__plugin_demo_stub__echo", args: { text: "ping" } },
+      applies: false,
+      runs: true,
+      reads: ["proxyRuleApplies", "identify mcp"],
     },
     {
       name: "a call through a namespace proxy",
       toolName: "mcp__stub",
       input: { tool: "echo", args: { text: "ping" } },
-      proxyShaped: true,
+      applies: true,
+      runs: false,
+      reads: ["proxyRuleApplies"],
     },
-    { name: "an mcp proxy search", toolName: "mcp", input: { search: "x" }, proxyShaped: false },
+    {
+      name: "a call through a namespace proxy",
+      toolName: "mcp__stub",
+      input: { tool: "echo", args: { text: "ping" } },
+      applies: false,
+      runs: true,
+      reads: ["proxyRuleApplies", "identify mcp__stub"],
+    },
+    {
+      name: "an mcp proxy search",
+      toolName: "mcp",
+      input: { search: "x" },
+      applies: true,
+      runs: true,
+      reads: ["identify mcp"],
+    },
+    {
+      name: "an mcp proxy search",
+      toolName: "mcp",
+      input: { search: "x" },
+      applies: false,
+      runs: true,
+      reads: ["identify mcp"],
+    },
     {
       name: "an mcp proxy describe action",
       toolName: "mcp",
       input: { tool: "mcp__plugin_demo_stub__echo", action: "describe" },
-      proxyShaped: false,
+      applies: true,
+      runs: true,
+      reads: ["identify mcp"],
+    },
+    {
+      name: "an mcp proxy describe action",
+      toolName: "mcp",
+      input: { tool: "mcp__plugin_demo_stub__echo", action: "describe" },
+      applies: false,
+      runs: true,
+      reads: ["identify mcp"],
     },
     {
       name: "a real mcp tool whose input names a tool",
       toolName: "mcp__plugin_demo_stub__echo",
       input: { tool: "echo" },
-      proxyShaped: false,
+      applies: true,
+      runs: true,
+      reads: ["identify mcp__plugin_demo_stub__echo"],
     },
-  ] as const;
+    {
+      name: "a real mcp tool whose input names a tool",
+      toolName: "mcp__plugin_demo_stub__echo",
+      input: { tool: "echo" },
+      applies: false,
+      runs: true,
+      reads: ["identify mcp__plugin_demo_stub__echo"],
+    },
+  ];
 
-  for (const { title, toolName, input, applies, runs, reads: expectedReads } of proxyRuleRows(
-    PROXY_CASES,
-  )) {
-    test(title("PreToolUse"), async () => {
+  for (const row of PROXY_ROWS) {
+    const { toolName, input, applies, runs, reads: expectedReads } = row;
+    test(proxyRuleTitle("PreToolUse", row), async () => {
       // arrange
       const runtime = createHooksRuntime();
       runtime.advanceGeneration();
@@ -3309,12 +3340,12 @@ describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
       assert.strictEqual(output, undefined);
       assert.deepStrictEqual(
         calls.map(({ pluginId }) => pluginId),
-        runs.map(() => "any"),
+        runs ? ["any"] : [],
       );
       assert.deepStrictEqual(reads, expectedReads);
     });
 
-    test(title("PostToolUse"), async () => {
+    test(proxyRuleTitle("PostToolUse", row), async () => {
       // arrange
       const runtime = createHooksRuntime();
       runtime.advanceGeneration();
@@ -3346,7 +3377,7 @@ describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
       assert.strictEqual(output, undefined);
       assert.deepStrictEqual(
         calls.map(({ pluginId }) => pluginId),
-        runs.map(() => "after"),
+        runs ? ["after"] : [],
       );
       assert.deepStrictEqual(reads, expectedReads);
     });

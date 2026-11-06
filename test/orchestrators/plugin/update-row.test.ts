@@ -18,6 +18,8 @@ import type { McpDependency } from "../../../extensions/pi-claude-marketplace/sh
 
 // D-P3-10: an MCP dependency that renders the `requires pi-mcp-adapter` marker.
 const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
+// `as const` keeps the literal `false` from widening to `boolean` in the outcome literals.
+const NO_MCP = false as const;
 
 const COMMIT_A = "a".repeat(40);
 const COMMIT_B = "b".repeat(40);
@@ -60,7 +62,7 @@ test("composes agent-only dependencies without an MCP marker", () => {
   const outcome = {
     constraint: undefined,
     declaresAgents: true,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "2.0.0",
     name: "beta",
     declaresWorkflows: false,
@@ -126,7 +128,7 @@ test("composes no dependencies and truly omits clean optional reasons", () => {
   const outcome = {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "4.0.0",
     name: "delta",
     declaresWorkflows: false,
@@ -188,7 +190,7 @@ test("WDEP-02: an update that declares no workflow carries no host-engine depend
   const outcome = {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "1.0.0",
     name: "zeta",
     declaresWorkflows: false,
@@ -212,7 +214,7 @@ test("keeps an empty partial degradation on the updated row", () => {
   const outcome = {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "5.0.0",
     name: "epsilon",
     partialDegrade: { kinds: [], newlyDegraded: true },
@@ -294,7 +296,7 @@ test("raises a clean updated row only for malformed written content", () => {
   const outcome = {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     degradedKinds: ["command"] as const,
     fromVersion: "7.0.0",
     name: "eta",
@@ -329,7 +331,7 @@ test("retains base info severity for an already degraded partial update", () => 
   const outcome = {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "8.0.0",
     name: "theta",
     partialDegrade: { kinds: ["hooks"], newlyDegraded: false },
@@ -364,7 +366,7 @@ test("retains base warning severity for a newly degraded partial update", () => 
   const outcome = {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "9.0.0",
     name: "iota",
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
@@ -399,7 +401,7 @@ test("reports orphan rewake without overriding clean base severity", () => {
   const outcome = {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "10.0.0",
     name: "kappa",
     orphanRewake: true,
@@ -437,7 +439,7 @@ test("D-10-15 / D-10-13: an in-range current-copy fallback names itself and its 
       fellBackToCurrentCopy: true,
     },
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "1.0.0",
     name: "shared-lib",
     declaresWorkflows: false,
@@ -522,7 +524,7 @@ test("an outcome with no constraint produces a message with no reasons key at al
   const outcome = {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "1.0.0",
     name: "shared-lib",
     declaresWorkflows: false,
@@ -551,7 +553,7 @@ function skippedOutcome(
     notes: [],
     reasons: [],
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     ...overrides,
   };
 }
@@ -604,7 +606,7 @@ test("D-10-13: constraintCauseFor composes an Error from an unchanged outcome's 
     fromVersion: "1.5.0",
     toVersion: "1.5.0",
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     declaresWorkflows: false,
     constraint: {
       disclosure:
@@ -635,7 +637,7 @@ test("D-10-13 / D-10-17a: constraintCauseFor composes an Error from an updated o
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     declaresWorkflows: false,
     constraint: {
       disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@tools"',
@@ -662,7 +664,7 @@ test("constraintCauseFor returns undefined for an unconstrained unchanged outcom
     fromVersion: "1.5.0",
     toVersion: "1.5.0",
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     constraint: undefined,
   };
 
@@ -677,7 +679,7 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
   // arrange
   const outcome = {
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "1.0.0",
     name: "alpha",
     constraint: undefined,
@@ -718,7 +720,7 @@ test("WLIF-06: an update that retired nothing renders the row it always rendered
   const outcome = {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "1.0.0",
     name: "alpha",
     declaresWorkflows: false,
@@ -752,7 +754,7 @@ test("WLIF-06: all four axes at once emit in one brace in the established order"
   const outcome = {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     degradedKinds: ["skill" as const],
     fromVersion: "1.0.0",
     name: "alpha",
@@ -797,7 +799,7 @@ test("WLIF-06: the dropped-kind row raises on the stale token alone", () => {
   // malformed, so the raise here can only come from the stale-command axis.
   const outcome = {
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     fromVersion: "1.0.0",
     name: "alpha",
     partialDegrade: { kinds: ["monitors"], newlyDegraded: false },
@@ -825,7 +827,7 @@ function updatedOutcomeOver(move: RevisionMove): PluginUpdateUpdatedOutcome {
   return {
     constraint: undefined,
     declaresAgents: false,
-    declaresMcp: false as const,
+    declaresMcp: NO_MCP,
     declaresWorkflows: false,
     name: "ghp",
     partition: "updated",

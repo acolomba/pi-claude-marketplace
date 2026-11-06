@@ -2761,7 +2761,7 @@ test("registering the bridge reads neither Pi's tools nor its commands (MSEL-01)
   });
 
   // assert
-  assert.deepStrictEqual(
+  assert.strictEqual(
     registrations.filter(({ event }) => event === "tool_call" || event === "tool_result").length,
     2,
   );

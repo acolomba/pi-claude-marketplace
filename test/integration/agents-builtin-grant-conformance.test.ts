@@ -18,7 +18,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import os from "node:os";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 
 import { convertAgent } from "../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 
@@ -113,17 +113,22 @@ function grantSelectors(mcpImplementation: McpImplementationId): string[] {
     .map((entry) => entry.replace(/^mcp:/, ""));
 }
 
-test("MGRT-01: pi-subagents resolves every built-in grant selector against Pi's built-in MCP", async (t) => {
-  // arrange
+/** Imports pi-subagents' selector resolver from the optional peer cache and reports the proven version. */
+async function loadAllowlist(t: TestContext): Promise<McpDirectToolAllowlistModule> {
   const peer = await findCachedPeer("pi-subagents");
   t.diagnostic(`pi-subagents ${peer.version} at ${peer.root}`);
-  const allowlist = await importPeerModule<McpDirectToolAllowlistModule>(
+  return importPeerModule<McpDirectToolAllowlistModule>(
     peer,
     "src",
     "runs",
     "shared",
     "mcp-direct-tool-allowlist.js",
   );
+}
+
+test("MGRT-01: pi-subagents resolves every built-in grant selector against Pi's built-in MCP", async (t) => {
+  // arrange
+  const allowlist = await loadAllowlist(t);
   const selectors = grantSelectors("builtin");
 
   // act
@@ -146,15 +151,7 @@ test("MGRT-01: pi-subagents resolves every built-in grant selector against Pi's 
 
 test("MGRT-01: pi-subagents resolves no adapter grant selector of the same agent against Pi's built-in MCP", async (t) => {
   // arrange
-  const peer = await findCachedPeer("pi-subagents");
-  t.diagnostic(`pi-subagents ${peer.version} at ${peer.root}`);
-  const allowlist = await importPeerModule<McpDirectToolAllowlistModule>(
-    peer,
-    "src",
-    "runs",
-    "shared",
-    "mcp-direct-tool-allowlist.js",
-  );
+  const allowlist = await loadAllowlist(t);
   const selectors = grantSelectors("adapter");
 
   // act

@@ -16,7 +16,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { McpDependency } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
+import type { Dependency } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
 import type {
   RowPolicyMap,
   ResolvedEnvelope,
@@ -37,9 +37,13 @@ import type {
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
-// D-P3-10: the MCP dependency a `mcp` row maps to; it renders the
-// `requires pi-mcp-adapter` marker.
-const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
+// D-P3-10: the dependency each kind name stands for in a row; `mcp` maps to an
+// `McpDependency` that renders the `requires pi-mcp-adapter` marker.
+const DEPENDENCY_BY_KIND = {
+  agents: "agents",
+  mcp: { kind: "mcp", runEvery: ["adapter"] },
+  workflows: "workflows",
+} as const satisfies Record<"agents" | "mcp" | "workflows", Dependency>;
 
 void ({
   status: "failed",
@@ -1531,7 +1535,7 @@ describe("resolveRows", () => {
         severity: "info",
         needsReload: true,
         name: "alpha",
-        dependencies: [dependency === "mcp" ? ADAPTER_MCP : dependency],
+        dependencies: [DEPENDENCY_BY_KIND[dependency]],
         reasons: ["orphan rewake"],
       } satisfies PluginNotificationMessage;
       const markers = { installed: { markers: policy === "on", contentReasons: true } };

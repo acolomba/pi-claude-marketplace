@@ -48,6 +48,26 @@ const COST_LINE =
   "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.";
 
 /**
+ * Rewrites the saved `hello@mp` record as a released build left it: no
+ * `compatibilityBasis`, no `mcpServerConfigs`, and `stagedServers` as its staged
+ * MCP servers. Returns a copy of the record as rewritten.
+ */
+async function stripReleasedFields(
+  cwd: string,
+  stagedServers: readonly string[],
+): Promise<PluginInstallRecord> {
+  const locations = locationsFor("project", cwd);
+  const state = await loadState(locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record);
+  delete record.compatibilityBasis;
+  delete record.mcpServerConfigs;
+  record.resources.mcpServers = [...stagedServers];
+  await saveState(locations.extensionRoot, state);
+  return structuredClone(record);
+}
+
+/**
  * Seeds `hello@mp` in the project scope as a released build left it: the real
  * install of `srv`, then `extra` declared beside it, a marked legacy entry per
  * server in `mcp.json`, and a record with no `compatibilityBasis` and no
@@ -69,14 +89,7 @@ async function seedReleasedOwner(
       mcpServers: { srv: { ...STDIO_SERVER, ...MARKER }, extra: { ...extra, ...MARKER } },
     }),
   );
-  const state = await loadState(locations.extensionRoot);
-  const record = state.marketplaces.mp?.plugins.hello;
-  assert.ok(record);
-  delete record.compatibilityBasis;
-  delete record.mcpServerConfigs;
-  record.resources.mcpServers = ["srv", "extra"];
-  await saveState(locations.extensionRoot, state);
-  return structuredClone(record);
+  return stripReleasedFields(cwd, ["srv", "extra"]);
 }
 
 async function runLoad(cwd: string): Promise<readonly string[]> {
@@ -203,14 +216,7 @@ test("MREC-03 / D-P3-16: a moved legacy plugin whose only server pi-mcp-adapter 
       path.join(pluginRoot, ".mcp.json"),
       JSON.stringify({ mcpServers: { srv: asker } }),
     );
-    const locations = locationsFor("project", cwd);
-    const state = await loadState(locations.extensionRoot);
-    const seeded = state.marketplaces.mp?.plugins.hello;
-    assert.ok(seeded);
-    delete seeded.compatibilityBasis;
-    delete seeded.mcpServerConfigs;
-    seeded.resources.mcpServers = ["srv"];
-    await saveState(locations.extensionRoot, state);
+    await stripReleasedFields(cwd, ["srv"]);
     await runLoad(cwd);
 
     // act
@@ -261,14 +267,7 @@ test("MREC-02 / D-P3-16: a legacy plugin whose catalog moved before the load kee
         plugins: [{ name: "hello", source: "./plugins/hello", version: "1.1.0" }],
       }),
     );
-    const locations = locationsFor("project", cwd);
-    const state = await loadState(locations.extensionRoot);
-    const seeded = state.marketplaces.mp?.plugins.hello;
-    assert.ok(seeded);
-    delete seeded.compatibilityBasis;
-    delete seeded.mcpServerConfigs;
-    seeded.resources.mcpServers = ["srv"];
-    await saveState(locations.extensionRoot, state);
+    const seeded = await stripReleasedFields(cwd, ["srv"]);
     await runLoad(cwd);
 
     // act

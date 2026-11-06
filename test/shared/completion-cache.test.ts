@@ -741,7 +741,7 @@ describe("getPluginIndex", () => {
 });
 
 describe("getPluginIndex MCP implementation stamp (D-P6-22)", () => {
-  test("rebuilds a memory entry read under another implementation, keeping one entry", async (t) => {
+  test("rebuilds a memory entry read under another implementation", async (t) => {
     // arrange
     const directory = await mkdtemp(path.join(os.tmpdir(), "completion-stamp-memory-"));
     const cachePath = path.join(directory, "plugin-index.json");

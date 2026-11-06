@@ -212,6 +212,7 @@ describe("needsAgentGrantRewrite", () => {
     // assert
     assert.strictEqual(needed, false);
   });
+
   test("P4-DC-06: a legacy row holding the adapter async warning is a candidate under Pi's built-in MCP", async (t) => {
     // arrange
     const locations = await userScope(t);

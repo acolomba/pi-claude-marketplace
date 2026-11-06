@@ -161,8 +161,21 @@ function piResolved(written: string, raw: string, env: Environment): readonly st
   ];
 }
 
-for (const row of EXPANSION_CASES) {
-  test(`BLT-02: ${row.title} comes out of Pi's built-in MCP as Claude Code's value`, () => {
+for (const row of EXPANSION_CASES.filter((candidate) => !FIELD_SHAPES[candidate.field].secret)) {
+  test(`BLT-02: ${row.title} is written as Claude Code's value`, () => {
+    // arrange
+    const shape = FIELD_SHAPES[row.field];
+
+    // act
+    const written = shape.written(builtinConfig(shape.server(row.raw), row.runtimeEnv));
+
+    // assert
+    assert.strictEqual(written, row.claudeOutput);
+  });
+}
+
+for (const row of EXPANSION_CASES.filter((candidate) => FIELD_SHAPES[candidate.field].secret)) {
+  test(`BLT-02: ${row.title} comes out of Pi's resolver as Claude Code's value`, () => {
     // arrange
     const shape = FIELD_SHAPES[row.field];
 
@@ -171,11 +184,6 @@ for (const row of EXPANSION_CASES) {
 
     // assert
     assert.ok(typeof written === "string", `no written ${row.field}`);
-    if (!shape.secret) {
-      assert.strictEqual(written, row.claudeOutput);
-      return;
-    }
-
     assert.deepStrictEqual(
       [
         piConfigValues.getConfigValueEnvVarNames(written),

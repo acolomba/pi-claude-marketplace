@@ -164,11 +164,8 @@ function legacyPluginRecord(
   plugin: string,
   mcpServers: readonly string[],
 ): PluginRecord {
-  const { compatibilityBasis: _basis, ...legacy } = pluginRecord(
-    marketplaceRoot,
-    plugin,
-    mcpServers,
-  );
+  const legacy: PluginRecord = pluginRecord(marketplaceRoot, plugin, mcpServers);
+  delete legacy.compatibilityBasis;
   return legacy;
 }
 
