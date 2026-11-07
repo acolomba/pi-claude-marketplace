@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, realpath, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -8,6 +18,7 @@ import {
   readBuiltinServerDescription,
   type BuiltinDescriptionSource,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-description.ts";
+import { redactAbsolutePaths } from "../../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
 const WRAPPED = path.join(".claude-plugin", "plugin.json");
@@ -234,6 +245,12 @@ test("ANAME-06: a marketplace manifest that is a directory is logged and plugin.
   await unlink(tree.source.manifestPath);
   await mkdir(tree.source.manifestPath);
   await writeManifestAt(tree, WRAPPED, JSON.stringify({ description: "Wrapped" }));
+  // Node 26 appends the path to an fs errno message and Node 22/24 do not, so
+  // the expected wording comes from this runtime, redacted as the log line is.
+  const eisdir = await readFile(tree.source.manifestPath, "utf8").then(
+    () => assert.fail("a directory read must fail"),
+    (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  );
 
   // act
   const description = await readBuiltinServerDescription(tree.source);
@@ -241,7 +258,7 @@ test("ANAME-06: a marketplace manifest that is a directory is logged and plugin.
   // assert
   assert.strictEqual(description, "Wrapped");
   assert.deepStrictEqual(logged, [
-    "[mcp] MCP server description of demo not read from the marketplace manifest: EISDIR: illegal operation on a directory, read",
+    `[mcp] MCP server description of demo not read from the marketplace manifest: ${redactAbsolutePaths(eisdir)}`,
   ]);
 });
 

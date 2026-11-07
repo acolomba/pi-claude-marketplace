@@ -12,8 +12,6 @@
 #   wrapper drops two capabilities, so a test that denies a file with chmod
 #   sees the error. The wrapper is not under HOME, because pre-commit ignores
 #   a node there and downloads its own, which the network policy blocks.
-# - npm: global installs go to /usr/local, which is on every PATH, so
-#   init.sh and the MCP servers find `codegraph`.
 # - trufflehog: its Go toolchain download is blocked. SKIP leaves the hook to
 #   CI.
 # - LFS: the GitHub proxy cannot fetch LFS objects, so `git lfs install`
@@ -32,7 +30,6 @@ case ":$PATH:" in
     *":$wrapper_dir:"*) ;;
     *) export PATH="$wrapper_dir:$HOME/.local/bin:$PATH" ;;
 esac
-export npm_config_prefix=/usr/local
 case " ${NODE_OPTIONS-} " in
     *" --max-old-space-size="*) ;;
     *) export NODE_OPTIONS="--max-old-space-size=4096${NODE_OPTIONS:+ $NODE_OPTIONS}" ;;
@@ -49,7 +46,6 @@ lfs_install_flags=--skip-smudge
 cloud_session_exports() {
     echo "$cloud_env_marker"
     echo "case \":\$PATH:\" in *\":$wrapper_dir:\"*) ;; *) export PATH=\"$wrapper_dir:\$HOME/.local/bin:\$PATH\" ;; esac"
-    printf 'export npm_config_prefix=%q\n' "$npm_config_prefix"
     printf 'export NODE_OPTIONS=%q\n' "$NODE_OPTIONS"
     printf 'export SKIP=%q\n' "$SKIP"
 }

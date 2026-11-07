@@ -2,8 +2,10 @@
   "mcpServers": {
     "codegraph": {
       "type": "stdio",
-      "command": "codegraph",
+      "command": "npx",
       "args": [
+        "--no",
+        "codegraph",
         "serve",
         "--mcp"
       ],
