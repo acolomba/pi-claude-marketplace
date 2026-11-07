@@ -13,6 +13,15 @@
 // containment of `domain/manifest-containment.ts`, inside the manifest
 // boundary of the plugin's source. Every failure reads as absent, so the
 // reader never throws and a missing description only drops the field.
+//
+// ANAME-06 / T-02-18: a read or parse failure of the marketplace manifest, or
+// of the plugin manifest candidate that decides the walk, leaves one
+// `mcp`-channel debug line. The line never quotes the file: a parse failure is
+// named by a fixed phrase, because the parser's message quotes the start of
+// the text. A missing file leaves no line, a candidate after the deciding one
+// is never traced, and a link that leaves the boundary is a refusal, not a
+// failure (D-PL2-24). A manifest without a usable description is not a
+// failure either.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -25,7 +34,13 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { isErrnoException } from "../../shared/errors.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import {
+  errorMessage,
+  InvalidMarketplaceManifestError,
+  isErrnoException,
+} from "../../shared/errors.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 
 import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
 import type { ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
@@ -48,12 +63,45 @@ type CandidateRead = PresentCandidate | { readonly present: false };
 interface PresentCandidate {
   readonly present: true;
   readonly description: string | undefined;
+  /** Why the candidate could not be read, located, or parsed; `undefined` when it was. */
+  readonly failure: string | undefined;
+}
+
+/** The candidate that decides the walk, with its `MANIFEST_CANDIDATES` entry. */
+interface DecidingCandidate {
+  readonly candidate: string;
+  readonly read: PresentCandidate;
 }
 
 const NOT_THERE: CandidateRead = { present: false };
-// A manifest that is there but cannot be read, parsed, or located inside the
-// boundary describes nothing, and still ends the walk (D-01-07).
-const UNUSABLE: CandidateRead = { present: true, description: undefined };
+// A manifest that is there but has no usable description, or lies outside the
+// boundary, describes nothing, and still ends the walk (D-01-07).
+const UNUSABLE: CandidateRead = { present: true, description: undefined, failure: undefined };
+
+const NOT_JSON = "the file is not valid JSON";
+
+// A manifest that is there but cannot be read, located, or parsed describes
+// nothing and ends the walk too; `reason` words its debug line.
+function failed(reason: string): CandidateRead {
+  return { present: true, description: undefined, failure: reason };
+}
+
+function traceUnread(pluginName: string, source: string, reason: string): void {
+  hookDebugLog(
+    redactAbsolutePaths(
+      `MCP server description of ${pluginName} not read from ${source}: ${reason}`,
+    ),
+    "mcp",
+  );
+}
+
+// `InvalidMarketplaceManifestError` embeds the parser's message, which can
+// quote the file.
+function marketplaceManifestFailure(error: unknown): string {
+  return error instanceof InvalidMarketplaceManifestError
+    ? "it is not a valid marketplace manifest"
+    : errorMessage(error);
+}
 
 function nonEmpty(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
@@ -68,8 +116,13 @@ async function declaredEntry(
       source.pluginName,
     );
     return lookup.kind === "declared" ? lookup.entry : undefined;
-  } catch {
-    // An unreadable marketplace manifest leaves no entry to read from.
+  } catch (error: unknown) {
+    // An unreadable marketplace manifest leaves no entry to read from. A
+    // missing one is no failure.
+    if (!isAbsenceError(error)) {
+      traceUnread(source.pluginName, "the marketplace manifest", marketplaceManifestFailure(error));
+    }
+
     return undefined;
   }
 }
@@ -84,18 +137,18 @@ async function openedCandidate(manifestPath: string): Promise<CandidateRead> {
   try {
     text = await readFile(manifestPath, "utf8");
   } catch (error: unknown) {
-    return isNoManifest(error) ? NOT_THERE : UNUSABLE;
+    return isNoManifest(error) ? NOT_THERE : failed(errorMessage(error));
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return UNUSABLE;
+    return failed(NOT_JSON);
   }
 
   return typeof parsed === "object" && parsed !== null && "description" in parsed
-    ? { present: true, description: nonEmpty(parsed.description) }
+    ? { present: true, description: nonEmpty(parsed.description), failure: undefined }
     : UNUSABLE;
 }
 
@@ -107,21 +160,38 @@ async function candidateRead(
     boundary,
     path.join(boundary.pluginRoot, candidate),
   );
-  if (location.kind === "open") {
-    return openedCandidate(location.path);
-  }
-
   // A link that leaves the boundary, or cannot be resolved, is a manifest
   // that cannot be used; a dangling link is none.
-  return location.kind === "absent" ? NOT_THERE : UNUSABLE;
+  switch (location.kind) {
+    case "open":
+      return openedCandidate(location.path);
+    case "absent":
+      return NOT_THERE;
+    case "escapes":
+      return UNUSABLE;
+    case "unresolvable":
+      return failed(errorMessage(location.error));
+  }
 }
 
-async function manifestDescription(boundary: ManifestBoundary): Promise<string | undefined> {
+async function manifestDescription(
+  boundary: ManifestBoundary,
+  pluginName: string,
+): Promise<string | undefined> {
   const reads = await Promise.all(
-    MANIFEST_CANDIDATES.map((candidate) => candidateRead(boundary, candidate)),
+    MANIFEST_CANDIDATES.map(async (candidate) => ({
+      candidate,
+      read: await candidateRead(boundary, candidate),
+    })),
   );
-  // D-01-07: the first candidate that is there is the plugin's manifest.
-  return reads.find((read): read is PresentCandidate => read.present)?.description;
+  // D-01-07: the first candidate that is there is the plugin's manifest, and
+  // only its failure is traced.
+  const deciding = reads.find((entry): entry is DecidingCandidate => entry.read.present);
+  if (deciding?.read.failure !== undefined) {
+    traceUnread(pluginName, deciding.candidate, deciding.read.failure);
+  }
+
+  return deciding?.read.description;
 }
 
 /**
@@ -141,5 +211,5 @@ export async function readBuiltinServerDescription(
     source.marketplaceRoot,
     source.pin,
   );
-  return (await manifestDescription(boundary)) ?? nonEmpty(entry?.description);
+  return (await manifestDescription(boundary, source.pluginName)) ?? nonEmpty(entry?.description);
 }
