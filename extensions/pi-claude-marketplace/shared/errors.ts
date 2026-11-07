@@ -1150,7 +1150,8 @@ export function manualRecoveryLeaks(err: unknown): readonly string[] {
  *                                with `op = "install"`
  *   - `"no-longer-installable"` -- PR-6, thrown from `requireInstallable`
  *                                with `op = "update"`
- * The downstream consumer is `classifyEntityShapeError` (install-flow.ts).
+ * The downstream consumer is `classifyEntityShapeError`
+ * (`orchestrators/plugin/install.messaging.ts`).
  *
  * The constructor is the SINGLE SOURCE OF TRUTH for the `.message` text. The
  * exact byte-equal forms (preserved so existing
@@ -1162,14 +1163,19 @@ export function manualRecoveryLeaks(err: unknown): readonly string[] {
  *   no-longer-installable:  `Plugin "<plugin>" is no longer installable: <reasons.join("; ")>`
  *
  * `reasons` on the (not-)installable variants is `readonly string[]` and
- * NOT `readonly Reason[]`. The resolver populates `r.notes` with free-form
- * strings (`"contains hooks"`, `"source dir does not exist"`,
- * `"malformed marketplace entry: ..."`, etc.) -- the
- * closed `Reason` set lives one layer up at the renderer boundary. The
- * `classifyEntityShapeError` consumer in `orchestrators/plugin/install-flow.ts`
- * narrows these strings to closed-set `Reason` members. Carrying the raw
- * strings here preserves byte-equal `.message` text (the resolver's notes
- * are joined verbatim) and removes the regex re-parse path entirely.
+ * NOT `readonly Reason[]`. They are the resolver's free-form notes
+ * (`"contains hooks"`, `"source dir does not exist"`,
+ * `"malformed marketplace entry: ..."`, etc.). A partially-available plugin
+ * can have no note: a dropped hook or an MCP server the active
+ * implementation cannot run writes none. For that plugin,
+ * `requireInstallable` writes the closed-set tokens of `unsupportedKinds`
+ * instead, so the message always names a reason (NOTINSTALLMSG-01). The
+ * closed `Reason` set lives one layer up at the renderer boundary:
+ * `narrowNotInstallableReasons` in `orchestrators/plugin/install.messaging.ts`
+ * narrows a refused shape to closed-set `Reason` members for a row, and the
+ * `classifyEntityShapeError` consumer in the same module calls it. Carrying
+ * the raw strings here preserves byte-equal `.message` text (the resolver's
+ * notes are joined verbatim) and removes the regex re-parse path entirely.
  *
  * `Error.cause` flows through `ErrorOptions` (mirrors `ManualRecoveryError`
  * / `PluginUpdatePhase3Error` precedents) so the depth-5

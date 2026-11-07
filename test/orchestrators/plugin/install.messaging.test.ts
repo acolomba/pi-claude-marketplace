@@ -8,6 +8,7 @@ import {
   composeInstallFailureMessage,
   composePromotedRow,
   formatOrchestratedCause,
+  narrowNotInstallableReasons,
   PROMOTED_ROW_REASONS,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import {
@@ -25,6 +26,7 @@ import type {
   EntityErrorRow,
   InstallMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
+import type { PluginShapeErrorShape } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type { ContentReason } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
@@ -1264,6 +1266,70 @@ describe("resolver reason narrowing through the install failure row", () => {
     // assert
     assert.deepStrictEqual(narrowedReasons, ["unsupported component", "lsp"]);
   });
+});
+
+describe("narrowNotInstallableReasons", () => {
+  const rows: readonly {
+    readonly title: string;
+    readonly shape: Extract<
+      PluginShapeErrorShape,
+      { kind: "not-installable" | "no-longer-installable" }
+    >;
+    readonly expected: readonly ContentReason[];
+  }[] = [
+    {
+      title: "narrows the unsupported kinds of a shape with no reasons",
+      shape: {
+        kind: "not-installable",
+        plugin: "lib",
+        reasons: [],
+        partialable: true,
+        unsupportedKinds: ["mcpServers"],
+      },
+      expected: ["unsupported mcp"],
+    },
+    {
+      title: "narrows a partialable component note on the component axis",
+      shape: {
+        kind: "not-installable",
+        plugin: "lib",
+        reasons: ["contains monitors"],
+        partialable: true,
+      },
+      expected: ["unsupported component"],
+    },
+    {
+      title: "adds nothing for a kind token the resolver gate wrote as a reason",
+      shape: {
+        kind: "not-installable",
+        plugin: "lib",
+        reasons: ["unsupported hooks"],
+        partialable: true,
+        unsupportedKinds: ["hooks"],
+      },
+      expected: ["unsupported hooks"],
+    },
+    {
+      title: "narrows a structural note of a plugin that is no longer installable",
+      shape: {
+        kind: "no-longer-installable",
+        plugin: "lib",
+        reasons: ["source dir does not exist: /abs/lib"],
+        partialable: false,
+      },
+      expected: ["source missing"],
+    },
+  ];
+
+  for (const { title, shape, expected } of rows) {
+    test(title, () => {
+      // act
+      const reasons = narrowNotInstallableReasons(shape);
+
+      // assert
+      assert.deepStrictEqual(reasons, expected);
+    });
+  }
 });
 
 describe("classifyInstallFailure", () => {

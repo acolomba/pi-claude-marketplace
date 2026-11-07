@@ -5,7 +5,7 @@ import {
 } from "../../orchestrators/marketplace/add.ts";
 import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
 import {
-  narrowResolverReasons,
+  narrowNotInstallableReasons,
   PROMOTED_ROW_REASONS,
 } from "../../orchestrators/plugin/install.messaging.ts";
 import {
@@ -2373,11 +2373,7 @@ function dispatchFailedOutcome(
         // IMP-08, IMPORTCAUSE-01: the warning carries install's narrowing.
         // Its cause states the refusal once, in install's words, over the
         // same tokens.
-        const reasons = narrowResolverReasons(
-          error.shape.reasons,
-          error.shape.unsupportedKinds,
-          error.shape.partialable,
-        );
+        const reasons = narrowNotInstallableReasons(error.shape);
         result.warnings.push({
           ...warningBase(plugin, new PluginShapeError({ ...error.shape, reasons }).message),
           reason: "uninstallable",

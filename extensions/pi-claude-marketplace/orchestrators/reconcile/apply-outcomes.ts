@@ -41,7 +41,7 @@ import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts"
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
-import { narrowResolverReasons } from "../plugin/install.messaging.ts";
+import { narrowNotInstallableReasons } from "../plugin/install.messaging.ts";
 
 import {
   DEPENDENCY_UNSATISFIED_ROW_REASONS,
@@ -813,7 +813,8 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
 /**
  * REC-06: the reason fields of a failed install's row. A plugin that cannot be
  * installed reads the reasons `install` and `import` narrow it to
- * (`narrowResolverReasons`); every other throw reads its one classified reason.
+ * (`narrowNotInstallableReasons`); every other throw reads its one classified
+ * reason.
  * A reason the caller already holds (a dependency's `cross-marketplace`) wins.
  */
 export function installFailureReasonFields(
@@ -834,11 +835,7 @@ export function installFailureReasonFields(
   ) {
     return {
       reason,
-      reasons: narrowResolverReasons(
-        err.shape.reasons,
-        err.shape.unsupportedKinds,
-        err.shape.partialable,
-      ),
+      reasons: narrowNotInstallableReasons(err.shape),
     };
   }
 

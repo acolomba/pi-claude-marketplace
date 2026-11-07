@@ -25,6 +25,7 @@ import {
 } from "../../shared/probe-classifiers.ts";
 import { redactCauseChain, redactedRollbackPartials } from "../../shared/redact-absolute-paths.ts";
 
+import type { PluginShapeErrorShape } from "../../shared/errors.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
@@ -430,11 +431,7 @@ export function classifyEntityShapeError(
         // `.kind === "not-installable" | "no-longer-installable"`
         // guarantees `.reasons` is present -- no `?? []` fallback
         // needed.
-        reasons: narrowResolverReasons(
-          err.shape.reasons,
-          err.shape.unsupportedKinds,
-          err.shape.partialable,
-        ),
+        reasons: narrowNotInstallableReasons(err.shape),
         // SEV-02 / D-69-03: thread the three-way distinction the resolver
         // stamped on the throw so the composer conditions the `--partial` hint.
         partialable: err.shape.partialable,
@@ -651,7 +648,7 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  * such a note ONLY on the partially-available arm; the structural arm keeps it on
  * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
  */
-export function narrowResolverReasons(
+function narrowResolverReasons(
   reasons: readonly string[],
   unsupportedKinds: readonly string[] = [],
   partialable = false,
@@ -672,6 +669,20 @@ export function narrowResolverReasons(
   // map several notes to the same closed Reason, and the row must not
   // render a duplicate token.
   return [...new Set(out)];
+}
+
+/**
+ * IMP-08 / REC-06 / NOTINSTALLMSG-01: the one place where a refused plugin's
+ * shape becomes row reasons. Install, apply, and import call it, and it
+ * passes every field of the shape to `narrowResolverReasons`. When the
+ * resolver wrote no note, `requireInstallable` puts the kind tokens in
+ * `reasons`. These tokens narrow to themselves, so the row shows the same
+ * reasons.
+ */
+export function narrowNotInstallableReasons(
+  shape: Extract<PluginShapeErrorShape, { kind: "not-installable" | "no-longer-installable" }>,
+): readonly ContentReason[] {
+  return narrowResolverReasons(shape.reasons, shape.unsupportedKinds, shape.partialable);
 }
 
 export function classifyInstallFailure(
