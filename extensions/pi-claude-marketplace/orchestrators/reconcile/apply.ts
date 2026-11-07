@@ -1878,6 +1878,7 @@ async function runStep(
  * step reports the move's row and then the enable's own rows (D-PL2-18). A
  * deferred record's step reports one net row (WR-02): the enable's rows for a
  * growth-only move, which keeps the version, else the move's `(updated)` row.
+ * That row carries the markers of the enable that landed (D-MB-07).
  */
 function landedStepRows(
   step: CascadeStep,
@@ -1897,7 +1898,7 @@ function landedStepRows(
   const mcpConfigNotices = enables.flatMap((outcome) => outcome.mcpConfigNotices ?? []);
   return [
     {
-      ...enabledMoveOutcome(move),
+      ...enabledMoveOutcome(move, enables[0]),
       ...(stagingWarnings.length > 0 && { stagingWarnings }),
       ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
     },

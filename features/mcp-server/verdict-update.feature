@@ -1,9 +1,13 @@
 Feature: MCP server verdict update
 
   An update asks for --partial when the MCP implementation pi runs now drops a
-  server of the new version (MREC-06, D-P3-11, D-P3-19). A local marketplace
-  stands in for a published one, a stdio stub for a real server, and the sse
-  server points at a loopback port that nothing listens on.
+  server of the new version (MREC-06, D-P3-11, D-P3-19). With no implementation,
+  it asks only for a server neither implementation runs, and the row names the
+  implementation that would run every server (D-MB-05, D-MB-07). A local
+  marketplace stands in for a published one, a stdio stub for a real server, a
+  Pi started with built-in MCP turned off and without pi-mcp-adapter for a
+  session with no implementation, and the sse server points at a loopback port
+  that nothing listens on.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -117,3 +121,34 @@ Feature: MCP server verdict update
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | id            | name | status  | reasons | scope   | from  | to    |
       | fixtures         | project           | updated            | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+
+  @own-implementation
+  Scenario: Updating to a version that adds an sse server needs no --partial with no MCP implementation, and names pi-mcp-adapter as missing (D-MB-05, D-P3-11)
+    Given the user's pi settings turn off pi's built-in mcp
+    Given pi runs with the scripted model
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | true                                |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons                 | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated | requires pi-mcp-adapter | project | 1.0.0 | 1.1.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.1.0   | true    |
+
+  @own-implementation
+  Scenario: Reinstalling a plugin whose new version adds an sse server reports it reinstalled with no MCP implementation, and names pi-mcp-adapter as missing (D-MB-06, D-MB-07)
+    Given the user's pi settings turn off pi's built-in mcp
+    Given pi runs with the scripted model
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | true                                |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons                 | scope   | from  | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled | requires pi-mcp-adapter | project | 1.0.0 | 1.1.0   |

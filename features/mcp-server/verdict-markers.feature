@@ -4,8 +4,12 @@ Feature: MCP server verdict markers
   run every server (D-MB-07), so a row's state and markers follow the active
   implementation (MREC-03, MREC-05, MREC-07). A row whose servers both
   implementations run reads the same under either, and a pair keeps one twin per
-  profile where the rows or a diagnostic differ. Local marketplaces, a loopback
-  https git host, and a loopback npm registry stand in for published ones.
+  profile where the rows or a diagnostic differ. When each implementation runs
+  only some of the servers, the marker names the other implementation, or mcp
+  when none runs (D-P3-06). A Pi started with built-in MCP turned off in the
+  user's settings and without pi-mcp-adapter runs no implementation. Local
+  marketplaces, a loopback https git host, and a loopback npm registry stand in
+  for published ones.
 
   @mcp
   Scenario: A bare update preserves scope and insertion order with adjacent notices
@@ -446,3 +450,80 @@ Feature: MCP server verdict markers
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status              | reasons         | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp | project | 1.0.0   |
+
+  @adapter-only
+  Scenario: A plugin whose servers each implementation runs only some of lists as partially installed and names Pi's built-in MCP, under pi-mcp-adapter (D-P3-06)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}, "asker": {"command": "node", "bareElicitationCapability": true}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --partial", which did not fail
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status              | reasons                               | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp, requires builtin mcp | project | 1.0.0   |
+
+  @builtin-only
+  Scenario: A plugin whose servers each implementation runs only some of lists as partially installed and names pi-mcp-adapter, under Pi's built-in MCP (D-P3-06)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}, "asker": {"command": "node", "bareElicitationCapability": true}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --partial", which did not fail
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status              | reasons                                  | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp, requires pi-mcp-adapter | project | 1.0.0   |
+
+  @own-implementation
+  Scenario: A plugin whose servers each implementation runs only some of lists as installed and names mcp as missing, with no MCP implementation (D-P3-06, D-MB-07)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}, "asker": {"command": "node", "bareElicitationCapability": true}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --partial", which did not fail
+    Given the user's pi settings turn off pi's built-in mcp
+    Given pi runs with the scripted model
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons      | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed | requires mcp | project | 1.0.0   |

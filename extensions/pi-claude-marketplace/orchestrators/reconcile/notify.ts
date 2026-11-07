@@ -519,10 +519,17 @@ export function convergedMoveOutcomes(
 
 /**
  * APPLY1-01: the net row of a held-down record `apply` moved and then enabled
- * in one cascade: the move's `(updated)` row, as `pending` lists it. It is
- * also a waiting record's move row, ahead of its enable row (D-PL2-18).
+ * in one cascade: the move's `(updated)` row, as `pending` lists it. Given
+ * the enable that landed, the row carries the soft dependencies that enable
+ * staged, so its markers follow the run's snapshot as the enable's own row
+ * would (D-MB-07). It is also a waiting record's move row, ahead of its
+ * enable row (D-PL2-18). That call passes no enable, because the enable row
+ * that follows already shows the markers.
  */
-export function enabledMoveOutcome(move: PlannedMove): PluginConvergedOutcome {
+export function enabledMoveOutcome(
+  move: PlannedMove,
+  enable?: PluginEnabledOutcome,
+): PluginConvergedOutcome {
   const row: PluginUpdatedMessage = {
     status: "updated",
     name: move.plugin,
@@ -530,7 +537,7 @@ export function enabledMoveOutcome(move: PlannedMove): PluginConvergedOutcome {
     from: move.fromVersion,
     to: move.toVersion,
     ...withCommits(revisionCommits(move)),
-    dependencies: [],
+    dependencies: enable === undefined ? [] : enableRowDependencies(enable),
     severity: "info",
     needsReload: true,
   };

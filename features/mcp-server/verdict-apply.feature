@@ -4,9 +4,11 @@ Feature: MCP server verdict apply
   implementation alone never asks for consent (MREC-06, D-P3-13) or shows a
   new row (D-P3-14, D-P3-15, D-P3-19). Pending previews a declared plugin that
   the active implementation runs only in part as a partial install, but apply
-  installs a declared plugin without --partial and refuses it. A local
-  marketplace stands in for a published one, and each sse server points at a
-  loopback port that nothing listens on.
+  installs a declared plugin without --partial and refuses it. A held-down
+  plugin that apply moves and enables names the implementation its servers
+  need, as its enable row does (D-MB-07). A local marketplace stands in for a
+  published one, and each sse server points at a loopback port that nothing
+  listens on.
 
   @own-implementation
   Scenario: Apply under Pi's built-in MCP moves a plugin with an sse server, installed without --partial, to its new version partially, without asking (MREC-06)
@@ -168,3 +170,42 @@ Feature: MCP server verdict apply
       | marketplace name | marketplace scope | id            | name | status | reasons         | scope | leaks | rollback partial |
       | fixtures         | user              | demo@fixtures | demo | failed | unsupported mcp | user  |       |                  |
     Then the user scope has no installed plugins
+
+  @own-implementation
+  Scenario: Apply moves and enables a held-down plugin with an MCP server and names mcp as missing, with no MCP implementation (D-MB-07, APPLY1-01)
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the published plugin "widget" of the marketplace "tools" has the stub mcp server "stub"
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project", which did not fail
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which warned
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    Given the user's pi settings turn off pi's built-in mcp
+    Given pi runs with the scripted model
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 2                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status  | reasons      | scope   | from  | to    |
+      | tools            | project           | zcore@tools  | zcore  | updated |              | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | widget@tools | widget | updated | requires mcp | project | 1.0.0 | 1.1.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 2.0.0   | true    |

@@ -2088,6 +2088,37 @@ describe("enabledMoveOutcome", () => {
       },
     });
   });
+
+  test("D-MB-07: a held-down record moved and enabled carries the soft dependencies its enable staged", () => {
+    // act
+    const outcome = enabledMoveOutcome(DEMO_MOVE, {
+      kind: "plugin-enabled",
+      scope: "project",
+      marketplace: "mp",
+      plugin: "demo",
+      version: "1.1.0",
+      stagedAgents: true,
+      stagedWorkflows: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "plugin-converged",
+      scope: "project",
+      marketplace: "mp",
+      plugin: "demo",
+      row: {
+        status: "updated",
+        name: "demo",
+        scope: "project",
+        from: DEMO_MOVE.fromVersion,
+        to: DEMO_MOVE.toVersion,
+        dependencies: ["agents", "workflows"],
+        severity: "info",
+        needsReload: true,
+      },
+    });
+  });
 });
 
 describe("convergedMoveOutcomes", () => {
