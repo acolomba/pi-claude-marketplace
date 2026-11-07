@@ -178,6 +178,12 @@ Differences from the ROADMAP text:
 - The built-in `grantSelector` (`mcp:<registered name>`) is not yet checked
   against pi-subagents' grant syntax; Phase 4 uses it (P1-DC-28).
 
+Amended after the milestone (REVIEWSUGG-01, quick 261106-u9b): the adapter
+profile is `AdapterMcpProfile`, whose `toolNamePrefix` returns a `string`, and
+`profileFor(id: "adapter")` returns it through an overload. The union
+`McpImplementationProfile` and the `string | undefined` prefix above stay as
+written for the built-in profile.
+
 ### 2. The run snapshot's active implementation
 
 File `platform/pi-api.ts`:
@@ -208,6 +214,13 @@ Phase 6 removed the derived boolean for the adapter, which no production code
 read, and the code block above now shows the interface as it is (D-P6-09).
 The adapter probe still runs, because `mcpImplementation` needs it, so the
 probe order and counts do not change.
+
+Amended after the milestone (REVIEWSUGG-01, quick 261106-u9b, u98):
+`SoftDepStatus` members are readonly. A throwing `getCommands()`, or a throwing
+MCP check, still reads as absent, and now writes one `mcp` debug line
+(P1-DC-29 amended). `platform/pi-api.ts` exports `BUILTIN_MCP_SOURCE_PATH`,
+the one `builtin:mcp` definition that `isBuiltinMcpCommand` and the hooks view
+compare with.
 
 ### 3. The record field and its only reader
 

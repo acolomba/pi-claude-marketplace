@@ -25,6 +25,9 @@
   - The tool segment keeps Pi's change of `-` to `_`, and a name over 64 characters keeps Pi's cut to 55 characters and a hash.
   - A proxy `mcp` call now skips hooks only while pi-mcp-adapter is active, and under Pi's built-in MCP every tool call runs its hooks.
   - Tab completion of plugin names now follows the MCP implementation Pi runs, as `list` does.
+  - Under Pi's built-in MCP, `info` no longer fails when Pi's MCP registry or tool list cannot be read. The server shows `status unknown`.
+  - Under Pi's built-in MCP, two plugin servers that share a Pi name or tool namespace now run one server, chosen by declaration order, and `info` shows the other as `not loaded`.
+  - With no MCP implementation, `apply` now shows `{requires mcp}` on a plugin it moves and then enables, as that plugin's other rows do.
 
 ## [0.22.0] - 2026-11-03
 

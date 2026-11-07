@@ -195,6 +195,14 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261030-ogp | bootstrap runs only marketplace add | 2026-10-30 | 841e3dc2 | complete | [261030-ogp-bootstrap-runs-only-marketplace-add](./quick/261030-ogp-bootstrap-runs-only-marketplace-add/) |
 | 12 | Fix STATE.md health warnings: archived 03.x phase tokens, milestone-complete status, PR #290 merged | 2026-10-31 | 9847e01b | — | — |
 | 261103-eqa | Make tests robust to Pi upgrades: stop pinning upstream text | 2026-11-03 | 5de5e65 | — | [261103-eqa-make-tests-robust-to-pi-upgrades](./quick/261103-eqa-make-tests-robust-to-pi-upgrades/) |
+| 261106-u95 | Agent grant forms (AGENTIDXFORM-01, GRANTFORMGAP-01, REVIEWSUGG-01 agents part) | 2026-11-07 | 6adefd3 | — | .planning/quick/261106-u95-agent-grant-forms-agentidxform-01-grantformgap-01-reviewsugg |
+| 261106-u96 | Recorded MCP servers (LEGACYSRC-01, REVIEWSUGG-01 RecordedMcpServers part) | 2026-11-07 | 7eca160 | — | .planning/quick/261106-u96-recorded-mcp-servers-legacysrc-01-and-reviewsugg-01-recorded |
+| 261106-u97 | MCP status lookup (STATUSLOOKUP-01, REVIEWSUGG-01 status part) | 2026-11-07 | dfc7001 | — | .planning/quick/261106-u97-mcp-status-lookup-statuslookup-01-and-reviewsugg-01-status-p |
+| 261106-u98 | Hooks tool view (HOOKTOOLREAD-01, REVIEWSUGG-01 hooks part) | 2026-11-07 | 4546f56 | — | .planning/quick/261106-u98-hooks-tool-view-hooktoolread-01-and-reviewsugg-01-hooks-part |
+| 261106-u99 | Import warning cause (IMPORTCAUSE-01) | 2026-11-07 | 8a9b5c6 | — | .planning/quick/261106-u99-import-warning-cause-importcause-01-see-planning-backlog-md |
+| 261106-u9a | Built-in registration error handling (REVIEWSUGG-01 error-handling part) | 2026-11-07 | 5b1da7b | — | .planning/quick/261106-u9a-built-in-registration-error-handling-reviewsugg-01-error-han |
+| 261106-u9b | MCP domain and soft-dependency types (REVIEWSUGG-01 types part) | 2026-11-07 | 0007063 | — | .planning/quick/261106-u9b-mcp-domain-and-soft-dependency-types-reviewsugg-01-types-par |
+| 261106-u9c | MCP implementation test gaps and the apply row fix (REVIEWSUGG-01 tests part) | 2026-11-07 | e27276c | — | .planning/quick/261106-u9c-mcp-implementation-test-gaps-reviewsugg-01-tests-part-see-pl |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
