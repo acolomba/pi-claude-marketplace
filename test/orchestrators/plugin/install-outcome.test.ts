@@ -2319,7 +2319,7 @@ for (const { label, servers, consentView } of [
       assert.deepStrictEqual(error.shape, {
         kind: "not-installable",
         plugin: "empty",
-        reasons: [],
+        reasons: ["unsupported mcp"],
         partialable: true,
         unsupportedKinds: ["mcpServers"],
       });

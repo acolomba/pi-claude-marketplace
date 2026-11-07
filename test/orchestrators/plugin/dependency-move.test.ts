@@ -322,7 +322,10 @@ describe("judgeDependencyMove", () => {
     {
       mcpImplementation: "builtin",
       verdict: "refuses",
-      expectedJudgement: { ok: false, cause: 'Plugin "zcore" is no longer installable: ' },
+      expectedJudgement: {
+        ok: false,
+        cause: 'Plugin "zcore" is no longer installable: unsupported mcp',
+      },
     },
     { mcpImplementation: "adapter", verdict: "admits", expectedJudgement: { ok: true } },
   ] as const) {

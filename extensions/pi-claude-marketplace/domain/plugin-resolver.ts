@@ -37,7 +37,11 @@ import path from "node:path";
 
 import { errorMessage, isErrnoException, PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
-import { MANIFEST_ESCAPE_NOTE, SOURCE_DIR_MISSING_NOTE } from "../shared/probe-classifiers.ts";
+import {
+  MANIFEST_ESCAPE_NOTE,
+  narrowUnsupportedKinds,
+  SOURCE_DIR_MISSING_NOTE,
+} from "../shared/probe-classifiers.ts";
 
 import { collectStrictComponentPaths, type ComponentPathResolution } from "./component-paths.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
@@ -876,13 +880,28 @@ function decideResolution(
 }
 
 /**
+ * NOTINSTALLMSG-01 / PR-6: the reasons of a partially-available plugin's
+ * refusal. The resolver writes a `contains <kind>` note for each kind it
+ * cannot install. It writes no note for a dropped hook (D-CF5-20) or for a
+ * server the active implementation cannot run (MREC-06). With no note, the
+ * message would end at the colon. So this gives the notes when there is at
+ * least one, and otherwise the kind tokens of `narrowUnsupportedKinds`
+ * (D-64-02), which the install row also shows. When a row narrows these
+ * tokens again, they add no reason, so every row brace stays the same.
+ */
+function refusalReasons(resolved: ResolvedPluginPartiallyAvailable): readonly string[] {
+  return resolved.notes.length > 0 ? resolved.notes : narrowUnsupportedKinds(resolved.unsupported);
+}
+
+/**
  * PR-6: narrow to installable-or-throw.
  *
  * Throws `PluginShapeError` (typed discriminated carrier) so catch sites
  * dispatch on `instanceof PluginShapeError` + `.kind` rather than
- * substring-matching `.message`. `resolved.notes` is passed through as the
- * `reasons` array (free-form strings; closed `Reason` narrowing happens
- * at the renderer boundary in `classifyEntityShapeError`).
+ * substring-matching `.message`. The `reasons` array holds the resolver's
+ * notes, or, for a partially-available plugin with no note, its kind tokens
+ * (`refusalReasons`). These are free-form strings; closed `Reason` narrowing
+ * happens at the renderer boundary in `classifyEntityShapeError`.
  */
 export function requireInstallable(
   resolved: ResolvedPlugin,
@@ -905,7 +924,7 @@ export function requireInstallable(
   throw new PluginShapeError({
     kind: op === "update" ? "no-longer-installable" : "not-installable",
     plugin: resolved.name,
-    reasons: resolved.notes,
+    reasons: refusalReasons(resolved),
     // SEV-02 / D-69-03: `partially-available` is partially-available; `unavailable` is
     // a structural defect `--partial` cannot help -- carry the distinction the
     // render row uses to condition the `--partial` hint.

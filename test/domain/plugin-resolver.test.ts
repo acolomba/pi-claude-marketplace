@@ -4806,6 +4806,100 @@ describe("requireInstallable", () => {
       },
     );
   });
+
+  // NOTINSTALLMSG-01 / PR-6: the resolver writes no note for hooks that the
+  // entry declares besides the convention file (D-CF5-20), or for an sse
+  // server under Pi's built-in MCP (MREC-06). The refusal names the kind
+  // token, so its message does not end at the colon.
+  const entryHooks = {
+    PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+  };
+
+  for (const { op, kind, message } of [
+    {
+      op: "install",
+      kind: "not-installable",
+      message: 'Plugin "p1" is not installable: unsupported hooks',
+    },
+    {
+      op: "update",
+      kind: "no-longer-installable",
+      message: 'Plugin "p1" is no longer installable: unsupported hooks',
+    },
+  ] as const) {
+    test(`NOTINSTALLMSG-01: requireInstallable names unsupported hooks for entry-declared hooks with no note (${op})`, async () => {
+      // arrange
+      const resolvedPlugin = await resolveStrict(
+        pluginEntry({ source: "./local", hooks: entryHooks }),
+        resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" }),
+      );
+
+      // act & assert
+      assert.throws(
+        () => {
+          requireInstallable(resolvedPlugin, op);
+        },
+        (error: unknown) => {
+          assert.ok(error instanceof PluginShapeError);
+          assert.deepStrictEqual(
+            { message: error.message, shape: error.shape },
+            {
+              message,
+              shape: {
+                kind,
+                plugin: "p1",
+                reasons: ["unsupported hooks"],
+                partialable: true,
+                unsupportedKinds: ["hooks"],
+              },
+            },
+          );
+          return true;
+        },
+      );
+    });
+  }
+
+  test("NOTINSTALLMSG-01: requireInstallable names unsupported mcp for an sse server under Pi's built-in MCP", async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const resolvedPlugin = await resolveStrict(
+      pluginEntry({ source: "./local" }),
+      resolveContext(marketplaceRoot, {
+        [localRoot]: "dir",
+        [path.join(localRoot, ".mcp.json")]: {
+          contents: JSON.stringify({
+            mcpServers: { events: { type: "sse", url: "https://mcp.example.com/sse" } },
+          }),
+        },
+      }),
+    );
+    const view = resolutionFor(resolvedPlugin, "builtin");
+
+    // act & assert
+    assert.throws(
+      () => {
+        requireInstallable(view, "update");
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof PluginShapeError);
+        assert.deepStrictEqual(
+          { message: error.message, shape: error.shape },
+          {
+            message: 'Plugin "p1" is no longer installable: unsupported mcp',
+            shape: {
+              kind: "no-longer-installable",
+              plugin: "p1",
+              reasons: ["unsupported mcp"],
+              partialable: true,
+              unsupportedKinds: ["mcpServers"],
+            },
+          },
+        );
+        return true;
+      },
+    );
+  });
 });
 
 describe("requirePartialInstallable", () => {
