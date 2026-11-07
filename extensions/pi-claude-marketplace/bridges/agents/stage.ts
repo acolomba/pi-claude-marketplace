@@ -487,6 +487,7 @@ export async function commitPreparedAgents(
     // Reverse-walk completed renames -- restore each back to staging. The
     // rollback loop NEVER throws; rollback failures accumulate into
     // rollbackLeaks[] for surfacing via appendLeaks below.
+    // fallow-ignore-next-line code-duplication -- reviewed: the agents and commands bridges keep the same TR-01/TR-05 commit-and-rollback shape on purpose, so each rollback contract stays beside the commit it protects
     const rollbackLeaks: string[] = [];
     for (const pair of [...completedRenames].reverse()) {
       try {
