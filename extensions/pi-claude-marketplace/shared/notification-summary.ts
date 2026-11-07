@@ -1,7 +1,6 @@
 import { redactAbsolutePaths } from "./redact-absolute-paths.ts";
 
 import type {
-  CascadeNotificationMessage,
   MarketplaceNotificationMessage,
   NotificationMessage,
   RetainedWorkflowStaging,
@@ -188,18 +187,6 @@ export interface SummaryCounts {
 }
 
 /**
- * `error`-severity counting (D-29-04): failed plugin rows (summed across all
- * marketplaces) and failed marketplace rows. Mirrors `computeSeverity` arm 1.
- * Cascade-only (SC#1): the parameter is narrowed to
- * `CascadeNotificationMessage` -- info-surface kinds do not invoke
- * `buildSummaryLine` (see `notify()` dispatcher and `buildSummaryLine`'s
- * defensive short-circuit).
- */
-function countFailedOperations(message: CascadeNotificationMessage): SummaryCounts {
-  return countFailedRows(message.marketplaces);
-}
-
-/**
  * SEV-02: error-severity tally by stamped fact -- the marketplace rows AND
  * plugin rows whose caller-stamped `severity === "error"`. The D-03 stamps map
  * `failed` rows to `error`. Consumed by both the cascade arm and the RECON-04
@@ -207,14 +194,6 @@ function countFailedOperations(message: CascadeNotificationMessage): SummaryCoun
  */
 function countFailedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
   return countRowsBySeverity(marketplaces, "error");
-}
-
-/**
- * `warning`-severity counting consumed by the summary line. Cascade-only (SC#1;
- * see `countFailedOperations`).
- */
-function countSkippedOperations(message: CascadeNotificationMessage): SummaryCounts {
-  return countSkippedRows(message.marketplaces);
 }
 
 /**
@@ -313,6 +292,7 @@ function buildSummaryLineForCascade(
     return summaryPhrase(counts.marketplaces, severity, "marketplace");
   }
 
+  // counts.plugins > 0, or the unreachable 0/0 degrade-to-plugin-plural case.
   return summaryPhrase(counts.plugins, severity, "plugin");
 }
 
@@ -374,20 +354,7 @@ export function buildSummaryLine(
     }
   }
 
-  const counts =
-    severity === "error" ? countFailedOperations(message) : countSkippedOperations(message);
-
-  // D-03: mixed-subject cascade drops the noun and counts all rows uniformly.
-  if (counts.plugins > 0 && counts.marketplaces > 0) {
-    return summaryPhrase(counts.plugins + counts.marketplaces, severity, null);
-  }
-
-  if (counts.marketplaces > 0) {
-    return summaryPhrase(counts.marketplaces, severity, "marketplace");
-  }
-
-  // counts.plugins > 0, or the unreachable 0/0 degrade-to-plugin-plural case.
-  return summaryPhrase(counts.plugins, severity, "plugin");
+  return buildSummaryLineForCascade(message.marketplaces, severity);
 }
 
 /**

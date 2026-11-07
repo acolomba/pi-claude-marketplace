@@ -152,7 +152,6 @@ async function playNextStep(messages: readonly Message[]): Promise<AssistantMess
   });
 }
 
-// fallow-ignore-next-line unused-export -- Pi's --extension loader reads this default.
 export default function scriptedModel(pi: ExtensionAPI): void {
   const faux = createFauxCore({});
   // The faux provider takes one queued response per call. The player queues

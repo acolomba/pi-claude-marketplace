@@ -53,6 +53,7 @@ function checkWorkflowInstallScripts(projectRoot = defaultProjectRoot) {
   return violations;
 }
 
+// fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
 function parseProjectRoot(args) {
   if (args.length === 0) {
     return defaultProjectRoot;
