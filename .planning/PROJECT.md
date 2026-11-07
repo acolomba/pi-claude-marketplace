@@ -21,6 +21,41 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
+## Current Milestone: behavioral-gaps -- Behavioral Coverage Gaps
+
+**Goal:** The cucumber suite covers the user-visible behavior that the
+November 2026 coverage audit found untested, with every scenario failing
+without the behavior it names and passing under both the adapter and the
+builtin profiles.
+
+**Target features:**
+
+- A foundation phase first, run serially in the parent session: every shared
+  stand-in, library, and step module the streams need (an async-hook recorder,
+  a GitHub device-code endpoint stand-in, earlier-release `state.json` and
+  `mcp.json` fixtures, a model tool-call driver, the browse terminal driver, a
+  pi-subagents background-child process flag), then frozen.
+- Hook events: async hooks and the async-rewake resume path, `StopFailure`,
+  `PostToolUseFailure`, `PostCompact`, and `SessionEnd`.
+- Upgrades: the legacy `state.json` migration, the MIG-01 first-run config
+  migration, and the AMIG-01 move of legacy `mcp.json` entries.
+- The model-facing tools `pi_claude_marketplace_list` and
+  `pi_claude_marketplace_plugin_list`, and GitHub Device Flow sign-in.
+- Thin spots: `browse` in the terminal UI, `prune`, `bootstrap`, the
+  marketplace state lock, and the load in a pi-subagents background child
+  (D-MB-12).
+
+**Key context:** Every stream after the foundation runs in its own child
+session on a `features/behavioral-gaps-phase-N` branch (`gsd-autonomous --only
+N`), owns only its own feature files and verb step modules, and never edits a
+foundation file, as `.agents/skills/cucumber/rules/layout.md` "Parallel work"
+defines. The parent session merges the branches and resolves the planning-file
+conflicts. Out of scope: hook events Pi cannot support, and the unsupported
+plugin features (LSP servers, `userConfig`, channels).
+
+**Bug policy:** as in component-features. A scenario that exposes a product
+bug fixes it in the same phase, with Claude Code as the reference.
+
 ## Previous Milestone: mcp-builtin -- MCP Built-in (branch: features/mcp-builtin, started 2026-11-04, completed 2026-11-05, PR [#303](https://github.com/acolomba/pi-claude-marketplace/pull/303), version 0.23.0, not yet merged)
 
 **Goal:** A plugin's MCP servers run through pi-mcp-adapter when it is
@@ -984,7 +1019,8 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-No milestone is active. The 31 mcp-builtin requirements are validated and
+The behavioral-gaps requirements are in
+[REQUIREMENTS.md](REQUIREMENTS.md). The 31 mcp-builtin requirements are validated and
 archived in
 [milestones/mcp-builtin-REQUIREMENTS.md](milestones/mcp-builtin-REQUIREMENTS.md).
 Earlier milestones: the 62 component-features requirements are validated
@@ -2391,3 +2427,5 @@ _Last updated: 2026-11-03 after the component-features milestone closed again. 6
 _Last updated: 2026-11-04 after starting the mcp-builtin milestone._
 
 _Last updated: 2026-11-05 after the mcp-builtin milestone closed. 31/31 requirements validated and archived; Phase 2 closed with a verification override (two manual checks wait for the user)._
+
+_Last updated: 2026-11-07 after starting the behavioral-gaps milestone._

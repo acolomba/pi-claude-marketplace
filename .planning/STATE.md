@@ -1,19 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: mcp-builtin
-status: Awaiting next milestone
-stopped_at: "Milestone mcp-builtin archived, reviewed, and merged (PR #303)"
-last_updated: "2026-11-07T20:53:21.019Z"
+milestone: behavioral-gaps
+milestone_name: Behavioral Coverage Gaps
+status: planning
+last_updated: "2026-11-07T23:05:31.687Z"
 last_activity: 2026-11-07
-last_activity_desc: "PR #303 merged; mcp-builtin review logs moved into the milestone archive"
-state_head: 55cf139346f22e8fa3127680b4f387d00a8f149e
-milestone_name: MCP Built-in
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 55
-  completed_plans: 55
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -32,10 +29,10 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 
 ## Current Position
 
-Phase: Milestone mcp-builtin complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-07 - Completed quick task 261107-lth: install codegraph as a devDependency
+Status: Defining requirements
+Last activity: 2026-11-07 — Milestone behavioral-gaps started
 
 
 ### mcp-4 closeout
