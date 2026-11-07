@@ -1,0 +1,89 @@
+# Requirements: pi-claude-marketplace -- behavioral-gaps
+
+**Defined:** 2026-11-07
+**Core Value:** A Pi user can install a Claude plugin and load each supported component as a working Pi artifact.
+
+Every requirement is met by cucumber scenarios under `features/` that fail without the behavior they name and pass under both the adapter and the builtin profiles. A scenario that exposes a product bug fixes it in the same phase, with Claude Code as the reference. The thin-spot requirements (BROWSE, PRUNE, BOOT, MLOCK) are first drafts that each phase's research may refine toward upstream behavior.
+
+## Milestone Requirements
+
+### Foundation
+
+- [ ] **FND-01**: The shared harness provides every stand-in, fixture writer, and shared step the stream phases name, each proven by a seed scenario under both profiles.
+- [ ] **FND-02**: Before the streams fork, the foundation files are listed as frozen in the roadmap, a child-session brief exists, and the combined tree passes `npm run check`.
+
+### Async hooks
+
+- [ ] **ASYNC-01**: An `asyncRewake` hook that exits 2 gets its `rewakeMessage` and output into the model's context, which the model sees on its next turn.
+- [ ] **ASYNC-02**: An `asyncRewake` hook that exits with any other code adds nothing to the model's context, and its `rewakeSummary` reaches the user.
+- [ ] **ASYNC-03**: An `asyncRewake` hook never blocks or delays the event it fired on; a `PreToolUse` async hook does not block the tool.
+- [ ] **ASYNC-04**: `/reload` stops the async hook processes still running, and the next load reaps the ones an earlier Pi process left behind.
+- [ ] **ASYNC-05**: A hook declaring plain `async: true` behaves as Claude Code does, or the divergence is recorded with its license.
+
+### Hook events
+
+- [ ] **STOPF-01**: `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload, and matchers select them by error type.
+- [ ] **TFAIL-01**: `PostToolUseFailure` hooks run on a failed tool call with Claude Code's payload, matchers select them by tool, and a `PostToolUse` hook does not run on the failure.
+- [ ] **PCOMP-01**: `PostCompact` hooks run after a compaction with its trigger (`manual` or `auto`), and matchers select them by trigger.
+- [ ] **SEND-01**: `SessionEnd` hooks run with each reason Pi can produce, matchers select them by reason, and a failing `SessionEnd` hook does not keep the session from ending.
+
+### Upgrades
+
+- [ ] **STMIG-01**: After an upgrade from an older `state.json` schema, the first load lists every recorded plugin as installed, its components work, and the state file is rewritten in the current schema.
+- [ ] **STMIG-02**: A `state.json` from a newer, unsupported schema is refused as unreadable, and nothing is changed.
+- [ ] **CFGMIG-01**: The first load with a `state.json` and no `claude-plugins.json` writes a config declaring every recorded marketplace and plugin, carrying the enabled state and the legacy `autoupdate` field.
+- [ ] **CFGMIG-02**: Later loads never rewrite the config, so the user's edits survive, and an invalid existing config is never overwritten.
+- [ ] **AMIG-01**: On load, a plugin's entries in a legacy `mcp.json` move to `mcp-adapter.json`, and its servers still run.
+- [ ] **AMIG-02**: The move leaves the user's own, unmarked `mcp.json` entries untouched.
+
+### Model-facing tools
+
+- [ ] **TOOL-01**: A model calling `pi_claude_marketplace_list` gets the configured marketplaces of both scopes, or of the scope it asks for.
+- [ ] **TOOL-02**: A model calling `pi_claude_marketplace_plugin_list` gets each plugin's compatibility and install status, filtered as it asks (installed, available, unavailable).
+- [ ] **TOOL-03**: A call naming an unknown marketplace or scope gets an error result, and neither tool changes anything on disk.
+
+### Device Flow
+
+- [ ] **DFLOW-01**: Adding a GitHub marketplace that needs a credential the user has not stored shows a user code and a verification URL, then clones once the user authorizes.
+- [ ] **DFLOW-02**: An authorization that is denied or expires fails as authentication required and records nothing.
+- [ ] **DFLOW-03**: An install from a GitHub git source runs the same flow on a cache miss.
+- [ ] **DFLOW-04**: The background autoupdate pass never starts a Device Flow; it uses stored credentials only.
+
+### Thin spots
+
+- [ ] **BROWSE-01**: In the terminal UI, `browse` and a bare `/claude:plugin` open the plugin picker, which lists the marketplaces and plugins of both scopes.
+- [ ] **BROWSE-02**: Choosing a plugin in the picker installs it in its marketplace's scope; cancelling installs nothing.
+- [ ] **PRUNE-01**: `prune` without `--scope` behaves as Claude Code does, `--scope user|project` combines with `--dry-run`, and its usage errors are covered.
+- [ ] **PRUNE-02**: `prune` while another process holds the state lock fails as lock held and removes nothing, and a dependency only a disabled plugin needs is handled as upstream does.
+- [ ] **BOOT-01**: `bootstrap` refuses `--scope` and arguments, and its json and rpc output carry the same outcome as the terminal UI.
+- [ ] **BOOT-02**: `bootstrap` while another process holds the user scope's state lock fails as lock held and records nothing.
+- [ ] **MLOCK-01**: `marketplace autoupdate` and `noautoupdate` while another process holds the state lock fail as lock held and change nothing.
+- [ ] **MLOCK-02**: A lock file left by a process that has died does not block the marketplace verbs, as `proper-lockfile`'s stale handling defines.
+- [ ] **CHILD-01**: A load in a pi-subagents background child, with `autoapply` on and a pending change, installs, uninstalls, and updates nothing.
+- [ ] **CHILD-02**: A load in a background child moves no legacy `mcp.json` entry and rewrites no agent grant, yet still loads the installed components.
+
+## Future Requirements
+
+None.
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Hook events Pi cannot support (`SubagentStop`, `PermissionRequest`, and the like) | Pi has no event to bridge them to; not a coverage gap |
+| LSP servers, `userConfig`, channels | Unsupported plugin features; partial-install behavior is already covered |
+| Product features beyond the bugs a scenario exposes | Milestone adds coverage, not features |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+
+**Coverage:**
+- Milestone requirements: 34 total
+- Mapped to phases: 0
+- Unmapped: 34
+
+---
+*Requirements defined: 2026-11-07*
+*Last updated: 2026-11-07 after initial definition*
