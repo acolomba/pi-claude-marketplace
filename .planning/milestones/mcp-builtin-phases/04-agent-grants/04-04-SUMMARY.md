@@ -143,7 +143,7 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 
 1. **Claude-Session trailer value**
    - Severity: Low
-   - Choice: Both commits end with `Claude-Session: https://claude.ai/code/session_01EDUMG7S9uXh4o5dikBwum8`, the value in `.planning/CHILD-SESSION-BRIEF.md` and the executor prompt.
+   - Choice: Both commits end with `Claude-Session: https://claude.ai/code/session_01EDUMG7S9uXh4o5dikBwum8`, the value in `.planning/milestones/mcp-builtin-CHILD-SESSION-BRIEF.md` and the executor prompt.
    - Alternatives: The harness attribution reminder names `session_01EDUMG87PKcySw33ikhvFmE`.
    - Why dubious: The two sources disagree. The executor prompt said to use the trailer exactly as the child brief gives it, so I did, as 04-01 did.
    - Recorded in: this SUMMARY.

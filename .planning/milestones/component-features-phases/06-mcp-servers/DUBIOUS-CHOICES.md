@@ -2,7 +2,7 @@
 
 Choices made without the user in the Phase 6 child session
 (`features/component-features-phase-6`). Same shape as the root
-`.planning/DUBIOUS-CHOICES.md`; the parent merges these entries into it.
+`.planning/milestones/component-features-DUBIOUS-CHOICES.md`; the parent merges these entries into it.
 Severity: High changes what a user sees or diverges from upstream; Medium is a
 judgment call a reviewer may reverse at low cost; Low is process, naming, or
 tooling. Status stays `open` until the user reviews it.

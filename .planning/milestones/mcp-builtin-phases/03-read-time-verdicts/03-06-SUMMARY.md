@@ -281,7 +281,7 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 - **A missing marketplace in the prepared state fails the swap.** Severity: Low. Alternative: fall back to the stored verdict. Why dubious: defensive code for a state the preflight already ruled out.
 - **Fixtures default to `"none"`.** Severity: Low. Existing fixtures name the neutral view, which reproduces what they pinned before; new cases name builtin or adapter. Alternative: `"adapter"` everywhere, which would change several existing expectations (a bare-elicitation candidate would need `--partial`). Why dubious: the fixtures do not exercise the production default of any single implementation.
 - **The --partial update under built-in is a warning row.** Severity: Low. It follows D-P3-09 (an MCP marker raises warning). Alternative: keep explicit `--partial` at info. Why dubious: before this phase a user-requested partial update was info.
-- **Claude-Session trailer.** Severity: Low. The commits end with `session_01EDUMG7S9uXh4o5dikBwum8`, as `.planning/CHILD-SESSION-BRIEF.md`, the plan, the executor rules, and every earlier commit on the branch require; this executor's harness suggested a different session URL. Alternative: the harness URL. Why dubious: two instructions disagree.
+- **Claude-Session trailer.** Severity: Low. The commits end with `session_01EDUMG7S9uXh4o5dikBwum8`, as `.planning/milestones/mcp-builtin-CHILD-SESSION-BRIEF.md`, the plan, the executor rules, and every earlier commit on the branch require; this executor's harness suggested a different session URL. Alternative: the harness URL. Why dubious: two instructions disagree.
 
 ## Self-Check: PASSED
 

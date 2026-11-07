@@ -29,7 +29,7 @@ tech_debt:
       - "MGRT-02's background-child check reads pi-subagents 0.84.0's `PI_SUBAGENT_CHILD` variable (a soft dependency); a rename upstream would fail silently."
   - phase: milestone
     items:
-      - "Decisions waiting on the user: 12 High entries and 36 Pending Key Decisions rows, listed at the top of `.planning/DUBIOUS-CHOICES.md`."
+      - "Decisions waiting on the user: 12 High entries and 36 Pending Key Decisions rows, listed at the top of `.planning/milestones/mcp-builtin-DUBIOUS-CHOICES.md`."
       - "Version bump, CHANGELOG PR number, and the pull request wait for the user (D-P6-17)."
       - "CI re-run 41967152313 on 2b6f2f4 (after the review fixes) passed on attempt 2: attempt 1 failed one adapter-components scenario, BLT-01 at `lifecycle.feature:392`, the known adapter flake P3-DC-111 (pi-mcp-adapter had not listed the tool yet). The scenario is the one 06-05 lifted to `@mcp`; its stand-in wait does not cover the adapter's listing, so the flake stays open."
 nyquist:

@@ -331,7 +331,7 @@ If `install` or `enable` registers immediately under built-in MCP ("later regist
 
 ### Pitfall 18: Root-container DAC, worktree hooks, and other environment facts
 
-Taken from `.planning/CHILD-SESSION-BRIEF.md` "ENVIRONMENT FACTS". Every executor must get them:
+Taken from `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md` "ENVIRONMENT FACTS". Every executor must get them:
 - About 167 chmod-based cases fail as root. Run every npm script and hooked commit with `npm_config_script_shell=<scratchpad>/nondac-sh NODE_OPTIONS=--max-old-space-size=6144`. The settings cleanup's "unreadable or locked settings.json" cases depend on this.
 - Warm ESLint with a lone `npm run lint` first, because a cold run can run out of memory.
 - In `.claude/worktrees/...` the commit hook may check nothing. Run `check:static` and the tests by hand before committing.
@@ -496,7 +496,7 @@ Lessons from component-features (child brief, DC-27, DC-32 merge notes):
 - `pi-mcp-adapter@7.0.0` tarball: `pi-builtin-mcp.ts`, `onboarding-state.ts` (handled-version semantics), `index.ts` (`applyPiMcpServers`, `registerAdapterServer`, `session_start`). HIGH.
 - `pi-subagents@0.84.0` tarball: `docs/agents.md` (built-in `mcp:` resolution, background-child registration, catalog snapshot timing). MEDIUM (docs, not run).
 - This tree: `extensions/pi-claude-marketplace/index.ts`, `platform/pi-api.ts`, `shared/notification-run.ts`, `domain/name.ts`, `domain/claude-mcp-variables.ts`, `domain/mcp-server-features.ts`, `bridges/mcp/{substitute,legacy,stage}.ts`, `bridges/agents/convert.ts`, `bridges/hooks/dispatch.ts`, `persistence/state-io.ts`, `features/support/{world,pi-process}.ts`, `features/lib/{companions,pi-process}.ts`, `test/e2e/_rpc.ts`, `test/architecture/behavioral-shard-coverage.test.ts`, `.github/workflows/ci.yml`, `cucumber.json`, `.fallowrc.json`, `scripts/install-test-peers.mjs`, `package.json`. HIGH.
-- `.planning/inputs/mcp-builtin/BRIEF.md`, `.planning/PROJECT.md` Constraints, `.planning/CHILD-SESSION-BRIEF.md`, `.planning/milestones/component-features-MILESTONE-AUDIT.md` (W2 and W4, the gate), `.planning/DUBIOUS-CHOICES.md` (DC-08, DC-09, DC-27, DC-32, DC-44, P6-DC-03/11/12/15).
+- `.planning/inputs/mcp-builtin/BRIEF.md`, `.planning/PROJECT.md` Constraints, `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`, `.planning/milestones/component-features-MILESTONE-AUDIT.md` (W2 and W4, the gate), `.planning/milestones/component-features-DUBIOUS-CHOICES.md` (DC-08, DC-09, DC-27, DC-32, DC-44, P6-DC-03/11/12/15).
 
 ---
 *Pitfalls research for: Pi built-in MCP as an equal alternative to pi-mcp-adapter (milestone mcp-builtin)*

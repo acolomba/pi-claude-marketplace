@@ -4,7 +4,7 @@
 **Status:** Ready for planning
 **Mode:** autonomous (decisions made from upstream evidence, no user prompts).
 The user asked for no interruptions: every dubious choice below is also listed
-in `.planning/DUBIOUS-CHOICES.md` for later review.
+in `.planning/milestones/component-features-DUBIOUS-CHOICES.md` for later review.
 
 <domain>
 ## Phase Boundary

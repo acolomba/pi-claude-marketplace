@@ -464,6 +464,6 @@ The outcome of every parent line above, one row per line in order (ROADMAP Phase
 | PL-90.23 | 01-FROZEN.md interface 3 | repeats PL-53 | 99a62fe |
 | PL-90.24 | Phase 3 BACKLOG parent line (P3-DC-122) | repeats PL-57 | PENDAPPLY-01 |
 | PL-91 | Watch at merge: P3-DC-36, P3-DC-30, P4-DC-38, P2-DC-43, P2-DC-31 | no longer applicable | The merges are done with green gates: 7d4246c and a25cd35 |
-| PL-92 | Phase 2 verification: P2-DC-100, the manual checks in 02-UAT.md, the REQUIREMENTS traceability | already applied; left for the user | 73db55e recorded the traceability of Phase 2's IDs in REQUIREMENTS.md; the 02-UAT.md checks are listed for the user under "Decisions waiting on you" in `.planning/DUBIOUS-CHOICES.md` (272dd20) |
+| PL-92 | Phase 2 verification: P2-DC-100, the manual checks in 02-UAT.md, the REQUIREMENTS traceability | already applied; left for the user | 73db55e recorded the traceability of Phase 2's IDs in REQUIREMENTS.md; the 02-UAT.md checks are listed for the user under "Decisions waiting on you" in `.planning/milestones/mcp-builtin-DUBIOUS-CHOICES.md` (272dd20) |
 | PL-93 | P2-DC-90: mint D-MB IDs for the cited P2-DC IDs and re-point the docs citations | applied | a65e979 (plan 06-10: D-MB-14 to D-MB-29); 8969c18 (plan 06-06: docs citations) |
 | PL-94 | Known flake: `lifecycle.feature:396` under the adapter profile (P3-DC-111) | applied | 9e9c116 carries it into 06-CI-HANDOFF.md `## Known flakes` with the rerun rule |

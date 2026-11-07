@@ -39,7 +39,7 @@ behavior_unverified: 0
 overrides_applied: 1
 overrides:
   - must_have: "04-02 prohibition (AGT-02): MUST NOT run a bridged agent in the background when its source does not ask for it with `background: true` and the call does not ask for it either."
-    reason: "User decision A.2 of 2026-11-02 (.planning/DUBIOUS-CHOICES.md l.68-90; D-CF6-10 in PROJECT.md l.1807, 'User accepted'): 'the extension writes `async: true` for agents granted MCP tools, which is consistent with Pi but differs from Claude Code's foreground run', because pi-subagents loads no ambient extension, pi-mcp-adapter included, into a foreground child. 204a8e6 implements it (bridges/agents/convert.ts:899-901, 961). The prohibition still holds for every agent that runs no plugin MCP tool: `async: false` unless the source sets `background: true` (convert.ts:1003, frontmatter.feature). This is the same decision Phase 6 carries as its SC4/MCP-07 override."
+    reason: "User decision A.2 of 2026-11-02 (.planning/milestones/component-features-DUBIOUS-CHOICES.md l.68-90; D-CF6-10 in PROJECT.md l.1807, 'User accepted'): 'the extension writes `async: true` for agents granted MCP tools, which is consistent with Pi but differs from Claude Code's foreground run', because pi-subagents loads no ambient extension, pi-mcp-adapter included, into a foreground child. 204a8e6 implements it (bridges/agents/convert.ts:899-901, 961). The prohibition still holds for every agent that runs no plugin MCP tool: `async: false` unless the source sets `background: true` (convert.ts:1003, frontmatter.feature). This is the same decision Phase 6 carries as its SC4/MCP-07 override."
     accepted_by: "acolomba"
     accepted_at: "2026-11-02T11:15:00Z"
 re_verification:

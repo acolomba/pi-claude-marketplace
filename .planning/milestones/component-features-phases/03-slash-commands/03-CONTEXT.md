@@ -312,7 +312,7 @@ prompts are already left out of resource discovery (Phase 2, `6a7ea1b`).
 - `extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts`,
   `edge/skill-aliases.ts`, `bridges/skills/project-installs.ts` (patterns;
   Phase 2 owned).
-- `.planning/DUBIOUS-CHOICES.md` DC-03..DC-10, DC-13, DC-24..DC-27.
+- `.planning/milestones/component-features-DUBIOUS-CHOICES.md` DC-03..DC-10, DC-13, DC-24..DC-27.
 - `.agents/skills/cucumber/SKILL.md`,
   `.agents/skills/claude-code-compat-research/SKILL.md`.
 

@@ -4590,7 +4590,7 @@ Added 2026-11-01 (component-features Phase 6, D-CF6-10). In the cucumber harness
 
 ## ~~MCPSUB-01: file the pi-subagents foreground MCP gap report~~ -- CLOSED
 
-**CLOSED 2026-11-02** by the user's decision (`.planning/DUBIOUS-CHOICES.md`, A.2). The foreground refusal is pi-subagents' documented design (docs/agents.md:553) and is accepted as a deviation; no gap report is filed. The two real pi-subagents bugs go upstream as the patches in `.planning/upstream/pi-subagents-mcp-direct-tools.patch` instead. MCPBG-01 tracks the later background-call proof.
+**CLOSED 2026-11-02** by the user's decision (`.planning/milestones/component-features-DUBIOUS-CHOICES.md`, A.2). The foreground refusal is pi-subagents' documented design (docs/agents.md:553) and is accepted as a deviation; no gap report is filed. The two real pi-subagents bugs go upstream as the patches in `.planning/upstream/pi-subagents-mcp-direct-tools.patch` instead. MCPBG-01 tracks the later background-call proof.
 
 Added 2026-11-01 (component-features Phase 6, D-CF6-10).
 

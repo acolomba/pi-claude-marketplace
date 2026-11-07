@@ -261,7 +261,7 @@ change is a parent line.
 - The ROADMAP success criterion 1 example (one `sse` plugin, available under
   the adapter and partially available under built-in, no reinstall) is the
   wave-1 tracer.
-- Environment facts from `.planning/CHILD-SESSION-BRIEF.md` (root DAC wrapper
+- Environment facts from `.planning/milestones/mcp-builtin-CHILD-SESSION-BRIEF.md` (root DAC wrapper
   `nondac-sh`, warm ESLint first, worktree hook caveat, zizmor without
   `GH_TOKEN`, per-executor scratch folders, `files_deleted`, TDD commits
   test and implementation together) apply to every executor.

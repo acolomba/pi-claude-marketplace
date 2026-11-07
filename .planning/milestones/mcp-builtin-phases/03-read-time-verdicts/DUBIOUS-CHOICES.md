@@ -1,7 +1,7 @@
 # Phase 3 (Read-Time Verdicts): Dubious Choices Log
 
 The choices Phase 3 made without the user, in the shape of the root
-`.planning/DUBIOUS-CHOICES.md` (read it for DC-01..DC-45, which these entries
+`.planning/milestones/component-features-DUBIOUS-CHOICES.md` (read it for DC-01..DC-45, which these entries
 stay consistent with) and of Phase 1's log
 (`.planning/phases/01-foundation-and-pi-1-5-0/DUBIOUS-CHOICES.md`,
 P1-DC-01..). Only this phase's session writes this file: each subagent ends

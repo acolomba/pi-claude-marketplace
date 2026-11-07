@@ -200,7 +200,7 @@ Also out of scope (CONTEXT `<domain>`): hooks modules (`modules`, not bridged), 
 
 ## Project Constraints (from AGENTS.md / CLAUDE.md)
 
-Directives the planner must honor (AGENTS.md, `.planning/CHILD-SESSION-BRIEF.md`, ROADMAP milestone rules):
+Directives the planner must honor (AGENTS.md, `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`, ROADMAP milestone rules):
 
 - **Upstream parity:** Claude Code 2.1.316 is the default; a divergence needs a recorded decision ID or a Pi capability gap. Research upstream with `.agents/skills/claude-code-compat-research`.
 - **Behavioral tests:** every user-visible change ships with a cucumber scenario under `features/` that fails without it (record the red proof). Unit tests and direct coverage do not replace it.

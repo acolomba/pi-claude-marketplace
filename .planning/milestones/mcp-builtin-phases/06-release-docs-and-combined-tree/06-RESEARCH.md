@@ -181,7 +181,7 @@ Several parent lines are larger than one line: P3-DC-22 (completions per impleme
 
   REQUIREMENTS.md traceability rows are marked Complete for Phase 2's 11 IDs.
 - **D-P6-14:** The milestone's root log of dubious choices is committed at
-  `.planning/DUBIOUS-CHOICES.md`:
+  `.planning/milestones/mcp-builtin-DUBIOUS-CHOICES.md`:
   - The previous milestone's file there moves with `git mv` to
     `.planning/milestones/component-features-DUBIOUS-CHOICES.md`, beside
     that milestone's other archives.

@@ -407,7 +407,7 @@ conflict, these amendments win.
   `SERVER_NAME = /^[A-Za-z0-9_-]+$/`, `mcpNamespace(server) = "mcp__" + server.replace(/-/g, "_")`,
   `createMcpToolName` with `MAX_TOOL_NAME_LENGTH = 64` and the 8-hex sha256
   suffix of `"<server>\0<tool>"`.
-- The harness environment facts in `.planning/CHILD-SESSION-BRIEF.md` (root
+- The harness environment facts in `.planning/milestones/mcp-builtin-CHILD-SESSION-BRIEF.md` (root
   DAC wrapper `nondac-sh`, warm ESLint first, the worktree hook caveat, zizmor
   without `GH_TOKEN`, per-executor scratch folders, `files_deleted`) apply to
   every executor of this phase.

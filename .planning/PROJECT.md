@@ -815,7 +815,7 @@ the active implementation, and a switch needs no plugin command. The
 extension never edits Pi settings (D-MB-01). Every MCP scenario runs under an
 `adapter` and a `builtin` cucumber profile. Audit `tech_debt`, no blockers;
 closed with a verification override for Phase 2. The user's review on
-2026-11-06 settled every entry in `.planning/DUBIOUS-CHOICES.md`, and quick
+2026-11-06 settled every entry in `.planning/milestones/mcp-builtin-DUBIOUS-CHOICES.md`, and quick
 batch 261106-m01 fixed what it queued; Phase 2 then re-verified `passed`
 (7/7) with 02-UAT 2/2.
 

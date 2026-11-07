@@ -1,7 +1,7 @@
 # Phase 5 (Hook Tool Names): Dubious Choices Log
 
 The choices Phase 5 made without the user, in the shape of the root
-`.planning/DUBIOUS-CHOICES.md` (read it for DC-01..DC-45, which these entries
+`.planning/milestones/component-features-DUBIOUS-CHOICES.md` (read it for DC-01..DC-45, which these entries
 stay consistent with). Only the Phase 5 child session writes this file: each
 subagent ends its report with `## Dubious Choices` (or "None"), and the
 session copies every item here. Phase 6 merges this file into the root log.
