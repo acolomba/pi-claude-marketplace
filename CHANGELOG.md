@@ -28,6 +28,7 @@
   - Under Pi's built-in MCP, `info` no longer fails when Pi's MCP registry or tool list cannot be read. The server shows `status unknown`.
   - Under Pi's built-in MCP, two plugin servers that share a Pi name or tool namespace now run one server, chosen by declaration order, and `info` shows the other as `not loaded`.
   - With no MCP implementation, `apply` now shows `{requires mcp}` on a plugin it moves and then enables, as that plugin's other rows do.
+  - A plugin's `is not installable` cause now names what Pi cannot run, such as `unsupported mcp`, and no longer ends at the colon.
 
 ## [0.22.0] - 2026-11-03
 
