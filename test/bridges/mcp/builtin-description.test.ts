@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -8,6 +8,7 @@ import {
   readBuiltinServerDescription,
   type BuiltinDescriptionSource,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-description.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
 const WRAPPED = path.join(".claude-plugin", "plugin.json");
 const BARE = "plugin.json";
@@ -88,15 +89,26 @@ test("D-01-07: a wrapped plugin.json without a description falls to the entry, n
   assert.strictEqual(description, "Entry text");
 });
 
-for (const { title, text } of [
-  { title: "an empty description", text: JSON.stringify({ description: "" }) },
-  { title: "a description that is not a string", text: JSON.stringify({ description: 5 }) },
-  { title: "text that does not parse", text: "{" },
-  { title: "a JSON string", text: JSON.stringify("Wrapped") },
-  { title: "JSON null", text: "null" },
+for (const { title, text, lines } of [
+  { title: "an empty description", text: JSON.stringify({ description: "" }), lines: [] },
+  {
+    title: "a description that is not a string",
+    text: JSON.stringify({ description: 5 }),
+    lines: [],
+  },
+  {
+    title: "text that does not parse",
+    text: "{",
+    lines: [
+      "[mcp] MCP server description of demo not read from .claude-plugin/plugin.json: the file is not valid JSON",
+    ],
+  },
+  { title: "a JSON string", text: JSON.stringify("Wrapped"), lines: [] },
+  { title: "JSON null", text: "null", lines: [] },
 ]) {
-  test(`ANAME-06: a plugin.json holding ${title} falls to the entry's description`, async (t) => {
+  test(`ANAME-06: a plugin.json holding ${title} falls to the entry's description and logs ${lines.length} line(s)`, async (t) => {
     // arrange
+    const logged = captureDebugLog(t);
     const tree = await pluginTree(t);
     await writeManifestAt(tree, WRAPPED, text);
 
@@ -105,6 +117,7 @@ for (const { title, text } of [
 
     // assert
     assert.strictEqual(description, "Entry text");
+    assert.deepStrictEqual(logged, lines);
   });
 }
 
@@ -132,6 +145,7 @@ test("ANAME-06: an empty entry description and no plugin.json give no descriptio
 
 test("D-PL2-24: a plugin.json link that leaves the boundary is not read and ends the walk", async (t) => {
   // arrange
+  const logged = captureDebugLog(t);
   const tree = await pluginTree(t);
   const outside = path.join(tree.root, "outside.json");
   await writeText(outside, JSON.stringify({ description: "Outside" }));
@@ -144,10 +158,12 @@ test("D-PL2-24: a plugin.json link that leaves the boundary is not read and ends
 
   // assert
   assert.strictEqual(description, "Entry text");
+  assert.deepStrictEqual(logged, []);
 });
 
 test("D-01-06: a dangling plugin.json link is no manifest, so the next candidate answers", async (t) => {
   // arrange
+  const logged = captureDebugLog(t);
   const tree = await pluginTree(t);
   await mkdir(path.join(tree.pluginRoot, ".claude-plugin"), { recursive: true });
   await symlink(path.join(tree.pluginRoot, "gone.json"), path.join(tree.pluginRoot, WRAPPED));
@@ -158,10 +174,12 @@ test("D-01-06: a dangling plugin.json link is no manifest, so the next candidate
 
   // assert
   assert.strictEqual(description, "Bare");
+  assert.deepStrictEqual(logged, []);
 });
 
 test("D-01-06: a directory spelled as the wrapped plugin.json is no manifest", async (t) => {
   // arrange
+  const logged = captureDebugLog(t);
   const tree = await pluginTree(t);
   await mkdir(path.join(tree.pluginRoot, WRAPPED), { recursive: true });
   await writeManifestAt(tree, BARE, JSON.stringify({ description: "Bare" }));
@@ -171,10 +189,12 @@ test("D-01-06: a directory spelled as the wrapped plugin.json is no manifest", a
 
   // assert
   assert.strictEqual(description, "Bare");
+  assert.deepStrictEqual(logged, []);
 });
 
-test("D-01-07: a plugin.json that cannot be read ends the walk and the entry answers", async (t) => {
+test("D-01-07: a plugin.json that cannot be read ends the walk, is logged, and the entry answers", async (t) => {
   // arrange
+  const logged = captureDebugLog(t);
   const tree = await pluginTree(t);
   await writeManifestAt(tree, WRAPPED, JSON.stringify({ description: "Wrapped" }));
   await chmod(path.join(tree.pluginRoot, WRAPPED), 0o000);
@@ -185,10 +205,14 @@ test("D-01-07: a plugin.json that cannot be read ends the walk and the entry ans
 
   // assert
   assert.strictEqual(description, "Entry text");
+  assert.deepStrictEqual(logged, [
+    "[mcp] MCP server description of demo not read from .claude-plugin/plugin.json: EACCES: permission denied, open 'plugin.json'",
+  ]);
 });
 
 test("ANAME-06: an unreadable marketplace manifest still lets plugin.json answer", async (t) => {
   // arrange
+  const logged = captureDebugLog(t);
   const tree = await pluginTree(t);
   await writeText(tree.source.manifestPath, "{");
   await writeManifestAt(tree, WRAPPED, JSON.stringify({ description: "Wrapped" }));
@@ -198,6 +222,75 @@ test("ANAME-06: an unreadable marketplace manifest still lets plugin.json answer
 
   // assert
   assert.strictEqual(description, "Wrapped");
+  assert.deepStrictEqual(logged, [
+    "[mcp] MCP server description of demo not read from the marketplace manifest: it is not a valid marketplace manifest",
+  ]);
+});
+
+test("ANAME-06: a marketplace manifest that is a directory is logged and plugin.json still answers", async (t) => {
+  // arrange
+  const logged = captureDebugLog(t);
+  const tree = await pluginTree(t);
+  await unlink(tree.source.manifestPath);
+  await mkdir(tree.source.manifestPath);
+  await writeManifestAt(tree, WRAPPED, JSON.stringify({ description: "Wrapped" }));
+
+  // act
+  const description = await readBuiltinServerDescription(tree.source);
+
+  // assert
+  assert.strictEqual(description, "Wrapped");
+  assert.deepStrictEqual(logged, [
+    "[mcp] MCP server description of demo not read from the marketplace manifest: EISDIR: illegal operation on a directory, read",
+  ]);
+});
+
+test("ANAME-06: a missing marketplace manifest logs nothing and plugin.json still answers", async (t) => {
+  // arrange
+  const logged = captureDebugLog(t);
+  const tree = await pluginTree(t);
+  await unlink(tree.source.manifestPath);
+  await writeManifestAt(tree, WRAPPED, JSON.stringify({ description: "Wrapped" }));
+
+  // act
+  const description = await readBuiltinServerDescription(tree.source);
+
+  // assert
+  assert.strictEqual(description, "Wrapped");
+  assert.deepStrictEqual(logged, []);
+});
+
+test("D-01-07: a plugin.json after the one that decides is not logged", async (t) => {
+  // arrange
+  const logged = captureDebugLog(t);
+  const tree = await pluginTree(t);
+  await writeManifestAt(tree, WRAPPED, JSON.stringify({ description: "Wrapped" }));
+  await writeManifestAt(tree, BARE, "{");
+
+  // act
+  const description = await readBuiltinServerDescription(tree.source);
+
+  // assert
+  assert.strictEqual(description, "Wrapped");
+  assert.deepStrictEqual(logged, []);
+});
+
+test("D-PL2-24: a plugin.json whose location cannot be resolved is logged and the entry answers", async (t) => {
+  // arrange
+  const logged = captureDebugLog(t);
+  const tree = await pluginTree(t);
+  const wrapped = path.join(tree.pluginRoot, WRAPPED);
+  await mkdir(path.dirname(wrapped), { recursive: true });
+  await symlink(wrapped, wrapped);
+
+  // act
+  const description = await readBuiltinServerDescription(tree.source);
+
+  // assert
+  assert.strictEqual(description, "Entry text");
+  assert.deepStrictEqual(logged, [
+    "[mcp] MCP server description of demo not read from .claude-plugin/plugin.json: ELOOP: too many symbolic links encountered, realpath 'plugin.json'",
+  ]);
 });
 
 test("ANAME-06: a plugin the manifest no longer lists has no entry description", async (t) => {

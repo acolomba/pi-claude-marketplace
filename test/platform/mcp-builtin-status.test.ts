@@ -311,7 +311,7 @@ test("P2-DC-14: each noted name answers its owner and a name the sync does not r
   t.after(() => {
     noteBuiltinServerOwners(new Map());
   });
-  const project = { scope: "project", marketplace: "mp", plugin: "alpha" } as const;
+  const project = { scope: "project", marketplace: "mp", plugin: "alpha", server: "api" } as const;
   noteBuiltinServerOwners(new Map([["plugin_alpha_api", project]]));
 
   // act
@@ -326,8 +326,8 @@ test("P2-DC-14: a later sync's owners replace every earlier owner", (t) => {
   t.after(() => {
     noteBuiltinServerOwners(new Map());
   });
-  const user = { scope: "user", marketplace: "mp", plugin: "alpha" } as const;
-  noteBuiltinServerOwners(new Map([["plugin_alpha_api", user]]));
+  const user = { scope: "user", marketplace: "mp", plugin: "alpha", server: "db" } as const;
+  noteBuiltinServerOwners(new Map([["plugin_alpha_api", { ...user, server: "api" }]]));
   noteBuiltinServerOwners(new Map([["plugin_alpha_db", user]]));
 
   // act

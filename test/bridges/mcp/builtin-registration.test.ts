@@ -257,6 +257,36 @@ test("D-MB-12: a refused removal is logged with its name and Pi's message, noted
   verify(log);
 });
 
+test("D-MB-12: a removal Pi refused is tried again by the next sync", () => {
+  // arrange
+  const registry = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+  const log = mock<DebugLog>({ exactParams: true, name: "debug log" });
+  when(() => registry.getMcpServers())
+    .thenReturn([listed("plugin_gone_a", stdioConfig("a"))])
+    .twice();
+  when(() => {
+    registry.unregisterMcpServer("plugin_gone_a");
+  }).thenThrow(new Error("runtime is stale"));
+  when(() => {
+    registry.unregisterMcpServer("plugin_gone_a");
+  }).thenReturn(undefined);
+  when(() => {
+    log("MCP server plugin_gone_a not unregistered: runtime is stale");
+  }).thenReturn(undefined);
+  const { notes, noted } = noteRecorder();
+
+  // act
+  syncBuiltinRegistrations(registry, new Map(), log, notes);
+  const notedAfterFirstSync = [...noted];
+  syncBuiltinRegistrations(registry, new Map(), log, notes);
+
+  // assert
+  assert.deepStrictEqual(notedAfterFirstSync, []);
+  assert.deepStrictEqual(noted, [["plugin_gone_a", "fresh"]]);
+  verify(registry);
+  verify(log);
+});
+
 test("D-MB-12: a name in the retained set is not unregistered", () => {
   // arrange
   const registry = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });

@@ -316,8 +316,8 @@ describe("builtinRegistrationStep", () => {
     assert.deepStrictEqual(
       [builtinServerOwner("plugin_demo_stub"), builtinServerOwner("plugin_demo_extra")],
       [
-        { scope: "project", marketplace: "mp", plugin: "demo" },
-        { scope: "user", marketplace: "mp", plugin: "demo" },
+        { scope: "project", marketplace: "mp", plugin: "demo", server: "stub" },
+        { scope: "user", marketplace: "mp", plugin: "demo", server: "extra" },
       ],
     );
     assert.deepStrictEqual(registered, [
@@ -374,7 +374,132 @@ describe("builtinRegistrationStep", () => {
       scope: "user",
       marketplace: "mp",
       plugin: "demo",
+      server: "stub",
     });
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-MB-13 / D-MB-23: a later server with the same registered name replaces an earlier one in place, and the earlier one is logged", async (t) => {
+    // arrange
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+    });
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(fixture, "user", {
+      demo: installRecord(fixture.pluginRoot, [
+        { name: "my.api", config: { command: "first" } },
+        { name: "my_api", config: { command: "second" } },
+      ]),
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_my_api", {
+        command: "second",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+        },
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      "[mcp] MCP server plugin_demo_my_api for my.api of demo@mp (user scope) not registered: plugin_demo_my_api for my_api of demo@mp (user scope) holds its Pi namespace",
+    ]);
+    assert.deepStrictEqual(builtinServerOwner("plugin_demo_my_api"), {
+      scope: "user",
+      marketplace: "mp",
+      plugin: "demo",
+      server: "my_api",
+    });
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("ANAME-03: a server whose name folds into the Pi namespace of a server declared before it is left out, logged, and owned by that server", async (t) => {
+    // arrange
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+      noteFreshBuiltinRegistration("plugin_demo_s-t");
+    });
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(fixture, "user", {
+      demo: installRecord(fixture.pluginRoot, [
+        { name: "s-t", config: { command: "first" } },
+        { name: "s_t", config: { command: "second" } },
+      ]),
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_s-t", {
+        command: "first",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+        },
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      "[mcp] MCP server plugin_demo_s_t for s_t of demo@mp (user scope) not registered: plugin_demo_s-t for s-t of demo@mp (user scope) holds its Pi namespace",
+    ]);
+    const holder = { scope: "user", marketplace: "mp", plugin: "demo", server: "s-t" };
+    assert.deepStrictEqual(
+      [builtinServerOwner("plugin_demo_s-t"), builtinServerOwner("plugin_demo_s_t")],
+      [holder, holder],
+    );
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("ANAME-03: a listed server whose namespace a server declared before it holds is unregistered, and that server registers", async (t) => {
+    // arrange
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+      noteFreshBuiltinRegistration("plugin_demo_s-t");
+      noteFreshBuiltinRegistration("plugin_demo_s_t");
+    });
+    const fixture = await session(t);
+    captureDebugLog(t);
+    await writeState(fixture, "user", {
+      demo: installRecord(fixture.pluginRoot, [
+        { name: "s-t", config: { command: "first" } },
+        { name: "s_t", config: { command: "second" } },
+      ]),
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+    when(() => pi.getMcpServers()).thenReturn([listedServer("plugin_demo_s_t")]);
+    when(() => {
+      pi.unregisterMcpServer("plugin_demo_s_t");
+    }).thenReturn(undefined);
+    when(() => {
+      pi.registerMcpServer("plugin_demo_s-t", {
+        command: "first",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+        },
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act & assert
+    await assert.doesNotReject(builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") }));
     verify(pi);
     verify(ctx);
   });
@@ -444,8 +569,13 @@ describe("builtinRegistrationStep", () => {
 
   test("NFR-2: an unreadable user state keeps the user scope's live servers registered and owned", async (t) => {
     // arrange
-    const owner = { scope: "user", marketplace: "mp", plugin: "demo" } as const;
-    const projectOwner = { scope: "project", marketplace: "mp", plugin: "demo" } as const;
+    const owner = { scope: "user", marketplace: "mp", plugin: "demo", server: "stub" } as const;
+    const projectOwner = {
+      scope: "project",
+      marketplace: "mp",
+      plugin: "demo",
+      server: "other",
+    } as const;
     noteBuiltinServerOwners(
       new Map<string, BuiltinServerOwner>([
         ["plugin_demo_stub", owner],
@@ -483,11 +613,11 @@ describe("builtinRegistrationStep", () => {
 
   test("NFR-2: a record whose read throws keeps its live servers while another record's gone server goes", async (t) => {
     // arrange
-    const owner = { scope: "user", marketplace: "mp", plugin: ".." } as const;
+    const owner = { scope: "user", marketplace: "mp", plugin: "..", server: "stub" } as const;
     noteBuiltinServerOwners(
       new Map([
         ["plugin_dots_stub", owner],
-        ["plugin_gone_stub", { scope: "user", marketplace: "mp", plugin: "gone" }],
+        ["plugin_gone_stub", { scope: "user", marketplace: "mp", plugin: "gone", server: "stub" }],
       ]),
     );
     t.after(() => {
@@ -519,7 +649,9 @@ describe("builtinRegistrationStep", () => {
   test("MREC-02: an unreadable legacy record still unregisters its live servers", async (t) => {
     // arrange
     noteBuiltinServerOwners(
-      new Map([["plugin_demo_stub", { scope: "user", marketplace: "mp", plugin: "demo" }]]),
+      new Map([
+        ["plugin_demo_stub", { scope: "user", marketplace: "mp", plugin: "demo", server: "stub" }],
+      ]),
     );
     t.after(() => {
       noteBuiltinServerOwners(new Map());
@@ -965,6 +1097,30 @@ describe("builtinRegistrationStep", () => {
 
     // assert
     assert.deepStrictEqual(logged, ["[mcp] MCP built-in registration skipped: runtime is stale"]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("ASTAT-01 / NFR-2: a sync whose registry cannot list keeps the owners the last sync noted", async (t) => {
+    // arrange
+    const owner = { scope: "user", marketplace: "mp", plugin: "other", server: "stub" } as const;
+    noteBuiltinServerOwners(new Map([["plugin_demo_stub", owner]]));
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+    });
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(fixture, "user", { demo: installRecord(fixture.pluginRoot) });
+    const ctx = sessionContext(fixture, false);
+    const pi = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+    when(() => pi.getMcpServers()).thenThrow(new Error("runtime is stale"));
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, ["[mcp] MCP built-in registration skipped: runtime is stale"]);
+    assert.deepStrictEqual(builtinServerOwner("plugin_demo_stub"), owner);
     verify(pi);
     verify(ctx);
   });

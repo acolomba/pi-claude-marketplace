@@ -18,12 +18,33 @@
 // entry with neither only overrides a global server of the same name, which
 // already holds the namespace. Any read or parse error reads as no server, so
 // the read never throws inside info (T-02-18).
+//
+// BLT-04 / T-02-18: a missing file configures nothing and leaves no trace, as
+// Pi skips a missing `mcp.json`. Any other read error, or text that does not
+// parse, also configures nothing and leaves one `mcp`-channel debug line. A
+// parse failure is named by a fixed phrase, because the parser's message
+// quotes the start of the text, and `mcp.json` holds header and env
+// credentials. A shape this read does not count stays silent: Pi reports
+// `mcp.json` shape errors itself.
 
 import { readFileSync } from "node:fs";
 
+import { isAbsenceError } from "../../domain/manifest-containment.ts";
 import { foldedMcpServerKey } from "../../domain/name.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 
 import { isPlainObject } from "./marker.ts";
+
+function traceUnread(error: unknown): void {
+  if (isAbsenceError(error)) {
+    return;
+  }
+
+  const reason = error instanceof SyntaxError ? "the file is not valid JSON" : errorMessage(error);
+  hookDebugLog(redactAbsolutePaths(`mcp.json servers not read: ${reason}`), "mcp");
+}
 
 function readServerNames(file: string): readonly string[] {
   try {
@@ -38,7 +59,8 @@ function readServerNames(file: string): readonly string[] {
     return Object.entries(servers)
       .filter(([, entry]) => definesServer(entry))
       .map(([name]) => name);
-  } catch {
+  } catch (error: unknown) {
+    traceUnread(error);
     return [];
   }
 }

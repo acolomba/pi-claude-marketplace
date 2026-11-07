@@ -836,16 +836,18 @@ test("D-MB-09: under builtin a project row reads project not trusted while Pi do
 /** Gives the registered names to their owners, as the registration step's sync does, for this case. */
 function ownedBy(
   t: TestContext,
-  owners: Readonly<Record<string, readonly [scope: Scope, marketplace: string, plugin: string]>>,
+  owners: Readonly<
+    Record<string, readonly [scope: Scope, marketplace: string, plugin: string, server: string]>
+  >,
 ): void {
   t.after(() => {
     noteBuiltinServerOwners(new Map());
   });
   noteBuiltinServerOwners(
     new Map(
-      Object.entries(owners).map(([name, [scope, marketplace, plugin]]) => [
+      Object.entries(owners).map(([name, [scope, marketplace, plugin, server]]) => [
         name,
-        { scope, marketplace, plugin },
+        { scope, marketplace, plugin, server },
       ]),
     ),
   );
@@ -853,7 +855,7 @@ function ownedBy(
 
 test("BLT-05: under builtin a trusted project row whose record owns the name reads the reader's answer", async (t) => {
   // arrange
-  ownedBy(t, { plugin_alpha_api: ["project", "mp", "alpha"] });
+  ownedBy(t, { plugin_alpha_api: ["project", "mp", "alpha", "api"] });
   const { lookup } = await builtinLookup(t, answeringReader("connected"));
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }], "project");
 
@@ -876,8 +878,8 @@ test("BLT-05: under builtin a trusted project row whose record owns the name rea
 test("ASTAT-01 / P2-DC-14: under builtin only the user row's server that a project record owns reads overridden by project scope", async (t) => {
   // arrange
   ownedBy(t, {
-    plugin_alpha_api: ["project", "mp", "alpha"],
-    plugin_alpha_db: ["user", "mp", "alpha"],
+    plugin_alpha_api: ["project", "mp", "alpha", "api"],
+    plugin_alpha_db: ["user", "mp", "alpha", "db"],
   });
   const reader = mock<McpStatusReader>({ exactParams: true, name: "mcp status" });
   when(() => reader.lookup("plugin_alpha_db"))
@@ -909,31 +911,37 @@ test("ASTAT-01 / P2-DC-14: under builtin only the user row's server that a proje
 for (const { label, owner, scope, token } of [
   {
     label: "a project record of another marketplace owns the name, the user row",
-    owner: ["project", "other", "alpha"],
+    owner: ["project", "other", "alpha", "api"],
     scope: "user",
     token: "overridden by project scope",
   },
   {
     label: "a user record of another marketplace owns the name, the user row",
-    owner: ["user", "other", "alpha"],
+    owner: ["user", "other", "alpha", "api"],
     scope: "user",
     token: "not loaded",
   },
   {
     label: "another plugin's server folds to the name, the user row",
-    owner: ["user", "mp", "alpha-x"],
+    owner: ["user", "mp", "alpha-x", "api"],
     scope: "user",
     token: "not loaded",
   },
   {
     label: "the user record owns the name, the trusted project row",
-    owner: ["user", "mp", "alpha"],
+    owner: ["user", "mp", "alpha", "api"],
     scope: "project",
+    token: "not loaded",
+  },
+  {
+    label: "another server of the row's own record holds the name, the user row",
+    owner: ["user", "mp", "alpha", "other"],
+    scope: "user",
     token: "not loaded",
   },
 ] as const satisfies readonly {
   label: string;
-  owner: readonly [Scope, string, string];
+  owner: readonly [Scope, string, string, string];
   scope: Scope;
   token: McpServerStatus;
 }[]) {
@@ -962,9 +970,42 @@ for (const { label, owner, scope, token } of [
   });
 }
 
+test("D-MB-13: under builtin a server whose name another server of its own record holds reads not loaded, and the holder keeps the reader's answer", async (t) => {
+  // arrange
+  ownedBy(t, { plugin_alpha_my_api: ["user", "mp", "alpha", "my_api"] });
+  const reader = mock<McpStatusReader>({ exactParams: true, name: "mcp status" });
+  when(() => reader.lookup("plugin_alpha_my_api"))
+    .thenReturn("not-connected")
+    .times(1);
+  const { lookup } = await builtinLookup(t, reader);
+  const block = infoBlock("installed", [
+    { name: "plugin:alpha:my.api" },
+    { name: "plugin:alpha:my_api" },
+  ]);
+
+  // act
+  const stamped = await withMcpServerStatus(
+    block,
+    installRecord([]),
+    lookup,
+    undefined,
+    recording(["my.api", "my_api"]),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    stamped,
+    infoBlock("installed", [
+      { name: "plugin:alpha:my.api", status: "not loaded" },
+      { name: "plugin:alpha:my_api", status: "not connected" },
+    ]),
+  );
+  verify(reader);
+});
+
 test("P2-DC-14: under builtin a server the trusted project record lists but the step registered for the user reads the reader's answer", async (t) => {
   // arrange
-  ownedBy(t, { plugin_alpha_api: ["user", "mp", "alpha"] });
+  ownedBy(t, { plugin_alpha_api: ["user", "mp", "alpha", "api"] });
   const { lookup } = await builtinLookup(t, answeringReader("connected"));
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
@@ -986,7 +1027,7 @@ test("P2-DC-14: under builtin a server the trusted project record lists but the 
 
 test("BLT-05: under builtin an mcp.json override comes before a project override", async (t) => {
   // arrange
-  ownedBy(t, { plugin_alpha_api: ["project", "mp", "alpha"] });
+  ownedBy(t, { plugin_alpha_api: ["project", "mp", "alpha", "api"] });
   const { lookup, environment } = await builtinLookup(t, answeringReader("connected"));
   await writeMcpJson(environment.agentDir, { plugin_alpha_api: { command: "node" } });
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
@@ -1118,7 +1159,7 @@ test("D-MB-29: under builtin an mcp.json override comes before a refused registr
 
 test("D-MB-29 / P2-DC-14: under builtin a user row's server that a project record owns reads overridden by project scope, also when Pi refused the name", async (t) => {
   // arrange
-  ownedBy(t, { plugin_alpha_api: ["project", "mp", "alpha"] });
+  ownedBy(t, { plugin_alpha_api: ["project", "mp", "alpha", "api"] });
   refused(t, "plugin_alpha_api");
   const { lookup } = await builtinLookup(t, answeringReader("connected"));
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
