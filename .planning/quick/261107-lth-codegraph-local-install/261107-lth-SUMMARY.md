@@ -19,6 +19,9 @@ lockfile pins 1.6.2). Every caller runs the project copy:
   rewrote the committed configs (the `.mcp.json` drift). It runs
   `codegraph init --yes` only when `.codegraph/` is missing.
 - AGENTS.md shell line: `npx --no codegraph explore`.
+- `scripts/cloud-env.sh` no longer sets `npm_config_prefix=/usr/local`, and
+  `scripts/init.sh` no longer adds the npm global bin to PATH: both existed
+  only so the global codegraph could be found.
 
 Verified: init.sh in the main checkout left only these edits. With every global
 copy removed from PATH, the MCP server answered `initialize` as version 1.6.2

@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
-export PATH="$PATH:$HOME/.local/bin:$(npm prefix --global)/bin"
+export PATH="$PATH:$HOME/.local/bin"
 
 # empty outside a Claude Code cloud VM. There, scripts/cloud-env.sh sets it
 # and installs what the VM lacks.
