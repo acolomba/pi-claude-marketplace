@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: behavioral-gaps
 milestone_name: Behavioral Coverage Gaps
 status: planning
-last_updated: "2026-11-07T23:05:31.687Z"
+last_updated: "2026-11-07T23:45:00.000Z"
 last_activity: 2026-11-07
 progress:
-  total_phases: 0
+  total_phases: 16
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,22 +17,26 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-05 after the mcp-builtin milestone closed)
+See: `.planning/PROJECT.md` (updated 2026-11-07 when the behavioral-gaps milestone started)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** the next milestone (mcp-builtin merged as PR #303)
+**Current focus:** behavioral-gaps Phase 1 (Foundation), serially in the parent
+session on `features/behavioral-gaps`; Phases 2-16 then run as fifteen
+parallel child sessions (mcp-builtin merged as PR #303).
 The mcp-builtin review log is `.planning/milestones/mcp-builtin-DUBIOUS-CHOICES.md`. Still open from component-features:
 the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 `acolomba/pi` and `acolomba/pi-subagents`.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-11-07 — Milestone behavioral-gaps started
+Phase: 1 of 16 (Foundation)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-07 — Roadmap created: 16 phases, 34/34 requirements mapped
+
+Progress: [░░░░░░░░░░] 0%
 
 
 ### mcp-4 closeout
@@ -812,6 +816,16 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Roadmap Evolution
 
+- behavioral-gaps roadmap created 2026-11-07 (phase numbers reset to 1), with
+  the phase structure the user fixed for maximum concurrency: Phase 1
+  (Foundation, serial in the parent session; builds every stand-in and shared
+  step, then freezes every shared file and writes the child-session brief),
+  then Phases 2-16 in parallel child sessions on
+  `features/behavioral-gaps-phase-N`, each depending on Phase 1 alone. No
+  closing phase: the parent applies parent lines at each merge. Phase 1 also
+  builds four stand-ins derived from the stream requirements (a scripted-model
+  error turn, an automatic compaction, a json-mode and terminal command run,
+  and a stale state lock), because the streams cannot edit the frozen harness.
 - mcp-builtin roadmap created 2026-11-04 (phase numbers reset to 1): Phase 1
   (Foundation and Pi 1.5.0, serial, freezes the shared files and the
   cross-phase interfaces), then Phases 2-5 in parallel child sessions
@@ -874,6 +888,18 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [behavioral-gaps] Phase 1 must settle how Pi reaches the Device Flow
+  stand-in: GHB-02 turns Device Flow off while
+  `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` points GitHub sources at the
+  loopback git host, which every cucumber Pi sets. A request redirect inside
+  the Pi process is preferred; a product seam needs a decision ID.
+- [behavioral-gaps] The requirements say every scenario passes under both
+  cucumber profiles, but the `builtin` profile selects only `@mcp` and
+  `@builtin-only` scenarios. Phase 1's discuss step decides what "both
+  profiles" means for a scenario with no MCP surface.
+- [behavioral-gaps] `hook/session.feature` and `hook/tool-use.feature` (no
+  owner) already pin part of PCOMP-01, SEND-01, and TFAIL-01; Phases 4-6 add
+  only what they do not pin.
 - [mcp-builtin] Resolved 2026-11-04: pi-mcp-adapter 7.0.0 writes
   `-builtin:mcp` into the user's Pi settings once per version, so after the
   adapter is removed the next start is usually `none`. Under D-MB-01 that is
@@ -917,6 +943,6 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-05T05:10:00Z
-Stopped at: milestone mcp-builtin archived; user review of the choices next
+Last session: 2026-11-07T23:45:00Z
+Stopped at: behavioral-gaps roadmap created (16 phases, 34/34 requirements); Phase 1 (Foundation) next
 Resume file: None

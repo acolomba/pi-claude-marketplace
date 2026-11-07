@@ -78,12 +78,46 @@ None.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| FND-01 | Phase 1 | Pending |
+| FND-02 | Phase 1 | Pending |
+| ASYNC-01 | Phase 2 | Pending |
+| ASYNC-02 | Phase 2 | Pending |
+| ASYNC-03 | Phase 2 | Pending |
+| ASYNC-04 | Phase 2 | Pending |
+| ASYNC-05 | Phase 2 | Pending |
+| STOPF-01 | Phase 3 | Pending |
+| TFAIL-01 | Phase 4 | Pending |
+| PCOMP-01 | Phase 5 | Pending |
+| SEND-01 | Phase 6 | Pending |
+| STMIG-01 | Phase 7 | Pending |
+| STMIG-02 | Phase 7 | Pending |
+| CFGMIG-01 | Phase 8 | Pending |
+| CFGMIG-02 | Phase 8 | Pending |
+| AMIG-01 | Phase 9 | Pending |
+| AMIG-02 | Phase 9 | Pending |
+| TOOL-01 | Phase 10 | Pending |
+| TOOL-02 | Phase 10 | Pending |
+| TOOL-03 | Phase 10 | Pending |
+| DFLOW-01 | Phase 11 | Pending |
+| DFLOW-02 | Phase 11 | Pending |
+| DFLOW-03 | Phase 11 | Pending |
+| DFLOW-04 | Phase 11 | Pending |
+| BROWSE-01 | Phase 12 | Pending |
+| BROWSE-02 | Phase 12 | Pending |
+| PRUNE-01 | Phase 13 | Pending |
+| PRUNE-02 | Phase 13 | Pending |
+| BOOT-01 | Phase 14 | Pending |
+| BOOT-02 | Phase 14 | Pending |
+| MLOCK-01 | Phase 15 | Pending |
+| MLOCK-02 | Phase 15 | Pending |
+| CHILD-01 | Phase 16 | Pending |
+| CHILD-02 | Phase 16 | Pending |
 
 **Coverage:**
 - Milestone requirements: 34 total
-- Mapped to phases: 0
-- Unmapped: 34
+- Mapped to phases: 34
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-11-07*
-*Last updated: 2026-11-07 after initial definition*
+*Last updated: 2026-11-07 after roadmap creation (16 phases)*
