@@ -26,6 +26,12 @@ const READY_TEXT = "Warning: No models available.";
 const DEFAULT_READY_MS = 15_000;
 const DEFAULT_STOP_MS = 5_000;
 
+// Pi prints this status once `/reload` has run the session handlers.
+const RELOADED_TEXT = "Reloaded keybindings";
+
+// A reload rebuilds the extension runtime in well under this.
+const DEFAULT_RELOAD_MS = 20_000;
+
 /**
  * What `PiTuiSession.start` needs: the sandbox, the git environment, and the
  * time limits. D-CF2-12: a scenario that profiles the TUI, such as with the
@@ -240,6 +246,17 @@ export class PiTuiSession {
   /** Waits until the normalized terminal contains `text`. */
   async waitForText(text: string, timeoutMs: number): Promise<void> {
     await this.waitFor(() => this.text.includes(text), timeoutMs, `terminal text ${text}`);
+  }
+
+  /**
+   * Types `/reload` and waits until Pi reports the reload done, which it does
+   * only after the new extensions' `session_start` and `resources_discover`
+   * handlers ran.
+   */
+  async reload(timeoutMs = DEFAULT_RELOAD_MS): Promise<void> {
+    const mark = this.markOutput();
+    this.sendLine("/reload");
+    await this.waitForTextAfter(RELOADED_TEXT, mark, timeoutMs);
   }
 
   /** Marks the current raw terminal position for a later event-driven wait. */

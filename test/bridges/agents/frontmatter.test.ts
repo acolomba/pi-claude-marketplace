@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   emitGeneratedAgentFile,
+  emitGeneratedAgentFrontmatter,
   parseFrontmatter,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 
@@ -1072,6 +1073,82 @@ Body.
 
       // assert
       assert.strictEqual(agentFile, expectedAgentFile);
+    });
+  }
+});
+
+describe("emitGeneratedAgentFrontmatter", () => {
+  const agentFields = {
+    frontmatter: {
+      name: "acme:reviewer",
+      description: "Reviews files",
+      tools: ["read", "mcp:plugin_acme_db/query"],
+      skills: [],
+      inheritSkills: false,
+      async: true,
+    },
+    provenance: {
+      pluginName: "acme",
+      sourceName: "reviewer",
+      sourcePath: "agents/reviewer.md",
+      droppedFields: [],
+      droppedTools: ["WebFetch"],
+      warnings: ["first warning"],
+    },
+  } as const;
+  const expectedFrontmatter = `---
+name: acme:reviewer
+description: Reviews files
+tools: read,mcp:plugin_acme_db/query
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: reviewer
+  sourcePath: agents/reviewer.md
+  droppedFields: []
+  droppedTools:
+    - WebFetch
+  warnings:
+    - first warning
+---
+`;
+
+  test("MGRT-01: returns the frontmatter block from the opening through the closing --- line", () => {
+    // act
+    const frontmatter = emitGeneratedAgentFrontmatter(agentFields);
+
+    // assert
+    assert.strictEqual(frontmatter, expectedFrontmatter);
+  });
+
+  for (const { label, body, expectedBody } of [
+    {
+      label: "a body with no separators",
+      body: "Review files.",
+      expectedBody: "\nReview files.\n",
+    },
+    {
+      label: "a body that already has its separators",
+      body: "\nReview files.\n",
+      expectedBody: "\nReview files.\n",
+    },
+    {
+      label: "a body holding a --- line",
+      body: "Before.\n---\nAfter.\n",
+      expectedBody: "\nBefore.\n---\nAfter.\n",
+    },
+  ]) {
+    test(`MGRT-01: the file is the frontmatter block followed by ${label}`, () => {
+      // act
+      const agentFile = emitGeneratedAgentFile({ ...agentFields, body });
+
+      // assert
+      assert.strictEqual(agentFile, expectedFrontmatter + expectedBody);
     });
   }
 });

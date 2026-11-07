@@ -214,7 +214,7 @@ function renderPartiallyUpgradableBrace(message: NotificationMessage): string {
   const boundary = makeCtx();
   const run = runWithSoftDeps({
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
+    mcpImplementation: "adapter",
     workflowEngineLoaded: false,
   });
 

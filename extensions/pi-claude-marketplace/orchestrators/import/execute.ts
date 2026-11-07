@@ -5,7 +5,7 @@ import {
 } from "../../orchestrators/marketplace/add.ts";
 import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
 import {
-  narrowResolverReasons,
+  narrowNotInstallableReasons,
   PROMOTED_ROW_REASONS,
 } from "../../orchestrators/plugin/install.messaging.ts";
 import {
@@ -101,6 +101,7 @@ import type {
 import type { MergedConfig } from "../../persistence/config-merge.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -134,10 +135,11 @@ export interface PluginInstalledOutcome {
    * CMC-13 / MSG-SD-1..3: per-row soft-dep predicate inputs propagated
    * from `InstallPluginOutcome.installed`. REQUIRED (mirrors D-01) so the
    * cascade-row build site cannot read `undefined` and silently render the
-   * marker as `false` (NFR-7).
+   * marker as `false` (NFR-7). D-P3-10: `declaresMcp` is the plugin's
+   * `McpDependency`, or `false`.
    */
   readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
+  readonly declaresMcp: McpDependency | false;
   /**
    * D-04-07: the entry named a record that arrived as another plugin's
    * dependency, and the install promoted it rather than installing anew, as
@@ -722,7 +724,7 @@ function installedRow(
       ...(o.version !== undefined && { version: o.version }),
       ...o.enableSignals,
       ...(o.declaresAgents && { stagedAgents: true }),
-      ...(o.declaresMcp && { stagedMcpServers: true }),
+      ...(o.declaresMcp !== false && { stagedMcpServers: o.declaresMcp }),
       ...(o.declaresWorkflows && { stagedWorkflows: true }),
     });
   }
@@ -1198,7 +1200,7 @@ async function installOnePlannedPlugin(
       // The collapsed `failed` status carries the typed Error directly. Narrow
       // on `instanceof PluginShapeError` plus `.kind` to recover the specific
       // failure class; everything else falls through to the unexpected bucket.
-      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
+      dispatchFailedOutcome(result, plugin, outcome.error, {
         rollbackPartials: outcome.rollbackPartials ?? [],
       });
       return "install-failed";
@@ -1325,7 +1327,7 @@ async function enableOnePlannedPlugin(
         resourcesChanged: true,
         ...(outcome.version !== undefined && { version: outcome.version }),
         declaresAgents: outcome.stagedAgents === true,
-        declaresMcp: outcome.stagedMcpServers === true,
+        declaresMcp: outcome.stagedMcpServers ?? false,
         reenabled: true,
         enableSignals: enableDegradation(outcome),
         declaresWorkflows: outcome.stagedWorkflows === true,
@@ -1335,7 +1337,7 @@ async function enableOnePlannedPlugin(
     case "failed":
       // AFILE-04: a failed enable can still have rewritten the MCP config.
       result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
-      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
+      dispatchFailedOutcome(result, plugin, outcome.error, {
         rollbackPartials: outcome.rollbackPartials ?? [],
       });
       return "install-failed";
@@ -2310,14 +2312,16 @@ function runtimeFailureReason(
  * `status: "failed"` outcome. `PluginShapeError.kind === "already-installed"`
  * and `ConcurrentInstallError` both route to the skip bucket;
  * `not-in-manifest` and `(no-)not-installable` route to the
- * unavailable / uninstallable warnings, carrying the caller's pre-formatted
- * `cause` text verbatim (`ImportWarningOutcome.cause` has no rendered
- * cause-chain slot, so there is nothing to double-render there); a
- * `DependencyCascadeError` (RESV-06) routes to `unexpectedPluginFailures`
- * with `reason: "dependency-failed"`; everything else lands there with
- * `reason: "unexpected-failure"`. Both `unexpectedPluginFailures` pushes go
- * through `pushUnexpectedFailure`, which derives its head and cause chain
- * from `error` directly rather than from the pre-formatted `cause` string.
+ * unavailable / uninstallable warnings. IMPORTCAUSE-01: each warning builds
+ * its cause once from the typed `PluginShapeError`. The not-in-manifest
+ * warning uses the message the constructor wrote. The uninstallable warning
+ * uses install's not-installable wording over the reasons IMP-08 narrows.
+ * The warning cause has no rendered slot (D-15-01), so it never reaches a
+ * row. A `StateLockHeldError` (IMP-07) routes to `unexpectedPluginFailures`
+ * with `reason: "lock-held"`; a `DependencyCascadeError` (RESV-06) routes
+ * there with `reason: "dependency-failed"`; everything else lands there with
+ * `reason: "unexpected-failure"`. Both of the last two pushes go through
+ * `pushUnexpectedFailure`, which builds its head and cause chain from `error`.
  *
  * Mirrors the instanceof ladder in
  * `orchestrators/reconcile/apply-outcomes.ts::classifyOrchestratorThrow`,
@@ -2327,7 +2331,6 @@ function dispatchFailedOutcome(
   result: MutableImportResult,
   plugin: PlannedPluginImport,
   error: Error,
-  cause: string,
   options: { readonly rollbackPartials: readonly RollbackPartial[] },
 ): void {
   if (error instanceof DependencyCascadeError) {
@@ -2363,22 +2366,21 @@ function dispatchFailedOutcome(
         pushAlreadyInstalled(result, plugin);
         return;
       case "not-in-manifest":
-        pushPluginWarning(result, plugin, "unavailable", cause);
+        pushPluginWarning(result, plugin, "unavailable", error.message);
         return;
       case "not-installable":
-      case "no-longer-installable":
-        // IMP-08: install's own narrowing, so a fresh import reads what
-        // `install` reads for the same plugin.
+      case "no-longer-installable": {
+        // IMP-08, IMPORTCAUSE-01: the warning carries install's narrowing.
+        // Its cause states the refusal once, in install's words, over the
+        // same tokens.
+        const reasons = narrowNotInstallableReasons(error.shape);
         result.warnings.push({
-          ...warningBase(plugin, cause),
+          ...warningBase(plugin, new PluginShapeError({ ...error.shape, reasons }).message),
           reason: "uninstallable",
-          reasons: narrowResolverReasons(
-            error.shape.reasons,
-            error.shape.unsupportedKinds,
-            error.shape.partialable,
-          ),
+          reasons,
         });
         return;
+      }
     }
   }
 

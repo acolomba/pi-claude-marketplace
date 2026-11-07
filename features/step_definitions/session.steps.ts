@@ -13,9 +13,12 @@
  * session, and the results that follow it, such as a background update's
  * notice, become the last results the same way. A prompt to a profile Pi
  * runs a model turn, and every record and stand-in log line the turn
- * produced becomes the last model turn (HAR-03). A profile Pi also lists the
- * slash commands it offers through its registry probe, and the listing stays
- * on the world for the step that compares it (HAR-04).
+ * produced becomes the last model turn (HAR-03). A Pi in the terminal with
+ * the scripted model can reload before its turn, which Pi offers only in the
+ * terminal, and the stand-in log lines of that turn become the last model
+ * turn the same way. A profile Pi also lists the slash commands it offers
+ * through its registry probe, and the listing stays on the world for the step
+ * that compares it (HAR-04).
  */
 
 import assert from "node:assert/strict";
@@ -29,6 +32,7 @@ import { readRegistrySnapshot, REGISTRY_PROBE_COMMAND } from "../lib/pi-registry
 import { resultsTable } from "../lib/result-rows.ts";
 import { expandTokens, projectTokens } from "../lib/run-tokens.ts";
 import { modelCallsOf } from "../lib/scripted-model/script.ts";
+import { lastScriptReply, sendTerminalTurn } from "../lib/scripted-model/terminal-turn.ts";
 import { readLogLengths, readLogLinesSince } from "../lib/turn-records.ts";
 
 import type { SessionReport } from "../lib/pi-commands.ts";
@@ -39,6 +43,14 @@ import type { ScenarioWorld } from "../support/world.ts";
 // runner and stays below the 30-second step timeout, so a turn that never
 // settles fails here with Pi's stderr.
 const MODEL_TURN_TIMEOUT_MS = 20_000;
+
+// A scripted turn in the terminal makes no request; it renders its last reply
+// well within this.
+const TERMINAL_TURN_TIMEOUT_MS = 30_000;
+
+// The reload step starts a terminal Pi (its readiness wait is a minute),
+// reloads it (up to 20 seconds), and waits for the turn.
+const TERMINAL_RELOAD_STEP_TIMEOUT_MS = 120_000;
 
 // An extension error or a dialog during a turn is never expected.
 function isTurnFault(record: RpcRecord): boolean {
@@ -114,6 +126,31 @@ When("the user prompts {string}", async function (this: ScenarioWorld, text: str
   );
   this.recordTurn({ prompt, disposition, records, logs });
 });
+
+// Pi offers `/reload` only in the terminal, so the step starts a terminal Pi
+// with the scripted model beside the profile Pi, in the same sandbox, where it
+// plays the profile Pi's script (D-CF2-05). Pi reports the reload done only
+// after the new extensions' session handlers ran, and the turn keeps every
+// stand-in log line from the reload on.
+When(
+  "the user reloads pi in the terminal and then prompts {string}",
+  { timeout: TERMINAL_RELOAD_STEP_TIMEOUT_MS },
+  async function (this: ScenarioWorld, text: string): Promise<void> {
+    const harness = this.profileHarness();
+    const reply = await lastScriptReply(harness);
+    const tui = await this.startTuiSession("scripted");
+    const lengths = await readLogLengths(harness);
+    await tui.reload();
+    const prompt = expandTokens(text, this.tokens);
+    const logs = await sendTerminalTurn(tui, prompt, {
+      harness,
+      lengths,
+      reply,
+      timeoutMs: TERMINAL_TURN_TIMEOUT_MS,
+    });
+    this.recordTurn({ prompt, disposition: "interactive", records: [], logs });
+  },
+);
 
 // HAR-04: the registry probe of the profile Pi reports every tool and slash
 // command Pi offers. Pi runs the probe's command to completion before it

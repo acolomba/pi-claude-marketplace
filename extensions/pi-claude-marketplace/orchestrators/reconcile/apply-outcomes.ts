@@ -41,7 +41,7 @@ import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts"
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
-import { narrowResolverReasons } from "../plugin/install.messaging.ts";
+import { narrowNotInstallableReasons } from "../plugin/install.messaging.ts";
 
 import {
   DEPENDENCY_UNSATISFIED_ROW_REASONS,
@@ -113,9 +113,10 @@ export interface MpRemovePartialOutcome extends OutcomeBase {
 /**
  * Plugin install success outcome. `version` mirrors the resolved install
  * version (when known); `dependencies` is the closed-set `Dependency[]`
- * derived from `InstallPluginOutcome.declaresAgents` / `declaresMcp` /
- * `declaresWorkflows` so the renderer's `PluginInstalledMessage` arm fires
- * soft-dep markers correctly when companion extensions are unloaded.
+ * derived from `InstallPluginOutcome.declaresAgents` / `declaresMcp` (the
+ * `McpDependency` itself, D-P3-10) / `declaresWorkflows` so the renderer's
+ * `PluginInstalledMessage` arm fires soft-dep markers correctly when companion
+ * extensions are unloaded.
  *
  * WR-04: the two ledger-degradation signals are INHERITED from the shared shape
  * rather than re-declared here, so all three ledger-driven arms (install,
@@ -331,7 +332,7 @@ export interface PluginEnableFailedOutcome extends PluginOutcomeBase {
  * install-disabled cascade (DFEN-04 -- the install ran whole and then unstaged
  * because the plugin's own `defaultEnabled` said so). The three optional fields
  * below are what tell the two apart on the rendered row; the toggle path omits
- * all three and stays byte-frozen.
+ * all three.
  */
 export interface PluginDisabledOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-disabled";
@@ -345,7 +346,7 @@ export interface PluginDisabledOutcome extends PluginOutcomeBase {
    */
   readonly reasons?: readonly ContentReason[];
   /**
-   * OUT-04 / D-102-10: request the frozen trailer naming the `enable` verb. Set
+   * OUT-04 / D-102-10: request the trailer naming the `enable` verb. Set
    * by the install-disabled cascade for the same reason the standalone install
    * row sets it -- the user did not ask for a disable, so the row has to name
    * the remedy. The toggle path omits it: a user who declared `enabled: false`
@@ -812,7 +813,8 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
 /**
  * REC-06: the reason fields of a failed install's row. A plugin that cannot be
  * installed reads the reasons `install` and `import` narrow it to
- * (`narrowResolverReasons`); every other throw reads its one classified reason.
+ * (`narrowNotInstallableReasons`); every other throw reads its one classified
+ * reason.
  * A reason the caller already holds (a dependency's `cross-marketplace`) wins.
  */
 export function installFailureReasonFields(
@@ -833,11 +835,7 @@ export function installFailureReasonFields(
   ) {
     return {
       reason,
-      reasons: narrowResolverReasons(
-        err.shape.reasons,
-        err.shape.unsupportedKinds,
-        err.shape.partialable,
-      ),
+      reasons: narrowNotInstallableReasons(err.shape),
     };
   }
 

@@ -1,3 +1,4 @@
+import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
 import {
   narrowProbeError,
@@ -9,6 +10,7 @@ import { resolveListCandidate } from "./list-candidate-version.ts";
 import { classifyManifestEntry } from "./plugin-state-classifier.ts";
 
 import type { ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ResolveContext, ResolvedPlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
@@ -119,7 +121,9 @@ function probeFailureRow(manifestEntry: ManifestPluginEntry, probeErr: unknown):
  * Composes one not-installed list row from local filesystem state only.
  *
  * Git sources with no cached clone remain `remote`; warm and path sources use
- * the resolver's exact three-way state. Probe failures become per-row reasons.
+ * the resolver's exact three-way state, as the active MCP implementation sees
+ * it (MREC-03, D-P3-03), so the row and its `--partial` bucket follow the
+ * implementation. Probe failures become per-row reasons.
  */
 export async function availableRowMessage(
   manifestEntry: ManifestPluginEntry,
@@ -129,6 +133,7 @@ export async function availableRowMessage(
   >,
   locations: ScopedLocations,
   declaredEnabled: boolean | undefined,
+  mcpImplementation: ActiveMcpImplementation,
 ): Promise<CandidateRow> {
   const claimsInstallDisabled = rowClaimsInstallDisabled(manifestEntry, declaredEnabled);
 
@@ -147,7 +152,7 @@ export async function availableRowMessage(
 
     return resolvedCandidateRow(
       candidateRowFields(manifestEntry, outcome.version),
-      outcome.resolved,
+      resolutionFor(outcome.resolved, mcpImplementation),
       claimsInstallDisabled,
     );
   } catch (probeErr) {

@@ -159,10 +159,11 @@ function isManualRecoveryOutcome(
  * that row: the standalone verb and the bulk cascade mapper both call it, so
  * the two surfaces cannot report the same ledger run differently (WR-09).
  *
- * CMC-13: `declaresAgents` / `declaresMcp` are required booleans, mapped to the
- * `dependencies: Dependency[]` tuple per SNM-06. The row's `dependencies` feed
- * `resolveRows`, which composes `{requires pi-subagents}` / `{requires pi-mcp-adapter}`
- * when the companion extension is unloaded (D-12).
+ * CMC-13: `declaresAgents` (a boolean) and `declaresMcp` (an `McpDependency`
+ * or `false`, D-P3-10) are required, mapped to the `dependencies: Dependency[]`
+ * tuple per SNM-06. The row's `dependencies` feed `resolveRows`, which composes
+ * `{requires pi-subagents}` and the MCP marker when the companion extension is
+ * unloaded (D-12).
  *
  * WARN-01 / WR-09 / D-86-03: a component this ledger degraded names its kind and
  * takes the info -> warning raise, exactly as on the install, enable and backfill

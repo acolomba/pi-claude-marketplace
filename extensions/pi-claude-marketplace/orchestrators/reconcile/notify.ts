@@ -60,7 +60,7 @@
 // orchestrator detects emptiness BEFORE calling this projection so the
 // advisory takes precedence.
 
-import { resolveStrict } from "../../domain/plugin-resolver.ts";
+import { resolutionFor, resolveStrict } from "../../domain/plugin-resolver.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -109,6 +109,7 @@ import type { CascadeStep, ConvergencePlan, PlannedMove } from "./convergence.ts
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { MarketplaceRows } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -518,10 +519,17 @@ export function convergedMoveOutcomes(
 
 /**
  * APPLY1-01: the net row of a held-down record `apply` moved and then enabled
- * in one cascade: the move's `(updated)` row, as `pending` lists it. It is
- * also a waiting record's move row, ahead of its enable row (D-PL2-18).
+ * in one cascade: the move's `(updated)` row, as `pending` lists it. Given
+ * the enable that landed, the row carries the soft dependencies that enable
+ * staged, so its markers follow the run's snapshot as the enable's own row
+ * would (D-MB-07). It is also a waiting record's move row, ahead of its
+ * enable row (D-PL2-18). That call passes no enable, because the enable row
+ * that follows already shows the markers.
  */
-export function enabledMoveOutcome(move: PlannedMove): PluginConvergedOutcome {
+export function enabledMoveOutcome(
+  move: PlannedMove,
+  enable?: PluginEnabledOutcome,
+): PluginConvergedOutcome {
   const row: PluginUpdatedMessage = {
     status: "updated",
     name: move.plugin,
@@ -529,7 +537,7 @@ export function enabledMoveOutcome(move: PlannedMove): PluginConvergedOutcome {
     from: move.fromVersion,
     to: move.toVersion,
     ...withCommits(revisionCommits(move)),
-    dependencies: [],
+    dependencies: enable === undefined ? [] : enableRowDependencies(enable),
     severity: "info",
     needsReload: true,
   };
@@ -630,12 +638,16 @@ function forceInstallKey(scope: Scope, marketplace: string, plugin: string): str
 /**
  * FSTAT-06 / D-66-04 / NFR-5: resolve every planned install candidate
  * no-network via `resolveStrict` and collect the `(scope, marketplace, plugin)`
- * keys whose candidate resolves `state === "partially-available"` -- the planned
- * install would degrade and proceed under the partial path, so its pending row
- * renders `(will partially install)`. The resolve is the cache/no-network resolver
- * (guarded by BLOCK F in `eslint.config.js`); a probe throw
- * or an unlocatable candidate degrades to NO force (the safe, truthful preview
+ * keys whose candidate is `partially-available` under the run's active MCP
+ * implementation (D-P3-15), read like every other surface, so its pending row
+ * renders `(will partially install)`. The resolve is the cache/no-network
+ * resolver (guarded by BLOCK F in `eslint.config.js`); a probe throw or an
+ * unlocatable candidate degrades to NO force (the safe, truthful preview
  * default), never a crash on this read-only surface (IL-2).
+ *
+ * `apply` installs a declared plugin without `--partial` (P3-DC-20), so it
+ * refuses the install this row previews, for an MCP drop as for any other
+ * kind. That mismatch predates the MCP implementations and is left as it is.
  *
  * D-66-05: there is deliberately NO `will partially update` analog. The
  * `ReconcilePlan` has no update bucket (install/uninstall/enable/disable/
@@ -646,6 +658,7 @@ function forceInstallKey(scope: Scope, marketplace: string, plugin: string): str
 export async function resolvePendingForceInstalls(
   plans: readonly ReconcilePlan[],
   locate: PendingInstallCandidateLocator,
+  mcpImplementation: ActiveMcpImplementation,
 ): Promise<ReadonlySet<string>> {
   const keys = new Set<string>();
   for (const plan of plans) {
@@ -664,7 +677,7 @@ export async function resolvePendingForceInstalls(
           marketplaceName: install.marketplace,
           marketplaceSource: candidate.marketplaceSource,
         });
-        if (resolved.state === "partially-available") {
+        if (resolutionFor(resolved, mcpImplementation).state === "partially-available") {
           keys.add(forceInstallKey(install.scope, install.marketplace, install.plugin));
         }
       } catch (err) {
@@ -931,8 +944,9 @@ export function planListNeedsApply(plans: readonly ReconcilePlan[]): boolean {
 // `enabled` is NOT a member of PLUGIN_STATUSES (only `disabled` is). A
 // successful enable re-materializes the plugin via installPlugin, so the
 // projection emits the `installed` row, deriving its `dependencies` from the
-// ledger's staged-count signals exactly as the install arm derives its own
-// (SEV-01 / WR-06). The reverse asymmetry (a successful disable maps to
+// ledger's signals (the staged counts, and the `McpDependency` of the declared
+// servers, D-P3-10) exactly as the install arm derives its own (SEV-01 /
+// WR-06). The reverse asymmetry (a successful disable maps to
 // `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES. This
 // belongs to the token mapping above rather than to either row builder below:
 // it is the asymmetry BETWEEN them, and as a `/** */` block stacked above
@@ -998,10 +1012,10 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * `plugin-installed` / `plugin-backfilled` arms.
  *
  * SEV-01 / WDEP-02 / WR-06: `dependencies` is DERIVED on both arms from the
- * ledger's staged-agent / staged-MCP / staged-workflow verdicts through the
+ * ledger's staged-agent / MCP-dependency / staged-workflow verdicts through the
  * same `enableRowDependencies` seam the standalone enable row uses, so the
- * `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
- * `{requires pi-dynamic-workflows}` markers fire on a projected re-enable
+ * `{requires pi-subagents}` / MCP / `{requires pi-dynamic-workflows}` markers
+ * fire on a projected re-enable
  * exactly as they do on the sibling install arm. A re-enable that staged none
  * of the three composes an empty array, which elides the brace entirely
  * (NREG-01).
@@ -1409,8 +1423,8 @@ function applyPluginOutcomeToBlock(
       // enable branch re-materializes via runInstallLedger so the realized
       // outcome IS an install -- `(installed)` is the truthful surface row.
       // No dependencies plumbed from EnableDisablePluginOutcome (the orchestrator
-      // doesn't expose declaresAgents / declaresMcp on the enabled arm); the
-      // empty dependencies array suppresses soft-dep markers, which is the
+      // doesn't expose declaresAgents / the MCP dependency on the enabled arm);
+      // the empty dependencies array suppresses soft-dep markers, which is the
       // safe default for a re-materialization that wouldn't change the
       // companion-extension surface.
       //

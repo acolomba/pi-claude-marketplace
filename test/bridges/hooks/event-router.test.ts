@@ -44,6 +44,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
@@ -59,7 +60,9 @@ import type {
   ExtensionContext,
   SessionCompactEvent,
   ToolCallEvent,
+  ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { SlashCommandInfo, ToolInfo } from "@earendil-works/pi-coding-agent";
 
 /**
  * Unit tests for `bridges/hooks/event-router.ts` -- the hooks-bridge
@@ -2618,6 +2621,151 @@ test("separate runtimes keep their current callbacks live and route through thei
   assert.deepStrictEqual(secondDispatched, ["second-plugin"]);
   assert.deepStrictEqual(firstPi.messages, []);
   assert.deepStrictEqual(secondPi.messages, []);
+});
+
+/**
+ * A recording Pi that also lists `commands` and counts its inventory reads,
+ * the reads the run snapshot behind the proxy rule makes (D-P5-07).
+ */
+function makeInventoryPi(commands: readonly SlashCommandInfo[]): {
+  readonly pi: ExtensionAPI;
+  readonly registrations: RecordedRegistration[];
+  readonly reads: { getAllTools: number; getCommands: number };
+} {
+  const recording = makeRecordingPi();
+  const reads = { getAllTools: 0, getCommands: 0 };
+  const pi = Object.assign(recording.pi, {
+    getAllTools(): ToolInfo[] {
+      reads.getAllTools += 1;
+      return [];
+    },
+    getCommands(): SlashCommandInfo[] {
+      reads.getCommands += 1;
+      return [...commands];
+    },
+  });
+  return { pi, registrations: recording.registrations, reads };
+}
+
+/** A `*` PreToolUse hook and a `*` PostToolUse hook of one plugin. */
+function setMatchAllToolBuckets(runtime: HooksRuntime, cwd: string): void {
+  for (const claudeEvent of ["PreToolUse", "PostToolUse"] as const) {
+    runtime.setRoutingBucket(claudeEvent, [
+      {
+        scope: "project",
+        marketplace: "catalog",
+        pluginId: claudeEvent,
+        resolvedSource: asAbsolutePluginRoot(path.join(cwd, "plugin")),
+        claudeEvent,
+        matcher: parseMatcher("*"),
+        rawMatcher: "*",
+        handlerDecl: { type: "command", command: "guard" },
+        declarationIndex: 0,
+        ifPredicate: MATCH_ALL_IF,
+      },
+    ]);
+  }
+}
+
+const PROXY_TOOL_CALL = {
+  type: "tool_call",
+  toolCallId: "proxy-call",
+  toolName: "mcp",
+  input: { tool: "mcp__plugin_demo_stub__echo", args: { text: "ping" } },
+} satisfies ToolCallEvent;
+
+const PROXY_TOOL_RESULT = {
+  ...PROXY_TOOL_CALL,
+  type: "tool_result",
+  content: [{ type: "text", text: "echo:ping" }],
+  isError: false,
+  details: undefined,
+} satisfies ToolResultEvent;
+
+async function callToolHandlers(
+  registrations: readonly RecordedRegistration[],
+  occurrence: number,
+  context: ExtensionContext,
+): Promise<unknown[]> {
+  return [
+    await registeredHandler(registrations, "tool_call", occurrence)(PROXY_TOOL_CALL, context),
+    await registeredHandler(registrations, "tool_result", occurrence)(PROXY_TOOL_RESULT, context),
+  ];
+}
+
+test("the tool handlers of one bridge load share one read of the proxy rule (D-P5-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-proxy-rule-");
+  const cwd = path.join(root, "project");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, reads } = makeInventoryPi([adapterCommand()]);
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd,
+    executor: (entry) => {
+      dispatched.push(entry.pluginId);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  setMatchAllToolBuckets(runtime, cwd);
+
+  // act
+  const outputs = await callToolHandlers(registrations, 0, makeContext(cwd, root));
+
+  // assert
+  assert.deepStrictEqual(outputs, [undefined, undefined]);
+  assert.deepStrictEqual(dispatched, []);
+  assert.deepStrictEqual(reads, { getAllTools: 3, getCommands: 1 });
+});
+
+test("a new bridge load reads the proxy rule again and its stale handlers read nothing (D-P5-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-proxy-rule-reload-");
+  const cwd = path.join(root, "project");
+  const runtime = createHooksRuntime();
+  const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
+  const { pi, registrations, reads } = makeInventoryPi([adapterCommand()]);
+  const context = makeContext(cwd, root);
+  await hydration.registerHooksBridge(pi, {
+    cwd,
+    executor: () => Promise.resolve({ kind: "noop" }),
+  });
+  setMatchAllToolBuckets(runtime, cwd);
+  await callToolHandlers(registrations, 0, context);
+  await hydration.registerHooksBridge(pi, {
+    cwd,
+    executor: () => Promise.resolve({ kind: "noop" }),
+  });
+  setMatchAllToolBuckets(runtime, cwd);
+
+  // act
+  const staleOutputs = await callToolHandlers(registrations, 0, context);
+  const readsAfterStale = { ...reads };
+  await callToolHandlers(registrations, 1, context);
+
+  // assert
+  assert.deepStrictEqual(staleOutputs, [undefined, undefined]);
+  assert.deepStrictEqual(readsAfterStale, { getAllTools: 3, getCommands: 1 });
+  assert.deepStrictEqual(reads, { getAllTools: 6, getCommands: 2 });
+});
+
+test("registering the bridge reads neither Pi's tools nor its commands (MSEL-01)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-proxy-rule-register-");
+  const cwd = path.join(root, "project");
+  const { pi, registrations, reads } = makeInventoryPi([adapterCommand()]);
+
+  // act
+  await createHooksHydration(createHooksRuntime(), EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd,
+  });
+
+  // assert
+  assert.strictEqual(
+    registrations.filter(({ event }) => event === "tool_call" || event === "tool_result").length,
+    2,
+  );
+  assert.deepStrictEqual(reads, { getAllTools: 0, getCommands: 0 });
 });
 
 test(

@@ -10,7 +10,7 @@ import {
   requireNotificationMode,
   createCommandRunState,
 } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
-import { adapterCommand } from "../platform/pi-inventory-seed.ts";
+import { adapterCommand, builtinMcpCommand } from "../platform/pi-inventory-seed.ts";
 
 import { runWithNothingLoaded } from "./notification-run-seeds.ts";
 
@@ -56,9 +56,60 @@ test("takes a snapshot without an entry sink or command identity", () => {
 
   // assert
   assert.deepStrictEqual(snapshot, {
-    softDeps: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
+    softDeps: {
+      piSubagentsLoaded: false,
+      mcpImplementation: "none",
+      workflowEngineLoaded: false,
+    },
   });
   verify(inventory);
+});
+
+test("MSEL-01: a snapshot names Pi's built-in MCP as the run's active implementation", () => {
+  // arrange
+  const inventory = mock<PiInventory>({ exactParams: true, name: "Pi inventory" });
+  when(() => inventory.getAllTools())
+    .thenReturn([])
+    .times(3);
+  when(() => inventory.getCommands())
+    .thenReturn([builtinMcpCommand()])
+    .times(1);
+
+  // act
+  const snapshot = openNotificationSnapshot(inventory);
+
+  // assert
+  assert.deepStrictEqual(snapshot, {
+    softDeps: {
+      piSubagentsLoaded: false,
+      mcpImplementation: "builtin",
+      workflowEngineLoaded: false,
+    },
+  });
+  verify(inventory);
+});
+
+test("MSEL-01: a run carries Pi's built-in MCP as its active implementation", () => {
+  // arrange
+  const pi = {
+    getAllTools: () => [],
+    getCommands: () => [builtinMcpCommand()],
+    appendEntry: () => {},
+  };
+
+  // act
+  const run = openNotificationRun(pi, { kind: "hook" });
+
+  // assert
+  assert.deepStrictEqual(run, {
+    origin: { kind: "hook" },
+    entrySink: pi,
+    softDeps: {
+      piSubagentsLoaded: false,
+      mcpImplementation: "builtin",
+      workflowEngineLoaded: false,
+    },
+  });
 });
 
 test("keeps the root identity when the supplied origin later changes", () => {
@@ -103,7 +154,11 @@ test("D-05: opening a run reads the tools three times and the commands once", ()
   // assert
   assert.deepStrictEqual(run, {
     origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-    softDeps: { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: false },
+    softDeps: {
+      piSubagentsLoaded: true,
+      mcpImplementation: "adapter",
+      workflowEngineLoaded: false,
+    },
     entrySink: pi,
     commandState: { hasOutcome: false, needsReload: false, settled: false, delivery: "open" },
   });
@@ -157,7 +212,7 @@ for (const kind of ["load", "hook"] as const) {
       entrySink: pi,
       softDeps: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     });
@@ -186,7 +241,7 @@ test("D-05: a run keeps its snapshot when the inventory later answers differentl
   // assert
   assert.deepStrictEqual(run.softDeps, {
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
   });
 });

@@ -82,6 +82,77 @@ function toolInventory(
   return { getAllTools: () => tools, getCommands: () => commands };
 }
 
+interface McpImplementationRow {
+  readonly situation: string;
+  readonly inventory: () => PiBoundary.PiInventory;
+  readonly mcpImplementation: PiBoundary.ActiveMcpImplementation;
+}
+
+function failingRead(): never {
+  throw new Error("not ready");
+}
+
+/** MSEL-01: inventories that decide the run's active MCP implementation. */
+function mcpImplementationRows(): McpImplementationRow[] {
+  return [
+    {
+      situation: "the adapter's mcp-adapter extension command is listed",
+      inventory: () => toolInventory([], [adapterCommand()]),
+      mcpImplementation: "adapter",
+    },
+    {
+      situation: "Pi lists the mcp command from builtin:mcp",
+      inventory: () => toolInventory([], [builtinMcpCommand()]),
+      mcpImplementation: "builtin",
+    },
+    {
+      situation: "the adapter command is listed before Pi's builtin:mcp command",
+      inventory: () => toolInventory([], [adapterCommand(), builtinMcpCommand()]),
+      mcpImplementation: "adapter",
+    },
+    {
+      situation: "the adapter command is listed after Pi's builtin:mcp command",
+      inventory: () => toolInventory([], [builtinMcpCommand(), adapterCommand()]),
+      mcpImplementation: "adapter",
+    },
+    {
+      situation: "another extension registers the mcp command",
+      inventory: () => toolInventory([], [adapterCommand("mcp", "npm:other-mcp-extension")]),
+      mcpImplementation: "none",
+    },
+    {
+      situation: "a prompt template named mcp carries the builtin:mcp path",
+      inventory: () => toolInventory([], [{ ...builtinMcpCommand(), source: "prompt" }]),
+      mcpImplementation: "none",
+    },
+    {
+      situation: "a skill command named mcp carries the builtin:mcp path",
+      inventory: () => toolInventory([], [{ ...builtinMcpCommand(), source: "skill" }]),
+      mcpImplementation: "none",
+    },
+    {
+      situation: "Pi lists no command",
+      inventory: () => toolInventory([], []),
+      mcpImplementation: "none",
+    },
+    {
+      situation: "getCommands() throws",
+      inventory: () => ({ getAllTools: () => [], getCommands: failingRead }),
+      mcpImplementation: "none",
+    },
+    {
+      situation: "getAllTools() throws and Pi lists the builtin:mcp command",
+      inventory: () => ({ getAllTools: failingRead, getCommands: () => [builtinMcpCommand()] }),
+      mcpImplementation: "builtin",
+    },
+    {
+      situation: "only a tool whose source names pi-mcp-adapter is listed",
+      inventory: () => toolInventory([adapterProxyTool()], []),
+      mcpImplementation: "adapter",
+    },
+  ];
+}
+
 void (true satisfies Same<PiBoundary.AgentEndEvent, Peer.AgentEndEvent>);
 void (true satisfies Same<PiBoundary.AgentSettledEvent, Peer.AgentSettledEvent>);
 void (true satisfies Same<PiBoundary.BeforeAgentStartEvent, Peer.BeforeAgentStartEvent>);
@@ -124,9 +195,14 @@ void ({
 } satisfies PiBoundary.ResourcesDiscoverResult);
 void ({
   piSubagentsLoaded: true,
-  piMcpAdapterLoaded: false,
+  mcpImplementation: "none",
   workflowEngineLoaded: false,
 } satisfies PiBoundary.SoftDepStatus);
+void ({
+  name: "mcp",
+  source: "extension",
+  sourceInfo: { path: "builtin:mcp", source: "builtin" },
+} satisfies PiBoundary.CommandInventoryItem);
 void (true satisfies Same<PiBoundary.AgentMessage, PiBoundary.AgentEndEvent["messages"][number]>);
 void (true satisfies Same<
   PiBoundary.AssistantMessage,
@@ -159,6 +235,8 @@ void ("manual" satisfies PiBoundary.ResourcesDiscoverEvent["reason"]);
 void ({ skillPaths: [42] } satisfies PiBoundary.ResourcesDiscoverResult);
 // @ts-expect-error soft-dependency status reports every dependency
 void ({ piSubagentsLoaded: true } satisfies PiBoundary.SoftDepStatus);
+// @ts-expect-error soft-dependency status names a known MCP implementation
+void ("other" satisfies PiBoundary.SoftDepStatus["mcpImplementation"]);
 // @ts-expect-error an agent message has a supported role
 void ({ role: "unsupported" } satisfies PiBoundary.AgentMessage);
 // @ts-expect-error an assistant message has the assistant role
@@ -171,6 +249,83 @@ void ({ getCommands: () => [] } satisfies PiBoundary.PiInventory);
 void ({ getAllTools: () => [] } satisfies PiBoundary.PiInventory);
 // @ts-expect-error a notification context must expose ui.notify
 void ({ mode: "tui", ui: {} } satisfies PiBoundary.NotificationContext);
+
+function proveSoftDepStatusReadonly(snapshot: PiBoundary.SoftDepStatus): void {
+  // @ts-expect-error the pi-subagents flag of a snapshot is readonly
+  snapshot.piSubagentsLoaded = true;
+  // @ts-expect-error the MCP implementation of a snapshot is readonly
+  snapshot.mcpImplementation = "builtin";
+  // @ts-expect-error the workflow engine flag of a snapshot is readonly
+  snapshot.workflowEngineLoaded = true;
+}
+
+void proveSoftDepStatusReadonly;
+
+interface ProbeTraceRow {
+  readonly situation: string;
+  readonly inventory: () => PiBoundary.PiInventory;
+  readonly expectedLines: readonly string[];
+  readonly expectedStatus: PiBoundary.SoftDepStatus;
+}
+
+/** A command whose `source` getter throws, as a broken inventory entry would. */
+function commandWithFailingSource(): PiBoundary.CommandInventoryItem {
+  return {
+    name: "mcp",
+    get source(): unknown {
+      throw new Error("source unreadable");
+    },
+  };
+}
+
+/** OBS-01: inventories whose failed MCP reads the probe traces. */
+function probeTraceRows(): ProbeTraceRow[] {
+  const unloaded: PiBoundary.SoftDepStatus = {
+    piSubagentsLoaded: false,
+    mcpImplementation: "none",
+    workflowEngineLoaded: false,
+  };
+  return [
+    {
+      situation: "one line for a throwing getCommands() read",
+      inventory: () => ({ getAllTools: () => [], getCommands: failingRead }),
+      expectedLines: ["[mcp] soft-dependency probe: pi.getCommands() failed: not ready"],
+      expectedStatus: unloaded,
+    },
+    {
+      situation: "one line, from the pi-mcp-adapter tool check, for a throwing getAllTools() read",
+      inventory: () => ({ getAllTools: failingRead, getCommands: () => [] }),
+      expectedLines: [
+        "[mcp] soft-dependency probe: the pi-mcp-adapter tool check failed: not ready",
+      ],
+      expectedStatus: unloaded,
+    },
+    {
+      situation: "the getCommands() line, then the tool check line, when both Pi reads throw",
+      inventory: () => ({ getAllTools: failingRead, getCommands: failingRead }),
+      expectedLines: [
+        "[mcp] soft-dependency probe: pi.getCommands() failed: not ready",
+        "[mcp] soft-dependency probe: the pi-mcp-adapter tool check failed: not ready",
+      ],
+      expectedStatus: unloaded,
+    },
+    {
+      situation: "one line per command check when a listed command cannot report its source",
+      inventory: () => toolInventory([], [commandWithFailingSource()]),
+      expectedLines: [
+        "[mcp] soft-dependency probe: the pi-mcp-adapter command check failed: source unreadable",
+        "[mcp] soft-dependency probe: the built-in MCP command check failed: source unreadable",
+      ],
+      expectedStatus: unloaded,
+    },
+    {
+      situation: "no line when every read succeeds",
+      inventory: () => toolInventory([], [adapterCommand()]),
+      expectedLines: [],
+      expectedStatus: { ...unloaded, mcpImplementation: "adapter" },
+    },
+  ];
+}
 
 describe("getAgentDir", () => {
   test("re-exports the peer binding", () => {
@@ -378,7 +533,7 @@ describe("softDepStatus", () => {
       // assert
       assert.deepStrictEqual(status, {
         piSubagentsLoaded: expectedLoaded,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       });
     });
@@ -391,7 +546,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand()],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -401,7 +556,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand()],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -411,7 +566,7 @@ describe("softDepStatus", () => {
       commands: [forkAdapterCommand()],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -421,7 +576,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand("mcp-adapter:1", "cli"), adapterCommand("mcp-adapter:2", "cli")],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -431,7 +586,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand("mcp-adapter:2", "cli")],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -441,7 +596,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand("mcp-adapter:10", "cli")],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -451,7 +606,7 @@ describe("softDepStatus", () => {
       commands: [builtinMcpCommand()],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "builtin",
         workflowEngineLoaded: false,
       },
     },
@@ -461,7 +616,7 @@ describe("softDepStatus", () => {
       commands: [builtinMcpCommand(), adapterCommand()],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -471,7 +626,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -481,7 +636,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -491,7 +646,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand("MCP-Adapter", "cli")],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -501,7 +656,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand("mcp-adapter-x", "cli")],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -511,7 +666,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand("mcp-adapter:", "cli")],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -521,7 +676,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand("mcp-adapter:1a", "cli")],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -531,7 +686,7 @@ describe("softDepStatus", () => {
       commands: [{ ...adapterCommand("mcp-adapter", "cli"), source: "prompt" }],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -541,7 +696,7 @@ describe("softDepStatus", () => {
       commands: [{ ...adapterCommand("mcp-adapter", "cli"), source: "skill" }],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -551,7 +706,7 @@ describe("softDepStatus", () => {
       commands: [{ ...adapterCommand("adapter-recipe"), source: "prompt" }],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -561,7 +716,7 @@ describe("softDepStatus", () => {
       commands: [{ ...adapterCommand("skill:adapter-recipe"), source: "skill" }],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -571,7 +726,7 @@ describe("softDepStatus", () => {
       commands: [{ source: "extension", sourceInfo: { source: "cli" } }],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -581,7 +736,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand("mcp-tools", "npm:pi-mcp-adapter")],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -591,7 +746,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -601,7 +756,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -611,7 +766,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -621,7 +776,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -631,7 +786,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -641,7 +796,7 @@ describe("softDepStatus", () => {
       commands: [{ name: "other", sourceInfo: { source: 42 } }],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -673,7 +828,7 @@ describe("softDepStatus", () => {
     // assert
     assert.deepStrictEqual(status, {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     });
   });
@@ -693,7 +848,7 @@ describe("softDepStatus", () => {
     // assert
     assert.deepStrictEqual(status, {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     });
   });
@@ -706,7 +861,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand()],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -717,7 +872,7 @@ describe("softDepStatus", () => {
       commands: [builtinMcpCommand()],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "builtin",
         workflowEngineLoaded: false,
       },
     },
@@ -759,7 +914,7 @@ describe("softDepStatus", () => {
     // assert
     assert.deepStrictEqual(status, {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: false,
     });
   });
@@ -802,7 +957,7 @@ describe("softDepStatus", () => {
       // assert
       assert.deepStrictEqual(status, {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: expectedLoaded,
       });
     });
@@ -815,7 +970,7 @@ describe("softDepStatus", () => {
       commands: [adapterCommand()],
       expectedStatus: {
         piSubagentsLoaded: true,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: true,
       },
     },
@@ -825,7 +980,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: true,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -835,7 +990,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       },
     },
@@ -848,7 +1003,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: true,
       },
     },
@@ -858,7 +1013,7 @@ describe("softDepStatus", () => {
       commands: [],
       expectedStatus: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
     },
@@ -892,8 +1047,75 @@ describe("softDepStatus", () => {
     // assert
     assert.deepStrictEqual(status, {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: false,
     });
   });
+  for (const { situation, inventory, mcpImplementation } of mcpImplementationRows()) {
+    test(`MSEL-01 decides ${mcpImplementation} when ${situation}`, () => {
+      // arrange
+      const extensionApi = inventory();
+
+      // act
+      const status = softDepStatus(extensionApi);
+
+      // assert
+      assert.deepStrictEqual(status, {
+        piSubagentsLoaded: false,
+        mcpImplementation,
+        workflowEngineLoaded: false,
+      });
+    });
+  }
+
+  test("MSEL-01 decides both MCP arms from one getCommands() read and three getAllTools() reads", () => {
+    // arrange
+    const extensionApi = mock<PiBoundary.PiInventory>({
+      exactParams: true,
+      name: "Pi inventory",
+    });
+    when(() => extensionApi.getAllTools())
+      .thenReturn([])
+      .times(3);
+    when(() => extensionApi.getCommands())
+      .thenReturn([builtinMcpCommand(), adapterCommand()])
+      .times(1);
+
+    // act
+    const status = softDepStatus(extensionApi);
+
+    // assert
+    assert.deepStrictEqual(status, {
+      piSubagentsLoaded: false,
+      mcpImplementation: "adapter",
+      workflowEngineLoaded: false,
+    });
+    verify(extensionApi);
+  });
+
+  for (const { situation, inventory, expectedLines, expectedStatus } of probeTraceRows()) {
+    test(`MSEL-01 / OBS-01: the mcp debug channel gets ${situation}`, (testContext) => {
+      // arrange
+      const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      testContext.after(() => {
+        if (previousDebug === undefined) {
+          delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+        } else {
+          process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+        }
+      });
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+      const lines: string[] = [];
+      testContext.mock.method(console, "error", (...parts: unknown[]) => {
+        lines.push(parts.map(String).join(" "));
+      });
+      const extensionApi = inventory();
+
+      // act
+      const status = softDepStatus(extensionApi);
+
+      // assert
+      assert.deepStrictEqual({ status, lines }, { status: expectedStatus, lines: expectedLines });
+    });
+  }
 });

@@ -100,6 +100,7 @@ type DroppedMcpServerSchema = Type.TObject<{
   feature: Type.TUnion<
     [
       Type.TLiteral<"ws">,
+      Type.TLiteral<"sse">,
       Type.TLiteral<"sse-ide">,
       Type.TLiteral<"ws-ide">,
       Type.TLiteral<"sdk">,
@@ -150,7 +151,15 @@ interface MaterializableFields {
       >
     >
   >;
+  // MSEL-04: the subset pi-mcp-adapter supports, which the mcp phase stages
+  // under every MCP implementation.
   mcpServers: McpServersFieldSchema;
+  // MREC-01 / D-CF6-01: every non-malformed merged server in merge order,
+  // supported or blocked, as declared before plugin-variable substitution.
+  declaredMcpServers: McpServersFieldSchema;
+  // MREC-01: a `.mcpb` or `.dxt` bundle reference was read; no declared
+  // server stands for it.
+  mcpBundle: Type.TOptional<Type.TLiteral<true>>;
   hooksConfigPath: Type.TOptional<Type.TString>;
   orphanRewake: Type.TOptional<Type.TBoolean>;
   droppedHooks: Type.TOptional<
@@ -160,7 +169,8 @@ interface MaterializableFields {
         : never
     >
   >;
-  // ANAME-07: the servers a partial install leaves out, each with its feature.
+  // ANAME-07 / D-P3-01: the servers every MCP implementation blocks, each with
+  // its feature, in merge order. `resolutionFor` gives one implementation's list.
   droppedMcpServers: Type.TOptional<
     Type.TArray<
       [DroppedMcpServerDriftCheck, DroppedMcpServerKeysCheck] extends [true, true]

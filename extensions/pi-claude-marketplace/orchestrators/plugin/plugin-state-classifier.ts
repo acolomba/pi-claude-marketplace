@@ -4,32 +4,38 @@
 // the list row owners (`composeInstalledListRow` / `availableRowMessage`) and the
 // completion bucketizer (`orchestrators/edge-deps.ts::loadManifestForMarketplace`)
 // derive their finer plugin state from THESE two functions -- there is no
-// second classifier. A parity drift-guard test (test/orchestrators/edge-deps.test.ts)
-// asserts the two surfaces never diverge.
+// second classifier. For an installed record, both reach
+// `classifyInstalledRecord` through one composition,
+// `list-installed-row.ts::classifyInstalledForImplementation`, which also owns
+// the disabled short-circuit, the MCP verdict read, and `candidateFor`, the
+// active MCP implementation's view of an upgrade candidate (D-P3-03, D-P6-22).
+// The two surfaces hold no copy of that composition, so they cannot drift.
 //
-// PURITY (NFR-5): both functions take already-resolved inputs. They perform no
+// PURITY (NFR-5): these functions take already-resolved inputs. They perform no
 // disk or network I/O -- the caller owns the no-network `resolveStrict` probe and
 // passes the result (or `undefined` on a probe failure) in. This keeps the
 // classifier free of the `platform`/network layers and lets the no-network
 // boundary stay at the caller, where the network-free ESLint block
 // (BLOCK F in `eslint.config.js`) enforces it.
 
+import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ResolvedPlugin } from "../../domain/resolver-types.ts";
 
 /**
  * The finer installed-inventory states the classifier derives from a persisted
  * install record (plus the no-network resolution of its upgrade candidate).
  *
- * `disabled` is NOT produced here: `list` renders the distinct `(disabled)`
- * inventory token via its own `isRecordedButDisabled` guard ahead of the call
- * (D-54-01 / ENBL-04) -- the same single predicate this module consumes for its
- * own short-circuit. The completion path has no `disabled` token, so the
- * classifier collapses a recorded-but-disabled record to `installed` (WR-01) --
- * keeping it in the no-`--partial` inventory set while excluding it from the
- * `update --partial` (upgradable/partially-upgradable) candidates, at parity with the
- * frozen `(disabled)` row `list` shows.
+ * `disabled` is NOT produced here: `classifyInstalledForImplementation`
+ * answers a recorded-but-disabled record ahead of the call (D-54-01 /
+ * ENBL-04), through the same single `isRecordedButDisabled` predicate this
+ * module consumes for its own short-circuit. `list` renders it as the
+ * distinct `(disabled)` token. Completion has no `disabled` token, so
+ * `completionStatus` in `orchestrators/edge-deps.ts` offers it as `installed`
+ * (WR-01). It stays in the no-`--partial` inventory set and is never an
+ * `update --partial` candidate.
  *
  * `partially-installed-upgradable` is a partially-installed record (already degraded)
  * that ALSO carries a meaningful upgrade candidate -- a newer, NON-unavailable
@@ -64,14 +70,21 @@ export type ManifestEntryClassification =
  * reads. Both `ExtensionState[...]plugins[...]` and the bucketizer's state
  * record satisfy this by construction.
  *
- * - `compatibility.unsupported` is the install-time degrade signal (FSTAT-01 /
- *   D-66-01): non-empty means one or more components were dropped, so the row
- *   derives `partially-installed`.
+ * - `compatibility.unsupported` is the degrade signal (FSTAT-01 / D-66-01):
+ *   non-empty means one or more components cannot run, so the row derives
+ *   `partially-installed`. The `list` row passes the record's effective kinds
+ *   for the active MCP implementation (D-P3-05), so a switch of
+ *   implementation changes the row with no reinstall. The completion path in
+ *   `edge-deps.ts` reads them through the same composition, for the
+ *   implementation its resolver carries (D-P6-22).
  * - `enabled` is the recorded-but-disabled axis on its own (ENBL-05 -- the
  *   single `persistence/state-io.ts::isRecordedButDisabled`): a record with
  *   `enabled: false` was explicitly disabled and is version-frozen, so the
  *   classifier short-circuits it to `installed` (WR-01) -- it must never split
- *   into `upgradable`/`partially-upgradable`. A record's `installable` flag is
+ *   into `upgradable`/`partially-upgradable`.
+ *   `classifyInstalledForImplementation` answers a disabled record before it
+ *   calls the classifier, so production always passes `enabled: true`, and
+ *   the short-circuit guards a direct caller. A record's `installable` flag is
  *   a caller-side concern and never decides disabled-ness, so this view does
  *   not declare it.
  */
@@ -99,6 +112,23 @@ export type UpgradeCandidate =
   | { readonly upgradable: true; readonly resolved: ResolvedPlugin | undefined };
 
 /**
+ * D-P3-03 / D-P6-22: the candidate as the active MCP implementation sees it,
+ * so a newer version degrades a row only when that implementation cannot run
+ * it. The resolver's own verdict is the neutral one (D-P3-01); an upgradable
+ * candidate with a resolution gets `resolutionFor`'s view of it, and any other
+ * candidate is returned as it is. `list` and completion both classify through
+ * this view, so the two agree for every implementation.
+ */
+export function candidateFor(
+  candidate: UpgradeCandidate,
+  active: ActiveMcpImplementation,
+): UpgradeCandidate {
+  return candidate.upgradable && candidate.resolved !== undefined
+    ? { upgradable: true, resolved: resolutionFor(candidate.resolved, active) }
+    : candidate;
+}
+
+/**
  * Classify a persisted install record into the finer installed-inventory state.
  *
  * Precedence (A4): `partially-installed` (install-time degrade) wins over the clean
@@ -123,15 +153,15 @@ export function classifyInstalledRecord(
   // WR-01 / ENBL-05 / D-54-01: a recorded-but-disabled record (the explicit
   // `enabled: false` marker the single `isRecordedButDisabled` reads) is
   // version-frozen while disabled, so it must never split into
-  // `upgradable`/`partially-upgradable`. `list` renders it as the distinct
-  // `(disabled)` token via its own pre-classifier guard; the completion path has
-  // no `disabled` token, so collapse to `installed` here -- it stays in the
-  // no-`--partial` inventory set but is excluded from `update --partial`, at
-  // parity with the frozen `(disabled)` row.
+  // `upgradable`/`partially-upgradable`. Production never reaches this branch,
+  // because `classifyInstalledForImplementation` answers such a record before
+  // it calls this classifier. The branch stays as a guard, so a direct caller
+  // cannot split a frozen record. Completion offers a disabled record as
+  // `installed` through `completionStatus` in `orchestrators/edge-deps.ts`.
   //
-  // Checked BEFORE the `unsupported.length` branch, and that precedence is now
-  // load-bearing rather than incidental: a DEGRADED record can also be disabled,
-  // and it must report `installed` (frozen), never `partially-installed`.
+  // Checked BEFORE the `unsupported.length` branch: a DEGRADED record can also
+  // be disabled, and it must report `installed` (frozen), never
+  // `partially-installed`.
   if (isRecordedButDisabled(record)) {
     return "installed";
   }

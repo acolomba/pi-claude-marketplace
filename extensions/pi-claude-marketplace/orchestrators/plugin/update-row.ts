@@ -28,7 +28,7 @@ import {
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { Dependency, McpDependency } from "../../shared/concerns/soft-dep.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   PluginUpdateSkippedOutcome,
@@ -268,21 +268,22 @@ export function withCommits(commits: VersionCommits | undefined): {
 }
 
 /**
- * Derive the v2 Dependency[] tuple from the outcome's declared kinds. File-
- * private: both row forms take it from the one composer above, so no caller can
- * hand-derive a third spelling of the same tuple (IN-05).
+ * Derive the v2 Dependency[] tuple from the outcome's declared kinds; the MCP
+ * entry is the outcome's `McpDependency` (D-P3-10). File-private: both row
+ * forms take it from the one composer above, so no caller can hand-derive a
+ * third spelling of the same tuple (IN-05).
  *
  * WDEP-02: `workflows` spreads LAST, so an update that declares agents and mcp
  * renders the same two-marker brace whether or not it also declares workflows.
  */
 function outcomeDependencies(
   declaresAgents: boolean,
-  declaresMcp: boolean,
+  declaresMcp: McpDependency | false,
   declaresWorkflows: boolean,
 ): readonly Dependency[] {
   return [
     ...(declaresAgents ? (["agents"] as const) : []),
-    ...(declaresMcp ? (["mcp"] as const) : []),
+    ...(declaresMcp === false ? [] : [declaresMcp]),
     ...(declaresWorkflows ? (["workflows"] as const) : []),
   ];
 }
@@ -292,7 +293,7 @@ function outcomeDependencies(
  * whichever partition carries it. The `skipped` arm carries the held-update
  * cause on `notes`; the `unchanged` and `updated` arms carry the gate's
  * disclosure on `constraint` (D-10-17a). `undefined` for every other outcome,
- * so its row stays byte-frozen (no other producer sets either field under
+ * so its row carries no cause line (no other producer sets either field under
  * this reason).
  */
 export function constraintCauseFor(

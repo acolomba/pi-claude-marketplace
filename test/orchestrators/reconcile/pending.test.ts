@@ -32,7 +32,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -530,7 +530,11 @@ test("treats the official fallback as current when another source is recorded", 
   );
 
   // act
-  const report = await composePendingReport({ cwd, scopes: ["project"] });
+  const report = await composePendingReport({
+    cwd,
+    mcpImplementation: "adapter",
+    scopes: ["project"],
+  });
 
   // assert
   assert.deepStrictEqual(report, { marketplaces: [], retained: {}, needsApply: false });
@@ -798,6 +802,43 @@ for (const { condition, stage, rendered, expectedMessage } of plannedInstallRows
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
+    verifyBoundary();
+  });
+}
+
+// D-P3-15: the preview reads the planned install under the run's active MCP
+// implementation, so an sse server degrades the install only where the active
+// implementation cannot run it.
+for (const { mcpImplementation, rendered } of [
+  { mcpImplementation: "builtin", rendered: "will partially install" },
+  { mcpImplementation: "adapter", rendered: "will install" },
+] as const) {
+  test(`D-P3-15: a planned install with an sse server renders "${rendered}" under ${mcpImplementation}`, async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "planned-sse-install");
+    const { marketplaceRoot } = await stagePlannedInstall(cwd, project, { degrade: false });
+    await writeUnder(
+      path.join(marketplaceRoot, "cr", ".mcp.json"),
+      JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+    );
+    const run = runWithSoftDeps({
+      piSubagentsLoaded: false,
+      mcpImplementation,
+      workflowEngineLoaded: false,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await pendingReconcile({ ctx, run, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          `● mp-github [project]\n  ● cr (${rendered})\n\n` +
+          "Reconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+      },
+    ]);
     verifyBoundary();
   });
 }
@@ -1245,7 +1286,11 @@ test("APL-02 / D-14: composePendingReport counts a catalog move alone as a chang
   await stageOfferedPlugins(project, offered);
 
   // act
-  const report = await composePendingReport({ cwd, scopes: ["project"] });
+  const report = await composePendingReport({
+    cwd,
+    mcpImplementation: "adapter",
+    scopes: ["project"],
+  });
 
   // assert
   assert.deepStrictEqual(report, {
@@ -1271,7 +1316,11 @@ test("D-PL2-16: composePendingReport lists an enable that waits on a planned ins
   });
 
   // act
-  const report = await composePendingReport({ cwd, scopes: ["project"] });
+  const report = await composePendingReport({
+    cwd,
+    mcpImplementation: "adapter",
+    scopes: ["project"],
+  });
 
   // assert
   assert.deepStrictEqual(report, {
@@ -1312,7 +1361,11 @@ test("WR-07 / D-PL2-18: composePendingReport lists a waiting record's move, its 
   await stageOfferedPlugins(project, offered);
 
   // act
-  const report = await composePendingReport({ cwd, scopes: ["project"] });
+  const report = await composePendingReport({
+    cwd,
+    mcpImplementation: "adapter",
+    scopes: ["project"],
+  });
 
   // assert
   assert.deepStrictEqual(report, {
@@ -1348,7 +1401,11 @@ test("WR-07 / D-PL2-18: composePendingReport lists the move and then the enable 
   await stageOfferedPlugins(project, offered);
 
   // act
-  const report = await composePendingReport({ cwd, scopes: ["project"] });
+  const report = await composePendingReport({
+    cwd,
+    mcpImplementation: "adapter",
+    scopes: ["project"],
+  });
 
   // assert
   assert.deepStrictEqual(report, {
@@ -1491,7 +1548,11 @@ test("D-12: composePendingReport does not count a range hold as a change apply m
   await stageOfferedPlugins(project, LIB_PAST_APP_RANGE.offered);
 
   // act
-  const report = await composePendingReport({ cwd, scopes: ["project"] });
+  const report = await composePendingReport({
+    cwd,
+    mcpImplementation: "adapter",
+    scopes: ["project"],
+  });
 
   // assert
   assert.deepStrictEqual(report, {
@@ -1858,7 +1919,11 @@ test("D-05: composePendingReport returns an empty report when no scope has pendi
   const { cwd } = await createHermeticScopes(t, "compose-empty");
 
   // act
-  const report = await composePendingReport({ cwd, scopes: ["project", "user"] });
+  const report = await composePendingReport({
+    cwd,
+    mcpImplementation: "adapter",
+    scopes: ["project", "user"],
+  });
 
   // assert
   assert.deepStrictEqual(report, { marketplaces: [], retained: {}, needsApply: false });
@@ -1873,7 +1938,11 @@ test("D-06: composePendingReport returns the change apply would make and asks fo
   );
 
   // act
-  const report = await composePendingReport({ cwd, scopes: ["project", "user"] });
+  const report = await composePendingReport({
+    cwd,
+    mcpImplementation: "adapter",
+    scopes: ["project", "user"],
+  });
 
   // assert
   assert.deepStrictEqual(report, {
@@ -1902,8 +1971,12 @@ test("D-06: composePendingReport reads only the scopes it is given", async (t) =
   await writeUnder(user.baseConfigJsonPath, "{");
 
   // act
-  const userOnly = await composePendingReport({ cwd, scopes: ["user"] });
-  const none = await composePendingReport({ cwd, scopes: [] });
+  const userOnly = await composePendingReport({
+    cwd,
+    mcpImplementation: "adapter",
+    scopes: ["user"],
+  });
+  const none = await composePendingReport({ cwd, mcpImplementation: "adapter", scopes: [] });
 
   // assert
   assert.deepStrictEqual(
@@ -1927,7 +2000,11 @@ test("I5 / T-53-02-02: an unreadable config's cause names its basename and no ab
   await chmod(project.baseConfigJsonPath, 0o000);
 
   // act
-  const report = await composePendingReport({ cwd, scopes: ["project"] });
+  const report = await composePendingReport({
+    cwd,
+    mcpImplementation: "adapter",
+    scopes: ["project"],
+  });
 
   // assert
   assert.deepStrictEqual(report.marketplaces, [

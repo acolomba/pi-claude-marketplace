@@ -206,7 +206,7 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
       keptOverride: { disabled: true, env: { STUB_TOKEN: "stub-secret" } },
     };
     const installedRow = (scope: Scope, version: string): NotifyRecord => ({
-      message: `A plugin operation needs attention.\n\n● mp [${scope}]\n  ● hello v${version} (installed) {requires pi-mcp-adapter}\n\n/reload to pick up changes`,
+      message: `A plugin operation needs attention.\n\n● mp [${scope}]\n  ● hello v${version} (installed) {requires mcp}\n\n/reload to pick up changes`,
       severity: "warning",
     });
     const uninstalledRow = (scope: Scope, version: string): NotifyRecord => ({
@@ -236,14 +236,14 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
         projectUpdate: [
           {
             message:
-              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 → v1.1.0 (updated) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 → v1.1.0 (updated) {requires mcp}\n\n/reload to pick up changes",
             severity: "warning",
           },
         ],
         projectReinstall: [
           {
             message:
-              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.1.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.1.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
             severity: "warning",
           },
         ],
@@ -500,7 +500,7 @@ test("ANAME-07: a project install over a stub keeps the user's timeout for write
     assert.deepStrictEqual(installed.notifications, [
       {
         message:
-          "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+          "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (installed) {requires mcp}\n\n/reload to pick up changes",
         severity: "warning",
       },
       {

@@ -61,12 +61,6 @@ const TERMINAL_STARTUP_RUN_TIMEOUT_MS = 30_000;
 // startup run; a short interval keeps the wait close to the run itself.
 const HOOK_LOG_POLL_MS = 50;
 
-// Pi prints this status once `/reload` has run the session handlers.
-const RELOADED_TEXT = "Reloaded keybindings";
-
-// A reload rebuilds the extension runtime in well under this.
-const TERMINAL_RELOAD_TIMEOUT_MS = 20_000;
-
 // A prompt's UserPromptSubmit run lands within seconds of the prompt; the
 // margin covers a loaded CI runner and stays below the step timeout.
 const TERMINAL_PROMPT_RUN_TIMEOUT_MS = 20_000;
@@ -214,8 +208,8 @@ Given(
     await waitForStartupRun(harness);
   },
 );
-
-// A new session's payloads become the last results, as the frozen session
+// A new session's payloads become the last results, as the plain new-session
+// `When` keeps them, so a payload no step states still fails the scenario.
 // `When` keeps them, so a payload no step states still fails the scenario.
 When(
   "the user starts a new pi session with the hooks recording",
@@ -288,9 +282,7 @@ When(
     const harness = this.profileHarness();
     const prompt = expandTokens(text, this.tokens);
     await recordTerminalAction(this, "/reload", async () => {
-      const mark = tui.markOutput();
-      tui.sendLine("/reload");
-      await tui.waitForTextAfter(RELOADED_TEXT, mark, TERMINAL_RELOAD_TIMEOUT_MS);
+      await tui.reload();
       tui.sendLine(prompt);
       await waitForRun(
         harness,

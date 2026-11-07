@@ -24,9 +24,9 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`.
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). An agent's MCP grants follow the MCP implementation in use. Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`.
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
-- MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
+- MCP servers. Uses Pi's built-in MCP or, for more MCP features, [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
 
 Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
@@ -35,9 +35,9 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 ## Prerequisites
 
-- [Pi Coding Agent](https://pi.dev) 1.4.0 or newer
+- [Pi Coding Agent](https://pi.dev) 1.5.0 or newer
 - [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 or a later 7.x release (optional but recommended, `pi install npm:pi-mcp-adapter`).
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 or a later 7.x release (optional, `pi install npm:pi-mcp-adapter`). It supports more MCP features than Pi's built-in MCP.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 or newer (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Usage
@@ -123,13 +123,14 @@ Skills use Pi's `/skill:` form and also have aliases in interactive sessions and
 
 The aliases are the names that Claude Code gives a skill. The skill name is the name of the skill's folder. If the skill's frontmatter sets `name`, the skill also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon.
 
-Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`.
+Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. Pi's built-in MCP registers each server as `plugin_<plugin>_<server>`, with no `_` at the end. Under Pi's built-in MCP, the model sees each `-` of a tool name as `_`, and Pi cuts a tool name that is longer than 64 characters. For more information, see [Name length](docs/mcp-compatibility.md#name-length). `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`. Plugin hooks see the server part of a tool name as Claude Code writes it. For more information, see [Tool name mapping](docs/hooks-compatibility.md#tool-name-mapping).
 
-| Plugin name | `mcpServers` key | Adapter server key  | Tool names                      | Name shown by `info` |
-| ----------- | ---------------- | ------------------- | ------------------------------- | -------------------- |
-| `foo`       | `api`            | `plugin_foo_api_`   | `mcp__plugin_foo_api__<tool>`   | `plugin:foo:api`     |
-| `foo`       | `my.db`          | `plugin_foo_my_db_` | `mcp__plugin_foo_my_db__<tool>` | `plugin:foo:my.db`   |
-| `bar`       | `api`            | `plugin_bar_api_`   | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`     |
+| Plugin name | `mcpServers` key | Adapter server key  | Built-in server name | Tool names                                                                            | Name shown by `info` |
+| ----------- | ---------------- | ------------------- | -------------------- | ------------------------------------------------------------------------------------- | -------------------- |
+| `foo`       | `api`            | `plugin_foo_api_`   | `plugin_foo_api`     | `mcp__plugin_foo_api__<tool>`                                                         | `plugin:foo:api`     |
+| `foo`       | `my.db`          | `plugin_foo_my_db_` | `plugin_foo_my_db`   | `mcp__plugin_foo_my_db__<tool>`                                                       | `plugin:foo:my.db`   |
+| `foo`       | `my-db`          | `plugin_foo_my-db_` | `plugin_foo_my-db`   | `mcp__plugin_foo_my-db__<tool>` (adapter), `mcp__plugin_foo_my_db__<tool>` (built-in) | `plugin:foo:my-db`   |
+| `bar`       | `api`            | `plugin_bar_api_`   | `plugin_bar_api`     | `mcp__plugin_bar_api__<tool>`                                                         | `plugin:bar:api`     |
 
 ### Scoping
 
@@ -141,7 +142,7 @@ You can also install the same plugin in both the user and project scopes. Then t
 
 ### Partially available plugins
 
-Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, an MCP server that uses a feature pi-mcp-adapter cannot run, or an MCP bundle. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
+Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, an MCP server that the MCP implementation Pi runs cannot run (pi-mcp-adapter or Pi's built-in MCP), or an MCP bundle. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
 
 List partially available plugins.
 
@@ -260,9 +261,6 @@ Add a marketplace from another `https://` git host, such as GitLab.
 ```text
 /claude:plugin marketplace add https://gitlab.com/my-group/my-marketplace
 ```
-
-> [!NOTE]
-> Device Flow authentication also covers `gitlab.com`. Non-GitHub hosts need the full `https://` URL; the `owner/repo` shorthand only resolves to GitHub.
 
 Add a marketplace from the local filesystem. The path can be a directory with `.claude-plugin/marketplace.json`, or a direct path to a `marketplace.json` file.
 

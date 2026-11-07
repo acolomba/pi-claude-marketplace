@@ -166,6 +166,7 @@ function makeMaterializablePlugin(
     notes: [],
     componentPaths: { skills: [], commands: [], agents: [...agents], workflows: [] },
     mcpServers: {},
+    declaredMcpServers: {},
     defaultEnabled: true,
   };
 }
@@ -378,13 +379,16 @@ describe("enableRowDependencies", () => {
 
   test("returns agent then MCP dependencies when both companion kinds were staged", () => {
     // arrange
-    const signals = { stagedAgents: true, stagedMcpServers: true } as const;
+    const signals = {
+      stagedAgents: true,
+      stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
+    } as const;
 
     // act
     const dependencies = enableRowDependencies(signals);
 
     // assert
-    assert.deepStrictEqual(dependencies, ["agents", "mcp"]);
+    assert.deepStrictEqual(dependencies, ["agents", { kind: "mcp", runEvery: "adapter" }]);
   });
 
   test("WDEP-02: returns the workflows dependency when the ledger staged a workflow", () => {
@@ -400,13 +404,21 @@ describe("enableRowDependencies", () => {
 
   test("WDEP-02: returns workflows LAST when all three companion kinds were staged", () => {
     // arrange
-    const signals = { stagedAgents: true, stagedMcpServers: true, stagedWorkflows: true } as const;
+    const signals = {
+      stagedAgents: true,
+      stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
+      stagedWorkflows: true,
+    } as const;
 
     // act
     const dependencies = enableRowDependencies(signals);
 
     // assert
-    assert.deepStrictEqual(dependencies, ["agents", "mcp", "workflows"]);
+    assert.deepStrictEqual(dependencies, [
+      "agents",
+      { kind: "mcp", runEvery: "adapter" },
+      "workflows",
+    ]);
   });
 
   test("WDEP-02: a ledger that staged no workflow declares no host-engine dependency", () => {
@@ -3687,7 +3699,7 @@ describe("degradationFromEnable", () => {
       orphanRewake: true,
       degradedKinds: ["skill"],
       stagedAgents: true,
-      stagedMcpServers: true,
+      stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
       stagedWorkflows: true,
     });
 
@@ -3697,7 +3709,7 @@ describe("degradationFromEnable", () => {
       orphanRewake: true,
       degradedKinds: ["skill"],
       stagedAgents: true,
-      stagedMcpServers: true,
+      stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
       stagedWorkflows: true,
     });
   });

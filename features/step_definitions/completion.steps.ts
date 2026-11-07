@@ -11,7 +11,14 @@ import type { ScenarioWorld } from "../support/world.ts";
 When(
   "the user requests plugin completions for {string}",
   async function (this: ScenarioWorld, prefix: string): Promise<void> {
-    this.recordCompletions(prefix, await pluginCompletions(prefix, this.tokens.projectDir));
+    this.recordCompletions(
+      prefix,
+      await pluginCompletions(
+        prefix,
+        this.tokens.projectDir,
+        await this.runningMcpImplementation(),
+      ),
+    );
   },
 );
 

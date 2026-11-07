@@ -42,6 +42,8 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { SubagentChildEnv } from "../../../extensions/pi-claude-marketplace/platform/subagent-child.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
@@ -569,17 +571,24 @@ test("IL-2: the migration notice, the pending block and the warnings go out in t
   verifyBoundary();
 });
 
-/** AAP-02: a load step whose apply step records each call and changes nothing. */
-function recordingLoad(): {
+/**
+ * AAP-02: a load step whose apply step records each call and changes nothing.
+ * MGRT-02: `env` is the environment the step reads the child marker from.
+ */
+function recordingLoad(env?: SubagentChildEnv): {
   readonly loadReconcile: (opts: LoadReconcileOptions) => Promise<void>;
   readonly applied: ApplyReconcileOptions[];
 } {
   const applied: ApplyReconcileOptions[] = [];
   return {
-    loadReconcile: createLoadReconcile({ loadState }, (opts) => {
-      applied.push(opts);
-      return Promise.resolve();
-    }),
+    loadReconcile: createLoadReconcile(
+      { loadState },
+      (opts) => {
+        applied.push(opts);
+        return Promise.resolve();
+      },
+      env,
+    ),
     applied,
   };
 }
@@ -845,5 +854,145 @@ test("AAP-01 / D-03: a config that turns autoapply on beside an invalid config k
     },
   ]);
   assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  verifyBoundary();
+});
+
+/** MGRT-02: one load in a project Pi trusts, with a fresh run, routing owner and cache. */
+function trustedLoadOptions(
+  ctx: LoadReconcileOptions["ctx"],
+  cwd: string,
+  migrateMcpEntries?: McpMigrationStep,
+): LoadReconcileOptions {
+  return {
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    projectTrusted: true,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+    ...(migrateMcpEntries !== undefined && { migrateMcpEntries }),
+  };
+}
+
+/**
+ * MGRT-02: a project scope whose base config declares the uninstalled
+ * `hello@mp` and sets `autoapply` (left out of the file when undefined).
+ */
+async function createHelloScope(
+  t: TestContext,
+  label: string,
+  autoapply: boolean | undefined,
+): Promise<LoadScope> {
+  const scope = await createLoadScope(t, label);
+  await seedInstalled(scope, scope.project, {}, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaringAutoapply(scope.marketplaceRoot, { "hello@mp": {} }, autoapply),
+  );
+  return scope;
+}
+
+/** AMIG-01: an MCP move step that records the scope of each call and moves nothing. */
+function recordingMove(): {
+  readonly migrateMcpEntries: McpMigrationStep;
+  readonly moved: Scope[];
+} {
+  const moved: Scope[] = [];
+  return {
+    migrateMcpEntries: (input) => {
+      moved.push(input.scope);
+      return Promise.resolve();
+    },
+    moved,
+  };
+}
+
+const PENDING_HELLO = {
+  message:
+    "● mp [project]\n  ● hello (will install)\n\nReconcile pending: 1 success" + APPLY_TRAILER,
+} as const;
+
+test("MGRT-02 / D-MB-12: in a pi-subagents background child, autoapply runs no apply step and the load prints pending's block", async (t) => {
+  // arrange
+  const scope = await createHelloScope(t, "child-autoapply", true);
+  const before = await scopeFiles(scope.project);
+  const { loadReconcile: childLoad, applied } = recordingLoad({ PI_SUBAGENT_CHILD: "1" });
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await childLoad(trustedLoadOptions(ctx, scope.cwd));
+
+  // assert
+  assert.deepStrictEqual(applied, []);
+  assert.deepStrictEqual(notifications, [PENDING_HELLO]);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  verifyBoundary();
+});
+
+test("MGRT-02 / AMIG-01: in a pi-subagents background child, the load runs no MCP move", async (t) => {
+  // arrange
+  const scope = await createHelloScope(t, "child-mcp-move", undefined);
+  const { migrateMcpEntries, moved } = recordingMove();
+  const { loadReconcile: childLoad, applied } = recordingLoad({ PI_SUBAGENT_CHILD: "1" });
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await childLoad(trustedLoadOptions(ctx, scope.cwd, migrateMcpEntries));
+
+  // assert
+  assert.deepStrictEqual(moved, []);
+  assert.deepStrictEqual(applied, []);
+  assert.deepStrictEqual(notifications, [PENDING_HELLO]);
+  verifyBoundary();
+});
+
+test("MGRT-02 / AMIG-01: outside a pi-subagents background child, the load runs the MCP move for each readable scope", async (t) => {
+  // arrange
+  const scope = await createHelloScope(t, "parent-mcp-move", undefined);
+  const { migrateMcpEntries, moved } = recordingMove();
+  const { loadReconcile: parentLoad } = recordingLoad({});
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await parentLoad(trustedLoadOptions(ctx, scope.cwd, migrateMcpEntries));
+
+  // assert
+  assert.deepStrictEqual(moved, ["project", "user"]);
+  assert.deepStrictEqual(notifications, [PENDING_HELLO]);
+  verifyBoundary();
+});
+
+test("MGRT-02 / NFR-2: a child marker set after the load step was created makes the next load a child load", async (t) => {
+  // arrange
+  const scope = await createHelloScope(t, "child-late-marker", true);
+  const env: Record<string, string | undefined> = {};
+  const { loadReconcile: lateLoad, applied } = recordingLoad(env);
+  env["PI_SUBAGENT_CHILD"] = "1";
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await lateLoad(trustedLoadOptions(ctx, scope.cwd));
+
+  // assert
+  assert.deepStrictEqual(applied, []);
+  assert.deepStrictEqual(notifications, [PENDING_HELLO]);
+  verifyBoundary();
+});
+
+test('MGRT-02 / AAP-02: PI_SUBAGENT_CHILD "0" leaves autoapply running the apply step', async (t) => {
+  // arrange
+  const scope = await createHelloScope(t, "child-marker-zero", true);
+  const { loadReconcile: parentLoad, applied } = recordingLoad({ PI_SUBAGENT_CHILD: "0" });
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+
+  // act
+  await parentLoad(trustedLoadOptions(ctx, scope.cwd));
+
+  // assert
+  assert.deepStrictEqual(
+    applied.map((opts) => opts.cwd),
+    [scope.cwd],
+  );
+  assert.deepStrictEqual(notifications, []);
   verifyBoundary();
 });

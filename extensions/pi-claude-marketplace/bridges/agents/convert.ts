@@ -11,12 +11,14 @@
 // Model, tool, and thinking mappings are user contracts; owner tests assert
 // their exact converted output.
 
+import { profileFor } from "../../domain/mcp-implementation.ts";
 import { declaredAgentName, generatedMcpServerKey } from "../../domain/name.ts";
 import { resolveSkillReference, rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
-import { emitGeneratedAgentFile } from "./frontmatter.ts";
+import { emitGeneratedAgentFile, emitGeneratedAgentFrontmatter } from "./frontmatter.ts";
+import { mcpAsyncWarning } from "./mcp-async-warning.ts";
 
 import type { GeneratedToolsFields } from "./frontmatter.ts";
 import type {
@@ -25,6 +27,7 @@ import type {
   RawAgentFrontmatter,
   SkillPreload,
 } from "./types.ts";
+import type { McpImplementationId } from "../../domain/mcp-implementation.ts";
 import type {
   InstalledReferenceNames,
   SkillReferenceResolution,
@@ -82,28 +85,53 @@ const TOOL_MAP: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * ANAME-02: one MCP server this install writes. `key` is the server's
- * pi-mcp-adapter key, which pi-subagents `mcp:` entries name; `claudePrefix`
- * is the Claude Code tool-name prefix of the same server, `mcp__` plus the key
- * without its trailing `_`.
+ * ANAME-02 / MGRT-01: one MCP server the rendered form maps. `selector` is the
+ * pi-subagents `mcp:` entry for every tool of the server under the form's MCP
+ * implementation; `claudePrefix` is the Claude Code tool-name prefix of the
+ * same server, `mcp__` plus the adapter key without its trailing `_`, which is
+ * the same under both implementations. `excludeName` gives the `excludeTools`
+ * name of one tool of the server from its Claude token and its tool part.
  */
 interface McpGrant {
-  readonly key: string;
+  readonly selector: string;
   readonly claudePrefix: string;
+  readonly excludeName: (token: string, tool: string) => string;
 }
 
 /** ANAME-02: a Claude-form MCP name matched to a written server. */
 interface McpGrantMatch {
-  /** `mcp:<key>`, the pi-subagents entry for every tool of the server. */
+  /** The grant's selector, the pi-subagents entry for every tool of the server. */
   readonly server: string;
   /** The raw MCP tool name; absent when the name covers the whole server. */
   readonly tool?: string;
+  /** The `excludeTools` name of the matched tool (see `McpGrant`). */
+  readonly excludeName: (token: string, tool: string) => string;
+}
+
+/**
+ * MGRT-01: the `excludeTools` name of one per-tool MCP disallow. The adapter
+ * form keeps the Claude token verbatim (a `.` in the tool part included),
+ * because the Claude name is the delivered tool name there (ANAME-02). The
+ * built-in form takes Pi's own tool name, which differs from the Claude name
+ * whenever the server name holds a `-` or the name passes 64 characters.
+ */
+function excludeNameFor(
+  id: McpImplementationId,
+  pluginName: string,
+  server: string,
+): (token: string, tool: string) => string {
+  if (id === "adapter") {
+    return (token) => token;
+  }
+
+  const profile = profileFor(id);
+  return (_token, tool) => profile.toolName(pluginName, server, tool);
 }
 
 /**
  * ANAME-02: the pi-subagents form of a disallowed MCP name on an explicit
  * `tools:` list. `exact` holds the Pi names and `mcp:` entries to remove;
- * `servers` holds the `mcp:<key>` of each disallowed whole server, whose
+ * `servers` holds the `mcp:` selector of each disallowed whole server, whose
  * per-tool entries are removed too. `perTool` keeps each per-tool disallow
  * with its source token for the cannot-narrow warning.
  */
@@ -112,15 +140,6 @@ interface ExplicitDisallow {
   readonly servers: ReadonlySet<string>;
   readonly perTool: readonly { readonly token: string; readonly server: string }[];
 }
-
-/**
- * D-CF6-10: why an agent that runs plugin MCP tools launches in the
- * background, where Claude Code runs it in the foreground.
- */
-const MCP_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents serves only to background children -- " +
-  "the agent runs in the background (`async: true`), where Claude Code runs it in the " +
-  "foreground; a launch before pi-mcp-adapter has cached the server's tools still fails";
 
 /**
  * Allowlist for thinking/effort values. D-CF4-06 as amended: `max` is one of
@@ -157,8 +176,9 @@ interface OmittedToolMapping extends ToolMappingBase {
   readonly omitted: true;
   /**
    * Names for `excludeTools:`: source disallowedTools via TOOL_MAP, plus each
-   * per-tool MCP name of a written server verbatim, because the Claude name
-   * is the delivered tool name (ANAME-02).
+   * per-tool MCP name of a written server as the form's implementation names
+   * the delivered tool: the Claude name for the adapter (ANAME-02), Pi's
+   * built-in tool name for the built-in MCP (MGRT-01).
    */
   readonly excludeTools: string[];
   /**
@@ -327,19 +347,24 @@ function fullModelId(value: string): string | undefined {
 }
 
 /**
- * ANAME-02: the grant table of the MCP servers this install writes, longest
- * Claude prefix first, so a token that two prefixes match takes the longer
- * one. Each key comes from `generatedMcpServerKey`, the only normalization
- * of a server name.
+ * ANAME-02 / MGRT-01: the grant table of the MCP servers the form maps,
+ * longest Claude prefix first, so a token that two prefixes match takes the
+ * longer one. The Claude prefix comes from `generatedMcpServerKey` and the
+ * selector from the implementation's frozen `grantSelector`, which both
+ * normalize the server name, so a declared name cannot inject a frontmatter
+ * line or an extra grant (T-04-01).
  */
 function buildMcpGrants(
   pluginName: string,
   serverNames: readonly string[] | undefined,
+  id: McpImplementationId,
 ): readonly McpGrant[] {
-  const grants = (serverNames ?? []).map((server) => {
-    const key = generatedMcpServerKey(pluginName, server);
-    return { key, claudePrefix: `mcp__${key.slice(0, -1)}` };
-  });
+  const profile = profileFor(id);
+  const grants = (serverNames ?? []).map((server) => ({
+    selector: profile.grantSelector(pluginName, server),
+    claudePrefix: `mcp__${generatedMcpServerKey(pluginName, server).slice(0, -1)}`,
+    excludeName: excludeNameFor(id, pluginName, server),
+  }));
   grants.sort((a, b) => b.claudePrefix.length - a.claudePrefix.length);
   return grants;
 }
@@ -350,7 +375,10 @@ function buildMcpGrants(
  * names one tool. Matching is exact and case-sensitive. An empty tool part
  * matches nothing, and neither does a tool part holding `/`: Claude Code
  * never puts `/` in a tool name, and pi-subagents splits `mcp:` entries on
- * the first `/`.
+ * the first `/`. A tool part holding whitespace or `,` matches nothing
+ * either: Claude Code never puts one in a tool name, and the generated
+ * `tools:` line would split on it, or a line break would start a new
+ * frontmatter key (T-04-01).
  */
 function matchMcpGrant(token: string, grants: readonly McpGrant[]): McpGrantMatch | undefined {
   const grant = grants.find(
@@ -361,13 +389,14 @@ function matchMcpGrant(token: string, grants: readonly McpGrant[]): McpGrantMatc
     return undefined;
   }
 
-  const server = `mcp:${grant.key}`;
+  const server = grant.selector;
+  const { excludeName } = grant;
   const tool = token.slice(grant.claudePrefix.length + 2);
   if (token === grant.claudePrefix || tool === "*") {
-    return { server };
+    return { server, excludeName };
   }
 
-  return tool === "" || tool.includes("/") ? undefined : { server, tool };
+  return tool === "" || /[\s,/]/u.test(tool) ? undefined : { server, tool, excludeName };
 }
 
 function mcpEntry(match: McpGrantMatch): string {
@@ -515,11 +544,13 @@ function explicitMcpWarnings(kept: readonly string[], disallow: ExplicitDisallow
 }
 
 /**
- * ANAME-02: a per-tool MCP name of a written server, verbatim. A whole-server
+ * ANAME-02 / MGRT-01: the `excludeTools` name of a per-tool MCP name of a
+ * written server, in the form's spelling (`excludeNameFor`). A whole-server
  * name has no `excludeTools` form.
  */
 function perToolMcpName(token: string, grants: readonly McpGrant[]): string | undefined {
-  return matchMcpGrant(token, grants)?.tool === undefined ? undefined : token;
+  const match = matchMcpGrant(token, grants);
+  return match?.tool === undefined ? undefined : match.excludeName(token, match.tool);
 }
 
 /**
@@ -529,11 +560,11 @@ function perToolMcpName(token: string, grants: readonly McpGrant[]): string | un
  * (and, for background children, ambient extension tools such as
  * pi-mcp-adapter's MCP tools). disallowedTools narrows that default set via
  * excludeTools (pi-subagents 0.62.0; earlier versions store-and-ignore the
- * key). A per-tool MCP name of a written server joins excludeTools verbatim
- * (ANAME-02). Both degradations on that path warn: a disallow token with no
- * such mapping cannot narrow anything, and an emitted excludeTools is inert
- * below the version floor -- each is an author-written restriction that must
- * not weaken without a trace.
+ * key). A per-tool MCP name of a written server joins excludeTools in the
+ * form's spelling (ANAME-02, MGRT-01). Both degradations on that path warn:
+ * a disallow token with no such mapping cannot narrow anything, and an
+ * emitted excludeTools is inert below the version floor -- each is an
+ * author-written restriction that must not weaken without a trace.
  */
 function omittedToolMapping(
   disallowedTokens: readonly string[],
@@ -820,11 +851,19 @@ export interface ConvertAgentInput {
    */
   projectDir?: string | undefined;
   /**
-   * ANAME-02: the declared names of the MCP servers this install writes. An
-   * agent's Claude-form MCP names of these servers map to pi-subagents `mcp:`
-   * entries; every other `mcp__` name is dropped.
+   * ANAME-02 / MGRT-01: the declared names of the MCP servers the rendered
+   * form maps, the servers its implementation runs. An agent's Claude-form MCP
+   * names of these servers map to pi-subagents `mcp:` entries; every other
+   * `mcp__` name is dropped, so a caller leaves out a server the
+   * implementation cannot run.
    */
   mcpServerNames?: readonly string[] | undefined;
+  /**
+   * MGRT-01: the MCP implementation whose grant form the file gets: the
+   * `mcp:` selectors, the per-tool `excludeTools` names, and the D-CF6-10
+   * async warning. Absent means the adapter form.
+   */
+  mcpImplementation?: McpImplementationId | undefined;
   /**
    * D-CF4-04: the preloads the stage read, keyed by generated skill name. A
    * known `skills:` reference with no entry stays a `skills:` entry.
@@ -846,6 +885,35 @@ export interface ConvertAgentInput {
  * the user can correct upstream.
  */
 export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
+  const conversion = convertAgentOrEmpty(input);
+  if (conversion.kind === "empty-tools") {
+    throw emptyToolListError(input.discovered.raw, input.discovered.sourceName, input.pluginName);
+  }
+
+  return conversion.agent;
+}
+
+/**
+ * MGRT-01 / AG-11 per form: the conversion `convertAgent` performs, or
+ * `undefined` where `convertAgent` refuses with AG-11 because an explicit
+ * `tools:` list maps to nothing in this form. The stage renders the grant
+ * form the file does not get through it, so that form's empty list leaves
+ * the form out instead of failing the staging.
+ */
+export function convertAgentForm(input: ConvertAgentInput): ConvertedAgent | undefined {
+  const conversion = convertAgentOrEmpty(input);
+  return conversion.kind === "converted" ? conversion.agent : undefined;
+}
+
+/**
+ * The outcome of one conversion: the converted agent, or the AG-11 case of
+ * an explicit `tools:` list that maps to nothing. Each export decides what
+ * the empty case means for its caller.
+ */
+type AgentConversion =
+  { readonly kind: "converted"; readonly agent: ConvertedAgent } | { readonly kind: "empty-tools" };
+
+function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
   const {
     pluginName,
     pluginRoot,
@@ -857,6 +925,7 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
     mapModel: mapModelFlag,
     projectDir,
     mcpServerNames,
+    mcpImplementation = "adapter",
   } = input;
   const { raw, body, sourceName, generatedName, sourcePath } = discovered;
 
@@ -892,13 +961,16 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
   const toolsResult = mapTools(
     raw.tools,
     raw.disallowedTools,
-    buildMcpGrants(pluginName, mcpServerNames),
+    buildMcpGrants(pluginName, mcpServerNames, mcpImplementation),
   );
-  assertMappedToolsNonEmpty(toolsResult, { raw, sourceName, pluginName });
+  if (!hasMappedTools(toolsResult)) {
+    return { kind: "empty-tools" };
+  }
+
   warnings.push(...toolsResult.warnings);
   const backgroundForMcp = runsMcpTools(toolsResult, mcpServerNames);
   if (backgroundForMcp) {
-    warnings.push(MCP_ASYNC_WARNING);
+    warnings.push(mcpAsyncWarning(mcpImplementation));
   }
 
   // 4. Thinking / effort mapping
@@ -947,8 +1019,10 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
 
   // 8. Hand off to the frontmatter emitter for final assembly. From here on,
   //    parser-safety (YAML quote-flipping, newline normalization, field
-  //    ordering) lives behind a single seam.
-  const fileContent = emitGeneratedAgentFile({
+  //    ordering) lives behind a single seam. The frontmatter block comes
+  //    from the same fields, so the file is that block followed by the body
+  //    (MGRT-01).
+  const emitted = {
     frontmatter: {
       name: declaredName,
       description,
@@ -969,6 +1043,9 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
       droppedTools: toolsResult.dropped,
       warnings,
     },
+  };
+  const fileContent = emitGeneratedAgentFile({
+    ...emitted,
     body: bodyWithPreloads(convertedBody, skillsResult.inline),
   });
 
@@ -977,6 +1054,7 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
     generatedName,
     sourcePath,
     fileContent,
+    frontmatter: emitGeneratedAgentFrontmatter(emitted),
     sourceHash,
     droppedFields,
     droppedTools: toolsResult.dropped,
@@ -984,7 +1062,7 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
     ...(modelResult.originalModel !== undefined && { originalModel: modelResult.originalModel }),
   };
 
-  return result;
+  return { kind: "converted", agent: result };
 }
 
 /**
@@ -1024,9 +1102,17 @@ function optionalModel(model: string | undefined): { model?: string } {
 }
 
 /**
- * AG-11: rejects an explicit `tools:` declaration whose mapped list is empty
- * -- pi-subagents reads an empty allowlist as "no tools", which has no safe
- * representation. The message includes source values so the user can correct
+ * AG-11: whether a tool mapping is representable -- an omitted `tools:`, or
+ * an explicit one that maps to at least one entry. pi-subagents reads an
+ * empty allowlist as "no tools", which has no safe representation.
+ */
+function hasMappedTools(toolsResult: ToolMappingResult): toolsResult is ValidatedToolMapping {
+  return toolsResult.omitted || toolsResult.mapped.length > 0;
+}
+
+/**
+ * AG-11: the error for an explicit `tools:` declaration whose mapped list is
+ * empty. The message includes source values so the user can correct
  * upstream. AGSK-03 / D-83.1-02 (#86): Skill is silently excluded from
  * classification (it maps to inheritSkills, not a Pi tool), so a
  * `tools: Skill`-only agent would otherwise see one declared tool produce
@@ -1034,21 +1120,17 @@ function optionalModel(model: string | undefined): { model?: string } {
  * Skill was among the raw source tokens. The `?? "(omitted)"` label covers a
  * malformed `raw.tools` accessor whose value disappears between reads
  * (pinned by the malformed-accessor test); a genuinely omitted `tools:`
- * never reaches the throw (#179).
+ * never reaches the error (#179).
  */
-function assertMappedToolsNonEmpty(
-  toolsResult: ToolMappingResult,
-  input: { raw: RawAgentFrontmatter; sourceName: string; pluginName: string },
-): asserts toolsResult is ValidatedToolMapping {
-  const { raw, sourceName, pluginName } = input;
-  if (toolsResult.omitted || toolsResult.mapped.length > 0) {
-    return;
-  }
-
+function emptyToolListError(
+  raw: RawAgentFrontmatter,
+  sourceName: string,
+  pluginName: string,
+): Error {
   const skillNote = splitToolList(raw.tools).some(isSkillToken)
     ? " Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list."
     : "";
-  throw new Error(
+  return new Error(
     `Cannot convert agent "${sourceName}" in plugin "${pluginName}": ` +
       `the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). ` +
       `Source tools: ${raw.tools ?? "(omitted)"}; ` +
@@ -1062,7 +1144,7 @@ function assertMappedToolsNonEmpty(
  * grants its default builtin tools, with disallowedTools narrowing that
  * set via excludeTools. The GeneratedToolsFields return type is what keeps
  * the two lines from ever rendering together. The validated mapping carries
- * the nonempty explicit list proved by assertMappedToolsNonEmpty, so the
+ * the nonempty explicit list proved by hasMappedTools, so the
  * emitter does not need a second runtime check.
  */
 function toolsFields(result: ValidatedToolMapping): GeneratedToolsFields {

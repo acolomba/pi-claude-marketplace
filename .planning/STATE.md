@@ -1,38 +1,43 @@
 ---
 gsd_state_version: "1.0"
-milestone: component-features
+milestone: mcp-builtin
 status: Awaiting next milestone
-stopped_at: Milestone component-features completed and archived 2026-11-03 (8 phases, 65 plans, 62/62 requirements)
-last_updated: "2026-11-03T11:38:09.234Z"
-last_activity: 2026-11-03
-last_activity_desc: Milestone component-features completed and archived
-state_head: 5de5e65a9b1bf1fb1e73040eadf49278601f6051
+stopped_at: "Milestone mcp-builtin archived and reviewed; PR #303 open"
+last_updated: "2026-11-07T03:11:45.126Z"
+last_activity: 2026-11-06
+last_activity_desc: "PR #303 review backlog closed (quick batch 261106-u94, quick 261107-36g); waits for the merge"
+state_head: 93168c0758b5f2ecb082a4f0aa2d7a627126ac05
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 65
-  completed_plans: 65
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 55
+  completed_plans: 55
   percent: 100
-milestone_name: Component Behavioral Tests
+milestone_name: MCP Built-in
+current_phase: 06
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-02 after the component-features milestone)
+See: `.planning/PROJECT.md` (updated 2026-11-05 after the mcp-builtin milestone closed)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** component-features closed again 2026-11-03 after Phase 8 and the re-verification of every phase. Next: version bump, CHANGELOG entry and the PR for `claude/quirky-planck-hhm592` (dispatch `ci.yml` first to re-measure the components shard). Open for the user: review the upstream branches on `acolomba/pi` and `acolomba/pi-subagents`.
+**Current focus:** the user's review of the mcp-builtin choices, then the PR (milestone archived 2026-11-05)
+The root review log is `.planning/DUBIOUS-CHOICES.md`. Still open from component-features:
+the PR for `claude/quirky-planck-hhm592` and the upstream branches on
+`acolomba/pi` and `acolomba/pi-subagents`.
 
 ## Current Position
 
-Phase: Milestone component-features complete
+Phase: Milestone mcp-builtin complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-03 — Milestone component-features completed and archived
+Last activity: 2026-11-06 — PR #303 reviewed and hardened; waits for the merge
+
 
 ### mcp-4 closeout
 
@@ -129,6 +134,8 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| verification_override | Phase 02 (built-in materialization): `human_needed`, 5/7 must-haves at the combined-tree re-verification (c7a0358); the milestone closed with an override, MS-06 | resolved 2026-11-06 — re-verified `passed` 7/7 after the review fixes | 2026-11-05 | mcp-builtin |
+| uat_gaps       | 02/02-UAT.md: 2 pending manual scenarios (BLT-04 "reported, never silent" as `info` plus `/mcp`; `/reload` and `/new` in a real Pi with built-in MCP), P2-DC-100 | resolved 2026-11-06 — 02-UAT 2/2 passed (283db43) | 2026-11-05 | mcp-builtin |
 | todos          | 2026-10-13-cucumber-rules-trial.md: try the cucumber rules on another repository (§3; reviewed in Phase 10 and not folded) | acknowledged — still pending | 2026-10-21 | marketplace-features |
 | deferred_items | 07/deferred-items.md: DEP-07-03-01 brace-expansion advisory in the root Pi tree; TEST-07-06-01 optional pi-subagents resolver skip | acknowledged — carried as BACKLOG DEPADV-01; WINDOWS #92 (was #89 before the main merge) | 2026-10-11 | json-output |
 | deferred_items | 08/deferred-items.md: DEF-08-04-01 `windows status --pick` fails when stdout is a pipe | acknowledged — upstream gsd-tools, out of scope | 2026-10-11 | json-output |
@@ -188,6 +195,15 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261030-ogp | bootstrap runs only marketplace add | 2026-10-30 | 841e3dc2 | complete | [261030-ogp-bootstrap-runs-only-marketplace-add](./quick/261030-ogp-bootstrap-runs-only-marketplace-add/) |
 | 12 | Fix STATE.md health warnings: archived 03.x phase tokens, milestone-complete status, PR #290 merged | 2026-10-31 | 9847e01b | — | — |
 | 261103-eqa | Make tests robust to Pi upgrades: stop pinning upstream text | 2026-11-03 | 5de5e65 | — | [261103-eqa-make-tests-robust-to-pi-upgrades](./quick/261103-eqa-make-tests-robust-to-pi-upgrades/) |
+| 261106-u95 | Agent grant forms (AGENTIDXFORM-01, GRANTFORMGAP-01, REVIEWSUGG-01 agents part) | 2026-11-07 | 6adefd3 | — | .planning/quick/261106-u95-agent-grant-forms-agentidxform-01-grantformgap-01-reviewsugg |
+| 261106-u96 | Recorded MCP servers (LEGACYSRC-01, REVIEWSUGG-01 RecordedMcpServers part) | 2026-11-07 | 7eca160 | — | .planning/quick/261106-u96-recorded-mcp-servers-legacysrc-01-and-reviewsugg-01-recorded |
+| 261106-u97 | MCP status lookup (STATUSLOOKUP-01, REVIEWSUGG-01 status part) | 2026-11-07 | dfc7001 | — | .planning/quick/261106-u97-mcp-status-lookup-statuslookup-01-and-reviewsugg-01-status-p |
+| 261106-u98 | Hooks tool view (HOOKTOOLREAD-01, REVIEWSUGG-01 hooks part) | 2026-11-07 | 4546f56 | — | .planning/quick/261106-u98-hooks-tool-view-hooktoolread-01-and-reviewsugg-01-hooks-part |
+| 261106-u99 | Import warning cause (IMPORTCAUSE-01) | 2026-11-07 | 8a9b5c6 | — | .planning/quick/261106-u99-import-warning-cause-importcause-01-see-planning-backlog-md |
+| 261106-u9a | Built-in registration error handling (REVIEWSUGG-01 error-handling part) | 2026-11-07 | 5b1da7b | — | .planning/quick/261106-u9a-built-in-registration-error-handling-reviewsugg-01-error-han |
+| 261106-u9b | MCP domain and soft-dependency types (REVIEWSUGG-01 types part) | 2026-11-07 | 0007063 | — | .planning/quick/261106-u9b-mcp-domain-and-soft-dependency-types-reviewsugg-01-types-par |
+| 261106-u9c | MCP implementation test gaps and the apply row fix (REVIEWSUGG-01 tests part) | 2026-11-07 | e27276c | — | .planning/quick/261106-u9c-mcp-implementation-test-gaps-reviewsugg-01-tests-part-see-pl |
+| 261107-36g | Name the unsupported kinds in the not-installable message (NOTINSTALLMSG-01) | 2026-11-07 | 93168c0 | — | [261107-36g-fix-notinstallmsg-01-name-the-unsupporte](./quick/261107-36g-fix-notinstallmsg-01-name-the-unsupporte/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
@@ -271,8 +287,12 @@ archived milestone artifacts.
 ## Operator Next Steps
 
 
-
-- Start the next milestone with /gsd-new-milestone
+- Squash-merge PR #303 (version 0.23.0) when the user says so, then record
+  the merge date and squash SHA in ROADMAP.md, MILESTONES.md, PROJECT.md and
+  RETROSPECTIVE.md, and tag `v0.23.0` to publish.
+- Decide BACKLOG GRANTFORMGAP-01 (an agent whose other grant form maps to
+  nothing keeps stale grants after a switch).
+- Then start the next milestone with the `new-gsd-milestone` skill.
 
 
 ## Performance Metrics
@@ -404,6 +424,7 @@ archived milestone artifacts.
 | Phase 11 P06 | 42min | 3 tasks | 13 files |
 | Phase 11 P09 | 15min | 3 tasks | 7 files |
 | Phase 11 P13 | 47min | 3 tasks | 11 files |
+| Phase 4 P06 | 11min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -618,6 +639,7 @@ archived milestone artifacts.
 - [Phase 11]: Keep transaction composition and architecture-gated call sites in the main install ledger; extracted owners receive narrow typed inputs.
 - [Phase 11]: Preserve the exact five-operation planning port and one-way imports, including type-only edges.
 - [Phase 11]: Give each extracted install-flow owner one compact direct-coverage suite with fixture-level doubles and no cross-test imports.
+- [Phase 4]: Phase 4 gate reused the orchestrator's 8e801f4 results for 8c95f25 (planning-only diff) and ran test:modules; only the P4-DC-23 verdict-markers row fails under builtin
 
 ### mcp-4 decisions
 
@@ -793,6 +815,13 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Roadmap Evolution
 
+- mcp-builtin roadmap created 2026-11-04 (phase numbers reset to 1): Phase 1
+  (Foundation and Pi 1.5.0, serial, freezes the shared files and the
+  cross-phase interfaces), then Phases 2-5 in parallel child sessions
+  (Built-in Materialization, Read-Time Verdicts, Agent Grants, Hook Tool
+  Names), then Phase 6 (Release Docs and Combined Tree, serial, parent). The
+  research's settings-cleanup phase is dropped (D-MB-01); the built-in status
+  reader moved from the verdicts phase to the built-in phase.
 - component-features roadmap created 2026-10-31: Phase 1 (Harness and
   Version Raise, with the pre-fan-out decisions in its discuss step) then
   Phases 2-7, one per component kind, in parallel; no suite-close phase, the
@@ -809,7 +838,16 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Recent Decisions
 
-Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
+Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the user's review; D-CF1-01..17).
+
+- [mcp-builtin Phase 6] DUAL-04 reads `{requires mcp}` with one read-only
+  `/claude:plugin list` between the switches (D-P6-18); completions follow
+  the active implementation through a stamped single cache file (D-P6-22,
+  amended); the legacy reader refuses an uncontained root (UF-1, D-P6-23);
+  `SoftDepStatus.piMcpAdapterLoaded` is gone (D-P6-09); `.fallowrc.json`
+  has one entry and no `ignoreExports` (D-P6-21).
+- [mcp-builtin Phase 6] CI run 41960058038 on the combined tree: every leg
+  under 5 minutes, so `timeout-minutes: 15` stays (D-CF1-16, D-P6-25).
 
 - D-CF1-01..05: user-invoked bridged skills and commands get Claude Code's
   argument substitution, `` !`cmd` `` injection, description fallback, and
@@ -839,6 +877,18 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 
 ### Blockers/Concerns
 
+- [mcp-builtin] Resolved 2026-11-04: pi-mcp-adapter 7.0.0 writes
+  `-builtin:mcp` into the user's Pi settings once per version, so after the
+  adapter is removed the next start is usually `none`. Under D-MB-01 that is
+  `{requires mcp}` until the user turns built-in MCP back on (D-MB-07). MSEL-02
+  and DUAL-04 now say so, and DUAL-04 moved to Phase 6 because it needs
+  Phase 2's registration and Phase 3's marker on the combined tree.
+- [mcp-builtin] Resolved 2026-11-05: Phases 4 and 5's built-in legs re-ran
+  on the combined tree (06-12 re-verification table), and Phase 3 merged last.
+- [mcp-builtin] Open for the user: the Pi 1.5.0 RPC `new_session` leak
+  (P6-DC-0503, unreported upstream), the 02-UAT.md manual checks, and the
+  version bump and pull request (D-P6-17). Decisions waiting are listed at
+  the top of `.planning/DUBIOUS-CHOICES.md`.
 - [component-features] No scenario may pin an unlicensed gap before the user
   decides; the pre-fan-out decisions are recorded (D-CF1-01..17).
 - [Phase 1] `.fallowrc.json` carries `dynamicallyLoaded` and `ignoreExports`
@@ -870,6 +920,6 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 
 ## Session Continuity
 
-Last session: 2026-11-01T20:10:00Z
-Stopped at: Phase 06 complete — all phases complete
+Last session: 2026-11-05T05:10:00Z
+Stopped at: milestone mcp-builtin archived; user review of the choices next
 Resume file: None

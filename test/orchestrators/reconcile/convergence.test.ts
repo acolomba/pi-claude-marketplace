@@ -28,6 +28,7 @@ import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { seedWarmMirror } from "../plugin/warm-mirror-seed.ts";
 
+import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type {
   IndexFailure,
   RecordDeclarations,
@@ -72,7 +73,8 @@ async function writeUnder(filePath: string, bytes: string): Promise<void> {
 }
 
 function marketplaceRootOf(fixture: Fixture, marketplace: string): string {
-  return path.join(fixture.locations.extensionRoot, "marketplaces", marketplace);
+  // UF-1: an `acme/<name>` source reads as cloned, so its root is the scope's checkout.
+  return path.join(fixture.locations.sourcesDir, marketplace);
 }
 
 /**
@@ -171,7 +173,12 @@ test("D-10: a newer catalog version is a move that names both versions", async (
   const state = await stageDemo(fixture, "1.1.0");
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [demoMove()], holds: [], declines: [] });
@@ -185,7 +192,12 @@ test("D-10: a move of a record installed partial says so", async (t) => {
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [demoMove({ partial: true })], holds: [], declines: [] });
@@ -197,7 +209,12 @@ test("D-10: the recorded version at the recorded root is not a move", async (t) 
   const state = await stageDemo(fixture, "1.0.0");
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -211,7 +228,12 @@ test("D-10 / D-18-11: a changed plugin root at the same version is a move", asyn
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -233,7 +255,12 @@ test("D-10: a move from a recorded commit carries it as the from side", async (t
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [demoMove({ fromCommit })], holds: [], declines: [] });
@@ -245,7 +272,12 @@ test("ENBL-08: a disabled record is never a move", async (t) => {
   const state = await stageDemo(fixture, "1.1.0", { enabled: false });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -288,6 +320,7 @@ for (const { title, plan: reconcilePlan } of PLANS_THAT_LEAVE_NO_MOVE) {
       scope: "project",
       state,
       locations: fixture.locations,
+      mcpImplementation: "adapter",
       plan: reconcilePlan,
     });
 
@@ -306,6 +339,7 @@ test("D-10: a record the plan enables is a move", async (t) => {
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation: "adapter",
     plan: planWith({ pluginsToEnable: [DEMO_OP] }),
   });
 
@@ -323,6 +357,7 @@ test("D-10: a record the plan leaves alone keeps its move", async (t) => {
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation: "adapter",
     plan: planWith({ pluginsToUninstall: [{ ...DEMO_OP, plugin: "other" }] }),
   });
 
@@ -339,7 +374,12 @@ test("DLS-D1: a record its marketplace no longer lists is not a move", async (t)
   const state = stateOf({ ...mp, plugins: { demo: pluginRecord(root) } });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -356,7 +396,12 @@ test("D-10: an entry that fails the entry schema is not a move", async (t) => {
   const state = stateOf({ ...mp, plugins: { demo: pluginRecord(root) } });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -372,7 +417,12 @@ test("D-10: an unavailable candidate is not a move", async (t) => {
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -393,7 +443,12 @@ test("D-PL5-32: a hosted catalog's relative entry is not a move", async (t) => {
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -432,7 +487,12 @@ test("D-10 / GIT-01: a fetched mirror at a new commit and version is a move nami
   const state = await stageGitDemo(fixture, { source: { source: "url", url: DEMO_URL } });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -451,7 +511,12 @@ test("D-10: a cached copy at the recorded commit and version is not a move", asy
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -464,7 +529,12 @@ test("GIT-01: an unpinned mirror at the recorded commit is not a move although i
   const state = await stageGitDemo(fixture, { source: { source: "url", url: DEMO_URL } }, head);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -480,7 +550,12 @@ test("D-10: a cached git tree that resolves unavailable is not a move", async (t
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -515,7 +590,12 @@ for (const { title, entry, move } of COLD_MOVES) {
     const state = await stageGitDemo(fixture, entry);
 
     // act
-    const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+    const plan = await plannedMoves({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      mcpImplementation: "adapter",
+    });
 
     // assert
     assert.deepStrictEqual(plan, {
@@ -544,7 +624,12 @@ for (const { title, entry } of COLD_STAYS) {
     const state = await stageGitDemo(fixture, entry);
 
     // act
-    const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+    const plan = await plannedMoves({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      mcpImplementation: "adapter",
+    });
 
     // assert
     assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -564,7 +649,12 @@ test("D-11 / GV-01: with no cached tree, a record at a release tag of the entry'
   record.resolvedVersion = "1.0.0";
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -580,7 +670,12 @@ test("D-11: a cached clone that lacks the plugin's subdirectory is judged by the
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -601,7 +696,12 @@ test("D-05-07: a scope whose marketplace manifest cannot be read previews no mov
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -622,7 +722,12 @@ test("D-05-07: a scope whose declaration walk cannot be read previews no move at
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -641,7 +746,12 @@ test("T-29-22: a candidate whose version cannot be read is skipped and traced", 
   const state = stateOf({ ...mp, plugins: { demo: pluginRecord(root) } });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -673,7 +783,12 @@ test("D-10: moves are ordered by marketplace, then plugin", async (t) => {
   );
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -745,7 +860,12 @@ test("D-12 / D-23: a catalog version a dependent's range does not admit is held,
   const state = await stageTools(fixture, APP_HOLDS_LIB);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -764,7 +884,12 @@ test("D-12: a catalog version the dependent's range admits moves", async (t) => 
   ]);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -784,7 +909,12 @@ test("D-12: ranges that admit no version in common hold the move", async (t) => 
   ]);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -809,6 +939,7 @@ test("D-12: a dependent the plan uninstalls no longer holds the move", async (t)
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation: "adapter",
     plan: planWith({ pluginsToUninstall: [{ ...DEMO_OP, plugin: "app" }] }),
   });
 
@@ -852,6 +983,7 @@ for (const { bucket, plan } of [
       scope: "project",
       state,
       locations: fixture.locations,
+      mcpImplementation: "adapter",
       plan,
     });
 
@@ -881,6 +1013,7 @@ test("D-12 / RESV-01: a dependency a planned install's cascade brings in holds t
     scope: "project",
     state: stateOf({ ...tools, plugins }),
     locations: fixture.locations,
+    mcpImplementation: "adapter",
     plan: planWith({ pluginsToInstall: [{ ...INSTALL_APP, plugin: "top" }] }),
   });
 
@@ -909,6 +1042,7 @@ for (const { title, install } of [
       scope: "project",
       state,
       locations: fixture.locations,
+      mcpImplementation: "adapter",
       plan: planWith({ pluginsToInstall: [install] }),
     });
 
@@ -935,7 +1069,12 @@ test("D-12 / UPDT-02: a disabled dependent still holds the move and is marked", 
   ]);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -999,7 +1138,12 @@ test("D-12 / DLS-D1: a held dependent is judged by its catalog and installed cop
   const state = await stageTools(fixture, heldDependentChain("widget-installed"));
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -1032,7 +1176,12 @@ test("D-12 / D-05-06: a held dependent whose catalog copy is stricter than its i
   ]);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -1079,7 +1228,12 @@ for (const { dep, host } of [
     const state = await stageTools(fixture, heldByTwoCopies(dep, host));
 
     // act
-    const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+    const plan = await plannedMoves({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      mcpImplementation: "adapter",
+    });
 
     // assert
     assert.deepStrictEqual(plan.moves, []);
@@ -1108,7 +1262,12 @@ test("D-12: a held dependent whose installed copy cannot be read keeps its catal
   const state = await stageTools(fixture, chain);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -1130,7 +1289,12 @@ test("D-12 / WCONV-01: a clean record whose candidate would drop components is d
   await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "demo"));
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -1167,6 +1331,7 @@ test("D-PL2-12 / D-PL2-25: a dependent whose copy sits under neither clone root 
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation: "adapter",
   });
 
   // assert
@@ -1191,6 +1356,7 @@ test("D-PL2-23: a dependent left pinned to a stale commit with its copy in the m
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation: "adapter",
   });
 
   // assert
@@ -1234,6 +1400,7 @@ test("D-PL2-25: a candidate whose installed copy's manifest links outside its bo
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation: "adapter",
   });
 
   // assert
@@ -1253,6 +1420,7 @@ test("D-12 / DLS-D1: a cascade whose installed copies are all usable carries no 
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation: "adapter",
   });
 
   // assert
@@ -1268,7 +1436,12 @@ test("D-12: a record already installed partial moves to a partial candidate", as
   await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "demo"));
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -1285,7 +1458,12 @@ test("D-12: a partial candidate a dependent's range does not admit is held, not 
   await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "lib"));
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -1294,6 +1472,363 @@ test("D-12: a partial candidate a dependent's range does not admit is held, not 
     declines: [],
   });
 });
+
+const SSE_SERVER = { type: "sse", url: "http://127.0.0.1:9/sse" } as const;
+const STDIO_SERVER = { command: "tools-server" } as const;
+/** pi-mcp-adapter blocks this server, and Pi's built-in MCP runs it. */
+const ELICITATION_SERVER = { command: "node", bareElicitationCapability: true } as const;
+/** Neither implementation runs this server. */
+const WS_SERVER = { type: "ws", url: "ws://127.0.0.1:9/ws" } as const;
+
+/** Gives the plugin under `root` an `.mcp.json` that declares `servers`. */
+async function stageMcpServers(root: string, servers: Record<string, unknown>): Promise<void> {
+  await writeUnder(path.join(root, ".mcp.json"), JSON.stringify({ mcpServers: servers }));
+}
+
+/** A record that stored the neutral verdict of a plugin with `servers` (D-P3-02). */
+function neutralMcpRecord(servers: Record<string, unknown>): Partial<PluginRecord> {
+  return {
+    compatibilityBasis: "neutral",
+    compatibility: { installable: true, notes: [], supported: ["mcpServers"], unsupported: [] },
+    mcpServerConfigs: Object.entries(servers).map(([name, config]) => ({ name, config })),
+  };
+}
+
+for (const { mcpImplementation, partial } of [
+  { mcpImplementation: "builtin", partial: true },
+  { mcpImplementation: "adapter", partial: false },
+  { mcpImplementation: "none", partial: false },
+] as const) {
+  test(`D-P3-13: a record with an sse server moves to a candidate that keeps it, partial ${partial} under ${mcpImplementation}`, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, `sse-kept-${mcpImplementation}`);
+    const state = await stageDemo(fixture, "1.1.0", neutralMcpRecord({ events: SSE_SERVER }));
+    await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+      events: SSE_SERVER,
+    });
+
+    // act
+    const plan = await plannedMoves({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      mcpImplementation,
+    });
+
+    // assert
+    assert.deepStrictEqual(plan, { moves: [demoMove({ partial })], holds: [], declines: [] });
+  });
+}
+
+test("D-P3-13: a candidate that adds an sse server to a stdio record needs consent under Pi's built-in MCP", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "sse-added-builtin");
+  const state = await stageDemo(fixture, "1.1.0", neutralMcpRecord({ tools: STDIO_SERVER }));
+  await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+    tools: STDIO_SERVER,
+    events: SSE_SERVER,
+  });
+
+  // act
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "builtin",
+  });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [],
+    holds: [],
+    declines: [
+      {
+        scope: "project",
+        marketplace: "tools",
+        plugin: "demo",
+        version: "1.0.0",
+        unsupported: ["mcpServers"],
+      },
+    ],
+  });
+});
+
+test("D-P3-13: a candidate that adds an sse server to a stdio record moves under pi-mcp-adapter", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "sse-added-adapter");
+  const state = await stageDemo(fixture, "1.1.0", neutralMcpRecord({ tools: STDIO_SERVER }));
+  await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+    tools: STDIO_SERVER,
+    events: SSE_SERVER,
+  });
+
+  // act
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
+
+  // assert
+  assert.deepStrictEqual(plan, { moves: [demoMove()], holds: [], declines: [] });
+});
+
+test("D-12 / D-P3-13: a record partial for a component Pi cannot load moves without consent under Pi's built-in MCP", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "partial-builtin");
+  const state = await stageDemo(fixture, "1.1.0", {
+    compatibilityBasis: "neutral",
+    compatibility: { installable: false, notes: [], supported: [], unsupported: ["outputStyles"] },
+    mcpServerConfigs: [],
+  });
+  await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "demo"));
+
+  // act
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "builtin",
+  });
+
+  // assert
+  assert.deepStrictEqual(plan, { moves: [demoMove({ partial: true })], holds: [], declines: [] });
+});
+
+/**
+ * A record a released build wrote for a plugin that staged `servers`: no
+ * basis and no server configs, so its servers are read by re-resolving the
+ * catalog, which refuses once the catalog version moved (MREC-02).
+ */
+function legacyMcpRecord(servers: readonly string[]): Partial<PluginRecord> {
+  return {
+    resources: {
+      skills: [],
+      prompts: [],
+      agents: [],
+      mcpServers: [...servers],
+      hooks: [],
+      workflows: [],
+    },
+  };
+}
+
+test("D-MB-06 / D-P3-13: an unreadable legacy sse record moves partial without consent under Pi's built-in MCP", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "legacy-sse-builtin");
+  const state = await stageDemo(fixture, "1.1.0", legacyMcpRecord(["events"]));
+  await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+    events: SSE_SERVER,
+  });
+
+  // act
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "builtin",
+  });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [demoMove({ partial: true })],
+    holds: [],
+    declines: [],
+  });
+});
+
+test("D-MB-06 / D-P3-13: an unreadable legacy record still needs consent for a server no implementation runs", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "legacy-ws-builtin");
+  const state = await stageDemo(fixture, "1.1.0", legacyMcpRecord(["tools"]));
+  await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+    tools: STDIO_SERVER,
+    live: { type: "ws", url: "ws://127.0.0.1:9/ws" },
+  });
+
+  // act
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "builtin",
+  });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [],
+    holds: [],
+    declines: [
+      {
+        scope: "project",
+        marketplace: "tools",
+        plugin: "demo",
+        version: "1.0.0",
+        unsupported: ["mcpServers"],
+      },
+    ],
+  });
+});
+
+test("D-MB-06 / D-P3-13: under pi-mcp-adapter, an unreadable legacy record needs consent for a server only the adapter blocks", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "legacy-asker-adapter");
+  const state = await stageDemo(fixture, "1.1.0", legacyMcpRecord(["tools"]));
+  await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+    tools: STDIO_SERVER,
+    asker: { command: "node", bareElicitationCapability: true },
+  });
+
+  // act
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [],
+    holds: [],
+    declines: [
+      {
+        scope: "project",
+        marketplace: "tools",
+        plugin: "demo",
+        version: "1.0.0",
+        unsupported: ["mcpServers"],
+      },
+    ],
+  });
+});
+
+test("D-P3-14: a record whose catalog changed nothing plans no move after a switch to Pi's built-in MCP", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "sse-unchanged-builtin");
+  const state = await stageDemo(fixture, "1.0.0", neutralMcpRecord({ events: SSE_SERVER }));
+  await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+    events: SSE_SERVER,
+  });
+
+  // act
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "builtin",
+  });
+
+  // assert
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
+});
+
+const DEMO_MCP_DECLINE: ConvergencePlan = {
+  moves: [],
+  holds: [],
+  declines: [
+    {
+      scope: "project",
+      marketplace: "tools",
+      plugin: "demo",
+      version: "1.0.0",
+      unsupported: ["mcpServers"],
+    },
+  ],
+};
+
+const SPLIT_SERVERS = { events: SSE_SERVER, asker: ELICITATION_SERVER } as const;
+
+for (const { title, mcpImplementation, servers, expectedPlan } of [
+  {
+    title:
+      "D-P3-13 / D-MB-05: with no MCP implementation, a candidate that adds servers each implementation runs only some of moves without consent",
+    mcpImplementation: "none",
+    servers: SPLIT_SERVERS,
+    expectedPlan: { moves: [demoMove()], holds: [], declines: [] },
+  },
+  {
+    title:
+      "D-P3-13: under pi-mcp-adapter, a candidate that adds servers each implementation runs only some of needs consent",
+    mcpImplementation: "adapter",
+    servers: SPLIT_SERVERS,
+    expectedPlan: DEMO_MCP_DECLINE,
+  },
+  {
+    title:
+      "D-P3-13: under Pi's built-in MCP, a candidate that adds servers each implementation runs only some of needs consent",
+    mcpImplementation: "builtin",
+    servers: SPLIT_SERVERS,
+    expectedPlan: DEMO_MCP_DECLINE,
+  },
+  {
+    title:
+      "D-P3-13 / D-MB-05: with no MCP implementation, a candidate that adds a server neither implementation runs needs consent",
+    mcpImplementation: "none",
+    servers: { live: WS_SERVER },
+    expectedPlan: DEMO_MCP_DECLINE,
+  },
+] as const) {
+  test(title, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, `added-${mcpImplementation}`);
+    const state = await stageDemo(fixture, "1.1.0", neutralMcpRecord({ tools: STDIO_SERVER }));
+    await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+      tools: STDIO_SERVER,
+      ...servers,
+    });
+
+    // act
+    const plan = await plannedMoves({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      mcpImplementation,
+    });
+
+    // assert
+    assert.deepStrictEqual(plan, expectedPlan);
+  });
+}
+
+for (const { title, servers, expectedPlan } of [
+  {
+    // The stored verdict is not the neutral one, but the neutral view drops
+    // nothing, so the move is not partial.
+    title:
+      "D-MB-06 / D-P3-13: with no MCP implementation, an unreadable legacy record moves without consent for a server only pi-mcp-adapter blocks",
+    servers: { asker: ELICITATION_SERVER },
+    expectedPlan: { moves: [demoMove()], holds: [], declines: [] },
+  },
+  {
+    title:
+      "D-MB-06 / D-P3-13: with no MCP implementation, an unreadable legacy record still needs consent for a server neither implementation runs",
+    servers: { live: WS_SERVER },
+    expectedPlan: DEMO_MCP_DECLINE,
+  },
+] as const) {
+  test(title, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, "legacy-none");
+    const state = await stageDemo(fixture, "1.1.0", legacyMcpRecord(["tools"]));
+    await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+      tools: STDIO_SERVER,
+      ...servers,
+    });
+
+    // act
+    const plan = await plannedMoves({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      mcpImplementation: "none",
+    });
+
+    // assert
+    assert.deepStrictEqual(plan, expectedPlan);
+  });
+}
 
 const COMPONENT_FILES = {
   skills: path.join("skills", "tool", "SKILL.md"),
@@ -1328,7 +1863,12 @@ test("D-10 / BFILL-01: a strictly grown supported set is a growth-only move at t
   await stageComponents(path.join(marketplaceRootOf(fixture, "tools"), "demo"), ["skills"]);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -1345,7 +1885,12 @@ test("D-10: a grown supported set rides on a version move", async (t) => {
   await stageComponents(path.join(marketplaceRootOf(fixture, "tools"), "demo"), ["skills"]);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -1376,7 +1921,12 @@ for (const { title, recorded, offered } of NOT_GROWN) {
     await stageComponents(path.join(marketplaceRootOf(fixture, "tools"), "demo"), offered);
 
     // act
-    const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+    const plan = await plannedMoves({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      mcpImplementation: "adapter",
+    });
 
     // assert
     assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -1392,7 +1942,12 @@ test("D-10 / WCONV-01: a grown set whose candidate would drop components is decl
   await stageOutputStyle(root);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -1425,7 +1980,12 @@ test("DLS-01: a delisted record whose installed copy reads does not stop another
   });
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, {
@@ -1442,7 +2002,12 @@ test("ENBL-08: a disabled record whose supported set grew is not a move", async 
   await stageComponents(path.join(marketplaceRootOf(fixture, "tools"), "demo"), ["skills"]);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const plan = await plannedMoves({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter",
+  });
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
@@ -1478,6 +2043,7 @@ async function settle(
   fixture: Fixture,
   state: ExtensionState,
   lift: readonly string[] = [],
+  mcpImplementation: ActiveMcpImplementation = "adapter",
 ): Promise<Awaited<ReturnType<typeof settleMoveCascade>> & { readonly input: ReconcilePlan }> {
   const verdict = await buildScopeSatisfactionVerdict({ state, locations: fixture.locations });
   const input = planFrom(verdict, lift);
@@ -1485,6 +2051,7 @@ async function settle(
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation,
     plan: input,
     verdict,
     replan: (released) => planFrom(released, lift),
@@ -1552,6 +2119,59 @@ test("APPLY1-01: a dependent held down by an earlier pass is enabled only after 
   assert.deepStrictEqual(settled.preview.pluginsToEnable, []);
 });
 
+/** Nothing moves, nothing waits, and `widget` stays held down. */
+const HELD_WIDGET = { cascadeMoves: undefined, deferredEnables: [], heldDown: ["widget"] } as const;
+
+for (const { title, mcpImplementation, expected } of [
+  {
+    title:
+      "APPLY1-01 / D-P3-13: with no MCP implementation, a held-down dependent is released by its dependency's move to servers each implementation runs only some of",
+    mcpImplementation: "none",
+    expected: {
+      cascadeMoves: ["zcore@tools", "widget@tools"],
+      deferredEnables: [{ ...DEMO_OP, plugin: "widget" }],
+      heldDown: [],
+    },
+  },
+  {
+    title:
+      "APPLY1-01 / D-P3-13: under pi-mcp-adapter, a held-down dependent stays held while its dependency's move to servers each implementation runs only some of needs consent",
+    mcpImplementation: "adapter",
+    expected: HELD_WIDGET,
+  },
+  {
+    title:
+      "APPLY1-01 / D-P3-13: under Pi's built-in MCP, a held-down dependent stays held while its dependency's move to servers each implementation runs only some of needs consent",
+    mcpImplementation: "builtin",
+    expected: HELD_WIDGET,
+  },
+] as const) {
+  test(title, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, `deferred-split-${mcpImplementation}`);
+    const state = await stageTools(fixture, [
+      { ...CO_SHIPPED[0], record: { enabled: false, dependencyDisabled: true } } as StagedPlugin,
+      { name: "zcore", offered: "2.0.0" },
+    ]);
+    await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "zcore"), SPLIT_SERVERS);
+
+    // act
+    const settled = await settle(fixture, state, ["widget"], mcpImplementation);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        cascadeMoves: settled.cascade?.plan.moves.map(
+          (move) => `${move.plugin}@${move.marketplace}`,
+        ),
+        deferredEnables: settled.deferredEnables,
+        heldDown: settled.plan.pluginsToDependencyDisable.map((op) => op.plugin),
+      },
+      expected,
+    );
+  });
+}
+
 test("APPLY1-01: a held-down dependent that waits on no move is enabled with the toggles", async (t) => {
   // arrange
   const fixture = await createFixture(t, "lift-no-move");
@@ -1583,7 +2203,12 @@ test("APPLY1-01: a disabled record the caller enables after its move is planned 
     { name: "demo", offered: "1.1.0", record: { enabled: false } },
     { name: "lib", offered: "1.0.0" },
   ]);
-  const input = { scope: "project" as const, state, locations: fixture.locations };
+  const input = {
+    scope: "project" as const,
+    state,
+    locations: fixture.locations,
+    mcpImplementation: "adapter" as const,
+  };
 
   // act
   const none = await planConvergenceCascade({ ...input, enable: new Set() });
@@ -1704,6 +2329,7 @@ async function settleWith(
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation: "adapter",
     plan,
     verdict,
     replan: () => plan,
@@ -1870,6 +2496,7 @@ test("D-PL2-02: a dependent is released when its dependency moves to a version t
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation: "adapter",
     plan: replan(verdict),
     verdict,
     replan,
@@ -2082,6 +2709,7 @@ async function settleOver(
     scope: "project",
     state,
     locations: fixture.locations,
+    mcpImplementation: "adapter",
     plan,
     verdict,
     replan: () => plan,

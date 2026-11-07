@@ -15,8 +15,9 @@
 // The line-based parser in frontmatter.ts only emits string values for the
 // known fields; consumers narrow as needed.
 
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
-import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+import type { AgentsIndexRow } from "../../persistence/agents-index-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
@@ -60,6 +61,13 @@ export interface ConvertedAgent {
   readonly sourceHash: string;
   /** Ready-to-write file content (frontmatter, including provenance keys, + body). */
   readonly fileContent: string;
+  /**
+   * MGRT-01 / D-MB-03: the file's frontmatter block, from the opening `---`
+   * line through the closing `---` line and its newline; `fileContent` is
+   * this block followed by the body. The stage records it per MCP
+   * implementation, so a load can swap one grant form for the other.
+   */
+  readonly frontmatter: string;
   /** Original `model:` field from source if present (for index/provenance). */
   readonly originalModel?: string;
   /** Frontmatter fields dropped because unsupported. */
@@ -91,11 +99,21 @@ export interface StageAgentsInput {
    */
   readonly mapModel?: boolean;
   /**
-   * ANAME-02: the declared names of the MCP servers this install writes.
-   * `convertAgent` maps an agent's `mcp__` tool names that name one of these
-   * servers to pi-subagents `mcp:` entries.
+   * MGRT-01 / ANAME-02: the run's active MCP implementation and every
+   * non-malformed declared MCP server, keyed by declared name in declaration
+   * order. The stage renders both grant forms of each agent, each over the
+   * declared servers its implementation runs, writes the active
+   * implementation's form (`none` writes the adapter form), and records both
+   * forms on the agent's index row when they differ. Absent means the plugin
+   * declares no MCP server: the stage renders the adapter form, maps no MCP
+   * server, and records no form.
    */
-  readonly mcpServerNames?: readonly string[] | undefined;
+  readonly mcpGrantForms?:
+    | {
+        readonly active: ActiveMcpImplementation;
+        readonly declaredMcpServers: Readonly<Record<string, unknown>>;
+      }
+    | undefined;
   /**
    * D-CF4-04: the skills phase's recorded rows. The stage reads each row's
    * source `SKILL.md` for the skills an agent preloads. Absent leaves every
@@ -189,13 +207,13 @@ export interface PreparedAgentsStaged {
   readonly result: StageAgentsCommitResult;
   // Internals -- opaque to orchestrators (NOT re-exported from index.ts).
   /** Previous index entries safe to overwrite (foreign-content excluded). */
-  readonly previousEntries: readonly AgentsIndexEntry[];
+  readonly previousEntries: readonly AgentsIndexRow[];
   /** W-08: AG-5 foreign-content rows kept in index, NOT rm'd. */
-  readonly foreignPreservedEntries: readonly AgentsIndexEntry[];
+  readonly foreignPreservedEntries: readonly AgentsIndexRow[];
   /** Other (mp,plugin) rows preserved across the stage. */
-  readonly otherEntries: readonly AgentsIndexEntry[];
+  readonly otherEntries: readonly AgentsIndexRow[];
   /** New rows produced by this stage. */
-  readonly newEntries: readonly AgentsIndexEntry[];
+  readonly newEntries: readonly AgentsIndexRow[];
   /** Pre-staged file paths -- {from: stagingDir/<name>.md, to: agentsDir/<name>.md}. */
   readonly stagedFilePaths: readonly { readonly from: string; readonly to: string }[];
 }

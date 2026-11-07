@@ -115,9 +115,11 @@ import { assertRecordedMarketplaceName } from "../../domain/name.ts";
 import {
   requirePartialInstallable,
   requireInstallable,
+  resolutionFor,
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
+import { mcpServerConfigsOf } from "../../persistence/state-io.ts";
 import { WorkflowsUnstageRefusedError } from "../../shared/errors-bridges.ts";
 import {
   ConcurrentInstallError,
@@ -159,6 +161,7 @@ import { WorkflowsUnstageFailureError } from "../marketplace/shared.ts";
 import { materializeMarketplaceTagClone } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone, type InstallCloneCacheSeam } from "./install-clone-probe.ts";
+import { mcpDependencyOf } from "./mcp-verdict.ts";
 import {
   createPackagesPhase,
   DEFAULT_PACKAGE_INSTALL_OPS,
@@ -183,6 +186,7 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
@@ -225,6 +229,16 @@ export interface InstallLedgerOptions {
   readonly plugin: string;
   readonly mapModel?: boolean;
   readonly partial?: boolean;
+  /**
+   * D-P3-11 / D-P3-13: the MCP implementation whose view of the resolution the
+   * `--partial` consent gate reads. A user-run install, its cascade members,
+   * and a fresh import or apply install pass the run's implementation, so they
+   * ask only for what that implementation cannot run. A re-materialization of
+   * a kept record (enable, the re-enable cascade member, promotion) passes
+   * `"none"`, so a switch never asks for consent the user already gave. No
+   * default exists: every caller names the view it gates on.
+   */
+  readonly consentView: ActiveMcpImplementation;
   readonly pinVersionOverride?: string;
   /**
    * RESV-03: the commit a constrained dependency's release tag resolved to.
@@ -348,6 +362,11 @@ export interface InstallLedgerSummary {
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
+  /**
+   * MREC-03: the resolution as the run's active MCP implementation sees it,
+   * which every row composer reads. The record stores the neutral verdict
+   * (D-P3-02), so one install reads per implementation at read time.
+   */
   readonly resolved: MaterializablePlugin;
   readonly version: string;
   readonly pluginDataDir: string;
@@ -512,8 +531,11 @@ type InstallLedgerContextResult =
  *      commit for a git source (url / git-subdir / github) whose clone probe
  *      captured it, spelled as `shaVersion` spells it (GV-01), then the
  *      content hash (D-16-08). The full sha is recorded apart (D-77-02).
+ *
+ * MREC-02: the legacy MCP servers reader derives a re-resolution's version
+ * here too, so it compares the version install would record.
  */
-async function deriveInstallVersion(args: {
+export async function deriveInstallVersion(args: {
   entry: PluginEntry;
   installable: MaterializablePlugin;
   marketplace: Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">;
@@ -836,11 +858,21 @@ async function preflightInstallResolve(
   // partially-available arm; the default gate still blocks it. Both gates
   // reject `unavailable` (FORCE-05), so `--partial` never bypasses a hard
   // structural failure.
+  // D-P3-11 / MREC-06: the gate reads the consent view, so a server only the
+  // named implementation blocks needs `--partial` and one only the other
+  // blocks does not (D-MB-05 for `"none"`). The decision is taken here, under
+  // the scope's state lock, from this transaction's own resolution.
+  const consentView = resolutionFor(resolved, opts.consentView);
   if (opts.partial === true) {
-    requirePartialInstallable(resolved, "install");
+    requirePartialInstallable(consentView, "install");
   } else {
-    requireInstallable(resolved, "install");
+    requireInstallable(consentView, "install");
   }
+
+  // D-P3-02: a view is unavailable exactly when the neutral resolution is, so
+  // this cannot throw once the view passed; it narrows the neutral
+  // resolution, which `statePhase` stores unchanged.
+  requirePartialInstallable(resolved, "install");
 
   if (opts.directoryPin !== undefined) {
     await assertDirectoryPinSatisfied(
@@ -1015,7 +1047,10 @@ export async function runInstallLedger(
     return result;
   }
 
-  return { kind: "installed", summary: toInstallLedgerSummary(result.installCtx) };
+  return {
+    kind: "installed",
+    summary: toInstallLedgerSummary(result.installCtx, options.run.softDeps.mcpImplementation),
+  };
 }
 
 /** D-PL1-13: keep a failed ledger's collected warnings, when it has any. */
@@ -1029,14 +1064,21 @@ function captureStagingWarnings(
   }
 }
 
-/** Project the completed ledger context onto its caller-facing summary. */
-function toInstallLedgerSummary(context: InstallLedgerContext): InstallLedgerSummary {
+/**
+ * Project the completed ledger context onto its caller-facing summary. The
+ * summary's resolution is the run's active view (MREC-03); the context keeps
+ * the neutral one that `statePhase` stored.
+ */
+function toInstallLedgerSummary(
+  context: InstallLedgerContext,
+  active: ActiveMcpImplementation,
+): InstallLedgerSummary {
   return {
     locations: context.locations,
     cwd: context.cwd,
     marketplace: context.marketplace,
     plugin: context.plugin,
-    resolved: context.resolved,
+    resolved: resolutionFor(context.resolved, active),
     version: context.version,
     pluginDataDir: context.pluginDataDir,
     frontmatterDegradations: context.frontmatterDegradations,
@@ -1315,9 +1357,15 @@ async function runInstallLedgerBody(
         // we explicitly default to false so generated agents omit
         // `model:` (the default behavior).
         mapModel: opts.mapModel ?? false,
-        // ANAME-02: the servers this install writes. The mcp phase runs
-        // later, so the set comes from the resolver, not the mcp stage.
-        mcpServerNames: Object.keys(installCtx.resolved.mcpServers),
+        // MGRT-01: the file gets the active implementation's grant form, and
+        // the row stores both forms so a later switch can swap them. The run
+        // snapshot is the only source of the active implementation (D-05).
+        // ANAME-02: each form maps the declared servers its implementation
+        // runs. The mcp phase runs later, so they come from the resolver.
+        mcpGrantForms: {
+          active: opts.run.softDeps.mcpImplementation,
+          declaredMcpServers: installCtx.resolved.declaredMcpServers,
+        },
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
       });
@@ -1599,6 +1647,12 @@ async function runInstallLedgerBody(
         // a later `info` need not read the config back off disk. Omitted when
         // the plugin declares no hooks config -- there is nothing to describe.
         ...(installCtx.hookEntries !== undefined && { hookEntries: [...installCtx.hookEntries] }),
+        // MREC-01 / D-MB-04: every declared, non-malformed MCP server in its
+        // Claude form, read from the resolver and never from the mcp phase's
+        // substituted entries. Each config is a deep copy, so no later
+        // in-memory change reaches the saved record.
+        mcpServerConfigs: mcpServerConfigsOf(installCtx.resolved.declaredMcpServers),
+        ...(installCtx.resolved.mcpBundle === true && { mcpBundle: true }),
         compatibility: {
           // INV-1 / D-66-01 / BFILL-01: record the REAL compatibility from the
           // resolve, not a hardcoded `true`. A `--partial` install of an
@@ -1612,6 +1666,8 @@ async function runInstallLedgerBody(
           supported: [...installCtx.resolved.supported],
           unsupported: [...installCtx.resolved.unsupported],
         },
+        // D-P3-02: the resolver's verdict above is the neutral one.
+        compatibilityBasis: "neutral",
         resources: {
           skills: [...installCtx.stagedSkillNames],
           prompts: [...installCtx.stagedCommandNames],
@@ -1740,7 +1796,7 @@ export function installedPluginOutcome(
     version: summary.version,
     resourcesChanged: !landedDisabled && stagedAny,
     declaresAgents: summary.stagedAgentNames.length > 0,
-    declaresMcp: summary.stagedMcpServerNames.length > 0,
+    declaresMcp: mcpDependencyOf(Object.values(summary.resolved.declaredMcpServers)),
     declaresWorkflows: summary.stagedWorkflowNames.length > 0,
     ...(landedDisabled && { landedDisabled: true as const }),
     ...(postCommitWarnings.length > 0 && { postCommitWarnings: [...postCommitWarnings] }),

@@ -26,8 +26,10 @@ import {
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { ManifestSoftFailError } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { InvalidMarketplaceManifestError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
+import type { ActiveMcpImplementation } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { PluginIndexRow } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
@@ -45,6 +47,8 @@ interface InstalledFixture {
   readonly resolvedSha?: string;
   readonly enabled?: boolean;
   readonly unsupported?: readonly string[];
+  /** MREC-01: the servers the record holds, as an install writes them. */
+  readonly mcpServerConfigs?: PluginRecord["mcpServerConfigs"];
 }
 
 interface FixturePlugin {
@@ -62,6 +66,10 @@ interface FixturePlugin {
   readonly declaresBinaries?: boolean;
   /** Create the on-disk plugin tree (default true). */
   readonly pluginTree?: boolean;
+  /** The `.mcp.json` text the plugin tree ships, when it ships one. */
+  readonly mcpJson?: string;
+  /** The `hooks/hooks.json` text the plugin tree ships, when it ships one. */
+  readonly hooksJson?: string;
   readonly installed?: InstalledFixture;
 }
 
@@ -72,6 +80,11 @@ interface BucketizerCase {
   readonly plugins: () => readonly FixturePlugin[];
   readonly rows: readonly PluginIndexRow[];
 }
+
+/** One sse server: pi-mcp-adapter runs it, Pi's built-in MCP cannot. */
+const SSE_MCP_JSON = JSON.stringify({
+  mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } },
+});
 
 function refuseNetwork(): Promise<Response> {
   throw new Error("the completion resolver must not reach the network");
@@ -107,6 +120,9 @@ function pluginRecord(resolvedSource: string, installed: InstalledFixture): Plug
     version: installed.version,
     resolvedSource,
     ...(installed.resolvedSha !== undefined && { resolvedSha: installed.resolvedSha }),
+    ...(installed.mcpServerConfigs !== undefined && {
+      mcpServerConfigs: installed.mcpServerConfigs,
+    }),
     compatibility: {
       installable: unsupported.length === 0,
       notes: [],
@@ -190,6 +206,14 @@ async function layoutMarketplace(
         }),
         "utf8",
       );
+      if (plugin.mcpJson !== undefined) {
+        await writeFile(path.join(pluginRoot, ".mcp.json"), plugin.mcpJson, "utf8");
+      }
+
+      if (plugin.hooksJson !== undefined) {
+        await mkdir(path.join(pluginRoot, "hooks"), { recursive: true });
+        await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), plugin.hooksJson, "utf8");
+      }
     }
 
     if (plugin.installed !== undefined) {
@@ -204,7 +228,7 @@ describe("pluginCachePath", () => {
   test("derives the project-scope per-marketplace cache file", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "index-project");
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
     const expectedCachePath = path.join(
       scope.cwd,
       ".pi",
@@ -224,7 +248,7 @@ describe("pluginCachePath", () => {
   test("derives the user-scope per-marketplace cache file", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "index-user");
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
     const expectedCachePath = path.join(
       scope.home,
       ".pi",
@@ -254,7 +278,7 @@ describe("loadStateForScope", () => {
       }),
       marketplaceRecord(scope.cwd, "empty-mp", {}),
     ]);
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
     const expectedState = {
       marketplaces: {
         "team-mp": { plugins: { plug: pluginRecord(pluginRoot, { version: "1.0.0" }) } },
@@ -272,7 +296,7 @@ describe("loadStateForScope", () => {
   test("reports no marketplaces when the scope has no state file", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "state-absent");
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
     const expectedState = { marketplaces: {} };
 
     // act
@@ -530,7 +554,7 @@ describe("loadManifestForMarketplace", () => {
       // arrange
       const scope = await createHermeticScope(t, marketplace);
       await layoutMarketplace(scope.cwd, marketplace, plugins());
-      const resolver = makeLocationsResolver(scope.cwd);
+      const resolver = makeLocationsResolver(scope.cwd, "adapter");
       const expectedRows = rows;
 
       // act
@@ -544,7 +568,7 @@ describe("loadManifestForMarketplace", () => {
   test("reports a soft failure when the scope has no record for the marketplace", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "absent-record");
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
 
     // act
     const rejection = resolver.loadManifestForMarketplace("project", "absent-mp");
@@ -568,7 +592,7 @@ describe("loadManifestForMarketplace", () => {
     await mkdir(path.dirname(manifestPath), { recursive: true });
     await writeFile(manifestPath, "{", "utf8");
     await writeStateFile(scope.cwd, [marketplaceRecord(scope.cwd, "broken-mp", {})]);
-    const resolver = makeLocationsResolver(scope.cwd);
+    const resolver = makeLocationsResolver(scope.cwd, "adapter");
 
     // act
     const rejection = resolver.loadManifestForMarketplace("project", "broken-mp");
@@ -581,4 +605,133 @@ describe("loadManifestForMarketplace", () => {
       return true;
     });
   });
+
+  // The servers of a legacy record that names `mcpServers` and that the
+  // manifest no longer declares cannot be re-resolved, so a verdict read of it
+  // logs one `mcp` debug line. `list` reads no verdict of a disabled record.
+  const legacyCases = [
+    {
+      enabled: true,
+      status: "partially-installed",
+      logged: [
+        "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of events@legacy-mp: not-in-manifest",
+      ],
+    },
+    { enabled: false, status: "installed", logged: [] },
+  ] satisfies readonly {
+    readonly enabled: boolean;
+    readonly status: PluginIndexRow["status"];
+    readonly logged: readonly string[];
+  }[];
+
+  for (const { enabled, status, logged } of legacyCases) {
+    const recordLabel = enabled ? "an enabled" : "a disabled";
+    test(`classifies ${recordLabel} legacy record as ${status} with ${logged.length} verdict read(s)`, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, `legacy-${String(enabled)}`);
+      await layoutMarketplace(scope.cwd, "legacy-mp", [
+        {
+          name: "events",
+          inManifest: false,
+          installed: { version: "1.0.0", enabled, unsupported: ["mcpServers"] },
+        },
+      ]);
+      const resolver = makeLocationsResolver(scope.cwd, "builtin");
+      const debugLines = captureDebugLog(t);
+      const expectedRows = [{ name: "events", status, version: "1.0.0" }];
+
+      // act
+      const indexRows = await resolver.loadManifestForMarketplace("project", "legacy-mp");
+
+      // assert
+      assert.deepStrictEqual(indexRows, expectedRows);
+      assert.deepStrictEqual(debugLines, logged);
+    });
+  }
+
+  const implementationCases = [
+    { mcpImplementation: "adapter", sseStatus: "available" },
+    { mcpImplementation: "builtin", sseStatus: "partially-available" },
+    { mcpImplementation: "none", sseStatus: "available" },
+  ] satisfies readonly {
+    readonly mcpImplementation: ActiveMcpImplementation;
+    readonly sseStatus: PluginIndexRow["status"];
+  }[];
+
+  for (const { mcpImplementation, sseStatus } of implementationCases) {
+    test(`classifies a not-installed sse entry as ${sseStatus} for ${mcpImplementation}`, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, `sse-${mcpImplementation}`);
+      await layoutMarketplace(scope.cwd, "sse-mp", [
+        { name: "events", manifestVersion: "1.0.0", mcpJson: SSE_MCP_JSON },
+        { name: "plain", manifestVersion: "1.0.0" },
+      ]);
+      const resolver = makeLocationsResolver(scope.cwd, mcpImplementation);
+      const expectedRows = [
+        { name: "events", status: sseStatus, version: "1.0.0" },
+        { name: "plain", status: "available", version: "1.0.0" },
+      ];
+
+      // act
+      const indexRows = await resolver.loadManifestForMarketplace("project", "sse-mp");
+
+      // assert
+      assert.deepStrictEqual(indexRows, expectedRows);
+    });
+  }
+
+  /** One recorded sse server: pi-mcp-adapter runs it, Pi's built-in MCP cannot. */
+  const sseRecord = (enabled: boolean): InstalledFixture => ({
+    version: "1.0.0",
+    enabled,
+    mcpServerConfigs: [{ name: "events", config: { type: "sse", url: "http://127.0.0.1:9/sse" } }],
+  });
+  const recordCases = [
+    { newerTree: "unavailable", enabled: true, mcpImplementation: "adapter", status: "upgradable" },
+    { newerTree: "unavailable", enabled: true, mcpImplementation: "none", status: "upgradable" },
+    {
+      newerTree: "unavailable",
+      enabled: true,
+      mcpImplementation: "builtin",
+      status: "partially-installed",
+    },
+    { newerTree: "installable", enabled: true, mcpImplementation: "adapter", status: "upgradable" },
+    {
+      newerTree: "installable",
+      enabled: true,
+      mcpImplementation: "builtin",
+      status: "partially-installed-upgradable",
+    },
+    { newerTree: "unavailable", enabled: false, mcpImplementation: "builtin", status: "installed" },
+  ] satisfies readonly {
+    readonly newerTree: "installable" | "unavailable";
+    readonly enabled: boolean;
+    readonly mcpImplementation: ActiveMcpImplementation;
+    readonly status: PluginIndexRow["status"];
+  }[];
+
+  for (const { newerTree, enabled, mcpImplementation, status } of recordCases) {
+    const recordLabel = enabled ? "an sse record" : "a disabled sse record";
+    test(`classifies ${recordLabel} with an ${newerTree} newer tree as ${status} for ${mcpImplementation}`, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, `sse-record-${mcpImplementation}`);
+      await layoutMarketplace(scope.cwd, "sse-record-mp", [
+        {
+          name: "events",
+          manifestVersion: "2.0.0",
+          mcpJson: SSE_MCP_JSON,
+          ...(newerTree === "unavailable" && { hooksJson: "this is not JSON" }),
+          installed: sseRecord(enabled),
+        },
+      ]);
+      const resolver = makeLocationsResolver(scope.cwd, mcpImplementation);
+      const expectedRows = [{ name: "events", status, version: "1.0.0" }];
+
+      // act
+      const indexRows = await resolver.loadManifestForMarketplace("project", "sse-record-mp");
+
+      // assert
+      assert.deepStrictEqual(indexRows, expectedRows);
+    });
+  }
 });

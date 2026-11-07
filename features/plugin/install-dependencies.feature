@@ -109,6 +109,59 @@ Feature: Plugin install dependencies
       | tools            | project           | app@tools | app       | installed |                   | project | 1.0.0   |
       | tools            | project           | lib@tools | lib@tools | skipped   | already installed | project | 1.0.0   |
 
+  @mcp
+  Scenario: Installing a plugin names unsupported mcp in the cause of a fresh dependency whose only server is a ws server
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"live": {"type": "ws", "url": "ws://127.0.0.1:9/"}}}
+      """
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status | reasons           | scope   | cause chain                                      | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed | project |                                                  |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed |                   | project | Plugin "lib" is not installable: unsupported mcp | false           |       |                  |
+    Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin names unsupported hooks in the refusal to move an installed dependency to a version whose manifest declares hooks
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+      | lib  | 2.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "lib", "version": "2.0.0", "hooks": "./extra/hooks.json" }
+      """
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                                          | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                                      |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.0.0   | Dependency "lib@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: Plugin "lib" is no longer installable: unsupported hooks. To look for a version in range, run /claude:plugin update lib@tools. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | lib@tools | 1.0.0   | true    |
+
   Scenario: The plugin list shows a partially installed dependency beside its installed dependent
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

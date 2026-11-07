@@ -12,10 +12,12 @@
  * installed plugin's data directory, delete a plugin's installed skills or an
  * agent file, delete the cached clones of git plugins, write a file of the
  * user's own in the scope's shared `agents/` directory, where an install
- * writes the agents of every plugin, and plant an agents index entry that
- * claims a file there. The other steps only read; one of them lists the files
- * of that `agents/` directory, and one checks that the user scope holds no
- * record of project installs.
+ * writes the agents of every plugin, plant an agents index entry that claims
+ * a file there, move a plugin's recorded plugin root outside its
+ * marketplace, and set the scope a marketplace's record names, as a hand edit
+ * of the installation record can. The other steps
+ * only read; one of them lists the files of that `agents/` directory, and one
+ * checks that the user scope holds no record of project installs.
  *
  * A missing installation record fails the step; it never reads as no plugins.
  * A scope that has a marketplace added always has one.
@@ -30,6 +32,12 @@ import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { isPlainObject } from "../../lib/field-rows.ts";
 import { readGitClones } from "../../lib/git-clones.ts";
+import {
+  readMarketplaceRecord,
+  readPluginRecord,
+  relocatePluginRoot,
+  rewriteMarketplaceRecord,
+} from "../../lib/installation-record.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -287,6 +295,34 @@ Given(
         assert.rejects(stat(directory), { code: "ENOENT" }, `${directory} still exists`),
       ),
     );
+  },
+);
+
+Given(
+  "the installation record of the plugin {string} in the {word} scope names a plugin root outside its marketplace",
+  async function (this: ScenarioWorld, id: string, scope: string) {
+    const scopeRoot = this.scopeRoot(scope);
+    assert.ok(isEntryName(id), `${id} is not a plugin@marketplace id`);
+    // A directory of the sandbox home that no marketplace or clone root holds.
+    const copy = path.join(this.tokens.home, "relocated-plugins", id);
+    this.onRelease(() => rm(copy, { recursive: true, force: true }));
+    await relocatePluginRoot(scopeRoot, id, copy);
+    const record = await readPluginRecord(scopeRoot, id);
+    assert.equal(record.resolvedSource, copy);
+  },
+);
+
+Given(
+  "the {word} scope's record of the marketplace {string} names the {word} scope",
+  async function (this: ScenarioWorld, scope: string, marketplace: string, named: string) {
+    const scopeRoot = this.scopeRoot(scope);
+    assert.ok(named === "user" || named === "project", `${named} is not a scope`);
+    await rewriteMarketplaceRecord(scopeRoot, marketplace, (record) => ({
+      ...record,
+      scope: named,
+    }));
+    const record = await readMarketplaceRecord(scopeRoot, marketplace);
+    assert.equal(record.scope, named);
   },
 );
 

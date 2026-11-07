@@ -45,7 +45,7 @@ const REINSTALL_REINSTALLED_CLEAN = {
 
 const REINSTALL_REINSTALLED_FULL = {
   declaresAgents: true,
-  declaresMcp: true,
+  declaresMcp: { kind: "mcp", runEvery: "adapter" },
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   discoveryWarnings: [
@@ -160,7 +160,7 @@ const PLUGIN_UPDATE_UPDATED_FULL = {
     fellBackToCurrentCopy: true,
   },
   declaresAgents: true,
-  declaresMcp: true,
+  declaresMcp: { kind: "mcp", runEvery: "adapter" },
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   fromVersion: "1.0.0",
@@ -204,7 +204,7 @@ const PLUGIN_UPDATE_SKIPPED_CLEAN = {
 
 const PLUGIN_UPDATE_SKIPPED_FULL = {
   declaresAgents: true,
-  declaresMcp: true,
+  declaresMcp: { kind: "mcp", runEvery: "adapter" },
   declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
@@ -226,7 +226,7 @@ const PLUGIN_UPDATE_FAILED_CLEAN = {
 const PLUGIN_UPDATE_FAILED_FULL = {
   cause: new Error("permission denied"),
   declaresAgents: true,
-  declaresMcp: true,
+  declaresMcp: { kind: "mcp", runEvery: "adapter" },
   declaresWorkflows: false,
   fromVersion: "1.0.0",
   name: "alpha",
@@ -288,13 +288,15 @@ const SCOPE_DEPENDENCY_INSTALL_FN = ((request) => {
 void SCOPE_DEPENDENCY_INSTALL_FN;
 
 // D-26: a catalog move names its scope's cwd, whether a partial candidate is admitted,
-// and whether it re-materializes the recorded revision (D-10 / D-25).
+// the MCP implementation its plan judged it under (D-P3-13), and whether it
+// re-materializes the recorded revision (D-10 / D-25).
 const PLUGIN_CONVERGE_TARGET = {
   plugin: "alpha",
   marketplace: "official",
   scope: "project",
   cwd: "/project",
   partial: false,
+  mcpImplementation: "builtin",
   rematerialize: false,
 } satisfies PluginConvergeTarget;
 
@@ -337,7 +339,7 @@ const LEDGER_DEGRADATION_SIGNALS = {
   degradedKinds: ["skill", "command"],
   orphanRewake: true,
   stagedAgents: true,
-  stagedMcpServers: true,
+  stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
   unsupported: ["hooks", "lsp"],
 } satisfies LedgerDegradationSignals;
 
@@ -352,7 +354,7 @@ const INSTALL_INSTALLED_CLEAN = {
 
 const INSTALL_INSTALLED_FULL = {
   declaresAgents: true,
-  declaresMcp: true,
+  declaresMcp: { kind: "mcp", runEvery: "adapter" },
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   landedDisabled: true,
@@ -841,7 +843,7 @@ void ({
   resourcesChanged: false,
   status: "installed",
   // @ts-expect-error install outcomes do not carry rendered-row dependencies
-  dependencies: ["agents", "mcp"],
+  dependencies: ["agents", { kind: "mcp", runEvery: "adapter" }],
 } satisfies InstallPluginOutcome);
 
 void ({

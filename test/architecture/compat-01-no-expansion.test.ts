@@ -313,6 +313,9 @@ const EXPECTED_REASONS = [
   "network error",
   // IMP-06: import's skipped header for a marketplace already recorded with the same source.
   "already added",
+  // D-MB-07: the MCP markers naming either implementation, or Pi's built-in MCP alone.
+  "requires mcp",
+  "requires builtin mcp",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
@@ -656,14 +659,18 @@ type IsExact<Actual, Expected> = [Actual] extends [Expected]
 // resolvedVersion precedent), or as a REQUIRED field that arrives WITH a schemaVersion bump and
 // a migrate fill that runs before validation, so every earlier document loads
 // with a truthful default (the enabled / ENBL-02 and provenance / D-04-03
-// precedent). Removing one is a migration.
+// precedent). Removing one is a migration. MREC-01 adds the optional
+// `mcpServerConfigs`, `mcpBundle`, and `compatibilityBasis` the first way.
 void (true satisfies IsExact<
   keyof PluginInstallRecord,
   | "compatibility"
+  | "compatibilityBasis"
   | "dependencyDisabled"
   | "enabled"
   | "hookEntries"
   | "installedAt"
+  | "mcpBundle"
+  | "mcpServerConfigs"
   | "provenance"
   | "resolvedSha"
   | "resolvedSource"

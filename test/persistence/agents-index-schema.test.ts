@@ -6,10 +6,17 @@ import {
   AGENTS_INDEX_VALIDATOR,
 } from "../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
+import type { McpImplementationId } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type {
   AgentsIndex,
   AgentsIndexEntry,
 } from "../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+
+type IsExact<Actual, Expected> = [Actual] extends [Expected]
+  ? [Expected] extends [Actual]
+    ? true
+    : false
+  : false;
 
 void ({
   plugin: "typed-plugin",
@@ -49,6 +56,36 @@ void (2 satisfies AgentsIndex["schemaVersion"]);
 void ({} satisfies Pick<AgentsIndexEntry, "generatedName">);
 // @ts-expect-error the optional original model is a string when present
 void (42 satisfies AgentsIndexEntry["originalModel"]);
+// MGRT-01: a row's grant form names exactly the MCP implementations.
+void (true satisfies IsExact<
+  NonNullable<AgentsIndexEntry["mcpImplementation"]>,
+  McpImplementationId
+>);
+
+const MGRT_ROW = {
+  plugin: "demo",
+  marketplace: "tools",
+  sourceAgent: "runner",
+  generatedName: "pi-claude-marketplace-demo-runner",
+  sourcePath: "/plugins/demo/agents/runner.md",
+  targetPath: "/scope/agents/pi-claude-marketplace-demo-runner.md",
+  sourceHash: "runner-hash",
+  droppedFields: [],
+  droppedTools: [],
+  warnings: ["builtin warning"],
+} as const;
+
+const ADAPTER_FORM = {
+  frontmatter: "---\ntools: mcp:plugin_demo_stub_/echo\n---\n",
+  warnings: ["adapter warning"],
+  droppedTools: [],
+} as const;
+
+const BUILTIN_FORM = {
+  frontmatter: "---\ntools: mcp:plugin_demo_stub/echo\n---\n",
+  warnings: ["builtin warning"],
+  droppedTools: ["mcp__plugin_demo_events__watch"],
+} as const;
 
 describe("AGENTS_INDEX_ENTRY_VALIDATOR", () => {
   test("accepts every required row field and the optional original model", () => {
@@ -269,6 +306,57 @@ describe("AGENTS_INDEX_ENTRY_VALIDATOR", () => {
 
       // act
       const isAccepted = AGENTS_INDEX_ENTRY_VALIDATOR.Check(rejectedEntry);
+
+      // assert
+      assert.strictEqual(isAccepted, false);
+    });
+  }
+});
+
+describe("AGENTS_INDEX_ENTRY_VALIDATOR MCP grant forms", () => {
+  for (const { label, entry } of [
+    {
+      label: "the built-in implementation and both forms",
+      entry: {
+        ...MGRT_ROW,
+        mcpImplementation: "builtin",
+        mcpForms: { adapter: ADAPTER_FORM, builtin: BUILTIN_FORM },
+      },
+    },
+    {
+      label: "the adapter implementation and only the adapter form",
+      entry: { ...MGRT_ROW, mcpImplementation: "adapter", mcpForms: { adapter: ADAPTER_FORM } },
+    },
+  ]) {
+    test(`MGRT-01: accepts a row with ${label}`, () => {
+      // act
+      const isAccepted = AGENTS_INDEX_ENTRY_VALIDATOR.Check(entry);
+
+      // assert
+      assert.strictEqual(isAccepted, true);
+    });
+  }
+
+  for (const { label, entry } of [
+    { label: "the none implementation", entry: { ...MGRT_ROW, mcpImplementation: "none" } },
+    {
+      label: "a form without its frontmatter block",
+      entry: {
+        ...MGRT_ROW,
+        mcpForms: { adapter: { warnings: [], droppedTools: [] } },
+      },
+    },
+    {
+      label: "a form whose warnings hold a non-string",
+      entry: {
+        ...MGRT_ROW,
+        mcpForms: { builtin: { ...BUILTIN_FORM, warnings: [42] } },
+      },
+    },
+  ]) {
+    test(`MGRT-01: rejects a row with ${label}`, () => {
+      // act
+      const isAccepted = AGENTS_INDEX_ENTRY_VALIDATOR.Check(entry);
 
       // assert
       assert.strictEqual(isAccepted, false);

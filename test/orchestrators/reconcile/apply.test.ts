@@ -95,7 +95,7 @@ import { createNotificationBoundary } from "../../edge/notification-boundary.ts"
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
@@ -3015,7 +3015,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● rich v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
+          "  ● rich v1.0.0 (installed) {requires pi-subagents, requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -3555,7 +3555,7 @@ describe("applyReconcile", () => {
     {
       name: "declares both companions when the ledger stages an agent and a server",
       tree: { agents: ["with-tools"], mcpServer: true, skill: "clean" },
-      row: "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}",
+      row: "  ● hello v1.0.0 (installed) {requires pi-subagents, requires mcp}",
       severity: undefined,
       summary: "",
       tally: "Reconcile: 1 success",
@@ -7877,7 +7877,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -7945,7 +7945,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -8055,7 +8055,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -8088,7 +8088,7 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ● duo v1.0.0 (installed) {requires pi-subagents}\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 2 successes\n" +
           "\n" +
@@ -8294,7 +8294,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● secrets-vault v1.0.0 (installed) {dependency installed, requires pi-mcp-adapter}\n" +
+          "  ● secrets-vault v1.0.0 (installed) {dependency installed, requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +
@@ -8331,7 +8331,7 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ○ alfa v1.0.0 (uninstalled)\n" +
-          "  ● bravo v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "  ● bravo v1.0.0 (installed) {requires mcp}\n" +
           "\n" +
           "Reconcile: 2 successes\n" +
           "\n" +
@@ -8755,6 +8755,47 @@ function coShippedSeed(widget: Omit<RecordSeed, "pluginRoot" | "supported"> = {}
     dependencies: { widget: [{ name: "zcore", version: "^2.0.0" }] },
     records: { widget },
   } as const;
+}
+
+/**
+ * D-P3-13: `coShippedSeed` with `widget` held down, where `zcore` 2.0.0 adds
+ * servers that each MCP implementation runs only some of, so only the run's
+ * implementation decides whether the move it waits on lands. `configInstall`
+ * also declares an unrecorded `extra`, whose install makes apply plan the
+ * toggles again (D-09-07). Returns the declared plugins.
+ */
+async function seedSplitDependencyScope(
+  t: TestContext,
+  label: string,
+  options: { readonly configInstall: boolean },
+): Promise<{
+  readonly cwd: string;
+  readonly project: ScopedLocations;
+  readonly plugins: readonly string[];
+}> {
+  const seed = coShippedSeed({ enabled: false, dependencyDisabled: true });
+  const extra = options.configInstall ? ["extra"] : [];
+  const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, label, {
+    ...seed,
+    trees: {
+      ...seed.trees,
+      ...Object.fromEntries(extra.map((plugin) => [plugin, { skill: "clean" } as const])),
+    },
+    supported: { ...seed.supported, extra: ["skills"] },
+  });
+  await withoutRecords(project, extra);
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "zcore", ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        events: { type: "sse", url: "http://127.0.0.1:9/sse" },
+        asker: { command: "node", bareElicitationCapability: true },
+      },
+    }),
+  );
+  const plugins = ["widget", "zcore", ...extra];
+  await declareEnabled(project, cwd, plugins);
+  return { cwd, project, plugins };
 }
 
 /**
@@ -9818,6 +9859,70 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("MREC-01: a held-down record whose enable fails after its pin refresh gets back its own MCP servers and bundle flag", async (t) => {
+    // arrange -- `widget` 1.1.0 declares the `echo` server; the record names another
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "deferred-mcp-restore",
+      {
+        ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+        trees: { widget: { skill: "clean", mcpServer: true }, zcore: { skill: "clean" } },
+      },
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const seeded = await loadState(project.extensionRoot);
+    const seededWidget = seeded.marketplaces.mp?.plugins.widget;
+    assert.ok(seededWidget !== undefined);
+    seededWidget.mcpServerConfigs = [{ name: "old", config: { command: "old" } }];
+    seededWidget.mcpBundle = true;
+    await saveState(project.extensionRoot, seeded);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const before = await recordFor(project, "mp", "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordFor(project, "mp", "widget"), before);
+    verifyBoundary();
+  });
+
+  test("MREC-01: a legacy held-down record whose enable fails after its pin refresh stays without recorded MCP servers", async (t) => {
+    // arrange -- `widget` 1.1.0 declares the `echo` server; the record predates the field
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "deferred-mcp-legacy", {
+      ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+      trees: { widget: { skill: "clean", mcpServer: true }, zcore: { skill: "clean" } },
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const before = await recordFor(project, "mp", "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordFor(project, "mp", "widget"), before);
+    verifyBoundary();
+  });
+
   test("a failed enable after a catalog move keeps its rollback details on the failed move row", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
@@ -10057,7 +10162,7 @@ describe("applyReconcile catalog convergence", () => {
         message:
           "● mp [project]\n" +
           "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
-          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated) {requires mcp}\n" +
           "\nReconcile: 2 successes\n\n/reload to pick up changes",
       },
       {
@@ -10068,6 +10173,37 @@ describe("applyReconcile catalog convergence", () => {
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
+    verifyBoundary();
+  });
+
+  test("D-MB-07 / APPLY1-01: with no MCP implementation, a held-down plugin with an MCP server that apply moves and enables names mcp as missing", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "deferred-mcp-marker", {
+      ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+      trees: { widget: { skill: "clean", mcpServer: true }, zcore: { skill: "clean" } },
+      supported: { widget: ["skills", "mcpServers"], zcore: ["skills"] },
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated) {requires mcp}\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["widget"]), [["1.1.0", true, undefined]]);
     verifyBoundary();
   });
 
@@ -10108,6 +10244,127 @@ describe("applyReconcile catalog convergence", () => {
     assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.1.0", true]);
     verifyBoundary();
   });
+
+  const SPLIT_MOVE_DECLINED = [
+    {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● zcore v1.0.0 (partially-upgradable) {unsupported mcp}\n    Run update --partial on this plugin to update it with the supported components.\n\nReconcile: 1 warning",
+      severity: "warning",
+    },
+  ];
+  const SPLIT_MOVE_DECLINED_AFTER_INSTALL = [
+    {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● extra v1.0.0 (installed)\n  ● zcore v1.0.0 (partially-upgradable) {unsupported mcp}\n    Run update --partial on this plugin to update it with the supported components.\n\nReconcile: 1 warning, 1 success\n\n/reload to pick up changes",
+      severity: "warning",
+    },
+  ];
+
+  for (const { title, mcpImplementation, configInstall, expectedNotifications, expectedStates } of [
+    {
+      title:
+        "D-P3-13 / APPLY1-01: with no MCP implementation, a held-down plugin is enabled after its dependency moves to servers each implementation runs only some of",
+      mcpImplementation: "none",
+      configInstall: false,
+      expectedNotifications: [
+        {
+          message:
+            "● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated) {requires mcp}\n  ● widget v1.0.0 → v1.1.0 (updated)\n\nReconcile: 2 successes\n\n/reload to pick up changes",
+        },
+      ],
+      expectedStates: [
+        ["1.1.0", true, undefined],
+        ["2.0.0", true, undefined],
+      ],
+    },
+    {
+      title:
+        "D-P3-13 / APPLY1-01: under pi-mcp-adapter, a held-down plugin stays down while its dependency's move to servers each implementation runs only some of needs consent",
+      mcpImplementation: "adapter",
+      configInstall: false,
+      expectedNotifications: SPLIT_MOVE_DECLINED,
+      expectedStates: [
+        ["1.0.0", false, true],
+        ["1.0.0", true, undefined],
+      ],
+    },
+    {
+      title:
+        "D-P3-13 / APPLY1-01: under Pi's built-in MCP, a held-down plugin stays down while its dependency's move to servers each implementation runs only some of needs consent",
+      mcpImplementation: "builtin",
+      configInstall: false,
+      expectedNotifications: SPLIT_MOVE_DECLINED,
+      expectedStates: [
+        ["1.0.0", false, true],
+        ["1.0.0", true, undefined],
+      ],
+    },
+    {
+      title:
+        "D-09-07 / D-P3-13: with no MCP implementation, the re-plan after a config install keeps the deferred enable of a held-down plugin whose dependency moves to servers each implementation runs only some of",
+      mcpImplementation: "none",
+      configInstall: true,
+      expectedNotifications: [
+        {
+          message:
+            "● mp [project]\n  ● extra v1.0.0 (installed)\n  ● zcore v1.0.0 → v2.0.0 (updated) {requires mcp}\n  ● widget v1.0.0 → v1.1.0 (updated)\n\nReconcile: 3 successes\n\n/reload to pick up changes",
+        },
+      ],
+      expectedStates: [
+        ["1.1.0", true, undefined],
+        ["2.0.0", true, undefined],
+        ["1.0.0", true, undefined],
+      ],
+    },
+    {
+      title:
+        "D-09-07 / D-P3-13: under pi-mcp-adapter, the re-plan after a config install keeps a held-down plugin down while its dependency's move needs consent",
+      mcpImplementation: "adapter",
+      configInstall: true,
+      expectedNotifications: SPLIT_MOVE_DECLINED_AFTER_INSTALL,
+      expectedStates: [
+        ["1.0.0", false, true],
+        ["1.0.0", true, undefined],
+        ["1.0.0", true, undefined],
+      ],
+    },
+    {
+      title:
+        "D-09-07 / D-P3-13: under Pi's built-in MCP, the re-plan after a config install keeps a held-down plugin down while its dependency's move needs consent",
+      mcpImplementation: "builtin",
+      configInstall: true,
+      expectedNotifications: SPLIT_MOVE_DECLINED_AFTER_INSTALL,
+      expectedStates: [
+        ["1.0.0", false, true],
+        ["1.0.0", true, undefined],
+        ["1.0.0", true, undefined],
+      ],
+    },
+  ] as const) {
+    test(title, async (t) => {
+      // arrange
+      const { cwd, project, plugins } = await seedSplitDependencyScope(
+        t,
+        `split-dependency-${mcpImplementation}`,
+        { configInstall },
+      );
+      const run = runWithSoftDeps({
+        piSubagentsLoaded: false,
+        mcpImplementation,
+        workflowEngineLoaded: false,
+      });
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+      const { gitOps } = createOfflineGitOps();
+
+      // act
+      await applyReconcile({ ctx, run, cwd, scope: "project", gitOps });
+
+      // assert
+      assert.deepStrictEqual(notifications, expectedNotifications);
+      assert.deepStrictEqual(await recordStates(project, plugins), expectedStates);
+      verifyBoundary();
+    });
+  }
 
   test("APL-02 / D-08: a path-source plugin the catalog moved is updated, recorded and reported with the reload trailer", async (t) => {
     // arrange
@@ -10527,6 +10784,51 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("D-P3-13: a candidate that adds an sse server is declined under Pi's built-in MCP and writes nothing", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "converge-sse-builtin",
+      {
+        trees: { demo: { skill: "clean" } },
+        supported: { demo: ["skills"] },
+        offered: { demo: "1.1.0" },
+      },
+    );
+    await writeUnder(
+      path.join(marketplaceRoot, "plugins", "demo", ".mcp.json"),
+      JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+    );
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const run = runWithSoftDeps({
+      piSubagentsLoaded: false,
+      mcpImplementation: "builtin",
+      workflowEngineLoaded: false,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 (partially-upgradable) {unsupported mcp}\n" +
+          "    Run update --partial on this plugin to update it with the supported components.\n" +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
+      },
+    ]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
   test("ENBL-08: a disabled record whose supported set grew is never re-materialized", async (t) => {
     // arrange
     const { cwd, project } = await seedConvergenceScope(t, "converge-grown-disabled", {
@@ -10711,7 +11013,7 @@ describe("applyReconcile catalog convergence", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● alfa v1.0.0 (installed) {components now supported, requires pi-mcp-adapter}\n" +
+          "  ● alfa v1.0.0 (installed) {components now supported, requires mcp}\n" +
           "\n" +
           "Reconcile: 1 success\n" +
           "\n" +

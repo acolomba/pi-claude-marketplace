@@ -20,7 +20,7 @@ import {
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/browse.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
-import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../../shared/notification-run-seeds.ts";
 import { createJsonCapture } from "../../json-capture.ts";
 import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
@@ -200,6 +200,78 @@ for (const { args, flag } of [
     verify(ui);
   });
 }
+
+test("TUI mode lists plugin rows as the run's MCP implementation sees them (MREC-03)", async (t) => {
+  // arrange
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    mcpImplementation: "builtin",
+    workflowEngineLoaded: false,
+  });
+  const scope = await createHermeticScope(t, "loader-implementation");
+  await seedMarketplace(scope.cwd, "official");
+  const marketplaceRoot = path.join(scope.cwd, "marketplaces", "official");
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "events-plugin");
+  await mkdir(pluginRoot, { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".mcp.json"),
+    JSON.stringify({
+      mcpServers: { events: { type: "sse", url: "https://mcp.example.test/sse" } },
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "official",
+      plugins: [{ name: "events-plugin", source: "./plugins/events-plugin", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+
+  const { handlers } = createMockActionHandlers();
+  const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  when(() => ctx.mode).thenReturn("tui");
+  when(() => ctx.cwd)
+    .thenReturn(scope.cwd)
+    .atLeast(2);
+  when(() => ctx.ui).thenReturn(ui);
+
+  const customFactory = It.willCapture<Parameters<ExtensionCommandContext["ui"]["custom"]>[0]>();
+  when(() => ui.custom(customFactory)).thenResolve(null);
+
+  const browseHandler = makeBrowseHandler(handlers);
+  await browseHandler("", ctx, run);
+
+  const factory = customFactory.value;
+  assert.ok(factory !== undefined);
+  const plugins = pluginRenderBarrier();
+  const tui = { requestRender: plugins.requestRender } as unknown as Parameters<typeof factory>[0];
+  const theme = {
+    fg: (_c: string, s: string) => s,
+    bold: (s: string) => s,
+  } as unknown as Parameters<typeof factory>[1];
+  const keybindings = {} as unknown as Parameters<typeof factory>[2];
+  const comp = factory(tui, theme, keybindings, () => {});
+  assert.ok(comp !== null && typeof comp === "object" && !(comp instanceof Promise));
+
+  // act
+  comp.handleInput?.("\r");
+  await plugins.rendered;
+  const rows = comp.render(80);
+
+  // assert
+  assert.deepStrictEqual(rows, [
+    "─".repeat(80),
+    " Plugins in official [project]".padEnd(80),
+    "→ [partial] events-plugin         1.0.0",
+    " ↑↓ navigate • enter select • esc back".padEnd(80),
+    "─".repeat(80),
+  ]);
+  verify(ctx);
+  verify(ui);
+});
 
 for (const mode of ["json", "rpc"] as const) {
   test(`refuses browse in ${mode} before list, state, or picker access`, async () => {

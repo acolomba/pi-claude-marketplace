@@ -34,8 +34,9 @@ import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { discoveryWarning, hygieneWarning } from "../../shared/staging-warnings.ts";
 
-import { convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
+import { GUIDED_DROPPED_FIELDS } from "./convert.ts";
 import { discoverPluginAgents } from "./discover.ts";
+import { convertAgentGrantForms } from "./grant-forms.ts";
 import { assertAgentNamesUnclaimed, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
 import { readSkillPreloads } from "./skill-preload.ts";
@@ -50,7 +51,7 @@ import type {
   StagedAgentRecord,
   UnstageAgentFailure,
 } from "./types.ts";
-import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+import type { AgentsIndexRow } from "../../persistence/agents-index-io.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
@@ -119,24 +120,30 @@ export async function prepareStagePluginAgents(
     },
   });
 
-  // Step 2: convert (AG-7 + AG-11). AG-11 throws here if mapped tools is empty.
-  // `mapModel` defaults to false: the omit-by-default behavior is the
-  // contract; only explicit `--map-model` on install/update flips it on.
-  const converted: ConvertedAgent[] = discovered.map((d) =>
-    convertAgent({
-      pluginName,
-      pluginRoot,
-      pluginDataDir,
-      knownSkills: knownSkills ?? [],
-      referenceNames: input.referenceNames,
-      discovered: d,
-      sourceHash: d.sourceHash,
-      mapModel: mapModel ?? false,
-      projectDir,
-      mcpServerNames: input.mcpServerNames,
-      skillPreloads,
-    }),
+  // Step 2: convert (AG-7 + AG-11). AG-11 throws here if the file's form maps
+  // an explicit tools list to nothing. `mapModel` defaults to false: the
+  // omit-by-default behavior is the contract; only explicit `--map-model` on
+  // install/update flips it on. MGRT-01: each agent renders in the grant form
+  // of the active MCP implementation, and its row records both forms when
+  // they differ.
+  const conversions = discovered.map((d) =>
+    convertAgentGrantForms(
+      {
+        pluginName,
+        pluginRoot,
+        pluginDataDir,
+        knownSkills: knownSkills ?? [],
+        referenceNames: input.referenceNames,
+        discovered: d,
+        sourceHash: d.sourceHash,
+        mapModel: mapModel ?? false,
+        projectDir,
+        skillPreloads,
+      },
+      input.mcpGrantForms,
+    ),
   );
+  const converted: ConvertedAgent[] = conversions.map((c) => c.agent);
 
   // Step 3: load + partition (AG-3).
   const loaded = await loadAgentsIndex(locations);
@@ -186,8 +193,8 @@ export async function prepareStagePluginAgents(
   // content is present, surface via failed[] (NOT throw); preserve the
   // index row so commit can keep recording it.
   const ag5Failures: UnstageAgentFailure[] = [];
-  const safePreviousEntries: AgentsIndexEntry[] = [];
-  const foreignPreservedEntries: AgentsIndexEntry[] = [];
+  const safePreviousEntries: AgentsIndexRow[] = [];
+  const foreignPreservedEntries: AgentsIndexRow[] = [];
   for (const entry of previousEntries) {
     // eslint-disable-next-line no-await-in-loop -- bounded by this plugin's prior agents, one ownership read each
     const safety = await isOwnedAgentFile(entry.targetPath);
@@ -208,12 +215,12 @@ export async function prepareStagePluginAgents(
   await mkdir(stagingDir, { recursive: true });
 
   const stagedFilePaths: { from: string; to: string }[] = [];
-  const newEntries: AgentsIndexEntry[] = [];
+  const newEntries: AgentsIndexRow[] = [];
 
   try {
     await assertPathInside(locations.agentsStagingDir, stagingDir, "agents staging dir");
 
-    for (const c of converted) {
+    for (const { agent: c, recorded: grantForms } of conversions) {
       const stagedFile = path.join(stagingDir, c.generatedName + ".md");
       // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
       await assertPathInside(stagingDir, stagedFile, "staged agent file");
@@ -226,7 +233,7 @@ export async function prepareStagePluginAgents(
       stagedFilePaths.push({ from: stagedFile, to: targetFile });
 
       // Step 8: build new index entry.
-      const entry: AgentsIndexEntry = {
+      const entry: AgentsIndexRow = {
         plugin: pluginName,
         marketplace: marketplaceName,
         sourceAgent: c.sourceName,
@@ -238,6 +245,7 @@ export async function prepareStagePluginAgents(
         droppedFields: [...c.droppedFields],
         droppedTools: [...c.droppedTools],
         warnings: [...c.warnings],
+        ...grantForms,
       };
       newEntries.push(entry);
     }
@@ -318,7 +326,7 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
 function partitionPreviousEntries(
   prepared: PreparedAgentsStaged,
   options: { readonly force?: boolean } | undefined,
-): { readonly replaced: readonly AgentsIndexEntry[]; readonly kept: readonly AgentsIndexEntry[] } {
+): { readonly replaced: readonly AgentsIndexRow[]; readonly kept: readonly AgentsIndexRow[] } {
   if (options?.force !== true) {
     return { replaced: prepared.previousEntries, kept: prepared.foreignPreservedEntries };
   }
@@ -326,7 +334,7 @@ function partitionPreviousEntries(
   const stagedTargets = new Map(
     prepared.newEntries.map((entry) => [entry.generatedName, entry.targetPath]),
   );
-  const isOverwritten = (entry: AgentsIndexEntry): boolean =>
+  const isOverwritten = (entry: AgentsIndexRow): boolean =>
     stagedTargets.get(entry.generatedName) === entry.targetPath;
   return {
     replaced: [
@@ -376,7 +384,7 @@ export async function assertAgentCommitTargets(
  */
 async function assertForcedTargetsContained(
   prepared: PreparedAgentsStaged,
-  previous: { readonly replaced: readonly AgentsIndexEntry[] },
+  previous: { readonly replaced: readonly AgentsIndexRow[] },
   options: { readonly force?: boolean } | undefined,
 ): Promise<void> {
   if (options?.force !== true) {

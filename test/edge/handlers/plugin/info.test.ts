@@ -33,7 +33,11 @@
 // Boundary reads, which differ between the two emission paths:
 //   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
 //     writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once.
+//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and asks
+//     `ctx.isProjectTrusted()` once, because the status lookup it hands info
+//     carries the project's trust (BLT-05, D-MB-09). The strict context
+//     verifies that single question, and the untrusted case shows its answer
+//     reaching the status stamp.
 // Neither path reads the tool list: the projection renders from the command
 // run's soft-dependency snapshot (D-05).
 //
@@ -71,16 +75,18 @@ import https from "node:https";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import { when } from "strong-mock";
+
 import { parseFlagNames } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makePluginInfoHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../../../platform/mcp-status-seed.ts";
-import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { noStatusReaders } from "../../../platform/mcp-status-seed.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../../shared/notification-run-seeds.ts";
 import {
   createMachineNotificationBoundary,
   createNotificationBoundary,
 } from "../../notification-boundary.ts";
-import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
+import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -135,6 +141,7 @@ async function seedScope(
   scope: Scope,
   scopeRoot: string,
   alphaVersion: string,
+  plugins: Record<string, unknown> = {},
 ): Promise<void> {
   const marketplaceRoot = path.join(workspace.cwd, `mp-src-${scope}`);
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
@@ -159,7 +166,7 @@ async function seedScope(
     addedFromCwd: workspace.cwd,
     manifestPath,
     marketplaceRoot,
-    plugins: {},
+    plugins,
   });
 }
 
@@ -202,7 +209,10 @@ for (const { args, expectedMessage, label, summary } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+    when(() => ctx.isProjectTrusted())
+      .thenReturn(true)
+      .times(1);
+    const infoHandler = makePluginInfoHandler(noStatusReaders());
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -221,7 +231,10 @@ test("reads a git-source plugin from disk alone while the fetch flag is absent, 
     value: workspace.cwd,
     reads: 1,
   });
-  const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
+    .times(1);
+  const infoHandler = makePluginInfoHandler(noStatusReaders());
 
   // act
   await infoHandler("gitp@mp", ctx, runWithNothingLoaded());
@@ -237,6 +250,47 @@ test("reads a git-source plugin from disk alone while the fetch flag is absent, 
   verifyBoundary();
 });
 
+test("hands the status stamp the project's untrusted answer, so a project server reads project not trusted (BLT-05, D-MB-09)", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "untrusted");
+  await seedScope(workspace, "project", workspace.projectRoot, "1.0.0", {
+    alpha: buildInstalledPluginRecord(
+      { version: "1.0.0", resolvedSource: "./alpha" },
+      { skills: [], prompts: [], agents: [], mcpServers: ["api"], hooks: [], workflows: [] },
+    ),
+  });
+  await writeFile(
+    path.join(workspace.cwd, "mp-src-project", "alpha", ".mcp.json"),
+    JSON.stringify({ mcpServers: { api: { command: "node" } } }),
+    "utf8",
+  );
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(false)
+    .times(1);
+  const infoHandler = makePluginInfoHandler(noStatusReaders());
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    mcpImplementation: "builtin",
+    workflowEngineLoaded: false,
+  });
+
+  // act
+  await infoHandler("alpha@mp --scope project", ctx, run);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project] <no autoupdate>\n  ● alpha v1.0.0 (installed)\n    mcp: plugin:alpha:api (project not trusted)\n    requires: mcp",
+    },
+  ]);
+  verifyBoundary();
+});
+
 for (const { args, label, position } of [
   { args: `${ACCEPTED_FLAGS} gitp@mp`, label: "flag-before", position: "before" },
   { args: `gitp@mp ${ACCEPTED_FLAGS}`, label: "flag-after", position: "after" },
@@ -249,7 +303,10 @@ for (const { args, label, position } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+    when(() => ctx.isProjectTrusted())
+      .thenReturn(true)
+      .times(1);
+    const infoHandler = makePluginInfoHandler(noStatusReaders());
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -292,7 +349,7 @@ for (const { args, label, summary, sentence = MISSING_REFERENCE } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+    const infoHandler = makePluginInfoHandler(noStatusReaders());
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -343,7 +400,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+    const infoHandler = makePluginInfoHandler(noStatusReaders());
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -403,7 +460,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+    const infoHandler = makePluginInfoHandler(noStatusReaders());
 
     // act
     await infoHandler(args, ctx, runWithNothingLoaded());
@@ -419,7 +476,7 @@ test("carries the tokenizer's own sentence for an unrecognised scope value and n
   const workspace = await createHermeticWorkspace(t, "scope-value");
   await seedBothScopes(workspace);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const infoHandler = makePluginInfoHandler(noStatusSnapshot());
+  const infoHandler = makePluginInfoHandler(noStatusReaders());
 
   // act
   await infoHandler("alpha@mp --scope bogus", ctx, runWithNothingLoaded());
@@ -458,7 +515,7 @@ for (const mode of ["json", "rpc"] as const) {
       // arrange
       const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
 
-      const commandHandler = makePluginInfoHandler(noStatusSnapshot());
+      const commandHandler = makePluginInfoHandler(noStatusReaders());
 
       // act
       await commandHandler(args, ctx, run);

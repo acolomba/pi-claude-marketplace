@@ -34,6 +34,7 @@
 //     The cache layer's getPluginIndex catches that discriminator and
 //     writes the TC-8 `_loadError` poison row (returning [] to callers).
 
+import { lookupDeclaredPlugin } from "../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../domain/manifest.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
@@ -43,13 +44,13 @@ import { errorMessage } from "../shared/errors.ts";
 import { ownValue, setOwn } from "../shared/own-key.ts";
 
 import { probeManifestEntry } from "./plugin/git-source-probe.ts";
-import { upgradeCandidate } from "./plugin/list-installed-row.ts";
-import { classifyInstalledRecord } from "./plugin/plugin-state-classifier.ts";
+import { classifyInstalledForImplementation } from "./plugin/list-installed-row.ts";
 
 import type { MarketplaceManifest } from "../domain/manifest.ts";
+import type { ActiveMcpImplementation } from "../domain/mcp-implementation.ts";
 import type { ResolveContext } from "../domain/resolver-types.ts";
+import type { InstalledRecordView } from "./plugin/list-installed-row.ts";
 import type { ScopedLocations } from "../persistence/locations.ts";
-import type { UpgradeCandidate } from "./plugin/plugin-state-classifier.ts";
 import type { ExtensionState } from "../persistence/state-io.ts";
 import type { PluginIndexRow } from "../shared/completion-cache.ts";
 import type { Scope } from "../shared/types.ts";
@@ -98,6 +99,13 @@ export interface MarketplaceStateRecordLike {
  * other thrown error propagates verbatim (TC-9: state.json errors surface).
  */
 export interface LocationsResolverLike {
+  /**
+   * The run's active MCP implementation, whose view each row shows (D-P6-22,
+   * MREC-03): a row is classified as `list` classifies it under this
+   * implementation. Required, because every caller names the implementation
+   * (D-P3-03).
+   */
+  readonly mcpImplementation: ActiveMcpImplementation;
   /** Cache file path for a scoped marketplace's plugin index. */
   pluginCachePath(scope: Scope, marketplace: string): Promise<string>;
   /** Loads state.json for a scope (cache-miss rebuild path). */
@@ -109,47 +117,53 @@ export interface LocationsResolverLike {
 }
 
 /**
- * LIST-02 / D-67-02: build the cache row for ONE installed plugin via the
- * shared `classifyInstalledRecord`. Whether a newer candidate exists is list's
- * own rule (VER-01 / VER-02, D-PL7-09): `upgradeCandidate` reads the version
- * offline (NFR-5) from plugin.json, then the entry, then the commit, so
- * completion offers `update` for exactly the plugins `list` marks upgradable.
- * A candidate that fails to resolve degrades to plain `upgradable` (CR-01).
+ * ENBL-04: completion has no `disabled` token, so a disabled record,
+ * which `list` shows as `(disabled)`, is offered as `installed`. It stays in
+ * the no-`--partial` inventory set and is never an `update --partial`
+ * candidate. Plain `update` completion does offer it
+ * (`INSTALLED_INVENTORY_STATUSES` in `edge/completions/data.ts`). This
+ * function is the one place where completion maps a disabled record, because
+ * `classifyInstalledForImplementation` answers such a record before the
+ * classifier runs.
+ */
+function completionStatus(view: InstalledRecordView): PluginIndexRow["status"] {
+  return view.kind === "disabled" ? "installed" : view.status;
+}
+
+/**
+ * LIST-02 / D-67-02 / D-P6-22: build the cache row for ONE installed plugin
+ * through `classifyInstalledForImplementation`, the classification
+ * `composeInstalledListRow` uses, for the resolver's implementation. The
+ * manifest entry comes from `lookupDeclaredPlugin`, as `list` finds it, so
+ * completion offers `update` for exactly the plugins `list` marks upgradable
+ * (VER-01 / VER-02, D-PL7-09), and a disabled record reads no MCP verdict.
  */
 async function classifyInstalledPluginRow(
   pluginName: string,
   installed: ExtensionState["marketplaces"][string]["plugins"][string],
-  manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
+  manifest: MarketplaceManifest,
   scope: Scope,
-  marketplaceContext: Pick<
-    ResolveContext,
-    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
-  >,
+  mp: ExtensionState["marketplaces"][string],
   cwd: string,
+  mcpImplementation: ActiveMcpImplementation,
 ): Promise<PluginIndexRow> {
-  const candidate: UpgradeCandidate =
-    manifestEntry === undefined
-      ? { upgradable: false }
-      : await upgradeCandidate(manifestEntry, {
-          pluginName,
-          pluginScope: scope,
-          marketplaceScope: scope,
-          ...marketplaceContext,
-          record: installed,
-          lookup: { kind: "declared", entry: manifestEntry },
-          cwd,
-        });
+  const view = await classifyInstalledForImplementation({
+    pluginName,
+    pluginScope: scope,
+    marketplaceScope: scope,
+    marketplace: mp,
+    lookup: lookupDeclaredPlugin(manifest, pluginName),
+    cwd,
+    mcpImplementation,
+  });
 
-  return {
-    name: pluginName,
-    status: classifyInstalledRecord(installed, candidate),
-    version: installed.version,
-  };
+  return { name: pluginName, status: completionStatus(view), version: installed.version };
 }
 
 /**
  * LIST-02 / D-67-02: build the cache row for ONE not-installed manifest entry
- * via the shared `classifyManifestEntry`. `partially-available` is emitted DISTINCTLY
+ * via the shared `classifyManifestEntry`, over the view of `mcpImplementation`
+ * that `list` applies (D-P6-22). `partially-available` is emitted DISTINCTLY
  * from structural `unavailable` so the `--partial`-gated candidate sets can offer
  * `available + partially-available`. A probe failure is structural unavailability; the
  * cache row carries no diagnostic notes (the `list` surface renders detail).
@@ -161,6 +175,7 @@ async function classifyNotInstalledPluginRow(
     "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
   >,
   locations: ScopedLocations,
+  mcpImplementation: ActiveMcpImplementation,
 ): Promise<PluginIndexRow> {
   // RSTA-01 / RSTA-03: the shared presence-derived probe owns the git-source
   // classification (a not-installed url/git-subdir/github entry with a cold clone
@@ -171,7 +186,7 @@ async function classifyNotInstalledPluginRow(
   // diverges. No local try/catch is needed -- `probeManifestEntry` folds every
   // throw internally and never throws, so one broken mirror degrades one row
   // instead of poisoning the marketplace's completion index.
-  const status = await probeManifestEntry(entry, marketplaceContext, locations);
+  const status = await probeManifestEntry(entry, marketplaceContext, locations, mcpImplementation);
 
   return {
     name: entry.name,
@@ -181,16 +196,24 @@ async function classifyNotInstalledPluginRow(
 }
 
 /**
- * Construct a {@link LocationsResolver} closed over `cwd`. The resolver
- * is the single seam through which `edge/completions/provider.ts` reads
- * persistence + domain surfaces without crossing BLOCK C.
+ * Construct a {@link LocationsResolver} closed over `cwd` and the active MCP
+ * implementation. The resolver is the single seam through which
+ * `edge/completions/provider.ts` reads persistence + domain surfaces without
+ * crossing BLOCK C.
  *
  * Slash-command registration site: `edge/register.ts` calls
- * `makeLocationsResolver(process.cwd())` once at command setup and
- * threads the returned resolver into `getArgumentCompletions`.
+ * `makeLocationsResolver(process.cwd(), mcpImplementation)` once per
+ * completion lookup, with the implementation that lookup's inventory snapshot
+ * names (MSEL-01, D-P6-22), and threads the returned resolver into
+ * `getArgumentCompletions`.
  */
-export function makeLocationsResolver(cwd: string): LocationsResolverLike {
+export function makeLocationsResolver(
+  cwd: string,
+  mcpImplementation: ActiveMcpImplementation,
+): LocationsResolverLike {
   return {
+    mcpImplementation,
+
     pluginCachePath(scope: Scope, marketplace: string): Promise<string> {
       return locationsFor(scope, cwd).pluginCacheFile(marketplace);
     },
@@ -241,19 +264,20 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
 
         // Installed entries first. LIST-02 / D-67-02: the finer state
         // (installed | upgradable | partially-installed | partially-upgradable) is
-        // derived by the SHARED classifier -- the same one the `list`
-        // orchestrator consumes -- so the completion cache never diverges from
-        // `list` (no provider-local reclassification).
+        // derived by the SHARED composition the `list` orchestrator uses, for
+        // the resolver's implementation (D-P6-22) -- so the completion cache
+        // never diverges from `list` (no provider-local reclassification).
         for (const [pluginName, installed] of Object.entries(mp.plugins)) {
           rows.push(
             // eslint-disable-next-line no-await-in-loop -- bounded by the marketplace's installed plugins, one row each
             await classifyInstalledPluginRow(
               pluginName,
               installed,
-              parsed.plugins.find((p) => p.name === pluginName),
+              parsed,
               scope,
-              marketplaceContext,
+              mp,
               cwd,
+              mcpImplementation,
             ),
           );
         }
@@ -264,8 +288,15 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
             continue;
           }
 
-          // eslint-disable-next-line no-await-in-loop -- bounded by the manifest's uninstalled entries, one row each
-          rows.push(await classifyNotInstalledPluginRow(entry, marketplaceContext, locations));
+          rows.push(
+            // eslint-disable-next-line no-await-in-loop -- bounded by the manifest's uninstalled entries, one row each
+            await classifyNotInstalledPluginRow(
+              entry,
+              marketplaceContext,
+              locations,
+              mcpImplementation,
+            ),
+          );
         }
 
         return rows;

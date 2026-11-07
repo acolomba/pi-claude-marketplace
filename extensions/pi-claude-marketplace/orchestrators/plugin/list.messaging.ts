@@ -61,7 +61,8 @@ export const LIST_CONTEXT = {
     "partially-available": { markers: false, contentReasons: true },
     unavailable: { markers: false, contentReasons: true },
     upgradable: { markers: false, contentReasons: true },
-    "partially-installed": { markers: false, contentReasons: true },
+    // D-P3-07 / D-MB-07: the row's producer gives it only its MCP dependency.
+    "partially-installed": { markers: true, contentReasons: true },
     "partially-upgradable": { markers: false, contentReasons: true },
     disabled: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },

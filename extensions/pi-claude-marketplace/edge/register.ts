@@ -7,7 +7,8 @@
 //   - registerClaudePluginCommand(pi, deps):
 //       * pi.registerCommand("claude:plugin", { handler, getArgumentCompletions, description })
 //         -- routes through routeClaudePlugin; arg completions go through
-//         getArgumentCompletions + makeLocationsResolver(process.cwd()).
+//         getArgumentCompletions + makeLocationsResolver(process.cwd(),
+//         mcpImplementation).
 //         The handler runs each command through the optional
 //         `runForeground` gate, so a command waits for the background
 //         autoupdate step in flight (D-PL8-04).
@@ -44,7 +45,11 @@ import { createReinstallOperation } from "../orchestrators/plugin/operations.ts"
 import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall-flow.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
-import { openNotificationRun, requireNotificationMode } from "../shared/notification-run.ts";
+import {
+  openNotificationRun,
+  openNotificationSnapshot,
+  requireNotificationMode,
+} from "../shared/notification-run.ts";
 
 import { runCommand } from "./command-run.ts";
 import {
@@ -94,8 +99,8 @@ const COMMAND_DESCRIPTION =
  * (`index.ts` is the single call site).
  *
  * `deps.gitOps` and `deps.beginPluginUpdateRun` are threaded into the marketplace
- * add/update/remove handlers per D-04 EdgeDeps. `deps.mcpStatus` is threaded
- * into the plugin info handler (ASTAT-01).
+ * add/update/remove handlers per D-04 EdgeDeps. `deps.mcpStatus`, the status
+ * reader pair, is threaded into the plugin info handler (ASTAT-01, MSEL-01).
  */
 export function registerClaudePluginCommand(
   pi: ExtensionAPI,
@@ -181,8 +186,18 @@ export function registerClaudePluginCommand(
     // happens per lookup, not once when the command is registered.
     // Pinned by `test/edge/register.test.ts`, test "resolves argument
     // completions against the working directory the callback runs in".
+    // The active MCP implementation is read per lookup too, from one
+    // inventory snapshot, so the rows follow a switch with no reload, and
+    // registration reads no inventory (MSEL-01, D-P6-22).
     getArgumentCompletions: (prefix) =>
-      getArgumentCompletions(prefix, makeLocationsResolver(process.cwd()), deps.completionCache),
+      getArgumentCompletions(
+        prefix,
+        makeLocationsResolver(
+          process.cwd(),
+          openNotificationSnapshot(pi).softDeps.mcpImplementation,
+        ),
+        deps.completionCache,
+      ),
   });
 
   // TC-7 autocomplete wrapper. Installed unconditionally on every

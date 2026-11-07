@@ -97,6 +97,21 @@ export async function readStubRequests(harness: string): Promise<StubRequest[]> 
 }
 
 /**
+ * Returns whether the stub started for `plugin` and `server` logged a
+ * `tools/list` request among `requests`.
+ */
+export function listedTools(
+  requests: readonly StubRequest[],
+  plugin: string,
+  server: string,
+): boolean {
+  return requests.some(
+    (request) =>
+      request.plugin === plugin && request.server === server && request.method === "tools/list",
+  );
+}
+
+/**
  * Returns the names of the pid files that running stubs keep in the harness
  * directory `harness`, sorted. A stub removes its file when its stdin closes.
  */
@@ -135,6 +150,9 @@ function callResult(params: unknown): unknown {
   const echoed = tag === undefined || tag === "" ? `echo:${text}` : `${tag}:echo:${text}`;
   return { content: [{ type: "text", text: echoed }] };
 }
+
+/** The names of the tools the stub lists. */
+export const STUB_TOOL_NAMES: readonly string[] = [ECHO_TOOL.name];
 
 function resultFor(method: unknown, params: unknown): unknown {
   switch (method) {

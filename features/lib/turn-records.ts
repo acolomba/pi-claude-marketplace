@@ -8,15 +8,21 @@
  * lies inside the sandbox home, so the `Before()` that empties the sandbox
  * empties it too (HAR-05). A model turn keeps the lines each log gained during
  * the turn (HAR-03), and the release of a profile Pi checks, after Pi stops,
- * that every process a pid file names is gone.
+ * that every process a pid file names is gone within a bounded wait.
  */
 
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 const LOG_SUFFIX = ".jsonl";
 const PID_SUFFIX = ".pid";
+
+// How long the stand-in check waits for the stand-ins to exit after Pi stops.
+// The margin covers a loaded CI runner, as the shared Pi's reset does.
+const STAND_IN_EXIT_TIMEOUT_MS = 10_000;
+const STAND_IN_EXIT_POLL_MS = 50;
 
 /** Returns the harness directory of the sandbox home `home`: `<home>/harness`. */
 export function harnessDirectory(home: string): string {
@@ -60,7 +66,8 @@ export async function readLogLinesSince(
   return new Map(gained.filter(([, lines]) => lines.length > 0));
 }
 
-function isRunning(pid: number): boolean {
+/** Returns whether the process `pid` still exists. */
+export function isRunning(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
@@ -70,18 +77,38 @@ function isRunning(pid: number): boolean {
   }
 }
 
+interface StandInPid {
+  readonly file: string;
+  readonly pid: number;
+}
+
+// A pid that is not an integer names no process to watch, so it counts as running.
+function stillRunning(standIns: readonly StandInPid[]): StandInPid[] {
+  return standIns.filter(({ pid }) => !Number.isInteger(pid) || isRunning(pid));
+}
+
 /**
  * Asserts that every process a `*.pid` file in `directory` names has exited,
  * so a stand-in that outlived its profile Pi fails the scenario (HAR-05).
- * Each file holds one pid.
+ * Each file holds one pid. The check reads the files once, then waits up to
+ * `STAND_IN_EXIT_TIMEOUT_MS` for the processes to exit, because a stand-in
+ * that Pi stopped tracking exits only when its stdin closes, a moment after
+ * Pi exits (P2-DC-77). A process that still runs after the wait fails the
+ * scenario.
  */
 export async function assertStandInsStopped(directory: string): Promise<void> {
   const names = (await readdir(directory)).filter((name) => name.endsWith(PID_SUFFIX)).sort();
   const pids = await Promise.all(
     names.map(async (name) => Number((await readFile(path.join(directory, name), "utf8")).trim())),
   );
-  const running = names
-    .map((name, index) => ({ file: name, pid: pids[index] ?? Number.NaN }))
-    .filter(({ pid }) => !Number.isInteger(pid) || isRunning(pid));
+  const deadline = Date.now() + STAND_IN_EXIT_TIMEOUT_MS;
+  let running = stillRunning(
+    names.map((name, index) => ({ file: name, pid: pids[index] ?? Number.NaN })),
+  );
+  while (running.length > 0 && Date.now() < deadline) {
+    await delay(STAND_IN_EXIT_POLL_MS);
+    running = stillRunning(running);
+  }
+
   assert.deepStrictEqual(running, [], "these stand-in processes outlived the profile Pi");
 }

@@ -31,7 +31,7 @@ import {
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -271,6 +271,7 @@ function unmaterializedSummary(
       defaultEnabled: true,
       installable: true,
       mcpServers: {},
+      declaredMcpServers: {},
       name: member.name,
       notes: [],
       pluginRoot: path.join(cwd, "unmaterialized"),
@@ -308,6 +309,7 @@ function ledgerOptionsFor(cwd: string): (member: ResolvedCascadeMember) => Insta
     cwd,
     marketplace: member.marketplace,
     plugin: member.name,
+    consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
     ...(member.pin !== undefined && { sourcePinOverride: member.pin.oid }),
@@ -427,10 +429,15 @@ test("a materialized member's outcome carries what its own ledger summary report
       hooksConfigPath: "hooks/hooks.json",
     },
   };
+  const fooBase = unmaterializedSummary(locations, environment.cwd, closureMember("foo"));
   const fooSummary: InstallLedgerSummary = {
-    ...unmaterializedSummary(locations, environment.cwd, closureMember("foo")),
+    ...fooBase,
     version: "4.5.6",
     stagedMcpServerNames: ["foo-mcp"],
+    resolved: {
+      ...fooBase.resolved,
+      declaredMcpServers: { "foo-mcp": { type: "sse", url: "https://mcp.example.com/sse" } },
+    },
   };
   const seam: InstallCascadeLedgerSeam = {
     runInstallLedger: (_state, _locations, options) =>
@@ -487,7 +494,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       requiredBy: undefined,
       version: "4.5.6",
       declaresAgents: false,
-      declaresMcp: true,
+      declaresMcp: { kind: "mcp", runEvery: "adapter" },
       declaresWorkflows: false,
       pluginRoot: path.join(environment.cwd, "unmaterialized"),
       hooksConfigPath: undefined,
@@ -3079,6 +3086,54 @@ test("CR-08: a never-installed dependency below a disabled one installs exactly 
   assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.qux?.enabled, true);
   assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.enabled, true);
   assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.baz?.enabled, true);
+});
+
+test("D-P3-13 / D-MB-06: a disabled dependency with an sse server re-enables under Pi's built-in MCP without --partial", async (t) => {
+  // arrange: "foo" declares "bar"; "bar" is recorded, disabled, and declares
+  // an sse server, which Pi's built-in MCP cannot run.
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-sse-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { preinstalled: ["bar"] });
+  disableRecordedDependencies(state, ["bar"]);
+  await writeFile(
+    path.join(environment.cwd, MARKETPLACE, "plugins", "bar", ".mcp.json"),
+    JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+  );
+  const locations = locationsFor("project", environment.cwd);
+  const builtinOptionsFor = ledgerOptionsFor(environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: (member) => ({
+      ...builtinOptionsFor(member),
+      run: runWithSoftDeps({
+        piSubagentsLoaded: false,
+        mcpImplementation: "builtin",
+        workflowEngineLoaded: false,
+      }),
+      consentView: "builtin",
+    }),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(cascade.kind === "installed" && memberOrigins(cascade.members), [
+    { key: `bar@${MARKETPLACE}`, reEnabledFromRecord: true, requiredBy: `foo@${MARKETPLACE}` },
+    { key: `foo@${MARKETPLACE}`, reEnabledFromRecord: false, requiredBy: undefined },
+  ]);
+  assert.deepStrictEqual(
+    {
+      enabled: state.marketplaces[MARKETPLACE]?.plugins.bar?.enabled,
+      installable: state.marketplaces[MARKETPLACE]?.plugins.bar?.compatibility.installable,
+    },
+    { enabled: true, installable: true },
+  );
 });
 
 test("CR-08: a never-installed dependency reached from the root and from a disabled dependency installs once", async (t) => {

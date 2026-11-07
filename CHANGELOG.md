@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-07
+
+- Plugin MCP servers now also run through Pi's built-in MCP, switching between it and pi-mcp-adapter needs no plugin command, and Pi 1.5.0 is required. Thanks to @backstabslash, who requested this in #275. (#303)
+
+  - The extension now needs Pi 1.5.0 or newer.
+  - Without pi-mcp-adapter, the extension registers plugin MCP servers with Pi's built-in MCP at each start and `/reload`, and project servers only in a trusted project.
+  - To run plugin MCP servers, turn on Pi's built-in MCP or install pi-mcp-adapter. When both are loaded, pi-mcp-adapter runs them.
+  - `info` now shows the state of each built-in MCP server, such as `connected`, `not loaded`, `overridden by mcp.json`, or `project not trusted`.
+  - `install` and `list` now show `{requires mcp}`, `{requires builtin mcp}`, or `{requires pi-mcp-adapter}` when the active MCP implementation cannot run every server of a plugin. Each marker names the implementation that can, and `mcp` means either one.
+  - A plugin's state, MCP server verdicts, and `--partial` consent now follow the MCP implementation Pi runs, so a switch needs no reinstall. `list`, `info`, and `fetch` show the state for that implementation.
+  - `info` now shows each MCP server as written or left out for the MCP implementation Pi runs, with the feature that blocks it.
+  - `install` now asks for `--partial` only for an MCP server that the active implementation cannot run, such as an `sse` server under Pi's built-in MCP. With no implementation loaded, it asks only for a server that neither can run.
+  - A dependency move during `install` or `update` now asks for `--partial` only when the active implementation leaves out a server that the installed version runs. A plain `update` still asks when the new version is partially available.
+  - `enable` and `apply` never ask for `--partial` again after a switch. `pending` previews `(will partially install)` only for a server that the active implementation cannot run.
+  - `info`'s `requires:` names the MCP implementation that runs every server (`mcp`, `pi-mcp-adapter`, or `builtin mcp`), tagged `(missing)` when the active one does not. `info --json` now reports `{"companion":"mcp"}` for most MCP plugins, where it reported `pi-mcp-adapter`.
+  - The first load after the upgrade records the MCP servers of earlier installs and their implementation-neutral verdict, when it can read the recorded version.
+  - A generated agent's MCP grant now names its server in the active MCP implementation's form, and `apply` and marketplace autoupdate write that form at once.
+  - After you switch MCP implementations, the next start or `/reload` rewrites only the generated agent files whose grant changed.
+  - A pi-subagents background child no longer changes installation state: it runs no autoapply, moves no MCP server, and rewrites no agent file.
+  - Under Pi's built-in MCP, plugin hooks now see MCP tools under Claude Code's names, `mcp__<server>__<tool>`, with the server's `-` kept.
+  - The tool segment keeps Pi's change of `-` to `_`, and a name over 64 characters keeps Pi's cut to 55 characters and a hash.
+  - A proxy `mcp` call now skips hooks only while pi-mcp-adapter is active, and under Pi's built-in MCP every tool call runs its hooks.
+  - Tab completion of plugin names now follows the MCP implementation Pi runs, as `list` does.
+  - Under Pi's built-in MCP, `info` no longer fails when Pi's MCP registry or tool list cannot be read. The server shows `status unknown`.
+  - Under Pi's built-in MCP, two plugin servers that share a Pi name or tool namespace now run one server, chosen by declaration order, and `info` shows the other as `not loaded`.
+  - With no MCP implementation, `apply` now shows `{requires mcp}` on a plugin it moves and then enables, as that plugin's other rows do.
+  - A plugin's `is not installable` cause now names what Pi cannot run, such as `unsupported mcp`, and no longer ends at the colon.
+
 ## [0.22.0] - 2026-11-03
 
 - Plugin skills, commands, agents, hooks, MCP servers, and workflows now work more like Claude Code, project plugins follow Pi's trust, and Pi 1.4.0 is required. (#295)

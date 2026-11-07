@@ -74,6 +74,7 @@ import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.
 // The flag-completion branch never consults the resolver (it returns before any
 // state/manifest load), so an empty stub resolver is sufficient.
 const EMPTY_RESOLVER: LocationsResolver = {
+  mcpImplementation: "adapter",
   pluginCachePath(scope: Scope, marketplace: string): Promise<string> {
     return Promise.resolve(`/nonexistent/${scope}/${marketplace}.json`);
   },

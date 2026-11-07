@@ -155,7 +155,7 @@ function makeCtx(softDeps?: Partial<SoftDepStatus>): {
   };
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
     ...softDeps,
   });
@@ -297,7 +297,7 @@ async function seedMarketplace(opts: {
       ctx,
       run: runWithSoftDeps({
         piSubagentsLoaded: true,
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         workflowEngineLoaded: false,
       }),
       scope,
@@ -683,6 +683,7 @@ for (const coexist of [false, true]) {
         JSON.parse(await readFile(locations.agentsIndexPath, "utf8")),
         expectedIndex,
       );
+      // D-P3-02: the reinstall writes the neutral verdict with its basis.
       const migratedState = (updatedAt: string) => ({
         ...beforeState,
         marketplaces: {
@@ -692,6 +693,7 @@ for (const coexist of [false, true]) {
             plugins: {
               hello: {
                 ...oldRecord,
+                compatibilityBasis: "neutral",
                 resources: { ...oldRecord.resources, agents: expectedNames },
                 updatedAt,
               },
@@ -1347,7 +1349,7 @@ test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even wit
         // appear on the (reinstalled) row when companion extensions are
         // unloaded.
         assert.match(body, /\{[^}]*requires pi-subagents[^}]*\}/);
-        assert.match(body, /\{[^}]*requires pi-mcp-adapter[,}]/);
+        assert.match(body, /\{[^}]*requires mcp[,}]/);
         assert.match(body, /\/reload to pick up changes/);
       } finally {
         await rm(cwdWithDependencies, { recursive: true, force: true });
@@ -2278,7 +2280,7 @@ test("PRL-15: batch soft dependency markers ride only the reinstalled row", asyn
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}\n\nPlugin reinstall: 1 failure, 1 warning\n\n/reload to pick up changes",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires mcp}\n\nPlugin reinstall: 1 failure, 1 warning\n\n/reload to pick up changes",
           severity: "error",
         },
       ]);
@@ -2328,7 +2330,7 @@ test("DLS-01: a recorded plugin the manifest no longer declares keeps its instal
             "",
             "● mp [project]",
             "  ⊘ bad (skipped) {not in manifest}",
-            "  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}",
+            "  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires mcp}",
             "",
             "Plugin reinstall: 2 warnings",
             "",
@@ -2727,7 +2729,9 @@ test("D-PL1-14: a bulk reinstall renders each reinstalled and failed plugin's di
       }
 
       await seedForeignServerKey(cwd, "zzz");
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        mcpImplementation: "adapter",
+      });
 
       // act
       await reinstallPlugins({
@@ -4267,6 +4271,59 @@ test("D-18-06 / D-18-08: a reinstall that newly leaves a component out names it 
     }
   });
 });
+
+for (const { mcpImplementation, notification } of [
+  {
+    mcpImplementation: "builtin",
+    notification: {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {unsupported mcp, requires pi-mcp-adapter}\n\n/reload to pick up changes",
+      severity: "warning",
+    },
+  },
+  {
+    mcpImplementation: "adapter",
+    notification: {
+      message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+    },
+  },
+] as const) {
+  test(`D-P3-12 / D-P3-13: a reinstall under ${mcpImplementation} of a plugin that now declares an sse server re-materializes it and names what that implementation drops`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-view-"));
+      try {
+        // arrange
+        const seeded = await seedMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          resources: { skill: "old skill" },
+          install: true,
+        });
+        await writeFile(
+          path.join(seeded.pluginRoot, ".mcp.json"),
+          JSON.stringify({
+            mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } },
+          }),
+        );
+        const { ctx, run, notifications } = makeCtx({ mcpImplementation });
+
+        // act
+        await reinstallPlugins({
+          ctx,
+          run,
+          cwd,
+          scope: "project",
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        // assert
+        assert.deepStrictEqual(notifications, [notification]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 test("BFILL-01 / D-18-06 full: reinstall of an installable plugin records installable:true with empty unsupported", async () => {
   await withHermeticHome(async () => {
@@ -7757,7 +7814,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -7911,7 +7968,7 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -8059,7 +8116,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -8192,7 +8249,7 @@ test("retry proof: reinstall: a refused intent-mark save changes nothing and the
       });
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -8325,7 +8382,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       });
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -8410,9 +8467,11 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       // before the mark fails as concurrently updated.
       assert.ok(firstRecord !== undefined);
       const { updatedAt: markedStamp, ...markedFields } = firstRecord;
+      // D-P3-02: the intent mark keeps the basis the install set.
       const { updatedAt: readStamp, ...readFields } = recordBefore;
       assert.deepStrictEqual(markedFields, {
         ...readFields,
+        compatibilityBasis: "neutral",
         compatibility: {
           installable: false,
           notes: ["update-in-progress"],
@@ -8432,7 +8491,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         declaresWorkflows: false,
       });
       const finalRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
@@ -8550,7 +8609,7 @@ test("retry proof: reinstall: a concurrently removed record fails before any wri
       );
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -8666,7 +8725,7 @@ test("retry proof: reinstall: an unreadable base layer is left unchanged by a re
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -8772,7 +8831,7 @@ test("retry proof: reinstall: a completion-cache drop failure notes nothing and 
         completionCache,
       );
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -8868,7 +8927,7 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
       });
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -8985,7 +9044,7 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
         ?.plugins["beta"];
       const maintenance: string[] = [];
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
       const removeDataDir: RemoveDataDirFn = async (target, options) => {
@@ -9144,7 +9203,7 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
       const reinstall = createReinstallPlugin(hooksRouting, createCompletionCache());
 
       const { ctx, notifications, run } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
 
@@ -9753,7 +9812,10 @@ test("PRL-03: a bulk cascade forwards the state-transaction seam to every per-pl
           await saveState(extensionRoot, state);
         },
       };
-      const { ctx, run } = makeCtx({ piMcpAdapterLoaded: true, piSubagentsLoaded: true });
+      const { ctx, run } = makeCtx({
+        mcpImplementation: "adapter",
+        piSubagentsLoaded: true,
+      });
 
       // act
       const outcomes = await reinstallPlugins({
@@ -9814,7 +9876,7 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
         .hello;
       assert.ok(beforeRecord !== undefined);
       const { ctx, run, notifications } = makeCtx({
-        piMcpAdapterLoaded: true,
+        mcpImplementation: "adapter",
         piSubagentsLoaded: true,
       });
       const reinstall = createReinstallPlugin(
@@ -9844,7 +9906,7 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         declaresWorkflows: false,
       });
       const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
@@ -9994,7 +10056,7 @@ test("AFILE-04: reinstall over a commented mcp-adapter.json shows the comments-r
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
           severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
@@ -10118,7 +10180,7 @@ test("AFILE-04: an orchestrated reinstall returns the notice on its outcome and 
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         declaresWorkflows: false,
         mcpConfigNotices: [
           { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
@@ -10146,7 +10208,7 @@ test("AFILE-04: a self-rendered reinstall shows the notice after its row", async
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+            "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
           severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
@@ -10194,7 +10256,7 @@ for (const { label, env, notices } of [
         assert.deepStrictEqual(notifications, [
           {
             message:
-              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+              "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires mcp}\n\n/reload to pick up changes",
             severity: "warning",
           },
           ...notices,

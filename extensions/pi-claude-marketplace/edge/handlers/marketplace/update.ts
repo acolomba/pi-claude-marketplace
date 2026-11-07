@@ -12,7 +12,7 @@
 //
 // D-10-18: this handler IS the run boundary for the autoupdate cascade, so
 // it allocates the cascade's `PluginUpdateFn` once per invocation through
-// `deps.beginPluginUpdateRun()`. Both command forms share that one
+// `deps.beginPluginUpdateRun({ ctx, run })`. Both command forms share that one
 // allocation, because a bare `marketplace update` refreshing several
 // marketplaces is still one run.
 //

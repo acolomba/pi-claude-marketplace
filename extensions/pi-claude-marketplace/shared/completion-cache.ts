@@ -6,20 +6,22 @@
 // persistence/ (where state-io / locations live). shared/ is the only home
 // that satisfies BOTH directions.
 //
-// shared/ MUST NOT import from any other extension folder (eslint BLOCK C);
-// the cache module therefore does pure file I/O via shared/atomic-json and
-// receives the rebuild callback (which closes over loadState +
-// loadMarketplaceManifest) from its caller.
+// shared/ MUST NOT import from any other extension folder (eslint BLOCK C)
+// except platform/ for Pi API types, and this module takes only one type from
+// it (`ActiveMcpImplementation`); the cache module therefore does pure file
+// I/O via shared/atomic-json and receives the rebuild callback (which closes
+// over loadState + loadMarketplaceManifest) from its caller.
 //
 // Read API
-//   getPluginIndex(path, scope, marketplace, rebuild, { now? })
-//     - memory hit AND now() - loadedAt <= 10 minutes -> return cached
-//     - memory miss OR TTL expiry -> drop memory + read file
-//         - file hit (schema-OK) AND fresh (lastRefreshedAt within 10
-//           minutes) -> hydrate memory + return
+//   getPluginIndex(path, scope, marketplace, rebuild, { now?, mcpImplementation? })
+//     - memory hit with the read's stamp AND now() - loadedAt <= 10 minutes
+//       -> return cached
+//     - memory miss, other stamp, OR TTL expiry -> drop memory + read file
+//         - file hit (schema-OK) with the read's stamp AND fresh
+//           (lastRefreshedAt within 10 minutes) -> hydrate memory + return
 //         - file ENOENT/corrupt/schema mismatch/stale -> rebuild path (below)
 //     - rebuild path:
-//         - rebuild() returns rows -> atomicWriteJson + hydrate + return
+//         - rebuild() returns rows -> atomicWriteJson (stamped) + hydrate + return
 //         - rebuild() throws ManifestSoftFailError -> atomicWriteJson the
 //           {_loadError} poison row + hydrate memory with [] + return []
 //           (TC-8 soft-fail; never reaches the caller as a throw)
@@ -52,6 +54,7 @@ import { hookDebugLog } from "./debug-log.ts";
 import { errorMessage } from "./errors.ts";
 
 import type { Scope } from "./types.ts";
+import type { ActiveMcpImplementation } from "../platform/pi-api.ts";
 
 // ---------------------------------------------------------------------------
 // Cache file schemas (D-03 -- drop+rebuild on schemaVersion mismatch).
@@ -73,10 +76,25 @@ import type { Scope } from "./types.ts";
 // the fix. RSTA-03: the 5 -> 6 bump drops caches carrying the OLD not-installed
 // git-source `(available)` classification (a not-fetched git plugin is now
 // `remote`), so pre-fix caches drop+rebuild via the same drop-on-mismatch path.
+// D-P6-22: the 6 -> 7 bump adds the optional `mcpImplementation` stamp, the
+// implementation the rows were classified under. A file stamped for another
+// implementation, or an older unstamped file, drops and rebuilds through the
+// same mismatch path, so rows classified for one implementation are never
+// served after a switch to another. The stamp is absent only when the read
+// named no implementation, and an absent stamp matches only such a read.
+// The stamp is a field, not part of the key or the file name: the cache stays
+// one file per scope and marketplace, so every cache drop unlinks the one
+// `pluginCacheFile` path. The cost is a shared file: Pi processes that read it
+// under different implementations, such as two projects that differ on
+// `builtin:mcp` and complete from one user-scope marketplace, rebuild and
+// rewrite it in turn on each lookup.
 const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
-  schemaVersion: Type.Literal(6),
+  schemaVersion: Type.Literal(7),
   lastRefreshedAt: Type.String(),
   manifestRef: Type.Optional(Type.String()),
+  mcpImplementation: Type.Optional(
+    Type.Union([Type.Literal("adapter"), Type.Literal("builtin"), Type.Literal("none")]),
+  ),
   plugins: Type.Array(
     Type.Object({
       name: Type.String(),
@@ -125,6 +143,8 @@ export interface PluginIndexRow {
 interface PluginIndexMemoryEntry {
   readonly rows: readonly PluginIndexRow[];
   readonly loadedAt: number;
+  /** D-P6-22: the implementation the rows were classified under, if the read named one. */
+  readonly mcpImplementation: ActiveMcpImplementation | undefined;
 }
 
 /** 10-minute TTL safety net for the plugin index (D-03 -- catches concurrent-process changes). */
@@ -150,6 +170,7 @@ export class ManifestSoftFailError extends Error {
 // Helpers (private).
 // ---------------------------------------------------------------------------
 
+/** D-P6-22: the key names no implementation; the entry's stamp holds it. */
 function pluginIndexKey(scope: Scope, marketplace: string): string {
   return `${scope}::${marketplace}`;
 }
@@ -157,6 +178,8 @@ function pluginIndexKey(scope: Scope, marketplace: string): string {
 interface PluginIndexFileResult {
   readonly rows: readonly PluginIndexRow[];
   readonly lastRefreshedAt: string;
+  /** D-P6-22: the file's implementation stamp, absent when its writer named none. */
+  readonly mcpImplementation: ActiveMcpImplementation | undefined;
   /**
    * True when the cache file already contains the TC-8 soft-fail poison row
    * (_loadError set). The caller should hydrate memory with empty rows and
@@ -190,12 +213,33 @@ async function readPluginIndexFile(filePath: string): Promise<PluginIndexFileRes
 
   // Validator narrows `parsed.plugins` to the row shape.
   const isPoisoned = parsed._loadError !== undefined;
-  return { rows: parsed.plugins, lastRefreshedAt: parsed.lastRefreshedAt, isPoisoned };
+  return {
+    rows: parsed.plugins,
+    lastRefreshedAt: parsed.lastRefreshedAt,
+    mcpImplementation: parsed.mcpImplementation,
+    isPoisoned,
+  };
 }
 
-function pluginIndexFileIsFresh(result: PluginIndexFileResult, now: () => number): boolean {
+/** A file serves a read only when it is fresh and stamped for the read's implementation. */
+function pluginIndexFileServes(
+  result: PluginIndexFileResult,
+  mcpImplementation: ActiveMcpImplementation | undefined,
+  now: () => number,
+): boolean {
   const loadedAt = Date.parse(result.lastRefreshedAt);
-  return Number.isFinite(loadedAt) && now() - loadedAt <= PLUGIN_INDEX_TTL_MS;
+  return (
+    result.mcpImplementation === mcpImplementation &&
+    Number.isFinite(loadedAt) &&
+    now() - loadedAt <= PLUGIN_INDEX_TTL_MS
+  );
+}
+
+/** D-P6-22: the stamp field a cache file carries, omitted when the read named none. */
+function stampField(mcpImplementation: ActiveMcpImplementation | undefined): {
+  readonly mcpImplementation?: ActiveMcpImplementation;
+} {
+  return mcpImplementation === undefined ? {} : { mcpImplementation };
 }
 
 // ---------------------------------------------------------------------------
@@ -208,14 +252,22 @@ export interface GetPluginIndexOptions {
    * Node floor at 22 -- avoids requiring `t.mock.timers` (Node 23+).
    */
   readonly now?: () => number;
+  /**
+   * D-P6-22: the MCP implementation the rows are classified under. A memory
+   * entry or a cache file serves only a read with the same value, and a
+   * rebuild stamps it. An absent option is its own stamp, distinct from all
+   * three implementations, and never stands for a default implementation.
+   */
+  readonly mcpImplementation?: ActiveMcpImplementation;
 }
 
 /**
  * Resolve the plugin index for (`scope`, `marketplace`).
  *
- * In-memory hit (within 10-minute TTL) serves immediately. After the TTL
- * the next call drops the memory entry and re-reads the file (which is
- * cheap). On file miss / corruption / schema mismatch, invokes `rebuild`.
+ * In-memory hit (within 10-minute TTL, same implementation stamp) serves
+ * immediately. After the TTL, or under another stamp, the next call drops the
+ * memory entry and re-reads the file (which is cheap). On file miss /
+ * corruption / schema mismatch / other stamp, invokes `rebuild` (D-P6-22).
  *
  * TC-8: rebuild throwing ManifestSoftFailError writes a `_loadError` poison
  * row, hydrates memory with `[]`, and returns `[]` (no throw escapes).
@@ -231,35 +283,41 @@ async function getPluginIndexWithMemory(
   options?: GetPluginIndexOptions,
 ): Promise<readonly PluginIndexRow[]> {
   const now = options?.now ?? Date.now;
+  const mcpImplementation = options?.mcpImplementation;
   const key = pluginIndexKey(scope, marketplace);
 
   const memHit = memPluginIndex.get(key);
   if (memHit !== undefined) {
-    if (now() - memHit.loadedAt <= PLUGIN_INDEX_TTL_MS) {
+    if (
+      memHit.mcpImplementation === mcpImplementation &&
+      now() - memHit.loadedAt <= PLUGIN_INDEX_TTL_MS
+    ) {
       return memHit.rows;
     }
 
-    // TTL expired -- drop memory; fall through to file read.
+    // TTL expired, or the rows were classified for another implementation
+    // (D-P6-22) -- drop memory; fall through to file read.
     memPluginIndex.delete(key);
   }
 
   const fromFile = await readPluginIndexFile(pluginCachePath);
   if (fromFile !== undefined) {
-    if (pluginIndexFileIsFresh(fromFile, now)) {
+    if (pluginIndexFileServes(fromFile, mcpImplementation, now)) {
       // Poison rows hydrate as [] without re-running rebuild (TC-8: stay
       // soft-failed until explicit invalidation, or until the file's own
       // 10-min TTL expires and the next read falls through to rebuild).
       if (fromFile.isPoisoned) {
-        memPluginIndex.set(key, { rows: [], loadedAt: now() });
+        memPluginIndex.set(key, { rows: [], loadedAt: now(), mcpImplementation });
         return [];
       }
 
-      memPluginIndex.set(key, { rows: fromFile.rows, loadedAt: now() });
+      memPluginIndex.set(key, { rows: fromFile.rows, loadedAt: now(), mcpImplementation });
       return fromFile.rows;
     }
 
     // File cache TTL catches status changes made by another Pi process or
-    // by older versions that only invalidated the in-memory entry.
+    // by older versions that only invalidated the in-memory entry; a file
+    // stamped for another implementation rebuilds too (D-P6-22).
     memPluginIndex.delete(key);
   }
 
@@ -270,8 +328,9 @@ async function getPluginIndexWithMemory(
   } catch (err) {
     if (err instanceof ManifestSoftFailError) {
       const poison = {
-        schemaVersion: 6 as const,
+        schemaVersion: 7 as const,
         lastRefreshedAt: new Date().toISOString(),
+        ...stampField(mcpImplementation),
         plugins: [] as PluginIndexRow[],
         _loadError: errorMessage(err.cause),
       };
@@ -279,7 +338,7 @@ async function getPluginIndexWithMemory(
       hookDebugLog(
         `plugin-index rebuild soft-failed for ${scope}/${marketplace}; caching poison: ${errorMessage(err.cause)}`,
       );
-      memPluginIndex.set(key, { rows: [], loadedAt: now() });
+      memPluginIndex.set(key, { rows: [], loadedAt: now(), mcpImplementation });
       return [];
     }
 
@@ -288,8 +347,9 @@ async function getPluginIndexWithMemory(
   }
 
   await atomicWriteJson(pluginCachePath, {
-    schemaVersion: 6 as const,
+    schemaVersion: 7 as const,
     lastRefreshedAt: new Date().toISOString(),
+    ...stampField(mcpImplementation),
     plugins: rows.map((r) => {
       // Strip undefined version fields so the on-disk shape matches the
       // schema's Type.Optional convention (omit, not null).
@@ -300,7 +360,7 @@ async function getPluginIndexWithMemory(
       return { name: r.name, status: r.status, version: r.version };
     }),
   });
-  memPluginIndex.set(key, { rows, loadedAt: now() });
+  memPluginIndex.set(key, { rows, loadedAt: now(), mcpImplementation });
   return rows;
 }
 

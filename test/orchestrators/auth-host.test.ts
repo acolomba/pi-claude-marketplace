@@ -487,7 +487,7 @@ describe("buildAuthForHost", () => {
     assert.strictEqual(run.softDeps, snapshot);
     assert.deepStrictEqual(snapshot, {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: false,
     });
     assert.deepStrictEqual(deviceFlow.calls, {

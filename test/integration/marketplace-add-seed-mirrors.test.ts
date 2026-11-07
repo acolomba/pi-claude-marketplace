@@ -188,6 +188,7 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
         entry,
         { marketplaceRoot, marketplaceName: "third-party", marketplaceSource: undefined },
         locations,
+        "adapter",
       ),
       "available",
     );
@@ -239,6 +240,7 @@ test("seeds a matching path marketplace without network operations", async () =>
         entry,
         { marketplaceRoot, marketplaceName: "third-party", marketplaceSource: undefined },
         locations,
+        "adapter",
       ),
       "available",
     );
@@ -280,6 +282,7 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
         entry,
         { marketplaceRoot, marketplaceName: "third-party", marketplaceSource: undefined },
         locations,
+        "adapter",
       ),
       "remote",
     );

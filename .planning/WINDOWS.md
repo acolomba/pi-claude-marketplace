@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 13
 waived_count: 52
-fixed_count: 46
-total_count: 111
-last_updated: 2026-10-27T05:29:00.773Z
+fixed_count: 47
+total_count: 112
+last_updated: 2026-11-05T02:11:02.263Z
 ---
 
 # Broken Windows Ledger
@@ -126,6 +126,7 @@ last_updated: 2026-10-27T05:29:00.773Z
 | 109 | 10 | lint-warning | features/plugin/enable.feature | 3 | [marketplace-features] cucumber review: features/plugin/enable.feature:3 the description says enabling materializes the plugin again, but both scenarios are refusals; no scenario of the file enables a plugin and shows it materialized | open |  | 2026-10-21T15:24:37.353Z |  |
 | 110 | 1 | deviation | features/step_definitions/config.steps.ts |  | [lifecycle-coverage] No committed seed fails when the marketplaces config writer leaves a run token in a source: pending never reads the source of a marketplace it would add (DIFF-01, NFR-5). Close it in Phase 11 with a reconcile seed whose new session adds a marketplace declared only by this writer. | fixed |  | 2026-10-23T04:22:25.048Z | 2026-10-23T04:36:21.369Z |
 | 111 | 07 | deviation | test/edge/register.test.ts | 1851 | [plugin-lifecycle] registered prune cases pin one lockfile.lock call; the locked clone cleanup makes it two, so test:modules fails | open |  | 2026-10-27T05:29:00.773Z |  |
+| 112 | 2 | unmet-truth | features/mcp-server/lifecycle.feature |  | [mcp-builtin] 'A new session offers the plugin's tool again (BLT-01)' runs @adapter-only, not @mcp: Pi 1.5.0 RPC new_session emits session_start twice and Pi's built-in MCP leaves the first connection's stub running past the profile Pi, so the HAR-05 stand-in check fails the builtin run; lift to @mcp once the harness tolerates it | fixed |  | 2026-11-04T15:04:12.808Z | 2026-11-05T02:11:02.263Z |
 
 ````json
 [
@@ -1514,6 +1515,19 @@ last_updated: 2026-10-27T05:29:00.773Z
     "reason": "",
     "recorded_at": "2026-10-27T05:29:00.773Z",
     "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 112,
+    "kind": "unmet-truth",
+    "phase": "2",
+    "file": "features/mcp-server/lifecycle.feature",
+    "line": null,
+    "description": "[mcp-builtin] 'A new session offers the plugin's tool again (BLT-01)' runs @adapter-only, not @mcp: Pi 1.5.0 RPC new_session emits session_start twice and Pi's built-in MCP leaves the first connection's stub running past the profile Pi, so the HAR-05 stand-in check fails the builtin run; lift to @mcp once the harness tolerates it",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-11-04T15:04:12.808Z",
+    "resolved_at": "2026-11-05T02:11:02.263Z",
     "milestone": null
   }
 ]

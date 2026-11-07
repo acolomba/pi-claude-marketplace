@@ -23,7 +23,10 @@ export function requireNotificationMode(mode: string): ExtensionMode {
  * or tool projection in that invocation. Mode stays on the live context.
  */
 export interface NotificationSnapshot {
-  /** D-05: the one soft-dependency snapshot every emission of the run reads. */
+  /**
+   * D-05: the one soft-dependency snapshot every emission of the run reads.
+   * MSEL-01: it also names the run's active MCP implementation.
+   */
   readonly softDeps: SoftDepStatus;
 }
 

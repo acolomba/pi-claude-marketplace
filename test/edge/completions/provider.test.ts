@@ -167,6 +167,8 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
   installNetworkTrap(t);
 
   const resolver = {
+    mcpImplementation: "adapter",
+
     pluginCachePath: (scope: Scope, marketplace: string): Promise<string> =>
       Promise.resolve(path.join(cacheRoot, scope, "plugins", `${marketplace}.json`)),
 
@@ -937,8 +939,12 @@ test("TC-6 routes plugin references through the required completion cache", asyn
   const { resolver } = await seedResolver(t, "ref-required-cache");
   const cache = createCompletionCache();
   const cachePath = await resolver.pluginCachePath("user", "hub");
-  await cache.getPluginIndex(cachePath, "user", "hub", () =>
-    Promise.resolve([{ name: "cache-row", status: "installed" }]),
+  await cache.getPluginIndex(
+    cachePath,
+    "user",
+    "hub",
+    () => Promise.resolve([{ name: "cache-row", status: "installed" }]),
+    { mcpImplementation: "adapter" },
   );
   await rm(cachePath);
 

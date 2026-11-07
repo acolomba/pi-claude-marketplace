@@ -11,7 +11,7 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
-test("list preserves partial content while suppressing dependency markers", () => {
+test("D-P3-07 / D-MB-07: list puts the MCP marker of a partially-installed row after its content reasons", () => {
   // arrange
   const rows = [
     {
@@ -22,8 +22,8 @@ test("list preserves partial content while suppressing dependency markers", () =
           status: "partially-installed",
           name: "alpha",
           version: "1.0.0",
-          reasons: ["lsp"],
-          dependencies: ["agents", "mcp", "workflows"],
+          reasons: ["unsupported mcp"],
+          dependencies: [{ kind: "mcp", runEvery: "builtin" }],
         },
       ],
     },
@@ -39,10 +39,12 @@ test("list preserves partial content while suppressing dependency markers", () =
       status: "partially-installed",
       name: "alpha",
       version: "1.0.0",
-      reasons: ["lsp"],
+      reasons: ["unsupported mcp", "requires builtin mcp"],
     },
   ]);
-  assert.deepStrictEqual(lines, ["  ◉ alpha v1.0.0 (partially-installed) {lsp}"]);
+  assert.deepStrictEqual(lines, [
+    "  ◉ alpha v1.0.0 (partially-installed) {unsupported mcp, requires builtin mcp}",
+  ]);
 });
 
 void ({
@@ -386,7 +388,7 @@ test("LIST_CONTEXT declares complete row policies", () => {
     "partially-available": { markers: false, contentReasons: true },
     unavailable: { markers: false, contentReasons: true },
     upgradable: { markers: false, contentReasons: true },
-    "partially-installed": { markers: false, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
     "partially-upgradable": { markers: false, contentReasons: true },
     disabled: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },

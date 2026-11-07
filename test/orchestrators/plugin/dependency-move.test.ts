@@ -318,6 +318,71 @@ describe("judgeDependencyMove", () => {
     );
   });
 
+  for (const { mcpImplementation, verdict, expectedJudgement } of [
+    {
+      mcpImplementation: "builtin",
+      verdict: "refuses",
+      expectedJudgement: {
+        ok: false,
+        cause: 'Plugin "zcore" is no longer installable: unsupported mcp',
+      },
+    },
+    { mcpImplementation: "adapter", verdict: "admits", expectedJudgement: { ok: true } },
+  ] as const) {
+    test(`D-P3-11: ${verdict} a move to a version that adds an sse server under the run's ${mcpImplementation} MCP`, async (t) => {
+      // arrange
+      const seeded = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+      await writeFile(
+        path.join(seeded.pluginRoot, ".mcp.json"),
+        JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+      );
+      const context = {
+        ...seeded.context,
+        softDeps: { ...seeded.context.softDeps, mcpImplementation },
+      };
+
+      // act
+      const judgement = await judgeDependencyMove(request(), context);
+
+      // assert
+      assert.deepStrictEqual(
+        judgement.ok ? { ok: true } : { ok: false, cause: judgement.cause },
+        expectedJudgement,
+      );
+    });
+  }
+
+  test("D-MB-06 / D-P3-13: admits a move to a version that keeps an sse server its record already drops under the run's built-in MCP", async (t) => {
+    // arrange
+    const seeded = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const events = { type: "sse", url: "http://127.0.0.1:9/sse" };
+    await writeFile(
+      path.join(seeded.pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: { events } }),
+    );
+    const state = await loadState(seeded.context.locations.extensionRoot);
+    const record = state.marketplaces.mp?.plugins.zcore;
+    assert.ok(record !== undefined);
+    record.compatibilityBasis = "neutral";
+    record.mcpServerConfigs = [{ name: "events", config: events }];
+    await saveState(seeded.context.locations.extensionRoot, state);
+    const context = {
+      ...seeded.context,
+      softDeps: { ...seeded.context.softDeps, mcpImplementation: "builtin" as const },
+    };
+
+    // act
+    const judgement = await judgeDependencyMove(request(), context);
+
+    // assert
+    assert.deepStrictEqual(
+      judgement.ok
+        ? { ok: true, toVersion: judgement.prepared.toVersion }
+        : { ok: false, cause: judgement.cause },
+      { ok: true, toVersion: "2.0.0" },
+    );
+  });
+
   test("refuses a move whose catalog version falls outside the requester's range", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "1.5.0" });
@@ -539,6 +604,8 @@ describe("runDependencyMove", () => {
     const state = await loadState(context.locations.extensionRoot);
     assert.deepStrictEqual(state.marketplaces.mp?.plugins.zcore, {
       ...recordedPlugin("2.0.0", pluginRoot),
+      compatibilityBasis: "neutral",
+      mcpServerConfigs: [],
       updatedAt: "2026-01-02T00:00:00.001Z",
     });
   });

@@ -21,17 +21,26 @@ import { errorMessage, isErrnoException } from "../shared/errors.ts";
 
 import { MCP_SERVER_MAP_VALIDATOR } from "./components/mcp.ts";
 import { copyManifestBoundary, locateManifestCandidate } from "./manifest-containment.ts";
+import { profileFor } from "./mcp-implementation.ts";
 import { classifyMcpServer } from "./mcp-server-features.ts";
 
 import type { DroppedMcpServer, McpUnsupportedFeature } from "./mcp-server-features.ts";
 import type { StatKindReader } from "./resolver-types.ts";
 
-/** Mutable resolver fields owned by MCP resolution. */
+/**
+ * Mutable resolver fields owned by MCP resolution. `mcpServers` is the subset
+ * pi-mcp-adapter supports; `declaredMcpServers` is every non-malformed merged
+ * server, supported or blocked, as the plugin declared it (MREC-01).
+ * `droppedMcpServers` and the `mcpServers` entry of the `unsupported` kind
+ * list are the neutral verdict: only the servers both implementations block (D-P3-01).
+ */
 export interface McpResolution {
   notes: string[];
   unsupported: string[];
   mcpServers: Record<string, unknown>;
+  declaredMcpServers: Record<string, unknown>;
   droppedMcpServers?: DroppedMcpServer[];
+  mcpBundle?: true;
 }
 
 interface McpResolutionDependencies {
@@ -39,10 +48,13 @@ interface McpResolutionDependencies {
   readonly readFileText: (path: string) => Promise<string>;
 }
 
-// A merged server and the feature that blocks it, if one does.
+// A merged server, the feature that blocks it under pi-mcp-adapter, which
+// decides staging (MSEL-04), and the feature that blocks it under every
+// implementation, which decides the neutral verdict (D-P3-01).
 interface MergedServer {
   readonly config: unknown;
   readonly blockedBy?: McpUnsupportedFeature;
+  readonly neutralBlockedBy?: McpUnsupportedFeature;
 }
 
 // The merge in progress: `servers` keeps the first position of each name,
@@ -80,6 +92,19 @@ function logFileSkip(merge: McpMerge, file: string, detail: string): void {
 type MalformedServerHandler = (server: string, detail: string) => void;
 
 /**
+ * D-P3-01: a server the adapter blocks is blocked under every implementation
+ * only when Pi's built-in MCP blocks it too, and it keeps the adapter's
+ * feature, as the effective read does with no active implementation. Both
+ * verdicts share one shape check, so a server the adapter accepts is never
+ * malformed for the built-in profile.
+ */
+function mergedServer(config: unknown, adapterFeature: McpUnsupportedFeature): MergedServer {
+  return profileFor("builtin").classify(config).kind === "blocked"
+    ? { config, blockedBy: adapterFeature, neutralBlockedBy: adapterFeature }
+    : { config, blockedBy: adapterFeature };
+}
+
+/**
  * Merges each server of one source map. `onMalformed` decides what a
  * malformed server means for its source. A blocked server stays in the
  * merge, so a later source can replace it with a supported one (ANAME-07).
@@ -96,7 +121,7 @@ function mergeServers(
     } else {
       merge.servers.set(
         server,
-        verdict.kind === "blocked" ? { config, blockedBy: verdict.feature } : { config },
+        verdict.kind === "blocked" ? mergedServer(config, verdict.feature) : { config },
       );
     }
   }
@@ -330,31 +355,51 @@ async function readDeclaredMcp(merge: McpMerge, declared: unknown): Promise<void
 }
 
 /**
- * Keeps the supported merged servers in merge order and leaves out each
- * blocked one whole. The typed `mcpServers` kind is the only reason a blocked
- * server or a bundle gets, as `hooks` is for a dropped hook handler
- * (ANAME-07).
+ * Keeps the merged servers pi-mcp-adapter supports in merge order and leaves
+ * out each one it blocks whole, because the mcp phase stages that subset
+ * under every implementation (MSEL-04). The typed `mcpServers` kind is the
+ * only reason a blocked server or a bundle gets, as `hooks` is for a dropped
+ * hook handler (ANAME-07); it and `droppedMcpServers` hold the neutral
+ * verdict, the servers every implementation blocks (D-P3-01), and
+ * `resolutionFor` gives one implementation's view. Every merged server,
+ * blocked or not, is also kept in merge order as declared, for the install
+ * record (MREC-01, D-CF6-01), and a bundle sets `mcpBundle`, because no
+ * merged server stands for it.
+ *
+ * D-CF6-01: every list follows Claude Code's object order, which object
+ * spread gives: integer-like names first in ascending order, then the other
+ * names in the order they were first declared.
  */
 function recordMergedServers(merge: McpMerge): void {
+  const declared: [string, unknown][] = [];
   const supported: [string, unknown][] = [];
   const dropped: DroppedMcpServer[] = [];
-  for (const [server, { config, blockedBy }] of merge.servers) {
+  // `Object.fromEntries` defines own properties and `Object.entries` reads
+  // them, so a server named `__proto__` stays a server.
+  const merged = Object.fromEntries(merge.servers);
+  for (const [server, { config, blockedBy, neutralBlockedBy }] of Object.entries(merged)) {
+    declared.push([server, config]);
     if (blockedBy === undefined) {
       supported.push([server, config]);
-    } else {
-      dropped.push({ server, feature: blockedBy });
+    }
+
+    if (neutralBlockedBy !== undefined) {
+      dropped.push({ server, feature: neutralBlockedBy });
     }
   }
 
-  // `Object.fromEntries` defines own properties, so a server named
-  // `__proto__` stays a server.
   merge.resolution.mcpServers = Object.fromEntries(supported);
+  merge.resolution.declaredMcpServers = Object.fromEntries(declared);
   if (dropped.length > 0 || merge.bundle) {
     merge.resolution.unsupported.push("mcpServers");
   }
 
   if (dropped.length > 0) {
     merge.resolution.droppedMcpServers = dropped;
+  }
+
+  if (merge.bundle) {
+    merge.resolution.mcpBundle = true;
   }
 }
 

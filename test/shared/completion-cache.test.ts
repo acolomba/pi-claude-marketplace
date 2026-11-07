@@ -40,7 +40,7 @@ test("hydrates every supported plugin status and retains exact cache bytes", asy
   t.after(() => rm(directory, { recursive: true, force: true }));
   const cachePath = path.join(directory, "plugin-index.json");
   const bytes =
-    '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "row-1", "status": "installed", "version": "1.0"}, {"name": "row-2", "status": "upgradable", "version": "1.0"}, {"name": "row-3", "status": "partially-installed", "version": "1.0"}, {"name": "row-4", "status": "partially-installed-upgradable", "version": "1.0"}, {"name": "row-5", "status": "partially-upgradable", "version": "1.0"}, {"name": "row-6", "status": "available", "version": "1.0"}, {"name": "row-7", "status": "partially-available", "version": "1.0"}, {"name": "row-8", "status": "unavailable", "version": "1.0"}, {"name": "row-9", "status": "remote", "version": "1.0"}]}';
+    '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "row-1", "status": "installed", "version": "1.0"}, {"name": "row-2", "status": "upgradable", "version": "1.0"}, {"name": "row-3", "status": "partially-installed", "version": "1.0"}, {"name": "row-4", "status": "partially-installed-upgradable", "version": "1.0"}, {"name": "row-5", "status": "partially-upgradable", "version": "1.0"}, {"name": "row-6", "status": "available", "version": "1.0"}, {"name": "row-7", "status": "partially-available", "version": "1.0"}, {"name": "row-8", "status": "unavailable", "version": "1.0"}, {"name": "row-9", "status": "remote", "version": "1.0"}]}';
   await writeFile(cachePath, bytes);
   const cache = createCompletionCache();
 
@@ -77,52 +77,52 @@ for (const { name, bytes } of [
   {
     name: "missing lastRefreshedAt",
     bytes:
-      '{"schemaVersion": 6, "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 7, "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "missing plugins",
     bytes:
-      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "_loadError": "error"}',
+      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "_loadError": "error"}',
   },
   {
     name: "invalid lastRefreshedAt",
     bytes:
-      '{"schemaVersion": 6, "lastRefreshedAt": 5, "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 7, "lastRefreshedAt": 5, "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "invalid manifestRef",
     bytes:
-      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": 5, "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": 5, "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "invalid _loadError",
     bytes:
-      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": 5}',
+      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": 5}',
   },
   {
     name: "invalid plugins",
     bytes:
-      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": {}, "_loadError": "error"}',
+      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": {}, "_loadError": "error"}',
   },
   {
     name: "missing row name",
     bytes:
-      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"status": "installed", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"status": "installed", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "missing row status",
     bytes:
-      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "invalid row name",
     bytes:
-      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": 7, "status": "installed", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": 7, "status": "installed", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "invalid row version",
     bytes:
-      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": 7}], "_loadError": "error"}',
+      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": 7}], "_loadError": "error"}',
   },
 ]) {
   test(`rebuilds a cache with ${name} into complete current bytes`, async (t) => {
@@ -149,7 +149,7 @@ for (const { name, bytes } of [
     assert.strictEqual(
       await readFile(cachePath, "utf8"),
       `{
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "lastRefreshedAt": "2026-08-29T12:00:00.000Z",
   "plugins": [
     {
@@ -269,7 +269,7 @@ describe("getPluginIndex", () => {
         plugins: persisted.plugins,
       },
       {
-        schemaVersion: 6,
+        schemaVersion: 7,
         plugins: [
           { name: "alpha", status: "installed", version: "1.0.0" },
           { name: "beta", status: "available" },
@@ -377,7 +377,7 @@ describe("getPluginIndex", () => {
     });
     await writeFile(
       cachePath,
-      '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","manifestRef":"main","plugins":[{"name":"disk-row","status":"upgradable","version":"2.0.0"}]}',
+      '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","manifestRef":"main","plugins":[{"name":"disk-row","status":"upgradable","version":"2.0.0"}]}',
       "utf8",
     );
 
@@ -426,7 +426,7 @@ describe("getPluginIndex", () => {
         loadError: persisted._loadError,
       },
       {
-        schemaVersion: 6,
+        schemaVersion: 7,
         plugins: [],
         loadError: "manifest missing",
       },
@@ -453,7 +453,7 @@ describe("getPluginIndex", () => {
     );
   });
 
-  for (const { schemaVersion } of [{ schemaVersion: 5 }, { schemaVersion: 7 }]) {
+  for (const { schemaVersion } of [{ schemaVersion: 6 }, { schemaVersion: 8 }]) {
     test(`rejects adjacent plugin schema version ${schemaVersion}`, async (t) => {
       // arrange
       const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-schema-"));
@@ -493,7 +493,7 @@ describe("getPluginIndex", () => {
       assert.deepStrictEqual(
         { schemaVersion: persisted.schemaVersion, plugins: persisted.plugins },
         {
-          schemaVersion: 6,
+          schemaVersion: 7,
           plugins: [{ name: "rebuilt-row", status: "partially-installed" }],
         },
       );
@@ -505,7 +505,7 @@ describe("getPluginIndex", () => {
     {
       name: "malformed plugin cache",
       bytes:
-        '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"bad-row","status":"unknown"}]}',
+        '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"bad-row","status":"unknown"}]}',
     },
   ]) {
     test(`rebuilds a ${name}`, async (t) => {
@@ -544,13 +544,13 @@ describe("getPluginIndex", () => {
   for (const { name, bytes, expectedRows } of [
     {
       name: "empty plugin cache",
-      bytes: '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[]}',
+      bytes: '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[]}',
       expectedRows: [] satisfies PluginIndexRow[],
     },
     {
       name: "single-row plugin cache",
       bytes:
-        '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"only-row","status":"partially-available"}]}',
+        '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"only-row","status":"partially-available"}]}',
       expectedRows: [
         { name: "only-row", status: "partially-available" },
       ] satisfies PluginIndexRow[],
@@ -656,7 +656,7 @@ describe("getPluginIndex", () => {
     });
     await writeFile(
       cachePath,
-      '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.123Z","plugins":[{"name":"precise-row","status":"remote"}]}',
+      '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.123Z","plugins":[{"name":"precise-row","status":"remote"}]}',
       "utf8",
     );
 
@@ -689,7 +689,7 @@ describe("getPluginIndex", () => {
     });
     await writeFile(
       cachePath,
-      '{"schemaVersion":6,"lastRefreshedAt":"2026-08-29T12:00:00.123Z","plugins":[{"name":"stale-row","status":"installed"}]}',
+      '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.123Z","plugins":[{"name":"stale-row","status":"installed"}]}',
       "utf8",
     );
 
@@ -737,6 +737,211 @@ describe("getPluginIndex", () => {
       { name: "alpha", status: "available" },
       { name: "middle", status: "available" },
     ]);
+  });
+});
+
+describe("getPluginIndex MCP implementation stamp (D-P6-22)", () => {
+  test("rebuilds a memory entry read under another implementation", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-stamp-memory-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const scope = "project";
+    const marketplace = "stamp-memory";
+    const cache = createCompletionCache();
+    const rebuild = t.mock.fn(() =>
+      Promise.resolve([{ name: "row", status: "available" }] satisfies PluginIndexRow[]),
+    );
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    await cache.getPluginIndex(cachePath, scope, marketplace, rebuild, {
+      mcpImplementation: "adapter",
+    });
+    await rm(cachePath, { force: true });
+
+    // act
+    await cache.getPluginIndex(cachePath, scope, marketplace, rebuild, {
+      mcpImplementation: "builtin",
+    });
+    await rm(cachePath, { force: true });
+    await cache.getPluginIndex(cachePath, scope, marketplace, rebuild, {
+      mcpImplementation: "adapter",
+    });
+
+    // assert
+    assert.strictEqual(rebuild.mock.callCount(), 3);
+  });
+
+  test("rebuilds a fresh file stamped for another implementation and restamps it", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-stamp-file-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const scope = "user";
+    const marketplace = "stamp-file";
+    const cache = createCompletionCache();
+    const clock = Date.parse("2026-08-29T12:00:00.000Z");
+    const expectedRows = [
+      { name: "builtin-row", status: "partially-available" },
+    ] satisfies PluginIndexRow[];
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    await writeFile(
+      cachePath,
+      '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","mcpImplementation":"adapter","plugins":[{"name":"adapter-row","status":"available"}]}',
+      "utf8",
+    );
+
+    // act
+    const rows = await cache.getPluginIndex(
+      cachePath,
+      scope,
+      marketplace,
+      () => Promise.resolve(expectedRows),
+      { now: () => clock, mcpImplementation: "builtin" },
+    );
+    const persisted = JSON.parse(await readFile(cachePath, "utf8")) as Record<string, unknown>;
+
+    // assert
+    assert.deepStrictEqual(rows, expectedRows);
+    assert.deepStrictEqual(
+      { mcpImplementation: persisted.mcpImplementation, plugins: persisted.plugins },
+      {
+        mcpImplementation: "builtin",
+        plugins: [{ name: "builtin-row", status: "partially-available" }],
+      },
+    );
+  });
+
+  test("serves a fresh file stamped for the same implementation", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-stamp-same-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const cache = createCompletionCache();
+    const clock = Date.parse("2026-08-29T12:00:00.000Z");
+    const expectedRows = [{ name: "none-row", status: "available" }] satisfies PluginIndexRow[];
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    await writeFile(
+      cachePath,
+      '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","mcpImplementation":"none","plugins":[{"name":"none-row","status":"available"}]}',
+      "utf8",
+    );
+
+    // act
+    const rows = await cache.getPluginIndex(
+      cachePath,
+      "project",
+      "stamp-same",
+      () => Promise.reject(new Error("a same-stamp file rebuilt")),
+      { now: () => clock, mcpImplementation: "none" },
+    );
+
+    // assert
+    assert.deepStrictEqual(rows, expectedRows);
+  });
+
+  test("stamps the poison row, and rebuilds it under another implementation", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-stamp-poison-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const scope = "project";
+    const marketplace = "stamp-poison";
+    const expectedRows = [{ name: "recovered", status: "available" }] satisfies PluginIndexRow[];
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    await createCompletionCache().getPluginIndex(
+      cachePath,
+      scope,
+      marketplace,
+      () => Promise.reject(new ManifestSoftFailError(new Error("manifest missing"))),
+      { mcpImplementation: "adapter" },
+    );
+    const poison = JSON.parse(await readFile(cachePath, "utf8")) as Record<string, unknown>;
+
+    // act
+    const rows = await createCompletionCache().getPluginIndex(
+      cachePath,
+      scope,
+      marketplace,
+      () => Promise.resolve(expectedRows),
+      { mcpImplementation: "builtin" },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { mcpImplementation: poison.mcpImplementation, loadError: poison._loadError },
+      { mcpImplementation: "adapter", loadError: "manifest missing" },
+    );
+    assert.deepStrictEqual(rows, expectedRows);
+  });
+
+  test("keeps a read with no implementation option on its own stamp", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-stamp-absent-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const scope = "user";
+    const marketplace = "stamp-absent";
+    const cache = createCompletionCache();
+    const seededRows = [{ name: "seeded", status: "installed" }] satisfies PluginIndexRow[];
+    const rebuiltRows = [{ name: "rebuilt", status: "installed" }] satisfies PluginIndexRow[];
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    await cache.getPluginIndex(cachePath, scope, marketplace, () => Promise.resolve(seededRows));
+
+    // act
+    const absentRows = await cache.getPluginIndex(cachePath, scope, marketplace, () =>
+      Promise.reject(new Error("an absent-stamp read rebuilt")),
+    );
+    const noneRows = await cache.getPluginIndex(
+      cachePath,
+      scope,
+      marketplace,
+      () => Promise.resolve(rebuiltRows),
+      { mcpImplementation: "none" },
+    );
+
+    // assert
+    assert.deepStrictEqual(absentRows, seededRows);
+    assert.deepStrictEqual(noneRows, rebuiltRows);
+  });
+
+  test("invalidation drops a stamped entry, and dropping removes its stamped file", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-stamp-invalidate-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const scope = "project";
+    const marketplace = "stamp-invalidate";
+    const cache = createCompletionCache();
+    const options = { mcpImplementation: "builtin" } satisfies GetPluginIndexOptions;
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    await cache.getPluginIndex(
+      cachePath,
+      scope,
+      marketplace,
+      () => Promise.resolve([{ name: "before", status: "installed" }]),
+      options,
+    );
+    await writeFile(
+      cachePath,
+      `{"schemaVersion":7,"lastRefreshedAt":"${new Date().toISOString()}","mcpImplementation":"builtin","plugins":[{"name":"on-disk","status":"installed"}]}`,
+      "utf8",
+    );
+
+    // act
+    cache.invalidateMarketplaceCache(scope, marketplace);
+    const invalidatedRows = await cache.getPluginIndex(
+      cachePath,
+      scope,
+      marketplace,
+      () => Promise.reject(new Error("memory-only invalidation rebuilt")),
+      options,
+    );
+    await cache.dropMarketplaceCache(cachePath, scope, marketplace);
+    const droppedRows = await cache.getPluginIndex(
+      cachePath,
+      scope,
+      marketplace,
+      () => Promise.resolve([{ name: "after", status: "available" }]),
+      options,
+    );
+
+    // assert
+    assert.deepStrictEqual(invalidatedRows, [{ name: "on-disk", status: "installed" }]);
+    assert.deepStrictEqual(droppedRows, [{ name: "after", status: "available" }]);
   });
 });
 

@@ -53,7 +53,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 needsReload: true,
                 name: "helper",
                 version: "1.0.0",
-                dependencies: ["agents", "mcp"],
+                dependencies: ["agents", { kind: "mcp", runEvery: "adapter" }],
               },
             ],
           },

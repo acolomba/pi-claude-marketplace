@@ -37,7 +37,11 @@ import path from "node:path";
 
 import { errorMessage, isErrnoException, PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
-import { MANIFEST_ESCAPE_NOTE, SOURCE_DIR_MISSING_NOTE } from "../shared/probe-classifiers.ts";
+import {
+  MANIFEST_ESCAPE_NOTE,
+  narrowUnsupportedKinds,
+  SOURCE_DIR_MISSING_NOTE,
+} from "../shared/probe-classifiers.ts";
 
 import { collectStrictComponentPaths, type ComponentPathResolution } from "./component-paths.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
@@ -50,6 +54,7 @@ import {
   type ManifestBoundary,
 } from "./manifest-containment.ts";
 import { MANIFEST_CANDIDATES } from "./manifest-path.ts";
+import { effectiveMcpCompatibility, type ActiveMcpImplementation } from "./mcp-implementation.ts";
 import { resolveStrictMcp, type McpResolution } from "./mcp-resolution.ts";
 import { assertSafeName, isReservedRecordKey } from "./name.ts";
 import {
@@ -64,6 +69,7 @@ import { collectUnsupportedKinds } from "./unsupported-components.ts";
 
 import type {
   GitPluginRootResult,
+  MaterializablePlugin,
   ResolveContext,
   ResolvedPlugin,
   ResolvedPluginInstallable,
@@ -119,6 +125,7 @@ function emptyResolution(): PartialResolution {
     notes: [],
     componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
+    declaredMcpServers: {},
   };
 }
 
@@ -165,6 +172,9 @@ function materializableFields(
     // D-CF1-06: component-path collection creates the list only to add a kind.
     ...(partial.shadowedFolders !== undefined && { shadowedFolders: partial.shadowedFolders }),
     mcpServers: partial.mcpServers,
+    // MREC-01: every non-malformed declared server, for the install record.
+    declaredMcpServers: partial.declaredMcpServers,
+    ...(partial.mcpBundle !== undefined && { mcpBundle: partial.mcpBundle }),
     ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
     ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),
     ...(partial.droppedHooks !== undefined && { droppedHooks: partial.droppedHooks }),
@@ -738,6 +748,72 @@ export async function resolveStrict(
 }
 
 /**
+ * D-P3-03: one MCP implementation's view of a materializable resolution. The
+ * effective read recomputes the MCP part from the declared servers,
+ * as `list` does for a stored neutral record, so a fresh resolution and a
+ * record read agree on every kind and on its order.
+ */
+function materializableViewFor(
+  resolved: MaterializablePlugin,
+  active: ActiveMcpImplementation,
+): MaterializablePlugin {
+  const effective = effectiveMcpCompatibility(
+    {
+      compatibility: {
+        installable: resolved.state === "installable",
+        notes: resolved.notes,
+        unsupported: resolved.unsupported,
+      },
+      compatibilityBasis: "neutral",
+    },
+    {
+      kind: "recorded",
+      servers: Object.entries(resolved.declaredMcpServers).map(([name, config]) => ({
+        name,
+        config,
+      })),
+      bundle: resolved.mcpBundle === true,
+    },
+    active,
+  );
+  // Every implementation blocks what the neutral verdict blocks, so a view
+  // with no blocked server comes from a resolution with no
+  // `droppedMcpServers`, and the spread carries no stale list.
+  const view = {
+    ...resolved,
+    unsupported: [...effective.unsupported],
+    ...(effective.blocked.length > 0 && { droppedMcpServers: [...effective.blocked] }),
+  };
+  return effective.unsupported.length > 0
+    ? { ...view, state: "partially-available" }
+    : { ...view, state: "installable" };
+}
+
+/**
+ * D-P3-03: the view of a resolution for one MCP implementation. The
+ * resolver's own `state`, `unsupported` kind list, and `droppedMcpServers`
+ * are the neutral verdict (D-P3-01); this gives the ones the named implementation
+ * sees, so a server only one implementation blocks counts under that one.
+ * `"none"` gives the neutral verdict back. An `unavailable` resolution is a
+ * structural defect that no implementation changes, so it returns as is.
+ * Every caller names the implementation: there is no default.
+ */
+export function resolutionFor(
+  resolved: MaterializablePlugin,
+  active: ActiveMcpImplementation,
+): MaterializablePlugin;
+export function resolutionFor(
+  resolved: ResolvedPlugin,
+  active: ActiveMcpImplementation,
+): ResolvedPlugin;
+export function resolutionFor(
+  resolved: ResolvedPlugin,
+  active: ActiveMcpImplementation,
+): ResolvedPlugin {
+  return resolved.state === "unavailable" ? resolved : materializableViewFor(resolved, active);
+}
+
+/**
  * D-64-07: the STRUCTURAL accumulator (component-path / mcp / hooks defects).
  * The unsupported-component signal lives separately in `partial.unsupported`.
  * Every stage runs -- the flags are collected and folded at the end rather than
@@ -804,13 +880,28 @@ function decideResolution(
 }
 
 /**
+ * NOTINSTALLMSG-01 / PR-6: the reasons of a partially-available plugin's
+ * refusal. The resolver writes a `contains <kind>` note for each kind it
+ * cannot install. It writes no note for a dropped hook (D-CF5-20) or for a
+ * server the active implementation cannot run (MREC-06). With no note, the
+ * message would end at the colon. So this gives the notes when there is at
+ * least one, and otherwise the kind tokens of `narrowUnsupportedKinds`
+ * (D-64-02), which the install row also shows. When a row narrows these
+ * tokens again, they add no reason, so every row brace stays the same.
+ */
+function refusalReasons(resolved: ResolvedPluginPartiallyAvailable): readonly string[] {
+  return resolved.notes.length > 0 ? resolved.notes : narrowUnsupportedKinds(resolved.unsupported);
+}
+
+/**
  * PR-6: narrow to installable-or-throw.
  *
  * Throws `PluginShapeError` (typed discriminated carrier) so catch sites
  * dispatch on `instanceof PluginShapeError` + `.kind` rather than
- * substring-matching `.message`. `resolved.notes` is passed through as the
- * `reasons` array (free-form strings; closed `Reason` narrowing happens
- * at the renderer boundary in `classifyEntityShapeError`).
+ * substring-matching `.message`. The `reasons` array holds the resolver's
+ * notes, or, for a partially-available plugin with no note, its kind tokens
+ * (`refusalReasons`). These are free-form strings; closed `Reason` narrowing
+ * happens at the renderer boundary in `classifyEntityShapeError`.
  */
 export function requireInstallable(
   resolved: ResolvedPlugin,
@@ -833,7 +924,7 @@ export function requireInstallable(
   throw new PluginShapeError({
     kind: op === "update" ? "no-longer-installable" : "not-installable",
     plugin: resolved.name,
-    reasons: resolved.notes,
+    reasons: refusalReasons(resolved),
     // SEV-02 / D-69-03: `partially-available` is partially-available; `unavailable` is
     // a structural defect `--partial` cannot help -- carry the distinction the
     // render row uses to condition the `--partial` hint.

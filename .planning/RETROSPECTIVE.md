@@ -2,6 +2,50 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: mcp-builtin -- MCP Built-in
+
+**Completed:** 2026-11-05 on `features/mcp-builtin` (PR [#303](https://github.com/acolomba/pi-claude-marketplace/pull/303), version 0.23.0, not yet merged; closed autonomously, reviewed with the user on 2026-11-06)
+**Phases:** 6 | **Plans:** 55 | **Tasks:** 133 | **Requirements:** 31/31 | **Audit:** `tech_debt`, no blockers (integration 9/9, flows 8/8); Phase 2 closed with a verification override
+
+### What Was Built
+
+- Pi 1.5.0 as the floor, and an MCP implementation seam with two equal implementations: pi-mcp-adapter when it is loaded, Pi's built-in MCP when it is not, or none, chosen from the run snapshot at `session_start`.
+- Install records that keep every declared server in its Claude shape before plugin-variable substitution, with verdicts, the partial state, `--partial` consent, and the three `requires` markers read against the active implementation.
+- Built-in registration at each start and `/reload` as `plugin_<plugin>_<server>`, with Claude Code's values, project servers only in a trusted project, and per-server state in `info`; agent grants and hook tool names that follow the active implementation.
+- A dual-profile cucumber harness: every MCP scenario runs under an `adapter` and a `builtin` profile (1603 and 133 scenarios at the close), with a switch scenario that moves one plugin between the two and no implementation.
+
+### What Worked
+
+- **A foundation phase that froze every shared file and interface,** then four child sessions in parallel, merged lowest-conflict first (5, 4, 2, 3) with a gate after each merge. Conflicts stayed in tracking files.
+- **Parent lines:** each child handed the parent every change it needed in a file it did not own, and Phase 6 closed all of them with a recorded outcome.
+- **Re-verifying every phase on the combined tree at the close** with fresh fingerprints. It caught that Phase 2's `passed` was an orchestrator disposition, not evidence.
+- **One questionable-choices log collected from every session and agent,** so the autonomous run never stopped and the user can review everything in one pass.
+
+### What Was Inefficient
+
+- **Seven parallel executors timed out in the worktree start hook** (`npm install` plus `codegraph init` at once); dispatching one at a time behind a hook-wait script fixed it.
+- **A container restart killed four executors mid-plan.** Their uncommitted work was saved as patches and replayed by continuation executors.
+- **The first plan check was shallow;** the second found a blocker, which cost a revision round.
+- **A known adapter flake (P3-DC-111)** failed CI once more after the stand-in wait was added, because the wait does not cover the adapter's tool listing.
+
+### Patterns Established
+
+- **Two cucumber profiles with implementation tags** (`@mcp`, `@adapter-only`, `@builtin-only`, `@own-implementation`), enforced by `check:features` over every pickle.
+- **Read-time verdicts from neutral records:** a record stores what was declared, and every reader computes the verdict for the active implementation.
+- **An orchestrator must not turn `human_needed` into `passed`;** an open human check stays visible until the user answers it, and a close records it as an override.
+
+### Key Lessons
+
+1. Serialize worktree setup when the start hook installs dependencies; parallelism belongs after setup.
+2. Commit or save work in progress often in long executors; a container restart loses everything uncommitted.
+3. A wait that hides an upstream defect (Pi 1.5.0's double `session_start`) needs an upstream report, or the harness passes while users leak a process.
+
+### Cost Observations
+
+- Model mix: Opus parent, child sessions, planners and executors; Sonnet verifiers at the close; exact percentages were not recorded.
+- Sessions: one parent and four child sessions (Phases 2 to 5).
+- Timeline: 2026-11-04 -> 2026-11-05 (457 commits).
+
 ## Milestone: component-features -- Component Behavioral Tests
 
 **Completed:** 2026-11-03 on `claude/quirky-planck-hhm592` (first closed 2026-11-02, reopened the same day; PR [#295](https://github.com/acolomba/pi-claude-marketplace/pull/295), no npm release yet)
@@ -1146,6 +1190,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | lifecycle-coverage | 30 | Command-complete Cucumber coverage against real headless Pi; many parallel sessions with explicit file ownership; read-only load plus explicit apply |
 | plugin-lifecycle | 11 | Parallel backlog closure followed by shared test/cleanup sweeps; one exact-tree gate reused by concurrent verifiers; dry-run archive validation |
 | component-features | 8 | A harness phase, then parallel component sessions with file ownership; a user-reviewed dubious-choices log; upstream gaps split into bugs (patches) and design differences (accepted); a reopen and a retroactive phase for the locality redesign |
+| mcp-builtin | 6 | A frozen foundation phase, then four parallel child sessions with parent lines; two cucumber profiles for two MCP implementations; read-time verdicts from neutral records; every phase re-verified on the combined tree at the close |
 
 ### Cumulative Quality
 
@@ -1165,6 +1210,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | lifecycle-coverage | 825 scenarios | Every plugin lifecycle verb driven through a real headless Pi; path, GitHub, URL, and git-subdir source coverage |
 | plugin-lifecycle | 1,151 scenarios / 11,854 steps | 16 hooks and 309 direct-coverage records; all 64 requirements and 11 phase verifications current on the closeout tree |
 | component-features | 1,539 scenarios / 16,565 steps | Every bridged component kind checked against a real Pi with a scripted model; 327 direct-coverage records; 62/62 requirements and all 8 phase verifications current on the closeout tree |
+| mcp-builtin | 1,603 adapter + 133 builtin scenarios | Every MCP scenario under both implementations; 31/31 requirements; all 6 phase verifications current on the closeout tree (Phase 2 `human_needed`) |
 
 ### Top Lessons (Verified Across Milestones)
 

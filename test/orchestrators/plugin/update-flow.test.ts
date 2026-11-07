@@ -85,7 +85,10 @@ import type {
   GitAuthBundle,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import type { UpdatePluginsFn } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
+import type {
+  UpdateNotification,
+  UpdatePluginsFn,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import type {
   UpdateCloneCacheSeam,
   UpdatePluginsOptions,
@@ -111,7 +114,7 @@ function updatePlugins(options: UpdatePluginsOptions): Promise<void> {
 }
 
 const updateSinglePlugin: PluginUpdateFn = (plugin, marketplace, scope) =>
-  createUpdateOperations().beginPluginUpdateRun()(plugin, marketplace, scope);
+  createUpdateOperations().beginPluginUpdateRun(commandNotification())(plugin, marketplace, scope);
 
 const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",
@@ -287,6 +290,15 @@ async function createCaseDir(prefix: string): Promise<string> {
   return realpath(await mkdtemp(path.join(tmpdir(), prefix)));
 }
 
+/**
+ * The notification of a command run with no MCP implementation, which every
+ * autoupdate run that does not state its own command takes.
+ */
+function commandNotification(): UpdateNotification {
+  const { ctx, run } = makeCtx();
+  return { ctx, run };
+}
+
 function makeCtx(softDeps?: Partial<SoftDepStatus>): {
   ctx: NotificationContext;
   run: NotificationRun;
@@ -303,7 +315,7 @@ function makeCtx(softDeps?: Partial<SoftDepStatus>): {
   };
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
     ...softDeps,
   });
@@ -341,7 +353,7 @@ function observeStateTransition(
   return {
     fired: () => didFire,
     updatePlugins: operations.updatePlugins,
-    updateSinglePlugin: operations.beginPluginUpdateRun(),
+    updateSinglePlugin: operations.beginPluginUpdateRun(commandNotification()),
   };
 }
 
@@ -371,7 +383,10 @@ function mutateAtFirstLockedLoad(mutate: (state: ExtensionState) => void): {
       },
     },
   );
-  return { fired: () => didFire, updateSinglePlugin: operations.beginPluginUpdateRun() };
+  return {
+    fired: () => didFire,
+    updateSinglePlugin: operations.beginPluginUpdateRun(commandNotification()),
+  };
 }
 
 function makeCredentialOps(): ReturnType<typeof createCredentialOpsFake>["credentialOps"] {
@@ -1280,6 +1295,7 @@ test("PROV-02/PROV-03: update never promotes a dependency record's provenance", 
       version: "1.0.1",
       resolvedSource: path.join(cwd, "mp-src", "plugins", "hello"),
       compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+      compatibilityBasis: "neutral",
       resources: {
         skills: ["hello-tool"],
         prompts: [],
@@ -1292,6 +1308,7 @@ test("PROV-02/PROV-03: update never promotes a dependency record's provenance", 
       provenance: "dependency",
       installedAt: seededRecord.installedAt,
       updatedAt: record.updatedAt,
+      mcpServerConfigs: [],
     });
   });
 });
@@ -3804,6 +3821,150 @@ test("SEV-03 / D-69-01: prior-state read -- an ALREADY partially-installed plugi
       } finally {
         process.chdir(prevCwd);
       }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── D-P3-11 / D-P3-12 / D-P3-13: the run's MCP implementation ──────────────────
+
+/** Seeds `hello` 1.0.0 -> 1.1.0, where 1.1.0 declares one sse server only Pi's built-in MCP blocks. */
+async function seedSseUpdate(cwd: string): Promise<void> {
+  const seeded = await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  await writeFile(
+    path.join(seeded.marketplaceRoot, "plugins", "hello", ".mcp.json"),
+    JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+  );
+}
+
+for (const { mcpImplementation, version, notification } of [
+  {
+    mcpImplementation: "builtin",
+    version: "1.0.0",
+    notification: {
+      severity: "warning",
+      message:
+        "A plugin operation needs attention.\n" +
+        "\n" +
+        "● mp [project]\n" +
+        "  ● hello v1.0.0 (partially-upgradable) {unsupported mcp}\n" +
+        "    Re-run with --partial to update with the supported components.",
+    },
+  },
+  {
+    mcpImplementation: "adapter",
+    version: "1.1.0",
+    notification: {
+      message: "● mp [project]\n  ● hello v1.0.0 → v1.1.0 (updated)\n\n/reload to pick up changes",
+    },
+  },
+] as const) {
+  test(`D-P3-11: update without --partial under ${mcpImplementation} leaves the record at ${version} when the new version adds an sse server`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-view-gate-");
+      try {
+        // arrange
+        await seedSseUpdate(cwd);
+        const { ctx, run, notifications } = makeCtx({ mcpImplementation });
+
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        // assert
+        const record = (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp
+          ?.plugins.hello;
+        assert.deepStrictEqual(
+          { version: record?.version, notifications },
+          { version, notifications: [notification] },
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const { title, mcpImplementation, partialDegrade } of [
+  {
+    title: "a command run under Pi's built-in MCP reports the sse server as a new degrade",
+    mcpImplementation: "builtin",
+    partialDegrade: { kinds: ["mcpServers"], newlyDegraded: true },
+  },
+  {
+    title: "a command run with no MCP implementation reads the neutral view and reports no degrade",
+    mcpImplementation: "none",
+    partialDegrade: undefined,
+  },
+] as const) {
+  test(`D-P3-12: the autoupdate cascade of ${title}`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-view-autoupdate-");
+      const prevCwd = process.cwd();
+      try {
+        // arrange
+        await seedSseUpdate(cwd);
+        const { ctx, run } = makeCtx({ mcpImplementation });
+        const updateOne = createUpdateOperations().beginPluginUpdateRun({ ctx, run });
+        process.chdir(cwd);
+
+        // act
+        const outcome = await updateOne("hello", "mp", "project");
+
+        // assert
+        assert.deepStrictEqual(
+          {
+            partition: outcome.partition,
+            partialDegrade: "partialDegrade" in outcome ? outcome.partialDegrade : undefined,
+          },
+          { partition: "updated", partialDegrade },
+        );
+      } finally {
+        process.chdir(prevCwd);
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("D-P3-13: apply's catalog move of a version that adds an sse server lands with no degrade and no consent", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-view-converge-");
+    try {
+      // arrange
+      await seedSseUpdate(cwd);
+
+      // act
+      const outcome = await createUpdateOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        mcpImplementation: "none",
+        rematerialize: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          partition: outcome.partition,
+          partialDegrade: "partialDegrade" in outcome ? outcome.partialDegrade : undefined,
+        },
+        { partition: "updated", partialDegrade: undefined },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -7887,7 +8048,11 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
       );
 
       // act
-      const cascadeOutcome = await operations.beginPluginUpdateRun()("hello", "mp", "user");
+      const cascadeOutcome = await operations.beginPluginUpdateRun(commandNotification())(
+        "hello",
+        "mp",
+        "user",
+      );
 
       // assert
       assert.equal(cascadeOutcome.partition, "updated");
@@ -9616,9 +9781,9 @@ test("D-10-18: a tag published between two cascade runs is visible to the second
 
       // act -- two cascade runs through ONE binding, with the release tag
       // published between them.
-      await operations.beginPluginUpdateRun()("pathfoo", "mp", "project");
+      await operations.beginPluginUpdateRun(commandNotification())("pathfoo", "mp", "project");
       await git.tag({ fs, dir: marketplaceRoot, ref: "pathfoo--v1.2.0", object: oid });
-      await operations.beginPluginUpdateRun()("pathfoo", "mp", "project");
+      await operations.beginPluginUpdateRun(commandNotification())("pathfoo", "mp", "project");
 
       // assert -- run one listed no tag and fell back to the marketplace's
       // current copy; run two pins the published tag. A memo bound to the
@@ -10512,7 +10677,8 @@ test("GHB-03: the cascade's single-plugin update rethrows an invalid base", asyn
 
     // act & assert
     await assert.rejects(
-      () => createUpdateOperations().beginPluginUpdateRun()("gp", "mp", "project"),
+      () =>
+        createUpdateOperations().beginPluginUpdateRun(commandNotification())("gp", "mp", "project"),
       (error: unknown) => {
         assert.deepStrictEqual(
           error,
@@ -12041,7 +12207,9 @@ test("D-PL1-14 / D-PL1-22: a direct update whose later target throws in prepare 
       await seedCollidingSkills(seeded.marketplaceRoot, "aaa");
       await seedCollidingSkills(seeded.marketplaceRoot, "zzz");
       const refusal = await seedForeignMcpServerKey(cwd, seeded.marketplaceRoot, "zzz");
-      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      const { ctx, run, notifications } = makeCtx({
+        mcpImplementation: "adapter",
+      });
 
       // act
       await updatePlugins({
@@ -13411,7 +13579,7 @@ test("owns plugin update flow composition", () => {
   );
 
   // act
-  const pluginUpdateRun = operations.beginPluginUpdateRun();
+  const pluginUpdateRun = operations.beginPluginUpdateRun(commandNotification());
 
   // assert
   assert.strictEqual(typeof operations.updatePlugins, "function");
@@ -13439,7 +13607,11 @@ test("UPR-04: routes a not-installed preflight failure through the flow owner", 
       process.chdir(cwd);
 
       // act
-      const outcome = await operations.beginPluginUpdateRun()("present", "mp", "project");
+      const outcome = await operations.beginPluginUpdateRun(commandNotification())(
+        "present",
+        "mp",
+        "project",
+      );
 
       // assert
       assert.strictEqual(outcome.partition, "failed");
@@ -13508,7 +13680,7 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
           message:
             "A plugin operation needs attention.\n\n" +
             "● mp [project]\n" +
-            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires pi-mcp-adapter}\n\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires mcp}\n\n" +
             "/reload to pick up changes",
           severity: "warning",
         },
@@ -13850,7 +14022,7 @@ test("AFILE-04: update over a commented mcp-adapter.json shows the comments-remo
           message:
             "A plugin operation needs attention.\n\n" +
             "● mp [project]\n" +
-            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires mcp}\n\n" +
             "/reload to pick up changes",
           severity: "warning",
         },
@@ -13999,7 +14171,7 @@ test("AFILE-04: the cascade update entry returns the notice without notifying", 
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,
-        declaresMcp: true,
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         constraint: undefined,
         declaresWorkflows: false,
         mcpConfigNotices: [
@@ -14058,7 +14230,7 @@ for (const { label, env, notices } of [
             message:
               "A plugin operation needs attention.\n\n" +
               "● mp [project]\n" +
-              "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+              "  ● hello v1.0.0 → v1.0.1 (updated) {requires mcp}\n\n" +
               "/reload to pick up changes",
             severity: "warning",
           },
@@ -14186,7 +14358,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
           message:
             "A plugin operation needs attention.\n\n" +
             "● mp [project]\n" +
-            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires mcp}\n\n" +
             "Plugin update: 1 warning, 1 updated\n\n" +
             "/reload to pick up changes",
           severity: "warning",
@@ -14291,7 +14463,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later marketplace sync st
           message:
             "A plugin operation needs attention.\n\n" +
             "● mp [project]\n" +
-            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires mcp}\n\n" +
             "Plugin update: 1 warning, 1 updated\n\n" +
             "/reload to pick up changes",
           severity: "warning",
@@ -14337,6 +14509,7 @@ test("D-26: convergePlugin moves a path-source plugin to the catalog version in 
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14392,6 +14565,7 @@ test("APPLY1-01 / WR-3: convergePlugin collects clones through the target's coll
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
         cleanupClones: (target) => {
           collected.push(target.pluginClonesDir);
@@ -14429,6 +14603,7 @@ test("D-26: convergePlugin answers a move at the recorded revision as unchanged 
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14477,6 +14652,7 @@ test("D-10 / D-25: convergePlugin with rematerialize re-materializes the recorde
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: true,
       });
 
@@ -14531,6 +14707,7 @@ test("D-26 / WCONV-01: a partially available candidate is declined when the targ
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14566,6 +14743,7 @@ test("D-26 / WCONV-01: a partially available candidate is moved partially when t
         scope: "project",
         cwd,
         partial: true,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14641,6 +14819,7 @@ for (const { rematerialize, offered } of [
           scope: "project",
           cwd,
           partial: false,
+          mcpImplementation: "none",
           rematerialize,
         });
 
@@ -14681,6 +14860,7 @@ test("D-26 / PUP-9: a throw inside convergePlugin becomes a failed outcome namin
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14735,6 +14915,7 @@ test("GLK-02 / D-PL7-12: a convergePlugin swap that fails with EISDIR reads unre
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14784,6 +14965,7 @@ test("GLK-02: a convergePlugin swap that fails with a missing marketplace reads 
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14876,6 +15058,7 @@ test("D-13: a source file convergePlugin cannot read fails the move as permissio
         scope: "project",
         cwd,
         partial: false,
+        mcpImplementation: "none",
         rematerialize: false,
       });
 
@@ -14912,6 +15095,7 @@ test("GHB-03: convergePlugin rethrows an invalid base", async (t) => {
           scope: "project",
           cwd,
           partial: false,
+          mcpImplementation: "none",
           rematerialize: false,
         }),
       (error: unknown) => {
@@ -15012,48 +15196,43 @@ test("UPD-DEP-D1: a named update settles the new version's dependencies in the c
   });
 });
 
-for (const { label, notified, expected } of [
-  { label: "with the command's context settles", notified: true, expected: ["hello"] },
-  { label: "without a context settles no", notified: false, expected: [] },
-]) {
-  test(`UPD-DEP-D1: an autoupdate run ${label} dependencies`, async () => {
-    await withHermeticHome(async () => {
-      const cwd = await createCaseDir("autoupdate-settles-dependencies-");
-      const previousCwd = process.cwd();
-      try {
-        // arrange
-        await seedPathMarketplace({
-          cwd,
-          marketplaceRoot: path.join(cwd, "mp-src"),
-          marketplaceName: "mp",
-          manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
-          installedVersions: { hello: "1.0.0" },
-        });
-        process.chdir(cwd);
-        const { ctx, run } = makeCtx();
-        const settled: string[] = [];
-        const operations = createPluginUpdateOperations(
-          createHooksRouting(createHooksRuntime(), { readHooksJson }),
-          createCompletionCache(),
-          undefined,
-          {},
-          (args) => {
-            settled.push(args.plugin);
-            return Promise.resolve({ kind: "settled", rows: [] });
-          },
-        );
-        const updateOne = operations.beginPluginUpdateRun(notified ? { ctx, run } : undefined);
+test("UPD-DEP-D1: an autoupdate run settles the new version's dependencies in the command's context", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("autoupdate-settles-dependencies-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      process.chdir(cwd);
+      const { ctx, run } = makeCtx();
+      const settled: unknown[] = [];
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        {},
+        (args, _prepared, notification) => {
+          settled.push([args.plugin, notification.ctx === ctx, notification.run === run]);
+          return Promise.resolve({ kind: "settled", rows: [] });
+        },
+      );
+      const updateOne = operations.beginPluginUpdateRun({ ctx, run });
 
-        // act
-        const outcome = await updateOne("hello", "mp", "project");
+      // act
+      const outcome = await updateOne("hello", "mp", "project");
 
-        // assert
-        assert.strictEqual(outcome.partition, "updated");
-        assert.deepStrictEqual(settled, expected);
-      } finally {
-        process.chdir(previousCwd);
-        await rm(cwd, { recursive: true, force: true });
-      }
-    });
+      // assert
+      assert.strictEqual(outcome.partition, "updated");
+      assert.deepStrictEqual(settled, [["hello", true, true]]);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
-}
+});

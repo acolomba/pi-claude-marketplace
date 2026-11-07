@@ -3,12 +3,20 @@ import { declaredVersionWithPin, isSameVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { legacyServersSourceFor } from "../mcp/recorded-servers.ts";
 
 import { resolveListCandidate } from "./list-candidate-version.ts";
-import { classifyInstalledRecord } from "./plugin-state-classifier.ts";
+import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
+import { recordMcpDependency } from "./mcp-verdict.ts";
+import { candidateFor, classifyInstalledRecord } from "./plugin-state-classifier.ts";
 
-import type { UpgradeCandidate } from "./plugin-state-classifier.ts";
+import type { InstalledClassification, UpgradeCandidate } from "./plugin-state-classifier.ts";
 import type { ManifestLookup, ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
+import type {
+  ActiveMcpImplementation,
+  EffectiveMcpCompatibility,
+  RecordedMcpServers,
+} from "../../domain/mcp-implementation.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
@@ -19,6 +27,7 @@ import type {
   PluginUpgradableMessage,
 } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { LegacyServersSource } from "../mcp/recorded-servers.ts";
 
 export type InstalledListRow =
   | PluginDisabledMessage
@@ -32,22 +41,30 @@ export interface ComposeInstalledListRowOptions {
   readonly pluginName: string;
   readonly pluginScope: Scope;
   readonly marketplaceScope: Scope;
-  readonly marketplaceRoot: string;
-  readonly marketplaceName: string;
-  readonly marketplaceSource: unknown;
-  readonly record: PluginInstallRecord;
+  /** The marketplace record from the plugin scope's state file, which lists the plugin (UF-1). */
+  readonly marketplace: Parameters<typeof legacyServersSourceFor>[1];
   readonly lookup: ManifestLookup;
   readonly cwd: string;
+  /** D-P3-05: the run's active MCP implementation, whose view the row shows. */
+  readonly mcpImplementation: ActiveMcpImplementation;
 }
 
-function dependenciesFromRecord(record: PluginInstallRecord): readonly Dependency[] {
+/**
+ * D-P3-10: the row's MCP dependency comes from the record's recorded servers,
+ * not from the staged count, so it names the implementations that run them.
+ */
+function dependenciesFromRecord(
+  record: PluginInstallRecord,
+  recorded: RecordedMcpServers,
+): readonly Dependency[] {
   const dependencies: Dependency[] = [];
   if (record.resources.agents.length > 0) {
     dependencies.push("agents");
   }
 
-  if (record.resources.mcpServers.length > 0) {
-    dependencies.push("mcp");
+  const mcp = recordMcpDependency(recorded, record);
+  if (mcp !== false) {
+    dependencies.push(mcp);
   }
 
   // WDEP-02: `workflows` pushes LAST, so a row that declares agents and mcp
@@ -59,11 +76,24 @@ function dependenciesFromRecord(record: PluginInstallRecord): readonly Dependenc
   return dependencies;
 }
 
-function partiallyInstalledReasons(
+/**
+ * D-P3-07 / D-MB-07: a partially-installed row carries only its MCP
+ * dependency, so its marker can name the implementation that runs a server
+ * the active one blocks; agents and workflows markers stay off on it.
+ */
+function mcpOnlyDependencies(
   record: PluginInstallRecord,
+  recorded: RecordedMcpServers,
+): Pick<PluginPartiallyInstalledMessage, "dependencies"> {
+  const mcp = recordMcpDependency(recorded, record);
+  return mcp === false ? {} : { dependencies: [mcp] };
+}
+
+function partiallyInstalledReasons(
+  effectiveUnsupported: readonly string[],
   notInManifest: boolean,
 ): PluginPartiallyInstalledMessage["reasons"] {
-  const unsupported = narrowUnsupportedKinds(record.compatibility.unsupported);
+  const unsupported = narrowUnsupportedKinds(effectiveUnsupported);
   return notInManifest ? ["not in manifest", ...unsupported] : unsupported;
 }
 
@@ -85,44 +115,115 @@ function catalogVersion(entry: ManifestPluginEntry, marketplaceName: string): st
  * when no candidate resolves (a cold git source, a throw, or a tree with no
  * version). The resolved verdict travels only when the row is upgradable; a
  * cold candidate or a throw carries none (the CR-01 "could not assert" degrade).
+ * The verdict is the resolver's neutral one (D-P3-01); the list row takes the
+ * active implementation's view of it.
  */
-export async function upgradeCandidate(
+async function upgradeCandidate(
   manifestEntry: ManifestPluginEntry,
-  options: ComposeInstalledListRowOptions,
+  source: LegacyServersSource,
 ): Promise<UpgradeCandidate> {
+  const { marketplace } = source;
   const candidate = await resolveListCandidate(
     manifestEntry,
     {
-      marketplaceRoot: options.marketplaceRoot,
-      marketplaceName: options.marketplaceName,
-      marketplaceSource: options.marketplaceSource,
+      marketplaceRoot: marketplace.marketplaceRoot,
+      marketplaceName: marketplace.name,
+      marketplaceSource: marketplace.source,
     },
-    locationsFor(options.pluginScope, options.cwd),
+    source.locations,
   ).catch((): undefined => undefined);
   const resolved = candidate?.kind === "resolved" ? candidate : undefined;
-  const version = resolved?.version ?? catalogVersion(manifestEntry, options.marketplaceName);
+  const version = resolved?.version ?? catalogVersion(manifestEntry, marketplace.name);
   // GV-01: Claude Code compares the recorded string with the catalog's, so a
   // record at a release tag's commit (`<v>-<commit 12>`) is not `<v>`.
-  if (version === undefined || isSameVersion(options.record.version, version)) {
+  if (version === undefined || isSameVersion(source.record.version, version)) {
     return { upgradable: false };
   }
 
   return { upgradable: true, resolved: resolved?.resolved };
 }
 
+/**
+ * One installed record as the active MCP implementation sees it. A disabled
+ * record carries nothing more, because nothing more is read for it. Any other
+ * record carries its classification and the facts the classification read.
+ */
+export type InstalledRecordView =
+  | { readonly kind: "disabled" }
+  | {
+      readonly kind: "enabled";
+      readonly status: InstalledClassification;
+      readonly effective: EffectiveMcpCompatibility;
+      readonly recorded: RecordedMcpServers;
+      readonly candidate: UpgradeCandidate;
+    };
+
+/** The servers source of the row's plugin, read with the plugin scope's locations (UF-1). */
+function rowSource(options: ComposeInstalledListRowOptions): LegacyServersSource {
+  return legacyServersSourceFor(
+    locationsFor(options.pluginScope, options.cwd),
+    options.marketplace,
+    options.pluginName,
+  );
+}
+
+/**
+ * D-P6-22 / MREC-03: the one classification of an installed record that
+ * `list` and completion share, so the two cannot drift. A recorded-but-disabled
+ * record is version-frozen (ENBL-04), so it answers `disabled` before any MCP
+ * verdict read or candidate probe. Any other record joins its MCP verdict for
+ * the active implementation (D-P3-04 / D-P3-05), read offline, with that
+ * implementation's view of its upgrade candidate (`candidateFor`). The record
+ * and its marketplace record are in the plugin scope's state file (UF-1).
+ */
+export async function classifyInstalledForImplementation(
+  options: ComposeInstalledListRowOptions,
+): Promise<InstalledRecordView> {
+  return classifySource(rowSource(options), options);
+}
+
+/** `classifyInstalledForImplementation` over the source the row already built. */
+async function classifySource(
+  source: LegacyServersSource,
+  options: ComposeInstalledListRowOptions,
+): Promise<InstalledRecordView> {
+  const { record } = source;
+  const { lookup } = options;
+  if (isRecordedButDisabled(record)) {
+    return { kind: "disabled" };
+  }
+
+  const { effective, recorded } = await readRecordMcpVerdict(source, options.mcpImplementation);
+  const candidate = candidateFor(
+    lookup.kind === "declared"
+      ? await upgradeCandidate(lookup.entry, source)
+      : { upgradable: false },
+    options.mcpImplementation,
+  );
+  const status = classifyInstalledRecord(
+    { enabled: record.enabled, compatibility: { unsupported: effective.unsupported } },
+    candidate,
+  );
+
+  return { kind: "enabled", status, effective, recorded, candidate };
+}
+
 /** Composes one exact installed-inventory row without network access. */
 export async function composeInstalledListRow(
   options: ComposeInstalledListRowOptions,
 ): Promise<InstalledListRow> {
-  const { pluginName, pluginScope, marketplaceScope, record, lookup } = options;
+  const { pluginName, pluginScope, marketplaceScope, lookup } = options;
+  const source = rowSource(options);
+  const { record } = source;
   const manifestEntry = lookup.kind === "declared" ? lookup.entry : undefined;
   const notInManifest = lookup.kind === "absent";
   const scopeField: { readonly scope?: Scope } =
     pluginScope === marketplaceScope ? {} : { scope: pluginScope };
   const descriptionField: { readonly description?: string } =
     manifestEntry?.description === undefined ? {} : { description: manifestEntry.description };
+  const view = await classifySource(source, options);
 
-  if (isRecordedButDisabled(record)) {
+  if (view.kind === "disabled") {
     return {
       status: "disabled",
       name: pluginName,
@@ -135,18 +236,17 @@ export async function composeInstalledListRow(
     };
   }
 
-  const candidate: UpgradeCandidate =
-    manifestEntry === undefined
-      ? { upgradable: false }
-      : await upgradeCandidate(manifestEntry, options);
+  // D-P3-04 / D-P3-05: the record's MCP verdict for the active
+  // implementation decides the row, so a switch needs no reinstall.
+  const { status, effective, recorded, candidate } = view;
   const candidateResolved = candidate.upgradable ? candidate.resolved : undefined;
-  const status = classifyInstalledRecord(record, candidate);
 
   if (status === "partially-installed" || status === "partially-installed-upgradable") {
     return {
       status: "partially-installed",
       name: pluginName,
-      reasons: partiallyInstalledReasons(record, notInManifest),
+      reasons: partiallyInstalledReasons(effective.unsupported, notInManifest),
+      ...mcpOnlyDependencies(record, recorded),
       version: record.version,
       ...scopeField,
       ...descriptionField,
@@ -182,7 +282,7 @@ export async function composeInstalledListRow(
   return {
     status: "installed",
     name: pluginName,
-    dependencies: dependenciesFromRecord(record),
+    dependencies: dependenciesFromRecord(record, recorded),
     version: record.version,
     ...scopeField,
     ...descriptionField,

@@ -114,7 +114,7 @@ function makeCtx(): {
 function runFor(engineLoaded: boolean): NotificationRun {
   return runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: engineLoaded,
   });
 }

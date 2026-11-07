@@ -43,6 +43,7 @@ function makePi(sendError?: Error): { pi: ExtensionAPI; sent: SendCall[] } {
   const sent: SendCall[] = [];
   const pi = {
     getAllTools: () => [],
+    getCommands: () => [],
     sendMessage: (message: unknown, options?: unknown): void => {
       if (sendError !== undefined) {
         throw sendError;

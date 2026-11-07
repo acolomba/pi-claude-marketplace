@@ -33,7 +33,23 @@ const catchAllNames = new Set([
   "parameter-types",
 ]);
 const sourceTags = new Set(["@url", "@github"]);
+// The MCP implementation tags may sit on a Feature, a Rule, a scenario, or an Examples block
+// (DUAL-01); the source tags stay on Examples blocks only.
+const implementationTags = new Set([
+  "@mcp",
+  "@adapter-only",
+  "@builtin-only",
+  "@own-implementation",
+]);
 const localKinds = new Set(["dir", "file"]);
+// DUAL-02: a scenario is an MCP scenario when a step's text has the word mcp, or when a doc string
+// or a table cell of a step names one of these.
+const mcpStepWord = /\bmcp\b/i;
+const mcpArgumentNames = ["mcpServers", ".mcp.json"];
+const adapterName = "pi-mcp-adapter";
+const singleImplementationTags = new Set(["@adapter-only", "@builtin-only"]);
+// A requirement or decision ID, such as BLT-01, MREC-04, D-MB-07, or D-CF6-10.
+const licenseId = /\b[A-Z]+(?:-[A-Z0-9]+)*-\d+\b/;
 
 function createCollection() {
   return {
@@ -41,13 +57,35 @@ function createCollection() {
     pickleSteps: new Map(),
     testCases: [],
     stepLines: new Map(),
+    scenarioLines: new Map(),
+    descriptions: new Map(),
+    pickles: [],
     documents: [],
     parseErrors: [],
     undefinedParameterTypes: [],
   };
 }
 
+function argumentValues(argument) {
+  if (argument?.docString !== undefined) {
+    return [argument.docString.content];
+  }
+
+  return argument?.dataTable?.rows.flatMap((row) => row.cells.map((cell) => cell.value)) ?? [];
+}
+
 function collectPickle(collection, pickle) {
+  collection.pickles.push({
+    uri: pickle.uri,
+    name: pickle.name,
+    astNodeId: pickle.astNodeIds[0],
+    tags: pickle.tags.map((tag) => tag.name),
+    steps: pickle.steps.map((step) => ({
+      text: step.text,
+      values: argumentValues(step.argument),
+    })),
+  });
+
   for (const step of pickle.steps) {
     collection.pickleSteps.set(step.id, {
       uri: pickle.uri,
@@ -67,8 +105,23 @@ function gherkinSteps(children) {
   });
 }
 
+function gherkinScenarios(children) {
+  return children.flatMap((child) => {
+    if (child.rule !== undefined) {
+      return gherkinScenarios(child.rule.children);
+    }
+
+    return child.scenario === undefined ? [] : [child.scenario];
+  });
+}
+
 function collectGherkinDocument(collection, document) {
   collection.documents.push(document);
+  collection.descriptions.set(document.uri, document.feature?.description ?? "");
+
+  for (const scenario of gherkinScenarios(document.feature?.children ?? [])) {
+    collection.scenarioLines.set(scenario.id, scenario.location.line);
+  }
 
   for (const step of gherkinSteps(document.feature?.children ?? [])) {
     collection.stepLines.set(step.id, step.location.line);
@@ -330,16 +383,20 @@ function titleFindings(uri, feature) {
 }
 
 function misplacedTagFindings(uri, node) {
-  return node.tags.map((tag) =>
-    gherkinFinding(uri, tag, `tag ${tag.name} is not on an Examples block`),
-  );
+  return node.tags
+    .filter((tag) => !implementationTags.has(tag.name))
+    .map((tag) => gherkinFinding(uri, tag, `tag ${tag.name} is not on an Examples block`));
 }
 
 function examplesTagFindings(uri, examples) {
   return examples.tags
-    .filter((tag) => !sourceTags.has(tag.name))
+    .filter((tag) => !sourceTags.has(tag.name) && !implementationTags.has(tag.name))
     .map((tag) =>
-      gherkinFinding(uri, tag, `tag ${tag.name} on an Examples block is not @url or @github`),
+      gherkinFinding(
+        uri,
+        tag,
+        `tag ${tag.name} on an Examples block is not @url, @github, or an MCP implementation tag`,
+      ),
     );
 }
 
@@ -491,6 +548,79 @@ function documentFindings(document) {
   return [...findings, ...feature.children.flatMap((child) => childFindings(uri, child))];
 }
 
+function isMcpPickle(pickle) {
+  return pickle.steps.some(
+    (step) =>
+      mcpStepWord.test(step.text) ||
+      step.values.some((value) => mcpArgumentNames.some((name) => value.includes(name))),
+  );
+}
+
+// DUAL-01, DUAL-02: every MCP scenario runs under the profiles its one implementation tag selects,
+// so an untagged MCP scenario would run under the adapter profile only, unnoticed.
+function implementationTagProblem(pickle) {
+  const tags = pickle.tags.filter((tag) => implementationTags.has(tag));
+
+  if (tags.length > 1) {
+    return `the scenario carries ${tags.length} MCP implementation tags, ${tags.join(" and ")}; keep exactly one`;
+  }
+
+  if (tags.length === 0 && isMcpPickle(pickle)) {
+    return `the MCP scenario carries no MCP implementation tag: add exactly one of ${[...implementationTags].join(", ")}`;
+  }
+
+  return undefined;
+}
+
+// An @mcp scenario expects the same result under both implementations, so it reaches the active one
+// through the MCP implementation steps and never names the adapter.
+function adapterLiteralProblem(pickle) {
+  if (!pickle.tags.includes("@mcp")) {
+    return undefined;
+  }
+
+  const named = pickle.steps.some(
+    (step) =>
+      step.text.includes(adapterName) || step.values.some((value) => value.includes(adapterName)),
+  );
+
+  return named
+    ? `the @mcp scenario names ${adapterName}; only an @adapter-only, @builtin-only, or @own-implementation scenario may`
+    : undefined;
+}
+
+// A scenario that runs under one profile only names the requirement or decision ID that licenses
+// the tag, so the work that lifts the tag can find it.
+function tagReasonProblem(pickle, collection) {
+  const tags = pickle.tags.filter((tag) => singleImplementationTags.has(tag));
+  const reason = `${pickle.name}\n${collection.descriptions.get(pickle.uri) ?? ""}`;
+
+  if (tags.length === 0 || licenseId.test(reason)) {
+    return undefined;
+  }
+
+  return `the ${tags.join(" ")} scenario names no requirement or decision ID in its title or its feature description`;
+}
+
+const pickleRules = [implementationTagProblem, adapterLiteralProblem, tagReasonProblem];
+
+function pickleFindings(collection) {
+  const findings = new Map();
+
+  for (const pickle of collection.pickles) {
+    const line = collection.scenarioLines.get(pickle.astNodeId) ?? 0;
+
+    for (const problem of pickleRules.map((rule) => rule(pickle, collection))) {
+      if (problem !== undefined) {
+        const message = `${problem} (${featuresRule})`;
+        findings.set(`${pickle.uri}:${line}:${message}`, { path: pickle.uri, line, message });
+      }
+    }
+  }
+
+  return [...findings.values()];
+}
+
 function byLocation(left, right) {
   return left.path.localeCompare(right.path) || left.line - right.line;
 }
@@ -503,6 +633,7 @@ async function main() {
     ...patternFindings(collection),
     ...matchFindings(collection),
     ...collection.documents.flatMap(documentFindings),
+    ...pickleFindings(collection),
     ...layoutFindings(),
   ].sort(byLocation);
 

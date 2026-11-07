@@ -37,10 +37,14 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { adapterCommand, builtinMcpCommand } from "../../platform/pi-inventory-seed.ts";
 import { expectSoftDepProbes } from "../notification-boundary.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionAPI } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  CommandInventoryItem,
+  ExtensionAPI,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   PluginStatus,
   Reason,
@@ -123,6 +127,8 @@ interface SeededPlugin {
   readonly installDisabled?: boolean;
   /** Create the on-disk plugin tree (default true). */
   readonly pluginTree?: boolean;
+  /** The text of the plugin's `.mcp.json`; absent means the plugin ships none. */
+  readonly mcpJson?: string;
   readonly installed?: SeededInstall;
 }
 
@@ -267,6 +273,9 @@ async function layoutMarketplace(
         }),
         "utf8",
       );
+      if (plugin.mcpJson !== undefined) {
+        await writeFile(path.join(pluginRoot, ".mcp.json"), plugin.mcpJson, "utf8");
+      }
     }
 
     if (plugin.installed !== undefined) {
@@ -342,8 +351,10 @@ async function seedUrlSourceMarketplace(cwd: string, name: string, raw: string):
  * case's path reads it: the marketplace existence check and the payload load
  * take one read each, and a path that short-circuits before the load takes one
  * in total. `probes` soft-dependency probes are promised, each finding no
- * companion loaded: each tool's notification run takes one on its non-empty
- * path, and every other path never probes.
+ * companion loaded: the marketplace tool's notification run takes one on its
+ * non-empty path, the plugin tool's run takes one on every path that loads the
+ * payload (MREC-03: the run names the MCP implementation the rows follow), and
+ * every other path never probes.
  *
  * `ctx.ui` carries no expectation on purpose, so an attempt to notify fails
  * where it happens -- a tool returns its result and never reaches the
@@ -355,6 +366,7 @@ function createToolBoundary(
     readonly reads: number;
   },
   probes = 0,
+  commands: readonly CommandInventoryItem[] = [],
 ): ToolBoundary {
   const registrations: ToolRegistration[] = [];
   const ctx = mock<ExtensionToolContext>({ exactParams: true, name: "extension context" });
@@ -370,7 +382,7 @@ function createToolBoundary(
       .times(cwd.reads);
   }
 
-  expectSoftDepProbes(pi, probes);
+  expectSoftDepProbes(pi, probes, [], commands);
 
   return {
     ctx,
@@ -392,8 +404,9 @@ function registerToolUnderTest(
   register: (pi: ExtensionAPI) => void,
   cwd?: { readonly value: string; readonly reads: number },
   probes = 0,
+  commands: readonly CommandInventoryItem[] = [],
 ): RegisteredToolBoundary {
-  const boundary = createToolBoundary(cwd, probes);
+  const boundary = createToolBoundary(cwd, probes, commands);
   register(boundary.pi);
   const [registration] = boundary.registrations;
   if (registration === undefined) {
@@ -1433,10 +1446,14 @@ describe("registerListPluginsTool", () => {
   test("reports no marketplaces configured when neither scope holds a record", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "plugin-empty");
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      1,
+    );
     const expectedResult = {
       content: [{ type: "text", text: "No marketplaces configured." }],
       details: { marketplaces: [] },
@@ -1688,10 +1705,14 @@ describe("registerListPluginsTool", () => {
     await seedScope(scope.cwd, "project", [{ name: "broken-mp", plugins: [] }]);
     const locations = locationsFor("project", scope.cwd);
     await writeFile(locations.stateJsonPath, JSON.stringify({ schemaVersion: 4 }), "utf8");
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      1,
+    );
     const expectedResult = {
       content: [
         {
@@ -1716,10 +1737,14 @@ describe("registerListPluginsTool", () => {
     // arrange
     const scope = await createHermeticScope(t, "plugin-load-credential");
     await seedUrlSourceMarketplace(scope.cwd, "payload-mp", FTP_SOURCE_WITH_TOKEN);
-    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
-      value: scope.cwd,
-      reads: 1,
-    });
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListPluginsTool,
+      {
+        value: scope.cwd,
+        reads: 1,
+      },
+      1,
+    );
     const expectedResult = {
       content: [
         {
@@ -1800,4 +1825,72 @@ describe("registerListPluginsTool", () => {
     assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
+
+  // MREC-03: the list tool's rows follow the MCP implementation its own
+  // soft-dependency snapshot names, not a fixed one.
+  const sseServerPlugin = {
+    name: "alpha",
+    manifestVersion: "1.0.0",
+    mcpJson: JSON.stringify({
+      mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } },
+    }),
+  } as const satisfies SeededPlugin;
+
+  const sseImplementationCases = [
+    {
+      title: "lists a plugin with an sse server as partially available under Pi's built-in MCP",
+      commands: [builtinMcpCommand()],
+      line: "  [unavailable] alpha  1.0.0  (unsupported mcp)",
+      row: {
+        status: "partially-available",
+        name: "alpha",
+        id: "alpha@sse-mp",
+        reasons: ["unsupported mcp"],
+        version: "1.0.0",
+      },
+    },
+    {
+      title: "lists a plugin with an sse server as available under pi-mcp-adapter",
+      commands: [adapterCommand()],
+      line: "  [available] alpha  1.0.0",
+      row: {
+        status: "available",
+        name: "alpha",
+        id: "alpha@sse-mp",
+        reasons: [],
+        version: "1.0.0",
+      },
+    },
+  ] as const satisfies readonly {
+    readonly title: string;
+    readonly commands: readonly CommandInventoryItem[];
+    readonly line: string;
+    readonly row: ExpectedPluginRow;
+  }[];
+
+  for (const { title, commands, line, row } of sseImplementationCases) {
+    test(`MREC-03: ${title}`, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, "sse-implementation");
+      await seedScope(scope.cwd, "project", [{ name: "sse-mp", plugins: [sseServerPlugin] }]);
+      const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+        registerListPluginsTool,
+        { value: scope.cwd, reads: 1 },
+        1,
+        commands,
+      );
+      const expectedResult = {
+        content: [{ type: "text", text: `Marketplace sse-mp (project)\n${line}` }],
+        details: { marketplaces: [{ name: "sse-mp", scope: "project", plugins: [row] }] },
+      };
+
+      // act
+      const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+      // assert
+      assert.deepStrictEqual(listed, expectedResult);
+      assert.strictEqual(scope.networkCallCount(), 0);
+      verifyBoundary();
+    });
+  }
 });

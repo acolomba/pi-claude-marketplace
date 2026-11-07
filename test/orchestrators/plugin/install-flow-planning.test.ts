@@ -123,6 +123,7 @@ async function preparedUpdate(cwd: string, plugin: string): Promise<PreparedPlug
     locations: locationsFor("project", cwd),
     policy: UPDATE_MATERIALIZATION,
     cleanupClones: () => Promise.resolve(),
+    mcpImplementation: "none",
   });
   assert.ok(!isUpdatePreflightOutcome(prepared), "the update has a candidate");
   return prepared;
@@ -150,6 +151,7 @@ function updateArgs(owner: InstallTestOwner, cwd: string, plugin: string): Casca
     env: {},
     cascade: true,
     cleanupClones: () => Promise.resolve(),
+    mcpImplementation: "none",
   };
 }
 
@@ -586,7 +588,7 @@ for (const orchestrated of [false, true]) {
         orchestrated
           ? []
           : [
-              'A plugin operation needs attention.\n\n● mp [project]\n  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}\n    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"\n  ● app v1.0.0 (installed)\n  ● zzz@mp v1.0.0 (installed) {requires pi-mcp-adapter}\n\n/reload to pick up changes',
+              'A plugin operation needs attention.\n\n● mp [project]\n  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}\n    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"\n  ● app v1.0.0 (installed)\n  ● zzz@mp v1.0.0 (installed) {requires mcp}\n\n/reload to pick up changes',
               "MCP config comments removed.\n\nThe project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
             ],
       );
@@ -773,7 +775,7 @@ describe("createUpdateDependencyResolver", () => {
           {
             status: "installed",
             name: "zcore@mp",
-            dependencies: ["mcp"],
+            dependencies: [{ kind: "mcp", runEvery: "both" }],
             version: "1.0.0",
             severity: "warning",
             needsReload: true,

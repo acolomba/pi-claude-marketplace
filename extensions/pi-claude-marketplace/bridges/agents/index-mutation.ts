@@ -10,7 +10,7 @@
 
 import { AgentOwnershipConflictError } from "../../shared/errors-bridges.ts";
 
-import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+import type { AgentsIndexRow } from "../../persistence/agents-index-io.ts";
 import type { PluginCoordinate } from "../../shared/errors-bridges.ts";
 
 /**
@@ -20,8 +20,8 @@ import type { PluginCoordinate } from "../../shared/errors-bridges.ts";
  * input array order is stable.
  */
 export interface PartitionedIndex {
-  readonly previous: readonly AgentsIndexEntry[];
-  readonly other: readonly AgentsIndexEntry[];
+  readonly previous: readonly AgentsIndexRow[];
+  readonly other: readonly AgentsIndexRow[];
 }
 
 /**
@@ -34,12 +34,12 @@ export interface PartitionedIndex {
  * via `previous.push(...)` would silently break the AG-3 contract.
  */
 export function partitionByOwner(
-  entries: readonly AgentsIndexEntry[],
+  entries: readonly AgentsIndexRow[],
   mp: string,
   plugin: string,
 ): PartitionedIndex {
-  const previous: AgentsIndexEntry[] = [];
-  const other: AgentsIndexEntry[] = [];
+  const previous: AgentsIndexRow[] = [];
+  const other: AgentsIndexRow[] = [];
   for (const e of entries) {
     if (e.marketplace === mp && e.plugin === plugin) {
       previous.push(e);
@@ -62,11 +62,11 @@ export function partitionByOwner(
  * lists conflicts in the order the new plugin would have produced them.
  */
 function findOwnershipConflicts(
-  otherEntries: readonly AgentsIndexEntry[],
+  otherEntries: readonly AgentsIndexRow[],
   nextNames: readonly string[],
-): { generatedName: string; owner: AgentsIndexEntry }[] {
+): { generatedName: string; owner: AgentsIndexRow }[] {
   const otherByName = new Map(otherEntries.map((e) => [e.generatedName, e]));
-  const conflicts: { generatedName: string; owner: AgentsIndexEntry }[] = [];
+  const conflicts: { generatedName: string; owner: AgentsIndexRow }[] = [];
   for (const name of nextNames) {
     const owner = otherByName.get(name);
     if (owner !== undefined) {
@@ -83,7 +83,7 @@ function findOwnershipConflicts(
  */
 export function assertAgentNamesUnclaimed(
   owner: PluginCoordinate,
-  otherEntries: readonly AgentsIndexEntry[],
+  otherEntries: readonly AgentsIndexRow[],
   nextNames: readonly string[],
 ): void {
   const conflicts = findOwnershipConflicts(otherEntries, nextNames);

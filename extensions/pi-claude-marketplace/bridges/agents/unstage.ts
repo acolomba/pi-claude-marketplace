@@ -22,11 +22,11 @@ import { partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile, type SafetyResult } from "./marker.ts";
 
 import type { UnstageAgentFailure, UnstageAgentsInput, UnstageAgentsResult } from "./types.ts";
-import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+import type { AgentsIndexRow } from "../../persistence/agents-index-io.ts";
 
 type Outcome =
   | { kind: "removed"; name: string }
-  | { kind: "preserved"; entry: AgentsIndexEntry; failure: UnstageAgentFailure };
+  | { kind: "preserved"; entry: AgentsIndexRow; failure: UnstageAgentFailure };
 
 /**
  * Plugin-scoped removal. Loads agents-index, partitions by (mp, plugin),
@@ -97,7 +97,7 @@ export async function unstagePluginAgents(input: UnstageAgentsInput): Promise<Un
 
   const removedNames: string[] = [];
   const failed: UnstageAgentFailure[] = [];
-  const preservedEntries: AgentsIndexEntry[] = [];
+  const preservedEntries: AgentsIndexRow[] = [];
   for (const o of outcomes) {
     if (o.kind === "removed") {
       removedNames.push(o.name);

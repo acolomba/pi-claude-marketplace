@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "batch_id": "261106-m01",
+  "created_at": "2026-11-06T15:50:27.543Z",
+  "options": {},
+  "base_revision": "9a866020963560968b6a11b012e2a33fae9bc4c1",
+  "items": [
+    {
+      "quick_id": "261106-m02",
+      "client_id": null,
+      "description": "Built-in `info` status for a refused or legacy server (P2-DC-46, W1). Two fixes in `extensions/pi-claude-marketplace/orchestrators/plugin/info-mcp-status.ts` and the built-in registration step (`orchestrators/mcp/builtin-registration-step.ts`, `bridges/mcp/builtin-registration.ts`). (a) When Pi refuses our registration of `plugin_<plugin>_<server>` because another extension registered that name first, `/claude:plugin info` must show the existing status token `not loaded` on our plugin's built-in row, not the other extension's server state. The step already debug-logs the refusal and records name owners in process-level state (D-MB-20, P2-DC-92); use that record. No new closed-set token, message kind, or catalog change (user decision 2026-11-06, D-MB-29). (b) W1: `builtinRecordedServers` (`info-mcp-status.ts:149-151`) reads `record.mcpServerConfigs` with a `resources.mcpServers` fallback; route it through `recordedMcpServers` (`orchestrators/mcp/recorded-servers.ts`) and its legacy reader, so `info` under built-in lists the same servers the registration step registers for a record written before `mcpServerConfigs` existed. Each part ships an `@builtin-only` cucumber scenario under `features/mcp-server/` that fails without the change (the harness's built-in stand-in extension in `features/lib/builtin-mcp-stand-in/` can register a name first; the earlier-release record fixture from `implementation-switch.feature` gives a legacy record). Follow the `cucumber` skill and the typescript-unit-tests skill for paired unit tests.",
+      "status": "pending",
+      "depends_on": [
+        "261106-m04"
+      ],
+      "planned_files": [
+        "extensions/pi-claude-marketplace/orchestrators/plugin/info-mcp-status.ts",
+        "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
+        "extensions/pi-claude-marketplace/bridges/mcp/builtin-registration.ts",
+        "extensions/pi-claude-marketplace/orchestrators/mcp/builtin-registration-step.ts",
+        "extensions/pi-claude-marketplace/platform/mcp-builtin-status.ts",
+        "test/orchestrators/plugin/info-mcp-status.test.ts",
+        "test/orchestrators/plugin/info.test.ts",
+        "test/bridges/mcp/builtin-registration.test.ts",
+        "test/orchestrators/mcp/builtin-registration-step.test.ts",
+        "test/platform/mcp-builtin-status.test.ts",
+        "features/mcp-server/builtin-status.feature",
+        "features/step_definitions/mcp-server/builtin-status.steps.ts",
+        "features/lib/builtin-mcp-stand-in/servers.ts",
+        "features/lib/builtin-mcp-stand-in/extension.ts",
+        "docs/mcp-compatibility.md",
+        ".agents/skills/cucumber/rules/world-and-stand-ins.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 1,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261106-m03",
+      "client_id": null,
+      "description": "Builtin-profile `/reload` scenario (P2-DC-100, BLT-01). Add an `@builtin-only` scenario under `features/mcp-server/` that installs a plugin with a stub MCP server, runs `/reload` in the terminal-driven Pi (reuse the terminal and reload steps of `features/step_definitions/hook/session.steps.ts`; Pi's RPC mode cannot run `/reload`), and then has the scripted model call the plugin's tool through `tool_search`, asserting the tool answers. Test-only, no product change: prove it red once by temporarily disabling the built-in resync in a scratch edit (do not commit the negative control) and record the red run in the SUMMARY. Follow the `cucumber` skill.",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [
+        "features/lib/pi-tui.ts",
+        "features/lib/scripted-model/terminal-turn.ts",
+        "features/support/world.ts",
+        "features/step_definitions/hook/session.steps.ts",
+        "features/step_definitions/skill/aliases.steps.ts",
+        "features/step_definitions/session.steps.ts",
+        "features/mcp-server/builtin-reload.feature",
+        ".agents/skills/cucumber/rules/world-and-stand-ins.md",
+        ".planning/quick/261106-m03-builtin-profile-reload-scenario-p2-dc-100-blt-01-add-an-buil/261106-m03-SUMMARY.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261106-m04",
+      "client_id": null,
+      "description": "Required update-run notification and contained recorded servers (MS-05, P6-SEC-02). (a) `beginPluginUpdateRun()` in `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts` (about line 1555) falls back to the `none` MCP implementation (the adapter grant form) when called without a notification; make that argument required in the type so no caller can fall back, and update its callers and tests. No behavior change. (b) `recordedMcpServers` in `orchestrators/mcp/recorded-servers.ts` returns a record's stored `mcpServerConfigs` without the `isPluginRootContained` clone-root check that its legacy reader and the registration step already make (UF-1, NFR-10); apply the same check to the stored path, refusing with the existing `uncontained` reason, so all three agree. Every caller already passes `LegacyServersSource.locations`. Unit tests in the paired test files, 100% direct coverage.",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [
+        "extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts",
+        "extensions/pi-claude-marketplace/orchestrators/plugin/mcp-verdict-read.ts",
+        "extensions/pi-claude-marketplace/orchestrators/mcp/builtin-registration-step.ts",
+        "extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts",
+        "test/orchestrators/mcp/recorded-servers.test.ts",
+        "test/orchestrators/plugin/info.test.ts",
+        "test/orchestrators/plugin/list-flow.test.ts",
+        "test/orchestrators/plugin/list-installed-row.test.ts",
+        "test/orchestrators/reconcile/convergence.test.ts",
+        "features/lib/installation-record.ts",
+        "features/lib/mcp-builtin-earlier-record.ts",
+        "features/step_definitions/mcp-server/implementation-switch.steps.ts",
+        "features/step_definitions/plugin/installation.steps.ts",
+        "features/mcp-server/verdict-list.feature",
+        "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
+        "test/orchestrators/plugin/update-flow.test.ts",
+        "test/orchestrators/marketplace/update.test.ts"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261106-m05",
+      "client_id": null,
+      "description": "Adapter tool-listing wait in the harness (P3-DC-111). Under the `adapter` cucumber profile, \"A new session offers the plugin's tool again (BLT-01)\" at `features/mcp-server/lifecycle.feature:392` flakes when pi-mcp-adapter has not listed the plugin's tool yet (CI run 41967152313 attempt 1, seed 944382, 434/435). The bounded stand-in wait in `features/lib/turn-records.ts` (06-05) covers the stand-in process, not the adapter's listing. Make the step that reads the tool wait, bounded (about 10 s, polling about every 50 ms, same failure message on timeout), until the adapter lists the tool. Harness-only change; run the scenario under the adapter profile at least 20 times in a loop and record the result.",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [
+        "features/lib/mcp-implementation.ts",
+        "features/step_definitions/mcp-server/listing.steps.ts",
+        ".planning/quick/261106-m05-adapter-tool-listing-wait-in-the-harness-p3-dc-111-under-the/261106-m05-SUMMARY.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261106-m06",
+      "client_id": null,
+      "description": "Review docs and comment cleanups (IN-02, IN-04, IN-08, the frozen record, BACKLOG). (1) IN-02: add `.planning/PROJECT.md` Key Decisions rows (status Locked, mcp-builtin) for D-P6-18, D-P6-22 (as amended: the completion cache is one stamped file, P6-PLN-03), P2-DC-53, and P2-DC-77, each cited in code but without a row; read their text from `.planning/milestones/mcp-builtin-phases/`. (2) IN-04: the `CHANGELOG.md` Unreleased entry names only `install` and `update --partial` completion; it must also name plain `update`, `fetch`, and `install --partial` completion following the active MCP implementation (use the `changelog` skill). (3) IN-08: `classifyInstalledRecord`'s disabled branch is no longer reached in production (completion now uses `classifyInstalledForImplementation` in `orchestrators/plugin/list-installed-row.ts`); fix the comments that say completion relies on it, without changing behavior. (4) `.planning/milestones/mcp-builtin-phases/01-foundation-and-pi-1-5-0/01-FROZEN.md` interface 3 says an install writes no `compatibilityBasis`; amend it to say install writes `compatibilityBasis: \"neutral\"` (Phase 3). (5) Add BACKLOG entries for the items the user left: review info items IN-01, IN-05, IN-06, IN-07, IN-09 (`.planning/milestones/mcp-builtin-phases/06-release-docs-and-combined-tree/06-REVIEW.md`); P3-DC-122 (`pending` and `apply` previews can disagree after an implementation switch); `isPluginRootContained` maps every error to uncontained; no test pins that two built-in registrations leave Pi's registry unchanged; the background-child check depends on pi-subagents 0.84.0's `PI_SUBAGENT_CHILD` name.",
+      "status": "pending",
+      "depends_on": [
+        "261106-m04"
+      ],
+      "planned_files": [
+        "extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts",
+        "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts",
+        "CHANGELOG.md",
+        ".planning/PROJECT.md",
+        ".planning/BACKLOG.md",
+        ".planning/milestones/mcp-builtin-phases/01-foundation-and-pi-1-5-0/01-FROZEN.md",
+        ".planning/quick/261106-m06-review-docs-and-comment-cleanups-in-02-in-04-in-08-the-froze/261106-m06-SUMMARY.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 1,
+      "commit": null,
+      "failure_reason": null
+    }
+  ]
+}

@@ -80,6 +80,7 @@ import type {
   ImportDeps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { McpDependency } from "../../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
 import type { ContentReason } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { TestContext } from "node:test";
 
@@ -104,6 +105,10 @@ type InstallOptions = Parameters<InstallPlugin>[0];
 type Diagnostic = ClaudeImportExecutionResult["diagnostics"][number];
 type Collaborators = Required<ImportDeps>;
 type TestImportOptions = Omit<ImportClaudeSettingsOptions, "completionCache">;
+
+// D-P3-10: the MCP dependency a boolean `mcp` row maps to, which renders the
+// `requires pi-mcp-adapter` marker exactly as a declared MCP kind did.
+const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: "adapter" };
 
 for (const mode of ["json", "rpc"] as const) {
   test(`appends import diagnostics after the cascade in ${mode}`, async (t) => {
@@ -410,7 +415,7 @@ function installed(
 ): Installed {
   return {
     declaresAgents: declares.agents,
-    declaresMcp: declares.mcp,
+    declaresMcp: declares.mcp && ADAPTER_MCP,
     declaresWorkflows: declares.workflows ?? false,
     kind: "plugin-installed",
     marketplace,
@@ -1899,25 +1904,24 @@ function uninstallable(cause: string, reasons: readonly ContentReason[]): Warnin
   };
 }
 
+/** The message of install's not-in-manifest error for `target@mp`. */
+const TARGET_NOT_IN_MANIFEST = 'Plugin "target" not found in marketplace "mp".';
+
 // A typed install failure the dispatcher recognises as unavailable or
 // uninstallable becomes a warning row. IMP-08: an uninstallable plugin carries
-// the reasons `install` narrows from the same resolver verdict. The fault sits
+// the reasons `install` narrows from the same resolver verdict.
+// IMPORTCAUSE-01: each stubbed install cause differs from the expected warning
+// cause, so a warning that copies install's text fails. The fault sits
 // in the MIDDLE of a three-plugin batch, so the plugin installed before it
 // keeps its outcome and the plugin after it is still attempted.
 for (const { cause, error, token, title, warning } of [
   {
-    cause: 'Plugin "target" not found in marketplace "mp".',
+    cause: `${TARGET_NOT_IN_MANIFEST}\n\ncause: ${TARGET_NOT_IN_MANIFEST}`,
     error: (): Error =>
       new PluginShapeError({ kind: "not-in-manifest", marketplace: "mp", plugin: "target" }),
     token: "not in manifest",
     title: "the plugin is absent from the manifest",
-    warning: warned(
-      "target",
-      "mp",
-      "project",
-      "unavailable",
-      'Plugin "target" not found in marketplace "mp".',
-    ),
+    warning: warned("target", "mp", "project", "unavailable", TARGET_NOT_IN_MANIFEST),
   },
   {
     cause: "unsupported hooks: PreToolUse",
@@ -1930,7 +1934,9 @@ for (const { cause, error, token, title, warning } of [
       }),
     token: "unsupported hooks",
     title: "the plugin is not installable",
-    warning: uninstallable("unsupported hooks: PreToolUse", ["unsupported hooks"]),
+    warning: uninstallable('Plugin "target" is not installable: unsupported hooks', [
+      "unsupported hooks",
+    ]),
   },
   {
     cause: "contains outputStyles",
@@ -1944,7 +1950,9 @@ for (const { cause, error, token, title, warning } of [
       }),
     token: "unsupported component",
     title: "the plugin is only partially available",
-    warning: uninstallable("contains outputStyles", ["unsupported component"]),
+    warning: uninstallable('Plugin "target" is no longer installable: unsupported component', [
+      "unsupported component",
+    ]),
   },
 ] satisfies readonly {
   readonly cause: string;
@@ -3075,45 +3083,45 @@ test("records an unexpected plugin failure whose error carries a nested cause wi
 // companion extension loaded, so a declared dependency always surfaces.
 // WDEP-02: `workflows` composes LAST, so the agents/mcp brace forms are the same
 // bytes whether or not the row also declares workflows.
-for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
-  { declaresAgents: false, declaresMcp: false, declaresWorkflows: false, marker: "" },
+for (const { declaresAgents, mcp, declaresWorkflows, marker } of [
+  { declaresAgents: false, mcp: false, declaresWorkflows: false, marker: "" },
   {
     declaresAgents: true,
-    declaresMcp: false,
+    mcp: false,
     declaresWorkflows: false,
     marker: " {requires pi-subagents}",
   },
   {
     declaresAgents: false,
-    declaresMcp: true,
+    mcp: true,
     declaresWorkflows: false,
     marker: " {requires pi-mcp-adapter}",
   },
   {
     declaresAgents: false,
-    declaresMcp: false,
+    mcp: false,
     declaresWorkflows: true,
     marker: " {requires pi-dynamic-workflows}",
   },
   {
     declaresAgents: true,
-    declaresMcp: true,
+    mcp: true,
     declaresWorkflows: false,
     marker: " {requires pi-subagents, requires pi-mcp-adapter}",
   },
   {
     declaresAgents: true,
-    declaresMcp: true,
+    mcp: true,
     declaresWorkflows: true,
     marker: " {requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}",
   },
 ] satisfies readonly {
   readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
+  readonly mcp: boolean;
   readonly declaresWorkflows: boolean;
   readonly marker: string;
 }[]) {
-  test(`propagates declaresAgents ${declaresAgents}, declaresMcp ${declaresMcp} and declaresWorkflows ${declaresWorkflows} onto the outcome and the cascade row`, async (t) => {
+  test(`propagates declaresAgents ${declaresAgents}, declaresMcp ${mcp} and declaresWorkflows ${declaresWorkflows} onto the outcome and the cascade row`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "declares");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -3124,7 +3132,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
       installedPlugins: [
         installed("plugin", "mp", "user", {
           agents: declaresAgents,
-          mcp: declaresMcp,
+          mcp,
           workflows: declaresWorkflows,
         }),
       ],
@@ -3141,7 +3149,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
           Promise.resolve({
             ...installedOutcome(),
             declaresAgents,
-            declaresMcp,
+            declaresMcp: mcp && ADAPTER_MCP,
             declaresWorkflows,
           }),
         loadSettings: () =>
@@ -3477,7 +3485,7 @@ test("AVAR-04: an import reports the unset variable and the withheld credential 
     {
       message:
         "● fixture-mp [project] (added)\n" +
-        "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n\n" +
+        "  ● hello v1.0.0 (installed) {requires mcp}\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3496,7 +3504,7 @@ test("AVAR-04 / AVAR-05: with pi-mcp-adapter loaded, an import reports an info r
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
+    mcpImplementation: "adapter",
     workflowEngineLoaded: false,
   });
 
@@ -3520,6 +3528,125 @@ test("AVAR-04 / AVAR-05: with pi-mcp-adapter loaded, an import reports an info r
         "/reload to pick up changes",
     },
     ...variableNotices(),
+  ]);
+  verifyBoundary();
+});
+
+/**
+ * MREC-06: a marketplace whose one plugin declares an sse MCP server, named by
+ * the project's Claude settings. Pi's built-in MCP cannot run an sse server;
+ * pi-mcp-adapter can.
+ */
+async function seedSsePlugin(t: TestContext): Promise<{ cwd: string }> {
+  const { cwd } = await createHermeticScopes(t, "mcp-sse-plugin");
+  const marketplaceRoot = path.join(cwd, "fixture-mp");
+  await writeUnder(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "fixture-mp",
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
+    }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "hello", ".mcp.json"),
+    JSON.stringify({ mcpServers: { events: { type: "sse", url: "http://127.0.0.1:9/sse" } } }),
+  );
+  await writeUnder(
+    path.join(cwd, ".claude", "settings.json"),
+    settingsNaming(marketplaceRoot, { "hello@fixture-mp": true }),
+  );
+  return { cwd };
+}
+
+test("MREC-06: an import leaves a plugin with an sse server unavailable under Pi's built-in MCP, which cannot run an sse server", async (t) => {
+  // arrange
+  const { cwd } = await seedSsePlugin(t);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    mcpImplementation: "builtin",
+    workflowEngineLoaded: false,
+  });
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    run,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("fixture-mp", "project")],
+    warnings: [
+      {
+        kind: "plugin-warning",
+        scope: "project",
+        plugin: "hello",
+        marketplace: "fixture-mp",
+        ref: "hello@fixture-mp",
+        cause: 'Plugin "hello" is not installable: unsupported mcp',
+        reason: "uninstallable",
+        reasons: ["unsupported mcp"],
+      },
+    ],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● fixture-mp [project] (added)\n" +
+        "  ⊘ hello (unavailable) {unsupported mcp}\n\n" +
+        "Import: 1 warning, 1 success",
+      severity: "warning",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("MREC-06: an import installs a plugin with an sse server under pi-mcp-adapter, which runs it", async (t) => {
+  // arrange
+  const { cwd } = await seedSsePlugin(t);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    mcpImplementation: "adapter",
+    workflowEngineLoaded: false,
+  });
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    run,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("fixture-mp", "project")],
+    installedPlugins: [installed("hello", "fixture-mp", "project", { agents: false, mcp: true })],
+    changedResources: true,
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● fixture-mp [project] (added)\n" +
+        "  ● hello v1.0.0 (installed)\n\n" +
+        "Import: 2 successes\n\n" +
+        "/reload to pick up changes",
+    },
   ]);
   verifyBoundary();
 });
@@ -5916,7 +6043,7 @@ test("IMP-05: enables a plugin the scope records disabled and declares it enable
                 name: "alpha",
                 version: "1.0.0",
                 stagedAgents: true,
-                stagedMcpServers: true,
+                stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
                 stagedWorkflows: true,
                 mcpConfigNotices: [adapterNotice],
               }
@@ -6029,7 +6156,15 @@ test("IMP-05: an enable that fails or finds the plugin enabled is reported, not 
         cause: lockError.message,
       },
     ],
-    warnings: [warned("gone", "mp", "project", "unavailable", "gone is not in the manifest")],
+    warnings: [
+      warned(
+        "gone",
+        "mp",
+        "project",
+        "unavailable",
+        'Plugin "gone" not found in marketplace "mp".',
+      ),
+    ],
   });
   assert.deepStrictEqual(notifications[0], {
     message:

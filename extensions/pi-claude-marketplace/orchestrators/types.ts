@@ -10,7 +10,8 @@
 import { type ContentReason } from "../shared/notification-types.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
-import type { NotificationContext } from "../platform/pi-api.ts";
+import type { ActiveMcpImplementation, NotificationContext } from "../platform/pi-api.ts";
+import type { McpDependency } from "../shared/concerns/soft-dep.ts";
 import type { CleanupFailure } from "../shared/errors.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
 import type {
@@ -96,16 +97,18 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    */
   readonly resourcesChanged: boolean;
   /**
-   * CMC-13: per-row soft-dep predicate inputs. `true` iff
-   * the plugin's resolved manifest declared the kind AND it was actually
-   * staged at reinstall time (the orchestrator already tracks
-   * `stagedAgentNames.length > 0` / `stagedMcpServerNames.length > 0` /
-   * `resources.workflows.length > 0` per-outcome; these flags surface them
-   * through the typed outcome so cascade rendering
+   * CMC-13: per-row soft-dep predicate inputs. `declaresAgents` and
+   * `declaresWorkflows` are `true` iff the plugin's resolved manifest declared
+   * the kind AND it was actually staged at reinstall time (the orchestrator
+   * already tracks `stagedAgentNames.length > 0` /
+   * `resources.workflows.length > 0` per-outcome). D-P3-10: `declaresMcp` is
+   * the `McpDependency` the plugin's declared servers give, naming the MCP
+   * implementations that run every server, or `false` when none runs one.
+   * These fields surface through the typed outcome so cascade rendering
    * (`PluginCascadeRow.declaresAgents` / `.declaresMcp` /
    * `.declaresWorkflows`) consumes the
    * effective-state-at-render-time signal without re-deriving from the
-   * staged-name arrays at the renderer site).
+   * staged-name arrays at the renderer site.
    *
    * MSG-SD-3: per-row markers fire on `(reinstalled)` rows only. These
    * flags live ONLY on this reinstalled arm; the `(skipped)` and
@@ -113,14 +116,14 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * narrows on the partition discriminator and never reads soft-dep flags
    * for those rows.
    *
-   * CMC-13: required `boolean` (not `?: boolean`) so every reinstalled
+   * CMC-13: required fields (not optional) so every reinstalled
    * outcome producer populates the predicate EXPLICITLY rather than
    * relying on `undefined ~= false`. The closed type enforces the contract
    * at compile time; the `tsc --noEmit` gate catches any forgotten emitter
    * on every CI run.
    */
   readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
+  readonly declaresMcp: McpDependency | false;
   readonly declaresWorkflows: boolean;
   /**
    * WARN-01 / WR-04 / D-86-03: the component kinds whose SOURCE frontmatter
@@ -320,13 +323,14 @@ export interface DependencyStagingDiagnostic {
 export interface PluginUpdateBase {
   readonly name: string;
   /**
-   * CMC-13: required `boolean` on every partition.
+   * CMC-13: required on every partition.
    * The renderer narrows on the partition discriminator (`(updated)` is
    * the only partition that emits the soft-dep marker per MSG-SD-3), but
    * the explicit field keeps every producer honest at compile time.
+   * D-P3-10: `declaresMcp` is the plugin's `McpDependency`, or `false`.
    */
   readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
+  readonly declaresMcp: McpDependency | false;
   readonly declaresWorkflows: boolean;
   /**
    * UPD-DEP-D1: one row per dependency the update installed, enabled or moved
@@ -430,17 +434,18 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    * WR-01: the three inherited signals this verb spells elsewhere, pinned to
    * `never` so a producer cannot populate a second spelling of a fact the
    * outcome already carries. `never` still satisfies the inherited optional
-   * `boolean` / `string[]`, so the inheritance itself is untouched and a signal
-   * ADDED to `LedgerDegradationSignals` tomorrow still lands here unpinned --
-   * which is the property the inheritance exists for.
+   * `boolean` / `McpDependency` / `string[]`, so the inheritance itself is
+   * untouched and a signal ADDED to `LedgerDegradationSignals` tomorrow still
+   * lands here unpinned -- which is the property the inheritance exists for.
    *
    *  - the inherited `unsupported` array is `partialDegrade.kinds` here, which
    *    pairs the dropped kinds with the `newlyDegraded` verdict that makes them
    *    actionable.
-   *  - `stagedAgents` / `stagedMcpServers` are the presence half of
-   *    `stagedAgentNames` / `stagedMcpServerNames`, already reduced to the
-   *    required `declaresAgents` / `declaresMcp` predicates above. The
-   *    workflows counterpart rides `declaresWorkflows` for the same reason.
+   *  - `stagedAgents` is the presence half of `stagedAgentNames`, already
+   *    reduced to the required `declaresAgents` predicate above, and
+   *    `stagedMcpServers` is the plugin's `McpDependency`, already carried by
+   *    `declaresMcp` (D-P3-10). The workflows counterpart rides
+   *    `declaresWorkflows` for the same reason.
    */
   readonly unsupported?: never;
   readonly stagedAgents?: never;
@@ -628,7 +633,7 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
  *
  * Each partition variant carries `declaresAgents` / `declaresMcp` /
  * `declaresWorkflows` via the shared `PluginUpdateBase` base (CMC-13 required
- * booleans).
+ * fields; `declaresMcp` is an `McpDependency` or `false`, D-P3-10).
  */
 export type PluginUpdateOutcome =
   | PluginUpdateUpdatedOutcome
@@ -719,6 +724,11 @@ export interface PluginConvergeTarget {
   readonly cwd: string;
   readonly partial: boolean;
   /**
+   * D-P3-13: the MCP implementation of the run `apply` planned the move under,
+   * so the runner judges the candidate's MCP servers as the plan did.
+   */
+  readonly mcpImplementation: ActiveMcpImplementation;
+  /**
    * D-10 / D-25: a growth-only move re-materializes the recorded revision, so
    * the runner does not skip a candidate at the recorded revision. A plugin
    * whose supported component set grew gets the components it lacked.
@@ -763,10 +773,10 @@ export type PluginConvergeFn = (target: PluginConvergeTarget) => Promise<PluginU
  *
  * SNM-04 / D-15-02: the `"installed"` variant carries REQUIRED
  * `dependencies: readonly Dependency[]` (the closed-set
- * `"agents" | "mcp" | "workflows"` per SNM-04). The orchestrator derives the
- * array at the success-return site from
- * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`),
- * `installCtx.stagedMcpServerNames.length > 0` (-> `"mcp"`) and
+ * `"agents" | McpDependency | "workflows"` per SNM-04). The orchestrator
+ * derives the array at the success-return site from
+ * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`), the
+ * `McpDependency` of the resolution's declared servers (itself, D-P3-10), and
  * `installCtx.stagedWorkflowNames.length > 0` (-> `"workflows"`); the
  * `declaresAgents`/`declaresMcp`/`declaresWorkflows` predicates on
  * `InstallPluginOutcome`
@@ -806,7 +816,7 @@ export type InstallPluginOutcome =
       readonly status: "installed";
       readonly resourcesChanged: boolean;
       readonly declaresAgents: boolean;
-      readonly declaresMcp: boolean;
+      readonly declaresMcp: McpDependency | false;
       readonly declaresWorkflows: boolean;
       /**
        * The resolved install version, as the standalone rows render it. An
@@ -870,8 +880,8 @@ export type InstallPluginOutcome =
        * `unavailable`, `uninstallable`, `unexpected-failure`) map here.
        * `error` is the typed dispatch surface -- consumers narrow on
        * `instanceof PluginShapeError` and `.shape.kind` to recover the
-       * specific failure class. `cause` preserves the formatted user-visible
-       * text for callers in orchestrated mode that render it directly.
+       * specific failure class. `cause` is `error` as text: its message
+       * followed by its cause chain, as `formatOrchestratedCause` writes it.
        */
       readonly status: "failed";
       readonly error: Error;

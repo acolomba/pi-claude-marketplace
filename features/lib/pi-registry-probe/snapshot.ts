@@ -4,10 +4,11 @@
  *
  * The probe is a Pi extension that every profile Pi loads. When its command
  * runs, it appends one custom entry that holds every tool Pi has, the names
- * of the active tools, and every slash command Pi offers, in Pi's order. The
- * reader requires exactly one such entry among a request's custom entries and
- * validates all three fields, so an empty list is always an empty array that
- * a step compares, never a missing field read as empty.
+ * of the active tools, every slash command Pi offers, and every MCP server
+ * an extension registered with Pi, in Pi's order. The reader requires
+ * exactly one such entry among a request's custom entries and validates all
+ * four fields, so an empty list is always an empty array that a step
+ * compares, never a missing field read as empty.
  */
 
 import { fileURLToPath } from "node:url";
@@ -46,6 +47,7 @@ const SNAPSHOT_SCHEMA = Type.Object(
         { additionalProperties: false },
       ),
     ),
+    mcpServers: Type.Array(Type.Object({ name: Type.String() }, { additionalProperties: false })),
   },
   { additionalProperties: false },
 );
@@ -54,9 +56,11 @@ const SNAPSHOT_VALIDATOR = Compile(SNAPSHOT_SCHEMA);
 
 /**
  * One report of the probe: every tool with the source and path Pi records for
- * it, the names of the active tools, and every slash command with its
+ * it; the names of the active tools; every slash command with its
  * description (null when Pi has none), its kind (`extension`, `prompt`, or
- * `skill`), and the path Pi records for it. Each list keeps Pi's order.
+ * `skill`), and the path Pi records for it; and the name of every MCP server
+ * an extension registered with `pi.registerMcpServer()`. Each list keeps
+ * Pi's order.
  */
 export type RegistrySnapshot = Type.Static<typeof SNAPSHOT_SCHEMA>;
 

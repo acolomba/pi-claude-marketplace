@@ -14,7 +14,9 @@ import {
   type PluginInstallRecord,
   isRecordedButDisabled,
   loadState,
+  mcpServerConfigsOf,
   rangeVersionOf,
+  replaceCompatibility,
   saveState,
   toDisabledRecord,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -138,6 +140,79 @@ test("GV-01: a record moved to a catalog version keeps no release tag version", 
   const { resolvedVersion: _tagVersion, ...expected } = { ...record, version: "3.0.0" };
   assert.deepStrictEqual(moved, expected);
   assert.strictEqual(record.resolvedVersion, "2.0.0");
+});
+
+test("MREC-01: replacing a record's compatibility removes the neutral basis beside it", () => {
+  // arrange
+  const record: PluginInstallRecord = {
+    version: "1.0.0",
+    resolvedSource: "/plugin",
+    compatibilityBasis: "neutral",
+    compatibility: { installable: false, notes: [], supported: [], unsupported: ["mcpServers"] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  // act
+  replaceCompatibility(
+    record,
+    {
+      installable: true,
+      notes: ["note"],
+      supported: ["skills"],
+      unsupported: [],
+    },
+    undefined,
+  );
+
+  // assert
+  assert.deepStrictEqual(record, {
+    version: "1.0.0",
+    resolvedSource: "/plugin",
+    compatibility: { installable: true, notes: ["note"], supported: ["skills"], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+});
+
+test("MREC-01: replacing a record's compatibility with the neutral basis writes the basis beside it", () => {
+  // arrange
+  const record: PluginInstallRecord = {
+    version: "1.0.0",
+    resolvedSource: "/plugin",
+    compatibility: { installable: false, notes: [], supported: [], unsupported: ["mcpServers"] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  // act
+  replaceCompatibility(
+    record,
+    { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+    "neutral",
+  );
+
+  // assert
+  assert.deepStrictEqual(record, {
+    version: "1.0.0",
+    resolvedSource: "/plugin",
+    compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+    compatibilityBasis: "neutral",
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
 });
 
 test("disables a plugin while preserving its complete inventory", () => {
@@ -456,6 +531,49 @@ for (const { name, extra, accepted } of [
     extra: { dependencyDisabled: "yes" },
     accepted: false,
   },
+  {
+    name: "MREC-01 a record whose plugin declares no MCP server",
+    extra: { mcpServerConfigs: [] },
+    accepted: true,
+  },
+  {
+    name: "MREC-01 a record holding MCP servers of any JSON config",
+    extra: {
+      mcpServerConfigs: [
+        { name: "srv", config: { command: "${CLAUDE_PLUGIN_ROOT}/server" } },
+        { name: "odd", config: 5 },
+        { name: "nil", config: null },
+      ],
+    },
+    accepted: true,
+  },
+  {
+    name: "MREC-01 a recorded MCP server without a name",
+    extra: { mcpServerConfigs: [{ config: { command: "node" } }] },
+    accepted: false,
+  },
+  {
+    name: "MREC-01 a recorded MCP server with a non-string name",
+    extra: { mcpServerConfigs: [{ name: 5, config: { command: "node" } }] },
+    accepted: false,
+  },
+  {
+    name: "MREC-01 a recorded MCP server without a config",
+    extra: { mcpServerConfigs: [{ name: "srv" }] },
+    accepted: false,
+  },
+  { name: "MREC-01 a record flagging a bundle", extra: { mcpBundle: true }, accepted: true },
+  { name: "MREC-01 a false bundle flag", extra: { mcpBundle: false }, accepted: false },
+  {
+    name: "MREC-01 a record marking a neutral compatibility",
+    extra: { compatibilityBasis: "neutral" },
+    accepted: true,
+  },
+  {
+    name: "MREC-01 a compatibility basis other than neutral",
+    extra: { compatibilityBasis: "adapter" },
+    accepted: false,
+  },
 ]) {
   test(`validates ${name}`, async (t) => {
     // arrange
@@ -475,6 +593,80 @@ for (const { name, extra, accepted } of [
     assert.strictEqual(loaded, accepted);
   });
 }
+
+test("MREC-01: loads recorded MCP servers, the bundle flag, and the basis unchanged", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-mcp-server-configs-");
+  const storedState = storedStateWithPluginKeys({
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    mcpServerConfigs: [
+      { name: "srv", config: { command: "node", args: ["${CLAUDE_PLUGIN_DATA}/x.js"] } },
+      { name: "remote", config: { type: "http", url: "https://mcp.example.com" } },
+    ],
+    mcpBundle: true,
+    compatibilityBasis: "neutral",
+  });
+  await writeFile(path.join(extensionRoot, "state.json"), JSON.stringify(storedState));
+
+  // act
+  const loadedState = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(loadedState, storedState);
+});
+
+test("MREC-01: records each declared MCP server as a name and config pair in declaration order", () => {
+  // arrange
+  const declared = {
+    zeta: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/z.js"] },
+    alpha: { type: "ws", url: "wss://mcp.example.com/ws" },
+  };
+
+  // act
+  const mcpServerConfigs = mcpServerConfigsOf(declared);
+
+  // assert
+  assert.deepStrictEqual(mcpServerConfigs, [
+    { name: "zeta", config: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/z.js"] } },
+    { name: "alpha", config: { type: "ws", url: "wss://mcp.example.com/ws" } },
+  ]);
+});
+
+test("MREC-01: records a deep copy that a later change to the declared config does not reach", () => {
+  // arrange
+  const declared = { srv: { command: "node", env: { TOKEN: "${TOKEN}" } } };
+  const mcpServerConfigs = mcpServerConfigsOf(declared);
+
+  // act
+  declared.srv.env.TOKEN = "changed";
+
+  // assert
+  assert.deepStrictEqual(mcpServerConfigs, [
+    { name: "srv", config: { command: "node", env: { TOKEN: "${TOKEN}" } } },
+  ]);
+});
+
+test("MREC-01: records a declared server named __proto__ as a server", () => {
+  // arrange
+  const declared = JSON.parse('{"__proto__":{"command":"node"}}') as Record<string, unknown>;
+
+  // act
+  const mcpServerConfigs = mcpServerConfigsOf(declared);
+
+  // assert
+  assert.deepStrictEqual(mcpServerConfigs, [{ name: "__proto__", config: { command: "node" } }]);
+});
+
+test("MREC-01: records no entry for a plugin declaring no MCP server", () => {
+  // arrange
+  const declared = {};
+
+  // act
+  const mcpServerConfigs = mcpServerConfigsOf(declared);
+
+  // assert
+  assert.deepStrictEqual(mcpServerConfigs, []);
+});
 
 test("returns the exact default for a missing state file", async (t) => {
   // arrange

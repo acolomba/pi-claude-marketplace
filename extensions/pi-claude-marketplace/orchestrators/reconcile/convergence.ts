@@ -24,12 +24,14 @@
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { declaredVersionWithPin, isSameVersion, shaVersion } from "../../domain/version.ts";
 import { atCatalogVersion, isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { legacyServersSourceFor } from "../mcp/recorded-servers.ts";
 import { admitResolvedVersion, foldDeclaredConstraint } from "../plugin/constraint-fold.ts";
 import {
   installedCopyReadOptions,
@@ -42,6 +44,8 @@ import {
   unusableDeclaration,
 } from "../plugin/dependency-index.ts";
 import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
+import { readRecordMcpVerdict } from "../plugin/mcp-verdict-read.ts";
+import { degradeBaselineOf, newlyDroppedKinds } from "../plugin/mcp-verdict.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "../plugin/shared.ts";
 
 import {
@@ -60,6 +64,7 @@ import type {
 } from "./dependency-verdict.ts";
 import type { PlannedPluginEnable, ReconcilePlan } from "./types.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -71,6 +76,7 @@ import type {
   RecordDeclarations,
 } from "../plugin/dependency-index.ts";
 import type { ListCandidate } from "../plugin/list-candidate-version.ts";
+import type { RecordDegradeBaseline } from "../plugin/mcp-verdict.ts";
 import type { RevisionMove } from "../types.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -88,6 +94,12 @@ export interface ConvergenceInput {
    * planned as if enabled (`plugin@marketplace` keys).
    */
   readonly enable?: ReadonlySet<string>;
+  /**
+   * D-P3-03 / D-P3-13: the run's active MCP implementation, under which a
+   * record's verdict and its candidate's verdict are both read. Required, so
+   * no caller silently keeps the adapter's reading.
+   */
+  readonly mcpImplementation: ActiveMcpImplementation;
 }
 
 /** D-10: one catalog move, with the revisions on both sides (UPR-02). */
@@ -99,7 +111,7 @@ export interface PlannedMove extends RevisionMove {
   readonly revisionChanged: boolean;
   /** The supported component set strictly grew (BFILL-01). */
   readonly grew: boolean;
-  /** The record was installed partial (`installable: false`). */
+  /** The record is partial under the active MCP implementation (D-P3-13). */
   readonly partial: boolean;
 }
 
@@ -139,7 +151,7 @@ export interface ConvergencePlan {
 interface CandidateMove {
   readonly key: string;
   readonly move: PlannedMove;
-  /** The kinds a clean record's partial candidate would drop (D-12). */
+  /** The kinds the candidate would drop that the record does not (D-12, D-P3-13). */
   readonly consent?: readonly string[];
   /** DLS-D1: what the installed copy declares; none when it has no copy or no manifest. */
   readonly installed: readonly AddressedDependency[];
@@ -396,13 +408,51 @@ async function gitOffer(
   };
 }
 
+/** What a move's candidate drops, when it drops nothing. */
+const NO_DROPS = Object.freeze({ consent: undefined, excused: false });
+
+/**
+ * D-12 / D-P3-13: what a move's candidate drops under the active
+ * implementation, against the record read under the same implementation:
+ * `consent` holds the kinds the candidate newly drops, or is `undefined`, and
+ * `excused` says whether the candidate drops a kind that neither the record
+ * nor a new degrade explains. Only a record whose servers cannot be read,
+ * and whose stored verdict is not the active implementation's own, excuses a
+ * kind (the `mcpServers` drop a switch of implementation alone makes,
+ * D-MB-06), and such a move carries `--partial`, so a switch never holds a
+ * move.
+ */
+function candidateDrops(
+  baseline: RecordDegradeBaseline,
+  resolved: MaterializablePlugin | undefined,
+  active: ActiveMcpImplementation,
+): { readonly consent: readonly string[] | undefined; readonly excused: boolean } {
+  if (resolved === undefined) {
+    return NO_DROPS;
+  }
+
+  const view = resolutionFor(resolved, active);
+  if (view.state !== "partially-available") {
+    return NO_DROPS;
+  }
+
+  // The resolution's own verdict is the neutral one (D-P3-01).
+  const dropped = newlyDroppedKinds(view, resolved, baseline);
+  const excused = view.unsupported.some(
+    (kind) => !baseline.unsupported.includes(kind) && !dropped.includes(kind),
+  );
+  return { consent: dropped.length > 0 ? dropped : undefined, excused };
+}
+
 /**
  * D-10: the move one enabled record would make, or `undefined`. A delisted
  * record (DLS-D1), an invalid entry and an `unavailable` candidate are not
  * moves. A move is a changed revision or a strictly grown supported set
  * (BFILL-01), weighed on every pass; a growth-only move keeps its version. A
- * clean record's `partially-available` candidate carries the kinds it would
- * drop; a record already installed partial moves without consent (D-12).
+ * `partially-available` candidate carries the kinds it would newly drop; a
+ * record partial under the active implementation moves partial (D-12,
+ * D-P3-13), and so does a record whose unreadable servers excuse a drop
+ * (D-MB-06).
  */
 async function recordMove(
   input: ConvergenceInput,
@@ -438,6 +488,15 @@ async function recordMove(
     return undefined;
   }
 
+  const { effective, recorded } = await readRecordMcpVerdict(
+    legacyServersSourceFor(input.locations, mp, plugin),
+    input.mcpImplementation,
+  );
+  const { consent, excused } = candidateDrops(
+    degradeBaselineOf(effective, recorded, record, input.mcpImplementation),
+    resolved,
+    input.mcpImplementation,
+  );
   const move: PlannedMove = {
     scope: input.scope,
     marketplace: mp.name,
@@ -448,12 +507,8 @@ async function recordMove(
     ...(offer.toCommit !== undefined && { toCommit: offer.toCommit }),
     revisionChanged: offer.revisionChanged,
     grew,
-    partial: !record.compatibility.installable,
+    partial: !effective.installable || excused,
   };
-  const consent =
-    record.compatibility.installable && resolved?.state === "partially-available"
-      ? resolved.unsupported
-      : undefined;
   return { move, ...(consent !== undefined && { consent }) };
 }
 
@@ -1072,7 +1127,12 @@ function isDependencyHeld(state: ExtensionState, op: PlannedPluginEnable): boole
  * judges every enabled plugin again once the moves have run.
  */
 export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCascade> {
-  const base = { scope: input.scope, state: input.state, locations: input.locations };
+  const base = {
+    scope: input.scope,
+    state: input.state,
+    locations: input.locations,
+    mcpImplementation: input.mcpImplementation,
+  };
   const settled = await releaseOnLandedMoves(input);
   const lifts = settled.plan.pluginsToEnable.filter((op) => isDependencyHeld(input.state, op));
   const cascade =
@@ -1193,7 +1253,12 @@ async function judgePlannedScope(
 async function releaseOnLandedMoves(
   input: MoveCascadeInput,
 ): Promise<Pick<MoveCascade, "plan" | "cascade"> & { readonly released: ReadonlySet<string> }> {
-  const base = { scope: input.scope, state: input.state, locations: input.locations };
+  const base = {
+    scope: input.scope,
+    state: input.state,
+    locations: input.locations,
+    mcpImplementation: input.mcpImplementation,
+  };
   const scheduled = plannedInstallKeys(input.plan);
   let released = releasableDependents(input.verdict, input.state, scheduled);
   while (released.size > 0) {

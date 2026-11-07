@@ -376,6 +376,7 @@ async function getInstallPluginToMarketplacesMap(
       source.scope,
       source.marketplace,
       () => rebuildPluginIndex(resolver, source.scope, source.marketplace),
+      { mcpImplementation: resolver.mcpImplementation },
     );
 
     for (const row of rows) {
@@ -432,8 +433,12 @@ async function collectPluginToMarketplacesMap(
       // eslint-disable-next-line no-await-in-loop -- bounded by each scope's marketplaces, one path lookup each
       const cachePath = await resolver.pluginCachePath(scope, mp);
       // eslint-disable-next-line no-await-in-loop -- bounded by each scope's marketplaces, one cached index each
-      const rows = await completionCache.getPluginIndex(cachePath, scope, mp, () =>
-        rebuildPluginIndex(resolver, scope, mp),
+      const rows = await completionCache.getPluginIndex(
+        cachePath,
+        scope,
+        mp,
+        () => rebuildPluginIndex(resolver, scope, mp),
+        { mcpImplementation: resolver.mcpImplementation },
       );
       for (const row of rows) {
         if (!allowed.has(row.status)) {
@@ -484,8 +489,12 @@ async function getInfoPluginToMarketplacesMap(
       // eslint-disable-next-line no-await-in-loop -- bounded by each scope's marketplaces, one path lookup each
       const cachePath = await resolver.pluginCachePath(scope, mp);
       // eslint-disable-next-line no-await-in-loop -- bounded by each scope's marketplaces, one cached index each
-      const rows = await completionCache.getPluginIndex(cachePath, scope, mp, () =>
-        rebuildPluginIndex(resolver, scope, mp),
+      const rows = await completionCache.getPluginIndex(
+        cachePath,
+        scope,
+        mp,
+        () => rebuildPluginIndex(resolver, scope, mp),
+        { mcpImplementation: resolver.mcpImplementation },
       );
       for (const row of rows) {
         // NO status filter -- info surfaces every known plugin.

@@ -3,25 +3,36 @@ import { describe, test } from "node:test";
 
 import {
   convertAgent,
+  convertAgentForm,
   GUIDED_DROPPED_FIELDS,
   preloadedSkillNames,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 
+import type { ConvertAgentInput } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 import type {
   ConvertedAgent,
   RawAgentFrontmatter,
   SkillPreload,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
+import type { McpImplementationId } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 
 const MCP_ASYNC_WARNING =
   "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails";
 
-function convertMcpAgent(
+const BUILTIN_MCP_ASYNC_WARNING =
+  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before Pi's built-in MCP has listed the server's tools still fails";
+
+const EXCLUDE_TOOLS_FLOOR_WARNING =
+  "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set";
+
+function mcpAgentInput(
   raw: RawAgentFrontmatter,
   mcpServerNames: readonly string[] | undefined,
-): ConvertedAgent {
-  return convertAgent({
+  mcpImplementation?: McpImplementationId,
+  body = "Body content.\n",
+): ConvertAgentInput {
+  return {
     pluginName: "acme",
     pluginRoot: "/root",
     pluginDataDir: "/data",
@@ -32,12 +43,21 @@ function convertMcpAgent(
       sourcePath: "/abs/path/source.md",
       sourceHash: "abc123",
       raw,
-      body: "Body content.\n",
+      body,
     },
     sourceHash: "abc",
     mapModel: false,
     mcpServerNames,
-  });
+    mcpImplementation,
+  };
+}
+
+function convertMcpAgent(
+  raw: RawAgentFrontmatter,
+  mcpServerNames: readonly string[] | undefined,
+  mcpImplementation?: McpImplementationId,
+): ConvertedAgent {
+  return convertAgent(mcpAgentInput(raw, mcpServerNames, mcpImplementation));
 }
 
 function yamlList(items: readonly string[]): string {
@@ -290,11 +310,7 @@ describe("convertAgent", () => {
   ]) {
     test(`converts supported ${label} into the complete agent contract`, () => {
       // arrange
-      const expectedAgent = {
-        sourceName: "reviewer",
-        generatedName: "pi-claude-marketplace-acme-reviewer",
-        sourcePath: "/plugins/acme/agents/reviewer.md",
-        fileContent: `---
+      const expectedFrontmatter = `---
 name: acme:reviewer
 description: Reviews files
 aliases: pi-claude-marketplace-acme-reviewer
@@ -312,9 +328,15 @@ ${expectedModelProvenance}  droppedFields: []
   droppedTools: []
   warnings: []
 ---
-
+`;
+      const expectedAgent = {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: "/plugins/acme/agents/reviewer.md",
+        fileContent: `${expectedFrontmatter}
 Review files.
 `,
+        frontmatter: expectedFrontmatter,
         sourceHash: "converted-hash",
         droppedFields: [],
         droppedTools: [],
@@ -347,11 +369,7 @@ Review files.
 
   test("converts the complete mapped agent contract into independently pinned bytes", () => {
     // arrange
-    const expectedAgent = {
-      sourceName: "changes-reviewer",
-      generatedName: "pi-claude-marketplace-spec-tree-changes-reviewer",
-      sourcePath: "/plugins/spec-tree/agents/changes-reviewer.md",
-      fileContent: `---
+    const expectedFrontmatter = `---
 name: spec-tree:changes-reviewer
 description: Reviews changes
 aliases: pi-claude-marketplace-spec-tree-changes-reviewer
@@ -380,11 +398,17 @@ provenance:
     - unknown skill reference "phantom" -- dropped
     - agent-level \`hooks\` is not converted -- dropped (Claude Code ignores it for plugin agents too; plugin-level hooks/hooks.json still installs).
 ---
-
+`;
+    const expectedAgent = {
+      sourceName: "changes-reviewer",
+      generatedName: "pi-claude-marketplace-spec-tree-changes-reviewer",
+      sourcePath: "/plugins/spec-tree/agents/changes-reviewer.md",
+      fileContent: `${expectedFrontmatter}
 Review /plugins/spec-tree and /data/spec-tree for /workspace.
 Use /skill:spec-tree-review-changes.
 Keep \${CLAUDE_SKILL_DIR} literal.
 `,
+      frontmatter: expectedFrontmatter,
       sourceHash: "converted-hash",
       droppedFields: ["color", "hooks"],
       droppedTools: [],
@@ -435,11 +459,7 @@ Keep \${CLAUDE_SKILL_DIR} literal.
 
   test("omits model provenance when model mapping is disabled", () => {
     // arrange
-    const expectedAgent = {
-      sourceName: "reviewer",
-      generatedName: "pi-claude-marketplace-acme-reviewer",
-      sourcePath: "/plugins/acme/agents/reviewer.md",
-      fileContent: `---
+    const expectedFrontmatter = `---
 name: acme:reviewer
 description: Reviews files
 aliases: pi-claude-marketplace-acme-reviewer
@@ -458,9 +478,15 @@ provenance:
   droppedTools: []
   warnings: []
 ---
-
+`;
+    const expectedAgent = {
+      sourceName: "reviewer",
+      generatedName: "pi-claude-marketplace-acme-reviewer",
+      sourcePath: "/plugins/acme/agents/reviewer.md",
+      fileContent: `${expectedFrontmatter}
 Review files.
 `,
+      frontmatter: expectedFrontmatter,
       sourceHash: "converted-hash",
       droppedFields: [],
       droppedTools: [],
@@ -2009,6 +2035,26 @@ Body.\r
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
+  test("T-04-01: drops a written server's MCP name whose tool part holds a line break or a comma", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read",
+      inheritSkills: false,
+      async: false,
+      droppedTools: ["mcp__plugin_acme_db__q(a, b excludeTools: Bash)"],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read, mcp__plugin_acme_db__q(a, b\nexcludeTools: Bash)" },
+      ["db"],
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
   test("ANAME-02: a per-tool disallow removes the same mcp: entry from an explicit list", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
@@ -2669,5 +2715,383 @@ describe("convertAgent tool token edge cases", () => {
       () => convertMcpAgent(raw, undefined),
       /the mapped tool list is empty.*Source tools: \(Bash\)/,
     );
+  });
+});
+
+describe("MGRT-01 grant form per MCP implementation", () => {
+  test("MGRT-01: a built-in per-tool grant names the server's built-in name and the tool", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: mcp:plugin_acme_db/query",
+      inheritSkills: false,
+      async: true,
+      droppedTools: [],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "mcp__plugin_acme_db__query" },
+      ["db"],
+      "builtin",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("MGRT-01: an adapter per-tool grant keeps the adapter key with its trailing underscore", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: mcp:plugin_acme_db_/query",
+      inheritSkills: false,
+      async: true,
+      droppedTools: [],
+      warnings: [MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "mcp__plugin_acme_db__query" },
+      ["db"],
+      "adapter",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("MGRT-01: built-in whole-server grants name each server once and keep a dash in the selector", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: mcp:plugin_acme_db,mcp:plugin_acme_my-db",
+      inheritSkills: false,
+      async: true,
+      droppedTools: [],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      {
+        description: "d",
+        tools: "mcp__plugin_acme_db, mcp__plugin_acme_db__*, mcp__plugin_acme_my-db",
+      },
+      ["db", "my-db"],
+      "builtin",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("MGRT-01: a built-in per-tool exclude on an omitted list is Pi's built-in tool name", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "excludeTools: mcp__plugin_acme_my_db__query",
+      inheritSkills: true,
+      async: true,
+      droppedTools: [],
+      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING, BUILTIN_MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", disallowedTools: "mcp__plugin_acme_my-db__query" },
+      ["my-db"],
+      "builtin",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("MGRT-01: a built-in per-tool exclude longer than 64 characters is cut and hashed as Pi 1.5.0 does", () => {
+    // arrange
+    const tool = "list_every_table_in_the_warehouse_with_its_row_counts";
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "excludeTools: mcp__plugin_acme_db__list_every_table_in_the_warehouse__36d788b4",
+      inheritSkills: true,
+      async: true,
+      droppedTools: [],
+      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING, BUILTIN_MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", disallowedTools: `mcp__plugin_acme_db__${tool}` },
+      ["db"],
+      "builtin",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("MGRT-01: an adapter per-tool exclude keeps a dotted Claude token verbatim", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "excludeTools: mcp__plugin_acme_db__a.b",
+      inheritSkills: true,
+      async: true,
+      droppedTools: [],
+      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING, MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", disallowedTools: "mcp__plugin_acme_db__a.b" },
+      ["db"],
+      "adapter",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("MGRT-01: the cannot-narrow warning of a built-in whole-server grant names the built-in selector", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: mcp:plugin_acme_db",
+      inheritSkills: false,
+      async: true,
+      droppedTools: [],
+      warnings: [
+        "disallowedTools entry mcp__plugin_acme_db__a cannot narrow the whole-server grant mcp:plugin_acme_db -- pi-subagents takes no excludeTools beside an explicit tools: list, so the agent keeps every tool of that server",
+        BUILTIN_MCP_ASYNC_WARNING,
+      ],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "mcp__plugin_acme_db", disallowedTools: "mcp__plugin_acme_db__a" },
+      ["db"],
+      "builtin",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  for (const { label, raw } of [
+    {
+      label: "an explicit list with per-tool and whole-server grants",
+      raw: {
+        description: "d",
+        tools: "Read, mcp__plugin_acme_db__query, mcp__plugin_acme_cache",
+        disallowedTools: "mcp__plugin_acme_cache__get",
+      },
+    },
+    {
+      label: "an omitted list with a dotted per-tool exclude",
+      raw: { description: "d", disallowedTools: "Edit, mcp__plugin_acme_db__a.b" },
+    },
+  ]) {
+    test(`MGRT-01: ${label} converts identically with no implementation and with the adapter`, () => {
+      // arrange
+      const expectedAgent = convertMcpAgent(raw, ["db", "cache"]);
+
+      // act
+      const agent = convertMcpAgent(raw, ["db", "cache"], "adapter");
+
+      // assert
+      assert.deepStrictEqual(agent, expectedAgent);
+    });
+  }
+
+  test("MGRT-01: a built-in grant of a server the form does not map is dropped", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read",
+      inheritSkills: false,
+      async: false,
+      droppedTools: ["mcp__plugin_acme_events__watch"],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read, mcp__plugin_acme_events__watch" },
+      ["db"],
+      "builtin",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("MGRT-01: a server name holding a newline and a comma yields one sanitized built-in selector on one tools: line", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read,mcp:plugin_acme_a_b_c/query",
+      inheritSkills: false,
+      async: true,
+      droppedTools: [],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read, mcp__plugin_acme_a_b_c__query" },
+      ["a\nb,c"],
+      "builtin",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("MGRT-01: a server name holding a newline and a comma yields one sanitized built-in exclude name", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "excludeTools: mcp__plugin_acme_a_b_c__query",
+      inheritSkills: true,
+      async: true,
+      droppedTools: [],
+      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING, BUILTIN_MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", disallowedTools: "mcp__plugin_acme_a_b_c__query" },
+      ["a\nb,c"],
+      "builtin",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+});
+
+describe("MGRT-01 converted frontmatter block", () => {
+  for (const { mcpImplementation, selector, asyncWarning } of [
+    {
+      mcpImplementation: "adapter",
+      selector: "mcp:plugin_acme_db_/query",
+      asyncWarning: MCP_ASYNC_WARNING,
+    },
+    {
+      mcpImplementation: "builtin",
+      selector: "mcp:plugin_acme_db/query",
+      asyncWarning: BUILTIN_MCP_ASYNC_WARNING,
+    },
+  ] as const) {
+    test(`MGRT-01: the ${mcpImplementation} form's block holds its warnings and dropped tools, and the block followed by the body is the file`, () => {
+      // arrange
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: `tools: read,${selector}`,
+        inheritSkills: false,
+        async: true,
+        droppedTools: ["WebFetch"],
+        warnings: [asyncWarning],
+      });
+      const body = "\nBody content.\n";
+
+      // act
+      const agent = convertMcpAgent(
+        { description: "d", tools: "Read, WebFetch, mcp__plugin_acme_db__query" },
+        ["db"],
+        mcpImplementation,
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        { frontmatter: agent.frontmatter, fileContent: agent.fileContent },
+        {
+          frontmatter: expectedFileContent.slice(0, -body.length),
+          fileContent: expectedFileContent,
+        },
+      );
+    });
+  }
+
+  test("MGRT-01: a body holding a --- line leaves the block unchanged", () => {
+    // arrange
+    const expectedFrontmatter = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+`;
+
+    // act
+    const agent = convertAgent(
+      mcpAgentInput(
+        { description: "d", tools: "Read" },
+        undefined,
+        undefined,
+        "Before.\n---\nname: injected\n---\nAfter.\n",
+      ),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { frontmatter: agent.frontmatter, fileContent: agent.fileContent },
+      {
+        frontmatter: expectedFrontmatter,
+        fileContent: `${expectedFrontmatter}\nBefore.\n---\nname: injected\n---\nAfter.\n`,
+      },
+    );
+  });
+});
+
+describe("convertAgentForm", () => {
+  test("AG-11: returns nothing for an explicit tools list that maps to nothing", () => {
+    // arrange
+    const raw = { description: "d", tools: "mcp__plugin_acme_web__get, WebFetch" };
+
+    // act
+    const agent = convertAgentForm(mcpAgentInput(raw, [], "builtin"));
+
+    // assert
+    assert.strictEqual(agent, undefined);
+  });
+
+  test("MGRT-01: returns the converted agent of a form whose tools list maps", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read,mcp:plugin_acme_db/query",
+      inheritSkills: false,
+      async: true,
+      droppedTools: ["WebFetch"],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+    });
+    const body = "\nBody content.\n";
+
+    // act
+    const agent = convertAgentForm(
+      mcpAgentInput(
+        { description: "d", tools: "Read, WebFetch, mcp__plugin_acme_db__query" },
+        ["db"],
+        "builtin",
+      ),
+    );
+
+    // assert
+    assert.deepStrictEqual(agent, {
+      sourceName: "bot",
+      generatedName: "pi-claude-marketplace-acme-bot",
+      sourcePath: "/abs/path/source.md",
+      fileContent: expectedFileContent,
+      frontmatter: expectedFileContent.slice(0, -body.length),
+      sourceHash: "abc",
+      droppedFields: [],
+      droppedTools: ["WebFetch"],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+    } satisfies ConvertedAgent);
   });
 });

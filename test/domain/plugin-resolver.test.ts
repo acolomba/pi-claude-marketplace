@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   requirePartialInstallable,
   requireInstallable,
+  resolutionFor,
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
 import { PluginShapeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -21,6 +22,7 @@ import { resolveGitSubdirRoot } from "../../extensions/pi-claude-marketplace/sha
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type {
   GitPluginRootResult,
+  MaterializablePlugin,
   ResolveContext,
   ResolvedPlugin,
   ResolvedPluginUnavailable,
@@ -114,6 +116,7 @@ function installableLocal(localRoot: string, description?: string): ResolvedPlug
     notes: [],
     componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
+    declaredMcpServers: {},
     defaultEnabled: true,
     ...(description !== undefined && { description }),
   };
@@ -435,6 +438,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -494,6 +498,7 @@ describe("resolveStrict", () => {
       notes: ["contains mod"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -527,6 +532,7 @@ describe("resolveStrict", () => {
       notes: ["contains mod"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       hooksConfigPath: path.join("hooks", "hooks.json"),
       defaultEnabled: true,
     });
@@ -559,6 +565,7 @@ describe("resolveStrict", () => {
       notes: ["contains mod"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -593,6 +600,7 @@ describe("resolveStrict", () => {
       notes: ["contains mod"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -625,6 +633,7 @@ describe("resolveStrict", () => {
       notes: ["contains binaries"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -657,6 +666,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -1418,6 +1428,10 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: { local: { command: "node" } },
+      declaredMcpServers: {
+        live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        local: { command: "node" },
+      },
       droppedMcpServers: [{ server: "live", feature: "ws" }],
       defaultEnabled: true,
     });
@@ -1451,7 +1465,39 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: { local: { command: "node", args: ["server.js"] } },
+      declaredMcpServers: {
+        home: { command: "node", args: ["~/bin/server.js"] },
+        local: { command: "node", args: ["server.js"] },
+      },
       droppedMcpServers: [{ server: "home", feature: "args ~" }],
+      defaultEnabled: true,
+    });
+  });
+
+  test("MREC-01: a bundle reference makes the plugin partially available and flags the bundle", async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+    // act
+    const resolvedPlugin = await resolveStrict(
+      pluginEntry({ source: "./local", mcpServers: "server.mcpb" }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "partially-available",
+      installable: true,
+      name: "p1",
+      pluginRoot: localRoot,
+      supported: [],
+      unsupported: ["mcpServers"],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+      mcpServers: {},
+      declaredMcpServers: {},
+      mcpBundle: true,
       defaultEnabled: true,
     });
   });
@@ -1810,6 +1856,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -1839,6 +1886,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -1919,6 +1967,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -2014,6 +2063,7 @@ describe("resolveStrict", () => {
         notes: [],
         componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
         mcpServers: {},
+        declaredMcpServers: {},
         defaultEnabled: true,
       });
     } finally {
@@ -2043,6 +2093,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -2096,6 +2147,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -3665,6 +3717,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -3691,6 +3744,7 @@ describe("resolveStrict", () => {
       notes: ["contains themes"],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -3745,6 +3799,7 @@ describe("resolveStrict", () => {
         workflows: [],
       },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -3843,6 +3898,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: false,
     });
   });
@@ -3874,6 +3930,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: false,
     });
   });
@@ -4033,6 +4090,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: { srv: { command: "node" } },
+      declaredMcpServers: { srv: { command: "node" } },
       defaultEnabled: true,
     });
   });
@@ -4340,6 +4398,7 @@ describe("resolveStrict", () => {
         notes: [],
         componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
         mcpServers: {},
+        declaredMcpServers: {},
         defaultEnabled: true,
       });
     });
@@ -4373,6 +4432,7 @@ describe("resolveStrict", () => {
       notes: [],
       componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
+      declaredMcpServers: {},
       defaultEnabled: true,
     });
   });
@@ -4746,6 +4806,100 @@ describe("requireInstallable", () => {
       },
     );
   });
+
+  // NOTINSTALLMSG-01 / PR-6: the resolver writes no note for hooks that the
+  // entry declares besides the convention file (D-CF5-20), or for an sse
+  // server under Pi's built-in MCP (MREC-06). The refusal names the kind
+  // token, so its message does not end at the colon.
+  const entryHooks = {
+    PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+  };
+
+  for (const { op, kind, message } of [
+    {
+      op: "install",
+      kind: "not-installable",
+      message: 'Plugin "p1" is not installable: unsupported hooks',
+    },
+    {
+      op: "update",
+      kind: "no-longer-installable",
+      message: 'Plugin "p1" is no longer installable: unsupported hooks',
+    },
+  ] as const) {
+    test(`NOTINSTALLMSG-01: requireInstallable names unsupported hooks for entry-declared hooks with no note (${op})`, async () => {
+      // arrange
+      const resolvedPlugin = await resolveStrict(
+        pluginEntry({ source: "./local", hooks: entryHooks }),
+        resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" }),
+      );
+
+      // act & assert
+      assert.throws(
+        () => {
+          requireInstallable(resolvedPlugin, op);
+        },
+        (error: unknown) => {
+          assert.ok(error instanceof PluginShapeError);
+          assert.deepStrictEqual(
+            { message: error.message, shape: error.shape },
+            {
+              message,
+              shape: {
+                kind,
+                plugin: "p1",
+                reasons: ["unsupported hooks"],
+                partialable: true,
+                unsupportedKinds: ["hooks"],
+              },
+            },
+          );
+          return true;
+        },
+      );
+    });
+  }
+
+  test("NOTINSTALLMSG-01: requireInstallable names unsupported mcp for an sse server under Pi's built-in MCP", async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const resolvedPlugin = await resolveStrict(
+      pluginEntry({ source: "./local" }),
+      resolveContext(marketplaceRoot, {
+        [localRoot]: "dir",
+        [path.join(localRoot, ".mcp.json")]: {
+          contents: JSON.stringify({
+            mcpServers: { events: { type: "sse", url: "https://mcp.example.com/sse" } },
+          }),
+        },
+      }),
+    );
+    const view = resolutionFor(resolvedPlugin, "builtin");
+
+    // act & assert
+    assert.throws(
+      () => {
+        requireInstallable(view, "update");
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof PluginShapeError);
+        assert.deepStrictEqual(
+          { message: error.message, shape: error.shape },
+          {
+            message: 'Plugin "p1" is no longer installable: unsupported mcp',
+            shape: {
+              kind: "no-longer-installable",
+              plugin: "p1",
+              reasons: ["unsupported mcp"],
+              partialable: true,
+              unsupportedKinds: ["mcpServers"],
+            },
+          },
+        );
+        return true;
+      },
+    );
+  });
 });
 
 describe("requirePartialInstallable", () => {
@@ -4935,4 +5089,168 @@ describe("requirePartialInstallable", () => {
       },
     );
   });
+});
+
+// D-P3-03: the resolver's own verdict is the neutral one, so each case builds
+// that neutral resolution as the resolver returns it.
+function neutralResolution(
+  overrides: Partial<Omit<MaterializablePlugin, "state" | "installable">> & {
+    readonly state?: MaterializablePlugin["state"];
+  } = {},
+): MaterializablePlugin {
+  return {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: "/abs/marketplace/local",
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    declaredMcpServers: {},
+    defaultEnabled: true,
+    ...overrides,
+  };
+}
+
+function localServer(): Record<string, unknown> {
+  return { command: "node" };
+}
+
+function eventsServer(): Record<string, unknown> {
+  return { type: "sse", url: "https://mcp.example.com/sse" };
+}
+
+function askerServer(): Record<string, unknown> {
+  return { command: "node", bareElicitationCapability: true };
+}
+
+function liveServer(): Record<string, unknown> {
+  return { type: "ws", url: "wss://mcp.example.com/ws" };
+}
+
+describe("resolutionFor", () => {
+  test("D-P3-03: the none view deep-equals the neutral resolution", () => {
+    // arrange
+    const neutral = neutralResolution({
+      state: "partially-available",
+      unsupported: ["mcpServers"],
+      mcpServers: { local: localServer(), events: eventsServer() },
+      declaredMcpServers: {
+        local: localServer(),
+        events: eventsServer(),
+        asker: askerServer(),
+        live: liveServer(),
+      },
+      droppedMcpServers: [{ server: "live", feature: "ws" }],
+    });
+
+    // act
+    const view = resolutionFor(neutral, "none");
+
+    // assert
+    assert.deepStrictEqual(view, neutral);
+  });
+
+  test("D-P3-03: the builtin view of an sse plugin is partially available with the sse server dropped", () => {
+    // arrange
+    const neutral = neutralResolution({
+      mcpServers: { events: eventsServer() },
+      declaredMcpServers: { events: eventsServer() },
+    });
+
+    // act
+    const view = resolutionFor(neutral, "builtin");
+
+    // assert
+    assert.deepStrictEqual(
+      view,
+      neutralResolution({
+        state: "partially-available",
+        unsupported: ["mcpServers"],
+        mcpServers: { events: eventsServer() },
+        declaredMcpServers: { events: eventsServer() },
+        droppedMcpServers: [{ server: "events", feature: "sse" }],
+      }),
+    );
+  });
+
+  test("D-P3-03: the adapter view appends mcpServers after the neutral kinds", () => {
+    // arrange
+    const neutral = neutralResolution({
+      state: "partially-available",
+      unsupported: ["hooks"],
+      notes: ["contains hooks"],
+      declaredMcpServers: { asker: askerServer() },
+    });
+
+    // act
+    const view = resolutionFor(neutral, "adapter");
+
+    // assert
+    assert.deepStrictEqual(
+      view,
+      neutralResolution({
+        state: "partially-available",
+        unsupported: ["hooks", "mcpServers"],
+        notes: ["contains hooks"],
+        declaredMcpServers: { asker: askerServer() },
+        droppedMcpServers: [{ server: "asker", feature: "bareElicitationCapability" }],
+      }),
+    );
+  });
+
+  test("D-P3-03: a bundle keeps the plugin partially available under every view", () => {
+    // arrange
+    const neutral = neutralResolution({
+      state: "partially-available",
+      unsupported: ["mcpServers"],
+      mcpServers: { local: localServer() },
+      declaredMcpServers: { local: localServer() },
+      mcpBundle: true,
+    });
+
+    // act
+    const views = [
+      resolutionFor(neutral, "adapter"),
+      resolutionFor(neutral, "builtin"),
+      resolutionFor(neutral, "none"),
+    ];
+
+    // assert
+    assert.deepStrictEqual(views, [neutral, neutral, neutral]);
+  });
+
+  test("D-P3-03: an unavailable resolution returns unchanged", () => {
+    // arrange
+    const unavailablePlugin: ResolvedPlugin = {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: ["source dir does not exist: /abs/marketplace/missing"],
+    };
+
+    // act
+    const view = resolutionFor(unavailablePlugin, "builtin");
+
+    // assert
+    assert.strictEqual(view, unavailablePlugin);
+  });
+
+  for (const active of ["adapter", "builtin", "none"] as const) {
+    test(`D-P3-03: the ${active} view of a stdio plugin deep-equals the neutral resolution`, () => {
+      // arrange
+      const neutral = neutralResolution({
+        mcpServers: { local: localServer() },
+        declaredMcpServers: { local: localServer() },
+      });
+
+      // act
+      const view = resolutionFor(neutral, active);
+
+      // assert
+      assert.deepStrictEqual(view, neutral);
+    });
+  }
 });

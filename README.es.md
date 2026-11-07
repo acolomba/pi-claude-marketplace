@@ -24,9 +24,9 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 
 - Comandos.
 - Habilidades.
-- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`.
+- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los permisos MCP de un agente siguen la implementación MCP en uso. Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`.
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
-- Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
+- Servidores MCP. Usa el MCP integrado de Pi o, para más funciones de MCP, [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 - Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
 
 Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
@@ -35,9 +35,9 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 
 ## Requisitos previos
 
-- [Pi Coding Agent](https://pi.dev) 1.4.0 o posterior
+- [Pi Coding Agent](https://pi.dev) 1.5.0 o posterior
 - [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 o una versión 7.x posterior (opcional pero recomendado, `pi install npm:pi-mcp-adapter`).
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 o una versión 7.x posterior (opcional, `pi install npm:pi-mcp-adapter`). Admite más funciones de MCP que el MCP integrado de Pi.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 o posterior (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Uso
@@ -123,13 +123,14 @@ Las habilidades usan la forma `/skill:` de Pi y también tienen alias en las ses
 
 Los alias son los nombres que Claude Code da a una habilidad. El nombre de la habilidad es el nombre de su carpeta. Si el frontmatter de la habilidad define `name`, la habilidad también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos.
 
-Los servidores MCP de los complementos reciben los nombres que les da Claude Code. El modelo ve cada herramienta como `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter guarda cada servidor bajo una clave que termina en `_`. `/claude:plugin info` muestra cada servidor como `plugin:<plugin>:<server>`.
+Los servidores MCP de los complementos reciben los nombres que les da Claude Code. El modelo ve cada herramienta como `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter guarda cada servidor bajo una clave que termina en `_`. El MCP integrado de Pi registra cada servidor como `plugin_<plugin>_<server>`, sin `_` al final. Con el MCP integrado de Pi, el modelo ve cada `-` del nombre de una herramienta como `_`, y Pi recorta el nombre de una herramienta que tiene más de 64 caracteres. Para más información, consulta [Longitud de los nombres](docs/mcp-compatibility.md#name-length). `/claude:plugin info` muestra cada servidor como `plugin:<plugin>:<server>`. Los hooks de los complementos ven la parte del servidor en el nombre de una herramienta tal como la escribe Claude Code. Para más información, consulta [Mapeo de nombres de herramientas](docs/hooks-compatibility.md#tool-name-mapping).
 
-| Nombre del complemento | Clave de `mcpServers` | Clave del servidor en el adaptador | Nombres de las herramientas     | Nombre que muestra `info` |
-| ---------------------- | --------------------- | ---------------------------------- | ------------------------------- | ------------------------- |
-| `foo`                  | `api`                 | `plugin_foo_api_`                  | `mcp__plugin_foo_api__<tool>`   | `plugin:foo:api`          |
-| `foo`                  | `my.db`               | `plugin_foo_my_db_`                | `mcp__plugin_foo_my_db__<tool>` | `plugin:foo:my.db`        |
-| `bar`                  | `api`                 | `plugin_bar_api_`                  | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`          |
+| Nombre del complemento | Clave de `mcpServers` | Clave del servidor en el adaptador | Nombre del servidor integrado | Nombres de las herramientas                                                              | Nombre que muestra `info` |
+| ---------------------- | --------------------- | ---------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------- | ------------------------- |
+| `foo`                  | `api`                 | `plugin_foo_api_`                  | `plugin_foo_api`              | `mcp__plugin_foo_api__<tool>`                                                            | `plugin:foo:api`          |
+| `foo`                  | `my.db`               | `plugin_foo_my_db_`                | `plugin_foo_my_db`            | `mcp__plugin_foo_my_db__<tool>`                                                          | `plugin:foo:my.db`        |
+| `foo`                  | `my-db`               | `plugin_foo_my-db_`                | `plugin_foo_my-db`            | `mcp__plugin_foo_my-db__<tool>` (adaptador), `mcp__plugin_foo_my_db__<tool>` (integrado) | `plugin:foo:my-db`        |
+| `bar`                  | `api`                 | `plugin_bar_api_`                  | `plugin_bar_api`              | `mcp__plugin_bar_api__<tool>`                                                            | `plugin:bar:api`          |
 
 ### Ámbito (Scoping)
 
@@ -141,7 +142,7 @@ También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y
 
 ### Complementos parcialmente disponibles
 
-Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema, un servidor MCP que usa una función que pi-mcp-adapter no puede ejecutar o un paquete MCP. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
+Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema, un servidor MCP que la implementación de MCP que ejecuta Pi no puede ejecutar (pi-mcp-adapter o el MCP integrado de Pi) o un paquete MCP. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
 
 Lista los complementos parcialmente disponibles.
 
@@ -260,9 +261,6 @@ Agrega un mercado desde otro host git `https://`, como GitLab.
 ```text
 /claude:plugin marketplace add https://gitlab.com/my-group/my-marketplace
 ```
-
-> [!NOTE]
-> La autenticación Device Flow también cubre `gitlab.com`. Los hosts que no son GitHub necesitan la URL `https://` completa; la forma abreviada `owner/repo` solo apunta a GitHub.
 
 Agrega un mercado desde el sistema de archivos local. La ruta puede ser un directorio con `.claude-plugin/marketplace.json`, o una ruta directa a un archivo `marketplace.json`.
 

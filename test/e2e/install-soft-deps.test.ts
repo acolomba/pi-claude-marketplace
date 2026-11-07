@@ -27,7 +27,9 @@ import type { SlashCommandInfo, ToolInfo } from "@earendil-works/pi-coding-agent
 // Each plugin here declares one companion, so its row's reasons block holds
 // that marker alone (D-13-07).
 const REQUIRES_PI_SUBAGENTS_MARKER = "{requires pi-subagents}";
-const REQUIRES_PI_MCP_MARKER = "{requires pi-mcp-adapter}";
+// D-MB-07: context7's one stdio server runs under either MCP implementation,
+// so with neither active its row names `mcp`.
+const REQUIRES_MCP_MARKER = "{requires mcp}";
 
 interface SoftDepState {
   readonly requirement: string;
@@ -80,50 +82,51 @@ function rowReasons(messages: readonly string[], plugin: string): string | undef
   return /\{[^}]*\}$/.exec(row)?.[0] ?? "";
 }
 
-// ADET-01 / ADET-02: the pi-mcp-adapter states run through install and list on
-// the real extension. Each inventory comes from the shared seeds.
+// ADET-01 / ADET-02 / D-MB-07: the MCP implementation states run through install
+// and list on the real extension. Each inventory comes from the shared seeds.
+// Either implementation clears the marker; a foreign tool named mcp is neither.
 const MCP_STATES: readonly SoftDepState[] = [
   {
     requirement: "ADET-02",
-    name: "the adapter's proxy tool and command clear {requires pi-mcp-adapter}",
+    name: "the adapter's proxy tool and command clear {requires mcp} (D-MB-07)",
     tools: [adapterProxyTool()],
     commands: [adapterCommand()],
     reasons: "",
   },
   {
     requirement: "ADET-02",
-    name: "the adapter's command alone (disableProxyTool) clears {requires pi-mcp-adapter}",
+    name: "the adapter's command alone (disableProxyTool) clears {requires mcp} (D-MB-07)",
     tools: [],
     commands: [adapterCommand()],
     reasons: "",
   },
   {
     requirement: "ADET-02",
-    name: "a fork's mcp-adapter command clears {requires pi-mcp-adapter}",
+    name: "a fork's mcp-adapter command clears {requires mcp} (D-MB-07)",
     tools: [],
     commands: [forkAdapterCommand()],
     reasons: "",
   },
   {
     requirement: "ADET-01",
-    name: "Pi's built-in MCP alone keeps {requires pi-mcp-adapter}",
+    name: "Pi's built-in MCP alone clears {requires mcp} (D-MB-07)",
     tools: [builtinMcpTool()],
     commands: [builtinMcpCommand()],
-    reasons: REQUIRES_PI_MCP_MARKER,
+    reasons: "",
   },
   {
     requirement: "ADET-01",
-    name: "no adapter and no built-in MCP keeps {requires pi-mcp-adapter}",
+    name: "no adapter and no built-in MCP keeps {requires mcp} (D-MB-07)",
     tools: [],
     commands: [],
-    reasons: REQUIRES_PI_MCP_MARKER,
+    reasons: REQUIRES_MCP_MARKER,
   },
   {
     requirement: "ADET-01",
-    name: "a foreign extension's mcp tool keeps {requires pi-mcp-adapter}",
+    name: "a foreign extension's mcp tool with no built-in MCP keeps {requires mcp} (D-MB-07)",
     tools: [foreignMcpTool()],
     commands: [],
-    reasons: REQUIRES_PI_MCP_MARKER,
+    reasons: REQUIRES_MCP_MARKER,
   },
 ];
 

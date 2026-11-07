@@ -1,463 +1,223 @@
 # Project Research Summary
 
-**Project:** pi-claude-marketplace -- milestone `component-features` (Component Behavioral Tests)
-**Domain:** Cucumber behavioral coverage of six bridged Claude plugin component kinds (skills, commands, agents, hooks, MCP servers, workflows) on a model-free headless Pi, plus a raise of Pi and its three companions to their latest releases
-**Researched:** 2026-10-31
-**Confidence:** MEDIUM-HIGH (stack and architecture HIGH; features MEDIUM-HIGH; a few runtime behaviors documented but not yet run)
+**Project:** pi-claude-marketplace, milestone `mcp-builtin`
+**Domain:** Pi extension that bridges Claude plugin MCP servers into either pi-mcp-adapter 7.x or Pi 1.5.0's built-in MCP
+**Researched:** 2026-11-04
+**Confidence:** HIGH for the Pi, adapter and pi-subagents facts (read from published tarballs and this tree); MEDIUM for the phase split, handler ordering and wording
 
 ## Executive Summary
 
-This milestone adds no new product capability. It proves, through cucumber scenarios, that each bridged component kind looks to Pi and its companions the way Claude Code defines it after a real `/claude:plugin install`. Spike 028 showed this works without a real model. Pi's own faux provider (`@earendil-works/pi-ai/providers/faux`) scripts the model. A probe extension and RPC `get_commands` show what Pi registered. A hook recorder and a stub stdio MCP server log what the bridges launched. The workflow engine's `.events.jsonl` holds run results. Experts build this as a shared harness first, then independent per-kind suites. The harness must observe host-side stand-ins and never read back the script it wrote, or scenarios become tautological.
+This is a brownfield change to a layered, transactional Pi extension. Plugin MCP servers must run through pi-mcp-adapter when it is loaded and through Pi's built-in MCP when it is not. The two are equal implementations, and a switch must never need user action. Research confirms the brief's central claim: no single registration path serves both, because the adapter consumes `pi.registerMcpServer` registrations only as proxy-only servers and drops `directTools` (so `alwaysLoad` is lost). Each implementation therefore needs its own verdict table, translation, materialization, naming, status reader and agent-grant form.
 
-The recommended approach is one prerequisite phase (harness plus version raise), then six parallel component phases, each in its own worktree. Phase 1 owns every file that two component phases could both want. It lands each shared step together with one real seed scenario in the feature file of the phase that needs it, because `npm run check:features` fails on any step no scenario uses. Scenarios choose their Pi through a `Given` that starts a per-scenario "profile" Pi (scripted model, optional companions). The run's shared Pi stays as it is, with no model and no companions, so the existing 1,154 scenarios are untouched. Component phases never edit the shared prose files (`CHANGELOG.md`, README, PROJECT.md decisions, BACKLOG). Each phase writes its lines into its own SUMMARY.md, and the parent applies them at merge.
+The recommended approach has five parts. (1) Add no dependency. Bump Pi to 1.5.0 (a small mechanical change; the MCP code is byte-identical to 1.4.0). (2) Split the proposed `McpImplementation` interface by fallow zone: a pure profile in `domain/mcp-implementation.ts`, effects in `bridges/mcp` and `platform`, composition in a new `orchestrators/mcp/` directory. (3) Carry the active implementation (`adapter | builtin | none`) in the existing D-05 run snapshot (`SoftDepStatus.mcpImplementation`), not in a module global. (4) Persist the implementation-neutral, pre-substitution Claude form of every declared server in an optional additive `mcpServerConfigs` field, plus a neutral `compatibility`. Compute the effective verdict at read time. (5) Register built-in servers with `pi.registerMcpServer` from install records, twice per load (`session_start`, then after `loadReconcile`), only when built-in is the active implementation, gated on project trust, never handling `mcp_servers_change`.
 
-The main risks are three.
+**Superseded by decision 4:** research proposed a `-builtin:mcp` settings cleanup (decision 1: FEATURES T13, the P-Settings / Phase 6 proposals, the settings lock and atomic-write exemptions, the onboarding-state authorship questions, and the "one extra reload" cleanup gap). The user replaced it. The extension never edits Pi settings and NFR-10 is not amended. When neither implementation is active (no adapter, built-in MCP off, for example from the adapter's leftover `-builtin:mcp`), plugins with MCP servers are partially available because they require MCP support. The user turns on Pi's built-in MCP or installs pi-mcp-adapter. This removes the two hardest research problems and one whole phase.
 
-1. **The version raise.** pi-mcp-adapter 7.0.0 expands `${NAME:-default}` itself. Text the bridge writes as a literal, such as `${ANTHROPIC_API_KEY:-}` in an `oauth` value, therefore turns into the secret. `bridges/mcp/adapter-escape.ts` and the 462,790-value conformance property must be fixed and re-proved in Phase 1.
-2. **Harness hazards.** RPC records are dropped outside a request. The faux queue is process-global. Resets leak. pi-subagents writes `/tmp/pi-subagents-*`. Project trust hides project-scope MCP servers and agents.
-3. **Open parity decisions.** 33 decisions (FG-01..FG-33) must reach the user before the phases that pin those behaviors.
-
-Mitigate by settling cross-kind decisions in a pre-fan-out gate, giving each remaining decision to its owning phase's discuss step, and never pinning a GAP behavior before it is licensed.
+The main risks: variable encoding (Pi expands only `env`, `headers` and `oauth.clientSecret`, treats `$NAME` and a leading `!` specially, and has no `:-default`; unescaped plugin values can execute commands), name divergence (`-` folds to `_`; names over 64 characters get a hash), project-trust weakness (`isProjectTrusted()` auto-trusts a repo whose `.pi/` has no protected entry), the dual-profile cucumber harness silently running one implementation, and parallel children colliding in shared files. Each has a concrete mitigation below, and the serial foundation phase exists mainly to neutralize the last two.
 
 ## Key Findings
 
 ### Recommended Stack
 
-No new tool or framework. `@cucumber/cucumber` 13.3.0 is already latest. The only manifest addition beyond the floor raise is an exact devDependency on `@earendil-works/pi-ai` `1.4.0`. The harness imports `providers/faux` directly, and Pi's extension loader does not alias that subpath. Pi 1.3.0 to 1.4.0 breaks nothing this extension uses: the extension API types, RPC, skills, prompt templates and the faux `.d.ts` are byte-identical. Pi issue earendil-works/pi#10470 (duplicate `session_start` on RPC session switches) is still open, so keep SSDEDUP-01.
+No new runtime or dev dependency. Built-in MCP is driven through the Pi peer's `ExtensionAPI`; Pi's own client connects. Do not add an MCP SDK. Detail: `.planning/research/STACK.md`.
 
-**Core technologies and floors (user decision: raise all in Phase 1):**
+**Core technologies:**
 
-- `@earendil-works/pi-coding-agent` 1.4.0: dev `^1.4.0`, peer `>=1.4.0`. pi-subagents >=0.80 needs Pi >=1.2.0, and the suite proves only 1.4.0. `@earendil-works/pi-tui` dev `^1.4.0`.
-- `@earendil-works/pi-ai` 1.4.0, exact devDependency (not `^`): the faux provider. The exact pin avoids a second top-level copy beside Pi's exact pin.
-- `pi-mcp-adapter` `>=7.0.0 <8`: keep the major cap. 7.0.0 shows a major can change the interpolation passes the AVAR-03 escape depends on.
-- `pi-subagents` `>=0.84.0`: fixes the background-agent blocker (chord and `pi-agent-core/node` are no longer required). It ships a `bundle/`, and `pi.extensions` is `./bundle/index.js`.
-- `@quintinshaw/pi-dynamic-workflows` `>=3.15.0 <4`, new optional peer (`peerDependenciesMeta.optional`): the storage rule is byte-identical. It adds Pi-reserved-name refusal that bridged `plugin:name` names never hit.
-- Companions stay out of `dependencies`, `devDependencies` and the lockfile (PIFL-02/03). `scripts/install-test-peers.mjs` gains the engine in `peerNames`, and its `--before` cutoff moves to 2026-10-29T05:33Z.
-
-**Must-know breaking changes the raise absorbs:**
-
-- pi-mcp-adapter 7.0.0 `${VAR:-default}` expansion (security). Widen the `TRIGGER` regex in `adapter-escape.ts` to `\$(?=\{\w+(?:\}|:-))`. Re-prove the AVAR-05 partial-trigger analysis with `:-` tokens. Update the conformance needle and recompute `EXPECTED_CHECKED_VALUES`.
-- `ServerEntry` gains `appendStructuredContent` and `roots`. Decide whether they join `CARRIED_FIELDS`.
-- 6.0.0 registers every cached MCP tool as a deferred `mcp__<server>__<tool>`. Assert exact names, never counts. Nested `mcp({tool,args})` calls now fire Pi `tool_call` hooks under the real tool name, so a match-all PreToolUse hook fires twice per proxy call.
-- Four tests pin old floors and must move: `test/integration/adapter-expansion-conformance.test.ts`, `test/bridges/mcp/adapter-entry.test.ts`, `test/architecture/peer-floor.test.ts`, and `test/e2e/pi-json-output.test.ts` plus `test/e2e/pi-peer-floor/**`.
-- Docs, README (and `README.es.md`), `AGENTS.md` and `.planning/codebase/STACK.md` carry version text.
-- The CI `behavioral` job never runs `install-test-peers.mjs` and must.
-- Load companions through their manifest `pi.extensions` entry, never a hard-coded path.
+- `@earendil-works/pi-coding-agent` dev `^1.5.0`, peer `>=1.5.0`: host API and the built-in MCP itself. 1.5.0 adds `clientRegistration: "auto"` and fixes `isProjectTrusted()` ignoring a saved "Do not trust".
+- `@earendil-works/pi-ai` exact `1.5.0`: keep exact so the cucumber faux provider shares Pi's pi-ai instance. `pi-tui` dev `^1.5.0`.
+- Pin sites to bump: `package.json`, lock, `test/architecture/peer-floor.test.ts` literals, `test/e2e/pi-peer-floor/` package and lock, `test/e2e/pi-json-output.test.ts`, and the stale peer line in PROJECT.md Constraints.
+- Optional peers unchanged (`pi-subagents >=0.84.0`, `pi-mcp-adapter >=7.0.0 <8`, workflows). pi-subagents 0.84.0 already resolves `mcp:` selectors against built-in MCP, and registered servers work only in background (`async: true`) children.
+- Probe: built-in is active when `getCommands()` has `mcp` with `sourceInfo.path === "builtin:mcp"`; adapter-first precedence. `--no-mcp` simulates "none" in the harness.
+- `platform/pi-api.ts` (NFR-11 chokepoint) gains `McpServerConfig`, `RegisteredMcpServer`, `PiMcpRegistry`, `hasLoadedBuiltinMcp`, and `path`/`exposure`/`namespace` inventory fields.
 
 ### Expected Features
 
-Observation tiers:
+T1-T16 in FEATURES.md are all requirements except T13. Detail: `.planning/research/FEATURES.md`.
 
-- MF: model-free (`get_commands`, probe, recorder, stub log, events file).
-- FX: needs a faux-model turn.
-- RM: needs a real model, out of scope.
-- TUI: only the interactive TUI shows it.
+**Must have (table stakes):**
 
-FEATURES.md has per-kind contract tables (S, C, A, H, M, W rows). They give upstream behavior, extension behavior and disposition (MATCH, DIV(id), PIGAP, GAP, CONTRA, EDGE, BUG).
-
-**Must have (table stakes, every component phase):**
-
-- Listing and naming per kind, model-free.
-- Frontmatter and field variants per kind (pin each MATCH and each DIV).
-- Invocation through the faux model: what reaches the model matches upstream.
-- Companion-missing degradation for agents, MCP and workflows: `{requires ...}`, and recovery by loading the companion then `/reload`, with no reinstall.
-- Removal and replacement through uninstall, disable, enable and update, observed on a new session.
-- Hook parity fixes (`new` to `clear`, `compact`, `fork`) and the FG-19 exec-form `${CLAUDE_PLUGIN_ROOT}` BUG fix.
+- Pi 1.5.0 bump (T1) and the active-implementation snapshot `adapter | builtin | none` (T2).
+- Implementation-neutral Claude-shaped install records with legacy fallback (T3); read-time verdicts per implementation on list, info, install, update, enable, pending, apply (T4, T5).
+- Built-in translation table (T6): extension-side expansion for `url`, `command`, `args`; `$$`/`$!` escaping in `env`/`headers`; `timeout` ms to seconds; `callbackPort` to `callbackUrl http://localhost:<port>/callback`; `scope`; `description`; `exposure` (`deferred`, or `direct` for `alwaysLoad`). Never write `cwd` (not a Claude field) or Pi-only powers.
+- Built-in materialization (T7); naming `plugin_<plugin>_<server>` with collision check (T8); markers and `requires:` per implementation (T9); built-in status reader (T10); agent grants per implementation (T11); adapter entries written at install under every implementation, so no reconcile step is needed (T12); hooks proxy special case made adapter-only (T14); dual-profile cucumber (T15); docs (T16).
+- New verdicts: `sse` blocked under built-in (Pi rejects it); `bareElicitationCapability` supported under built-in; leading `~` and `headersHelper` blocked as with the adapter.
 
 **Should have (differentiators):**
 
-- Tool-use hooks driven by scripted faux tool calls (PreToolUse/PostToolUse exit codes and JSON decisions).
-- Agent runs with the child's system prompt recorded (`async: false`).
-- MCP calls through the adapter `mcp` proxy, logged by the stub.
-- Workflow runs read from `.events.jsonl`.
-- Cross-kind scenarios: a hook on a plugin MCP tool, an agent granted a plugin MCP tool, an agent preloading a skill. Each is assigned to exactly one phase and built from Phase 1 stand-ins.
+- D1 hook server-segment restoration (`-` restored in the matcher): P1 if the user rules that parity applies (the default under the parity rule).
+- D2 immediate register and unregister on install, uninstall, enable, disable. D5 re-test of background agents under built-in.
 
-**Defer (later milestone with a real provider):**
+**Defer:**
 
-- Model auto-selection of skills and agents, commands through the Skill tool (FG-11 proof), and workflows whose scripts call `agent()`.
-- Async (`async: true`) agent runs until proven on 0.84 in the harness.
-- Remote MCP OAuth end to end.
-- StopFailure, if the faux provider cannot end a turn in error.
+- D3 deny rules to `toolExposure: "hidden"`; persisted `/mcp` choices for built-in (Pi sessions only); `oauth.clientName` parity until the user rules.
 
-**Anti-features:** asserting files the bridge wrote; pinning a GAP behavior before the user decides; loading the faux provider or companions into the run's shared Pi.
+**Dropped (superseded by decision 4):** T13 settings cleanup, its notice and its cucumber scenarios.
 
 ### Architecture Approach
 
-A profile Pi is chosen by a `Given`, not a tag (the feature gate rejects new tags). It runs the real extension plus a scripted-model extension, a probe extension, and optionally the three companions. The scripted model reads its script from a sandbox file. It derives the step index from its own call-log length, so the script, counter and logs reset with the sandbox. A model-turn `When` waits for `agent_settled` (not the first `agent_end`). It stores one `lastTurn` record on the world: custom entries, tool events, model calls, the hook-recorder slice, the MCP stub slice and the probe snapshot. Kind phases therefore never touch `features/support/world.ts` (597 lines, the most conflict-prone file). Pi extensions live under `features/lib/`, never `support/`, because cucumber imports `support/**` into every worker.
+Split by zone: the entry may import neither `domain` nor `bridges-mcp`, and bridge zones may not import each other. The pure profile (`id`, `classify`, `serverName`, `toolNamePrefix`, `grantSelector`, plus `effectiveMcpCompatibility`) lives in `domain/mcp-implementation.ts` and is frozen after the foundation. Effects sit in their own zones. `orchestrators/mcp/session-materialize.ts` runs ordered, individually try/caught steps from `session_start`. Detail: `.planning/research/ARCHITECTURE.md`.
 
-**Major components (all Phase 1):**
+**Major components:**
 
-1. Profile Pi (`world.usePiWithProfile`, `startRpcPi` extra extensions and typed extra env): a per-scenario second Pi. Stopping its process group kills MCP stubs, workflow runs and async agents.
-2. Scripted model (`features/lib/scripted-model/{extension,script,calls}.ts`): faux provider with a whole-value call log.
-3. Registry probe (`features/lib/pi-registry-probe/*`): `getAllTools`, `getActiveTools` and `getCommands` as a custom entry.
-4. Hook recorder, MCP stub server (`.ts`, dependency-free stdio JSON-RPC), companion resolver (`features/lib/companions.ts`), run tokens (`{mcp stub server}`, `{hook recorder}`), and a generic `has the file "<path>" with this text:` step.
-5. Per-kind fixture writers and first topic step modules, each carrying one seed scenario.
+1. `domain/mcp-implementation.ts` and `mcp-builtin-features.ts`: pure profile, per-implementation verdict tables, naming, effective compatibility.
+2. `bridges/mcp/builtin-{entry,escape,registration}.ts`: translation, Pi value encoding, idempotent sync over `PiMcpRegistry`. Adapter files stay as they are and keep writing `mcp-adapter.json` at install under every implementation (built-in never reads it).
+3. `orchestrators/mcp/*`: `session-materialize`, `recorded-servers` (legacy fallback re-resolves read-only from `record.resolvedSource`), and step modules for built-in registration and agent grants.
+4. `platform/mcp-builtin-status.ts`: status from `getMcpServers()` plus `getAllTools()`. Pi has no status channel, so only `connected` / `not connected` / `disabled` / `overridden by mcp.json` / `project not trusted` are derivable.
+5. `bridges/agents/convert.ts` and the agents index: grant form per implementation, rewritten at load when the recorded implementation differs.
+
+Key rule: stored compatibility is neutral and effective compatibility is computed at read time. `--partial` consent is asked only at user-initiated install and update against the effective value. Re-materialization (enable, cascade, convergence, reinstall, import) checks the neutral value, so a switch never asks for consent.
 
 ### Critical Pitfalls
 
-1. **Faux model or companions on the run's shared Pi.** This breaks `sendMessage` refusal checks, the reset's empty-skills assertion and `{requires ...}` rows, in random order. Use a profile Pi, and never `set_model` on the shared Pi.
-2. **The RPC driver drops records outside an in-flight request.** `handleLine` returns when `pending` is undefined. That loses `agent_settled`, tool events and `pi-dynamic-workflows:progress` entries, and `idle` ignores a running turn. Keep an always-on per-scenario record log, read the `prompt` `disposition`, wait for `agent_settled` with `aborted: false`, and use no fixed sleeps.
-3. **The faux queue is one per process, and the spike's "done" fallback hides short scripts.** Use no fallback. Arm the script per scenario. Assert `getPendingResponseCount() === 0`. Write a child agent's steps into the same ordered table.
-4. **Tautological faux scenarios.** Every `Then` reads a host-side stand-in (recorder, stub log, model call log, probe) and compares whole values. Expected names are literals in the feature file, and each kind has at least one negative control. Record red proofs before product fixes.
-5. **Reset leaks, hermeticity, project trust.** Set `TMPDIR` under the run root, because pi-subagents writes `/tmp/pi-subagents-*`. Use per-scenario recorder directories and clean-state assertions in the profile reset. Use a stdio-`node` stub only (no `npx`/`http`). Make an explicit trust decision (`projectServers: "allow"`, Pi project trust) and add an untrusted-project scenario beside it. The adapter and pi-subagents skip unapproved project resources in RPC.
-6. **Version-raise pins live in many places (Pitfall 9 table).** Pitfall 12 adds that the hooks `new` to `clear` change breaks `features/plugin/session-start-hooks.feature` and the unit tests. SSDEDUP-01's `<sessionId>\0<reason>` key also drops the second compaction.
-7. **Parallel collisions on shared product files.** The shared files are the reason unions, the catalog counters, `soft-dep.ts`, `domain/name.ts`, and the reviewed clone pairs that carry `fallow-ignore-next-line code-duplication` markers. Prefer existing reasons. Edit only your own arm. Rerun `npx fallow dupes` after the second merge.
+1. **Variable encoding.** Pi expands only `env`, `headers`, `oauth.clientSecret`; supports `$NAME`; has no `:-default`; runs a leading `!` as a shell command; fails the connection on an unset variable. Expand Claude variables ourselves at registration, apply the AVAR-05 deny-list, then escape `$` to `$$` and a leading `!` to `$!`. Never persist resolved values.
+2. **Double serving and extension errors.** Never register while the adapter is active (it connects registrations proxy-only and drops `alwaysLoad`), and never when nothing connects (each registration becomes an extension error). Register per server in try/catch. Do not subscribe to `mcp_servers_change`.
+3. **Names.** Built-in folds `-` to `_`, cuts names over 64 characters with an 8-hex hash, and an `mcp.json` entry with the same folded name wins. Reusing `generatedMcpServerKey` (trailing `_`) gives triple-underscore tool names. Naming belongs to the profile; collisions are detected at read time in a fixed order (project over user).
+4. **Record reshape.** Record the Claude form before substitution (absolute paths and tokens must not enter `state.json`), as an optional additive field with no schema bump. An absent field must never mean "no servers".
+5. **Harness and parallel conflicts.** Profiles that silently run one implementation, and children editing frozen shared files. Freeze harness, contract, closed sets and wiring in the serial foundation; assert the active implementation in every profile Pi; add an architecture test for tags and a profile axis to the shard test.
+
+Also carry: project trust (gate per registration on `ctx.isProjectTrusted()` in every runtime); detection read before `session_start` or by an earlier handler (ban factory-time probes); legacy `mcp.json` entries that built-in reads before AMIG-01 moves them; timeout units; CI time with a second profile.
 
 ## Implications for Roadmap
 
-### Recommended phase graph
+ARCHITECTURE.md's split (serial foundation, then parallel phases) is the base, because it assigns disjoint files. PITFALLS.md labels map onto it:
 
-```text
-Pre-fan-out gate (inside Phase 1 discuss): cross-kind user decisions
-        |
-Phase 1  Harness and version raise  -- the ONLY prerequisite
-        |  merges to the milestone branch
-        +--> Phase 2 Skills        -+
-        +--> Phase 3 Commands       |
-        +--> Phase 4 Agents         |  six independent sessions/worktrees,
-        +--> Phase 5 Hooks          |  branched from the milestone branch after Phase 1
-        +--> Phase 6 MCP servers    |  each split into parallel executor waves
-        +--> Phase 7 Workflows     -+
-                 |
-        (optional) Phase 8 Suite close -- only if the parent does not apply collected lines at each merge
-```
+| PITFALLS label | Lands in                                                                                                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P-Foundation   | Phase 1                                                                                                                                                                     |
+| P-Records      | producer in Phase 1 (additive, no output change); readers, consent split and migration readers in Phase 3                                                                  |
+| P-Builtin      | Phase 2                                                                                                                                                                     |
+| P-Adapter      | no separate phase: the adapter keeps writing at install, so no reconcile step; AMIG-01 reader change in Phase 3; legacy-entry ordering concern in Phase 2                 |
+| P-Agents-Hooks | split into Phase 4 (agents) and Phase 5 (hooks), because their files are disjoint                                                                                          |
+| P-Settings     | dropped by decision 4                                                                                                                                                       |
+| P-Close        | no phase: the `docs/mcp-compatibility.md` built-in column belongs to Phase 2; CHANGELOG, README and PROJECT.md decision lines are parent lines applied at merge            |
 
-Phases 2-7 depend on Phase 1 only, and no component phase depends on another. A cross-kind scenario is owned by exactly one phase. It is built from Phase 1 stand-ins and never from another phase's lib file.
+### Phase 1: Foundation (serial, one session; everything below freezes after it)
 
-### Phase 1: Harness and version raise
+**Rationale:** Every parallel phase needs the same types, harness, closed set and wiring. Landing them first removes the merge conflicts. No visible behavior change, so the phase stays green.
 
-**Rationale:** Every component phase needs the faux model, the profile Pi, companions at the new floors and the shared steps. The version raise edits single shared files and must be proven by the harness seeds.
+**Delivers (internal waves):**
 
-**Delivers:**
+1. Wave 1, Pi 1.5.0: dev and peer pins, lock, `peer-floor.test.ts`, e2e floor fixture and lock, `pi-json-output` asserts, `pi-api.ts` type fixes, PROJECT.md peer line. Re-run the untrusted-profile scenarios (the `isProjectTrusted()` fix may flip them).
+2. Wave 2, in parallel: (a) domain seam: `mcp-implementation.ts`, split of `classifyMcpServer` into a Claude-shape check and per-profile scanners, `"sse"`, `mcp-builtin-features.ts`, `builtinMcpServerName`; (b) one closed-set commit adding the reason `"requires MCP support"` (wording per the messaging style guide, telling the user to turn on built-in MCP or install pi-mcp-adapter) across `notification-types.ts`, `REASONS`, `notify-reasons.ts`, the lock test, `docs/json-output.md`, catalog counters; (c) cucumber harness: `cucumber.json` `adapter` and `builtin` profiles over `@mcp`, world parameter, shared "MCP implementation" step, `--no-mcp` for `none` in `piArguments`, `check-features.mjs` tags (`@adapter-only`, `@builtin-only`), shard test with a `(profile, path)` axis, `ci.yml` matrix, a profile assertion, an architecture test that no `@mcp` scenario names the adapter literally, and the MCP-07 agent scenario split into `agent-grants.feature`.
+3. Wave 3: `platform/pi-api.ts` (snapshot field `mcpImplementation`, `hasLoadedBuiltinMcp`, `PiMcpRegistry`, MCP config types); `persistence/state-io.ts` `mcpServerConfigs?`; resolver producer `declaredMcpServers`; `statePhase` writes the field; `orchestrators/mcp/{session-materialize,recorded-servers}.ts` with no-op step seeds (`builtin-registration-step`, `agent-grants-step`); `platform/mcp-builtin-status.ts` seed; `EdgeDeps.mcpStatus {adapter, builtin}`; `index.ts` wiring (session_start order and the second sync after `loadReconcile`); a ban on factory-time probes.
+4. Wave 4: `npm run check`, both cucumber profiles, decisions, parent lines. Features that fail under built-in are tagged `@adapter-only` until their owning phase removes the tag.
 
-- The floors raised and the adapter 7.x escape fix.
-- The profile Pi, scripted model, probe, hook recorder, MCP stub, companion resolver, run tokens, generic file step, model-turn `When` and `lastTurn` on the world.
-- One seed scenario per kind.
-- CI changes (`install-test-peers`, shard, timeouts) and updated cucumber skill rules.
+**Frozen files:** `package.json`, lock, `ci.yml`, `cucumber.json`, `scripts/check-features.mjs`, `scripts/install-test-peers.mjs`, `test/e2e/_rpc.ts`, `features/support/**`, the shared `features/lib/*` and step modules, `platform/pi-api.ts`, `domain/mcp-implementation.ts`, `mcp-server-features.ts`, `mcp-builtin-features.ts`, `domain/name.ts` MCP functions, `persistence/state-io.ts`, `orchestrators/mcp/{session-materialize,recorded-servers}.ts`, `index.ts`, `edge/register.ts`, the closed-set reason files, `.fallowrc.json`, `rule-packs/architecture.json`. Under decision 4 no rule-pack or `persistence/locations.ts` settings change is needed.
 
-**Addresses:** table-stakes infrastructure for all kinds.
-**Avoids:** Pitfalls 1-6, 8, 9, 10, 14.
+**Frozen cross-phase interfaces:** `McpImplementationProfile`, `ActiveMcpImplementation`, `profileFor`, `effectiveMcpCompatibility`; `SoftDepStatus.mcpImplementation` with adapter, builtin, none precedence; `mcpServerConfigs?: {name, config}[]` (pre-substitution Claude form) and `recordedMcpServers(record, reader)`; `resolved.declaredMcpServers`; step contracts (`builtinRegistrationStep`, `resyncBuiltinRegistrations`, `agentGrantsStep`, each `Promise<void>` and never throwing); `PiMcpRegistry` and `McpStatusReader.lookup(serverName)`; `EdgeDeps.mcpStatus`; the world parameter, tags and step wording; the reason literal.
 
-Internal waves (plans within a wave own disjoint files):
+**Avoids:** pitfalls 3, 4 (seed), 8, 12, 13, 19, 20, 21.
 
-| Wave | Plan | Owns | Seed |
-|------|------|------|------|
-| 1 | 01-01 Version raise | `package.json`, `package-lock.json`, `scripts/install-test-peers.mjs`, `scripts/pi.sh`, `test/e2e/pi-peer-floor/**`, pinned `test/integration/**` tests, `test/architecture/peer-floor.test.ts`, `bridges/mcp/adapter-escape.ts` and `adapter-entry.ts` (+ comment anchors in `adapter-doc.ts`, `platform/mcp-status.ts`, `platform/workflow-home.ts`), `platform/pi-api.ts` (widen every Pi event and API type any kind needs: `session_compact`, `new`/`fork` reasons), README and `README.es.md` version lines, `*-compatibility.md` version lines, `AGENTS.md`, `.planning/codebase/STACK.md`, `CHANGELOG.md` | none |
-| 1 | 01-02 Ownership rules | `.agents/skills/cucumber/rules/layout.md` ("Parallel work": this milestone's table and reserved module names), `world-and-stand-ins.md` (profile Pi, scripted model, recorder, stub rules) | none |
-| 2 | 01-03 Tracer | `test/e2e/_rpc.ts` (`startRpcPi` extra extensions, typed extra env, `TMPDIR`), `test/architecture/hermetic-git-environment.test.ts`, `features/lib/pi-process.ts` (always-on record log, `agent_settled`, `idle`), `features/lib/scripted-model/*`, `features/lib/companions.ts`, `features/lib/run-tokens.ts`, `features/support/world.ts`, `step_definitions/{model,companion}.steps.ts`, `plugin/publishing.steps.ts` (generic file step), `session.steps.ts` (prompt `When`), `.github/workflows/ci.yml` (peer install, timeout) | `features/skill/invocation.feature` |
-| 3 | 01-04 Probe | `lib/pi-registry-probe/*`, `lib/slash-command-files.ts`, `step_definitions/slash-command/listing.steps.ts` | `features/slash-command/listing.feature` |
-| 3 | 01-05 Hook recorder | `lib/hook-recorder.ts`, `lib/hook-files.ts`, `step_definitions/hook/runs.steps.ts` | `features/hook/tool-use.feature` |
-| 3 | 01-06 MCP stub | `lib/mcp-stub-server.ts`, `lib/mcp-server-files.ts`, `step_definitions/mcp-server/calls.steps.ts` | `features/mcp-server/invocation.feature` |
-| 3 | 01-07 Agents | `lib/agent-files.ts`, `step_definitions/agent/runs.steps.ts` | `features/agent/invocation.feature` |
-| 3 | 01-08 Workflows | `lib/workflow-files.ts`, `step_definitions/workflow/runs.steps.ts` | `features/workflow/run.feature` |
-| 4 | 01-09 Phase gate | measure combined cucumber time, set CI shard and timeouts, `npm run check`, run the e2e floor test locally once | none |
+### Phase 2: Built-in materialization (parallel; `features/mcp-builtin-phase-2`)
 
-01-01 must finish before 01-03. The faux import needs `pi-ai` in `package.json`, and the companion profile needs the engine in the peer cache. Wave 3 works only because wave 2 put every shared registration in place. If 01-01 grows because adapter 7.x needs larger `bridges/mcp` work, split it into a wave-1 raise plus file-disjoint per-companion fix plans.
+**Rationale:** The core user value: servers actually connect under built-in.
 
-### What Phase 1 must pre-create so component phases only add files
+**Delivers:** `domain/mcp-builtin-translation.ts`; `bridges/mcp/builtin-{entry,escape,registration}.ts`; `substitute.ts` encoder parameter; `orchestrators/mcp/builtin-registration-step.ts`; per-registration trust gating; decision-2 exposure; collision and override reporting; legacy `mcp.json` entries reported as overridden (the AMIG-01 move runs too late for the first built-in session); the `docs/mcp-compatibility.md` built-in column.
 
-- **Shared, frozen after Phase 1 (component phases never edit):**
-  - `features/support/world.ts` (profile Pi, `lastTurn`, uncompared-turn marker) and `features/support/pi-process.ts`.
-  - `features/lib/{pi-process,pi-commands,run-tokens,published-marketplace}.ts`.
-  - `test/e2e/_rpc.ts`, `cucumber.json`, `scripts/check-features.mjs` and `.agents/skills/cucumber/**`.
-  - The shared step modules: `command`, `session`, `config`, `git-host`, `mcp-configuration`, `model`, `companion`, `plugin/publishing`, `marketplace/publishing`.
-  - `package.json`, `package-lock.json`, `scripts/install-test-peers.mjs`, `.github/workflows/ci.yml` and `platform/pi-api.ts`.
-- **Directories and modules created with a seed, then handed over:**
-  - `features/{skill,slash-command,agent,hook,mcp-server,workflow}/`.
-  - `features/step_definitions/<kind>/<topic>.steps.ts` for each kind.
-  - `features/lib/<kind>-files.ts` for each kind.
-  - `lib/scripted-model/*`, `lib/pi-registry-probe/*`, `lib/hook-recorder.ts`, `lib/mcp-stub-server.ts` and `lib/companions.ts`.
-- **Function directory names fixed in Phase 1** (every later scenario title depends on them): `skill`, `slash-command` (not `command`, which `command.steps.ts` already means), `agent`, `hook`, `mcp-server` (not `mcp`), `workflow`. Any phase that adds a parameter type prefixes its name with its kind.
-- **Generic readers** (JSONL log slicing, table projection) in lib, so phases never copy them. `fallow dupes` fails on any clone group across `features/`.
-- **Widened Pi types** for every event any kind needs, so Phase 5 does not edit `platform/pi-api.ts`.
-- **A reset contract** for the profile Pi:
-  - Wait for the settled turn, then stop any runs.
-  - Assert the baseline commands, tools and skills.
-  - Assert an empty faux queue and no live stub process.
-  - Assert an empty recorder directory and no new `/tmp/pi-subagents-*`.
-- **Decisions recorded** (see Open decisions, Phase 1): trust setup, directory names, and IDs for the four 2026-10-31 decisions.
+**Owns:** the files above plus `features/mcp-server/{listing,configuration,sources,project-scope,lifecycle,invocation}.feature` and steps, new `implementation-switch.feature`, `features/lib/mcp-server-*`. It removes the `@adapter-only` tags on those files.
 
-### Phase 2: Skills
+**Must not touch:** resolver, compatibility readers, agents, hooks, frozen files.
 
-**Rationale:** Independent; touches `bridges/skills/*` only.
-**Delivers:** listing and naming, frontmatter, invocation (`<skill>` block, path variables, same-plugin rewrite), collisions and lifecycle. It records `user-invocable: false` as a Pi-gap divergence and reports it to Pi. The `/plugin:skill` alias is tested via the TUI driver.
-**Addresses:** S1-S17.
-**Avoids:** Pitfalls 4, 13.
-**Owns:** `features/skill/**`, `step_definitions/skill/**`, `lib/skill-files.ts`, `bridges/skills/**`, `edge/skill-aliases.ts`, and the unit and integration tests for skills.
+**Avoids:** pitfalls 4, 5, 6, 7, 14, 15, 17 (register at `session_start` only, so the ledger stays disk-only).
 
-### Phase 3: Slash commands
+### Phase 3: Read-time verdicts, markers, list and info (parallel; `features/mcp-builtin-phase-3`)
 
-**Rationale:** Independent; touches `bridges/commands/*`.
-**Delivers:** listing (source `prompt`), nested namespacing, arguments (`$ARGUMENTS`, positional, quoting), content (variables, rewrites) and lifecycle.
-**Addresses:** C1-C17. The largest real-plugin impact is FG-01..FG-05.
-**Avoids:** Pitfall 13 (pinning a GAP before the user decides).
-**Owns:** `features/slash-command/**`, `step_definitions/slash-command/**`, `lib/slash-command-files.ts`, `bridges/commands/**`.
+**Rationale:** The semantic change touching the most shared orchestrator files. Start it first, merge it last.
 
-### Phase 4: Agents
+**Delivers:** neutral stored state, effective compatibility, the split consent gate, markers and `requires:` per implementation (`none` shows `requires MCP support`), the built-in status reader and tokens, `info-mcp-status.ts`, `companionSeverity`, convergence and `mcp-migration.ts` made profile-explicit.
 
-**Rationale:** Independent; needs pi-subagents 0.84 from Phase 1.
+**Owns:** `domain/mcp-resolution.ts`, `plugin-resolver.ts`, `resolver-types.ts`; the `install-outcome.ts` gate at `:840` only; `update-preflight.ts:514-516`; `list-installed-row.ts`; `plugin-state-classifier.ts`; `info.ts` compatibility functions; `info-mcp-status.ts`; `platform/mcp-builtin-status.ts`; `shared/concerns/soft-dep.ts` MCP arm; `shared/notify-reasons.ts`; the `partial` sites (`enable-disable`, `install-cascade`, `install-flow-results`, `update-swap`, `import/execute`, each in its own function); `reconcile/{convergence,mcp-migration}.ts`; `features/mcp-server/{companion-missing,invalid-configs}.feature`.
 
-**Delivers:**
+**Must not touch:** `bridges/**`, `orchestrators/mcp/*` steps, frozen files.
 
-- `subagent {action:"list"}` rows.
-- Conversion: tools, `excludeTools`, model with and without `--map-model`, effort, dropped fields.
-- Foreground runs (`async: false`) proving the child's system prompt and tool list.
-- Skill preload, companion-missing and lifecycle scenarios.
+**Avoids:** pitfalls 8, 9.
 
-**Avoids:** Pitfalls 3, 6, 7 (project agent trust).
-**Owns:** `features/agent/**`, `step_definitions/agent/**`, `lib/agent-files.ts`, `bridges/agents/**`, `persistence/agents-index-*`.
+### Phase 4: Agent grants (parallel; `features/mcp-builtin-phase-4`)
 
-### Phase 5: Hooks
+**Rationale:** Disjoint from Phases 2, 3 and 5; needs only the profile's `grantSelector`.
 
-**Rationale:** Independent but the heaviest product change. Wave 1 is the parity fixes. Wave 2 covers tool-use, prompt, stop, process and configuration.
+**Delivers:** grant selector and async warning per implementation in `bridges/agents/convert.ts`; optional `mcpImplementation` per agents-index row; `agent-grants-step.ts` rewriting changed rows from `sourcePath` under the scope's state lock, skipping untrusted projects and doing nothing under `none`; `agentsPhase` only in `install-outcome.ts` (`:1300-1330`).
 
-**Delivers:**
+**Owns:** `bridges/agents/convert.ts`, `persistence/agents-index-schema.ts` (and `agents-index-io.ts` if needed), `orchestrators/mcp/agent-grants-step.ts`, unit pairs, `features/mcp-server/agent-grants.feature`.
 
-- `new` sent as `clear` in SessionStart and SessionEnd.
-- SessionStart `compact` on `session_compact`.
-- `clear`, `compact` and `fork` matchers admitted.
-- The FG-19 exec-form substitution fix and the two-compaction dedupe fix.
-- A migrated `features/plugin/session-start-hooks.feature`.
+**Must not touch:** `bridges/mcp/**`, `bridges/hooks/**`, verdict readers.
 
-**Avoids:** Pitfall 12.
-**Owns:** `features/hook/**`, `features/plugin/session-start-hooks.feature`, `step_definitions/hook/**`, `step_definitions/plugin/session-start-hooks.steps.ts`, `lib/hook-files.ts`, `bridges/hooks/**` (one plan per wave owns `event-router.ts`), `domain/components/hook-*.ts` and `hooks*`, `test/architecture/hooks-*.test.ts`, `docs/hooks-compatibility.md`.
+**Avoids:** pitfall 10 (write only when bytes differ, skip on `StateLockHeldError`, stage then commit, compute grants from servers that actually registered).
 
-### Phase 6: MCP servers
+### Phase 5: Hook and tool naming (parallel; `features/mcp-builtin-phase-5`; small, may share Phase 4's session)
 
-**Rationale:** Independent; continues from Phase 1's 7.x escape fix.
+**Rationale:** Touches only `bridges/hooks/dispatch.ts`.
 
-**Delivers:**
+**Delivers:** `isMcpProxyCall` gated on the adapter; hooks on built-in tool names (`mcp__plugin_<p>_<s>__<t>`); the `-` divergence recorded and pinned by a scenario; D1 server-segment restoration if the user rules parity applies.
 
-- Connection and naming (`mcp__plugin_<p>_<s>__<tool>`, stub log `initialize`/`tools/list`).
-- Tool calls through the `mcp` proxy.
-- Remote servers (loopback only) and configuration variants.
-- Companion-missing, project scope under the harness trust setting, and lifecycle.
+**Owns:** `bridges/hooks/dispatch.ts` (proxy function and callers), `docs/hooks-compatibility.md` MCP row, `features/hook/mcp-tool-names.feature` and steps.
 
-**Avoids:** Pitfalls 7, 8.
-**Owns:** `features/mcp-server/**`, `step_definitions/mcp-server/**`, `lib/mcp-server-files.ts`, `bridges/mcp/**`, `platform/mcp-status.ts`, `domain/mcp-resolution.ts`, `domain/components/mcp.ts`, `docs/mcp-compatibility.md`.
-
-### Phase 7: Workflows
-
-**Rationale:** Independent; standard after spike 028.
-
-**Delivers:**
-
-- `/<plugin>:<meta.name>` registration and refusals.
-- Runs read from `.events.jsonl` (`{_, _raw, k=v}`).
-- Engine-missing at warning and info severities.
-- Lifecycle, including the WLIF-06 lingering-command notice.
-
-Scripts that call `agent()` are out of scope.
-
-**Owns:** `features/workflow/**`, `step_definitions/workflow/**`, `lib/workflow-files.ts`, `bridges/workflows/**`, `platform/workflow-home.ts`, `domain/workflow-script.ts`, `docs/workflows-compatibility.md`.
-
-### Phase 8 (optional): Suite close
-
-Only needed if the parent does not apply the collected CHANGELOG/README/README.es/PROJECT/BACKLOG lines at each merge. Otherwise limit it to:
-
-- Promoting any step two phases each defined into a topic module.
-- Tuning CI shards on the measured combined run.
-- Re-verifying every phase a later merge touched, and the milestone audit.
-
-I recommend the parent applies lines at each merge and Phase 8 stays a thin close-out.
-
-### Component phase wave template (phases 2-7)
-
-| Wave | Plan | Feature file | Step module |
-|------|------|--------------|-------------|
-| 1 | Tracer: listing and naming | `features/<kind>/listing.feature` | `<kind>/<topic>.steps.ts` (shared kind steps defined here only) |
-| 2 | Frontmatter and field variants | `frontmatter.feature` | `<kind>/frontmatter.steps.ts` |
-| 2 | Invocation through the scripted model | `invocation.feature` | `<kind>/invocation.steps.ts` |
-| 2 | Companion-missing (agents/MCP/workflows) or collisions (skills/commands) | `companion-missing.feature` / `collisions.feature` | `<kind>/companion-missing.steps.ts` |
-| 2 | Removal and replacement | `lifecycle.feature` | `<kind>/lifecycle.steps.ts` |
-| 3 | Decisions, docs, SUMMARY lines, phase gate | none | none |
-
-A step that two wave-2 plans both need moves to wave 1 or to a follow-up commit. A plan never edits a sibling plan's step module. If a fix needs a file that a same-wave plan owns, the second fix moves to the next wave. Iterate with `npx cucumber-js features/<kind>` and run `npm run check` only at gates.
-
-### File ownership at a glance
-
-| Phase | Feature files | Step modules | Lib | Product |
-|-------|---------------|--------------|-----|---------|
-| 1 | six seeds | shared + first topic module per kind | harness libs | version-raise fixes, `platform/pi-api.ts` |
-| 2 | `features/skill/**` | `skill/**` | `skill-files.ts` | `bridges/skills/**` |
-| 3 | `features/slash-command/**` | `slash-command/**` | `slash-command-files.ts` | `bridges/commands/**` |
-| 4 | `features/agent/**` | `agent/**` | `agent-files.ts` | `bridges/agents/**`, `persistence/agents-index-*` |
-| 5 | `features/hook/**`, `features/plugin/session-start-hooks.feature` | `hook/**`, `plugin/session-start-hooks.steps.ts` | `hook-files.ts` | `bridges/hooks/**`, `domain/components/hook*` |
-| 6 | `features/mcp-server/**` | `mcp-server/**` | `mcp-server-files.ts` | `bridges/mcp/**`, `platform/mcp-status.ts`, `domain/mcp-resolution.ts` |
-| 7 | `features/workflow/**` | `workflow/**` | `workflow-files.ts` | `bridges/workflows/**`, `platform/workflow-home.ts` |
-
-Each phase also owns its kind's unit tests (`test/bridges/<kind>/**`) and integration tests (`test/integration/<kind>-*`).
-
-### Collision rules for the parallel fan-out
-
-- **Never edited by a component phase:** `CHANGELOG.md`, `README.md`, `README.es.md`, `.planning/PROJECT.md` Key Decisions, `.planning/BACKLOG.md`. Each phase lists its lines in its SUMMARY.md and the parent applies them at merge. ROADMAP, STATE, REQUIREMENTS and WINDOWS are tool-written. For end-of-file append conflicts, keep both sides, and prefix WINDOWS descriptions with `[component-features]`.
-- **Append-only closed sets:**
-  - `shared/notification-types.ts` `Reason` union, `notification-wire.ts` `REASONS`, `notify-reasons.ts`, `schema/claude-plugin.schema.json`.
-  - `notify-closed-set-locks.test.ts` (78-entry count), `compat-01-no-expansion.test.ts`, `docs/json-output.md`.
-  - Catalog counters: `docs/output-catalog.md`, `EXPECTED_STATE_COUNT = 324`, `EXPECTED_UTF8_BYTES = 54_615`.
-
-  Prefer existing reasons. A new reason lands as its own commit, and the later merge keeps both entries and fixes the count.
-- **`shared/concerns/soft-dep.ts`:** each phase edits only its own companion's arm.
-- **Reviewed clone pairs** across `bridges/{skills,commands,agents}/stage.ts` and their siblings carry `fallow-ignore-next-line code-duplication` in both copies. Changing one side can break the other's marker, and that shows only in the combined tree. Rerun `npx fallow dupes` after the second merge.
-- **`domain/name.ts`:** edit only the kind's own function.
-- **Orchestrators** (`uninstall.ts`, `enable-disable.ts`, `update-flow.ts`, `install-outcome.ts`, `*.messaging.ts`): a phase that finds a bug there keeps the fix minimal and inside its own function. Earlier milestones produced stale verifications after exactly these merges, so re-verify a phase after any merge that touches its files.
-- **Suggested merge order, lowest conflict first:** 7 Workflows, 6 MCP, 4 Agents, 2 Skills, 3 Commands, 5 Hooks. Hooks goes last because it rewrites an existing plugin-function feature and touches the router.
+**Avoids:** pitfall 7 (hook half).
 
 ### Phase Ordering Rationale
 
-- Phase 1 comes first because the version raise edits single shared files and the companions depend on the host version. The 5.2-pinned integration tests would also turn `npm run check` red at every later merge gate.
-- The six kinds run in parallel because the bridges are separate fallow zones. Phase 1's seed-and-hand-over rule gives each kind a disjoint tree.
-- Cross-kind decisions (argument syntax, injection, replace-vs-union, description fallback) are settled before fan-out, so Skills and Commands, and Commands, Agents and Workflows, cannot diverge.
-- CI is sharded by path (lifecycle shard, components shard), not by tag, because the gate rejects tags outside `Examples:` blocks. About 300-400 new scenarios add roughly 3-7 minutes of wall time to today's 2-minute suite. The current 10-minute `behavioral` timeout does not hold that safely.
+- One serial phase freezes shared files and interfaces; the parallel phases then own disjoint files. Maximum concurrency is 4 child sessions (3 if Phase 5 joins Phase 4). Dropping the settings phase cut one session and the riskiest write path.
+- The record producer is in Phase 1 (additive, no output change) because Phases 2 and 3 both need records that hold every server.
+- Merge order, lowest conflict first: 5, 4, 2, then 3 last. After Phase 3 merges, re-verify Phase 2's switch scenario. Rerun `npx fallow dupes` after merging Phase 2 (the built-in and adapter entry and escape modules are likely clone pairs needing reviewed markers).
+- Children never edit `CHANGELOG.md`, READMEs, PROJECT.md decisions or `BACKLOG.md`; they list "Parent lines". Closed sets are append-only. Every user-visible change ships a cucumber scenario that fails without it, under the profile(s) where it applies. Phase gates run `npm run check` plus both cucumber profiles. Every child brief carries the environment facts from PITFALLS 18 (root DAC wrapper, warm ESLint, worktree hook caveat).
 
 ### Research Flags
 
-Phases needing `/gsd-plan-phase --research-phase`:
+Needs deeper research or a user ruling during planning:
 
-- **Phase 1:**
-  - The adapter 7.x `:-` design: keep the default resolved at install, or leave it to the adapter at connect time.
-  - The nested `mcp` proxy double-fire.
-  - Whether a pi-subagents background child loads an extension passed by `--extension` (MEDIUM, undocumented).
-  - The CI timing measurement.
-- **Phase 4 (Agents):** the pi-subagents 0.84 parser against the bridge's emitted frontmatter, project-agent trust, and any `async: true` proof.
-- **Phase 5 (Hooks):** a binary check of the PostCompact versus SessionStart `compact` order and the SessionEnd reason set, plus user answers (FG-20, FG-21).
-- **Phase 6 (MCP):** `claude-code-compat-research` on plugin MCP servers versus project approval and on `${VAR:-default}`, and a re-measure of every MCP doc row on adapter 7.x (FG-30).
+- **Phase 2:** how Claude Code resolves `cwd` and variables for plugin stdio servers; write `${VAR}` references or values (secrets visible via `getMcpServers()`); ms-to-s rounding; whether built-in lists deferred tools in `getAllTools()` before `tool_search` (status reader); first-session legacy `mcp.json` ordering.
+- **Phase 3:** the meaning of `none` (see Gaps); the status-token set.
+- **Phase 4:** how to detect a pi-subagents background child so it never rewrites agents; whether subagent launches re-read agent files or use the session snapshot.
+- **Phase 1:** the 64-character tool-name hash rule in the naming module; the profile-tag architecture test.
 
-Standard patterns (skip research):
-
-- **Phase 2 (Skills) and Phase 3 (Commands):** well covered by FEATURES.md. Decisions, not research, are the work.
-- **Phase 7 (Workflows):** standard after spike 028. Confirm the progress-entry shape against the 3.15 source.
-
-## Open decisions (deduplicated, grouped by owning phase)
-
-Each phase's discuss step settles its own list. Items marked **pre-fan-out** span more than one parallel phase. They should be settled once, during Phase 1's discuss step, so parallel sessions cannot diverge. Unlicensed gaps go to the user, and no scenario may pin one until it is decided. Upstream evidence for each is in FEATURES.md (ID, evidence tag, confidence).
-
-### Already decided (carry forward, no further question)
-
-- Raise to Pi 1.4.0, pi-mcp-adapter `>=7 <8`, pi-subagents `>=0.84`, `@quintinshaw/pi-dynamic-workflows >=3.15` (new optional peer) and `@earendil-works/pi-ai` as a dev dependency. The Pi peer floor is `>=1.4.0`.
-- Hooks: Pi `new` becomes `clear` in SessionStart and SessionEnd. `compact` fires SessionStart on `session_compact`. `clear`, `compact` and `fork` matchers are admitted. `user-invocable: false` is recorded as a Pi-gap divergence.
-- Out of scope: anything needing a real model.
-
-### Pre-fan-out gate (settle in Phase 1 discuss; cross-phase)
-
-- **FG-33 (all):** assign IDs to the four 2026-10-31 decisions (`user-invocable`, `compact`, `fork`, `new`->`clear`). Skills and Commands cite them.
-- **FG-01 (commands; same pattern in skills):** positional arguments are 0-based upstream (`$0` is first) and 1-based in Pi. Rewrite placeholders at install time, or record a Pi-gap divergence?
-- **FG-02 (commands, skills):** append `ARGUMENTS: $ARGUMENTS` at install to bodies with no placeholder, or record a divergence?
-- **FG-03 (commands, skills):** which other forms to translate. The forms are `$ARGUMENTS[N]`, named `$name`, `\$`, `${CLAUDE_SESSION_ID}` and `${CLAUDE_EFFORT}`. Pi-only `${1:-x}`, `$@` and `${@:N}` expand under Pi but stay literal upstream. Record the rest as divergences.
-- **FG-04 (skills):** transform `/skill:` arguments in the existing `input` handler (`edge/skill-aliases.ts`), or record a Pi gap?
-- **FG-05 (skills, commands):** `` !`cmd` `` and fenced `!` blocks never run. Implement them (an input transform plus a spawn chokepoint, with a security review), or record a Pi gap? This has the highest real-plugin impact.
-- **FG-06 (skills, commands):** the description fallback contradicts upstream, which uses the first non-empty line with hashes stripped and a cut at 100. Re-align skills. Synthesize a command `description` at install so Pi's 60-char rule never applies?
-- **FG-10 (skills, commands):** frontmatter fields are dropped silently: `allowed-tools`, `disallowed-tools`, `model`, `effort`, `agent`, `background`, `hooks`, `paths`, `shell`, `arguments`, `context: fork`. License them with one divergence ID tied to the Pi gap. Should install warn per field as agents do?
-- **FG-14 (commands, agents, workflows):** upstream replaces the default directory for `commands`, `agents` and `workflows`, and adds for `skills`. D-07 unions all of them, and the PROJECT.md "Out of Scope" bullet contradicts D-07. Confirm D-07, fix the PROJECT.md bullet, and pin the union.
-- **Project trust setup (agents, MCP; FG-29 + Pitfall 7):** how the profile Pi trusts its project (`--approve`, a sandbox `trust.json`, or `defaultProjectTrust: "always"`), plus `settings.projectServers: "allow"`. It applies to the profile Pi only, with an untrusted-project scenario beside it.
-- **Function directory names:** confirm `skill`, `slash-command`, `agent`, `hook`, `mcp-server`, `workflow`.
-
-### Phase 1 (harness and version raise)
-
-- **Adapter 7.x `${VAR:-default}`:** keep resolving defaults at install and escape the `:-` form in literals, or leave `${NAME:-default}` as a runtime reference for the adapter? The second matches Claude's connect-time resolution. Deny-listed names stay decided at install (AVAR-05). Either way it needs a recorded decision.
-- **New adapter keys:** whether `appendStructuredContent` and `roots` join `CARRIED_FIELDS`. They are user choices with no Claude field, and carrying them matches AFILE-06.
-- **Profile Pi shape:** per scenario (architecture, measured 1.6-1.7 s warm) or a lazily started long-lived companion Pi per worker (pitfalls). This synthesis recommends per scenario, and pooling later only if CI time requires it.
-- **CI shape:** a path-sharded `behavioral` matrix (lifecycle and components) with 15-minute timeouts, the peer install step, and whether to serialize companion scenarios.
-- **Harness mechanics:**
-  - The hook recorder and stub are `.ts` files under `features/lib/`.
-  - Script file under sandbox HOME versus `setResponses()` arming.
-  - No fallback reply.
-
-### Phase 2 (skills)
-
-- **FG-07:** derive the generated name from frontmatter `name` when present (upstream, MEDIUM). Verify first with `claude plugin details`.
-- **FG-08:** a skill and a command clash on one qualified name. Upstream says the skill wins, but SK-6 gives the command priority. Probe upstream with one plugin, then decide.
-- **FG-09:** the `/plugin:skill` alias works only in interactive input. Accept that and test it through the TUI, or extend it to RPC?
-- Name and record the `user-invocable: false` divergence ID, and report the gap to Pi.
-
-### Phase 3 (commands)
-
-- **FG-11:** commands are model-invocable upstream (merged into skills), while Pi prompt templates are user-only. Record a Pi gap, or also stage commands as skills?
-- **FG-12:** extend the `user-invocable: false` divergence ID to commands.
-- **FG-13:** the object-map `commands` form makes the plugin unavailable today. Support it (`content` needs a synthesized file), or record an unsupported form?
-- The pre-fan-out items FG-01..FG-06, FG-10 and FG-14 apply here too.
-
-### Phase 4 (agents)
-
-- **FG-15:** nested `agents/x/y.md` is ignored, and upstream names it `plugin:x:y`. Recurse and colon-join, as CM-4 does for commands?
-- **FG-16:** preloading a `disable-model-invocation` skill. Upstream refuses it. Skip it and warn?
-- **FG-17:** map `background`->`async` and `memory`->`memory` (pi-subagents near-analogs). Record the rest: `maxTurns`, `isolation`, `color`, `omitClaudeMd`, `autoCompactWindow`, `initialPrompt`.
-- **FG-18:** refresh the `--map-model` table: add `fable`, pass full `claude-*` IDs, retarget the aliases?
-- **Async runs:** whether any `async: true` scenario ships. It needs proof that a background child loads the faux provider extension. Otherwise record it as a gap.
-- **Same-name priority:** cross-plugin and user-agent same-name priority is not modeled (A15 EDGE).
-
-### Phase 5 (hooks)
-
-- **FG-20:** SessionEnd reason mapping beyond `new`->`clear`. The upstream closed set is `clear`, `resume`, `logout`, `prompt_input_exit`, `other`. Map `quit`->`prompt_input_exit` and `reload`/`fork`->`other`? Which SessionEnd matchers to admit (the closed set is empty today)?
-- **FG-21:** SessionStart on Pi `reload`: send `startup`, suppress it, or keep `reload` as a Pi-gap divergence?
-- **FG-22:** implement `once: true` and `onFailure: "continue"|"block"`, or record them?
-- **FG-23:** record `DirectoryAdded`. Correct either PROJECT.md ("silently dropped, debug-logged only") or the code (everything non-admitted is `{unsupported hooks}`).
-- **FG-24:** the manifest `hooks` field (path, array, inline object) is never installed. Implement the merge, or classify it unsupported so it is not silent?
-- **FG-26:** surface hook `systemMessage` through the notify chokepoint, or keep dropping it?
-- **Compaction order:** PostCompact versus SessionStart `compact` on one `session_compact`. Check the 2.1.316 binary.
-- **Dedupe key:** change SSDEDUP-01 so only the duplicate bind of one Pi event (pi#10470) drops. Two compactions in one session must give two records.
-- **Install outcomes:** a plugin that needed `--partial` for a `clear`, `compact` or `fork` matcher now installs whole, while existing installs keep the dropped hook. Report this in `pending`/`apply`? Record it in the CHANGELOG.
-- **Proxy double fire:** a match-all PreToolUse hook fires twice on `mcp` proxy calls (the outer `mcp` event plus the nested real name). Decide what to do with the outer event.
-- **Fixes with no question:**
-  - FG-19: exec-form `${CLAUDE_PLUGIN_ROOT}` substitution (BUG).
-  - FG-25: docs drift in `docs/hooks-compatibility.md` and the `hook-events.ts` header, fixed and pinned by a scenario.
-  - H7: `additionalContext` on every event is a divergence with no ID. Record one.
-
-### Phase 6 (MCP servers)
-
-- **FG-27:** MC-1 picks the first source (entry > manifest > `.mcp.json`). Upstream merges, and later declarations replace earlier ones. Re-decide for parity, or record it with an ID.
-- **FG-28:** one malformed server makes the whole plugin `(unavailable) {malformed mcp}`, while upstream skips only that server. Confirm the license ID, or align.
-- **FG-29 / Pitfall 7:** project-scope plugin MCP servers are treated by the adapter as unapproved project servers (skipped in RPC, a prompt in the TUI). Upstream starts plugin servers without approval (MEDIUM, verify). Is this a divergence with a Pi or companion-gap license, or a product fix?
-- **FG-30:** re-measure every MCP doc row (measured on 5.0/5.2) on adapter 7.x, and fix any break in-phase.
-- Fixtures avoid `protocolVersion: "auto"`, `npx`, and `http` without a loopback stand-in.
-
-### Phase 7 (workflows)
-
-- **FG-31:** record "no run approval" (upstream asks before running a plugin workflow) as a Pi-gap divergence with an ID.
-- **FG-32:** accept the engine's `{_, _raw, key=value}` argument shape (no upstream position) and pin it.
-- Fixture workflows must not be named after Pi reserved commands (`new`, `compact`, ...). Scripts use a statement body ending in `return`.
+Standard patterns (skip research-phase): Phase 5 (one function, existing hooks tests); Phase 1 waves 1 and 2(b) (mechanical bump and closed-set commit).
 
 ## Confidence Assessment
 
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Stack | HIGH | Versions, dates and every breaking change were read from published tarballs and a probe against the bridge's own `serializeLiteral`. MEDIUM only for nested MCP tool calls firing Pi `tool_call` and for which extensions a pi-subagents background child loads (documented, not run). The pi#10470 state is LOW from WebFetch but confirmed by the unchanged `rpc-mode.js` in 1.4.0. |
-| Features | MEDIUM-HIGH | HIGH where the 2.1.316 binary was grepped and extension code read. MEDIUM where only docs state upstream behavior (FG-07, FG-08, FG-15..FG-18, FG-28, FG-32). The 33 open decisions bound how much of each kind is pinnable. |
-| Architecture | HIGH | Layout, gates (`check-features.mjs`) and ownership hazards were read from this branch and two prior parallel milestones. Timings were measured on 4 cores. The CI time estimate for 300-400 new scenarios is MEDIUM (extrapolation). |
-| Pitfalls | HIGH | Mostly this tree's source and companion tarballs. The claim that Claude Code starts plugin MCP servers without a project-approval prompt is MEDIUM. Hook doc facts agree with the binary grep. |
+| Area         | Confidence    | Notes                                                                                                                                                                              |
+| ------------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stack        | HIGH          | Read from the 1.5.0, adapter 7.0.0 and subagents 0.84.0 tarballs and diffed against 1.4.0. Handler ordering between our `session_start` and Pi's is inferred (both orders are safe). |
+| Features     | HIGH / MEDIUM | Field and transport verdicts from the Claude Code 2.1.318 binary and package sources (HIGH). Wording and switch UX are recommendations with no upstream counterpart (MEDIUM).      |
+| Architecture | HIGH / MEDIUM | Integration map and Pi event order read from source (HIGH). The phase split is judgment built on the component-features precedent (MEDIUM).                                       |
+| Pitfalls     | HIGH          | Primary-source reads; pi-subagents behaviors rest on docs not run (MEDIUM). The Claude `cwd` rule is LOW; the compat-research skill was not run for Claude claims.                |
 
-**Overall confidence:** MEDIUM-HIGH.
+**Overall confidence:** HIGH for what to build; MEDIUM for how the parallel phases will merge.
 
 ### Gaps to Address
 
-- **Research disagreement:** ARCHITECTURE.md recommends a per-scenario profile Pi and PITFALLS.md recommends a lazily started long-lived companion Pi per worker. This summary resolves it in favor of per-scenario (free total reset, measured 1.6-1.7 s), keeping PITFALLS.md's reset assertions as the reset contract. Confirm in Phase 1 discuss.
-- **Background child and the faux provider:** does an extension given by `--extension` count as ambient for a detached pi-subagents runner? Test it in Phase 1 research, or keep `async: false` and record the gap.
-- **Proxy double fire:** whether the nested `mcp` proxy double-fire needs a hooks decision (Phase 5) and a harness assertion rule (Phase 1).
-- **Unknown upstream behavior:** SessionStart on reload, SessionEnd for `quit`/`reload`/`fork`, and PostCompact order. Check the binary. The answers go to the user as one batch.
-- **CI baseline:** no wall-clock baseline exists. Phase 1 measures it and sets shard and timeouts.
-- **Stale installed hooks:** existing installs keep dropped `clear`/`compact`/`fork` hooks until update or reinstall (Phase 5).
-- **Live upstream probes:** the skill-versus-command clash and frontmatter `name` need a live upstream probe before deciding (Phase 2).
+The decision-1 gaps are closed by decision 4. Remaining open questions for the user (carry into requirements and phase discuss steps):
+
+- **APL-D1 amendment:** may a load rewrite generated agent files (Phase 4)? Without it, the rewrite must be an `apply` or reload-time-only step. Record a decision ID, like AMIG-01.
+- **What is recorded:** research recommends the Claude form before substitution (derive `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`, `CLAUDE_PROJECT_DIR` at materialization), not "after substitution" as the brief says. Confirm the deviation.
+- **`--partial` consent at read time:** ask only at user-initiated install and update (effective value), never on enable, convergence or reinstall. Confirm.
+- **The "none" verdict rule:** decision 4 says plugins are partially available because they require MCP. FEATURES recommended the union rule (blocked only if neither implementation can run the server) with an install allowed under a marker. Decide whether `install` under `none` needs `--partial`, and whether `list` shows `(partially-available)` or only a marker.
+- **Hook matchers (D1):** restore `-` in the server segment under built-in? The extension owns that half, so only the tool segment is licensed as a Pi gap.
+- **Project-trust weakness:** `isProjectTrusted()` auto-trusts a repository whose `.pi/` has none of Pi's protected entries, so a committed project `state.json` could launch stdio commands with no prompt. Accept, or add a stronger gate.
+- **Background subagent children:** they load the extension and run its `session_start` steps. Confirm that a child never rewrites agents and registers only for itself (trust-gated).
+- **Registration timing:** register at `session_start` and again after `loadReconcile` (recommended; keeps the ledger disk-only and the reload hint uniform), or also immediately on install (D2).
+- **OAuth client name:** set `oauth.clientName: "Claude Code (<server>)"` for parity? No license covers leaving it unset.
+- **Smaller:** a load warning row per plugin that becomes partial after a switch; reduced built-in status tokens; the AMIG notice for legacy entries needs a built-in variant; marker wording; CHANGELOG must record the `{requires pi-mcp-adapter}` reason removal (breaking JSON output).
 
 ## Sources
 
 ### Primary (HIGH confidence)
 
-- npm registry (`npm view`, 2026-10-31) and unpacked tarballs of `pi-mcp-adapter` 5.2.0/6.0.0/7.0.0, `pi-subagents` 0.74.0/0.84.0, `@quintinshaw/pi-dynamic-workflows` 3.14.0/3.15.0, `@earendil-works/pi-coding-agent` 1.3.0/1.4.0 and `@earendil-works/pi-ai` 1.4.0. These gave changelogs, types, loaders, runners and the faux provider.
-- Claude Code 2.1.316 binary (`/opt/claude-code/bin/claude`) grep: skill and agent schemas, argument substitution, description fallback, hook event tuple, SessionStart/SessionEnd enums and MCP server schemas.
-- Repo: `.agents/skills/cucumber/**`, `scripts/check-features.mjs`, `features/**`, `test/e2e/_rpc.ts`, `.github/workflows/ci.yml`, `scripts/install-test-peers.mjs`, `eslint.config.js`, `.fallowrc.json`, bridge/platform/domain sources, `docs/*-compatibility.md`, `.planning/spikes/028-model-free-harness/`.
-- Prior milestones: lifecycle-coverage and plugin-lifecycle ROADMAP, RESEARCH, VERIFICATION and RETROSPECTIVE (parallel-phase collision evidence and the seed rule).
+- `@earendil-works/pi-coding-agent@1.5.0` tarball (docs `mcp.md`, `extensions.md`, `settings.md`, `security.md`; `dist/core/{mcp-servers,resolve-config-value,agent-session,resource-loader,package-manager}.*`; `dist/core/extensions/{runner,loader,types}`; `dist/extensions/mcp/*`) and installed 1.4.0 (diffed).
+- `pi-mcp-adapter@7.0.0` (`index.ts`, `pi-builtin-mcp.ts`, `onboarding-state.ts`), `pi-subagents@0.84.0` (`docs/agents.md`, `CHANGELOG.md`), `@earendil-works/pi-mcp@1.5.0`, `pi-ai`/`pi-tui@1.5.0`.
+- Claude Code 2.1.318 binary strings (FEATURES CC-1..CC-10).
+- This tree: `index.ts`, `platform/pi-api.ts`, `domain/{mcp-server-features,mcp-resolution,plugin-resolver,name}.ts`, `bridges/{mcp,agents,hooks}/*`, `persistence/state-io.ts`, `.fallowrc.json`, `cucumber.json`, `test/e2e/_rpc.ts`.
+- `.planning/inputs/mcp-builtin/BRIEF.md` (including Amendments) and `.planning/PROJECT.md` (Current Milestone, decisions 1-4).
 
 ### Secondary (MEDIUM confidence)
 
-- code.claude.com docs for skills, sub-agents, plugins-reference, workflows and hooks (retrieved 2026-10-31). They agree with the binary on every checked value.
-- Measurements on this branch: full cucumber run 2 min 0 s, and Pi start and RSS per profile.
+- Precedent: `.planning/milestones/component-features-ROADMAP.md` and `.planning/CHILD-SESSION-BRIEF.md`.
+- pi-subagents docs (not run).
 
-### Tertiary (LOW confidence, needs validation)
+### Tertiary (LOW confidence)
 
-- earendil-works/pi#10470 GitHub state (WebFetch), independently supported by the unchanged Pi 1.4.0 `rpc-mode.js`.
-- Claude Code's handling of plugin MCP servers versus project approval (verify with `claude-code-compat-research`).
+- Adapter `[Unreleased]` changelog via WebFetch; the Claude Code `cwd` rule for stdio servers; codemode skipping hooks.
 
 ---
 
-*Research completed: 2026-10-31*
+*Research completed: 2026-11-04*
 *Ready for roadmap: yes*

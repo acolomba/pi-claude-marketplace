@@ -37,6 +37,14 @@ import type {
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
+// D-P3-10: the dependency each kind name stands for in a row; `mcp` maps to an
+// `McpDependency` that renders the `requires pi-mcp-adapter` marker.
+const DEPENDENCY_BY_KIND = {
+  agents: "agents",
+  mcp: { kind: "mcp", runEvery: "adapter" },
+  workflows: "workflows",
+} as const satisfies Record<"agents" | "mcp" | "workflows", Dependency>;
+
 void ({
   status: "failed",
   severity: "error",
@@ -593,12 +601,20 @@ function marketplaceWith(
 
 /** A snapshot in which every companion extension is loaded. */
 function allLoaded(): SoftDepStatus {
-  return { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: true };
+  return {
+    piSubagentsLoaded: true,
+    mcpImplementation: "adapter",
+    workflowEngineLoaded: true,
+  };
 }
 
 /** A snapshot in which no companion extension is loaded. */
 function noneLoaded(): SoftDepStatus {
-  return { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false };
+  return {
+    piSubagentsLoaded: false,
+    mcpImplementation: "none",
+    workflowEngineLoaded: false,
+  };
 }
 
 describe("resolveRows", () => {
@@ -1506,7 +1522,7 @@ describe("resolveRows", () => {
       expectedReasons: ["orphan rewake"],
     },
   ] as const satisfies readonly {
-    dependency: Dependency;
+    dependency: "agents" | "mcp" | "workflows";
     policy: "on" | "off";
     companion: "loaded" | "missing";
     snapshot: SoftDepStatus;
@@ -1519,7 +1535,7 @@ describe("resolveRows", () => {
         severity: "info",
         needsReload: true,
         name: "alpha",
-        dependencies: [dependency],
+        dependencies: [DEPENDENCY_BY_KIND[dependency]],
         reasons: ["orphan rewake"],
       } satisfies PluginNotificationMessage;
       const markers = { installed: { markers: policy === "on", contentReasons: true } };
@@ -1550,7 +1566,7 @@ describe("resolveRows", () => {
         name: "alpha",
         from: "1.0.0",
         to: "2.0.0",
-        dependencies: ["workflows", "mcp", "agents"],
+        dependencies: ["workflows", { kind: "mcp", runEvery: "adapter" }, "agents"],
         reasons: ["orphan rewake", "malformed skill"],
       },
       markers: { updated: { markers: true, contentReasons: true } },
@@ -1571,11 +1587,46 @@ describe("resolveRows", () => {
       },
     },
     {
+      title:
+        "D-P3-10: finds the McpDependency among agents and workflows and renders the markers in canonical order",
+      row: {
+        status: "installed",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        dependencies: ["workflows", { kind: "mcp", runEvery: "builtin" }, "agents"],
+      },
+      markers: { installed: { markers: true, contentReasons: true } },
+      expectedRow: {
+        status: "installed",
+        severity: "info",
+        needsReload: true,
+        name: "alpha",
+        reasons: ["requires pi-subagents", "requires builtin mcp", "requires pi-dynamic-workflows"],
+      },
+    },
+    {
+      title:
+        "D-P3-07 / D-MB-07: puts the MCP marker of a split dependency after the content reasons",
+      row: {
+        status: "partially-installed",
+        name: "alpha",
+        dependencies: [{ kind: "mcp", runEvery: "split" }],
+        reasons: ["unsupported mcp"],
+      },
+      markers: { "partially-installed": { markers: true, contentReasons: true } },
+      expectedRow: {
+        status: "partially-installed",
+        name: "alpha",
+        reasons: ["unsupported mcp", "requires mcp"],
+      },
+    },
+    {
       title: "PMOD-01: keeps duplicate content reasons ahead of the markers",
       row: {
         status: "partially-installed",
         name: "alpha",
-        dependencies: ["mcp"],
+        dependencies: [{ kind: "mcp", runEvery: "adapter" }],
         reasons: ["lsp", "lsp"],
       },
       markers: { "partially-installed": { markers: true, contentReasons: true } },
@@ -1663,7 +1714,7 @@ describe("resolveRows", () => {
       name: "same",
       scope: "project",
       reasons: ["lsp", "lsp"],
-      dependencies: ["workflows", "mcp", "agents"],
+      dependencies: ["workflows", { kind: "mcp", runEvery: "adapter" }, "agents"],
     } as const;
     const marketplaces = [
       { name: "z-last", scope: "user", plugins: [row, row, { ...row, scope: "user" }] },

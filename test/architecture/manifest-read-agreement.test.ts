@@ -22,11 +22,16 @@
  *     install cascade resolves a plugin's dependencies through. It answers the
  *     same question `info` renders, against the same planted tree, so the two
  *     cannot disagree about which file declares what a plugin depends on.
+ *   - `bridges/mcp/builtin-description.ts::readBuiltinServerDescription`, the
+ *     description Pi's built-in MCP shows for a plugin's servers, which it
+ *     reads from the first manifest location present. Each planted manifest
+ *     describes the plugin by its own location, so the returned text names
+ *     the file that won.
  *
- * D-PL2-24: the first three reach each candidate through the one link
- * containment of `domain/manifest-containment.ts`, so the link-shape block
- * below drives them over the same planted links and expects one verdict.
- * `info`'s own walk is outside that containment.
+ * D-PL2-24: every half but `info`'s own walk reaches each candidate through
+ * the one link containment of `domain/manifest-containment.ts`, so the
+ * link-shape block below drives them over the same planted links and expects
+ * one verdict. `info`'s own walk is outside that containment.
  *
  * The list is deliberately open: a reader added later is added here too
  * (MANF-01, MANF-02, MANF-05).
@@ -38,6 +43,7 @@ import { devNull, tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import { readBuiltinServerDescription } from "../../extensions/pi-claude-marketplace/bridges/mcp/builtin-description.ts";
 import {
   requireInstallable,
   resolveStrict,
@@ -52,7 +58,7 @@ import {
   mergeMarketplaceIntoState,
 } from "../edge/handlers/marketplace-seed.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
+import { noStatusReaders } from "../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
@@ -63,10 +69,14 @@ import type { NotificationRun } from "../../extensions/pi-claude-marketplace/sha
 /** The marketplace entry every case resolves. Its own version is tier 2. */
 const ENTRY: PluginEntry = { name: "alpha", source: "./alpha", version: "1.0.0" };
 
+/** What the marketplace entry describes the plugin as, where a case gives it one. */
+const ENTRY_DESCRIPTION = "entry description";
+
 /**
- * Plants a marketplace root holding one plugin directory, writing whichever
+ * Plants a marketplace root holding one plugin directory and a
+ * `marketplace.json` whose entry describes the plugin, writing whichever
  * manifest locations the case names. A location left unnamed is absent from
- * disk, which is the only condition either reader may fall through on.
+ * disk, which is the only condition a reader may fall through on.
  */
 async function plantPlugin(
   t: TestContext,
@@ -76,6 +86,11 @@ async function plantPlugin(
   t.after(() => rm(marketplaceRoot, { recursive: true, force: true, maxRetries: 3 }));
   const pluginRoot = path.join(marketplaceRoot, "alpha");
   await mkdir(pluginRoot, { recursive: true });
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"));
+  await writeFile(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({ name: "mp", plugins: [{ ...ENTRY, description: ENTRY_DESCRIPTION }] }),
+  );
 
   if (manifests.wrapped !== undefined) {
     await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
@@ -89,10 +104,24 @@ async function plantPlugin(
   return marketplaceRoot;
 }
 
-test("both readers honor a manifest that lives only at the bare path", async (t) => {
+/**
+ * Reads the planted plugin's description through the built-in MCP half, from
+ * the `marketplace.json` that lists the plugin, as an in-place path source.
+ */
+async function readDescription(marketplaceRoot: string): Promise<string | undefined> {
+  return readBuiltinServerDescription({
+    manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    marketplaceRoot,
+    pluginName: ENTRY.name,
+    pluginRoot: path.join(marketplaceRoot, "alpha"),
+    pin: undefined,
+  });
+}
+
+test("three readers honor a manifest that lives only at the bare path", async (t) => {
   // arrange -- MANF-01: the bare file is the plugin's only manifest.
   const marketplaceRoot = await plantPlugin(t, {
-    bare: '{"name":"alpha","version":"9.9.9","defaultEnabled":false}\n',
+    bare: '{"name":"alpha","version":"9.9.9","defaultEnabled":false,"description":"bare manifest"}\n',
   });
 
   // act
@@ -106,17 +135,21 @@ test("both readers honor a manifest that lives only at the bare path", async (t)
     marketplaceName: "mp",
     marketplaceRoot,
   });
+  const description = await readDescription(marketplaceRoot);
 
   // assert
-  assert.strictEqual(resolved.defaultEnabled, false);
-  assert.strictEqual(version, "9.9.9");
+  assert.deepStrictEqual(
+    { defaultEnabled: resolved.defaultEnabled, version, description },
+    { defaultEnabled: false, version: "9.9.9", description: "bare manifest" },
+  );
 });
 
-test("both readers prefer the wrapped manifest over a bare sibling", async (t) => {
+test("three readers prefer the wrapped manifest over a bare sibling", async (t) => {
   // arrange -- MANF-02: the wrapped path is first in the shared ordering.
   const marketplaceRoot = await plantPlugin(t, {
-    wrapped: '{"name":"alpha","version":"2.0.0","defaultEnabled":false}\n',
-    bare: '{"name":"alpha","version":"9.9.9","defaultEnabled":true}\n',
+    wrapped:
+      '{"name":"alpha","version":"2.0.0","defaultEnabled":false,"description":"wrapped manifest"}\n',
+    bare: '{"name":"alpha","version":"9.9.9","defaultEnabled":true,"description":"bare manifest"}\n',
   });
 
   // act
@@ -130,13 +163,16 @@ test("both readers prefer the wrapped manifest over a bare sibling", async (t) =
     marketplaceName: "mp",
     marketplaceRoot,
   });
+  const description = await readDescription(marketplaceRoot);
 
   // assert
-  assert.strictEqual(resolved.defaultEnabled, false);
-  assert.strictEqual(version, "2.0.0");
+  assert.deepStrictEqual(
+    { defaultEnabled: resolved.defaultEnabled, version, description },
+    { defaultEnabled: false, version: "2.0.0", description: "wrapped manifest" },
+  );
 });
 
-test("both readers tolerate a plugin declaring no manifest at either path", async (t) => {
+test("three readers tolerate a plugin declaring no manifest at either path", async (t) => {
   // arrange -- MANF-05: absence at every candidate is not a failure.
   const marketplaceRoot = await plantPlugin(t, {});
 
@@ -151,10 +187,13 @@ test("both readers tolerate a plugin declaring no manifest at either path", asyn
     marketplaceName: "mp",
     marketplaceRoot,
   });
+  const description = await readDescription(marketplaceRoot);
 
-  // assert
-  assert.strictEqual(resolved.defaultEnabled, true);
-  assert.strictEqual(version, "1.0.0");
+  // assert -- each reader falls back to what the entry gives.
+  assert.deepStrictEqual(
+    { defaultEnabled: resolved.defaultEnabled, version, description },
+    { defaultEnabled: true, version: "1.0.0", description: ENTRY_DESCRIPTION },
+  );
 });
 
 // D-01-32: the third reader. `info` opens the same planted file, and treats it
@@ -225,7 +264,7 @@ for (const { label, prepare, resolution, notification } of [
       "● mp [user] <no autoupdate>\n  ⊘ alpha v1.0.0 (unavailable) {unreadable}\n    components: not resolved",
   },
 ]) {
-  test(`all four readers stop at ${label} instead of using the bare sibling`, async (t) => {
+  test(`all five readers stop at ${label} instead of using the bare sibling`, async (t) => {
     // arrange
     const { agentDir, cwd } = await createHermeticEnvironment(t, "manifest-read-agreement-");
     const marketplaceRoot = await seedScopedMarketplace(agentDir, cwd);
@@ -239,7 +278,7 @@ for (const { label, prepare, resolution, notification } of [
     // resolver's unavailable row can suppress the selected dependencies.
     await writeFile(
       path.join(marketplaceRoot, "alpha", "plugin.json"),
-      '{"name":"alpha","version":"9.9.9","dependencies":[42]}',
+      '{"name":"alpha","version":"9.9.9","dependencies":[42],"description":"bare manifest"}',
     );
     await prepare(path.join(marketplaceRoot, "alpha"));
     const { ctx, run, notifications } = makeCtx();
@@ -262,23 +301,27 @@ for (const { label, prepare, resolution, notification } of [
     await getPluginInfo({
       ctx,
       run,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
+      projectTrusted: true,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
       cwd,
     });
     const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
+    const description = await readDescription(marketplaceRoot);
 
     // assert -- the fourth reader falls back to the ENTRY, so the bare
-    // sibling's rejected `[42]` list cannot reach it either.
+    // sibling's rejected `[42]` list cannot reach it either. The fifth falls
+    // back to the entry too, which gives no description.
     assert.deepStrictEqual(
-      { resolved, version, notifications, declaration },
+      { resolved, version, notifications, declaration, description },
       {
         resolved: resolution,
         version: "1.0.0",
         notifications: [notification],
         declaration: declares("stale-dep"),
+        description: undefined,
       },
     );
   });
@@ -295,7 +338,7 @@ for (const { label, prepare } of [
       mkdir(path.join(root, ".claude-plugin", "plugin.json"), { recursive: true }),
   },
 ]) {
-  test(`all four readers fall through ${label} to the bare manifest`, async (t) => {
+  test(`all five readers fall through ${label} to the bare manifest`, async (t) => {
     // arrange
     const { agentDir, cwd } = await createHermeticEnvironment(t, "manifest-read-agreement-");
     const marketplaceRoot = await seedScopedMarketplace(agentDir, cwd);
@@ -316,17 +359,19 @@ for (const { label, prepare } of [
     await getPluginInfo({
       ctx,
       run,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
+      projectTrusted: true,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
       cwd,
     });
     const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
+    const description = await readDescription(marketplaceRoot);
 
     // assert
     assert.deepStrictEqual(
-      { state: resolved.state, version, notifications, declaration },
+      { state: resolved.state, version, notifications, declaration, description },
       {
         state: "installable",
         version: "9.9.9",
@@ -334,6 +379,7 @@ for (const { label, prepare } of [
           "● mp [user] <no autoupdate>\n  ○ alpha v9.9.9 (available)\n    dependencies: fresh-dep@mp",
         ],
         declaration: declares("fresh-dep"),
+        description: "bare manifest",
       },
     );
   });
@@ -345,6 +391,7 @@ const LINKED_MANIFEST = JSON.stringify({
   version: "3.0.0",
   defaultEnabled: true,
   dependencies: ["linked-dep@mp"],
+  description: "linked manifest",
 });
 
 /** What each reader answers when the wrapped link is followed to `LINKED_MANIFEST`. */
@@ -355,6 +402,7 @@ const FOLLOWED = {
     "● mp [user] <no autoupdate>\n  ○ alpha v3.0.0 (available)\n    dependencies: linked-dep@mp",
   ],
   declaration: declares("linked-dep"),
+  description: "linked manifest",
 };
 
 /** What each reader answers when the wrapped link leaves the plugin and its marketplace. */
@@ -368,6 +416,7 @@ const REFUSED = {
     "● mp [user] <no autoupdate>\n  ⊘ alpha v1.0.0 (unavailable) {unreadable manifest}",
   ],
   declaration: declares("stale-dep"),
+  description: undefined,
 };
 
 /** The resolver's verdict, reduced to what tells the link shapes apart. */
@@ -447,6 +496,7 @@ for (const { label, plant, expected } of [
         "● mp [user] <no autoupdate>\n  ⊘ alpha v1.0.0 (unavailable) {unreadable}\n    components: not resolved",
       ],
       declaration: declares("stale-dep"),
+      description: undefined,
     },
   },
   {
@@ -464,6 +514,7 @@ for (const { label, plant, expected } of [
         "● mp [user] <no autoupdate>\n  ○ alpha v9.9.9 (available)\n    dependencies: fresh-dep@mp",
       ],
       declaration: declares("fresh-dep"),
+      description: "bare manifest",
     },
   },
 ]) {
@@ -493,16 +544,21 @@ for (const { label, plant, expected } of [
     await getPluginInfo({
       ctx,
       run,
-      mcpStatus: noStatusSnapshot(),
+      mcpStatus: noStatusReaders(),
+      projectTrusted: true,
       marketplace: "mp",
       plugin: "alpha",
       scope: "user",
       cwd,
     });
     const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
+    const description = await readDescription(marketplaceRoot);
 
     // assert
-    assert.deepStrictEqual({ resolved, version, notifications, declaration }, expected);
+    assert.deepStrictEqual(
+      { resolved, version, notifications, declaration, description },
+      expected,
+    );
   });
 }
 
@@ -555,6 +611,7 @@ async function seedScopedMarketplace(agentDir: string, cwd: string): Promise<str
       version: "9.9.9",
       defaultEnabled: false,
       dependencies: [MANIFEST_DEPENDENCY],
+      description: "bare manifest",
     }),
     "utf8",
   );
@@ -572,7 +629,7 @@ async function seedScopedMarketplace(agentDir: string, cwd: string): Promise<str
   return marketplaceRoot;
 }
 
-test("all four readers locate one bare manifest, and two let it outrank the entry", async (t) => {
+test("all five readers locate one bare manifest, and two let it outrank the entry", async (t) => {
   // arrange -- one tree, one manifest, at the bare candidate only.
   const { agentDir, cwd } = await createHermeticEnvironment(t, "manifest-read-agreement-");
   const marketplaceRoot = await seedScopedMarketplace(agentDir, cwd);
@@ -592,18 +649,20 @@ test("all four readers locate one bare manifest, and two let it outrank the entr
   await getPluginInfo({
     ctx,
     run,
-    mcpStatus: noStatusSnapshot(),
+    mcpStatus: noStatusReaders(),
+    projectTrusted: true,
     marketplace: "mp",
     plugin: "alpha",
     scope: "user",
     cwd,
   });
   const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
+  const description = await readDescription(marketplaceRoot);
 
-  // assert -- readers one and two found the file; readers three and four not
-  // only found it but preferred it to the entry's competing claim.
+  // assert -- readers one, two, and five found the file; readers three and
+  // four not only found it but preferred it to the entry's competing claim.
   assert.deepStrictEqual(
-    { defaultEnabled: resolved.defaultEnabled, version, notifications, declaration },
+    { defaultEnabled: resolved.defaultEnabled, version, notifications, declaration, description },
     {
       defaultEnabled: false,
       version: "9.9.9",
@@ -611,6 +670,7 @@ test("all four readers locate one bare manifest, and two let it outrank the entr
         "● mp [user] <no autoupdate>\n  ○ alpha v9.9.9 (available)\n    dependencies: fresh-dep@mp",
       ],
       declaration: declares("fresh-dep"),
+      description: "bare manifest",
     },
   );
 });

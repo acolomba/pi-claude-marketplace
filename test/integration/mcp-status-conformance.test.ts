@@ -37,6 +37,7 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import { createMcpStatusTracker } from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { statusReaders } from "../platform/mcp-status-seed.ts";
 
 import { makeCtx, seedMcpPlugin } from "./mcp-plugin-seed.ts";
 import {
@@ -105,7 +106,14 @@ test("ASTAT-01: a snapshot on pi-mcp-adapter's own channel, for the keys install
       connectedCount: 1,
       disabledCount: 0,
     });
-    await getPluginInfo({ ...info.session, mcpStatus, marketplace: "mp", plugin: "hello", cwd });
+    await getPluginInfo({
+      ...info.session,
+      mcpStatus: statusReaders({ adapter: mcpStatus }),
+      projectTrusted: true,
+      marketplace: "mp",
+      plugin: "hello",
+      cwd,
+    });
 
     // assert
     assert.deepStrictEqual(userKeys, ["plugin_hello_srv_"]);
@@ -116,12 +124,12 @@ test("ASTAT-01: a snapshot on pi-mcp-adapter's own channel, for the keys install
           "● mp [project] <no autoupdate>",
           "  ● hello v1.0.0 (installed)",
           "    mcp: plugin:hello:srv (connected)",
-          "    requires: pi-mcp-adapter (missing)",
+          "    requires: mcp (missing)",
           "",
           "● mp [user] <no autoupdate>",
           "  ● hello v1.0.0 (installed)",
           "    mcp: plugin:hello:srv (overridden by project scope)",
-          "    requires: pi-mcp-adapter (missing)",
+          "    requires: mcp (missing)",
         ].join("\n"),
         severity: undefined,
       },

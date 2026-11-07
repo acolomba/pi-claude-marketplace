@@ -5,6 +5,7 @@ Feature: Plugin install rollback
   and a local marketplace stands in for a published one. A read-only skill
   directory stops the undo of the skills phase for a user other than root.
 
+  @mcp
   Scenario: An install that fails in its mcp phase leaves no installed plugin
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -24,6 +25,7 @@ Feature: Plugin install rollback
     Then the "claude-plugins.json" file of the project scope declares no plugins
     Then the project scope has no installed plugins
 
+  @mcp
   Scenario: A new session after a failed install offers no skills of the plugin
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -35,6 +37,7 @@ Feature: Plugin install rollback
     When the user starts a new pi session
     Then the session offers no skills
 
+  @mcp
   Scenario: An install that failed while a directory blocked the mcp-adapter.json file succeeds once the directory is removed
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -57,6 +60,7 @@ Feature: Plugin install rollback
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  @mcp
   Scenario: An install whose skills rollback cannot finish names the skills phase
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:

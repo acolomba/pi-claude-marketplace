@@ -109,7 +109,7 @@ export function makeCtx(loaded?: Partial<SoftDepStatus>): {
   };
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
     ...loaded,
   });

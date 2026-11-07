@@ -290,7 +290,13 @@ export type Reason =
   // with the same source, so nothing changed. Claude Code's own `marketplace
   // add` says "already added; nothing changed" for this case. It rides a
   // `skipped` marketplace header and is idempotent, so the cascade stays info.
-  | "already added";
+  | "already added"
+  // D-MB-07: the MCP soft-dependency marker names the implementation that
+  // would run every server of the plugin: `requires mcp` when either would,
+  // `requires builtin mcp` when only Pi's built-in MCP would, and the existing
+  // `requires pi-mcp-adapter` when only the adapter would.
+  | "requires mcp"
+  | "requires builtin mcp";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
@@ -1140,6 +1146,10 @@ export interface PluginInfoRowBase {
  * in both scopes: both scopes' adapter files hold one key, pi-mcp-adapter
  * loads the project file last and runs the project entry, so the user row's
  * server reads this token. The wording follows Claude Code's "overridden by".
+ * BLT-05: `overridden by mcp.json` and `project not trusted` are the states
+ * Pi's built-in MCP adds: a server an `mcp.json` entry of the same name
+ * replaces, and a project server Pi does not load because the project is not
+ * trusted.
  * A bare literal union like the other closed sets, not a `StatusToken`.
  */
 export type McpServerStatus =
@@ -1152,7 +1162,9 @@ export type McpServerStatus =
   | "failed"
   | "status unknown"
   | "not loaded"
-  | "overridden by project scope";
+  | "overridden by project scope"
+  | "overridden by mcp.json"
+  | "project not trusted";
 
 /**
  * ANAME-01 / ANAME-07: one plugin MCP server on the info surface, stamped by

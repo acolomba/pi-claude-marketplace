@@ -83,15 +83,15 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             mcp: [{ name: "plugin:commit-commands:github", status: "status unknown" }],
           },
           requires: [
-            { companion: "pi-mcp-adapter", missing: true },
+            { companion: "mcp", missing: true },
             { companion: "pi-subagents", missing: false },
           ],
         },
       },
     },
 
-    // ADET-01: all three companions in package-name order. The probe finds
-    // pi-subagents and pi-mcp-adapter but not the host workflow engine.
+    // ADET-01: all three companions in name order. The probe finds
+    // pi-subagents and an MCP implementation but not the host workflow engine.
     "installed-with-every-companion": {
       pi: piWithBothLoaded(),
       message: {
@@ -111,8 +111,8 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             workflows: ["commit-commands:changelog"],
           },
           requires: [
+            { companion: "mcp", missing: false },
             { companion: "pi-dynamic-workflows", missing: true },
-            { companion: "pi-mcp-adapter", missing: false },
             { companion: "pi-subagents", missing: false },
           ],
         },
@@ -530,7 +530,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
               { name: "plugin:db-tools:live", unsupportedFeature: "ws" },
             ],
           },
-          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+          requires: [{ companion: "mcp", missing: false }],
         },
       },
     },
@@ -560,7 +560,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
               },
             ],
           },
-          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+          requires: [{ companion: "mcp", missing: false }],
         },
       },
     },
@@ -590,7 +590,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
               { name: "plugin:ops-tools:metrics", status: "disabled" },
             ],
           },
-          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+          requires: [{ companion: "mcp", missing: false }],
         },
       },
     },
@@ -612,7 +612,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           components: {
             mcp: [{ name: "plugin:deploy-tools:deploys", status: "pending approval" }],
           },
-          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+          requires: [{ companion: "mcp", missing: false }],
         },
       },
     },
@@ -634,7 +634,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           components: {
             mcp: [{ name: "plugin:ticket-tools:tickets", status: "not loaded" }],
           },
-          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+          requires: [{ companion: "mcp", missing: false }],
         },
       },
     },
@@ -692,7 +692,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
               version: "1.0.0",
               componentsResolved: true,
               components: { mcp: [{ name: "plugin:ops-tools:alerts", status: "connected" }] },
-              requires: [{ companion: "pi-mcp-adapter", missing: false }],
+              requires: [{ companion: "mcp", missing: false }],
             },
           },
           {
@@ -708,7 +708,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
               components: {
                 mcp: [{ name: "plugin:ops-tools:alerts", status: "overridden by project scope" }],
               },
-              requires: [{ companion: "pi-mcp-adapter", missing: false }],
+              requires: [{ companion: "mcp", missing: false }],
             },
           },
         ],

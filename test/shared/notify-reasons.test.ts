@@ -168,7 +168,7 @@ const companionSeverityCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -180,7 +180,7 @@ const companionSeverityCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -188,11 +188,11 @@ const companionSeverityCases = [
   {
     title: "warns when only MCP is declared and neither companion is loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: "adapter" },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -200,11 +200,11 @@ const companionSeverityCases = [
   {
     title: "warns when both companions are declared and neither companion is loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: "adapter" },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -216,7 +216,7 @@ const companionSeverityCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -228,7 +228,7 @@ const companionSeverityCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -236,11 +236,11 @@ const companionSeverityCases = [
   {
     title: "keeps info when only MCP is declared and loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: "adapter" },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -248,11 +248,11 @@ const companionSeverityCases = [
   {
     title: "warns when agents are also declared but only MCP is loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: "adapter" },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -264,7 +264,7 @@ const companionSeverityCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -276,7 +276,7 @@ const companionSeverityCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -284,11 +284,11 @@ const companionSeverityCases = [
   {
     title: "warns when only MCP is declared and only agents are loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: "adapter" },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -296,11 +296,11 @@ const companionSeverityCases = [
   {
     title: "warns when MCP is also declared but only agents are loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: "adapter" },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",
@@ -312,7 +312,7 @@ const companionSeverityCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -324,7 +324,7 @@ const companionSeverityCases = [
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -332,11 +332,11 @@ const companionSeverityCases = [
   {
     title: "keeps info when only MCP is declared and both companions are loaded",
     declaresAgents: false,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: "adapter" },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -344,11 +344,11 @@ const companionSeverityCases = [
   {
     title: "keeps info when both companions are declared and loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: "adapter" },
     declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -362,7 +362,7 @@ const companionSeverityCases = [
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: false,
     },
     expectedSeverity: "warning",
@@ -374,7 +374,7 @@ const companionSeverityCases = [
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: true,
-      piMcpAdapterLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "info",
@@ -384,11 +384,95 @@ const companionSeverityCases = [
     // them: two unloaded companions still reach warning through their own arms.
     title: "raises to warning for two unloaded companions while the host engine is loaded",
     declaresAgents: true,
-    declaresMcp: true,
+    declaresMcp: { kind: "mcp", runEvery: "adapter" },
     declaresWorkflows: true,
     probe: {
       piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
+      mcpImplementation: "none",
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "warning",
+  },
+  {
+    title: "D-MB-07: keeps info for servers both implementations run under pi-mcp-adapter",
+    declaresAgents: false,
+    declaresMcp: { kind: "mcp", runEvery: "both" },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      mcpImplementation: "adapter",
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "info",
+  },
+  {
+    title: "D-MB-07: keeps info for servers both implementations run under Pi's built-in MCP",
+    declaresAgents: false,
+    declaresMcp: { kind: "mcp", runEvery: "both" },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      mcpImplementation: "builtin",
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "info",
+  },
+  {
+    title: "D-MB-07: warns for servers both implementations run with no MCP implementation",
+    declaresAgents: false,
+    declaresMcp: { kind: "mcp", runEvery: "both" },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      mcpImplementation: "none",
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "warning",
+  },
+  {
+    title: "D-MB-07: warns for a server only pi-mcp-adapter runs under Pi's built-in MCP",
+    declaresAgents: false,
+    declaresMcp: { kind: "mcp", runEvery: "adapter" },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      mcpImplementation: "builtin",
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "warning",
+  },
+  {
+    title: "D-MB-07: keeps info for a server only Pi's built-in MCP runs under it",
+    declaresAgents: false,
+    declaresMcp: { kind: "mcp", runEvery: "builtin" },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      mcpImplementation: "builtin",
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "info",
+  },
+  {
+    title: "D-MB-07: warns for a server only Pi's built-in MCP runs under pi-mcp-adapter",
+    declaresAgents: false,
+    declaresMcp: { kind: "mcp", runEvery: "builtin" },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      mcpImplementation: "adapter",
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "warning",
+  },
+  {
+    title: "D-MB-07: warns for servers split between the implementations under pi-mcp-adapter",
+    declaresAgents: false,
+    declaresMcp: { kind: "mcp", runEvery: "split" },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      mcpImplementation: "adapter",
       workflowEngineLoaded: true,
     },
     expectedSeverity: "warning",

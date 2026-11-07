@@ -17,6 +17,12 @@ import { createBackgroundPass } from "./orchestrators/marketplace/background-pas
 import { createBackgroundUpdate } from "./orchestrators/marketplace/background-update.ts";
 import { DEFAULT_GIT_OPS, runWithGitAbortSignal } from "./orchestrators/marketplace/shared.ts";
 import { updateMarketplace } from "./orchestrators/marketplace/update.ts";
+import { agentGrantsStep } from "./orchestrators/mcp/agent-grants-step.ts";
+import {
+  builtinRegistrationStep,
+  resyncBuiltinRegistrations,
+} from "./orchestrators/mcp/builtin-registration-step.ts";
+import { createMcpSessionMaterializer } from "./orchestrators/mcp/session-materialize.ts";
 import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
 import { composePackageInstallAbortScope } from "./orchestrators/plugin/package-install.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
@@ -27,6 +33,7 @@ import {
 import { createLoadReconcile } from "./orchestrators/reconcile/load.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
+import { createBuiltinMcpStatusReader } from "./platform/mcp-builtin-status.ts";
 import { createMcpStatusTracker } from "./platform/mcp-status.ts";
 import { createCompletionCache } from "./shared/completion-cache.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
@@ -91,7 +98,12 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   const backgroundGate = createBackgroundGate();
   // ASTAT-01: one status tracker per extension load. Pi drops its subscription
   // when it invalidates this runtime, and the next load starts empty.
-  const mcpStatus = createMcpStatusTracker(pi.events);
+  // MSEL-01 / BLT-05: the built-in reader beside it reads nothing from Pi here,
+  // at factory time; info picks one of the pair per command run.
+  const mcpStatus = {
+    adapter: createMcpStatusTracker(pi.events),
+    builtin: createBuiltinMcpStatusReader(pi),
+  };
   const pluginUpdateOperations = createUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
   // RECON-01..05: one reconcile apply operation and one load reconcile step
@@ -110,6 +122,13 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     { loadState },
     { hooksRouting, completionCache },
   );
+  // D-MB-10: the MCP session steps that `session_start` runs, the built-in
+  // registration first and the agent grants second. Building it reads nothing
+  // from Pi (MSEL-01).
+  const materializeMcpSession = createMcpSessionMaterializer({
+    builtinRegistrationStep,
+    agentGrantsStep: (input) => agentGrantsStep(input, process.env),
+  });
 
   // DISP-01 / DISP-02 / D-59-02 / D-59-03: register the hooks bridge at
   // factory time. The bridge's signature requires a `cwd`, which does not
@@ -164,6 +183,15 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       } catch (notifyErr) {
         hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
       }
+    }
+
+    // D-MB-10: the built-in MCP registrations follow the records the load
+    // reconcile left. NFR-2: a failure here skips only this stage.
+    try {
+      requireNotificationMode(ctx.mode);
+      await resyncBuiltinRegistrations({ pi, ctx, snapshot: run });
+    } catch (err) {
+      hookDebugLog(`MCP built-in resync skipped: ${errorMessage(err)}`, "mcp");
     }
 
     requireNotificationMode(ctx.mode);
@@ -233,13 +261,26 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // `ctx.sessionManager.getSessionId()` is evaluated first and could throw (or
   // `ctx.sessionManager` be undefined); wrap so a throw never propagates past
   // session_start, matching the NFR-2 boundary discipline of the handlers above.
-  pi.on("session_start", (_event, ctx) => {
+  //
+  // D-MB-10 / MSEL-01: then the MCP session steps run, the built-in
+  // registration first and the agent grants second. Pi emits `session_start`
+  // only after every extension has loaded, so this is the first point where the
+  // inventory the steps read is complete; the factory itself reads none of it.
+  // A mode failure skips the steps, and a session id failure does not.
+  pi.on("session_start", async (_event, ctx) => {
     applyMcpAdapterEnvFrom(() => ctx.cwd);
     try {
       requireNotificationMode(ctx.mode);
       applySessionEnv(ctx.sessionManager.getSessionId());
     } catch (err) {
       hookDebugLog(`session env apply skipped: ${errorMessage(err)}`, "env");
+    }
+
+    try {
+      requireNotificationMode(ctx.mode);
+      await materializeMcpSession(pi, ctx);
+    } catch (err) {
+      hookDebugLog(`MCP session steps skipped: ${errorMessage(err)}`, "mcp");
     }
   });
 

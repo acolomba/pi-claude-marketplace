@@ -656,7 +656,7 @@ test("D-05: stamps warning and composes the agents marker from one unloaded snap
   const boundary = createNotificationBoundary(1);
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
+    mcpImplementation: "adapter",
     workflowEngineLoaded: true,
   });
   const outcomes: readonly UpdateCascadeOutcome[] = [
@@ -697,7 +697,7 @@ test("D-05: stamps info and composes no marker from one loaded snapshot", () => 
   const boundary = createNotificationBoundary(1);
   const run = runWithSoftDeps({
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
   });
   const outcomes: readonly UpdateCascadeOutcome[] = [
@@ -779,6 +779,7 @@ test("SC3: an unconstrained plugin renders the same manual cascade rows as befor
     scope: "project",
     locations: seed.locations,
     cleanupClones: async () => {},
+    mcpImplementation: "none",
   });
   assert.ok(!("partition" in prepared));
   assert.strictEqual(prepared.constraint, undefined);

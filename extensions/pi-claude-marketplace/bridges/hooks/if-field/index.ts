@@ -54,6 +54,10 @@ import path from "node:path";
 
 import { TOOL_EVENTS, type BucketAEvent } from "../../../domain/components/hook-events.ts";
 import { IF_PREFIX_TARGETS } from "../../../domain/components/hook-if-targets.ts";
+import {
+  serverPrefixNames,
+  toolLiteralNames,
+} from "../../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 
@@ -68,6 +72,7 @@ import {
 import type { ParseResult } from "./bash.ts";
 import type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from "./glob.ts";
 import type { PiToolName } from "../../../domain/components/hook-tool-names.ts";
+import type { McpToolIdentity } from "../../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import type { ResolveHookIfContext } from "../../../domain/components/hooks.ts";
 import type { ExtensionContext } from "../../../platform/pi-api.ts";
 
@@ -98,10 +103,16 @@ import type { ExtensionContext } from "../../../platform/pi-api.ts";
  *                            cross-tool `piEvents` set, then consult
  *                            `pathGlob.testAbsolute(event.input.path
  *                            ?? ctx.cwd)`.
- *   - `mcp-literal`       -- exact equality on `event.toolName`.
+ *   - `mcp-literal`       -- exact equality on `event.toolName`; for a
+ *                            tool of Pi's built-in MCP, the server segment
+ *                            equals the registered server name and Pi's
+ *                            name for the tool segment is the event's
+ *                            (D-P5-04).
  *   - `mcp-server-prefix` -- `event.toolName.startsWith(serverPrefix)`
  *                            where `serverPrefix` includes the trailing
- *                            `"__"` (e.g. `"mcp__puppeteer__"`).
+ *                            `"__"` (e.g. `"mcp__puppeteer__"`); for a tool
+ *                            of Pi's built-in MCP, the prefix names the
+ *                            registered server name (D-P5-04).
  */
 export type IfPredicate =
   | { readonly kind: "match-all" }
@@ -470,8 +481,16 @@ function resolveTarget(p: string, ctx: ExtensionContext): string {
  *     event carries no `input.path` (Pi grep/find/ls optional-path
  *     tools), substitute `ctx.cwd` per D-61-03. Resolve relative inputs
  *     against `ctx.cwd` and call `pathGlob.testAbsolute`.
- *   - `mcp-literal` -- exact equality on `event.toolName`.
- *   - `mcp-server-prefix` -- prefix probe via `startsWith`.
+ *   - `mcp-literal` -- the literal names `tool`: exact equality on its Pi
+ *     name, or, for a tool of Pi's built-in MCP, the comparison under the
+ *     registered server name the matcher uses (D-P5-04).
+ *   - `mcp-server-prefix` -- the prefix names `tool`'s server: a
+ *     `startsWith` probe on its Pi name, or, for a tool of Pi's built-in
+ *     MCP, equality with the registered server's prefix (D-P5-04).
+ *
+ * `tool` is the event's tool as the dispatch named it once for the event
+ * (D-P5-01). Without it, the event's own tool name, with no built-in
+ * server, is compared.
  *
  * `claudeEvent` is accepted for symmetry with `compileIfPredicate` (the
  * parse-time entry compiles an `if` on a non-tool event to the
@@ -484,6 +503,7 @@ export function ifFires(
   event: unknown,
   ctx: ExtensionContext,
   _claudeEvent: BucketAEvent,
+  tool?: McpToolIdentity,
 ): boolean {
   switch (predicate.kind) {
     case "match-all":
@@ -527,9 +547,14 @@ export function ifFires(
     }
 
     case "mcp-literal":
-      return extractToolName(event) === predicate.toolName;
+      return toolLiteralNames(predicate.toolName, tool ?? eventTool(event));
 
     case "mcp-server-prefix":
-      return extractToolName(event).startsWith(predicate.serverPrefix);
+      return serverPrefixNames(predicate.serverPrefix, tool ?? eventTool(event));
   }
+}
+
+// The event's own tool name with no built-in server, for a caller that names no tool.
+function eventTool(event: unknown): McpToolIdentity {
+  return { piName: extractToolName(event), builtinServer: undefined };
 }

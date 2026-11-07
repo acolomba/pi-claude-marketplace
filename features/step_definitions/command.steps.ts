@@ -2,7 +2,8 @@
  * @fileoverview Steps that run `/claude:plugin` commands in a headless Pi and
  * check the JSON results of the last `When` step, a command or a new session.
  *
- * A `Given` command is setup and must succeed, unless its text says it failed.
+ * A `Given` command is setup and must succeed, unless its text says it
+ * failed, warned, or did not fail.
  * A `When` command is the action under test, and its result is kept on the
  * world for the `Then` steps.
  *
@@ -35,17 +36,17 @@ import type { NotificationPayload } from "../lib/pi-commands.ts";
 import type { ScenarioWorld } from "../support/world.ts";
 
 /**
- * Runs the setup `command` and asserts that every result it emits has
- * `severity`, so a result that does not shows whole.
+ * Runs the setup `command` and asserts that every result it emits has one of
+ * `severities`, so a result that does not shows whole.
  */
 async function runSetup(
   world: ScenarioWorld,
   command: string,
-  severity: NotificationPayload["severity"],
+  severities: readonly NotificationPayload["severity"][],
 ): Promise<void> {
   const payloads = await runCommandPayloads(world.pi, expandTokens(command, world.tokens));
   assert.deepStrictEqual(
-    payloads.filter((payload) => payload.severity !== severity),
+    payloads.filter((payload) => !severities.includes(payload.severity)),
     [],
   );
 }
@@ -53,7 +54,7 @@ async function runSetup(
 // Setup may emit any number of results, such as the two cascades of a first
 // bootstrap, and every one must be info.
 Given("the user has run {string}", async function (this: ScenarioWorld, command: string) {
-  await runSetup(this, command, "info");
+  await runSetup(this, command, ["info"]);
 });
 
 // A retry's first attempt: every result must be an error, so a first attempt
@@ -61,7 +62,7 @@ Given("the user has run {string}", async function (this: ScenarioWorld, command:
 Given(
   "the user has run {string}, which failed",
   async function (this: ScenarioWorld, command: string) {
-    await runSetup(this, command, "error");
+    await runSetup(this, command, ["error"]);
   },
 );
 
@@ -70,7 +71,17 @@ Given(
 Given(
   "the user has run {string}, which warned",
   async function (this: ScenarioWorld, command: string) {
-    await runSetup(this, command, "warning");
+    await runSetup(this, command, ["warning"]);
+  },
+);
+
+// DUAL-01: setup whose severity depends on the active MCP implementation,
+// such as the install of a plugin with MCP servers, which can warn under one
+// profile and not under the other. Every result must be info or a warning.
+Given(
+  "the user has run {string}, which did not fail",
+  async function (this: ScenarioWorld, command: string) {
+    await runSetup(this, command, ["info", "warning"]);
   },
 );
 

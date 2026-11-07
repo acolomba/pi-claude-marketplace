@@ -4,8 +4,9 @@
 // NFR-2 + NFR-3.
 //
 // Three entrypoints, bound by `createPluginUpdateOperations` (D-09 corollary):
-//  1. beginPluginUpdateRun(): PluginUpdateFn -- the autoupdate cascade;
-//     cascade-safe, throws only an invalid GitHub base override (GHB-03)
+//  1. beginPluginUpdateRun(notification): PluginUpdateFn -- the autoupdate
+//     cascade; cascade-safe, throws only an invalid GitHub base override
+//     (GHB-03)
 //  2. convergePlugin: PluginConvergeFn -- `apply`'s catalog move (D-26),
 //     under the same cascade-safe contract
 //  3. updatePlugins(opts) -- direct entrypoint; PUP-1 three forms
@@ -133,6 +134,7 @@ import type {
   UpdateRunOutcome,
 } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -318,6 +320,8 @@ function buildDirectThreePhaseArgs(
     // The cascade entrypoint never sets it, so cascade re-installs keep the
     // `requireInstallable` block.
     partial: opts.partial ?? false,
+    // D-P3-11: the gate asks against the implementation of the command's run.
+    mcpImplementation: opts.run.softDeps.mcpImplementation,
     // LAYER-04: `--local` selects the layer a named update acts on.
     ...(opts.local === true && { local: true }),
     // PURL-06: the test-only clone-cache seam for the git-source candidate
@@ -783,6 +787,7 @@ async function updateSinglePluginWith(
     readonly tagMemo: Map<string, readonly RemoteTag[]>;
     readonly marketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>;
   },
+  mcpImplementation: ActiveMcpImplementation,
 ): Promise<PluginUpdateOutcome> {
   // The cascade signature does not carry `cwd`; we default to process.cwd
   // because the cascade is invoked from a marketplace orchestrator that
@@ -806,7 +811,10 @@ async function updateSinglePluginWith(
     // automatic partial path can never materialize a structurally-broken plugin.
     // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
     // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
+    // D-P3-13: so a switch of MCP implementation never holds an autoupdate.
     partial: true,
+    // D-P3-12: the outcome reports the kinds this implementation drops.
+    mcpImplementation,
     // D-10-18: the SAME pair for every plugin of ONE autoupdate run, so a
     // cascade over many plugins of one marketplace lists it once -- see
     // `beginPluginUpdateRun` below for why the pair is allocated per run
@@ -839,6 +847,9 @@ function convergePluginWith(
     // D-26 / WCONV-01: only a record already installed partial admits a
     // partial candidate; a clean record's consent guard declines it.
     partial: target.partial,
+    // D-P3-13: `apply` planned the move under its run's MCP implementation
+    // and set `partial` from the record's view under it.
+    mcpImplementation: target.mcpImplementation,
     cleanupClones: target.cleanupClones ?? collectPluginClonesLocked,
   });
 }
@@ -1415,9 +1426,12 @@ export interface PluginUpdateOperations {
    * caller invokes this once per `marketplace update` command and drives
    * every plugin of that command through the returned function, which is
    * what bounds the D-10-18 tag memos to the run (see
-   * `createPluginUpdateOperations`).
+   * `createPluginUpdateOperations`). `notification` is the command's
+   * notification context, and it is required: its run names the MCP
+   * implementation the cascade reads (D-P3-12), and a dependency install
+   * reports through it (UPD-DEP-D1).
    */
-  readonly beginPluginUpdateRun: (notification?: UpdateNotification) => PluginUpdateFn;
+  readonly beginPluginUpdateRun: (notification: UpdateNotification) => PluginUpdateFn;
   /** D-26: materializes one catalog move for `apply` under the converge policy. */
   readonly convergePlugin: PluginConvergeFn;
 }
@@ -1515,8 +1529,8 @@ export function createPluginUpdateOperations(
   // version they move to, in the notification context of the command that
   // runs them. `apply`'s catalog moves do not: its plan installs, enables and
   // moves the dependencies first, as `pending` previews them.
-  const settling = (notification: UpdateNotification | undefined): UpdatePluginRunner =>
-    resolveDependencies === undefined || notification === undefined
+  const settling = (notification: UpdateNotification): UpdatePluginRunner =>
+    resolveDependencies === undefined
       ? run
       : (args) =>
           run({
@@ -1536,15 +1550,22 @@ export function createPluginUpdateOperations(
   // pushed between two runs is visible to the second. The pair spans every
   // plugin of one run, so a marketplace common to several of them is listed
   // once and the cascade's warm-cache expectation for path sources holds.
-  const beginPluginUpdateRun = (notification?: UpdateNotification): PluginUpdateFn => {
+  const beginPluginUpdateRun = (notification: UpdateNotification): PluginUpdateFn => {
     const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
     const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
     const runner = settling(notification);
+    // D-P3-12: the run reads the MCP implementation of its command's run.
+    const mcpImplementation = notification.run.softDeps.mcpImplementation;
     return (plugin, marketplace, scope) =>
-      updateSinglePluginWith(bindings, runner, plugin, marketplace, scope, {
-        tagMemo: constraintTagMemo,
-        marketplaceTagMemo: constraintMarketplaceTagMemo,
-      });
+      updateSinglePluginWith(
+        bindings,
+        runner,
+        plugin,
+        marketplace,
+        scope,
+        { tagMemo: constraintTagMemo, marketplaceTagMemo: constraintMarketplaceTagMemo },
+        mcpImplementation,
+      );
   };
 
   const convergePlugin: PluginConvergeFn = (target) =>

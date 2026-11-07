@@ -94,7 +94,13 @@ import {
 } from "../../bridges/workflows/index.ts";
 import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
+import {
+  UPDATE_IN_PROGRESS_NOTE,
+  type ActiveMcpImplementation,
+} from "../../domain/mcp-implementation.ts";
+import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { mcpServerConfigsOf, replaceCompatibility } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CleanupContextError,
@@ -115,8 +121,11 @@ import {
   withStateGuard,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
+import { legacyServersSourceFor } from "../mcp/recorded-servers.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
+import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
+import { degradeBaselineOf, mcpDependencyOf, newlyDroppedKinds } from "./mcp-verdict.ts";
 import {
   assertNoCrossPluginConflicts,
   removePluginRecord,
@@ -141,6 +150,7 @@ import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { RecordDegradeBaselineReader } from "./mcp-verdict.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type {
   MaterializationPolicy,
@@ -214,6 +224,14 @@ export interface ThreePhaseArgsBase {
   readonly mapModel?: boolean;
   readonly local?: boolean;
   readonly partial?: boolean;
+  /**
+   * D-P3-11 / D-P3-12: the MCP implementation of the calling run. The
+   * preflight asks for `--partial` against its view, and the outcome reports
+   * the kinds it drops. It is required, so no builder leaves it out.
+   */
+  readonly mcpImplementation: ActiveMcpImplementation;
+  /** D-MB-06 / D-P3-13: a cascade's baseline reader (`PreparePluginUpdateOptions`). */
+  readonly readRecordDegradeBaseline?: RecordDegradeBaselineReader;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   readonly cloneCandidates?: Set<string>;
   readonly credentialOps?: CredentialOps;
@@ -402,24 +420,11 @@ async function prepareUpdateHandles(
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });
-    handles.agents = await prepareStagePluginAgents(ops, {
-      locations,
-      marketplaceName: marketplace,
-      pluginName: plugin,
-      pluginRoot: installable.pluginRoot,
+    handles.agents = await prepareUpdateAgents(ops, args, preflight, {
       pluginDataDir,
       agentsDirs,
-      knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
-      skillSources: handles.skills.result.recorded,
       referenceNames,
-      // AG-7 opt-in: forward the direct-path `--map-model` setting. The
-      // cascade entrypoint never sets `args.mapModel`, so cascade re-
-      // installs always resolve to false (omit `model:`).
-      mapModel: args.mapModel ?? false,
-      // ANAME-02: the servers this update writes, mapped in agent tool lists.
-      mcpServerNames: Object.keys(installable.mcpServers),
-      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
-      cwd,
+      skills: handles.skills,
     });
     handles.mcp = await prepareStageMcpServers({
       locations,
@@ -451,6 +456,54 @@ async function prepareUpdateHandles(
   }
 
   return handles as PrepHandles;
+}
+
+/** What the agents staging of an update reads from the handles prepared before it. */
+interface UpdateAgentsInputs {
+  readonly pluginDataDir: string;
+  readonly agentsDirs: readonly string[];
+  readonly referenceNames: InstalledReferenceNames;
+  readonly skills: PreparedSkillsStaging;
+}
+
+/**
+ * The agents staging of an update: the new revision's agents, granted the MCP
+ * tools of the servers it writes in the form of the active implementation,
+ * with both forms recorded on each agent's index row (MGRT-01).
+ */
+async function prepareUpdateAgents(
+  ops: RemovalOps,
+  args: ThreePhaseArgs,
+  preflight: PluginPreflight,
+  inputs: UpdateAgentsInputs,
+): Promise<PreparedAgentsStaging> {
+  const { installable } = preflight;
+  return prepareStagePluginAgents(ops, {
+    locations: args.locations,
+    marketplaceName: args.marketplace,
+    pluginName: args.plugin,
+    pluginRoot: installable.pluginRoot,
+    pluginDataDir: inputs.pluginDataDir,
+    agentsDirs: inputs.agentsDirs,
+    knownSkills: inputs.skills.result.recorded.map((record) => record.generatedName),
+    skillSources: inputs.skills.result.recorded,
+    referenceNames: inputs.referenceNames,
+    // AG-7 opt-in: forward the direct-path `--map-model` setting. The
+    // cascade entrypoint never sets `args.mapModel`, so cascade re-
+    // installs always resolve to false (omit `model:`).
+    mapModel: args.mapModel ?? false,
+    mcpGrantForms: {
+      // MGRT-01 / D-MB-03: the grant form of the implementation the arguments
+      // name, which every producer sets from its own run, so a direct update,
+      // a reinstall, a dependency move, the autoupdate cascade, and `apply`'s
+      // convergence each stage the form of the run that carries them.
+      // ANAME-02: each form maps the declared servers its implementation runs.
+      active: args.mcpImplementation,
+      declaredMcpServers: installable.declaredMcpServers,
+    },
+    // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+    cwd: args.cwd,
+  });
 }
 
 /**
@@ -628,8 +681,6 @@ function appendCleanupFailure(
 // (record copy, not rendering), so no notify-rendering test is at risk.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
-
 // D-63-01: hooks slot lands between agents and mcp -- mirrors install-outcome.ts
 // runPhases literal-array order.
 const PHASE3_FAILURE_PHASES = [
@@ -719,15 +770,22 @@ async function markUpdateInProgress(
 
       sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
 
-      sRecord.compatibility = {
-        installable: false,
-        notes: [UPDATE_IN_PROGRESS_NOTE],
-        // Carry forward from EXISTING sRecord, NOT from
-        // preflight.installable -- the pre-update arrays are the truthful
-        // view during the intent-mark window.
-        supported: [...sRecord.compatibility.supported],
-        unsupported: [...sRecord.compatibility.unsupported],
-      };
+      // MREC-01 / D-P3-02: the intent mark changes only the notes of the
+      // verdict it carries forward, so the record keeps its basis: a neutral
+      // record stays neutral, and a legacy record keeps no basis.
+      replaceCompatibility(
+        sRecord,
+        {
+          installable: false,
+          notes: [UPDATE_IN_PROGRESS_NOTE],
+          // Carry forward from EXISTING sRecord, NOT from
+          // preflight.installable -- the pre-update arrays are the truthful
+          // view during the intent-mark window.
+          supported: [...sRecord.compatibility.supported],
+          unsupported: [...sRecord.compatibility.unsupported],
+        },
+        sRecord.compatibilityBasis,
+      );
 
       // CR-02: `resources.workflows` is the ONE inventory this window widens, to
       // the union of the names already recorded and the names about to be
@@ -877,12 +935,27 @@ function applyPerBridgeResources(
 function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: PluginPreflight): void {
   const { installable, toVersion, resolvedSha } = preflight;
   sRecord.version = toVersion;
-  sRecord.compatibility = {
-    installable: installable.state === "installable",
-    notes: [...installable.notes],
-    supported: [...installable.supported],
-    unsupported: [...installable.unsupported],
-  };
+  // MREC-01 / D-P3-02: the swap records the neutral verdict for `toVersion`.
+  replaceCompatibility(
+    sRecord,
+    {
+      installable: installable.state === "installable",
+      notes: [...installable.notes],
+      supported: [...installable.supported],
+      unsupported: [...installable.unsupported],
+    },
+    "neutral",
+  );
+  // MREC-01 / D-MB-04: the declared MCP servers of `toVersion`, written
+  // beside `compatibility` so a failed update keeps the previous servers next
+  // to the intent mark.
+  sRecord.mcpServerConfigs = mcpServerConfigsOf(installable.declaredMcpServers);
+  if (installable.mcpBundle === true) {
+    sRecord.mcpBundle = true;
+  } else {
+    delete sRecord.mcpBundle;
+  }
+
   sRecord.resolvedSource = installable.pluginRoot;
   // PURL-06 / D-78-01: write the git-source commit identity so the
   // post-commit GC and the next update read the swapped sha. Undefined for
@@ -1401,8 +1474,8 @@ function composePhase3FailureOutcome(
       msg: f.msg,
       ...(f.cleanupFailures !== undefined && { cleanupFailures: f.cleanupFailures }),
     })),
-    // declaresAgents / declaresMcp / declaresWorkflows are required `boolean`.
-    // `(failed)` rows do not render the soft-dep marker.
+    // declaresAgents / declaresMcp / declaresWorkflows are required; a
+    // `(failed)` row renders no soft-dep marker, so each is `false`.
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
@@ -1465,6 +1538,8 @@ export async function swapPluginUpdate(
 ): Promise<UpdateRunOutcome> {
   const { plugin, marketplace } = args;
   const { installable } = preflight;
+  // D-P3-12: read before the swap replaces the record it compares with.
+  const partialDegrade = await partialDegradeOf(args, preflight);
 
   // ─── Prepare into tmp ──────────────────────────────────────────────────────
   //
@@ -1596,8 +1671,9 @@ export async function swapPluginUpdate(
   }
 
   // Success: WR-04 fields populated for cascade-side RH-5 composition.
-  // CMC-13: declaresAgents / declaresMcp / declaresWorkflows reflect what
-  // was actually staged, matching reinstall's effective-state contract.
+  // CMC-13: declaresAgents / declaresWorkflows reflect what was actually
+  // staged, matching reinstall's effective-state contract; D-P3-10:
+  // declaresMcp is the MCP dependency of the candidate's declared servers.
   // resolveRows composes `{requires pi-subagents}`, `{requires pi-mcp-adapter}`,
   // and `{requires pi-dynamic-workflows}` from the command run's snapshot under
   // the context's marker policy (D-05, D-12), iff (declares AND unloaded).
@@ -1636,7 +1712,7 @@ export async function swapPluginUpdate(
     stagedAgentNames,
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
-    declaresMcp: stagedMcpServerNames.length > 0,
+    declaresMcp: mcpDependencyOf(Object.values(installable.declaredMcpServers)),
     // D-10-17a: forwarded from the preflight by a plain assignment, never a
     // conditional spread -- the member is required, so its ABSENCE is
     // spelled `undefined`, not an omitted key. This literal is the SINGLE
@@ -1663,24 +1739,9 @@ export async function swapPluginUpdate(
     // reads. Without this the one verb that INHERITS the signal was the one
     // verb whose row could never carry it.
     ...(installable.orphanRewake === true && { orphanRewake: true }),
-    // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
-    // `partially-available` degraded it -- carry the dropped kinds so the cascade
-    // renders `(partially-installed)` instead of `(updated)`. Empty for a clean
-    // candidate (FSTAT-03 -- no lingering partial state).
-    //
-    // SEV-03 / D-69-01: `newlyDegraded` records whether this degrade NEWLY
-    // introduced partial state -- the PERSISTED `compatibility.unsupported` read
-    // from the prior install record (`preflight.record`, loaded BEFORE the
-    // update applied) was empty. The autoupdate cascade renderer reads it to
-    // raise the row to `warning` (newly degraded) vs `info` (already degraded);
-    // the manual `update --partial` renderer ignores it (explicit opt-in stays
-    // info). No schema change -- the field already exists on the record.
-    ...(installable.state === "partially-available" && {
-      partialDegrade: {
-        kinds: [...installable.unsupported],
-        newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
-      },
-    }),
+    // FSTAT-07 / D-66-04: same NREG-01 spread rule; `partialDegradeOf` says
+    // when a candidate degrades the plugin.
+    ...(partialDegrade !== undefined && { partialDegrade }),
     // D-PL1-10: same NREG-01 spread rule as `degradedKinds` -- a clean
     // update's outcome keeps the key absent.
     ...(stagingWarnings.length > 0 && { stagingWarnings }),
@@ -1705,6 +1766,51 @@ export function preflightMove(preflight: PreparedPluginUpdate): RevisionMove {
     toVersion: preflight.toVersion,
     ...(fromCommit !== undefined && { fromCommit }),
     ...(toCommit !== undefined && { toCommit }),
+  };
+}
+
+/**
+ * FSTAT-07 / D-66-04 / D-P3-11: a candidate that the run's MCP implementation
+ * sees as partially available degrades the plugin. The outcome carries the
+ * kinds that implementation drops, so the cascade renders
+ * `(partially-installed)` instead of `(updated)`. A candidate the
+ * implementation runs whole carries nothing (FSTAT-03).
+ *
+ * SEV-03 / D-69-01 / D-P3-12: `newlyDegraded` is true when the installed
+ * record, read under the same implementation, dropped nothing and the
+ * candidate drops a kind it does not. The autoupdate cascade raises such a row
+ * to `warning`; the manual `update --partial` row ignores it. A record that
+ * only a switch of implementation made partial is already degraded, so its
+ * row stays `info`; so does a record whose servers cannot be read when the
+ * candidate drops `mcpServers` only under the active implementation, unless
+ * the record's stored verdict is that implementation's own (D-MB-06).
+ */
+async function partialDegradeOf(
+  args: ThreePhaseArgs,
+  preflight: PreparedPluginUpdate,
+): Promise<{ readonly kinds: readonly string[]; readonly newlyDegraded: boolean } | undefined> {
+  const view = resolutionFor(preflight.installable, args.mcpImplementation);
+  if (view.state === "installable") {
+    return undefined;
+  }
+
+  const marketplace = ownValue(preflight.state.marketplaces, args.marketplace);
+  if (marketplace === undefined) {
+    throw new PluginUpdateConcurrencyError("marketplace-removed", args.plugin, args.marketplace);
+  }
+
+  const { effective, recorded } = await readRecordMcpVerdict(
+    legacyServersSourceFor(args.locations, marketplace, args.plugin),
+    args.mcpImplementation,
+  );
+  const newlyDropped = newlyDroppedKinds(
+    view,
+    preflight.installable,
+    degradeBaselineOf(effective, recorded, preflight.record, args.mcpImplementation),
+  );
+  return {
+    kinds: [...view.unsupported],
+    newlyDegraded: effective.unsupported.length === 0 && newlyDropped.length > 0,
   };
 }
 

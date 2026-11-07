@@ -962,7 +962,7 @@ test("keeps mixed entries and duplicates ordered while reading live mode on the 
   assert.deepStrictEqual(reads, ["json", "rpc", "json", "rpc"]);
   assert.deepStrictEqual(run.softDeps, {
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
   });
   assert.strictEqual(run.entrySink, pi);
@@ -1091,7 +1091,7 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
   ctx.mode = "print";
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
+    mcpImplementation: "adapter",
     workflowEngineLoaded: false,
   }); // agents NOT loaded
   const msg: NotificationMessage = {
@@ -1129,7 +1129,7 @@ test("notify renders updated plugin with version arrow + mcp dep marker", (t) =>
   const ctx = createContext(t);
   const run = runWithSoftDeps({
     piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
+    mcpImplementation: "none",
     workflowEngineLoaded: false,
   }); // mcp NOT loaded
   const msg: NotificationMessage = {
@@ -1146,7 +1146,7 @@ test("notify renders updated plugin with version arrow + mcp dep marker", (t) =>
             name: "commit-commands",
             from: "1.0.0",
             to: "1.1.0",
-            dependencies: ["mcp"],
+            dependencies: [{ kind: "mcp", runEvery: "adapter" }],
           },
         ],
       },
@@ -1180,7 +1180,7 @@ test("notify renders reinstalled plugin with both deps loaded (no soft-dep marke
             needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
-            dependencies: ["agents", "mcp"],
+            dependencies: ["agents", { kind: "mcp", runEvery: "adapter" }],
           },
         ],
       },
@@ -1567,7 +1567,7 @@ test("WR-03: partially-installed success row threads dependencies -> soft-dep ma
   const ctx = createContext(t);
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
+    mcpImplementation: "adapter",
     workflowEngineLoaded: false,
   });
   const msg: NotificationMessage = {
@@ -7347,7 +7347,7 @@ for (const mode of ["json", "rpc"]) {
       origin: { kind: "load" },
       softDeps: {
         piSubagentsLoaded: false,
-        piMcpAdapterLoaded: false,
+        mcpImplementation: "none",
         workflowEngineLoaded: false,
       },
       entrySink: capture.entrySink,
@@ -7788,7 +7788,7 @@ test("D-12: context dispatch composes each row's markers under the caller's mark
           {
             status: "reinstalled",
             name: "beta",
-            dependencies: ["mcp"],
+            dependencies: [{ kind: "mcp", runEvery: "adapter" }],
             severity: "info",
             needsReload: false,
           },

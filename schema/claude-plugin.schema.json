@@ -180,7 +180,9 @@
                           "disabled in local layer",
                           "enabled in local layer",
                           "network error",
-                          "already added"
+                          "already added",
+                          "requires mcp",
+                          "requires builtin mcp"
                         ]
                       }
                     },
@@ -338,7 +340,9 @@
                     "disabled in local layer",
                     "enabled in local layer",
                     "network error",
-                    "already added"
+                    "already added",
+                    "requires mcp",
+                    "requires builtin mcp"
                   ]
                 }
               }
@@ -537,7 +541,9 @@
                           "disabled in local layer",
                           "enabled in local layer",
                           "network error",
-                          "already added"
+                          "already added",
+                          "requires mcp",
+                          "requires builtin mcp"
                         ]
                       }
                     },
@@ -695,7 +701,9 @@
                     "disabled in local layer",
                     "enabled in local layer",
                     "network error",
-                    "already added"
+                    "already added",
+                    "requires mcp",
+                    "requires builtin mcp"
                   ]
                 }
               }
@@ -958,7 +966,9 @@
                       "disabled in local layer",
                       "enabled in local layer",
                       "network error",
-                      "already added"
+                      "already added",
+                      "requires mcp",
+                      "requires builtin mcp"
                     ]
                   }
                 },
@@ -1021,7 +1031,9 @@
                               "failed",
                               "status unknown",
                               "not loaded",
-                              "overridden by project scope"
+                              "overridden by project scope",
+                              "overridden by mcp.json",
+                              "project not trusted"
                             ]
                           }
                         },
@@ -1040,7 +1052,13 @@
                     "required": ["companion", "missing"],
                     "properties": {
                       "companion": {
-                        "enum": ["pi-dynamic-workflows", "pi-mcp-adapter", "pi-subagents"]
+                        "enum": [
+                          "pi-dynamic-workflows",
+                          "pi-mcp-adapter",
+                          "pi-subagents",
+                          "mcp",
+                          "builtin mcp"
+                        ]
                       },
                       "missing": { "type": "boolean" }
                     },
@@ -1149,7 +1167,9 @@
                       "disabled in local layer",
                       "enabled in local layer",
                       "network error",
-                      "already added"
+                      "already added",
+                      "requires mcp",
+                      "requires builtin mcp"
                     ]
                   }
                 },
@@ -1423,7 +1443,9 @@
                             "disabled in local layer",
                             "enabled in local layer",
                             "network error",
-                            "already added"
+                            "already added",
+                            "requires mcp",
+                            "requires builtin mcp"
                           ]
                         }
                       },
@@ -1492,7 +1514,9 @@
                                     "failed",
                                     "status unknown",
                                     "not loaded",
-                                    "overridden by project scope"
+                                    "overridden by project scope",
+                                    "overridden by mcp.json",
+                                    "project not trusted"
                                   ]
                                 }
                               },
@@ -1511,7 +1535,13 @@
                           "required": ["companion", "missing"],
                           "properties": {
                             "companion": {
-                              "enum": ["pi-dynamic-workflows", "pi-mcp-adapter", "pi-subagents"]
+                              "enum": [
+                                "pi-dynamic-workflows",
+                                "pi-mcp-adapter",
+                                "pi-subagents",
+                                "mcp",
+                                "builtin mcp"
+                              ]
                             },
                             "missing": { "type": "boolean" }
                           },
@@ -1620,7 +1650,9 @@
                             "disabled in local layer",
                             "enabled in local layer",
                             "network error",
-                            "already added"
+                            "already added",
+                            "requires mcp",
+                            "requires builtin mcp"
                           ]
                         }
                       },
@@ -1761,7 +1793,9 @@
               "disabled in local layer",
               "enabled in local layer",
               "network error",
-              "already added"
+              "already added",
+              "requires mcp",
+              "requires builtin mcp"
             ]
           }
         }

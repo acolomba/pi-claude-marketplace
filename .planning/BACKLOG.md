@@ -4881,3 +4881,181 @@ Noted 2026-11-03 by the babysit-pr review of PR #295. `CommandMapEntrySchema` (`
 ## AGENTNAME-01: a nested and a flat agent can map to the same file name
 
 Noted 2026-11-03 by the babysit-pr review of PR #295. D-CF4-01 keeps `agents/review/security.md` (`demo:review:security`) and `agents/review-security.md` (`demo:review-security`) distinct, but `generatedAgentName` (`domain/name.ts`) joins namespace and name with `-`, so both become `pi-claude-marketplace-demo-review-security` and AG-12 keeps the first in `localeCompare` order with a warning. Claude Code loads both. Record the divergence as a decision next to D-CF4-01, or make the file name injective with a migration for existing marker and index names.
+
+## MCPV2-01: register and unregister built-in MCP servers at once
+
+Noted 2026-11-05 (mcp-builtin, MCPV2-01, D-MB-10). Under Pi's built-in MCP, the extension registers plugin MCP servers only at `session_start` and after the load reconcile. So a server that `install` or `enable` adds starts at the next start or `/reload`, and a server that `uninstall` or `disable` removes keeps running until then. The milestone deferred this because D-MB-10 settles on registration at session start. Candidate direction: call Pi's registration API from the install, uninstall, enable, and disable ledgers after the state commit, and keep the session-start pass as the reconciliation.
+
+## MCPV2-02: map Claude deny rules to hidden built-in MCP tools
+
+Noted 2026-11-05 (mcp-builtin, MCPV2-02). The extension does not map Claude deny rules for plugin MCP tools onto Pi's built-in MCP, so Pi exposes a denied tool like any other. The milestone kept deny rules out of its scope and named this a version 2 requirement. Candidate direction: at registration, map a Claude deny rule that names a plugin MCP tool or server to Pi's `toolExposure: "hidden"` for that tool or server.
+
+## MCPV2-03: let background pi-subagents children call plugin MCP tools under built-in MCP
+
+Noted 2026-11-05 (mcp-builtin, MCPV2-03, MCPBG-01). Under Pi's built-in MCP, a pi-subagents background child does not run the plugin MCP servers that the parent registered, so the child cannot call plugin MCP tools. The milestone deferred this because D-MB-12 keeps a background child from changing installation state, and the registration runs in the parent only. Candidate direction: register the recorded servers in a child without any state write, or ask pi-subagents to pass the parent's registrations to the child.
+
+## DENYPIN-01: re-pin the MCP variable deny-lists to Claude Code 2.1.318
+
+Noted 2026-11-05 (mcp-builtin, P2-DC-22, D-MB-27, AVAR-05). The variable deny-lists of the MCP value substitution stay pinned to Claude Code 2.1.291. The milestone compared behavior with Claude Code 2.1.318 elsewhere, and kept the lists so that this milestone changes no released substitution. Candidate direction: read the 2.1.318 deny-lists with `.agents/skills/claude-code-compat-research`, update both lists and their tests, and record the change in the CHANGELOG.
+
+## BLTNOTICE-01: a load notice for an overridden or refused built-in MCP registration
+
+Noted 2026-11-05 (mcp-builtin, P2-DC-08, D-MB-19, BLT-04). When an `mcp.json` entry overrides a plugin server, or the extension refuses a built-in registration, only `info` reports it. The load prints nothing. The milestone deferred a notice because it needs a closed-set reason and catalog states. Candidate direction: if Claude Code reports the same case, add one warning row per overridden or refused server to the load report, with its catalog states.
+
+## TOOLSEARCHOFF-01: a fallback when Pi's `tool_search` is turned off
+
+Noted 2026-11-05 (mcp-builtin, 02-08 item 4 (d)). Plugin MCP tools under Pi's built-in MCP reach the model through Pi's `tool_search`. When a user turns `tool_search` off, the model cannot find those tools. The milestone deferred this because no requirement covers it. Candidate direction: detect at registration that `tool_search` is off and register the plugin tools with direct exposure, or document the requirement.
+
+## BLTOWNER-01: tell another extension's same-name built-in registration apart in `info`
+
+Noted 2026-11-05 (mcp-builtin, P2-DC-46, D-MB-29). When another extension registers a built-in MCP server under the name of a plugin server first, `info` cannot tell that registration from this extension's own. D-MB-29 records it as a gap. The fix needs this extension's own `extensionPath`, so it changes the parameter of the built-in status reader (`createBuiltinMcpStatusReader`), which this milestone froze. Candidate direction: pass the extension's path to the reader and compare it with the source of the registration.
+
+Narrowed 2026-11-06 (quick 261106-m02): a registration Pi refuses now reads `not loaded` in `info`. Two cases stay open. A foreign registration whose config equals the plugin server's makes the sync attempt nothing, so no refusal is noted and `info` reads that server's state. And a changed config that Pi rejects while an older registration of this extension stays listed reads `not loaded` although the older server still runs (T-m02-05). The PR #303 review closed the second case: a refused re-registration now removes the older registration, so `not loaded` matches what runs. The first case stays open.
+
+## HOOKTOOLSEARCH-01: name Pi's `tool_search` as Claude Code's `ToolSearch` in hooks
+
+Noted 2026-11-05 (mcp-builtin, P5-DC-09, P5-DC-35, 05-CONTEXT deferred ideas). Hooks see Pi's `tool_search` tool under Pi's name, so a matcher written for Claude Code's `ToolSearch` does not fire. The milestone deferred this because Phase 5 covered MCP tool names only. Candidate direction: map the name in hook stdin and matchers, and change the `*` rows on `tool_search` in `features/hook/tool-use.feature`.
+
+## HOOKDETAILS-01: recover the original MCP tool segment from `details.tool`
+
+Noted 2026-11-05 (mcp-builtin, 05-CONTEXT deferred ideas). Under Pi's built-in MCP, the tool segment of a hook-facing name keeps Pi's change of `-` to `_`, because Pi does not report the original tool name. A tool result's `details.tool` holds it, but a PreToolUse event has no details, so the two events would disagree on the name. The milestone did not take this for that reason. Candidate direction: ask Pi to report the original tool name on the tool, then use it in both events.
+
+## HOOKPROXYBOTH-01: skip only adapter-registered tools as proxy calls when both MCP implementations are loaded
+
+Noted 2026-11-05 (mcp-builtin, T-05-07, P5-DC-15). When pi-mcp-adapter and Pi's built-in MCP are both loaded, a built-in tool whose name Pi cut inside the namespace, called with a string `tool` and no `action`, is still skipped as a proxy call, so its hooks do not run. The milestone deferred the hardening because the case needs both implementations loaded and a cut name. Candidate direction: skip only a tool that pi-mcp-adapter registered, never a tool whose `sourceInfo.path` is `builtin:mcp`.
+
+## HOOKMATCH-01: close the hook matcher parity gaps with Claude Code 2.1.318
+
+Noted 2026-11-05 (mcp-builtin, P5-DC-16). Claude Code 2.1.318 reads a matcher made only of `[a-zA-Z0-9_|, -]` as a list of exact names, with spaces and commas allowed, and any other matcher as an unanchored regex. This project accepts only `[A-Za-z0-9_|-]` and matches server prefixes with `startsWith`. The milestone deferred this because Phase 5 changed only the names that hooks see. Candidate direction: port the matcher rule of Claude Code, with scenarios for the list form and the regex form.
+
+## HOOKNOIMPL-01: a scenario for the proxy hook rule with no MCP implementation
+
+Noted 2026-11-05 (mcp-builtin, P5-DC-24, MHK-02). MHK-02's case with no MCP implementation loaded has unit tests only. A scenario needs a harness extension that registers a proxy-shaped tool while no MCP implementation is loaded, and that is a new stand-in. The milestone deferred it for that reason. Candidate direction: add the stand-in under `features/lib/` and an `@mcp` scenario in `features/hook/tool-use.feature`.
+
+## PENDAPPLY-01: `apply` refuses a declared install that `pending` previews as a partial install
+
+Noted 2026-11-05 (mcp-builtin, P3-DC-122). `pending` previews a declared install of a partially available plugin as `(will partially install)`, but `apply` refuses that install. The mismatch predates the milestone for every partially available kind. Phase 3 makes it reachable for an `sse` plugin under Pi's built-in MCP. Candidate direction: choose one behavior for both commands, from what Claude Code does with a declared plugin that installs only in part. The user's review on 2026-11-06 left it in BACKLOG.
+
+## GRANTLEGACY-01: exact translation of legacy agent grants under built-in MCP
+
+Noted 2026-11-05 (mcp-builtin, P4-DC-06, P4-DC-30). An agent that an earlier release installed gets a textual translation of its MCP grants at the first built-in session. Two gaps remain. A per-tool `excludeTools` name longer than 64 characters stays in the pi-mcp-adapter form. A grant of a server that built-in MCP cannot run (`sse`) is translated instead of dropped with the staging warning. Candidate direction: compute Pi's hashed name for long names, and drop unsupported grants with the warning.
+
+## GRANTWARN-01: a load warning when the grants step cannot rewrite an agent
+
+Noted 2026-11-05 (mcp-builtin, P4-DC-09, P4-DC-32). When the session-start grants step cannot rewrite a generated agent (a user-edited file, a held lock, or a corrupt index row), it skips the agent and reports nothing. The milestone deferred a warning because it needs a closed-set reason and catalog states. Candidate direction: add one warning row per skipped agent to the load report.
+
+## SWITCHNOTICE-01: a load notice for a plugin whose state changed because of an MCP switch
+
+Noted 2026-11-05 (mcp-builtin, Phase 1 conditional (b), D-P3-14). When the user switches between pi-mcp-adapter and Pi's built-in MCP, a plugin can become partially available, or available again, and the load prints no notice. `list`, `info`, and `fetch` show the new state. D-P3-14 deferred the notice. Candidate direction: at load, compare the state of each plugin under the implementation of the previous session with its state under the current one, and print one row per change.
+
+## STRICTINSTALL-01: make the built-in twin installs strict
+
+Noted 2026-11-05 (mcp-builtin, 02-08 item 9, P2-DC-78). The built-in twin scenarios of `configuration.feature`, `invocation.feature`, `sources.feature`, `builtin-values.feature`, `builtin-direct.feature`, `builtin-trust.feature`, `project-scope.feature`, and the enable and update twins of `lifecycle.feature` install and enable with `which did not fail`. Phase 2 used that form because the MCP markers did not exist yet. Phase 3's markers have landed, so those installs can no longer warn and the strict form fits. Phase 6 did not change the scenarios because its plans own no such edit. Candidate direction: change each twin to the strict install step and run both profiles.
+
+## COMPLIMPL-01: a completion scenario that reads the MCP implementation from Pi
+
+Noted 2026-11-06 (mcp-builtin, `06-REVIEW.md` IN-01, D-P6-22). The step `the user requests plugin completions for {string}` calls the completion provider in the test process with the implementation of the scenario's profile (`features/lib/plugin-completions.ts`). So no scenario covers how the registered command reads the implementation from Pi at each lookup (`edge/register.ts`). Only `test/edge/register.test.ts` covers it. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: drive one built-in completion scenario through the completion provider that the profile Pi registers, or record the gap as a known limit.
+
+## STAMPTYPE-01: derive the completion cache stamp values from the MCP implementation type
+
+Noted 2026-11-06 (mcp-builtin, `06-REVIEW.md` IN-05, D-P6-22). The schema of the completion cache in `shared/completion-cache.ts` lists the stamp values `adapter`, `builtin`, and `none` itself. It does not derive them from `ActiveMcpImplementation`. If a fourth implementation is added, the schema rejects its stamp, and the compiler does not report it. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: add a compile-time check that the static type of the stamp schema equals `ActiveMcpImplementation`, or build both from one exported tuple.
+
+## GRANTRUNARG-01: make the direct-swap grant test tell the run from the argument
+
+Noted 2026-11-06 (mcp-builtin, `06-REVIEW.md` IN-06, MGRT-01, D-MB-03). In `test/orchestrators/plugin/update-swap.test.ts`, the direct-swap case for Pi's built-in MCP passes a built-in run and `mcpImplementation: "builtin"`. The two values agree, so the test cannot tell which one the swap reads. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: give the case a run that names another implementation, and keep `mcpImplementation: "builtin"`.
+
+## STAMPREQ-01: make the completion cache stamp option required
+
+Noted 2026-11-06 (mcp-builtin, `06-REVIEW.md` IN-07, P6-PLN-04). `GetPluginIndexOptions.mcpImplementation` in `shared/completion-cache.ts` is optional only so that test fixtures can read a file without a stamp. Every production caller passes it. A later caller that leaves it out still compiles, and its reads rebuild the file each time, because they never match the stamp that production writes. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: make the option required, and stamp the test seeds with `"none"`.
+
+## EDGEDEPSCASES-01: restructure the `loadManifestForMarketplace` test cases
+
+Noted 2026-11-06 (mcp-builtin, `06-REVIEW.md` IN-09). `test/orchestrators/edge-deps.test.ts` has four top-level `describe` blocks for `loadManifestForMarketplace`, and two of their loops choose a label with a conditional in the loop body. Both break `.agents/skills/typescript-unit-tests/rules/cases.md`. The title "with N verdict read(s)" counts debug lines, which equal the reads only for its legacy-record fixture. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: put the label in each data row, title each row by the lines it logs, and merge the four blocks into one.
+
+## CONTAINCATCH-01: `isPluginRootContained` reads every error as an uncontained plugin root
+
+Noted 2026-11-06 (mcp-builtin, UF-1, NFR-10, D-P6-23). `isPluginRootContained` in `orchestrators/mcp/recorded-servers.ts` catches every error and answers false. The legacy reader, the stored-servers path of `recordedMcpServers`, and the built-in registration step ask it before they read the servers of a record. So an error that is not a containment refusal, such as an unexpected file-system error, reads as a plugin root outside its clone root, and the debug line names that cause instead of the real one. The answer stays safe, because the caller then reads no file of the plugin. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: answer false only for a refusal of the containment check, and report any other error with its own message, while each caller still skips only that record.
+
+## BLTREPEAT-01: a test that a second built-in registration pass changes nothing
+
+Noted 2026-11-06 (mcp-builtin, D-MB-10, MSEL-02, BLT-06). The extension registers built-in MCP servers at `session_start` (`builtinRegistrationStep`) and again after the load reconcile (`resyncBuiltinRegistrations`), both in `orchestrators/mcp/builtin-registration-step.ts`. The sync skips a server whose listed config has the same JSON text, so the second pass is meant to change nothing. A config that Pi lists with its keys in another order registers again (MSEL-02). No test runs both passes against one registry and checks that the second pass registers and unregisters nothing. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: a unit test of the step that runs both passes over one recording registry with the same records, and asserts that the second pass makes no registry call.
+
+## SUBCHILDVAR-01: the background-child check depends on the name `PI_SUBAGENT_CHILD`
+
+Noted 2026-11-06 (mcp-builtin, MGRT-02, D-MB-12). `platform/subagent-child.ts` tells a pi-subagents background child by the variable `PI_SUBAGENT_CHILD=1`, which pi-subagents 0.84.0 sets. pi-subagents is a soft dependency that the extension never imports. If pi-subagents renames the variable, the check fails silently. A child then runs autoapply when it is on, the AMIG-01 MCP move, and the agent grants step, so it can change installation state. The user's review on 2026-11-06 left it in BACKLOG. Candidate direction: a test that reads the name from the pi-subagents floor that `scripts/install-test-peers.mjs` installs, or a request that pi-subagents export the name.
+
+## ~~AGENTIDXFORM-01: let the agents-index row's type carry its grant-form invariant~~ -- CLOSED
+
+**CLOSED 2026-11-07** by quick task 261106-u95 (fixed). `loadAgentsIndex` now reads each row as `AgentsIndexRow`, whose type requires the stored form of the recorded implementation. A row whose pair does not match loads without both fields, adds no corruption, and writes one `mcp` debug line. `storedGrantForms` is the one constructor, and `saveAgentsIndex` takes only `AgentsIndexRow` rows. The schema file and `schemaVersion` 1 do not change. The rewrite lost its optional chaining, its absent-recorded-form check, and its stored-forms check in `isLegacyCandidate`. It keeps the guards for a row with no implementation, an implementation equal to the active one, an absent active form (AG-11), the AG-4 generated-block checks, containment (NFR-10), and the file read. The row-level `warnings` and `droppedTools` stay, because they are required on-disk fields of every row.
+
+Noted 2026-11-06 (mcp-builtin, PR #303 type review). `persistence/agents-index-schema.ts` stores `mcpImplementation` and `mcpForms` as two independent optional fields, and the row-level `warnings` and `droppedTools` repeat the active form's. The type allows a row with an implementation but no forms, forms without an implementation, or forms without the active key; `bridges/agents/grant-rewrite.ts` guards each at run time. Deferred because reshaping it changes the saved index file. Candidate direction: one optional sub-object whose shape requires the active form.
+
+## ~~LEGACYSRC-01: build a `LegacyServersSource` from one scoped record~~ -- CLOSED
+
+**CLOSED 2026-11-07** by quick task 261106-u96 (fixed). One constructor builds the source. The scope locations now agree with the marketplace record. The error is now `RecordedServersUnreadableError`, its message says `cannot read`, and callers narrow it with `instanceof`.
+
+Noted 2026-11-06 (mcp-builtin, PR #303 type review). `LegacyServersSource` in `orchestrators/mcp/recorded-servers.ts` carries `marketplaceName` beside the marketplace record that already holds the name, a plugin name not tied to the record passed beside it, and scope locations with no scope. The containment check (UF-1, NFR-10) trusts that callers pair them correctly. `LegacyServersUnreadableError` is also used for stored servers, which are not legacy. Candidate direction: one constructor that takes the scope, the marketplace record and the plugin name, and a neutral error name.
+
+## ~~STATUSLOOKUP-01: make `McpStatusLookup` a discriminated union~~ -- CLOSED
+
+**CLOSED 2026-11-07** by quick task 261106-u97 (fixed). `McpStatusLookup` is a union with one arm per implementation (`adapter`, `none`, `builtin`). `mcpStatusLookup` is its one production builder, and `info.ts` and `info-mcp-status.ts` use it.
+
+Noted 2026-11-06 (mcp-builtin, PR #303 type review). `McpStatusLookup` in `platform/mcp-status.ts` lets `reader` and `implementation` disagree, and its `projectTrusted` and `cwd` mean something only for the built-in arm. Candidate direction: one arm per implementation, built by a single function that picks the reader from `McpStatusReaders`.
+
+## ~~HOOKTOOLREAD-01: report a failed tool-list read in the hooks bridge~~ -- CLOSED
+
+**CLOSED 2026-11-07** by quick task 261106-u98 (fixed). A probe with a failed read of Pi's tools or commands keeps no answer, and the next proxy-shaped event probes again. The first failed read of a generation writes one `mcp` debug line. Nothing reaches the user.
+
+Noted 2026-11-06 (mcp-builtin, PR #303 error-handling review). `bridges/hooks/mcp-tool-view.ts` falls back to Pi's tool name when `pi.getAllTools()` throws, so a matcher written with Claude Code's name for a built-in MCP tool does not fire, and the proxy rule caches the answer of a failed probe for the bridge generation. Pi 1.5.0 has no path that throws there, so the review left it. Candidate direction: do not cache a probe that failed, and report the failure once per generation.
+
+## ~~GRANTFORMGAP-01: an agent whose other grant form maps to nothing keeps stale grants after a switch~~ -- CLOSED
+
+**CLOSED 2026-11-07** by quick task 261106-u95, as decided: keep the current behavior. pi-subagents 0.84.0 refuses to launch an agent whose `mcp:` selectors do not resolve, under both implementations, and it names them. AG-11 forbids an empty form. The two GRANTFORMGAP-01 cases in `test/bridges/agents/grant-rewrite.test.ts` pin this, and `bridges/agents/grant-forms.ts` (header point 3) gives the reason.
+
+Noted 2026-11-06 (mcp-builtin, PR #303 error-handling review; waits for the user). When an agent's explicit `tools:` list maps to no tool under the inactive MCP implementation, `bridges/agents/grant-forms.ts` leaves that form out (the AG-11 rule), so the agent is never a rewrite candidate. After the user switches implementations, the agent file keeps the previous implementation's `mcp:` selectors and `excludeTools` names with no notice. Decide whether the empty form should be stored (so the switch removes the grants) or warned about.
+
+## ~~IMPORTCAUSE-01: the import warning's cause repeats itself with an empty reason~~ -- CLOSED
+
+**CLOSED 2026-11-07** by quick task 261106-u99 (fixed). The import builds each warning cause once from the typed error, through one `narrowResolverReasons` call, on both the install and the enable path. A change to install's formatting cannot reach the warning now. No cucumber scenario ships, because the cause reaches no user surface. Two related defects went to NOTINSTALLMSG-01 and OUTCOMECAUSE-01.
+
+Noted 2026-11-06 (PR #303 test review). An import whose plugin is not installable reports a warning `cause` of `Plugin "<name>" is not installable: \n\ncause: Plugin "<name>" is not installable: `, the not-installable message repeated with an empty reason list. The text predates mcp-builtin; `test/orchestrators/import/execute.test.ts` pins it. Candidate direction: build the cause from the narrowed reasons once.
+
+## ~~REVIEWSUGG-01: PR #303 review suggestions left open~~ -- CLOSED
+
+**CLOSED 2026-11-07** by quick task 261106-u94 (items 261106-u95 to 261106-u9c). Every part is settled.
+
+- Types, `RecordedMcpServers` unreadable reason: fixed (u96). The arm carries `reason`.
+- Types, `recorded` and `re-resolved`: left as one arm each. Both carry the same servers and bundle, no consumer branches on them, and the kind tells a test which read answered.
+- Types, `McpDependency.runEvery`: fixed (u9b), a closed union `RunEvery`.
+- Types, `toolNamePrefix`: fixed (u9b), `profileFor("adapter")` returns `AdapterMcpProfile`.
+- Types, a `Record` reorders integer-like server names: left. Server order matches Claude Code 2.1.319, which merges by object spread.
+- Types, `mcpServerNames` and `mcpGrantForms`: fixed (u95). Each form's servers come from the declared servers through its profile.
+- Types, `HookTool.name` and `builtin:mcp`: fixed (u98). `claudeFormToolName` derives the name, and `BUILTIN_MCP_SOURCE_PATH` in `platform/pi-api.ts` is the one definition.
+- Types, `SoftDepStatus` fields: fixed (u9b), now readonly.
+- Types, `"none"` read as the adapter: fixed (u9b in the agent stage, u97 in the two status reads).
+- Types, `mcpBundle`: left as `Literal(true)`. That is exactly the saved `state.json` form, and a boolean would let this release write `false`, which an earlier release refuses to load.
+- Error handling, a server whose built-in config is `undefined`: left as `not loaded`. Only a variable that resolves to a leading `~` reaches it, and `not loaded` is the existing token for a server Pi does not list.
+- Error handling, two servers folding to one name: fixed (u9a). One server is registered by declaration order, and each left-out server is logged and reads `not loaded` in `info`.
+- Error handling, a failed unregister: left debug-only. The next sync retries it.
+- Error handling, owners noted before the sync: fixed (u9a).
+- Error handling, the probe, `mcp.json`, description, and rewrite-probe reads: fixed (u9b, u9a, u95). Each failure leaves one `mcp` debug line.
+- Error handling, the unguarded built-in status lookup: fixed (u97). The server shows `status unknown`.
+- Tests, `none` cases for apply's toggle and deferred-enable sites and for convergence: fixed (u9c).
+- Tests, scenarios for the split `runEvery` marker and for `none` in update, reinstall, and completion: fixed (u9c).
+- Performance, the completion snapshot per lookup: accepted as AR-06-02.
+
+Noted 2026-11-06 (mcp-builtin, PR #303 toolkit review, all rated Suggestion). Types: `RecordedMcpServers` merges `recorded` and `re-resolved` and drops the unreadable reason; `McpDependency.runEvery` is an array for four states; `toolNamePrefix` cannot say the adapter always returns one; declaration order kept in a `Record` reorders integer-like server names; `mcpServerNames` and `mcpGrantForms` are coupled by convention; `HookTool.name` is derivable and `builtin:mcp` is defined twice; `SoftDepStatus` fields are mutable; `"none"` can be read as the adapter by a new consumer; `mcpBundle` is an optional literal. Error handling: a server whose built-in config is `undefined` reads a bare `not loaded`; two servers folding to one name overwrite silently; a failed unregister logs only to debug; owners are noted before the sync; probe, `mcp.json`, description and rewrite-probe reads swallow errors without a trace; the built-in status lookup is unguarded. Tests: apply's toggle and deferred-enable sites and convergence lack a `none` case; no scenario shows the split `runEvery` marker or `none` for update, reinstall and completion. Performance: tab completion takes a soft-dependency snapshot per lookup (accepted as AR-06-02).
+
+## ~~NOTINSTALLMSG-01: the not-installable message can end in a bare `: `~~ -- CLOSED
+
+**CLOSED 2026-11-07** by quick task 261107-36g (fixed). When the resolver writes no note, `requireInstallable` names the closed-set tokens of the unsupported kinds, so the message reads, for example, `Plugin "lib" is not installable: unsupported mcp`. The empty ending showed on the failed dependency rows of `install`, `update`, and `marketplace update`, on the `{dependency failed}` rows of `apply` and `import`, on the `enable` row, and in the refusal to move an installed dependency. Two scenarios in `features/plugin/install-dependencies.feature` pin it, and install, apply, and import now narrow a refused plugin through one builder.
+
+Noted 2026-11-07 (mcp-builtin, from 261106-u99, S1). The `PluginShapeError` not-installable message ends in a bare `: ` when the resolver notes are empty and the signal is only in `unsupportedKinds`. A dependency row's cause chain can show it. Traced in code, not run. Candidate direction: when the notes are empty, build the reason text from `unsupportedKinds`, and add a unit case for a plugin that only `unsupportedKinds` marks not installable.
+
+## OUTCOMECAUSE-01: the failed outcomes' `cause` strings are unread and repeat their head
+
+Noted 2026-11-07 (mcp-builtin, from 261106-u99, S2). No production code now reads the `cause` strings of the failed install and enable outcomes. `formatOrchestratedCause` and `composeErrorWithCauseChain` put the head before a cause line that repeats it. Candidate direction: drop the `cause` strings from those outcomes and keep the typed error, or make the composers skip a cause line that equals the head.
+
+## MIXEDREFUSAL-01: a refusal message names only the noted kind when another kind has no note
+
+Noted 2026-11-07 (mcp-builtin, from quick 261107-36g). When a plugin has a resolver note for one kind and also an unsupported kind with no note, such as an output style plus hooks declared in the manifest, the not-installable message names only the noted kind (`contains outputStyles`). The row's reason list already shows both. Candidate direction: in `refusalReasons` (`domain/plugin-resolver.ts`), add the token of each unsupported kind that no note covers.

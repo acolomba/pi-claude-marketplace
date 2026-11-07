@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { resolveStrictMcp } from "../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts";
 
+import type { McpResolution } from "../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts";
 import type { StatKindReader } from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 type FileValue = "dir" | { readonly contents: string };
@@ -15,6 +16,7 @@ function emptyResolution() {
     notes: [] as string[],
     unsupported: [] as string[],
     mcpServers: {} as Record<string, unknown>,
+    declaredMcpServers: {} as Record<string, unknown>,
   };
 }
 
@@ -101,9 +103,15 @@ test("resolves a strict string reference at inline parity", async () => {
         notes: [],
         unsupported: [],
         mcpServers: { alpha: { command: "node" } },
+        declaredMcpServers: { alpha: { command: "node" } },
       },
       inlineDirty: false,
-      inlineResolution: { notes: [], unsupported: [], mcpServers: { alpha: { command: "node" } } },
+      inlineResolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { alpha: { command: "node" } },
+        declaredMcpServers: { alpha: { command: "node" } },
+      },
     },
   );
 });
@@ -153,12 +161,14 @@ test("D-CF6-01: reads the manifest MCP and ignores the entry MCP when a plugin.j
         notes: [],
         unsupported: [],
         mcpServers: { manifest: { command: "python" } },
+        declaredMcpServers: { manifest: { command: "python" } },
       },
       stringEntryDirty: false,
       stringEntryResolution: {
         notes: [],
         unsupported: [],
         mcpServers: { manifest: { command: "python" } },
+        declaredMcpServers: { manifest: { command: "python" } },
       },
       reads: [],
     },
@@ -194,6 +204,7 @@ test("D-CF6-01: reads the entry MCP after .mcp.json when the plugin has no plugi
         notes: [],
         unsupported: [],
         mcpServers: { e: { command: "entry-e" }, f: { command: "mcpjson-f" } },
+        declaredMcpServers: { e: { command: "entry-e" }, f: { command: "mcpjson-f" } },
       },
       order: ["e", "f"],
     },
@@ -231,6 +242,11 @@ test("D-CF6-01: merges .mcp.json and the manifest, a later server replacing an e
         notes: [],
         unsupported: [],
         mcpServers: {
+          a: { command: "manifest-a" },
+          c: { command: "mcpjson-c" },
+          b: { command: "manifest-b" },
+        },
+        declaredMcpServers: {
           a: { command: "manifest-a" },
           c: { command: "mcpjson-c" },
           b: { command: "manifest-b" },
@@ -278,6 +294,11 @@ test("D-CF6-01: reads an array of references and maps in order", async () => {
           z: { command: "mcpjson-z" },
           y: { command: "inline-y" },
         },
+        declaredMcpServers: {
+          x: { command: "fileb-x" },
+          z: { command: "mcpjson-z" },
+          y: { command: "inline-y" },
+        },
       },
       order: ["x", "z", "y"],
     },
@@ -309,6 +330,7 @@ test("D-CF6-01: refuses an array holding an element that is neither a reference 
         notes: ["malformed mcpServers: must be object"],
         unsupported: [],
         mcpServers: {},
+        declaredMcpServers: {},
       },
       stats: ["/plugins/alpha/.mcp.json"],
     },
@@ -338,6 +360,8 @@ for (const bundle of ["server.mcpb", "./server.dxt"] as const) {
           notes: [],
           unsupported: ["mcpServers"],
           mcpServers: { local: { command: "node" } },
+          declaredMcpServers: { local: { command: "node" } },
+          mcpBundle: true,
         },
         stats: ["/plugins/alpha/.mcp.json"],
         reads: ["/plugins/alpha/.mcp.json"],
@@ -372,7 +396,9 @@ test("D-CF6-01: records the mcpServers kind once for a bundle and a blocked serv
         notes: [],
         unsupported: ["mcpServers"],
         mcpServers: {},
+        declaredMcpServers: { live: { type: "ws", url: "wss://mcp.example.com/ws" } },
         droppedMcpServers: [{ server: "live", feature: "ws" }],
+        mcpBundle: true,
       },
     },
   );
@@ -403,7 +429,12 @@ test("D-CF6-01: a later supported server replaces an earlier blocked one of the 
     { dirty, resolution },
     {
       dirty: false,
-      resolution: { notes: [], unsupported: [], mcpServers: { live: { command: "node" } } },
+      resolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { live: { command: "node" } },
+        declaredMcpServers: { live: { command: "node" } },
+      },
     },
   );
 });
@@ -435,8 +466,55 @@ test("D-CF6-01: a later blocked server replaces an earlier supported one and is 
         notes: [],
         unsupported: ["mcpServers"],
         mcpServers: {},
+        declaredMcpServers: { live: { type: "ws", url: "wss://mcp.example.com/ws" } },
         droppedMcpServers: [{ server: "live", feature: "ws" }],
       },
+    },
+  );
+});
+
+test("D-CF6-01: keeps Claude Code's object order for integer-like server names across sources", async () => {
+  // arrange
+  const resolution: McpResolution = emptyResolution();
+  const deps = mcpFiles({
+    "/plugins/alpha/.mcp.json": {
+      contents: JSON.stringify({
+        b: { type: "ws", url: "wss://mcp.example.com/ws" },
+        "10": { command: "node" },
+      }),
+    },
+  });
+
+  // act
+  await resolveStrictMcp(
+    {
+      entry: {},
+      manifest: {
+        mcpServers: {
+          a: { command: "node" },
+          "2": { type: "ws", url: "wss://mcp.example.com/ws" },
+        },
+      },
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    deps,
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      declared: Object.keys(resolution.declaredMcpServers),
+      supported: Object.keys(resolution.mcpServers),
+      dropped: resolution.droppedMcpServers,
+    },
+    {
+      declared: ["2", "10", "b", "a"],
+      supported: ["10", "a"],
+      dropped: [
+        { server: "2", feature: "ws" },
+        { server: "b", feature: "ws" },
+      ],
     },
   );
 });
@@ -475,12 +553,14 @@ test("accepts wrapped and unwrapped standalone documents", async () => {
         notes: [],
         unsupported: [],
         mcpServers: { wrapped: { command: "node" } },
+        declaredMcpServers: { wrapped: { command: "node" } },
       },
       unwrappedDirty: false,
       unwrappedResolution: {
         notes: [],
         unsupported: [],
         mcpServers: { unwrapped: { command: "node" } },
+        declaredMcpServers: { unwrapped: { command: "node" } },
       },
     },
   );
@@ -534,7 +614,12 @@ for (const { title, reference, expectedNote } of [
       { dirty, resolution, stats: deps.stats, reads: deps.reads },
       {
         dirty: true,
-        resolution: { notes: [expectedNote], unsupported: [], mcpServers: {} },
+        resolution: {
+          notes: [expectedNote],
+          unsupported: [],
+          mcpServers: {},
+          declaredMcpServers: {},
+        },
         stats: ["/plugins/alpha/.mcp.json"],
         reads: [],
       },
@@ -589,7 +674,12 @@ for (const { title, referenceFiles } of [
       { dirty, resolution },
       {
         dirty: false,
-        resolution: { notes: [], unsupported: [], mcpServers: { local: { command: "node" } } },
+        resolution: {
+          notes: [],
+          unsupported: [],
+          mcpServers: { local: { command: "node" } },
+          declaredMcpServers: { local: { command: "node" } },
+        },
       },
     );
   });
@@ -620,7 +710,12 @@ test("D-CF6-01: reads an unwrapped string reference", async () => {
     { dirty, resolution },
     {
       dirty: false,
-      resolution: { notes: [], unsupported: [], mcpServers: { alpha: { command: "node" } } },
+      resolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { alpha: { command: "node" } },
+        declaredMcpServers: { alpha: { command: "node" } },
+      },
     },
   );
 });
@@ -699,6 +794,7 @@ test("MCPR-04: refuses a string reference whose link resolves outside the plugin
         ],
         unsupported: [],
         mcpServers: {},
+        declaredMcpServers: {},
       },
     },
   );
@@ -739,7 +835,12 @@ for (const { title, reference, makeLink } of [
       {
         dirty: false,
         reads: [path.join(tree.pluginRoot, "config", "real.json")],
-        resolution: { notes: [], unsupported: [], mcpServers: { linked: { command: "node" } } },
+        resolution: {
+          notes: [],
+          unsupported: [],
+          mcpServers: { linked: { command: "node" } },
+          declaredMcpServers: { linked: { command: "node" } },
+        },
       },
     );
   });
@@ -824,7 +925,12 @@ for (const { title, readFailure } of [
       { dirty, resolution },
       {
         dirty: false,
-        resolution: { notes: [], unsupported: [], mcpServers: { local: { command: "node" } } },
+        resolution: {
+          notes: [],
+          unsupported: [],
+          mcpServers: { local: { command: "node" } },
+          declaredMcpServers: { local: { command: "node" } },
+        },
       },
     );
   });
@@ -855,7 +961,12 @@ for (const { title, readFailure } of [
       { dirty, resolution },
       {
         dirty: false,
-        resolution: { notes: [], unsupported: [], mcpServers: { local: { command: "node" } } },
+        resolution: {
+          notes: [],
+          unsupported: [],
+          mcpServers: { local: { command: "node" } },
+          declaredMcpServers: { local: { command: "node" } },
+        },
       },
     );
   });
@@ -955,7 +1066,12 @@ test("D-CF6-02: skips a .mcp.json whose stat fails and keeps the manifest server
     { dirty, resolution, reads },
     {
       dirty: false,
-      resolution: { notes: [], unsupported: [], mcpServers: { local: { command: "node" } } },
+      resolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { local: { command: "node" } },
+        declaredMcpServers: { local: { command: "node" } },
+      },
       reads: [],
     },
   );
@@ -982,7 +1098,12 @@ for (const documentText of ["{ not json", "5", "null", "[1]", '{"mcpServers": 5}
       { dirty, resolution },
       {
         dirty: false,
-        resolution: { notes: [], unsupported: [], mcpServers: { local: { command: "node" } } },
+        resolution: {
+          notes: [],
+          unsupported: [],
+          mcpServers: { local: { command: "node" } },
+          declaredMcpServers: { local: { command: "node" } },
+        },
       },
     );
   });
@@ -1008,7 +1129,12 @@ test("D-CF6-02: drops a malformed server in .mcp.json and keeps its other server
     { dirty, resolution },
     {
       dirty: false,
-      resolution: { notes: [], unsupported: [], mcpServers: { ok: { command: "node" } } },
+      resolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { ok: { command: "node" } },
+        declaredMcpServers: { ok: { command: "node" } },
+      },
     },
   );
 });
@@ -1039,7 +1165,12 @@ test("D-CF6-02: a malformed server in a later file never replaces an earlier ser
     { dirty, resolution },
     {
       dirty: false,
-      resolution: { notes: [], unsupported: [], mcpServers: { x: { command: "mcpjson-x" } } },
+      resolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { x: { command: "mcpjson-x" } },
+        declaredMcpServers: { x: { command: "mcpjson-x" } },
+      },
     },
   );
 });
@@ -1069,7 +1200,12 @@ test("D-CF6-02: skips a string reference whose path walk fails with ENOTDIR, wit
     { dirty, resolution, reads: deps.reads },
     {
       dirty: false,
-      resolution: { notes: [], unsupported: [], mcpServers: { local: { command: "node" } } },
+      resolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { local: { command: "node" } },
+        declaredMcpServers: { local: { command: "node" } },
+      },
       reads: [path.join(pluginRoot, ".mcp.json")],
     },
   );
@@ -1094,6 +1230,7 @@ test("D-CF6-02: refuses a value written inline that is not a server map", async 
         notes: ["malformed mcpServers: must be object"],
         unsupported: [],
         mcpServers: {},
+        declaredMcpServers: {},
       },
     },
   );
@@ -1125,6 +1262,7 @@ test("D-CF6-02: refuses a malformed server in a map that an array holds inline",
         notes: ['malformed mcp server "broken": unknown type "bogus"'],
         unsupported: [],
         mcpServers: { local: { command: "node" } },
+        declaredMcpServers: { local: { command: "node" } },
       },
     },
   );
@@ -1198,7 +1336,12 @@ test("resolves valid inline entry MCP after only a stat of the absent .mcp.json"
     { dirty, resolution, stats: deps.stats, reads: deps.reads },
     {
       dirty: false,
-      resolution: { notes: [], unsupported: [], mcpServers: { alpha: { command: "node" } } },
+      resolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { alpha: { command: "node" } },
+        declaredMcpServers: { alpha: { command: "node" } },
+      },
       stats: ["/plugins/alpha/.mcp.json"],
       reads: [],
     },
@@ -1248,7 +1391,95 @@ test("ANAME-07: leaves a blocked server out and records it with its feature", as
         notes: [],
         unsupported: ["mcpServers"],
         mcpServers: { local: { command: "node" } },
+        declaredMcpServers: {
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          local: { command: "node" },
+        },
         droppedMcpServers: [{ server: "live", feature: "ws" }],
+      },
+    },
+  );
+});
+
+test("D-P3-01: stages the adapter subset and drops only the servers both implementations block", async () => {
+  // arrange
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await resolveStrictMcp(
+    {
+      entry: {
+        mcpServers: {
+          local: { command: "node" },
+          events: { type: "sse", url: "https://mcp.example.com/sse" },
+          asker: { command: "node", bareElicitationCapability: true },
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        },
+      },
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    mcpFiles({}),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: false,
+      resolution: {
+        notes: [],
+        unsupported: ["mcpServers"],
+        mcpServers: {
+          local: { command: "node" },
+          events: { type: "sse", url: "https://mcp.example.com/sse" },
+        },
+        declaredMcpServers: {
+          local: { command: "node" },
+          events: { type: "sse", url: "https://mcp.example.com/sse" },
+          asker: { command: "node", bareElicitationCapability: true },
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        },
+        droppedMcpServers: [{ server: "live", feature: "ws" }],
+      },
+    },
+  );
+});
+
+test("D-P3-01: an sse and a bare-elicitation server leave the neutral verdict clean", async () => {
+  // arrange
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await resolveStrictMcp(
+    {
+      entry: {
+        mcpServers: {
+          events: { type: "sse", url: "https://mcp.example.com/sse" },
+          asker: { command: "node", bareElicitationCapability: true },
+        },
+      },
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    mcpFiles({}),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: false,
+      resolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { events: { type: "sse", url: "https://mcp.example.com/sse" } },
+        declaredMcpServers: {
+          events: { type: "sse", url: "https://mcp.example.com/sse" },
+          asker: { command: "node", bareElicitationCapability: true },
+        },
       },
     },
   );
@@ -1283,6 +1514,10 @@ test("ANAME-07: records the mcpServers kind once for several blocked servers", a
         notes: [],
         unsupported: ["mcpServers"],
         mcpServers: {},
+        declaredMcpServers: {
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          ide: { type: "sdk" },
+        },
         droppedMcpServers: [
           { server: "live", feature: "ws" },
           { server: "ide", feature: "sdk" },
@@ -1321,6 +1556,7 @@ test("ANAME-07: a malformed server adds a note and reports a structural defect",
         notes: ['malformed mcp server "db": /timeout: must be integer'],
         unsupported: [],
         mcpServers: { local: { command: "node" } },
+        declaredMcpServers: { local: { command: "node" } },
       },
     },
   );
@@ -1340,5 +1576,56 @@ test("ANAME-07: keeps a server named __proto__ as an own server", async () => {
   // assert
   assert.deepStrictEqual(Object.entries(resolution.mcpServers), [
     ["__proto__", { command: "node" }],
+  ]);
+});
+
+test("MREC-01: keeps a declared server named __proto__ as an own server", async () => {
+  // arrange
+  const resolution = emptyResolution();
+  const servers: unknown = JSON.parse('{"__proto__":{"command":"node"}}');
+
+  // act
+  await resolveStrictMcp(
+    { entry: { mcpServers: servers }, manifest: null, pluginRoot: "/plugins/alpha", resolution },
+    mcpFiles({}),
+  );
+
+  // assert
+  assert.deepStrictEqual(Object.entries(resolution.declaredMcpServers), [
+    ["__proto__", { command: "node" }],
+  ]);
+});
+
+test("MREC-01 / D-CF6-01: declares supported and blocked servers in merge order, a later source keeping the first position with its config", async () => {
+  // arrange
+  const resolution = emptyResolution();
+  const deps = mcpFiles({
+    "/plugins/alpha/.mcp.json": {
+      contents: JSON.stringify({
+        first: { command: "node", args: ["v1.js"] },
+        live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        broken: { command: 5 },
+      }),
+    },
+  });
+
+  // act
+  await resolveStrictMcp(
+    {
+      entry: {},
+      manifest: {
+        mcpServers: { last: { command: "python" }, first: { command: "node", args: ["v2.js"] } },
+      },
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    deps,
+  );
+
+  // assert
+  assert.deepStrictEqual(Object.entries(resolution.declaredMcpServers), [
+    ["first", { command: "node", args: ["v2.js"] }],
+    ["live", { type: "ws", url: "wss://mcp.example.com/ws" }],
+    ["last", { command: "python" }],
   ]);
 });

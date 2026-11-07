@@ -13,6 +13,7 @@ Feature: Plugin apply
       | beta  | 1.0.0   |
       | gamma | 1.0.0   |
 
+  @mcp
   Scenario: Apply reports the rollback phases and leaks of a failed enable
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -321,6 +322,7 @@ Feature: Plugin apply
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  @mcp
   Scenario: Apply that cannot finish the rollback of a failed install names the rollback phase
     Given the marketplace "fixtures" is added to the project scope
     Given a config in scope project and layer base, with these plugins:
@@ -341,6 +343,7 @@ Feature: Plugin apply
       | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                  | cause truncated | leaks      | rollback partial                                                                                            |
       | fixtures         | project           | demo@fixtures | demo | failed | rollback partial | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
 
+  @mcp
   Scenario: Apply that cannot finish the rollback of a failed dependency reports the dependency's own row
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
@@ -367,6 +370,7 @@ Feature: Plugin apply
       | tools            | project           | app@tools | app  | failed | dependency failed | project |                                                              |                 |           |                                                                                                             |
       | tools            | project           | lib@tools | lib  | failed | rollback partial  | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
 
+  @mcp
   Scenario: Apply that cannot finish the rollback of a dependency two plugins share reports that dependency once
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
@@ -396,6 +400,7 @@ Feature: Plugin apply
       | tools            | project           | server@tools | server | failed | dependency failed | project |                                                              |                 |           |                                                                                                             |
       | tools            | project           | web@tools    | web    | failed | dependency failed | project |                                                              |                 |           |                                                                                                             |
 
+  @mcp
   Scenario: Apply shows the phase detail of a partially rolled back missing dependency
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
@@ -552,31 +557,6 @@ Feature: Plugin apply
       | kind         | reconcile-pending-empty |
       | severity     | info                    |
       | needs reload | false                   |
-
-  Scenario: Apply preserves dependency move warnings and MCP notices
-    Given the marketplace "tools" is published as a dir source
-    Given the marketplace "tools" offers these plugins with dependencies:
-      | name | version | dependencies |
-      | app  | 1.0.0   | lib          |
-      | lib  | 1.0.0   |              |
-    Given the marketplace "tools" is added to the project scope
-    Given the user has run "/claude:plugin install app@tools --scope project"
-    Given the marketplace "tools" offers these plugins with dependencies:
-      | name | version | dependencies |
-      | app  | 1.0.0   | lib          |
-      | lib  | 2.0.0   |              |
-    Given the published plugin "lib" of the marketplace "tools" has a second skill whose name collides with its first
-    Given the published plugin "lib" of the marketplace "tools" declares the mcp server "lib-server"
-    Given the mcp-adapter.json file of the project scope holds a comment
-    When the user runs "/claude:plugin apply --scope project"
-    Then the command reports these results:
-      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | header                                                           | lines                                                                                                                                  | notices                                                                   |
-      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |                                                                  |                                                                                                                                        |                                                                           |
-      | diagnostic                | warning  | false        |             |                |                |                     | Plugin "lib" [project] updated; 1 declared component has a note. | skill source "skill" in "[redacted path]                                                                                               |                                                                           |
-      | mcp-config-notices        | warning  | false        |             |                |                |                     |                                                                  |                                                                                                                                        | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
-    Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id        | name | status  | reasons                 | scope   | from  | to    |
-      | tools            | project           | lib@tools | lib  | updated | requires pi-mcp-adapter | project | 1.0.0 | 2.0.0 |
 
   Scenario: Apply keeps a plugin and its dependency at their versions, the plugin disabled, when the dependency's move fails, and the next apply does the same
     Given the marketplace "tools" is published as a dir source

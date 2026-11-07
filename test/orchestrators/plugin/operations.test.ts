@@ -36,7 +36,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { noStatusSnapshot } from "../../platform/mcp-status-seed.ts";
+import { noStatusReaders } from "../../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
@@ -473,6 +473,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    compatibilityBasis: "neutral",
     resources: {
       skills: [],
       prompts: [],
@@ -482,6 +483,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
       workflows: [],
     },
     hookEntries: [{ event: "PreToolUse", matcher: "" }],
+    mcpServerConfigs: [],
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -825,6 +827,7 @@ test("setPluginEnabled(false) unstages the artifacts, flips durable state and dr
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    compatibilityBasis: "neutral",
     resources: {
       skills: [],
       prompts: [],
@@ -834,6 +837,7 @@ test("setPluginEnabled(false) unstages the artifacts, flips durable state and dr
       workflows: [],
     },
     hookEntries: [{ event: "PreToolUse", matcher: "" }],
+    mcpServerConfigs: [],
     enabled: false,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -945,6 +949,7 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     version: "0.0.1",
     resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
     compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    compatibilityBasis: "neutral",
     resources: {
       skills: [],
       prompts: [],
@@ -954,6 +959,7 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
       workflows: [],
     },
     hookEntries: [{ event: "PreToolUse", matcher: "" }],
+    mcpServerConfigs: [],
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -1002,6 +1008,7 @@ test("D-26: convergePlugin moves the plugin to the catalog version in place and 
     scope: "project",
     cwd,
     partial: false,
+    mcpImplementation: "none",
     rematerialize: false,
   });
 
@@ -1147,7 +1154,8 @@ test("getPluginInfo reports the installed plugin through the bound reader capabi
   await getPluginInfo({
     ctx,
     run,
-    mcpStatus: noStatusSnapshot(),
+    mcpStatus: noStatusReaders(),
+    projectTrusted: true,
     marketplace: "mp",
     plugin: "p1",
     scope: "project",

@@ -55,6 +55,7 @@ const convertedAgent: ConvertedAgent = {
   sourcePath: "/plugin/agents/reviewer.md",
   sourceHash: "source-hash",
   fileContent: "---\nname: pi-claude-marketplace-acme-reviewer\n---\nReview the change.\n",
+  frontmatter: "---\nname: pi-claude-marketplace-acme-reviewer\n---\n",
   originalModel: "sonnet",
   droppedFields: ["thinking"],
   droppedTools: ["WebFetch"],
@@ -74,6 +75,12 @@ const stageAgentsInput: StageAgentsInput = {
   cwd: "/project",
 } satisfies StageAgentsInput;
 void stageAgentsInput;
+
+const stageAgentsInputWithGrantForms: StageAgentsInput = {
+  ...stageAgentsInput,
+  mcpGrantForms: { active: "builtin", declaredMcpServers: { db: { command: "node" } } },
+} satisfies StageAgentsInput;
+void stageAgentsInputWithGrantForms;
 
 const agentSkillSource: AgentSkillSource = {
   generatedName: "acme-testing",
@@ -167,10 +174,23 @@ const convertedAgentWithoutWarnings: ConvertedAgent = {
   sourcePath: "/plugin/agents/reviewer.md",
   sourceHash: "source-hash",
   fileContent: "Review the change.\n",
+  frontmatter: "",
   droppedFields: [],
   droppedTools: [],
 };
 void convertedAgentWithoutWarnings;
+// @ts-expect-error a converted agent always records its frontmatter block
+const convertedAgentWithoutFrontmatter: ConvertedAgent = {
+  generatedName: "pi-claude-marketplace-acme-reviewer",
+  sourceName: "reviewer",
+  sourcePath: "/plugin/agents/reviewer.md",
+  sourceHash: "source-hash",
+  fileContent: "Review the change.\n",
+  droppedFields: [],
+  droppedTools: [],
+  warnings: [],
+};
+void convertedAgentWithoutFrontmatter;
 // @ts-expect-error a stage input always carries the install cwd
 const stageAgentsInputWithoutCwd: StageAgentsInput = {
   locations: undefined!,
@@ -181,6 +201,20 @@ const stageAgentsInputWithoutCwd: StageAgentsInput = {
   agentsDirs: [],
 };
 void stageAgentsInputWithoutCwd;
+// @ts-expect-error grant forms always name the declared servers beside the active implementation
+void ({ ...stageAgentsInput, mcpGrantForms: { active: "adapter" } } satisfies StageAgentsInput);
+const stageAgentsInputWithUnknownImplementation: StageAgentsInput = {
+  ...stageAgentsInput,
+  // @ts-expect-error the active implementation is one of the closed implementation ids
+  mcpGrantForms: { active: "other", declaredMcpServers: {} },
+};
+void stageAgentsInputWithUnknownImplementation;
+const stageAgentsInputWithServerList: StageAgentsInput = {
+  ...stageAgentsInputWithGrantForms,
+  // @ts-expect-error ANAME-02: each grant form takes its servers from the declared servers, never from a separate list
+  mcpServerNames: ["db"],
+};
+void stageAgentsInputWithServerList;
 // @ts-expect-error a staged record always identifies its target path
 const stagedAgentRecordWithoutTargetPath: StagedAgentRecord = {
   generatedName: "pi-claude-marketplace-acme-reviewer",

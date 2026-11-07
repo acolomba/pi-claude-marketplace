@@ -5,18 +5,23 @@
 // import Pi API types from here so peer-version bumps are auditable.
 //
 // The soft-dependency probes (`hasLoadedPiSubagents` /
-// `hasLoadedPiMcpAdapter` / `hasLoadedWorkflowEngine` / `softDepStatus`) live
-// here because they inspect `pi.getAllTools()` and `pi.getCommands()`, which
-// belong to the external Pi API surface. `softDepStatus` is the probe that
-// `openNotificationRun` takes once per run (D-05). The run's `SoftDepStatus`
-// snapshot decides whether a plugin row whose `dependencies` declare a kind
-// carries the `requires pi-subagents` / `requires pi-mcp-adapter` /
-// `requires pi-dynamic-workflows` marker.
+// `hasLoadedPiMcpAdapter` / `hasLoadedBuiltinMcp` / `hasLoadedWorkflowEngine` /
+// `softDepStatus`) live here because they inspect `pi.getAllTools()` and
+// `pi.getCommands()`, which belong to the external Pi API surface.
+// `softDepStatus` is the probe that `openNotificationRun` takes once per run
+// (D-05). It reads `pi.getCommands()` once and hands that one list to both MCP
+// arms, the adapter's and the built-in's, so a snapshot makes the same reads
+// in every state (MSEL-01). The run's `SoftDepStatus` snapshot decides whether a plugin row whose
+// `dependencies` declare a kind carries the `requires pi-subagents` /
+// `requires pi-mcp-adapter` / `requires pi-dynamic-workflows` marker.
 
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { createReadTool } from "@earendil-works/pi-coding-agent";
+
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
 
 export { getAgentDir } from "@earendil-works/pi-coding-agent";
 
@@ -57,6 +62,8 @@ export type {
   ExtensionContext,
   InputEvent,
   InputEventResult,
+  McpServerConfig,
+  RegisteredMcpServer,
   SessionBeforeCompactEvent,
   SessionCompactEvent,
   SessionShutdownEvent,
@@ -71,11 +78,37 @@ export type { AutocompleteProvider } from "@earendil-works/pi-tui";
 import type {
   AgentEndEvent,
   ExtensionContext,
+  McpServerConfig,
+  RegisteredMcpServer,
   ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 
 /** Pi's mode union, derived from its context because the root omits the alias. */
 export type ExtensionMode = ExtensionContext["mode"];
+
+/**
+ * MSEL-01: the MCP implementations a plugin's MCP servers can run under:
+ * pi-mcp-adapter, or Pi's own built-in MCP.
+ */
+export type McpImplementationId = "adapter" | "builtin";
+
+/**
+ * MSEL-01: the MCP implementation a run uses, decided once per run snapshot
+ * (D-05). `none` means the extension can name neither implementation as
+ * active.
+ */
+export type ActiveMcpImplementation = McpImplementationId | "none";
+
+/**
+ * Consumer-owned view of the Pi API that registers built-in MCP servers for
+ * the session. Registrations are not saved; a server of the same name in
+ * `mcp.json` takes precedence.
+ */
+export interface PiMcpRegistry {
+  registerMcpServer(name: string, config: McpServerConfig): void;
+  unregisterMcpServer(name: string): void;
+  getMcpServers(): readonly RegisteredMcpServer[];
+}
 
 /**
  * Structural `text` content block -- mirrors `pi-ai`'s `TextContent`
@@ -137,10 +170,19 @@ export type AgentMessage = AgentEndEvent["messages"][number];
 export type AssistantMessage = Extract<AgentMessage, { role: "assistant" }>;
 export type StopReason = AssistantMessage["stopReason"];
 
+/**
+ * Which optional companion extensions Pi has loaded, and which MCP
+ * implementation the run uses. A snapshot is read-only: the run takes it once
+ * (D-05), and every reader sees the same values.
+ */
 export interface SoftDepStatus {
-  piSubagentsLoaded: boolean;
-  piMcpAdapterLoaded: boolean;
-  workflowEngineLoaded: boolean;
+  readonly piSubagentsLoaded: boolean;
+  /**
+   * MSEL-01: the run's active MCP implementation, with the precedence adapter,
+   * then Pi's built-in MCP, then none.
+   */
+  readonly mcpImplementation: ActiveMcpImplementation;
+  readonly workflowEngineLoaded: boolean;
 }
 
 /** The only Pi UI capability used by the notification boundary. */
@@ -160,11 +202,11 @@ export interface ToolInventoryItem {
   readonly sourceInfo?: { readonly source?: unknown };
 }
 
-/** The slash-command metadata inspected by the pi-mcp-adapter probe. */
+/** The slash-command metadata inspected by the MCP implementation probes. */
 export interface CommandInventoryItem {
   readonly name?: unknown;
   readonly source?: unknown;
-  readonly sourceInfo?: { readonly source?: unknown };
+  readonly sourceInfo?: { readonly source?: unknown; readonly path?: unknown };
 }
 
 /**
@@ -234,41 +276,119 @@ function isAdapterCommand(command: CommandInventoryItem): boolean {
   );
 }
 
+// OBS-01: the text every trace line of a failed probe read starts with.
+const PROBE_TRACE = "soft-dependency probe:";
+
 /**
- * Runs one probe arm. An arm that throws reports "not loaded", so a Pi read
- * failure can raise a false warning but never a false all-clear.
+ * Runs one MCP probe arm, named `check`. An arm that throws reports "not
+ * loaded", so a Pi read failure can raise a false warning but never a false
+ * all-clear. The failure is traced on the `mcp` debug channel (OBS-01) and
+ * reaches no user (RECON-05).
  */
-function probeArm(arm: () => boolean): boolean {
+function probeArm(check: string, arm: () => boolean): boolean {
   try {
     return arm();
-  } catch {
+  } catch (error) {
+    hookDebugLog(`${PROBE_TRACE} the ${check} check failed: ${errorMessage(error)}`, "mcp");
     return false;
   }
 }
 
 /**
- * ADET-02: pi-mcp-adapter is loaded iff `pi.getCommands()` lists an extension
- * command named `mcp-adapter`, or the `sourceInfo.source` of an extension
- * command or of a tool contains "pi-mcp-adapter". The command is present with
+ * The snapshot's one `pi.getCommands()` read, shared by both MCP arms. A read
+ * that throws reads as an empty inventory, so neither arm sees a command. The
+ * failure is traced on the `mcp` debug channel (OBS-01) and reaches no user
+ * (RECON-05).
+ */
+function readCommands(pi: PiInventory): readonly CommandInventoryItem[] {
+  try {
+    return pi.getCommands();
+  } catch (error) {
+    hookDebugLog(`${PROBE_TRACE} pi.getCommands() failed: ${errorMessage(error)}`, "mcp");
+    return [];
+  }
+}
+
+/**
+ * ADET-02: pi-mcp-adapter is loaded iff `commands` lists an extension command
+ * named `mcp-adapter`, or the `sourceInfo.source` of an extension command or
+ * of a tool contains "pi-mcp-adapter". The command is present with
  * `disableProxyTool` and in a fork. A bare tool named `mcp` does not count,
  * and neither does Pi's built-in MCP (`mcp__*` tools and an `mcp` command from
  * `builtin:mcp`). Each arm is guarded on its own and both always run, so one
  * snapshot makes the same reads in every state and a throwing arm leaves the
  * other one deciding.
  */
-function hasLoadedPiMcpAdapter(pi: PiInventory): boolean {
-  const viaCommands = probeArm(() => pi.getCommands().some((command) => isAdapterCommand(command)));
-  const viaTools = probeArm(() =>
+function hasLoadedPiMcpAdapter(
+  pi: PiInventory,
+  commands: readonly CommandInventoryItem[],
+): boolean {
+  const viaCommands = probeArm("pi-mcp-adapter command", () =>
+    commands.some((command) => isAdapterCommand(command)),
+  );
+  const viaTools = probeArm("pi-mcp-adapter tool", () =>
     pi.getAllTools().some((tool) => isAdapterSource(tool.sourceInfo?.source)),
   );
   return viaCommands || viaTools;
 }
 
-/** Snapshots which optional companion extensions Pi has loaded. */
+/**
+ * MSEL-01, D-P5-01: the `sourceInfo.path` of every command and tool that Pi's
+ * built-in MCP extension registers. Pi marks each of its own built-in
+ * extensions with the source path `builtin:<name>`.
+ */
+export const BUILTIN_MCP_SOURCE_PATH = "builtin:mcp";
+
+// MSEL-01: a third extension that registers `/mcp` makes Pi leave the built-in
+// out, and its command carries that extension's own path, so it does not read
+// as the built-in.
+function isBuiltinMcpCommand(command: CommandInventoryItem): boolean {
+  return (
+    command.source === "extension" &&
+    command.name === "mcp" &&
+    command.sourceInfo?.path === BUILTIN_MCP_SOURCE_PATH
+  );
+}
+
+/**
+ * MSEL-01: Pi's built-in MCP is loaded iff `commands` lists the extension
+ * command `mcp` whose `sourceInfo.path` is exactly `builtin:mcp`. A prompt
+ * template or skill named `mcp` does not count.
+ */
+function hasLoadedBuiltinMcp(commands: readonly CommandInventoryItem[]): boolean {
+  return probeArm("built-in MCP command", () =>
+    commands.some((command) => isBuiltinMcpCommand(command)),
+  );
+}
+
+/** MSEL-01: the adapter wins over Pi's built-in MCP; with neither, none. */
+function activeMcpImplementation(
+  adapterLoaded: boolean,
+  builtinLoaded: boolean,
+): ActiveMcpImplementation {
+  if (adapterLoaded) {
+    return "adapter";
+  }
+
+  if (builtinLoaded) {
+    return "builtin";
+  }
+
+  return "none";
+}
+
+/**
+ * Snapshots which optional companion extensions Pi has loaded and which MCP
+ * implementation the run uses. One snapshot reads `pi.getCommands()` once and
+ * `pi.getAllTools()` three times, whatever Pi has loaded.
+ */
 export function softDepStatus(pi: PiInventory): SoftDepStatus {
+  const piSubagentsLoaded = hasLoadedPiSubagents(pi);
+  const commands = readCommands(pi);
+  const adapterLoaded = hasLoadedPiMcpAdapter(pi, commands);
   return {
-    piSubagentsLoaded: hasLoadedPiSubagents(pi),
-    piMcpAdapterLoaded: hasLoadedPiMcpAdapter(pi),
+    piSubagentsLoaded,
+    mcpImplementation: activeMcpImplementation(adapterLoaded, hasLoadedBuiltinMcp(commands)),
     workflowEngineLoaded: hasLoadedWorkflowEngine(pi),
   };
 }
