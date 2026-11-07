@@ -3698,8 +3698,9 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       { speaker: { kind: "block", reason: "no", systemMessage: "hi" } },
       [],
     );
-    // The print-mode context's `ui` throws, so the notice cannot be shown.
-    const pi = { getAllTools: () => [] } as unknown as ExtensionAPI;
+    // The print-mode context's `ui` throws, so the notice cannot be shown. The
+    // Pi double answers both probe reads, so only the notice failure is traced.
+    const pi = { getAllTools: () => [], getCommands: () => [] } as unknown as ExtensionAPI;
     const handler = compositeHandlerFor(
       runtime,
       "UserPromptSubmit",
