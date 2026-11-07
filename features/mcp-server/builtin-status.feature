@@ -4,6 +4,7 @@ Feature: MCP server builtin status
   Plugin info shows each server's state as far as Pi's built-in MCP exposes it (BLT-05, BLT-04, D-MB-09), against a stub server, a scripted model, and a local marketplace.
   For a plugin an earlier release installed, it shows each server the extension registers (MREC-02). A name another Pi extension registered first, played by the built-in stand-in, reads not loaded (D-MB-29), and a server reads status unknown when another extension's tool makes Pi's tool list unreadable.
   Two plugin servers that give one registered name run one server, the one declared later, and info reads the other as not loaded. Claude Code runs both; Pi's server name rule is the capability gap (D-MB-13).
+  Names that differ only by - and _ share one Pi tool namespace, and the server declared first holds it, so info reads the other as not loaded. Claude Code runs both; Pi's namespace fold is the capability gap (ANAME-03).
   Each scenario but the disabled one compares the full info fields (P2-DC-16), which are re-verified after the read-time verdicts merge. The disabled one reads the server line in Pi's terminal.
 
   Scenario: Plugin info shows a connected built-in server as connected (BLT-05)
@@ -348,3 +349,51 @@ Feature: MCP server builtin status
       | plugin status                  | installed                                                                                                    |
       | plugin version                 | 1.0.0                                                                                                        |
       | severity                       | info                                                                                                         |
+
+  Scenario: Plugin info shows a server whose Pi namespace a server declared before it holds as not loaded, also when autoapply installs that server during the load (ANAME-03)
+    Given the marketplace "first" is published as a dir source
+    Given the marketplace "first" offers these plugins:
+      | name | version |
+      | a    | 1.0.0   |
+    Given the published plugin "a" of the marketplace "first" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"b-c": {"command": "pi-cm-no-such-program", "bareElicitationCapability": true}}}
+      """
+    Given the marketplace "second" is published as a dir source
+    Given the marketplace "second" offers these plugins:
+      | name | version |
+      | a-b  | 1.0.0   |
+    Given the published plugin "a-b" of the marketplace "second" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"c": {"command": "pi-cm-no-such-program", "bareElicitationCapability": true}}}
+      """
+    Given the marketplace "first" is added to the user scope
+    Given the marketplace "second" is added to the user scope
+    Given the user has run "/claude:plugin install a-b@second --scope user", which did not fail
+    Given a config in scope user and layer local, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | first       | a      |         |
+      | second      | a-b    |         |
+    Given pi runs with the scripted model
+    When the user runs "/claude:plugin info a-b@second --scope user"
+    Then the result has these fields:
+      | kind                           | plugin-info                                     |
+      | marketplace details autoupdate | false                                           |
+      | marketplace name               | second                                          |
+      | marketplace scope              | user                                            |
+      | needs reload                   | false                                           |
+      | plugin components mcp          | [{"name":"plugin:a-b:c","status":"not loaded"}] |
+      | plugin components resolved     | true                                            |
+      | plugin components skills       | a-b-skill                                       |
+      | plugin id                      | a-b@second                                      |
+      | plugin name                    | a-b                                             |
+      | plugin reasons                 |                                                 |
+      | plugin requires                | [{"companion":"builtin mcp","missing":false}]   |
+      | plugin scope                   | user                                            |
+      | plugin status                  | installed                                       |
+      | plugin version                 | 1.0.0                                           |
+      | severity                       | info                                            |

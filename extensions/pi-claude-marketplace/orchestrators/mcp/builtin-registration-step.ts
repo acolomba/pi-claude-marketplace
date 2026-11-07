@@ -17,10 +17,20 @@
  * because another extension registered it first, is noted for the session, so
  * info reads it as `not loaded` (D-MB-29).
  *
- * D-MB-23 / P2-DC-14: one registration per name. Two servers can give one
- * registered name (D-MB-13), such as `my.api` and `my_api` of one plugin. The
- * one declared later registers, in the earlier one's place, and each server
- * left out is logged.
+ * One registration per Pi namespace, decided in declaration order as a fresh
+ * session decides, so a sync never depends on what an earlier pass
+ * registered. Two servers can give one registered name (D-MB-13), such as
+ * `my.api` and `my_api` of one plugin: the one declared later registers in
+ * the earlier one's place, as a project server replaces a user server
+ * (D-MB-23). Two names that differ only by `-` and `_` share one Pi tool
+ * namespace: the one declared first keeps it, as Pi refuses the other at a
+ * fresh session, and a listed registration of the other is removed
+ * (ANAME-03). Each server left out is logged, and its name is owned by the
+ * server that holds the namespace, so info reads it as `not loaded`.
+ *
+ * ASTAT-01: the owners are noted only after the sync reached Pi's registry.
+ * When Pi's registry cannot be listed, the sync changes nothing, and the
+ * owners of the last sync still describe what Pi runs.
  *
  * MSEL-03: under pi-mcp-adapter, or with no implementation active, both steps
  * return before they read the context, the state, or Pi's registry. Pi reports
@@ -48,6 +58,7 @@ import {
   syncBuiltinRegistrations,
 } from "../../bridges/mcp/index.ts";
 import { profileFor } from "../../domain/mcp-implementation.ts";
+import { foldedMcpServerKey } from "../../domain/name.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import {
@@ -107,9 +118,15 @@ type Registration = readonly [name: string, config: McpServerConfig, owner: Buil
 /** The record a server belongs to; its owner adds the declared server. */
 type RecordOwner = Omit<BuiltinServerOwner, "server">;
 
-/** The registration that holds a name, which a later one can replace. */
+/** The registration that holds a Pi namespace, which a later one of the same name replaces. */
 interface Slot {
   holder: Registration;
+}
+
+/** The registrations the sync asks Pi for, and the owner of each name it left out. */
+interface Decided {
+  readonly registrations: Registration[];
+  readonly leftOutOwners: [name: string, owner: BuiltinServerOwner][];
 }
 
 /**
@@ -305,31 +322,41 @@ function describeRegistration([name, , owner]: Registration): string {
 }
 
 /**
- * D-MB-23 / P2-DC-14: one registration per name, in declaration order. A
- * registration with a held name replaces the holder in its place, as Pi does
- * when an extension registers its own name again. Each replaced registration
- * is logged against the name's final holder.
+ * One registration per Pi namespace, in declaration order. A registration
+ * with the holder's name replaces the holder in its place (D-MB-23,
+ * P2-DC-14), as Pi does when an extension registers its own name again. Any
+ * other registration in a held namespace is left out, as Pi's clash check
+ * refuses it (ANAME-03). Each left-out registration is logged against the
+ * namespace's final holder, and a left-out name spelled other than the
+ * holder's gets the holder as its owner.
  */
-function oneRegistrationPerName(registrations: readonly Registration[]): Registration[] {
+function onePerNamespace(registrations: readonly Registration[]): Decided {
   const slots = new Map<string, Slot>();
   const leftOut: (readonly [Registration, Slot])[] = [];
   for (const registration of registrations) {
-    const slot = slots.get(registration[0]);
+    const namespace = foldedMcpServerKey(registration[0]);
+    const slot = slots.get(namespace);
     if (slot === undefined) {
-      slots.set(registration[0], { holder: registration });
-    } else {
+      slots.set(namespace, { holder: registration });
+    } else if (slot.holder[0] === registration[0]) {
       leftOut.push([slot.holder, slot]);
       slot.holder = registration;
+    } else {
+      leftOut.push([registration, slot]);
     }
   }
 
+  const leftOutOwners: [string, BuiltinServerOwner][] = [];
   for (const [registration, { holder }] of leftOut) {
     debugLog(
       `MCP server ${describeRegistration(registration)} not registered: ${describeRegistration(holder)} holds its Pi namespace`,
     );
+    if (registration[0] !== holder[0]) {
+      leftOutOwners.push([registration[0], holder[2]]);
+    }
   }
 
-  return [...slots.values()].map(({ holder }) => holder);
+  return { registrations: [...slots.values()].map(({ holder }) => holder), leftOutOwners };
 }
 
 function isOwnedByFailure(owner: BuiltinServerOwner, failure: ReadFailure): boolean {
@@ -376,23 +403,27 @@ async function syncSession({ pi, ctx, snapshot }: BuiltinRegistrationStepInput):
       { cwd: ctx.cwd, env: process.env },
       ctx.isProjectTrusted(),
     );
-    const registrations = oneRegistrationPerName(desired.registrations);
+    const { registrations, leftOutOwners } = onePerNamespace(desired.registrations);
     // A scope or record that failed to read keeps its live servers: they are
-    // neither unregistered nor dropped from the owner map.
+    // neither unregistered nor dropped from the owner map. This reads the
+    // owners the last sync noted.
     const retained = retainedOwners(pi, desired.failures);
-    // P2-DC-14: info reads which record each name belongs to from here.
-    noteBuiltinServerOwners(
-      new Map([
-        ...retained,
-        ...registrations.map(([name, , owner]): [string, BuiltinServerOwner] => [name, owner]),
-      ]),
-    );
     syncBuiltinRegistrations(
       pi,
       new Map(registrations.map(([name, config]) => [name, config])),
       debugLog,
       REGISTRATION_NOTES,
       new Set(retained.keys()),
+    );
+    // P2-DC-14 / ASTAT-01: info reads which server each name belongs to from
+    // here, once the sync reached Pi's registry. A later entry wins: a
+    // left-out name, then a retained name, then a name the sync asked for.
+    noteBuiltinServerOwners(
+      new Map([
+        ...leftOutOwners,
+        ...retained,
+        ...registrations.map(([name, , owner]): [string, BuiltinServerOwner] => [name, owner]),
+      ]),
     );
   } catch (error: unknown) {
     debugLog(`MCP built-in registration skipped: ${errorMessage(error)}`);

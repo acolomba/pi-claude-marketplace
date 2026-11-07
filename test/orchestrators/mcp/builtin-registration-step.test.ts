@@ -423,6 +423,87 @@ describe("builtinRegistrationStep", () => {
     verify(ctx);
   });
 
+  test("ANAME-03: a server whose name folds into the Pi namespace of a server declared before it is left out, logged, and owned by that server", async (t) => {
+    // arrange
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+      noteFreshBuiltinRegistration("plugin_demo_s-t");
+    });
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(fixture, "user", {
+      demo: installRecord(fixture.pluginRoot, [
+        { name: "s-t", config: { command: "first" } },
+        { name: "s_t", config: { command: "second" } },
+      ]),
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_s-t", {
+        command: "first",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+        },
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      "[mcp] MCP server plugin_demo_s_t for s_t of demo@mp (user scope) not registered: plugin_demo_s-t for s-t of demo@mp (user scope) holds its Pi namespace",
+    ]);
+    const holder = { scope: "user", marketplace: "mp", plugin: "demo", server: "s-t" };
+    assert.deepStrictEqual(
+      [builtinServerOwner("plugin_demo_s-t"), builtinServerOwner("plugin_demo_s_t")],
+      [holder, holder],
+    );
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("ANAME-03: a listed server whose namespace a server declared before it holds is unregistered, and that server registers", async (t) => {
+    // arrange
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+      noteFreshBuiltinRegistration("plugin_demo_s-t");
+      noteFreshBuiltinRegistration("plugin_demo_s_t");
+    });
+    const fixture = await session(t);
+    captureDebugLog(t);
+    await writeState(fixture, "user", {
+      demo: installRecord(fixture.pluginRoot, [
+        { name: "s-t", config: { command: "first" } },
+        { name: "s_t", config: { command: "second" } },
+      ]),
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+    when(() => pi.getMcpServers()).thenReturn([listedServer("plugin_demo_s_t")]);
+    when(() => {
+      pi.unregisterMcpServer("plugin_demo_s_t");
+    }).thenReturn(undefined);
+    when(() => {
+      pi.registerMcpServer("plugin_demo_s-t", {
+        command: "first",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+        },
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act & assert
+    await assert.doesNotReject(builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") }));
+    verify(pi);
+    verify(ctx);
+  });
+
   test("P2-DC-07: with the project untrusted the user record of the same plugin registers", async (t) => {
     // arrange
     const fixture = await session(t);
@@ -1016,6 +1097,30 @@ describe("builtinRegistrationStep", () => {
 
     // assert
     assert.deepStrictEqual(logged, ["[mcp] MCP built-in registration skipped: runtime is stale"]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("ASTAT-01 / NFR-2: a sync whose registry cannot list keeps the owners the last sync noted", async (t) => {
+    // arrange
+    const owner = { scope: "user", marketplace: "mp", plugin: "other", server: "stub" } as const;
+    noteBuiltinServerOwners(new Map([["plugin_demo_stub", owner]]));
+    t.after(() => {
+      noteBuiltinServerOwners(new Map());
+    });
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(fixture, "user", { demo: installRecord(fixture.pluginRoot) });
+    const ctx = sessionContext(fixture, false);
+    const pi = mock<PiMcpRegistry>({ exactParams: true, name: "MCP registry" });
+    when(() => pi.getMcpServers()).thenThrow(new Error("runtime is stale"));
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, ["[mcp] MCP built-in registration skipped: runtime is stale"]);
+    assert.deepStrictEqual(builtinServerOwner("plugin_demo_stub"), owner);
     verify(pi);
     verify(ctx);
   });

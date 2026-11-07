@@ -41,11 +41,15 @@ function unregister(
  * to `log` and to `notes.refused` (D-MB-29); when Pi already listed that name,
  * the old registration is unregistered too, so the old config does not keep
  * running while info reads the name as not loaded. An `unregisterMcpServer`
- * throw goes to `log` only. A name in `retained` is never unregistered: the
- * caller could not read the record that owns it, so its registration stays.
- * A log line names the server and Pi's message, never a config value, and the
- * other servers still change. A `getMcpServers` throw leaves nothing to
- * compare, so it propagates and the whole sync is skipped.
+ * throw goes to `log` only, and nothing reaches the user (RECON-05, NFR-2).
+ * Pi still lists the name, so the next sync lists it and
+ * tries the removal again (D-MB-12). In Pi 1.5.0 the removal throws only for
+ * a stale or failed runtime, whose registrations end with it. A name in
+ * `retained` is never unregistered: the caller could not read the record
+ * that owns it, so its registration stays. A log line names the server and
+ * Pi's message, never a config value, and the other servers still change. A
+ * `getMcpServers` throw leaves nothing to compare, so it propagates and the
+ * whole sync is skipped.
  */
 export function syncBuiltinRegistrations(
   registry: PiMcpRegistry,
