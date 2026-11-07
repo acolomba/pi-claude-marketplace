@@ -365,12 +365,19 @@ async function readDeclaredMcp(merge: McpMerge, declared: unknown): Promise<void
  * blocked or not, is also kept in merge order as declared, for the install
  * record (MREC-01, D-CF6-01), and a bundle sets `mcpBundle`, because no
  * merged server stands for it.
+ *
+ * D-CF6-01: every list follows Claude Code's object order, which object
+ * spread gives: integer-like names first in ascending order, then the other
+ * names in the order they were first declared.
  */
 function recordMergedServers(merge: McpMerge): void {
   const declared: [string, unknown][] = [];
   const supported: [string, unknown][] = [];
   const dropped: DroppedMcpServer[] = [];
-  for (const [server, { config, blockedBy, neutralBlockedBy }] of merge.servers) {
+  // `Object.fromEntries` defines own properties and `Object.entries` reads
+  // them, so a server named `__proto__` stays a server.
+  const merged = Object.fromEntries(merge.servers);
+  for (const [server, { config, blockedBy, neutralBlockedBy }] of Object.entries(merged)) {
     declared.push([server, config]);
     if (blockedBy === undefined) {
       supported.push([server, config]);
@@ -381,8 +388,6 @@ function recordMergedServers(merge: McpMerge): void {
     }
   }
 
-  // `Object.fromEntries` defines own properties, so a server named
-  // `__proto__` stays a server.
   merge.resolution.mcpServers = Object.fromEntries(supported);
   merge.resolution.declaredMcpServers = Object.fromEntries(declared);
   if (dropped.length > 0 || merge.bundle) {
