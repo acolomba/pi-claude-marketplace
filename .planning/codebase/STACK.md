@@ -45,7 +45,7 @@ last_mapped_at: 2026-10-05
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
 - `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~520 lines; `npm run lint` passes `--max-warnings 0` and covers `extensions tests scripts eslint.config.js`), including the architecture-boundary rules (BLOCK C) and the NFR-5 git-surface rules (BLOCK F); the output and import bans live in the fallow rule pack
 - `prettier` `^3.9.9` for formatting (`npm run format` / `format:check`)
-- `fallow` `^3.33.1` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` first fails on any rule-pack `WARN` that `fallow rule-pack test` prints, then chains four subcommands, each `--fail-on-issues --format human`:
+- `fallow` `^3.41.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` first fails on any rule-pack `WARN` that `fallow rule-pack test` prints, then chains four subcommands, each `--fail-on-issues --format human`:
   - `fallow dead-code` (entry `extensions/pi-claude-marketplace/index.ts`, the one `entry` in `.fallowrc.json`, which has no `ignoreExports` key), scoped to production reachability by `production.deadCode`
   - `fallow dead-code --no-production --circular-deps --re-export-cycles`, which carries the two cycle classes across `test/` and `scripts/`
   - `fallow health` (`maxCyclomatic: 20`, `maxCognitive: 15`, plus `maxCrap: 0`, which switches CRAP OFF -- see the CRAP note in TESTING.md before touching it)

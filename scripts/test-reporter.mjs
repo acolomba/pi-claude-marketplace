@@ -90,7 +90,6 @@ function runFailed(state) {
   return state.unmet.size > 0 || state.counts.some((count) => failedCountPattern.test(count));
 }
 
-// fallow-ignore-next-line unused-export -- `node --test --test-reporter` loads this default.
 export default async function* failureReporter(source) {
   if (process.env.CI) {
     yield* Readable.from(source).pipe(new spec());

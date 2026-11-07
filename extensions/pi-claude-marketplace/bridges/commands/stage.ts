@@ -157,6 +157,7 @@ export async function prepareStageCommands(
   // Materialization gate (symmetry with skills bridge). D-07: surface
   // discoverWarnings even on noop so duplicate-generated-name skips
   // remain observable.
+  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   if (discovered.length === 0 && previousNames.length === 0) {
     return {
       kind: "noop",
