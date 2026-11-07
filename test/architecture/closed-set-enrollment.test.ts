@@ -60,7 +60,7 @@ const UNENROLLED_DEPENDENCIES: AssertNever<UnenrolledDependency>[] = [];
 
 // D-P3-10: the MCP member is an McpDependency; this one renders the
 // `requires pi-mcp-adapter` marker.
-const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
+const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: "adapter" };
 
 test("SCN-F025: BUCKET_A_EVENTS is the closed 10-entry admitted-event set", () => {
   // TOOL-02: the admission set opened at 8 events, the closed set

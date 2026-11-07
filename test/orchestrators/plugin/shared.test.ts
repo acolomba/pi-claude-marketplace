@@ -381,14 +381,14 @@ describe("enableRowDependencies", () => {
     // arrange
     const signals = {
       stagedAgents: true,
-      stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
+      stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
     } as const;
 
     // act
     const dependencies = enableRowDependencies(signals);
 
     // assert
-    assert.deepStrictEqual(dependencies, ["agents", { kind: "mcp", runEvery: ["adapter"] }]);
+    assert.deepStrictEqual(dependencies, ["agents", { kind: "mcp", runEvery: "adapter" }]);
   });
 
   test("WDEP-02: returns the workflows dependency when the ledger staged a workflow", () => {
@@ -406,7 +406,7 @@ describe("enableRowDependencies", () => {
     // arrange
     const signals = {
       stagedAgents: true,
-      stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
+      stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
       stagedWorkflows: true,
     } as const;
 
@@ -416,7 +416,7 @@ describe("enableRowDependencies", () => {
     // assert
     assert.deepStrictEqual(dependencies, [
       "agents",
-      { kind: "mcp", runEvery: ["adapter"] },
+      { kind: "mcp", runEvery: "adapter" },
       "workflows",
     ]);
   });
@@ -3699,7 +3699,7 @@ describe("degradationFromEnable", () => {
       orphanRewake: true,
       degradedKinds: ["skill"],
       stagedAgents: true,
-      stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
+      stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
       stagedWorkflows: true,
     });
 
@@ -3709,7 +3709,7 @@ describe("degradationFromEnable", () => {
       orphanRewake: true,
       degradedKinds: ["skill"],
       stagedAgents: true,
-      stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
+      stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
       stagedWorkflows: true,
     });
   });

@@ -4302,7 +4302,7 @@ test("AFILE-04: promoting a disabled dependency that re-materializes MCP servers
         version: "0.0.1",
         resourcesChanged: true,
         declaresAgents: false,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         declaresWorkflows: false,
         promoted: true,
         mcpConfigNotices: [
@@ -4343,7 +4343,7 @@ test("AFILE-04: an orchestrated install returns its MCP config notices and sends
         version: "0.0.1",
         resourcesChanged: true,
         declaresAgents: false,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         declaresWorkflows: false,
         mcpConfigNotices: [
           { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
@@ -4383,7 +4383,7 @@ test("AFILE-04: an orchestrated install over a comment-free mcp-adapter.json car
         version: "0.0.1",
         resourcesChanged: true,
         declaresAgents: false,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         declaresWorkflows: false,
       });
       assert.deepStrictEqual(notifications, []);
@@ -15507,7 +15507,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       assertRetryFailure(first, readFailure);
       assert.deepStrictEqual(second, {
         declaresAgents: true,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",

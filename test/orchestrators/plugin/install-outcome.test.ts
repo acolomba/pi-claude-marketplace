@@ -379,7 +379,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
   });
   assert.deepStrictEqual(installedPluginOutcome(richSummary, ["warning"], true), {
     declaresAgents: true,
-    declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+    declaresMcp: { kind: "mcp", runEvery: "both" },
     declaresWorkflows: true,
     degradedKinds: ["skill", "command"],
     landedDisabled: true,
@@ -3960,26 +3960,26 @@ function summaryDeclaring(
 for (const { title, declaredMcpServers, staged, runEvery } of [
   {
     title:
-      "D-P3-10 / D-MB-07: an install declaring an sse and a bare-elicitation server carries an empty runEvery",
+      "D-P3-10 / D-MB-07: an install declaring an sse and a bare-elicitation server carries the split state",
     declaredMcpServers: {
       events: { type: "sse", url: "https://mcp.example.com/sse" },
       asker: { command: "node", bareElicitationCapability: true },
     },
     staged: ["events"],
-    runEvery: [],
+    runEvery: "split",
   },
   {
     title: "D-P3-10 / D-MB-07: an install declaring a stdio server carries both implementations",
     declaredMcpServers: { tool: { command: "node" } },
     staged: ["tool"],
-    runEvery: ["adapter", "builtin"],
+    runEvery: "both",
   },
   {
     title:
       "D-P3-10 / D-MB-07: an install whose only server the adapter blocks still carries Pi's built-in MCP",
     declaredMcpServers: { asker: { command: "node", bareElicitationCapability: true } },
     staged: [],
-    runEvery: ["builtin"],
+    runEvery: "builtin",
   },
 ] as const) {
   test(title, () => {

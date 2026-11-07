@@ -148,7 +148,7 @@ test("composes a same-scope installed row with exact dependencies and descriptio
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "alpha",
-    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }, "workflows"],
+    dependencies: ["agents", { kind: "mcp", runEvery: "adapter" }, "workflows"],
     version: "1.0.0",
     description: "Alpha plugin.",
     severity: "info",
@@ -794,7 +794,7 @@ test("MREC-03: lists a neutral sse record as installed under pi-mcp-adapter", as
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "alpha",
-    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+    dependencies: [{ kind: "mcp", runEvery: "adapter" }],
     version: "1.0.0",
     description: "Alpha plugin.",
     severity: "info",
@@ -826,7 +826,7 @@ test("MREC-03 / D-P3-05: lists the same record as partially installed under Pi's
     status: "partially-installed",
     name: "alpha",
     reasons: ["unsupported mcp"],
-    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+    dependencies: [{ kind: "mcp", runEvery: "adapter" }],
     version: "1.0.0",
     description: "Alpha plugin.",
   });
@@ -1042,7 +1042,7 @@ test("D-P3-10 / D-MB-07: an installed row under Pi's built-in MCP carries the se
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "alpha",
-    dependencies: [{ kind: "mcp", runEvery: ["builtin"] }],
+    dependencies: [{ kind: "mcp", runEvery: "builtin" }],
     version: "1.0.0",
     description: "Alpha plugin.",
     severity: "info",
@@ -1078,7 +1078,7 @@ test("D-P3-07 / D-MB-07: a partially-installed row under pi-mcp-adapter carries 
     status: "partially-installed",
     name: "alpha",
     reasons: ["unsupported mcp"],
-    dependencies: [{ kind: "mcp", runEvery: ["builtin"] }],
+    dependencies: [{ kind: "mcp", runEvery: "builtin" }],
     version: "1.0.0",
     description: "Alpha plugin.",
   });
@@ -1165,7 +1165,7 @@ test("D-P3-07: a partially-installed row carries only its MCP dependency, never 
     status: "partially-installed",
     name: "alpha",
     reasons: ["lsp"],
-    dependencies: [{ kind: "mcp", runEvery: ["adapter", "builtin"] }],
+    dependencies: [{ kind: "mcp", runEvery: "both" }],
     version: "1.0.0",
     description: "Alpha plugin.",
   });

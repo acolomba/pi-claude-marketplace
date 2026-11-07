@@ -540,7 +540,7 @@ test("D-P3-10 / D-MB-07: an update to a candidate whose only server the adapter 
     {
       partition: "updated",
       stagedMcpServerNames: [],
-      declaresMcp: { kind: "mcp", runEvery: ["builtin"] },
+      declaresMcp: { kind: "mcp", runEvery: "builtin" },
     },
   );
 });
@@ -2051,7 +2051,7 @@ test("AFILE-04: a swap over a commented mcp-adapter.json carries the comments-re
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         constraint: undefined,
         declaresWorkflows: false,
         mcpConfigNotices: [PROJECT_COMMENTS_DROPPED],
@@ -2086,7 +2086,7 @@ test("AFILE-04: a swap over a comment-free mcp-adapter.json carries no notice", 
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         constraint: undefined,
         declaresWorkflows: false,
       });
@@ -2228,7 +2228,7 @@ test("AMIG-02: a swap removes the plugin's marked mcp.json entries after the MCP
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         constraint: undefined,
         declaresWorkflows: false,
         mcpConfigNotices: [
@@ -2481,7 +2481,7 @@ for (const { situation, resources, spec, expectedOutcome } of [
       ...DIRECT_UPDATED_OUTCOME,
       resourcesChanged: true,
       stagedMcpServerNames: ["server1"],
-      declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+      declaresMcp: { kind: "mcp", runEvery: "both" },
     },
   },
   {

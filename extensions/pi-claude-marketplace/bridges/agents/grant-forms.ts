@@ -57,7 +57,10 @@ export function convertAgentGrantForms(
     return { agent: convertAgent(formInput(input, "adapter", {})), recorded: {} };
   }
 
-  const fileForm: McpImplementationId = grantForms.active === "builtin" ? "builtin" : "adapter";
+  // MGRT-01: with no active implementation the file gets the adapter form,
+  // the form every earlier release wrote.
+  const fileForm: McpImplementationId =
+    grantForms.active === "none" ? "adapter" : grantForms.active;
   const otherForm: McpImplementationId = fileForm === "builtin" ? "adapter" : "builtin";
   const agent = convertAgent(formInput(input, fileForm, grantForms.declaredMcpServers));
   const other = convertAgentForm(formInput(input, otherForm, grantForms.declaredMcpServers));

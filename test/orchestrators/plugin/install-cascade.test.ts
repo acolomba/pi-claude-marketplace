@@ -494,7 +494,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       requiredBy: undefined,
       version: "4.5.6",
       declaresAgents: false,
-      declaresMcp: { kind: "mcp", runEvery: ["adapter"] },
+      declaresMcp: { kind: "mcp", runEvery: "adapter" },
       declaresWorkflows: false,
       pluginRoot: path.join(environment.cwd, "unmaterialized"),
       hooksConfigPath: undefined,

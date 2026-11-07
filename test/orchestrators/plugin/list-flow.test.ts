@@ -5163,7 +5163,7 @@ for (const { mcpImplementation, expectedRow } of [
     expectedRow: {
       status: "installed",
       name: "alpha",
-      dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+      dependencies: [{ kind: "mcp", runEvery: "adapter" }],
       version: "1.0.0",
       severity: "info",
       needsReload: false,
@@ -5175,7 +5175,7 @@ for (const { mcpImplementation, expectedRow } of [
       status: "partially-installed",
       name: "alpha",
       reasons: ["unsupported mcp"],
-      dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+      dependencies: [{ kind: "mcp", runEvery: "adapter" }],
       version: "1.0.0",
     },
   },
@@ -5184,7 +5184,7 @@ for (const { mcpImplementation, expectedRow } of [
     expectedRow: {
       status: "installed",
       name: "alpha",
-      dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+      dependencies: [{ kind: "mcp", runEvery: "adapter" }],
       version: "1.0.0",
       severity: "info",
       needsReload: false,

@@ -17,7 +17,7 @@ import type {
 import type { McpDependency } from "../../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
 
 // D-P3-10: an MCP dependency that renders the `requires pi-mcp-adapter` marker.
-const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
+const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: "adapter" };
 // `as const` keeps the literal `false` from widening to `boolean` in the outcome literals.
 const NO_MCP = false as const;
 
@@ -46,7 +46,7 @@ test("composes agent and MCP dependencies in declared display order", () => {
 
   // assert
   assert.deepStrictEqual(row, {
-    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
+    dependencies: ["agents", { kind: "mcp", runEvery: "adapter" }],
     from: "1.0.0",
     name: "alpha",
     needsReload: true,
@@ -112,7 +112,7 @@ test("composes MCP-only dependencies without an agent marker", () => {
 
   // assert
   assert.deepStrictEqual(row, {
-    dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+    dependencies: [{ kind: "mcp", runEvery: "adapter" }],
     from: "3.0.0",
     name: "gamma",
     needsReload: true,
@@ -180,7 +180,7 @@ test("WDEP-02: composes the workflows dependency LAST behind agents and MCP", ()
   // assert
   assert.deepStrictEqual(row.dependencies, [
     "agents",
-    { kind: "mcp", runEvery: ["adapter"] },
+    { kind: "mcp", runEvery: "adapter" },
     "workflows",
   ]);
 });
@@ -272,7 +272,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial row", (
 
   // assert
   assert.deepStrictEqual(row, {
-    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
+    dependencies: ["agents", { kind: "mcp", runEvery: "adapter" }],
     name: "zeta",
     needsReload: true,
     reasons: [
@@ -500,7 +500,7 @@ test("D-10-15: all four written axes emit in the documented order on one row", (
   // line, as the clean form does.
   assert.deepStrictEqual(row, {
     cause: new Error('constrained to the combined range (^1.0.0) -- required by "alpha@mp"'),
-    dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
+    dependencies: ["agents", { kind: "mcp", runEvery: "adapter" }],
     name: "shared-lib",
     needsReload: true,
     reasons: [

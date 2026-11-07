@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { resolveStrictMcp } from "../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts";
 
+import type { McpResolution } from "../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts";
 import type { StatKindReader } from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 type FileValue = "dir" | { readonly contents: string };
@@ -468,6 +469,52 @@ test("D-CF6-01: a later blocked server replaces an earlier supported one and is 
         declaredMcpServers: { live: { type: "ws", url: "wss://mcp.example.com/ws" } },
         droppedMcpServers: [{ server: "live", feature: "ws" }],
       },
+    },
+  );
+});
+
+test("D-CF6-01: keeps Claude Code's object order for integer-like server names across sources", async () => {
+  // arrange
+  const resolution: McpResolution = emptyResolution();
+  const deps = mcpFiles({
+    "/plugins/alpha/.mcp.json": {
+      contents: JSON.stringify({
+        b: { type: "ws", url: "wss://mcp.example.com/ws" },
+        "10": { command: "node" },
+      }),
+    },
+  });
+
+  // act
+  await resolveStrictMcp(
+    {
+      entry: {},
+      manifest: {
+        mcpServers: {
+          a: { command: "node" },
+          "2": { type: "ws", url: "wss://mcp.example.com/ws" },
+        },
+      },
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    deps,
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      declared: Object.keys(resolution.declaredMcpServers),
+      supported: Object.keys(resolution.mcpServers),
+      dropped: resolution.droppedMcpServers,
+    },
+    {
+      declared: ["2", "10", "b", "a"],
+      supported: ["10", "a"],
+      dropped: [
+        { server: "2", feature: "ws" },
+        { server: "b", feature: "ws" },
+      ],
     },
   );
 });

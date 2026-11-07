@@ -41,7 +41,7 @@ import type {
 // `McpDependency` that renders the `requires pi-mcp-adapter` marker.
 const DEPENDENCY_BY_KIND = {
   agents: "agents",
-  mcp: { kind: "mcp", runEvery: ["adapter"] },
+  mcp: { kind: "mcp", runEvery: "adapter" },
   workflows: "workflows",
 } as const satisfies Record<"agents" | "mcp" | "workflows", Dependency>;
 
@@ -1566,7 +1566,7 @@ describe("resolveRows", () => {
         name: "alpha",
         from: "1.0.0",
         to: "2.0.0",
-        dependencies: ["workflows", { kind: "mcp", runEvery: ["adapter"] }, "agents"],
+        dependencies: ["workflows", { kind: "mcp", runEvery: "adapter" }, "agents"],
         reasons: ["orphan rewake", "malformed skill"],
       },
       markers: { updated: { markers: true, contentReasons: true } },
@@ -1594,7 +1594,7 @@ describe("resolveRows", () => {
         severity: "info",
         needsReload: true,
         name: "alpha",
-        dependencies: ["workflows", { kind: "mcp", runEvery: ["builtin"] }, "agents"],
+        dependencies: ["workflows", { kind: "mcp", runEvery: "builtin" }, "agents"],
       },
       markers: { installed: { markers: true, contentReasons: true } },
       expectedRow: {
@@ -1611,7 +1611,7 @@ describe("resolveRows", () => {
       row: {
         status: "partially-installed",
         name: "alpha",
-        dependencies: [{ kind: "mcp", runEvery: [] }],
+        dependencies: [{ kind: "mcp", runEvery: "split" }],
         reasons: ["unsupported mcp"],
       },
       markers: { "partially-installed": { markers: true, contentReasons: true } },
@@ -1626,7 +1626,7 @@ describe("resolveRows", () => {
       row: {
         status: "partially-installed",
         name: "alpha",
-        dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+        dependencies: [{ kind: "mcp", runEvery: "adapter" }],
         reasons: ["lsp", "lsp"],
       },
       markers: { "partially-installed": { markers: true, contentReasons: true } },
@@ -1714,7 +1714,7 @@ describe("resolveRows", () => {
       name: "same",
       scope: "project",
       reasons: ["lsp", "lsp"],
-      dependencies: ["workflows", { kind: "mcp", runEvery: ["adapter"] }, "agents"],
+      dependencies: ["workflows", { kind: "mcp", runEvery: "adapter" }, "agents"],
     } as const;
     const marketplaces = [
       { name: "z-last", scope: "user", plugins: [row, row, { ...row, scope: "user" }] },

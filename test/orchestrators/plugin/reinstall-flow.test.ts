@@ -8491,7 +8491,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         declaresWorkflows: false,
       });
       const finalRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
@@ -9906,7 +9906,7 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         declaresWorkflows: false,
       });
       const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
@@ -10180,7 +10180,7 @@ test("AFILE-04: an orchestrated reinstall returns the notice on its outcome and 
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         declaresWorkflows: false,
         mcpConfigNotices: [
           { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
