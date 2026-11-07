@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: mcp-builtin
-milestone_name: MCP Built-in
 status: Awaiting next milestone
-stopped_at: Milestone mcp-builtin archived and reviewed; PR #303 open
-last_updated: "2026-11-05T04:55:12.051Z"
+stopped_at: "Milestone mcp-builtin archived and reviewed; PR #303 open"
+last_updated: "2026-11-07T03:11:45.126Z"
 last_activity: 2026-11-06
-last_activity_desc: PR #303 reviewed and hardened (babysit-pr); waits for the merge
-state_head: c7a0358499f663496eb3622f363e31b920db4164
+last_activity_desc: "PR #303 review backlog closed (quick batch 261106-u94, quick 261107-36g); waits for the merge"
+state_head: 93168c0758b5f2ecb082a4f0aa2d7a627126ac05
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 55
   completed_plans: 55
   percent: 100
+milestone_name: MCP Built-in
 current_phase: 06
 ---
 
@@ -203,6 +203,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261106-u9a | Built-in registration error handling (REVIEWSUGG-01 error-handling part) | 2026-11-07 | 5b1da7b | — | .planning/quick/261106-u9a-built-in-registration-error-handling-reviewsugg-01-error-han |
 | 261106-u9b | MCP domain and soft-dependency types (REVIEWSUGG-01 types part) | 2026-11-07 | 0007063 | — | .planning/quick/261106-u9b-mcp-domain-and-soft-dependency-types-reviewsugg-01-types-par |
 | 261106-u9c | MCP implementation test gaps and the apply row fix (REVIEWSUGG-01 tests part) | 2026-11-07 | e27276c | — | .planning/quick/261106-u9c-mcp-implementation-test-gaps-reviewsugg-01-tests-part-see-pl |
+| 261107-36g | Name the unsupported kinds in the not-installable message (NOTINSTALLMSG-01) | 2026-11-07 | 93168c0 | — | [261107-36g-fix-notinstallmsg-01-name-the-unsupporte](./quick/261107-36g-fix-notinstallmsg-01-name-the-unsupporte/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
