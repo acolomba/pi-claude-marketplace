@@ -22,13 +22,14 @@ if [[ ! -e node_modules/.package-lock.json ]]; then
     npm install >&2
 fi
 
-if [[ ! -d .codegraph ]] && command -v codegraph >/dev/null 2>&1; then
-    codegraph init --yes . >&2
+codegraph=node_modules/.bin/codegraph
+if [[ ! -d .codegraph && -x $codegraph ]]; then
+    "$codegraph" init --yes . >&2
 fi
 
 # the daemon's watcher keeps this index current; SubagentStop stops it, and the
 # idle timeout covers a stop that never comes. Codex has no SubagentStop and
 # starts its own CodeGraph server in the worktree
-if [[ -n ${CLAUDE_PROJECT_DIR-} && -d .codegraph ]] && command -v codegraph >/dev/null 2>&1; then
-    (CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS=14400000 setsid codegraph serve --mcp --path "$top" </dev/null >/dev/null 2>&1 &)
+if [[ -n ${CLAUDE_PROJECT_DIR-} && -d .codegraph && -x $codegraph ]]; then
+    (CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS=14400000 setsid "$codegraph" serve --mcp --path "$top" </dev/null >/dev/null 2>&1 &)
 fi

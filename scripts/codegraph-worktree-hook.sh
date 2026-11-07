@@ -15,8 +15,8 @@ cd -- "$top"
 # a restarted daemon catches up on the edits it missed; with no index here, the
 # launcher would start the enclosing checkout's daemon instead
 pid=$(node -p 'JSON.parse(require("fs").readFileSync(".codegraph/daemon.pid", "utf8")).pid' 2>/dev/null) || pid=
-if [[ -d .codegraph ]] && ! { [[ $pid =~ ^[1-9][0-9]*$ ]] && kill -0 "$pid" 2>/dev/null; }; then
-    (CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS=14400000 setsid codegraph serve --mcp --path "$top" </dev/null >/dev/null 2>&1 &)
+if [[ -d .codegraph && -x node_modules/.bin/codegraph ]] && ! { [[ $pid =~ ^[1-9][0-9]*$ ]] && kill -0 "$pid" 2>/dev/null; }; then
+    (CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS=14400000 setsid node_modules/.bin/codegraph serve --mcp --path "$top" </dev/null >/dev/null 2>&1 &)
 fi
 
 # updatedInput replaces every argument, so carry the original ones through
