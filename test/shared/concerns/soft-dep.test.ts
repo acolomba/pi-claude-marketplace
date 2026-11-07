@@ -17,14 +17,18 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // D-P3-10: an MCP dependency that only pi-mcp-adapter runs every server of.
-const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
-const BOTH_RUN_EVERY: McpDependency = { kind: "mcp", runEvery: ["adapter", "builtin"] };
-const BUILTIN_MCP: McpDependency = { kind: "mcp", runEvery: ["builtin"] };
-const SPLIT_MCP: McpDependency = { kind: "mcp", runEvery: [] };
+const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: "adapter" };
+const BOTH_RUN_EVERY: McpDependency = { kind: "mcp", runEvery: "both" };
+const BUILTIN_MCP: McpDependency = { kind: "mcp", runEvery: "builtin" };
+const SPLIT_MCP: McpDependency = { kind: "mcp", runEvery: "split" };
 
 void ("agents" satisfies Dependency);
-void ({ kind: "mcp", runEvery: ["builtin"] } satisfies Dependency);
+void ({ kind: "mcp", runEvery: "builtin" } satisfies Dependency);
 void ("workflows" satisfies Dependency);
+void ({ kind: "mcp", runEvery: "split" } satisfies McpDependency);
+const adapterList = ["adapter"] as const;
+// @ts-expect-error runEvery names one of four states, not a list
+void ({ kind: "mcp", runEvery: adapterList } satisfies McpDependency);
 // @ts-expect-error Dependency excludes unknown companion targets
 void ("hooks" satisfies Dependency);
 // @ts-expect-error D-P3-10: the MCP member is the McpDependency, not a literal
@@ -410,7 +414,7 @@ for (const {
   });
 }
 
-// D-P3-08: the MCP entry for each runEvery shape and active implementation.
+// D-P3-08: the MCP entry for each runEvery state and active implementation.
 const MCP_REQUIREMENT_CASES = [
   { label: "both", dependency: BOTH_RUN_EVERY, active: "none", companion: "mcp", missing: true },
   {
@@ -769,7 +773,7 @@ for (const { active, dependency, expectedMarkers } of [
     expectedMarkers: ["requires pi-subagents", "requires pi-dynamic-workflows"],
   },
 ] as const) {
-  test(`D-MB-07: puts the MCP marker between agents and workflows under ${active} for runEvery [${dependency.runEvery.join(", ")}]`, () => {
+  test(`D-MB-07: puts the MCP marker between agents and workflows under ${active} for runEvery ${dependency.runEvery}`, () => {
     // arrange
     const probe: SoftDepStatus = {
       piSubagentsLoaded: false,

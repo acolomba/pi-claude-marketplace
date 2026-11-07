@@ -385,7 +385,7 @@ describe("composeCascadeMemberRows", () => {
       rootKey: ROOT_KEY,
       rootRow: ROOT_ROW,
       installed: [
-        member({ declaresAgents: true, declaresMcp: { kind: "mcp", runEvery: ["adapter"] } }),
+        member({ declaresAgents: true, declaresMcp: { kind: "mcp", runEvery: "adapter" } }),
       ],
       alreadyInstalled: [],
       probe: PROBE_NO_AGENTS,
@@ -670,7 +670,7 @@ describe("composeCascadeMemberRow", () => {
   test("UPD-DEP-D1 a member installed from its marketplace's current copy names the fallback", () => {
     // act
     const row = composeCascadeMemberRow(
-      member({ declaresMcp: { kind: "mcp", runEvery: ["adapter"] }, fellBackToCurrentCopy: true }),
+      member({ declaresMcp: { kind: "mcp", runEvery: "adapter" }, fellBackToCurrentCopy: true }),
       PROBE_BOTH_LOADED,
     );
 
@@ -678,7 +678,7 @@ describe("composeCascadeMemberRow", () => {
     assert.deepStrictEqual(row, {
       status: "installed",
       name: "formatter@tools",
-      dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+      dependencies: [{ kind: "mcp", runEvery: "adapter" }],
       version: "2.1.0",
       reasons: ["dependency current copy"],
       severity: "info",

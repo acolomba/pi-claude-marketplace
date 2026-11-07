@@ -30,17 +30,17 @@ const DEPENDENCY_ROWS: readonly DependencyRow[] = [
   {
     title: "D-P3-06: both implementations run a stdio server",
     configs: [STDIO],
-    expectedDependency: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+    expectedDependency: { kind: "mcp", runEvery: "both" },
   },
   {
     title: "D-P3-06: only the adapter runs an sse server",
     configs: [EVENTS],
-    expectedDependency: { kind: "mcp", runEvery: ["adapter"] },
+    expectedDependency: { kind: "mcp", runEvery: "adapter" },
   },
   {
     title: "D-P3-06: only Pi's built-in MCP runs a bare-elicitation server",
     configs: [ASKER],
-    expectedDependency: { kind: "mcp", runEvery: ["builtin"] },
+    expectedDependency: { kind: "mcp", runEvery: "builtin" },
   },
   {
     title: "D-P3-06: a ws server that both implementations block gives no dependency",
@@ -53,19 +53,19 @@ const DEPENDENCY_ROWS: readonly DependencyRow[] = [
     expectedDependency: false,
   },
   {
-    title: "D-P3-06: servers split between the implementations leave runEvery empty",
+    title: "D-P3-06: servers split between the implementations give the split state",
     configs: [EVENTS, ASKER],
-    expectedDependency: { kind: "mcp", runEvery: [] },
+    expectedDependency: { kind: "mcp", runEvery: "split" },
   },
   {
     title: "D-P3-06: a server both implementations block is left out of R",
     configs: [STDIO, LIVE],
-    expectedDependency: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+    expectedDependency: { kind: "mcp", runEvery: "both" },
   },
   {
-    title: "D-P3-06: runEvery keeps only the implementations that run every server",
+    title: "D-P3-06: runEvery names the one implementation that runs every server",
     configs: [EVENTS, STDIO],
-    expectedDependency: { kind: "mcp", runEvery: ["adapter"] },
+    expectedDependency: { kind: "mcp", runEvery: "adapter" },
   },
 ];
 
@@ -104,19 +104,19 @@ const RECORD_ROWS: readonly RecordRow[] = [
     title: "D-P3-10: a recorded read gives the dependency of its configs",
     recorded: { kind: "recorded", servers: [{ name: "asker", config: ASKER }], bundle: false },
     staged: [],
-    expectedDependency: { kind: "mcp", runEvery: ["builtin"] },
+    expectedDependency: { kind: "mcp", runEvery: "builtin" },
   },
   {
     title: "D-P3-10: a re-resolved read gives the dependency of its configs",
     recorded: { kind: "re-resolved", servers: [{ name: "tool", config: STDIO }], bundle: false },
     staged: ["tool"],
-    expectedDependency: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+    expectedDependency: { kind: "mcp", runEvery: "both" },
   },
   {
     title: "P3-DC-24: an unreadable read of a record that staged a server keeps the adapter",
     recorded: { kind: "unreadable", reason: "read-failed" },
     staged: ["events"],
-    expectedDependency: { kind: "mcp", runEvery: ["adapter"] },
+    expectedDependency: { kind: "mcp", runEvery: "adapter" },
   },
   {
     title: "P3-DC-24: an unreadable read of a record that staged no server gives no dependency",

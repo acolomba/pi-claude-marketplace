@@ -14171,7 +14171,7 @@ test("AFILE-04: the cascade update entry returns the notice without notifying", 
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,
-        declaresMcp: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+        declaresMcp: { kind: "mcp", runEvery: "both" },
         constraint: undefined,
         declaresWorkflows: false,
         mcpConfigNotices: [

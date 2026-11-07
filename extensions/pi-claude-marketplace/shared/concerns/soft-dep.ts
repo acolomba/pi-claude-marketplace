@@ -1,10 +1,6 @@
 import { type Reason } from "../notification-types.ts";
 
-import type {
-  ActiveMcpImplementation,
-  McpImplementationId,
-  SoftDepStatus,
-} from "../../platform/pi-api.ts";
+import type { ActiveMcpImplementation, SoftDepStatus } from "../../platform/pi-api.ts";
 
 /**
  * shared/concerns/soft-dep.ts -- the soft-dep marker injection concern (D-01).
@@ -31,14 +27,21 @@ import type {
  */
 
 /**
+ * D-P3-10 / D-MB-07: which MCP implementations run every server of an
+ * `McpDependency`. `both`: either implementation runs every server.
+ * `adapter` or `builtin`: only that implementation does. `split`: each
+ * implementation runs some server the other cannot.
+ */
+export type RunEvery = "both" | "adapter" | "builtin" | "split";
+
+/**
  * D-P3-10 / D-MB-07: a plugin's MCP dependency. It exists only when at least
- * one MCP implementation runs one of the plugin's servers; `runEvery` lists,
- * in the order adapter then builtin, each implementation that runs every such
- * server, and is empty when the servers split between the two.
+ * one MCP implementation runs one of the plugin's servers. `runEvery` names
+ * the implementations that run every such server.
  */
 export interface McpDependency {
   readonly kind: "mcp";
-  readonly runEvery: readonly McpImplementationId[];
+  readonly runEvery: RunEvery;
 }
 
 /**
@@ -108,13 +111,6 @@ const SOFT_DEP_MARKER_WORKFLOWS: Reason = `requires ${COMPANION_WORKFLOWS}`;
 type McpCompanion =
   typeof COMPANION_ANY_MCP | typeof COMPANION_ADAPTER_MCP | typeof COMPANION_BUILTIN_MCP;
 
-/**
- * D-MB-07: which implementations run every server of an `McpDependency`.
- * `split` is the empty `runEvery`: each implementation runs some server the
- * other cannot.
- */
-type RunEveryShape = "both" | "adapter" | "builtin" | "split";
-
 /** D-P3-08: one MCP entry of the name table, the shape of a `requires:` entry. */
 interface McpRequirement {
   readonly companion: McpCompanion;
@@ -122,16 +118,16 @@ interface McpRequirement {
 }
 
 /**
- * D-P3-06 / D-P3-08 / D-MB-07: the MCP name table, per `runEvery` shape and
+ * D-P3-06 / D-P3-08 / D-MB-07: the MCP name table, per `runEvery` state and
  * active implementation. A `missing` entry is both the marker the row shows
  * and the `(missing)` `requires:` entry; any other entry is the `requires:`
  * entry alone. With no active implementation the entry names what would run
  * every server (`mcp` when either would, or when neither runs them all). With
  * an active implementation that runs every server it names the `runEvery`
- * set; with one that cannot, it names the other implementation.
+ * state; with one that cannot, it names the other implementation.
  */
 const MCP_NAME_TABLE: Readonly<
-  Record<RunEveryShape, Readonly<Record<ActiveMcpImplementation, McpRequirement>>>
+  Record<RunEvery, Readonly<Record<ActiveMcpImplementation, McpRequirement>>>
 > = {
   both: {
     none: { companion: COMPANION_ANY_MCP, missing: true },
@@ -155,23 +151,9 @@ const MCP_NAME_TABLE: Readonly<
   },
 };
 
-function runEveryShape(runEvery: readonly McpImplementationId[]): RunEveryShape {
-  const runsAdapter = runEvery.includes("adapter");
-  const runsBuiltin = runEvery.includes("builtin");
-  if (runsAdapter && runsBuiltin) {
-    return "both";
-  }
-
-  if (runsAdapter) {
-    return "adapter";
-  }
-
-  return runsBuiltin ? "builtin" : "split";
-}
-
 /** D-P3-08: the name-table entry of a dependency under the snapshot's implementation. */
 function mcpRequirement(declaresMcp: McpDependency, probe: SoftDepStatus): McpRequirement {
-  return MCP_NAME_TABLE[runEveryShape(declaresMcp.runEvery)][probe.mcpImplementation];
+  return MCP_NAME_TABLE[declaresMcp.runEvery][probe.mcpImplementation];
 }
 
 /**

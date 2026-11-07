@@ -108,7 +108,7 @@ type TestImportOptions = Omit<ImportClaudeSettingsOptions, "completionCache">;
 
 // D-P3-10: the MCP dependency a boolean `mcp` row maps to, which renders the
 // `requires pi-mcp-adapter` marker exactly as a declared MCP kind did.
-const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: ["adapter"] };
+const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: "adapter" };
 
 for (const mode of ["json", "rpc"] as const) {
   test(`appends import diagnostics after the cascade in ${mode}`, async (t) => {
@@ -6043,7 +6043,7 @@ test("IMP-05: enables a plugin the scope records disabled and declares it enable
                 name: "alpha",
                 version: "1.0.0",
                 stagedAgents: true,
-                stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
+                stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
                 stagedWorkflows: true,
                 mcpConfigNotices: [adapterNotice],
               }

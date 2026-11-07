@@ -344,7 +344,7 @@ test("P3-DC-24: reads an unreadable legacy record that staged a server as the ad
   const dependency = await readRecordMcpDependency(marketplace.sourceFor(record));
 
   // assert
-  assert.deepStrictEqual(dependency, { kind: "mcp", runEvery: ["adapter"] });
+  assert.deepStrictEqual(dependency, { kind: "mcp", runEvery: "adapter" });
 });
 
 test("D-P3-10: reads a neutral record's dependency from its recorded servers", async (t) => {
@@ -362,7 +362,7 @@ test("D-P3-10: reads a neutral record's dependency from its recorded servers", a
   const dependency = await readRecordMcpDependency(marketplace.sourceFor(record));
 
   // assert
-  assert.deepStrictEqual(dependency, { kind: "mcp", runEvery: ["adapter"] });
+  assert.deepStrictEqual(dependency, { kind: "mcp", runEvery: "adapter" });
 });
 
 for (const { title, marketplaceListed, active, baseline } of [

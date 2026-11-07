@@ -23,7 +23,7 @@ test("D-P3-07 / D-MB-07: list puts the MCP marker of a partially-installed row a
           name: "alpha",
           version: "1.0.0",
           reasons: ["unsupported mcp"],
-          dependencies: [{ kind: "mcp", runEvery: ["builtin"] }],
+          dependencies: [{ kind: "mcp", runEvery: "builtin" }],
         },
       ],
     },

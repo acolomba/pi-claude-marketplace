@@ -82,7 +82,7 @@ void ({
   marketplace: "official",
   plugin: "formatter",
   version: "1.2.3",
-  dependencies: ["agents", { kind: "mcp", runEvery: ["adapter"] }],
+  dependencies: ["agents", { kind: "mcp", runEvery: "adapter" }],
   orphanRewake: true,
   degradedKinds: ["skill", "command"],
   postCommitWarnings: ["cache refresh deferred"],
@@ -93,7 +93,7 @@ void ({
   marketplace: "official",
   plugin: "formatter",
   version: "1.2.3",
-  dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+  dependencies: [{ kind: "mcp", runEvery: "adapter" }],
   installable: false,
   unsupported: ["hooks", "lspServers"],
   orphanRewake: true,
@@ -152,7 +152,7 @@ void ({
   orphanRewake: true,
   degradedKinds: ["skill"],
   stagedAgents: true,
-  stagedMcpServers: { kind: "mcp", runEvery: ["adapter"] },
+  stagedMcpServers: { kind: "mcp", runEvery: "adapter" },
 } satisfies PluginEnabledOutcome);
 void ({
   kind: "plugin-enable-failed",

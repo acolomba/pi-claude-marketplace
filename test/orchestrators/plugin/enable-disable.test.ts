@@ -4850,7 +4850,7 @@ test("orchestrated enable returns every live degradation and companion signal wi
       name: "foo",
       orphanRewake: true,
       stagedAgents: true,
-      stagedMcpServers: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+      stagedMcpServers: { kind: "mcp", runEvery: "both" },
       stagingWarnings: [
         {
           kind: "hygiene",
@@ -9314,7 +9314,7 @@ test("AFILE-04: an orchestrated enable returns the notice on its outcome and sen
       status: "enabled",
       name: "foo",
       version: "1.2.3",
-      stagedMcpServers: { kind: "mcp", runEvery: ["adapter", "builtin"] },
+      stagedMcpServers: { kind: "mcp", runEvery: "both" },
       mcpConfigNotices: [{ kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" }],
     });
     assert.deepStrictEqual(notifications, []);

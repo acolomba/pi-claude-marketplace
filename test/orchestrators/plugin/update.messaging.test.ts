@@ -45,7 +45,7 @@ void ({
   name: "alpha",
   reasons: ["lsp"],
   // @ts-expect-error partially-upgradable messages cannot declare soft dependencies
-  dependencies: [{ kind: "mcp", runEvery: ["adapter"] }],
+  dependencies: [{ kind: "mcp", runEvery: "adapter" }],
 } satisfies UpdateMsg);
 
 test("exports the complete update command context in declared order", () => {

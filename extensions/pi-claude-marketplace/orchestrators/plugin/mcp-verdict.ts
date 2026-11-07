@@ -20,13 +20,31 @@ import type {
   RecordedMcpServers,
 } from "../../domain/mcp-implementation.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
-import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
+import type { McpDependency, RunEvery } from "../../shared/concerns/soft-dep.ts";
 
-// The order of `runEvery`: adapter, then builtin.
+// The order in which the implementation profiles are asked about a server.
 const IMPLEMENTATIONS: readonly McpImplementationId[] = ["adapter", "builtin"];
 
 function implementationsRunning(config: unknown): readonly McpImplementationId[] {
   return IMPLEMENTATIONS.filter((id) => profileFor(id).classify(config).kind === "supported");
+}
+
+/**
+ * D-P3-10 / D-MB-07: the `runEvery` state of R, from the implementations that
+ * run each server in R.
+ */
+function runEveryOf(runs: readonly (readonly McpImplementationId[])[]): RunEvery {
+  const adapterRunsAll = runs.every((ids) => ids.includes("adapter"));
+  const builtinRunsAll = runs.every((ids) => ids.includes("builtin"));
+  if (adapterRunsAll && builtinRunsAll) {
+    return "both";
+  }
+
+  if (adapterRunsAll) {
+    return "adapter";
+  }
+
+  return builtinRunsAll ? "builtin" : "split";
 }
 
 /**
@@ -36,12 +54,7 @@ function implementationsRunning(config: unknown): readonly McpImplementationId[]
  */
 export function mcpDependencyOf(configs: readonly unknown[]): McpDependency | false {
   const runs = configs.map(implementationsRunning).filter((ids) => ids.length > 0);
-  return runs.length === 0
-    ? false
-    : {
-        kind: "mcp",
-        runEvery: IMPLEMENTATIONS.filter((id) => runs.every((ids) => ids.includes(id))),
-      };
+  return runs.length === 0 ? false : { kind: "mcp", runEvery: runEveryOf(runs) };
 }
 
 /**
@@ -54,9 +67,7 @@ export function recordMcpDependency(
   record: Pick<PluginInstallRecord, "resources">,
 ): McpDependency | false {
   if (recorded.kind === "unreadable") {
-    return record.resources.mcpServers.length === 0
-      ? false
-      : { kind: "mcp", runEvery: ["adapter"] };
+    return record.resources.mcpServers.length === 0 ? false : { kind: "mcp", runEvery: "adapter" };
   }
 
   return mcpDependencyOf(recorded.servers.map((server) => server.config));
