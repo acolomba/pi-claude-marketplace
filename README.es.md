@@ -26,7 +26,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 - Habilidades.
 - Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los permisos MCP de un agente siguen la implementación MCP en uso. Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`.
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
-- Servidores MCP. Se ejecutan con el MCP integrado de Pi o, para más funciones de MCP, con [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
+- Servidores MCP. Usa el MCP integrado de Pi o, para más funciones de MCP, [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 - Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
 
 Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
