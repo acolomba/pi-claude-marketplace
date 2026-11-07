@@ -2,10 +2,10 @@
 gsd_state_version: "1.0"
 milestone: mcp-builtin
 status: Awaiting next milestone
-stopped_at: "Milestone mcp-builtin archived and reviewed; PR #303 open"
+stopped_at: "Milestone mcp-builtin archived, reviewed, and merged (PR #303)"
 last_updated: "2026-11-07T03:11:45.126Z"
-last_activity: 2026-11-06
-last_activity_desc: "PR #303 review backlog closed (quick batch 261106-u94, quick 261107-36g); waits for the merge"
+last_activity: 2026-11-07
+last_activity_desc: "PR #303 merged; mcp-builtin review logs moved into the milestone archive"
 state_head: 93168c0758b5f2ecb082a4f0aa2d7a627126ac05
 progress:
   total_phases: 6
@@ -14,7 +14,6 @@ progress:
   completed_plans: 55
   percent: 100
 milestone_name: MCP Built-in
-current_phase: 06
 ---
 
 # Project State
@@ -26,8 +25,8 @@ See: `.planning/PROJECT.md` (updated 2026-11-05 after the mcp-builtin milestone 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** the user's review of the mcp-builtin choices, then the PR (milestone archived 2026-11-05)
-The root review log is `.planning/DUBIOUS-CHOICES.md`. Still open from component-features:
+**Current focus:** the next milestone (mcp-builtin merged as PR #303)
+The mcp-builtin review log is `.planning/milestones/mcp-builtin-DUBIOUS-CHOICES.md`. Still open from component-features:
 the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 `acolomba/pi` and `acolomba/pi-subagents`.
 
@@ -36,7 +35,7 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 Phase: Milestone mcp-builtin complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-06 — PR #303 reviewed and hardened; waits for the merge
+Last activity: 2026-11-07 — PR #303 merged
 
 
 ### mcp-4 closeout
@@ -888,7 +887,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 - [mcp-builtin] Open for the user: the Pi 1.5.0 RPC `new_session` leak
   (P6-DC-0503, unreported upstream), the 02-UAT.md manual checks, and the
   version bump and pull request (D-P6-17). Decisions waiting are listed at
-  the top of `.planning/DUBIOUS-CHOICES.md`.
+  the top of `.planning/milestones/mcp-builtin-DUBIOUS-CHOICES.md`.
 - [component-features] No scenario may pin an unlicensed gap before the user
   decides; the pre-fan-out decisions are recorded (D-CF1-01..17).
 - [Phase 1] `.fallowrc.json` carries `dynamicallyLoaded` and `ignoreExports`
