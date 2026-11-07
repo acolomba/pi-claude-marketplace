@@ -1811,3 +1811,27 @@ here. The SUMMARYs keep the full text of those entries.
 - **P6-DC-1307 (Low):** the PL-90 group row's outcome is `repeats earlier lines`, outside the plan's list of outcomes, and PL-89 and several sub-rows join two or more `repeats PL-NN` parts. Alternative: give PL-90 one `repeats` label, which no single label fits. The checks read only `applied`, shas, and BACKLOG IDs, so this does not change them.
 - **P6-DC-1308 (Low):** in 01-FROZEN.md, the module-private `LegacyServersUnreadableReason` and `LegacyServersUnreadableError` stay in interface 3's code block without `export` and with a `// module-private` comment, as interface 2 shows `hasLoadedBuiltinMcp`. The amended `agentGrantsStep` line keeps `async`, as the source has it, unlike the block's other declarations. Alternative: delete the two private lines and write the step without `async`.
 - **P6-DC-1309 (Low):** PL-05 (CHANGELOG with the PR number) and PL-92 (02-UAT.md) carry `left for the user` for their open part. The PR number waits for the PR, which waits for the user (D-P6-17); the 02-UAT.md checks need the user. Alternative: `open`, which would ask the parent to act on something only the user can settle.
+
+## PR #303 review backlog batch (quick 261106-u94)
+
+The batch's questionable choices are in each item's SUMMARY under
+`.planning/quick/261106-u9*/`. The user reviewed them on 2026-11-07:
+
+- **D-MB-30 (two plugin servers on one Pi name):** locked as is. The later
+  declaration wins on the same registered name; the first wins on a `-`/`_`
+  pair.
+- **u95:** kept. A hand-edited agents-index row whose grant pair does not match
+  loads without it and may be translated as an older row; each grant form
+  takes its servers from its own profile (no extra pin test).
+- **u98:** kept. The D-P5-07 amendment: a probe whose read failed is not kept.
+- **u9c:** kept. The `apply` move-then-enable row fix, carrying all three
+  soft-dependency markers; a waiting record's move row stays without them.
+- **u99:** kept, with no scenario, because the import warning cause reaches no
+  user surface. NOTINSTALLMSG-01 is to be fixed next; OUTCOMECAUSE-01 stays in
+  the backlog.
+- **u97:** kept. `status unknown` for a failed read; a resolved leading `~`
+  stays `not loaded`.
+- **u96:** kept. The scope cross-check, the record `name`, the type and error
+  names.
+- **The rest** (u9b types, debug-line details, test setup, executor process):
+  kept as a group.
