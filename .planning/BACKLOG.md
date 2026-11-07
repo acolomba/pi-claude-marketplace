@@ -5055,3 +5055,7 @@ Noted 2026-11-07 (mcp-builtin, from 261106-u99, S1). The `PluginShapeError` not-
 ## OUTCOMECAUSE-01: the failed outcomes' `cause` strings are unread and repeat their head
 
 Noted 2026-11-07 (mcp-builtin, from 261106-u99, S2). No production code now reads the `cause` strings of the failed install and enable outcomes. `formatOrchestratedCause` and `composeErrorWithCauseChain` put the head before a cause line that repeats it. Candidate direction: drop the `cause` strings from those outcomes and keep the typed error, or make the composers skip a cause line that equals the head.
+
+## MIXEDREFUSAL-01: a refusal message names only the noted kind when another kind has no note
+
+Noted 2026-11-07 (mcp-builtin, from quick 261107-36g). When a plugin has a resolver note for one kind and also an unsupported kind with no note, such as an output style plus hooks declared in the manifest, the not-installable message names only the noted kind (`contains outputStyles`). The row's reason list already shows both. Candidate direction: in `refusalReasons` (`domain/plugin-resolver.ts`), add the token of each unsupported kind that no note covers.
