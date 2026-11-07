@@ -10162,7 +10162,7 @@ describe("applyReconcile catalog convergence", () => {
         message:
           "● mp [project]\n" +
           "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
-          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated) {requires mcp}\n" +
           "\nReconcile: 2 successes\n\n/reload to pick up changes",
       },
       {
@@ -10173,6 +10173,37 @@ describe("applyReconcile catalog convergence", () => {
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
+    verifyBoundary();
+  });
+
+  test("D-MB-07 / APPLY1-01: with no MCP implementation, a held-down plugin with an MCP server that apply moves and enables names mcp as missing", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "deferred-mcp-marker", {
+      ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+      trees: { widget: { skill: "clean", mcpServer: true }, zcore: { skill: "clean" } },
+      supported: { widget: ["skills", "mcpServers"], zcore: ["skills"] },
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated) {requires mcp}\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["widget"]), [["1.1.0", true, undefined]]);
     verifyBoundary();
   });
 
