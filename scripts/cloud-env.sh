@@ -12,8 +12,7 @@
 #   wrapper drops two capabilities, so a test that denies a file with chmod
 #   sees the error. The wrapper is not under HOME, because pre-commit ignores
 #   a node there and downloads its own, which the network policy blocks.
-# - npm: global installs go to /usr/local, which is on every PATH, so
-#   init.sh and the MCP servers find `codegraph`.
+# - npm: global installs go to /usr/local, which is on every PATH.
 # - trufflehog: its Go toolchain download is blocked. SKIP leaves the hook to
 #   CI.
 # - LFS: the GitHub proxy cannot fetch LFS objects, so `git lfs install`

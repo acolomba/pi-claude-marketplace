@@ -49,15 +49,11 @@ node .codex/gsd-core/bin/gsd-tools.cjs capability install \
     --scope project \
     --yes
 
-# codegraph
-if ! command -v codegraph >/dev/null 2>&1; then
-    npm install --global @colbymchenry/codegraph
+# codegraph: the devDependency. The agent configs that call it are committed,
+# so `codegraph install` is not run: it would rewrite them
+if [[ ! -d .codegraph ]]; then
+    npx --no codegraph init --yes
 fi
-
-codegraph install --target claude,codex --location local --no-permissions --init --yes
-
-# removes the generated per-tool copy, which would shadow the root file
-rm -f .claude/CLAUDE.md
 
 # fallow: skill pointers and MCP registration. No commit gate: the commit hook
 # already runs `npm run fallow`. No guide: it rewrites AGENTS.md and adds a
