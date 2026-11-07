@@ -250,6 +250,83 @@ void ({ getAllTools: () => [] } satisfies PiBoundary.PiInventory);
 // @ts-expect-error a notification context must expose ui.notify
 void ({ mode: "tui", ui: {} } satisfies PiBoundary.NotificationContext);
 
+function proveSoftDepStatusReadonly(snapshot: PiBoundary.SoftDepStatus): void {
+  // @ts-expect-error the pi-subagents flag of a snapshot is readonly
+  snapshot.piSubagentsLoaded = true;
+  // @ts-expect-error the MCP implementation of a snapshot is readonly
+  snapshot.mcpImplementation = "builtin";
+  // @ts-expect-error the workflow engine flag of a snapshot is readonly
+  snapshot.workflowEngineLoaded = true;
+}
+
+void proveSoftDepStatusReadonly;
+
+interface ProbeTraceRow {
+  readonly situation: string;
+  readonly inventory: () => PiBoundary.PiInventory;
+  readonly expectedLines: readonly string[];
+  readonly expectedStatus: PiBoundary.SoftDepStatus;
+}
+
+/** A command whose `source` getter throws, as a broken inventory entry would. */
+function commandWithFailingSource(): PiBoundary.CommandInventoryItem {
+  return {
+    name: "mcp",
+    get source(): unknown {
+      throw new Error("source unreadable");
+    },
+  };
+}
+
+/** OBS-01: inventories whose failed MCP reads the probe traces. */
+function probeTraceRows(): ProbeTraceRow[] {
+  const unloaded: PiBoundary.SoftDepStatus = {
+    piSubagentsLoaded: false,
+    mcpImplementation: "none",
+    workflowEngineLoaded: false,
+  };
+  return [
+    {
+      situation: "one line for a throwing getCommands() read",
+      inventory: () => ({ getAllTools: () => [], getCommands: failingRead }),
+      expectedLines: ["[mcp] soft-dependency probe: pi.getCommands() failed: not ready"],
+      expectedStatus: unloaded,
+    },
+    {
+      situation: "one line, from the pi-mcp-adapter tool check, for a throwing getAllTools() read",
+      inventory: () => ({ getAllTools: failingRead, getCommands: () => [] }),
+      expectedLines: [
+        "[mcp] soft-dependency probe: the pi-mcp-adapter tool check failed: not ready",
+      ],
+      expectedStatus: unloaded,
+    },
+    {
+      situation: "the getCommands() line, then the tool check line, when both Pi reads throw",
+      inventory: () => ({ getAllTools: failingRead, getCommands: failingRead }),
+      expectedLines: [
+        "[mcp] soft-dependency probe: pi.getCommands() failed: not ready",
+        "[mcp] soft-dependency probe: the pi-mcp-adapter tool check failed: not ready",
+      ],
+      expectedStatus: unloaded,
+    },
+    {
+      situation: "one line per command check when a listed command cannot report its source",
+      inventory: () => toolInventory([], [commandWithFailingSource()]),
+      expectedLines: [
+        "[mcp] soft-dependency probe: the pi-mcp-adapter command check failed: source unreadable",
+        "[mcp] soft-dependency probe: the built-in MCP command check failed: source unreadable",
+      ],
+      expectedStatus: unloaded,
+    },
+    {
+      situation: "no line when every read succeeds",
+      inventory: () => toolInventory([], [adapterCommand()]),
+      expectedLines: [],
+      expectedStatus: { ...unloaded, mcpImplementation: "adapter" },
+    },
+  ];
+}
+
 describe("getAgentDir", () => {
   test("re-exports the peer binding", () => {
     // arrange
@@ -1015,4 +1092,30 @@ describe("softDepStatus", () => {
     });
     verify(extensionApi);
   });
+
+  for (const { situation, inventory, expectedLines, expectedStatus } of probeTraceRows()) {
+    test(`MSEL-01 / OBS-01: the mcp debug channel gets ${situation}`, (testContext) => {
+      // arrange
+      const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      testContext.after(() => {
+        if (previousDebug === undefined) {
+          delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+        } else {
+          process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+        }
+      });
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+      const lines: string[] = [];
+      testContext.mock.method(console, "error", (...parts: unknown[]) => {
+        lines.push(parts.map(String).join(" "));
+      });
+      const extensionApi = inventory();
+
+      // act
+      const status = softDepStatus(extensionApi);
+
+      // assert
+      assert.deepStrictEqual({ status, lines }, { status: expectedStatus, lines: expectedLines });
+    });
+  }
 });

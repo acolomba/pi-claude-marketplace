@@ -17,6 +17,10 @@ import type {
   StoredMcpCompatibility,
 } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 
+void (profileFor("adapter").toolNamePrefix satisfies (plugin: string, server: string) => string);
+// @ts-expect-error the built-in profile can promise no prefix for a long namespace
+void (profileFor("builtin").toolNamePrefix satisfies (plugin: string, server: string) => string);
+
 interface NamingRow {
   readonly id: McpImplementationId;
   readonly serverName: string;

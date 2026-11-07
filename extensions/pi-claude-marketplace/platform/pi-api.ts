@@ -20,6 +20,9 @@ import { isDeepStrictEqual } from "node:util";
 
 import { createReadTool } from "@earendil-works/pi-coding-agent";
 
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
+
 export { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 /**
@@ -167,14 +170,19 @@ export type AgentMessage = AgentEndEvent["messages"][number];
 export type AssistantMessage = Extract<AgentMessage, { role: "assistant" }>;
 export type StopReason = AssistantMessage["stopReason"];
 
+/**
+ * Which optional companion extensions Pi has loaded, and which MCP
+ * implementation the run uses. A snapshot is read-only: the run takes it once
+ * (D-05), and every reader sees the same values.
+ */
 export interface SoftDepStatus {
-  piSubagentsLoaded: boolean;
+  readonly piSubagentsLoaded: boolean;
   /**
    * MSEL-01: the run's active MCP implementation, with the precedence adapter,
    * then Pi's built-in MCP, then none.
    */
-  mcpImplementation: ActiveMcpImplementation;
-  workflowEngineLoaded: boolean;
+  readonly mcpImplementation: ActiveMcpImplementation;
+  readonly workflowEngineLoaded: boolean;
 }
 
 /** The only Pi UI capability used by the notification boundary. */
@@ -268,26 +276,35 @@ function isAdapterCommand(command: CommandInventoryItem): boolean {
   );
 }
 
+// OBS-01: the text every trace line of a failed probe read starts with.
+const PROBE_TRACE = "soft-dependency probe:";
+
 /**
- * Runs one probe arm. An arm that throws reports "not loaded", so a Pi read
- * failure can raise a false warning but never a false all-clear.
+ * Runs one MCP probe arm, named `check`. An arm that throws reports "not
+ * loaded", so a Pi read failure can raise a false warning but never a false
+ * all-clear. The failure is traced on the `mcp` debug channel (OBS-01) and
+ * reaches no user (RECON-05).
  */
-function probeArm(arm: () => boolean): boolean {
+function probeArm(check: string, arm: () => boolean): boolean {
   try {
     return arm();
-  } catch {
+  } catch (error) {
+    hookDebugLog(`${PROBE_TRACE} the ${check} check failed: ${errorMessage(error)}`, "mcp");
     return false;
   }
 }
 
 /**
  * The snapshot's one `pi.getCommands()` read, shared by both MCP arms. A read
- * that throws reads as an empty inventory, so neither arm sees a command.
+ * that throws reads as an empty inventory, so neither arm sees a command. The
+ * failure is traced on the `mcp` debug channel (OBS-01) and reaches no user
+ * (RECON-05).
  */
 function readCommands(pi: PiInventory): readonly CommandInventoryItem[] {
   try {
     return pi.getCommands();
-  } catch {
+  } catch (error) {
+    hookDebugLog(`${PROBE_TRACE} pi.getCommands() failed: ${errorMessage(error)}`, "mcp");
     return [];
   }
 }
@@ -306,8 +323,10 @@ function hasLoadedPiMcpAdapter(
   pi: PiInventory,
   commands: readonly CommandInventoryItem[],
 ): boolean {
-  const viaCommands = probeArm(() => commands.some((command) => isAdapterCommand(command)));
-  const viaTools = probeArm(() =>
+  const viaCommands = probeArm("pi-mcp-adapter command", () =>
+    commands.some((command) => isAdapterCommand(command)),
+  );
+  const viaTools = probeArm("pi-mcp-adapter tool", () =>
     pi.getAllTools().some((tool) => isAdapterSource(tool.sourceInfo?.source)),
   );
   return viaCommands || viaTools;
@@ -337,7 +356,9 @@ function isBuiltinMcpCommand(command: CommandInventoryItem): boolean {
  * template or skill named `mcp` does not count.
  */
 function hasLoadedBuiltinMcp(commands: readonly CommandInventoryItem[]): boolean {
-  return probeArm(() => commands.some((command) => isBuiltinMcpCommand(command)));
+  return probeArm("built-in MCP command", () =>
+    commands.some((command) => isBuiltinMcpCommand(command)),
+  );
 }
 
 /** MSEL-01: the adapter wins over Pi's built-in MCP; with neither, none. */

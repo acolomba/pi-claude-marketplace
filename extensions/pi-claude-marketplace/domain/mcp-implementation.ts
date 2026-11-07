@@ -36,14 +36,23 @@ export interface McpImplementationProfile {
    * The text every tool name of the server starts with, or `undefined` when
    * the implementation cannot promise one: Pi's built-in MCP cuts a long tool
    * name inside a long server namespace (D-MB-13). Without a prefix, a caller
-   * matches the full names from `toolName` instead. The adapter profile
-   * always returns a prefix.
+   * matches the full names from `toolName` instead. `AdapterMcpProfile`
+   * states that the adapter always returns one.
    */
   readonly toolNamePrefix: (plugin: string, server: string) => string | undefined;
   /** The full name the model sees for one tool of the server. */
   readonly toolName: (plugin: string, server: string, tool: string) => string;
   /** The `mcp:` entry that grants an agent the whole server. */
   readonly grantSelector: (plugin: string, server: string) => string;
+}
+
+/**
+ * ANAME-01: pi-mcp-adapter's profile. Its tool prefix is Claude Code's
+ * tool-name form, so every server of every plugin has one.
+ */
+export interface AdapterMcpProfile extends McpImplementationProfile {
+  readonly id: "adapter";
+  readonly toolNamePrefix: (plugin: string, server: string) => string;
 }
 
 /**
@@ -70,7 +79,7 @@ function adapterToolName(plugin: string, server: string, tool: string): string {
   return `${prefix}${sanitized}`;
 }
 
-const ADAPTER_PROFILE: McpImplementationProfile = Object.freeze({
+const ADAPTER_PROFILE: AdapterMcpProfile = Object.freeze({
   id: "adapter",
   classify: classifyMcpServer,
   serverName: generatedMcpServerKey,
@@ -137,6 +146,8 @@ const PROFILES = {
 } as const satisfies Record<McpImplementationId, McpImplementationProfile>;
 
 /** The frozen profile of one MCP implementation; every call returns the same object. */
+export function profileFor(id: "adapter"): AdapterMcpProfile;
+export function profileFor(id: McpImplementationId): McpImplementationProfile;
 export function profileFor(id: McpImplementationId): McpImplementationProfile {
   return PROFILES[id];
 }
