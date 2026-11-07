@@ -61,7 +61,7 @@ import { currentRun } from "./pi-process.ts";
 import type { CompanionName } from "../lib/companions.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
-import type { McpProfile } from "../lib/mcp-implementation.ts";
+import type { McpImplementation, McpProfile } from "../lib/mcp-implementation.ts";
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
 import type { RpcGitEnvironment, RpcRecord, RpcRequest } from "../lib/pi-process.ts";
@@ -230,6 +230,15 @@ export class ScenarioWorld extends World {
    */
   get pi(): PiProcess {
     return this.scenarioPi ?? currentRun().pi;
+  }
+
+  /**
+   * The MCP implementation that the Pi the steps talk to runs now, read from
+   * its command list by the extension's own rule (MSEL-01, DUAL-02).
+   */
+  async runningMcpImplementation(): Promise<McpImplementation> {
+    const { response } = await this.pi.request({ type: "get_commands" });
+    return classifyMcpImplementation(listedCommands(response));
   }
 
   /**
@@ -945,8 +954,7 @@ export class ScenarioWorld extends World {
     await this.expectSuccess({ type: "set_auto_retry", enabled: false });
     // Pi answers a request only after its startup, so the listing holds a
     // command that an extension registers late in startup.
-    const { response } = await pi.request({ type: "get_commands" });
-    const actual = classifyMcpImplementation(listedCommands(response));
+    const actual = await this.runningMcpImplementation();
     assert.strictEqual(
       actual,
       expected,

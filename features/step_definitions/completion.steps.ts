@@ -13,7 +13,11 @@ When(
   async function (this: ScenarioWorld, prefix: string): Promise<void> {
     this.recordCompletions(
       prefix,
-      await pluginCompletions(prefix, this.tokens.projectDir, this.mcpProfile),
+      await pluginCompletions(
+        prefix,
+        this.tokens.projectDir,
+        await this.runningMcpImplementation(),
+      ),
     );
   },
 );

@@ -22,8 +22,9 @@ export interface PluginCompletion {
 
 /**
  * Returns every completion the registered command provider offers for
- * `prefix`, classified for `mcpImplementation`, the implementation the
- * scenario's profile runs (D-P6-22).
+ * `prefix`, classified for `mcpImplementation`, the implementation that the
+ * scenario's Pi runs. The registered command classifies in the same way, for
+ * the implementation Pi runs at each lookup (D-P6-22).
  */
 export async function pluginCompletions(
   prefix: string,

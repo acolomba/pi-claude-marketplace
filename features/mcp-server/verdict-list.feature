@@ -4,11 +4,12 @@ Feature: MCP server verdict list
   read, not the one it ran at install (MREC-03, D-P3-05), so a switch needs no
   reinstall, and its marker names the implementation that runs a server the
   active one cannot (D-MB-07). Argument completion offers the plugins the list
-  shows for the same implementation (D-P6-22). A plugin whose installation
-  record names a plugin root outside its marketplace, or whose marketplace
-  record names another scope, lists with the verdict its install recorded
-  (UF-1). A local marketplace stands in for a published one, and each sse
-  server points at a loopback port that nothing listens on.
+  shows for the same implementation, also when Pi runs none (D-P6-22). A
+  plugin whose installation record names a plugin root outside its
+  marketplace, or whose marketplace record names another scope, lists with the
+  verdict its install recorded (UF-1). A local marketplace stands in for a
+  published one, and each sse server points at a loopback port that nothing
+  listens on.
 
   @adapter-only
   Scenario: An installed plugin with an sse server lists as installed, under pi-mcp-adapter (MREC-03)
@@ -275,3 +276,23 @@ Feature: MCP server verdict list
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  @own-implementation
+  Scenario: Install completion offers a plugin whose servers each implementation runs only some of, with no MCP implementation (D-P6-22, D-MB-05)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | demo  | 1.0.0   |
+      | plain | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}, "asker": {"command": "node", "bareElicitationCapability": true}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user's pi settings turn off pi's built-in mcp
+    Given pi runs with the scripted model
+    When the user requests plugin completions for "install --scope project "
+    Then the plugin completion set for "install --scope project " contains these suggestions:
+      | label          | value                                     | description |
+      | demo@fixtures  | "install --scope project demo@fixtures "  |             |
+      | plain@fixtures | "install --scope project plain@fixtures " |             |
