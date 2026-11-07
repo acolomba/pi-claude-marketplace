@@ -27,6 +27,18 @@ This extension never edits your Pi settings (D-MB-01). If you remove pi-mcp-adap
 
 A plugin that an earlier release of this extension installed runs under Pi's built-in MCP too, with no reinstall. Its record holds no copy of its servers, so this extension reads them from the plugin source that the record names (MREC-02, `features/mcp-server/implementation-switch.feature`). `/claude:plugin info` shows the state of each of those servers (`features/mcp-server/builtin-status.feature`).
 
+### Markers in list and install
+
+When no active MCP implementation can run every server of a plugin, the plugin's row in `/claude:plugin list` and in the install result shows a marker:
+
+| Marker                      | Meaning                                                                            | What you can do                                                                                                                        |
+| --------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `{requires mcp}`            | No MCP implementation is active, and either one can run the servers of the plugin. | Turn on Pi's built-in MCP or install pi-mcp-adapter.                                                                                   |
+| `{requires pi-mcp-adapter}` | Only pi-mcp-adapter runs every server of the plugin.                               | Install pi-mcp-adapter.                                                                                                                |
+| `{requires builtin mcp}`    | The plugin needs Pi's built-in MCP. Only it runs every server of the plugin.       | If pi-mcp-adapter is loaded, remove it. Then turn on Pi's built-in MCP. See [Choosing an implementation](#choosing-an-implementation). |
+
+If the active implementation cannot run a server that the other one can run, the plugin shows `{unsupported mcp}` and the marker of the other implementation. A plugin with no MCP server gets no MCP marker. A server that neither implementation can run shows `{unsupported mcp}` and no `requires` marker.
+
 ## Server and tool names
 
 Claude Code registers a plugin server under the name `plugin:<plugin>:<server>`. The model sees each tool of that server as `mcp__plugin_<plugin>_<server>__<tool>`. To make a name, Claude Code replaces every character outside `A-Z`, `a-z`, `0-9`, `_` and `-` with `_` (ANAME-01).

@@ -26,7 +26,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 - Skills.
 - Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). An agent's MCP grants follow the MCP implementation in use. Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`.
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
-- MCP servers. Run through Pi's built-in MCP or through [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP implementations](#mcp-implementations) and [MCP compatibility](docs/mcp-compatibility.md).
+- MCP servers. Run through Pi's built-in MCP or, for more MCP features, through [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
 
 Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
@@ -37,7 +37,7 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 - [Pi Coding Agent](https://pi.dev) 1.5.0 or newer
 - [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 or a later 7.x release (optional, `pi install npm:pi-mcp-adapter`). Pi's built-in MCP runs plugin MCP servers without it.
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 or a later 7.x release (optional, `pi install npm:pi-mcp-adapter`). It supports more MCP features than Pi's built-in MCP.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 or newer (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Usage
@@ -156,36 +156,6 @@ Install a partially available plugin. Put `--partial` first to enable argument c
 /claude:plugin install --partial hookify@claude-plugins-official
 ```
 
-### MCP implementations
-
-Pi's built-in MCP runs plugin MCP servers without pi-mcp-adapter. At each start and each `/reload`, this extension registers the servers of your installed plugins with it. It registers project-scope servers only in a project that Pi trusts.
-
-To use plugin MCP servers, turn on Pi's built-in MCP or install pi-mcp-adapter. For the steps, see [Choosing an implementation](docs/mcp-compatibility.md#choosing-an-implementation). Pi's built-in MCP is on unless the `extensions` of your Pi settings hold `-builtin:mcp`, an entry that pi-mcp-adapter adds. You change your Pi settings yourself. This extension never edits them.
-
-When both are loaded, pi-mcp-adapter runs the plugin servers, and this extension registers none with Pi. To switch, change what Pi loads and start Pi again. You do not need a plugin command.
-
-pi-mcp-adapter adds these features to what Pi's built-in MCP does:
-
-- It runs servers of type `sse`. See [Partially available plugins](docs/mcp-compatibility.md#partially-available-plugins).
-- The model can reach plugin tools through its `mcp` tool when Pi's `tool_search` tool is off. See [Tool search](docs/mcp-compatibility.md#tool-search).
-- `/claude:plugin info` shows more server states, such as `pending approval` and `needs authentication`. See [Server status in info](docs/mcp-compatibility.md#server-status-in-info).
-- Your changes to a server entry in `mcp-adapter.json` stay after plugin updates. See [User overrides](docs/mcp-compatibility.md#user-overrides).
-- `/mcp-adapter disable` turns a server off until you turn it on again. Pi's `/mcp` turns a server off for the current session only. See [Tool search and /mcp](docs/mcp-compatibility.md#tool-search-and-mcp).
-- It asks you to approve each project-scope server. See [Project-scope servers](docs/mcp-compatibility.md#project-scope-servers).
-- Tool names keep each `-`, and pi-mcp-adapter does not cut them. See [Name length](docs/mcp-compatibility.md#name-length).
-
-Pi's built-in MCP runs a server with `bareElicitationCapability: true`, and pi-mcp-adapter does not. See [Partially available plugins](docs/mcp-compatibility.md#partially-available-plugins).
-
-When no active MCP implementation can run every server of a plugin, the plugin's row in `/claude:plugin list` and in the install result shows a marker:
-
-| Marker                      | Meaning                                                                            | What you can do                                                                                                                                                 |
-| --------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `{requires mcp}`            | No MCP implementation is active, and either one can run the servers of the plugin. | Turn on Pi's built-in MCP or install pi-mcp-adapter.                                                                                                            |
-| `{requires pi-mcp-adapter}` | Only pi-mcp-adapter runs every server of the plugin.                               | Install pi-mcp-adapter.                                                                                                                                         |
-| `{requires builtin mcp}`    | The plugin needs Pi's built-in MCP. Only it runs every server of the plugin.       | If pi-mcp-adapter is loaded, remove it. Then turn on Pi's built-in MCP. See [Choosing an implementation](docs/mcp-compatibility.md#choosing-an-implementation). |
-
-If the active implementation cannot run a server that the other one can run, the plugin shows `{unsupported mcp}` and the marker of the other implementation. A plugin with no MCP server gets no MCP marker. A server that neither implementation can run shows `{unsupported mcp}` and no `requires` marker.
-
 ## Configuration files
 
 Each scope declares its marketplaces and plugins in two layers: the base layer and the local layer. The file of a layer is its config. The base config, `claude-plugins.json`, is under the scope root.
@@ -291,9 +261,6 @@ Add a marketplace from another `https://` git host, such as GitLab.
 ```text
 /claude:plugin marketplace add https://gitlab.com/my-group/my-marketplace
 ```
-
-> [!NOTE]
-> Device Flow authentication also covers `gitlab.com`. Non-GitHub hosts need the full `https://` URL; the `owner/repo` shorthand only resolves to GitHub.
 
 Add a marketplace from the local filesystem. The path can be a directory with `.claude-plugin/marketplace.json`, or a direct path to a `marketplace.json` file.
 
