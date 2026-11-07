@@ -1,7 +1,7 @@
 # Phase 3 (Slash Commands): Dubious Choices Log
 
 Phase log for the child session on `features/component-features-phase-3`. Same
-shape as the root `.planning/DUBIOUS-CHOICES.md`; the parent merges these
+shape as the root log (now `.planning/milestones/component-features-DUBIOUS-CHOICES.md`); the parent merges these
 entries into it. Severity and status follow the root file's rules.
 
 ## Entries

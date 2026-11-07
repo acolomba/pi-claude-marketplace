@@ -26,7 +26,7 @@ validated: "2026-11-01"
 | **Full suite command** | `npm run check`, `npm run test:modules`, `npm run test:cucumber` |
 | **Estimated runtime** | ~4 seconds (agents unit suite); the agent features and the full gate take minutes |
 
-As root, every npm script and cucumber run goes through the `nondac-sh` wrapper (see `.planning/CHILD-SESSION-BRIEF.md`).
+As root, every npm script and cucumber run goes through the `nondac-sh` wrapper (see `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`).
 
 ---
 

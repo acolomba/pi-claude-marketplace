@@ -291,12 +291,12 @@ recommended or upstream option. Each amends the decision it names.
 ## Canonical References
 
 - `.planning/ROADMAP.md` Phase 4 section and the milestone rules (ownership,
-  frozen files, merge procedure); `.planning/CHILD-SESSION-BRIEF.md`.
+  frozen files, merge procedure); `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`.
 - `.planning/REQUIREMENTS.md` AGT-01..07, XK-01.
 - `.planning/research/FEATURES.md` section 3 (A1-A17) and FG-15..FG-18.
 - `.planning/phases/01-harness-and-version-raise/01-CONTEXT.md` D-CF1-05,
   D-CF1-06, D-CF1-07, D-CF1-08, D-CF1-17.
-- `.planning/DUBIOUS-CHOICES.md` DC-07, DC-20 (01-07), DC-22.
+- `.planning/milestones/component-features-DUBIOUS-CHOICES.md` DC-07, DC-20 (01-07), DC-22.
 - `04-UPSTREAM-AGENTS.md`, `04-PI-SUBAGENTS.md` (this directory).
 - `.agents/skills/cucumber/**`, `.agents/skills/local-verification/SKILL.md`.
 

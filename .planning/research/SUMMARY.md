@@ -210,7 +210,7 @@ The decision-1 gaps are closed by decision 4. Remaining open questions for the u
 
 ### Secondary (MEDIUM confidence)
 
-- Precedent: `.planning/milestones/component-features-ROADMAP.md` and `.planning/CHILD-SESSION-BRIEF.md`.
+- Precedent: `.planning/milestones/component-features-ROADMAP.md` and `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`.
 - pi-subagents docs (not run).
 
 ### Tertiary (LOW confidence)

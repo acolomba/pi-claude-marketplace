@@ -1,7 +1,7 @@
 # Phase 4 (Agents): Dubious Choices Log
 
 Phase log for the child session running Phase 4 of `component-features`, in the
-shape of the root `.planning/DUBIOUS-CHOICES.md`. The parent merges these
+shape of the root log (now `.planning/milestones/component-features-DUBIOUS-CHOICES.md`). The parent merges these
 entries into the root file. Severity and status follow the root file's rules.
 
 ## Entries

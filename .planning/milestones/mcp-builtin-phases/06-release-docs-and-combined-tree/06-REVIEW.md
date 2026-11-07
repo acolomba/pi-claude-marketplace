@@ -51,7 +51,7 @@ What remains is Info only: six iteration-1 Info items still open (IN-03 is resol
 | ----- | -------- | -------- |
 | WR-01 | Resolved | `README.md:185` and `README.es.md:185` now say to remove pi-mcp-adapter if it is loaded, then turn on the built-in MCP, and link the steps. The linked section covers `-builtin:mcp`. |
 | WR-02 | Resolved | `classifyInstalledForImplementation` (`list-installed-row.ts:171-205`) is the only composition of the verdict read, `candidateFor`, and `classifyInstalledRecord`. Both `composeInstalledListRow` (`:218`) and `classifyInstalledPluginRow` (`edge-deps.ts:155-163`) call it. Completion uses `lookupDeclaredPlugin`. The false parity-test sentence is gone from the classifier header (`plugin-state-classifier.ts:4-12`). |
-| WR-03 | Resolved (by amendment) | D-P6-22 in 06-CONTEXT.md:218-220 records the stamp-and-rebuild design. P6-PLN-03 is defined in `.planning/DUBIOUS-CHOICES.md:1358`. `completion-cache.ts:85-90` states the cross-process rebuild cost, and `pluginIndexKey` (`:173`) notes that its key names no implementation. ARCHITECTURE.md and 06-03-SUMMARY.md now say "stamped". The behavior did not change, which matches the second fix option. |
+| WR-03 | Resolved (by amendment) | D-P6-22 in 06-CONTEXT.md:218-220 records the stamp-and-rebuild design. P6-PLN-03 is defined in `.planning/milestones/mcp-builtin-DUBIOUS-CHOICES.md:1358`. `completion-cache.ts:85-90` states the cross-process rebuild cost, and `pluginIndexKey` (`:173`) notes that its key names no implementation. ARCHITECTURE.md and 06-03-SUMMARY.md now say "stamped". The behavior did not change, which matches the second fix option. |
 
 ## Resolved Info
 

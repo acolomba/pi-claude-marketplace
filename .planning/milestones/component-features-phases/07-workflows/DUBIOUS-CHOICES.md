@@ -1,7 +1,7 @@
 # Phase 7 (Workflows): Dubious Choices Log
 
 Phase 7's share of the component-features review queue. Same shape as the root
-`.planning/DUBIOUS-CHOICES.md`; the parent folds these entries into it at
+`.planning/milestones/component-features-DUBIOUS-CHOICES.md`; the parent folds these entries into it at
 merge. Only the Phase 7 orchestrator session writes this file; subagents report
 theirs under `## Dubious Choices` and the orchestrator copies them here.
 

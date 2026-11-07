@@ -750,7 +750,7 @@ by DC-39 (commands for the model, command aliases).
 
 - **Phase / source:** parent, after the user approved parallel sessions on `features/` branches and pushing to origin (2026-11-01).
 - **Severity:** Low. **Status:** open.
-- **Decision:** Phases 3-7 each run in their own Claude Code cloud session on `features/component-features-phase-{3..7}`, branched from the milestone head `cf00b31` (Phase 1 complete, Phase 2 waves 1-3 merged; Phase 2's last plan finishes on the milestone branch in parallel). Each child runs `gsd-autonomous --only N`, follows `.planning/CHILD-SESSION-BRIEF.md`, keeps its own `P{N}-DC-NN` log in its phase directory, and lists CHANGELOG/README/PROJECT lines as parent lines. The parent merges the branches in the ROADMAP order (7, 6, 4, 3, 5, after Phase 2), runs `npm run check` on each combined tree, applies the parent lines, and folds each phase log into this file. Branch names follow AGENTS.md (`features/*`), not the ROADMAP's unnamed per-phase branches.
+- **Decision:** Phases 3-7 each run in their own Claude Code cloud session on `features/component-features-phase-{3..7}`, branched from the milestone head `cf00b31` (Phase 1 complete, Phase 2 waves 1-3 merged; Phase 2's last plan finishes on the milestone branch in parallel). Each child runs `gsd-autonomous --only N`, follows `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`, keeps its own `P{N}-DC-NN` log in its phase directory, and lists CHANGELOG/README/PROJECT lines as parent lines. The parent merges the branches in the ROADMAP order (7, 6, 4, 3, 5, after Phase 2), runs `npm run check` on each combined tree, applies the parent lines, and folds each phase log into this file. Branch names follow AGENTS.md (`features/*`), not the ROADMAP's unnamed per-phase branches.
 
 ### DC-28: Phase 2 executor choices
 
@@ -1047,7 +1047,7 @@ Copied verbatim from each phase directory on 2026-11-02, with headings shifted. 
 ### Phase 3 (Slash Commands): Dubious Choices Log
 
 Phase log for the child session on `features/component-features-phase-3`. Same
-shape as the root `.planning/DUBIOUS-CHOICES.md`; the parent merges these
+shape as the root log (now `.planning/milestones/component-features-DUBIOUS-CHOICES.md`); the parent merges these
 entries into it. Severity and status follow the root file's rules.
 
 
@@ -1521,7 +1521,7 @@ Source: `.planning/phases/03-slash-commands/DUBIOUS-CHOICES.md`.
 ### Phase 4 (Agents): Dubious Choices Log
 
 Phase log for the child session running Phase 4 of `component-features`, in the
-shape of the root `.planning/DUBIOUS-CHOICES.md`. The parent merges these
+shape of the root log (now `.planning/milestones/component-features-DUBIOUS-CHOICES.md`). The parent merges these
 entries into the root file. Severity and status follow the root file's rules.
 
 
@@ -1847,7 +1847,7 @@ Source: `.planning/phases/04-agents/04-DUBIOUS-CHOICES.md`.
 ### Phase 5 (Hooks): Dubious Choices Log
 
 The Phase 5 child session's review queue for the choices it made without the
-user. It has the same shape as the root `.planning/DUBIOUS-CHOICES.md`
+user. It has the same shape as the root log (now `.planning/milestones/component-features-DUBIOUS-CHOICES.md`)
 (DC-01..DC-27), and the parent merges it into that file. Only the Phase 5
 session writes this file. Each subagent ends its report with a
 `## Dubious Choices` section, and the session copies the items here.
@@ -1867,7 +1867,7 @@ session writes this file. Each subagent ends its report with a
   `Claude-Session: https://claude.ai/code/session_01EDUMG8q84hyEek3xsuxpLu`,
   the session that made them.
 - **Alternatives:** The `Claude-Session` line in
-  `.planning/CHILD-SESSION-BRIEF.md`
+  `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`
   (`session_01EDUMG5ARYqF6oZYKmj6oB3`), which names the parent session.
 - **Why dubious:** The brief says "End every commit message with exactly" that
   line. The session's own attribution instruction names this session, and a
@@ -2370,7 +2370,7 @@ Source: `.planning/phases/05-hooks/DUBIOUS-CHOICES.md`.
 
 Choices made without the user in the Phase 6 child session
 (`features/component-features-phase-6`). Same shape as the root
-`.planning/DUBIOUS-CHOICES.md`; the parent merges these entries into it.
+`.planning/milestones/component-features-DUBIOUS-CHOICES.md`; the parent merges these entries into it.
 Severity: High changes what a user sees or diverges from upstream; Medium is a
 judgment call a reviewer may reverse at low cost; Low is process, naming, or
 tooling. Status stays `open` until the user reviews it.
@@ -2675,7 +2675,7 @@ Source: `.planning/phases/06-mcp-servers/DUBIOUS-CHOICES.md`.
 ### Phase 7 (Workflows): Dubious Choices Log
 
 Phase 7's share of the component-features review queue. Same shape as the root
-`.planning/DUBIOUS-CHOICES.md`; the parent folds these entries into it at
+`.planning/milestones/component-features-DUBIOUS-CHOICES.md`; the parent folds these entries into it at
 merge. Only the Phase 7 orchestrator session writes this file; subagents report
 theirs under `## Dubious Choices` and the orchestrator copies them here.
 

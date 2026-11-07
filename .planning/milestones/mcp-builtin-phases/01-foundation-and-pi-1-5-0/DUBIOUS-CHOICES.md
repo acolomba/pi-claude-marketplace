@@ -1,7 +1,7 @@
 # Phase 1 (Foundation and Pi 1.5.0): Dubious Choices Log
 
 The choices Phase 1 made without the user, in the shape of the root
-`.planning/DUBIOUS-CHOICES.md` (read it for DC-01..DC-45, which these entries
+`.planning/milestones/component-features-DUBIOUS-CHOICES.md` (read it for DC-01..DC-45, which these entries
 stay consistent with). Only the parent session writes this file: each
 subagent ends its report with `## Dubious Choices` (or "None"), and the parent
 copies every item here. Phase 6 merges this file into the root log.

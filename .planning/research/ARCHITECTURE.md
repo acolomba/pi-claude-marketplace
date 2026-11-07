@@ -483,7 +483,7 @@ Without the adapter's line, for example after a `pi config` change, start 1 is a
 
 ## 3. Phase decomposition for parallel child sessions
 
-The model is the component-features precedent (`.planning/milestones/component-features-ROADMAP.md:48-198`, `.planning/CHILD-SESSION-BRIEF.md`): one serial foundation phase, then parallel phases that each depend only on it, each on its own `features/mcp-builtin-phase-N` branch, merged by the parent.
+The model is the component-features precedent (`.planning/milestones/component-features-ROADMAP.md:48-198`, `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`): one serial foundation phase, then parallel phases that each depend only on it, each on its own `features/mcp-builtin-phase-N` branch, merged by the parent.
 
 ```text
 W0  Phase 1  Foundation: Pi 1.5.0, the seam, the record field, the frozen harness   (one session)
@@ -588,7 +588,7 @@ Dependency notes:
 - Pi 1.5.0 (`npm pack @earendil-works/pi-coding-agent@1.5.0`): `docs/extensions.md` (lifecycle diagram, `resources_discover`, `mcp_servers_change`, "MCP Servers"), `docs/mcp.md` (names, `${}` and `!cmd`, "Replace the built-in MCP support"), `dist/core/agent-session.js:2678-2710,3016-3048`, `dist/core/extensions/runner.js:242-246,503-520`, `dist/extensions/mcp/index.js:224-262,971-1110`, `dist/extensions/mcp/runtime.js:39-70`, `dist/core/resolve-config-value.js`, `dist/core/settings-manager.js:120-170`, `dist/core/package-manager.js:764-770`, `dist/core/source-info.js`, `dist/core/mcp-servers.d.ts`. Confidence HIGH (primary source).
 - pi-mcp-adapter 7.0.0 (`npm pack`): `pi-builtin-mcp.ts`, `onboarding-state.ts`, `index.ts:1259,1365,1406,1705`. Confidence HIGH.
 - pi-subagents 0.84.0 (`npm pack`): `docs/agents.md:450,573`, `CHANGELOG.md:440,480,507,530`, `docs/extension-api.md:294`. Confidence HIGH for the documented behavior; the child-detection mechanism was not found (flag).
-- Precedent: `.planning/milestones/component-features-ROADMAP.md:48-198` (Parallelism, File ownership, Frozen after Phase 1, Milestone rules, Merge procedure), `.planning/CHILD-SESSION-BRIEF.md`.
+- Precedent: `.planning/milestones/component-features-ROADMAP.md:48-198` (Parallelism, File ownership, Frozen after Phase 1, Milestone rules, Merge procedure), `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`.
 
 ---
 *Architecture research for: mcp-builtin (Pi built-in MCP as an equal alternative to pi-mcp-adapter)*

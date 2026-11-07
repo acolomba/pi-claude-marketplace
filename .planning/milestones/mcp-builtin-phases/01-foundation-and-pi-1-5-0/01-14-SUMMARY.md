@@ -33,7 +33,7 @@ key-files:
     - .planning/phases/01-foundation-and-pi-1-5-0/01-CI-HANDOFF.md
     - .planning/phases/01-foundation-and-pi-1-5-0/01-FROZEN.md
   modified:
-    - .planning/CHILD-SESSION-BRIEF.md
+    - .planning/milestones/mcp-builtin-CHILD-SESSION-BRIEF.md
     - .planning/codebase/CONVENTIONS.md
     - .planning/codebase/STACK.md
     - .planning/codebase/ARCHITECTURE.md
@@ -91,7 +91,7 @@ coverage:
     requirement: "MDEC-01"
     verification:
       - kind: other
-        ref: "git ls-files check of every listed path and glob (58 entries, all tracked); grep -c 01-FROZEN.md .planning/CHILD-SESSION-BRIEF.md = 1"
+        ref: "git ls-files check of every listed path and glob (58 entries, all tracked); grep -c 01-FROZEN.md .planning/milestones/mcp-builtin-CHILD-SESSION-BRIEF.md = 1"
         status: pass
     human_judgment: true
     rationale: "Whether the record is complete against the ROADMAP text and the code is a reading judgment; no test asserts it"
@@ -196,7 +196,7 @@ and the `## CI timings` section of `01-FROZEN.md` to fill.
 
 - `.planning/phases/01-foundation-and-pi-1-5-0/01-CI-HANDOFF.md` - the CI measurement checklist and the D-CF1-16 row text
 - `.planning/phases/01-foundation-and-pi-1-5-0/01-FROZEN.md` - the frozen record
-- `.planning/CHILD-SESSION-BRIEF.md` - the PROJECT RULES pointer line and the completed frozen list
+- `.planning/milestones/mcp-builtin-CHILD-SESSION-BRIEF.md` - the PROJECT RULES pointer line and the completed frozen list
 - `.planning/codebase/CONVENTIONS.md` - the entry list, the frozen-export bullet, the marker count 44 with the four harness extension defaults
 - `.planning/codebase/STACK.md` - the entry list in the `fallow dead-code` bullet
 - `.planning/codebase/ARCHITECTURE.md` - the entry list in the circular-imports bullet

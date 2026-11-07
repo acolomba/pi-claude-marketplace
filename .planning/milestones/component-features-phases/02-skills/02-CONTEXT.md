@@ -385,7 +385,7 @@ user has not reviewed them yet.
   `droppedInvocationFieldsWarning`), 01-12 (`substituteArguments`,
   `parseArgumentNames`, `claudeEffort`), and 01-13
   (`expandContextInjections`, `selectPromptShell`, `bashMissingMessage`).
-- `.planning/DUBIOUS-CHOICES.md` DC-03..DC-10 and DC-13.
+- `.planning/milestones/component-features-DUBIOUS-CHOICES.md` DC-03..DC-10 and DC-13.
 - `docs/prd/pi-claude-marketplace-prd.md` SK-2, SK-3, SK-6.
 - https://code.claude.com/docs/en/skills (retrieved 2026-11-01).
 - `.agents/skills/cucumber/SKILL.md` and

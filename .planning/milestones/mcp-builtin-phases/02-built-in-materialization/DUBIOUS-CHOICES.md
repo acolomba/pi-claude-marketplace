@@ -1,7 +1,7 @@
 # Phase 2 (Built-in Materialization): Dubious Choices Log
 
 The choices Phase 2 made without the user, in the shape of the root
-`.planning/DUBIOUS-CHOICES.md` (DC-01..DC-45, which these entries stay
+`.planning/milestones/component-features-DUBIOUS-CHOICES.md` (DC-01..DC-45, which these entries stay
 consistent with) and of Phase 1's log (`P1-DC-NN`). Only this phase's parent
 session (the Phase 2 child session) writes this file: each subagent ends its
 report with `## Dubious Choices` (or "None"), and the session copies every
