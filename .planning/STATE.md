@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: mcp-builtin
 status: Awaiting next milestone
 stopped_at: "Milestone mcp-builtin archived, reviewed, and merged (PR #303)"
-last_updated: "2026-11-07T03:11:45.126Z"
+last_updated: "2026-11-07T20:53:21.019Z"
 last_activity: 2026-11-07
 last_activity_desc: "PR #303 merged; mcp-builtin review logs moved into the milestone archive"
-state_head: 93168c0758b5f2ecb082a4f0aa2d7a627126ac05
+state_head: 55cf139346f22e8fa3127680b4f387d00a8f149e
+milestone_name: MCP Built-in
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 55
   completed_plans: 55
   percent: 100
-milestone_name: MCP Built-in
 ---
 
 # Project State
@@ -35,7 +35,7 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 Phase: Milestone mcp-builtin complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-07 — PR #303 merged
+Last activity: 2026-11-07 - Completed quick task 261107-lth: install codegraph as a devDependency
 
 
 ### mcp-4 closeout
@@ -203,6 +203,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261106-u9b | MCP domain and soft-dependency types (REVIEWSUGG-01 types part) | 2026-11-07 | 0007063 | — | .planning/quick/261106-u9b-mcp-domain-and-soft-dependency-types-reviewsugg-01-types-par |
 | 261106-u9c | MCP implementation test gaps and the apply row fix (REVIEWSUGG-01 tests part) | 2026-11-07 | e27276c | — | .planning/quick/261106-u9c-mcp-implementation-test-gaps-reviewsugg-01-tests-part-see-pl |
 | 261107-36g | Name the unsupported kinds in the not-installable message (NOTINSTALLMSG-01) | 2026-11-07 | 93168c0 | — | [261107-36g-fix-notinstallmsg-01-name-the-unsupporte](./quick/261107-36g-fix-notinstallmsg-01-name-the-unsupporte/) |
+| 261107-lth | Install codegraph as a devDependency instead of globally | 2026-11-07 | 55cf1393 | — | [261107-lth-codegraph-local-install](./quick/261107-lth-codegraph-local-install/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
