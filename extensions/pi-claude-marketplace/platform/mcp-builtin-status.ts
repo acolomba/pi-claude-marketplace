@@ -91,19 +91,23 @@ const replacedRegistrations = new Set<string>();
 // refused. A later registration Pi accepts, or a removal, clears a name.
 const refusedRegistrations = new Set<string>();
 
-/** The record whose server the built-in registration step registers under a name. */
+/** The record and server the built-in registration step registers under a name. */
 export interface BuiltinServerOwner {
   readonly scope: Scope;
   readonly marketplace: string;
   readonly plugin: string;
+  /** The server's name as the plugin declares it. */
+  readonly server: string;
 }
 
 // ASTAT-01 / P2-DC-14: the owner of each name the registration step's last
 // sync asked Pi to register, as it decided: the user records first, then the
-// trusted project's, a later record of the same server name winning. A server
-// whose record could not be read keeps its earlier owner. The marketplace is
-// not part of the name, and two plugin and server pairs can fold to one name,
-// so another record can own a name.
+// trusted project's, a later server of the same name winning. An owner is the
+// record and the declared server the sync registered under the name, because
+// two servers of one record can give one name (D-MB-13). A server whose
+// record could not be read keeps its earlier owner. The marketplace is not
+// part of the name, and two plugin and server pairs can fold to one name, so
+// another record can own a name.
 let serverOwners: ReadonlyMap<string, BuiltinServerOwner> = new Map();
 
 /** Records the owner of each name the registration step's last sync decided. */

@@ -3,6 +3,7 @@ Feature: MCP server builtin status
 
   Plugin info shows each server's state as far as Pi's built-in MCP exposes it (BLT-05, BLT-04, D-MB-09), against a stub server, a scripted model, and a local marketplace.
   For a plugin an earlier release installed, it shows each server the extension registers (MREC-02). A name another Pi extension registered first, played by the built-in stand-in, reads not loaded (D-MB-29), and a server reads status unknown when another extension's tool makes Pi's tool list unreadable.
+  Two plugin servers that give one registered name run one server, the one declared later, and info reads the other as not loaded. Claude Code runs both; Pi's server name rule is the capability gap (D-MB-13).
   Each scenario but the disabled one compares the full info fields (P2-DC-16), which are re-verified after the read-time verdicts merge. The disabled one reads the server line in Pi's terminal.
 
   Scenario: Plugin info shows a connected built-in server as connected (BLT-05)
@@ -316,3 +317,34 @@ Feature: MCP server builtin status
       | plugin status                  | installed                                               |
       | plugin version                 | 1.0.0                                                   |
       | severity                       | info                                                    |
+
+  Scenario: Plugin info shows a server whose registered name a later server of the plugin takes as not loaded (D-MB-13)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with this text:
+      """
+      {"mcpServers": {"my.api": {"command": "pi-cm-no-such-program", "bareElicitationCapability": true}, "my_api": {"command": "pi-cm-no-such-program", "bareElicitationCapability": true}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model
+    When the user runs "/claude:plugin info demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind                           | plugin-info                                                                                                  |
+      | marketplace details autoupdate | false                                                                                                        |
+      | marketplace name               | fixtures                                                                                                     |
+      | marketplace scope              | user                                                                                                         |
+      | needs reload                   | false                                                                                                        |
+      | plugin components mcp          | [{"name":"plugin:demo:my_api","status":"not connected"},{"name":"plugin:demo:my.api","status":"not loaded"}] |
+      | plugin components resolved     | true                                                                                                         |
+      | plugin components skills       | demo-skill                                                                                                   |
+      | plugin id                      | demo@fixtures                                                                                                |
+      | plugin name                    | demo                                                                                                         |
+      | plugin reasons                 |                                                                                                              |
+      | plugin requires                | [{"companion":"builtin mcp","missing":false}]                                                                |
+      | plugin scope                   | user                                                                                                         |
+      | plugin status                  | installed                                                                                                    |
+      | plugin version                 | 1.0.0                                                                                                        |
+      | severity                       | info                                                                                                         |

@@ -17,6 +17,11 @@
  * because another extension registered it first, is noted for the session, so
  * info reads it as `not loaded` (D-MB-29).
  *
+ * D-MB-23 / P2-DC-14: one registration per name. Two servers can give one
+ * registered name (D-MB-13), such as `my.api` and `my_api` of one plugin. The
+ * one declared later registers, in the earlier one's place, and each server
+ * left out is logged.
+ *
  * MSEL-03: under pi-mcp-adapter, or with no implementation active, both steps
  * return before they read the context, the state, or Pi's registry. Pi reports
  * a registration nothing connects as an extension error, and the adapter
@@ -99,6 +104,14 @@ interface SessionFacts {
 
 type Registration = readonly [name: string, config: McpServerConfig, owner: BuiltinServerOwner];
 
+/** The record a server belongs to; its owner adds the declared server. */
+type RecordOwner = Omit<BuiltinServerOwner, "server">;
+
+/** The registration that holds a name, which a later one can replace. */
+interface Slot {
+  holder: Registration;
+}
+
 /**
  * A scope, or one record of it, whose state or servers could not be read. A
  * live server it owns keeps its registration on this pass.
@@ -156,7 +169,7 @@ function serverRegistrations(
   servers: readonly RecordedMcpServer[],
   ctx: McpSubstitutionContext,
   description: string | undefined,
-  owner: BuiltinServerOwner,
+  owner: RecordOwner,
 ): Registration[] {
   return servers
     .filter(({ config }) => BUILTIN_PROFILE.classify(config).kind === "supported")
@@ -170,7 +183,7 @@ function serverRegistrations(
         return [];
       }
 
-      return [[serverName, built, owner]];
+      return [[serverName, built, { ...owner, server: name }]];
     });
 }
 
@@ -287,6 +300,38 @@ async function desiredRegistrations(
   };
 }
 
+function describeRegistration([name, , owner]: Registration): string {
+  return `${name} for ${owner.server} of ${owner.plugin}@${owner.marketplace} (${owner.scope} scope)`;
+}
+
+/**
+ * D-MB-23 / P2-DC-14: one registration per name, in declaration order. A
+ * registration with a held name replaces the holder in its place, as Pi does
+ * when an extension registers its own name again. Each replaced registration
+ * is logged against the name's final holder.
+ */
+function oneRegistrationPerName(registrations: readonly Registration[]): Registration[] {
+  const slots = new Map<string, Slot>();
+  const leftOut: (readonly [Registration, Slot])[] = [];
+  for (const registration of registrations) {
+    const slot = slots.get(registration[0]);
+    if (slot === undefined) {
+      slots.set(registration[0], { holder: registration });
+    } else {
+      leftOut.push([slot.holder, slot]);
+      slot.holder = registration;
+    }
+  }
+
+  for (const [registration, { holder }] of leftOut) {
+    debugLog(
+      `MCP server ${describeRegistration(registration)} not registered: ${describeRegistration(holder)} holds its Pi namespace`,
+    );
+  }
+
+  return [...slots.values()].map(({ holder }) => holder);
+}
+
 function isOwnedByFailure(owner: BuiltinServerOwner, failure: ReadFailure): boolean {
   return (
     owner.scope === failure.scope &&
@@ -327,13 +372,14 @@ async function syncSession({ pi, ctx, snapshot }: BuiltinRegistrationStepInput):
   try {
     // The step's only read of the process environment. Trust is asked on
     // every call, since the user can trust a project mid-session.
-    const { registrations, failures } = await desiredRegistrations(
+    const desired = await desiredRegistrations(
       { cwd: ctx.cwd, env: process.env },
       ctx.isProjectTrusted(),
     );
+    const registrations = oneRegistrationPerName(desired.registrations);
     // A scope or record that failed to read keeps its live servers: they are
     // neither unregistered nor dropped from the owner map.
-    const retained = retainedOwners(pi, failures);
+    const retained = retainedOwners(pi, desired.failures);
     // P2-DC-14: info reads which record each name belongs to from here.
     noteBuiltinServerOwners(
       new Map([

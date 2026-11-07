@@ -46,13 +46,15 @@
 // `mcp.json` files holds its namespace (BLT-04, P2-DC-08): the user's file,
 // and the project's only while trusted, read synchronously through the bridge
 // (P2-DC-26). Then a server whose registered name the registration step's
-// last sync gave to another record does not read that record's state: a user
-// row reads `overridden by project scope` when a project record owns the name
-// (ASTAT-01, P2-DC-14), and any other row reads `not loaded`. The owner is the
-// step's own decision, so a project server the step skipped, as blocked,
-// malformed, outside its clone root, or unreadable, overrides nothing, and
-// the owner's marketplace and plugin count, because the registered name does
-// not name the marketplace and can fold two plugins together. Then a server
+// last sync gave to another record, or to another server of the row's own
+// record, does not read that server's state: a user row reads `overridden by
+// project scope` when a project record owns the name (ASTAT-01, P2-DC-14,
+// D-MB-23), and any other row reads `not loaded`. The owner is the step's own
+// decision, so a project server the step skipped, as blocked, malformed,
+// outside its clone root, or unreadable, overrides nothing. The owner's
+// marketplace, plugin, and declared server count, because the registered name
+// does not name the marketplace and can fold two plugins, or two servers of
+// one plugin, together (D-MB-13). Then a server
 // whose registration Pi refused reads `not loaded`, because another extension
 // registered the name first and Pi lists that extension's server under it
 // (D-MB-29, P2-DC-46). Otherwise the server reads the reader's answer.
@@ -185,17 +187,25 @@ function mcpJsonFiles(lookup: BuiltinLookup): readonly string[] {
 }
 
 /**
- * ASTAT-01 / P2-DC-14: the state of a server whose registered name another
- * record owns, or `undefined` when the row's own record owns it or no record
- * does.
+ * ASTAT-01 / P2-DC-14 / D-MB-13: the state of a server whose registered name
+ * another record, or another server of the row's own record, owns, or
+ * `undefined` when the row's own server owns it or no server does.
  */
-function ownedElsewhere(block: PluginInfoMessage, name: string): McpServerStatus | undefined {
+function ownedElsewhere(
+  block: PluginInfoMessage,
+  name: string,
+  server: string,
+): McpServerStatus | undefined {
   const owner = builtinServerOwner(name);
+  if (owner === undefined) {
+    return undefined;
+  }
+
   if (
-    owner === undefined ||
-    (owner.scope === block.marketplaceScope &&
-      owner.marketplace === block.marketplaceName &&
-      owner.plugin === block.plugin.name)
+    owner.scope === block.marketplaceScope &&
+    owner.marketplace === block.marketplaceName &&
+    owner.plugin === block.plugin.name &&
+    owner.server === server
   ) {
     return undefined;
   }
@@ -208,8 +218,9 @@ function ownedElsewhere(block: PluginInfoMessage, name: string): McpServerStatus
 /**
  * BLT-05: one server's built-in state, in a fixed order: an `mcp.json`
  * server that holds its namespace (BLT-04, T-02-19), so a same-named
- * `mcp.json` server never reads as the plugin's; then a name another record
- * owns; then a name whose registration Pi refused (D-MB-29); then the
+ * `mcp.json` server never reads as the plugin's; then a name another record,
+ * or another server of the row's own record, owns (D-MB-13); then a name
+ * whose registration Pi refused (D-MB-29); then the
  * reader's answer under the registered name.
  */
 function builtinStatus(
@@ -223,7 +234,7 @@ function builtinStatus(
     return "overridden by mcp.json";
   }
 
-  const owned = ownedElsewhere(block, name);
+  const owned = ownedElsewhere(block, name, server);
   if (owned !== undefined) {
     return owned;
   }
