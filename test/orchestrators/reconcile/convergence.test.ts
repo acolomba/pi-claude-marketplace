@@ -28,6 +28,7 @@ import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { seedWarmMirror } from "../plugin/warm-mirror-seed.ts";
 
+import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type {
   IndexFailure,
   RecordDeclarations,
@@ -1474,6 +1475,10 @@ test("D-12: a partial candidate a dependent's range does not admit is held, not 
 
 const SSE_SERVER = { type: "sse", url: "http://127.0.0.1:9/sse" } as const;
 const STDIO_SERVER = { command: "tools-server" } as const;
+/** pi-mcp-adapter blocks this server, and Pi's built-in MCP runs it. */
+const ELICITATION_SERVER = { command: "node", bareElicitationCapability: true } as const;
+/** Neither implementation runs this server. */
+const WS_SERVER = { type: "ws", url: "ws://127.0.0.1:9/ws" } as const;
 
 /** Gives the plugin under `root` an `.mcp.json` that declares `servers`. */
 async function stageMcpServers(root: string, servers: Record<string, unknown>): Promise<void> {
@@ -1492,6 +1497,7 @@ function neutralMcpRecord(servers: Record<string, unknown>): Partial<PluginRecor
 for (const { mcpImplementation, partial } of [
   { mcpImplementation: "builtin", partial: true },
   { mcpImplementation: "adapter", partial: false },
+  { mcpImplementation: "none", partial: false },
 ] as const) {
   test(`D-P3-13: a record with an sse server moves to a candidate that keeps it, partial ${partial} under ${mcpImplementation}`, async (t) => {
     // arrange
@@ -1718,6 +1724,112 @@ test("D-P3-14: a record whose catalog changed nothing plans no move after a swit
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
+const DEMO_MCP_DECLINE: ConvergencePlan = {
+  moves: [],
+  holds: [],
+  declines: [
+    {
+      scope: "project",
+      marketplace: "tools",
+      plugin: "demo",
+      version: "1.0.0",
+      unsupported: ["mcpServers"],
+    },
+  ],
+};
+
+const SPLIT_SERVERS = { events: SSE_SERVER, asker: ELICITATION_SERVER } as const;
+
+for (const { title, mcpImplementation, servers, expectedPlan } of [
+  {
+    title:
+      "D-P3-13 / D-MB-05: with no MCP implementation, a candidate that adds servers each implementation runs only some of moves without consent",
+    mcpImplementation: "none",
+    servers: SPLIT_SERVERS,
+    expectedPlan: { moves: [demoMove()], holds: [], declines: [] },
+  },
+  {
+    title:
+      "D-P3-13: under pi-mcp-adapter, a candidate that adds servers each implementation runs only some of needs consent",
+    mcpImplementation: "adapter",
+    servers: SPLIT_SERVERS,
+    expectedPlan: DEMO_MCP_DECLINE,
+  },
+  {
+    title:
+      "D-P3-13: under Pi's built-in MCP, a candidate that adds servers each implementation runs only some of needs consent",
+    mcpImplementation: "builtin",
+    servers: SPLIT_SERVERS,
+    expectedPlan: DEMO_MCP_DECLINE,
+  },
+  {
+    title:
+      "D-P3-13 / D-MB-05: with no MCP implementation, a candidate that adds a server neither implementation runs needs consent",
+    mcpImplementation: "none",
+    servers: { live: WS_SERVER },
+    expectedPlan: DEMO_MCP_DECLINE,
+  },
+] as const) {
+  test(title, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, `added-${mcpImplementation}`);
+    const state = await stageDemo(fixture, "1.1.0", neutralMcpRecord({ tools: STDIO_SERVER }));
+    await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+      tools: STDIO_SERVER,
+      ...servers,
+    });
+
+    // act
+    const plan = await plannedMoves({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      mcpImplementation,
+    });
+
+    // assert
+    assert.deepStrictEqual(plan, expectedPlan);
+  });
+}
+
+for (const { title, servers, expectedPlan } of [
+  {
+    // The stored verdict is not the neutral one, but the neutral view drops
+    // nothing, so the move is not partial.
+    title:
+      "D-MB-06 / D-P3-13: with no MCP implementation, an unreadable legacy record moves without consent for a server only pi-mcp-adapter blocks",
+    servers: { asker: ELICITATION_SERVER },
+    expectedPlan: { moves: [demoMove()], holds: [], declines: [] },
+  },
+  {
+    title:
+      "D-MB-06 / D-P3-13: with no MCP implementation, an unreadable legacy record still needs consent for a server neither implementation runs",
+    servers: { live: WS_SERVER },
+    expectedPlan: DEMO_MCP_DECLINE,
+  },
+] as const) {
+  test(title, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, "legacy-none");
+    const state = await stageDemo(fixture, "1.1.0", legacyMcpRecord(["tools"]));
+    await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "demo"), {
+      tools: STDIO_SERVER,
+      ...servers,
+    });
+
+    // act
+    const plan = await plannedMoves({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      mcpImplementation: "none",
+    });
+
+    // assert
+    assert.deepStrictEqual(plan, expectedPlan);
+  });
+}
+
 const COMPONENT_FILES = {
   skills: path.join("skills", "tool", "SKILL.md"),
   agents: path.join("agents", "helper.md"),
@@ -1931,6 +2043,7 @@ async function settle(
   fixture: Fixture,
   state: ExtensionState,
   lift: readonly string[] = [],
+  mcpImplementation: ActiveMcpImplementation = "adapter",
 ): Promise<Awaited<ReturnType<typeof settleMoveCascade>> & { readonly input: ReconcilePlan }> {
   const verdict = await buildScopeSatisfactionVerdict({ state, locations: fixture.locations });
   const input = planFrom(verdict, lift);
@@ -1938,7 +2051,7 @@ async function settle(
     scope: "project",
     state,
     locations: fixture.locations,
-    mcpImplementation: "adapter",
+    mcpImplementation,
     plan: input,
     verdict,
     replan: (released) => planFrom(released, lift),
@@ -2005,6 +2118,59 @@ test("APPLY1-01: a dependent held down by an earlier pass is enabled only after 
   assert.deepStrictEqual(settled.plan.pluginsToEnable, [{ ...DEMO_OP, plugin: "widget" }]);
   assert.deepStrictEqual(settled.preview.pluginsToEnable, []);
 });
+
+/** Nothing moves, nothing waits, and `widget` stays held down. */
+const HELD_WIDGET = { cascadeMoves: undefined, deferredEnables: [], heldDown: ["widget"] } as const;
+
+for (const { title, mcpImplementation, expected } of [
+  {
+    title:
+      "APPLY1-01 / D-P3-13: with no MCP implementation, a held-down dependent is released by its dependency's move to servers each implementation runs only some of",
+    mcpImplementation: "none",
+    expected: {
+      cascadeMoves: ["zcore@tools", "widget@tools"],
+      deferredEnables: [{ ...DEMO_OP, plugin: "widget" }],
+      heldDown: [],
+    },
+  },
+  {
+    title:
+      "APPLY1-01 / D-P3-13: under pi-mcp-adapter, a held-down dependent stays held while its dependency's move to servers each implementation runs only some of needs consent",
+    mcpImplementation: "adapter",
+    expected: HELD_WIDGET,
+  },
+  {
+    title:
+      "APPLY1-01 / D-P3-13: under Pi's built-in MCP, a held-down dependent stays held while its dependency's move to servers each implementation runs only some of needs consent",
+    mcpImplementation: "builtin",
+    expected: HELD_WIDGET,
+  },
+] as const) {
+  test(title, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, `deferred-split-${mcpImplementation}`);
+    const state = await stageTools(fixture, [
+      { ...CO_SHIPPED[0], record: { enabled: false, dependencyDisabled: true } } as StagedPlugin,
+      { name: "zcore", offered: "2.0.0" },
+    ]);
+    await stageMcpServers(path.join(marketplaceRootOf(fixture, "tools"), "zcore"), SPLIT_SERVERS);
+
+    // act
+    const settled = await settle(fixture, state, ["widget"], mcpImplementation);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        cascadeMoves: settled.cascade?.plan.moves.map(
+          (move) => `${move.plugin}@${move.marketplace}`,
+        ),
+        deferredEnables: settled.deferredEnables,
+        heldDown: settled.plan.pluginsToDependencyDisable.map((op) => op.plugin),
+      },
+      expected,
+    );
+  });
+}
 
 test("APPLY1-01: a held-down dependent that waits on no move is enabled with the toggles", async (t) => {
   // arrange

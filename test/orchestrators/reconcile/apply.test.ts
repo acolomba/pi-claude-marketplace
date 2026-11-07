@@ -8758,6 +8758,47 @@ function coShippedSeed(widget: Omit<RecordSeed, "pluginRoot" | "supported"> = {}
 }
 
 /**
+ * D-P3-13: `coShippedSeed` with `widget` held down, where `zcore` 2.0.0 adds
+ * servers that each MCP implementation runs only some of, so only the run's
+ * implementation decides whether the move it waits on lands. `configInstall`
+ * also declares an unrecorded `extra`, whose install makes apply plan the
+ * toggles again (D-09-07). Returns the declared plugins.
+ */
+async function seedSplitDependencyScope(
+  t: TestContext,
+  label: string,
+  options: { readonly configInstall: boolean },
+): Promise<{
+  readonly cwd: string;
+  readonly project: ScopedLocations;
+  readonly plugins: readonly string[];
+}> {
+  const seed = coShippedSeed({ enabled: false, dependencyDisabled: true });
+  const extra = options.configInstall ? ["extra"] : [];
+  const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, label, {
+    ...seed,
+    trees: {
+      ...seed.trees,
+      ...Object.fromEntries(extra.map((plugin) => [plugin, { skill: "clean" } as const])),
+    },
+    supported: { ...seed.supported, extra: ["skills"] },
+  });
+  await withoutRecords(project, extra);
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "zcore", ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        events: { type: "sse", url: "http://127.0.0.1:9/sse" },
+        asker: { command: "node", bareElicitationCapability: true },
+      },
+    }),
+  );
+  const plugins = ["widget", "zcore", ...extra];
+  await declareEnabled(project, cwd, plugins);
+  return { cwd, project, plugins };
+}
+
+/**
  * Records `widget` at a per-commit copy under the plugin clones whose manifest
  * links to a file in the project directory, outside its plugin directory.
  */
@@ -10172,6 +10213,127 @@ describe("applyReconcile catalog convergence", () => {
     assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.1.0", true]);
     verifyBoundary();
   });
+
+  const SPLIT_MOVE_DECLINED = [
+    {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● zcore v1.0.0 (partially-upgradable) {unsupported mcp}\n    Run update --partial on this plugin to update it with the supported components.\n\nReconcile: 1 warning",
+      severity: "warning",
+    },
+  ];
+  const SPLIT_MOVE_DECLINED_AFTER_INSTALL = [
+    {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● extra v1.0.0 (installed)\n  ● zcore v1.0.0 (partially-upgradable) {unsupported mcp}\n    Run update --partial on this plugin to update it with the supported components.\n\nReconcile: 1 warning, 1 success\n\n/reload to pick up changes",
+      severity: "warning",
+    },
+  ];
+
+  for (const { title, mcpImplementation, configInstall, expectedNotifications, expectedStates } of [
+    {
+      title:
+        "D-P3-13 / APPLY1-01: with no MCP implementation, a held-down plugin is enabled after its dependency moves to servers each implementation runs only some of",
+      mcpImplementation: "none",
+      configInstall: false,
+      expectedNotifications: [
+        {
+          message:
+            "● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated) {requires mcp}\n  ● widget v1.0.0 → v1.1.0 (updated)\n\nReconcile: 2 successes\n\n/reload to pick up changes",
+        },
+      ],
+      expectedStates: [
+        ["1.1.0", true, undefined],
+        ["2.0.0", true, undefined],
+      ],
+    },
+    {
+      title:
+        "D-P3-13 / APPLY1-01: under pi-mcp-adapter, a held-down plugin stays down while its dependency's move to servers each implementation runs only some of needs consent",
+      mcpImplementation: "adapter",
+      configInstall: false,
+      expectedNotifications: SPLIT_MOVE_DECLINED,
+      expectedStates: [
+        ["1.0.0", false, true],
+        ["1.0.0", true, undefined],
+      ],
+    },
+    {
+      title:
+        "D-P3-13 / APPLY1-01: under Pi's built-in MCP, a held-down plugin stays down while its dependency's move to servers each implementation runs only some of needs consent",
+      mcpImplementation: "builtin",
+      configInstall: false,
+      expectedNotifications: SPLIT_MOVE_DECLINED,
+      expectedStates: [
+        ["1.0.0", false, true],
+        ["1.0.0", true, undefined],
+      ],
+    },
+    {
+      title:
+        "D-09-07 / D-P3-13: with no MCP implementation, the re-plan after a config install keeps the deferred enable of a held-down plugin whose dependency moves to servers each implementation runs only some of",
+      mcpImplementation: "none",
+      configInstall: true,
+      expectedNotifications: [
+        {
+          message:
+            "● mp [project]\n  ● extra v1.0.0 (installed)\n  ● zcore v1.0.0 → v2.0.0 (updated) {requires mcp}\n  ● widget v1.0.0 → v1.1.0 (updated)\n\nReconcile: 3 successes\n\n/reload to pick up changes",
+        },
+      ],
+      expectedStates: [
+        ["1.1.0", true, undefined],
+        ["2.0.0", true, undefined],
+        ["1.0.0", true, undefined],
+      ],
+    },
+    {
+      title:
+        "D-09-07 / D-P3-13: under pi-mcp-adapter, the re-plan after a config install keeps a held-down plugin down while its dependency's move needs consent",
+      mcpImplementation: "adapter",
+      configInstall: true,
+      expectedNotifications: SPLIT_MOVE_DECLINED_AFTER_INSTALL,
+      expectedStates: [
+        ["1.0.0", false, true],
+        ["1.0.0", true, undefined],
+        ["1.0.0", true, undefined],
+      ],
+    },
+    {
+      title:
+        "D-09-07 / D-P3-13: under Pi's built-in MCP, the re-plan after a config install keeps a held-down plugin down while its dependency's move needs consent",
+      mcpImplementation: "builtin",
+      configInstall: true,
+      expectedNotifications: SPLIT_MOVE_DECLINED_AFTER_INSTALL,
+      expectedStates: [
+        ["1.0.0", false, true],
+        ["1.0.0", true, undefined],
+        ["1.0.0", true, undefined],
+      ],
+    },
+  ] as const) {
+    test(title, async (t) => {
+      // arrange
+      const { cwd, project, plugins } = await seedSplitDependencyScope(
+        t,
+        `split-dependency-${mcpImplementation}`,
+        { configInstall },
+      );
+      const run = runWithSoftDeps({
+        piSubagentsLoaded: false,
+        mcpImplementation,
+        workflowEngineLoaded: false,
+      });
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+      const { gitOps } = createOfflineGitOps();
+
+      // act
+      await applyReconcile({ ctx, run, cwd, scope: "project", gitOps });
+
+      // assert
+      assert.deepStrictEqual(notifications, expectedNotifications);
+      assert.deepStrictEqual(await recordStates(project, plugins), expectedStates);
+      verifyBoundary();
+    });
+  }
 
   test("APL-02 / D-08: a path-source plugin the catalog moved is updated, recorded and reported with the reload trailer", async (t) => {
     // arrange
