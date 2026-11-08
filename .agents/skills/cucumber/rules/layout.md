@@ -136,10 +136,10 @@ Product paths are relative to `extensions/pi-claude-marketplace/`, step module p
 No stream edits these files. A change that a stream needs is a parent line, which the parent session applies on the milestone branch.
 
 - Build and CI: `package.json`, `package-lock.json`, `.github/workflows/ci.yml`, `cucumber.json`, `scripts/check-features.mjs`, `scripts/install-test-peers.mjs`, `.fallowrc.json`, `rule-packs/architecture.json`, and `eslint.config.js`.
-- Harness: `test/e2e/_rpc.ts`, `features/support/**`, and `features/lib/**`, with every library Phase 1 adds. A stream adds no file under `features/support/` or `features/lib/`. A small helper private to one of its step modules stays in that module.
-- Step modules: the shared modules `command`, `config`, `session`, `mcp-configuration`, `mcp-implementation`, `git-host`, `scope-state`, `claude-code-settings`, `model`, `completion`, `companion`, and `npm-registry`; every topic module, such as `plugin/publishing`, `plugin/installation`, `marketplace/publishing`, `marketplace/checkout`, `hook/runs`, `hook/session`, and `hook/tool-use`; and every other step module that exists when Phase 1 ends. A stream adds only the verb module that the table below gives it.
+- Harness: `test/e2e/_rpc.ts`, `features/support/**`, and `features/lib/**`, with every library Phase 1 adds: `features/lib/github-device-flow/**`, `features/lib/pi-json-mode.ts`, and `features/lib/plugin-picker.ts`. Also the harness tests that Phase 1 added or changed: `test/architecture/github-device-flow-redirect.test.ts`, `test/architecture/pi-tui-screen.test.ts`, and `test/architecture/hermetic-git-environment.test.ts`. A stream adds no file under `features/support/` or `features/lib/`. A small helper private to one of its step modules stays in that module.
+- Step modules: the shared modules `command`, `config`, `session`, `mcp-configuration`, `mcp-implementation`, `git-host`, `scope-state`, `claude-code-settings`, `model`, `completion`, `companion`, and `npm-registry`; every topic module, such as `plugin/publishing`, `plugin/installation`, `marketplace/publishing`, `marketplace/checkout`, `hook/runs`, `hook/session`, and `hook/tool-use`, and the topic module `plugin/picker.steps.ts` that Phase 1 adds; and every other step module that exists when Phase 1 ends. A stream adds only the verb module that the table below gives it.
 - This skill, `.agents/skills/cucumber/**`.
-- Product: `platform/pi-api.ts` and any seam that Phase 1 adds for a stand-in.
+- Product: `platform/pi-api.ts`. Phase 1 checked that it already re-exports every Pi event type that the streams read, and changed nothing. Phase 1 added no product seam for a stand-in (D-BG-01).
 - Closed sets, frozen except for additions at the end: `shared/notification-types.ts` `Reason`, `shared/notification-wire.ts` `REASONS`, the reason table in `shared/notify-reasons.ts`, `test/architecture/notify-closed-set-locks.test.ts`, `docs/json-output.md`, and the catalog counters (`docs/output-catalog.md`, `EXPECTED_STATE_COUNT`, and `EXPECTED_UTF8_BYTES`).
 
 ### What each phase owns
@@ -189,7 +189,37 @@ Phase 1 creates none of these verb modules. It creates only the new feature file
 
 Each seed scenario that Phase 1 puts in a stream's feature file passes to that stream. The stream may rewrite the seed, but it keeps every shared step that the seed uses in use, because `npm run check:features` fails on an unused step and the stream cannot remove one from a frozen module.
 
-The per-stream list of seed steps follows when the seeds land.
+Each entry below names the stream's seeds by title, then the steps that only those seeds use, with their modules. The stream keeps each of these steps in use. The seeds also use common steps, such as `the user has run {string}` in `command.steps.ts` and the publishing steps in `marketplace/publishing.steps.ts`. Other scenarios use those steps too, so they stay in use without the seeds. A column that the seeds use is named too, although `npm run check:features` does not check columns.
+
+- Phase 2, `hook/async.feature`: "An async rewake hook goes on running after the prompt that started it", "An async rewake hook shows the user its summary when it exits", "An async rewake hook that exits 2 puts its message into the model's next call", "A hook process that a dead Pi left stops when Pi starts again", and "Reloading Pi stops its waiting hook processes".
+  - `hook/prompt-and-stop.steps.ts`: `the user prompts {string} and the hook {string} goes on in the background` and `the user has prompted {string} and the hook {string} goes on in the background`.
+  - `hook/session.steps.ts`: `the user releases the hook {string} with the hooks recording`, `the user has released the hook {string}`, `the user has started pi in the terminal and the hook {string} goes on in the background`, `pi's process has died, leaving its hook processes running`, and `the user starts pi again with the hooks recording`.
+  - `hook/runs.steps.ts`: `the hook processes record these lifecycle events:` and `no hook process is running`.
+  - `hook/messages.steps.ts`: `the hooks show the user these rewake summaries:`.
+  - The hooks table columns `async rewake`, `waits`, `rewake message`, and `rewake summary`, in `hook/runs.steps.ts`'s `the published plugin {string} of the marketplace {string} has these hooks, each recording its runs:`.
+- Phase 3, `hook/stop-failure.feature`: "A turn the model ends in an authentication error runs the StopFailure hook". It uses common steps only, and the `error` column of `the scripted model plays these steps:` in `model.steps.ts`.
+- Phase 4: no seed. Phase 4 creates `hook/tool-failure.feature`.
+- Phase 5, `hook/compaction.feature`: "A turn that fills the context window runs PostCompact with trigger auto". It uses common steps only, among them `pi keeps only one recent token when the hooks session compacts` in `hook/session.steps.ts`, and the `context tokens` column of `the scripted model plays these steps:`.
+- Phase 6: no seed. Phase 6 creates `hook/session-end.feature`.
+- Phase 7, `plugin/state-migration.feature`: "Pi lists the plugin of an installation record that release 0.6.0 wrote", "Pi lists the plugin of an installation record that release 0.19.2 wrote", and "A newer installation record is refused and left as it was".
+  - `plugin/installation.steps.ts`: `the installation record of the {word} scope is rewritten as release {string} wrote it` and `the installation record of the {word} scope is rewritten with a schema version this release does not read`.
+- Phase 8, `plugin/config-migration.feature`: "The first load after an upgrade from release 0.4.3 writes the config from the records" and "The first load after the user deleted the config writes it without a disabled plugin's enabled state". The second seed pins a product gap that Phase 8 fixes (CFGMIG-01).
+  - `plugin/installation.steps.ts`: `the {word} scope holds what release 0.4.3 left: its installation record and no config`.
+  - `config.steps.ts`: `the user has deleted the config files of the {word} scope`.
+- Phase 9, `mcp-server/legacy-move.feature`: "A load moves a plugin's servers out of a release 0.19.2 mcp.json and keeps the user's own server" (`@mcp`).
+  - `mcp-configuration.steps.ts`: `the mcp.json file of the {word} scope holds the servers of the plugin {string} as release 0.19.2 wrote them, beside the user's own server {string}` and `the mcp configuration file {string} of the {word} scope holds this text:`.
+- Phase 10, `plugin/model-tools.feature`: "The model reads the marketplaces the list tool returns" and "A plugin list call with a scope the tool does not accept reaches the model as invalid arguments". They use common steps only. The second seed reads Pi's argument-validation text through the projection in `features/lib/upstream/pi.ts`.
+- Phase 11, `marketplace/device-flow.feature`: "Adding a private GitHub marketplace signs in through Device Flow and clones it" and "A terminal session of a sign-in scenario sends the background update's GitHub requests to the git host".
+  - `git-host.steps.ts`: `github's sign-in answers its polls with these outcomes:`, `the user's git keeps credentials in its credential store`, `pi runs with github's requests routed to the stand-ins`, `github's sign-in receives these requests:`, `github's sign-in receives no request`, and `pi routes these github requests:`.
+- Phase 12, `plugin/browse.feature`: "The terminal picker lists the marketplaces of both scopes", "Choosing a plugin in the terminal picker installs it", and "Cancelling the terminal picker installs nothing". The first seed pins the `0 plugin(s)` count that Phase 12 checks (BROWSE-01).
+  - `plugin/picker.steps.ts`: `the user opens the plugin picker with {string} in pi's terminal`, `the plugin picker shows the screen {string} with these rows:`, `the user chooses {string} in the plugin picker`, and `the user cancels the plugin picker`.
+- Phase 13: no seed in `plugin/prune.feature`.
+- Phase 14, `plugin/bootstrap.feature`: "Bootstrapping in json mode reports the result it reports over rpc" and "Bootstrapping in the terminal shows the result it reports over rpc".
+  - `command.steps.ts`: `the user runs {string} in pi's json mode`, `the user runs {string} in pi's terminal`, and `pi's terminal shows this result of the command:`.
+- Phase 15, `marketplace/state-lock.feature`: "Removing a marketplace while a process that died left the state lock of its scope removes it".
+  - `scope-state.steps.ts`: `a process that died left the state lock of the {word} scope`.
+- Phase 16, `plugin/subagent-child.feature`: "A background child's load leaves a declared plugin pending while autoapply is on".
+  - `companion.steps.ts`: `pi runs with the scripted model as a pi-subagents background child`.
 
 ### Parent-owned files
 

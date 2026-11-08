@@ -154,23 +154,34 @@ a parent line, which the parent applies on the milestone branch):
   `scripts/install-test-peers.mjs`, `.fallowrc.json`,
   `rule-packs/architecture.json`, and `eslint.config.js`.
 - Harness: `test/e2e/_rpc.ts`, `features/support/**`, and `features/lib/**`,
-  including every library Phase 1 adds. A stream adds no file under
-  `features/support/` or `features/lib/`; a small helper private to one of its
-  step modules stays in that module.
+  including every library Phase 1 adds: `features/lib/github-device-flow/**`
+  (the Device Flow stand-in, the redirect extension, and its routing rule),
+  `features/lib/pi-json-mode.ts`, and `features/lib/plugin-picker.ts`. Also the
+  harness tests Phase 1 added or changed:
+  `test/architecture/github-device-flow-redirect.test.ts`,
+  `test/architecture/pi-tui-screen.test.ts`, and
+  `test/architecture/hermetic-git-environment.test.ts`. A stream adds no file
+  under `features/support/` or `features/lib/`; a small helper private to one
+  of its step modules stays in that module.
 - Step modules: the shared modules `command`, `config`, `session`,
   `mcp-configuration`, `mcp-implementation`, `git-host`, `scope-state`,
   `claude-code-settings`, `model`, `completion`, `companion`, and
   `npm-registry`; every topic module, such as `plugin/publishing`,
   `plugin/installation`, `marketplace/publishing`, `marketplace/checkout`,
-  `hook/runs`, `hook/session`, and `hook/tool-use`; and every other step module
+  `hook/runs`, `hook/session`, and `hook/tool-use`, and the topic module
+  `plugin/picker.steps.ts` that Phase 1 adds; and every other step module
   that exists when Phase 1 ends. A stream adds only the verb module the table
   below gives it.
 - `.agents/skills/cucumber/**`. Phase 1 gives `rules/layout.md` a "Behavioral
   gaps" section that copies this ownership table and reserves each stream's
   feature file and verb module name.
-- Product: `platform/pi-api.ts` (Phase 1 widens every Pi event and API type the
-  streams read, such as a turn that ends in error, an automatic compaction, and
-  the session shutdown reasons) and any seam Phase 1 adds for a stand-in.
+- Product: `platform/pi-api.ts`. Phase 1 checked that it already re-exports
+  every Pi event type the streams read (`AgentEndEvent`, `AgentSettledEvent`,
+  `SessionCompactEvent`, `SessionShutdownEvent`, `ToolResultEvent`, and
+  `ExtensionAPI`, which carry a turn that ends in error, an automatic
+  compaction, and the session shutdown reasons), and changed nothing. Phase 1
+  added no product seam for a stand-in: the Device Flow redirect runs inside
+  the harness (D-BG-01), so D-BG-02 was not applied.
 - Closed sets, frozen except for additions at the end (see Milestone rules).
 
 **Seeded by Phase 1, then handed over.** Phase 1 puts each seed scenario in the
@@ -198,13 +209,13 @@ step, and the stream cannot remove one from a frozen module.
 | 15 Marketplace state lock | `marketplace/state-lock.feature` (exists) | NEW `marketplace/state-lock.steps.ts` | `orchestrators/marketplace/autoupdate.ts`; `edge/handlers/marketplace/autoupdate.ts`; `transaction/with-state-guard.ts` |
 | 16 Background-child load | NEW `plugin/subagent-child.feature` | NEW `plugin/subagent-child.steps.ts` | `platform/subagent-child.ts`; the background-child gates in `orchestrators/reconcile/load.ts` and `orchestrators/mcp/agent-grants-step.ts` |
 
-**What exists today** (checked 2026-11-07). Of the stream feature files, only
-`plugin/{browse,prune,bootstrap}.feature` and `marketplace/state-lock.feature`
-exist. All their steps live in shared and topic modules (`command`, `config`,
-`scope-state`, `git-host`, `marketplace/publishing`, `marketplace/checkout`,
-`plugin/installation`). None of the four has a verb module, so each of Phases
-12-15 creates its own. The other eleven feature files and all fifteen verb
-modules are new. Two existing files that no stream owns already pin part of the
+**What exists today** (checked 2026-11-08, at the end of Phase 1). Every
+stream feature file exists with its seeds, except `hook/tool-failure.feature`
+and `hook/session-end.feature`, which have no seed and which Phases 4 and 6
+create. `plugin/prune.feature` has no seed either; it existed before Phase 1.
+All the seeds' steps live in shared and topic modules, and the cucumber
+skill's layout rules list them per stream. No verb module exists yet, so each
+of Phases 2-16 creates its own. Two existing files that no stream owns already pin part of the
 hook requirements: `hook/session.feature` (PostCompact after `/compact` with
 trigger `manual`, a trigger matcher on a manual compaction, and SessionEnd with
 `clear`, `resume`, `other`, and `prompt_input_exit`) and `hook/tool-use.feature`
