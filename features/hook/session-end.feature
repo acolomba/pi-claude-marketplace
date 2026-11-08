@@ -127,3 +127,72 @@ Feature: Hook session end
     Then the hooks record these runs:
       | event      | session | reason            | cwd           | transcript path | arguments             | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                   | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | SessionEnd | first   | prompt_input_exit | {project dir} |                 | end-prompt-input-exit | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {agent dir}/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+  Scenario Outline: A SessionEnd hook that fails or outlasts its budget does not keep the next session from starting
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher | form   | exit code   | stderr   | timeout   | sleep   |
+      | end   | SessionEnd   | *       | script | <exit code> | <stderr> | <timeout> | <sleep> |
+      | start | SessionStart | *       |        |             |          |           |         |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    When the user starts a new pi session with the hooks recording
+    Then the hooks record these runs:
+      | event        | session | reason | source | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_ENV_FILE                                                            | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionEnd   | first   | clear  |        | {project dir} |                 | end       | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo |                                                                            | first                  | first             | 1          |
+      | SessionStart | second  |        | clear  | {project dir} |                 | start     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-second.env | second                 | second            | 1          |
+
+    Examples:
+      | exit code | stderr         | timeout | sleep |
+      | 1         | cleanup failed |         |       |
+      |           |                |         | 30    |
+      |           |                | 60      | 60    |
+
+  Scenario: A SessionEnd hook that exits 2 shows its error and does not keep the next session from starting
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher | form   | exit code | stderr         |
+      | end   | SessionEnd   | *       | script | 2         | cleanup failed |
+      | start | SessionStart | *       |        |           |                |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user starts a new pi session with the hooks recording
+    Then the hooks record these runs:
+      | event        | session | reason | source | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_ENV_FILE                                                            | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionEnd   | first   | clear  |        | {project dir} |                 | end       | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo |                                                                            | first                  | first             | 1          |
+      | SessionStart | second  |        | clear  | {project dir} |                 | start     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-second.env | second                 | second            | 1          |
+    Then the hooks show the user these messages:
+      | severity | text                                                                                |
+      | info     | SessionEnd:clear hook error: [${CLAUDE_PLUGIN_ROOT}/hooks/end.sh]: cleanup failed |
+
+  Scenario Outline: A SessionEnd hook that fails or outlasts its budget does not keep pi from exiting after a command in json mode
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event      | matcher | form   | exit code   | stderr   | timeout   | sleep   |
+      | end  | SessionEnd | *       | script | <exit code> | <stderr> | <timeout> | <sleep> |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    When the user runs "/claude:plugin list" in pi's json mode with the hooks recording
+    Then the hooks record these runs:
+      | event      | session | reason | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionEnd | first   | other  | {project dir} |                 | end       | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+    Examples:
+      | exit code | stderr         | timeout | sleep |
+      | 1         | cleanup failed |         |       |
+      | 2         | cleanup failed |         |       |
+      |           |                |         | 30    |
+      |           |                | 60      | 60    |
