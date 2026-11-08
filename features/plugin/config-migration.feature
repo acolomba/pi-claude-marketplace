@@ -40,3 +40,53 @@ Feature: Plugin config migration
     Then the "claude-plugins.json" file of the user scope declares these plugins:
       | id            | enabled |
       | demo@fixtures | false   |
+
+  Scenario: Pending shows nothing to apply after the first load rebuilt the user config
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user"
+    Given the user has deleted the config files of the user scope
+    Given the user has started a new pi session
+    When the user runs "/claude:plugin pending --scope user"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
+  Scenario: The first load after the user deleted the config leaves out a plugin installed only as a dependency
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | demo         |
+      | demo | 1.0.0   |              |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install app@fixtures --scope user"
+    Given the user has deleted the config files of the user scope
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id           |
+      | app@fixtures |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:app-skill  | A skill of app 1.0.0.  |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: The first load after the user deleted the config declares a dependency the user disabled as disabled
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | demo         |
+      | demo | 1.0.0   |              |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install app@fixtures --scope user"
+    Given the user has run "/claude:plugin disable app@fixtures --scope user"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user"
+    Given the user has deleted the config files of the user scope
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            | enabled |
+      | demo@fixtures | false   |
+      | app@fixtures  | false   |
