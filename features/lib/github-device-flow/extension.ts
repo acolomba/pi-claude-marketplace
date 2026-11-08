@@ -1,21 +1,24 @@
 /**
- * @fileoverview The GitHub redirect: a harness Pi extension that keeps every
- * request of a Pi without the GitHub base override on this machine (D-BG-01).
+ * @fileoverview The GitHub redirect: a harness Pi extension that keeps the
+ * requests of a Pi without the GitHub base override on this machine, for the
+ * request functions it replaces (D-BG-01).
  *
  * Such a Pi signs in through Device Flow at `https://github.com/login/...`
  * and clones from `https://github.com/...`, because GHB-02 runs Device Flow
  * only when the override is unset. When Pi loads this module, it reads
  * `<home>/github-redirect.json`, which a step writes before Pi starts, and
- * replaces `request` and `get` of `node:https` and `node:http` and
- * `globalThis.fetch` in Pi's process. isomorphic-git reaches the network
- * through `simple-get`, which reads `https.request` when it sends, and the
- * product's Device Flow calls the global `fetch`, so both go through the
- * replacements. An https request for `github.com` goes to the Device Flow
+ * replaces `request` and `get` of `node:https` and `node:http`, for CommonJS
+ * callers and ESM named imports alike, and `globalThis.fetch` in Pi's process.
+ * isomorphic-git reaches the network through `simple-get`, which reads
+ * `https.request` when it sends, and the product's Device Flow calls the
+ * global `fetch`, so both go through the replacements. The redirect does not
+ * see `net`, `tls`, or `http2` connections, a `fetch` that a module captured
+ * before the redirect loaded, or a request sent before it loaded. An https request for `github.com` goes to the Device Flow
  * stand-in when its path starts with `/login/`, and to the run's git host
  * otherwise, with its path kept. Its host becomes `127.0.0.1`, so TLS checks
  * the git host's certificate, which both stand-ins serve. A request to a
- * loopback host passes unchanged. Any other request is refused with an error
- * that names its host, and so is every non-loopback request when the config
+ * loopback host passes unchanged. Any other request through the replaced
+ * functions is refused with an error that names its host, and so is every non-loopback request when the config
  * is missing. At load it appends one `loaded` line with its process id, and it
  * appends one line per routed or refused request, synchronously, to
  * `<harness dir>/github-redirect.jsonl`, so a scenario can state that nothing
@@ -26,6 +29,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
+import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { fileURLToPath, urlToHttpOptions } from "node:url";
 
@@ -145,6 +149,19 @@ function withoutHostHeader(
   );
 }
 
+// A copy of `input` for `url`. A `Request` cannot be the init of another,
+// because a stream body then needs `duplex`, so the copy holds its body read
+// whole.
+async function routedRequest(url: string, input: Request): Promise<Request> {
+  return new Request(url, {
+    method: input.method,
+    headers: input.headers,
+    body: input.body === null ? null : await input.arrayBuffer(),
+    redirect: input.redirect,
+    signal: input.signal,
+  });
+}
+
 class GitHubRedirect {
   private readonly config: RedirectConfig | undefined;
   private readonly log: string;
@@ -226,7 +243,10 @@ class GitHubRedirect {
         throw new TypeError(`the GitHub redirect refuses a request to ${route.host}`);
       }
 
-      return original(input instanceof Request ? new Request(route.url, input) : route.url, init);
+      return original(
+        input instanceof Request ? await routedRequest(route.url, input) : route.url,
+        init,
+      );
     };
   }
 }
@@ -240,6 +260,7 @@ export default function githubRedirect(): void {
   const httpRequest = redirect.request(http.request, "http:");
   Object.assign(https, { request: httpsRequest, get: redirect.get(httpsRequest) });
   Object.assign(http, { request: httpRequest, get: redirect.get(httpRequest) });
+  syncBuiltinESMExports();
   globalThis.fetch = redirect.fetch(globalThis.fetch.bind(globalThis));
   redirect.append({ decision: "loaded", pid: process.pid, configured: config !== undefined });
 }
