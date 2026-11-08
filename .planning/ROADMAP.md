@@ -346,7 +346,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 5: PostCompact Hooks** - `PostCompact` hooks run after manual and automatic compactions with the trigger, and matchers select by trigger
 - [ ] **Phase 6: SessionEnd Hooks** - `SessionEnd` hooks run with every reason Pi produces, matchers select by reason, and a failing hook never keeps a session open
 - [ ] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched
-- [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
+- [x] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config (completed 2026-11-08)
 - [ ] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay
 - [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
 - [ ] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass
@@ -529,7 +529,7 @@ Plans:
   2. A user's edit to the written config survives every later load and `/reload` (CFGMIG-02).
   3. An existing config that is not valid is reported and stays byte for byte as it was (CFGMIG-02).
 
-**Plans**: 2/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -676,7 +676,7 @@ Plans:
 | 5. PostCompact Hooks | 0/TBD | Not started | - |
 | 6. SessionEnd Hooks | 0/TBD | Not started | - |
 | 7. State Schema Migration | 0/TBD | Not started | - |
-| 8. First-Run Config Migration | 2/2 | In Progress | - |
+| 8. First-Run Config Migration | 2/2 | Complete    | 2026-11-08 |
 | 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
 | 11. Device Flow Sign-In | 0/TBD | Not started | - |

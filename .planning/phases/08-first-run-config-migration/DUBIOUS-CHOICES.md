@@ -54,3 +54,8 @@ The autonomous run took the recommended option at every discuss question; those 
 ## Code review step
 
 - **P8-DC-26 (Low, open). The review's one Info item (IN-01) is left unfixed.** A user's `disable` of a record that the dependency check already holds keeps the marker, so a rebuilt config writes `{}` for it and loses that disable. `state.json` holds nothing that tells this case apart, so the projection cannot recover it; the item is recorded for a future change to the disable command.
+
+## Verification and transition step
+
+- **P8-DC-27 (Low, open). The phase closed without `/gsd-secure-phase` or `/gsd-validate-phase`.** `phase.complete` warned that `SECURITY.md` is missing and `08-VALIDATION.md` is still `draft`. Neither step is in the brief's run (discuss, plan, execute, review, verify, transition); each plan's threat model is mitigated by scenarios with recorded red proofs, and every validation-map command ran green.
+- **P8-DC-28 (Low, open). `phase.complete` advanced STATE.md's frontmatter and Current Position to Phase 2;** at the merge the parent keeps the milestone branch's frontmatter and Current Position, as the merge procedure says. Its path warnings about the SUMMARYs are false positives (short product-relative paths and quoted commands).
