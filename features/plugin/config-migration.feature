@@ -114,6 +114,28 @@ Feature: Plugin config migration
       | fixtures         | user              | demo@fixtures | demo | will disable |         | user  |
     Then the config and installation record bytes of the user scope are unchanged
 
+  Scenario: A reload in the terminal keeps the user's edit to the config the first load wrote
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given pi runs with the scripted model
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has deleted the config files of the user scope
+    Given the user has started a new pi session
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   | false   |
+    Given the config and installation record bytes of the user scope are remembered
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+    When the user reloads pi in the terminal and then prompts "after the reload"
+    Then the model receives these calls:
+      | call | role | text             |
+      | 1    | user | after the reload |
+    Then the config and installation record bytes of the user scope are unchanged
+
   Scenario: The first load after an upgrade from release 0.4.3 writes the project config with autoupdate off
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
