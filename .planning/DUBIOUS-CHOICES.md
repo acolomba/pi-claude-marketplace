@@ -328,3 +328,28 @@ Full text: `.planning/phases/06-sessionend-hooks/DUBIOUS-CHOICES.md`.
 - **P6-DC-26 (Medium, open).** The phase gate passed after one rerun.
 - **P6-DC-27 (Low, open).** The code review found two info items and no fix.
 - **P6-DC-28 (Low, open).** STATE.md left as the parent's.
+
+## Phase 13: Prune
+
+Full text: `.planning/phases/13-prune/DUBIOUS-CHOICES.md`.
+
+- **P13-DC-01 (Medium, open).** Criteria 2 and 3 met by scenarios the phase does not own.
+- **P13-DC-02 (Low, open).** Upstream's `autoremove` alias is not adopted.
+- **P13-DC-03 (Medium, open).** An island of dependencies that declare each other stays installed.
+- **P13-DC-04 (High, open).** A pruned disabled dependency leaves `enabled: false` in `claude-plugins.json`.
+- **P13-DC-05 (Low, open).** A separate orphan per scope.
+- **P13-DC-06 (Low, open).** The lock red proof edits a Phase 15 file locally.
+- **P13-DC-07 (Low, open).** The optional-peer cache was missing.
+- **P13-DC-08 (Low, open).** No pattern-mapper run.
+- **P13-DC-09 (Low, open).** Scenario placement.
+- **P13-DC-10 (Low, open).** M3 edits a file the phase does not own, locally.
+- **P13-DC-11 (Low, open).** Scenario D states the config.
+- **P13-DC-12 (Low, open).** One plan above the half-context estimate.
+- **P13-DC-13 (Low, open).** BACKLOG IDs.
+- **P13-DC-14 (Medium, open).** The plan, review, and verification ran inline, without subagents.
+- **P13-DC-15 (Low, open).** Gate reruns on the failing scenarios only.
+- **P13-DC-16 (Low, open).** The shared scratchpad leaked commit messages between phases.
+- **P13-DC-17 (Low, open).** The roadmap plan line was ticked by hand.
+- **P13-DC-18 (Low, open).** Security and validation records written inline.
+- **P13-DC-19 (Low, open).** The regression gate is the full check.
+- **P13-DC-20 (Low, open).** The transition's PROJECT.md step was skipped.
