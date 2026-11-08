@@ -1,30 +1,60 @@
 Feature: Plugin subagent child
 
-  A load in a pi-subagents background child changes nothing installed (D-MB-12). A profile Pi
-  started with the runner's marker in its environment stands in for the child, and a local
-  marketplace stands in for a published one.
+  A load in a pi-subagents background child changes nothing installed, yet loads the installed
+  components (D-MB-12). Stand-ins: a profile Pi with the runner's marker for the child, a one-shot
+  json-mode Pi for the next parent load, a scripted model, recording hooks, and a local marketplace.
 
-  Scenario: A background child's load leaves a declared plugin pending while autoapply is on
+  Scenario: A background child's load with autoapply on leaves a pending install, uninstall, and update for the next parent load
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
+      | old  | 1.0.0   |
+      | upd  | 1.0.0   |
     Given a config in scope project and layer base, with this text:
       """
       { "autoapply": true }
       """
     Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install old@fixtures --scope project"
+    Given the user has run "/claude:plugin install upd@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | old  | 1.0.0   |
+      | upd  | 1.1.0   |
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
+      | fixtures    | upd    |         |
     Given pi runs with the scripted model as a pi-subagents background child
     When the user starts a new pi session
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 3                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 3                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
-    Then the installation record of the project scope holds no plugins
+      | marketplace name | marketplace scope | id            | name | status         | reasons | scope   | version | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | will install   |         | project |         |       |       |
+      | fixtures         | project           | old@fixtures  | old  | will uninstall |         | project | 1.0.0   |       |       |
+      | fixtures         | project           | upd@fixtures  | upd  | will update    |         | project |         | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | demo@fixtures | demo | will install   |         | project |         |       |       |
+      | fixtures         | project           | old@fixtures  | old  | will uninstall |         | project | 1.0.0   |       |       |
+      | fixtures         | project           | upd@fixtures  | upd  | will update    |         | project |         | 1.0.0 | 1.1.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | old@fixtures | 1.0.0   | true    |
+      | upd@fixtures | 1.0.0   | true    |
+    When the user runs "/claude:plugin list" in pi's json mode
+    Then the command reports these results:
+      | kind    | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | Plugin list | 0              | 0              | 3                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+      | fixtures         | project           | old@fixtures  | old  | available |         |         | 1.0.0   |
+      | fixtures         | project           | upd@fixtures  | upd  | installed |         | project | 1.1.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+      | upd@fixtures  | 1.1.0   | true    |
