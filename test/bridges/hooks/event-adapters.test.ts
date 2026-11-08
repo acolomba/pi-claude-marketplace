@@ -734,6 +734,66 @@ describe("adaptToolResultResult", () => {
     assert.strictEqual(event.content, content);
   });
 
+  for (const { name, mutation, diagnostics } of [
+    {
+      name: "ignores a replacement output on a failed result and reports it (D-BG-405)",
+      mutation: {
+        kind: "mutate",
+        updatedToolOutput: { content: [{ type: "text", text: "replaced" }], isError: false },
+      } as const,
+      diagnostics: [["[hooks] adaptToolResult: updatedToolOutput ignored on a failed tool result"]],
+    },
+    {
+      name: "leaves a failed result with only additional context unreported (D-BG-405)",
+      mutation: { kind: "mutate", additionalContext: "checked the error" } as const,
+      diagnostics: [],
+    },
+  ]) {
+    test(name, (t) => {
+      // arrange
+      const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
+      const hadDebug = Object.hasOwn(process.env, debugKey);
+      const previousDebug = process.env[debugKey];
+      t.after(() => {
+        if (hadDebug) {
+          process.env[debugKey] = previousDebug;
+        } else {
+          delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+        }
+      });
+      process.env[debugKey] = "1";
+      const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
+      const event = {
+        type: "tool_result",
+        toolCallId: "result-failed-mutate",
+        toolName: "read",
+        input: { path: "notes.txt", offset: 9 },
+        content: [{ type: "text" as const, text: "Offset 9 is beyond end of file" }],
+        isError: true,
+        details: undefined,
+      } satisfies ToolResultEvent;
+
+      // act
+      const adaptation = adaptToolResultResult(mutation, event, adapterContext(guardEntry()));
+
+      // assert
+      assert.strictEqual(adaptation, undefined);
+      assert.deepStrictEqual(
+        consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
+        diagnostics,
+      );
+      assert.deepStrictEqual(event, {
+        type: "tool_result",
+        toolCallId: "result-failed-mutate",
+        toolName: "read",
+        input: { path: "notes.txt", offset: 9 },
+        content: [{ type: "text", text: "Offset 9 is beyond end of file" }],
+        isError: true,
+        details: undefined,
+      });
+    });
+  }
+
   for (const { name, stopOutcome, diagnostic } of [
     {
       name: "its supplied reason",
