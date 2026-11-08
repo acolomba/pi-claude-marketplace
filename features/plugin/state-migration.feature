@@ -53,6 +53,49 @@ Feature: Plugin state migration
       | id            | enabled | provenance |
       | demo@fixtures | true    | explicit   |
 
+  Scenario: The first load after an upgrade from release 0.19.2 rewrites the installation record in the current schema
+    Given the installation record of the user scope is rewritten as release "0.19.2" wrote it
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+    Then the migrated installation record of the user scope has schema version 3 and these plugins:
+      | id            | enabled | provenance |
+      | demo@fixtures | true    | explicit   |
+
+  Scenario: A second load after an upgrade from release 0.6.0 changes nothing
+    Given the installation record of the user scope is rewritten as release "0.6.0" wrote it
+    Given the user has started a new pi session
+    Given the config and installation record bytes of the user scope are remembered
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+    Then the config and installation record bytes of the user scope are unchanged
+
+  Scenario: A second load after an upgrade from release 0.19.2 changes nothing
+    Given the installation record of the user scope is rewritten as release "0.19.2" wrote it
+    Given the user has started a new pi session
+    Given the config and installation record bytes of the user scope are remembered
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+    Then the config and installation record bytes of the user scope are unchanged
+
+  Scenario: A plugin disabled before an upgrade from release 0.19.2 stays disabled
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user"
+    Given the installation record of the user scope is rewritten as release "0.19.2" wrote it
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the session offers no skills
+    Then the migrated installation record of the user scope has schema version 3 and these plugins:
+      | id            | enabled | provenance |
+      | demo@fixtures | false   | explicit   |
+
   Scenario: A newer installation record is refused and left as it was
     Given the installation record of the user scope is rewritten with a schema version this release does not read
     Given the config and installation record bytes of the user scope are remembered
