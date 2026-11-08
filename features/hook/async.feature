@@ -150,6 +150,98 @@ Feature: Hook async
       | 2    | assistant | Done.    |
       | 2    | user      | next     |
 
+  Scenario: A plain async hook goes on running after the prompt that started it
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event            | matcher | form   | async | waits |
+      | wake | UserPromptSubmit | *       | script | true  | true  |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+    When the user prompts "say done" and the hook "wake" goes on in the background
+    Then the hooks record these runs:
+      | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | say done | {project dir} |                 | wake      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hook processes record these lifecycle events:
+      | hook | phase | exit code |
+      | wake | start |           |
+    Then the model receives these calls:
+      | call | role | text     |
+      | 1    | user | say done |
+
+  Scenario: A plain async hook's answer reaches the model's next call and never the user
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event            | matcher | form   | async | waits | exit code | output |
+      | note | UserPromptSubmit | *       | script | true  | true  | 2         | {"systemMessage":"remember the tests","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"the tests live in test"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Done.  |
+      | Noted. |
+    Given the user has prompted "say done" and the hook "note" goes on in the background
+    When the user releases the hook "note" and pi handles its exit
+    Then the hooks show the user no messages
+    Then the hooks show the user no rewake summaries
+    When the user prompts "next" and the hook "note" goes on in the background
+    Then the model receives these calls:
+      | call | role      | text                   |
+      | 2    | user      | say done               |
+      | 2    | assistant | Done.                  |
+      | 2    | user      | next                   |
+      | 2    | user      | remember the tests     |
+      | 2    | user      | the tests live in test |
+
+  Scenario: An async rewake Stop hook that exits 2 wakes the model once
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event | matcher | form   | async rewake | exit code | stderr     | on reentry |
+      | keep | Stop  |         | script | true         | 2         | keep going | allow      |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+      | Woke. |
+    When the user prompts "say done" and the hook "keep" wakes the model once
+    Then the hooks record these runs:
+      | event | session | last assistant message | stop hook active | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | Stop  | first   | Done.                  | false            | {project dir} |                 | keep      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | Stop  | first   | Woke.                  | true             | {project dir} |                 | keep      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role      | text                                                   |
+      | 1    | user      | say done                                               |
+      | 2    | user      | say done                                               |
+      | 2    | assistant | Done.                                                  |
+      | 2    | user      | Stop hook blocking error from command "Stop": keep going |
+    Then the hooks show the user these rewake summaries:
+      | text               |
+      | Stop hook feedback |
+    Then the hook processes record these lifecycle events:
+      | hook | phase | exit code |
+      | keep | start |           |
+      | keep | end   | 2         |
+      | keep | start |           |
+      | keep | end   | 0         |
+
   Scenario: A hook process that a dead Pi left stops when Pi starts again
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

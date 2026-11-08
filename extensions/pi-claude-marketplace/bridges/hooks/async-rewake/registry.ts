@@ -1,9 +1,11 @@
 // extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts
 //
-// Bridge-owned asyncRewake registry. Spawns hook children detached-but-in-
+// Bridge-owned registry of background hooks: `asyncRewake` and plain `async`
+// (D-BG-205). Spawns hook children detached-but-in-
 // parent-process-group, holds them in an in-memory Map keyed by a UUID
-// dispatchId, watches each child for exit code 2, and on exit 2 wakes the
-// model with Claude Code 2.1.319's rewake text through pi.sendMessage with
+// dispatchId, and watches each child. A plain async child gives its JSON
+// answer to the model on its next call; an asyncRewake child that exits 2
+// wakes the model with Claude Code 2.1.319's rewake text through pi.sendMessage with
 // `display: false` matching Claude Code's <system-reminder> semantic: an idle
 // Pi starts a turn with it, and a running turn reads it at its next turn
 // boundary (D-BG-201, D-BG-202).
@@ -28,7 +30,7 @@
 // pass that drains the persisted PID table at factory entry (D-62-05).
 // It does NOT own the dispatcher decision to take the async branch -- the
 // composite handler in `dispatch.ts` calls
-// `spawnAndRegister` once per `asyncRewake: true` routing entry and
+// `spawnAndRegister` once per `async: true` or `asyncRewake: true` entry and
 // folds `{ kind: "noop" }` into its reducer.
 //
 // IL-2 EXEMPTION (T-62-09): the single sanctioned runtime notify call
@@ -66,6 +68,7 @@ import { collectStreamText } from "../stream-text.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 
+import { asyncAnswerTexts } from "./async-answer.ts";
 import {
   pidTablePath,
   readPidTable,
@@ -95,6 +98,12 @@ const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
 /** HOOK-06: custom-message type for the exit-2 injection. */
 const REWAKE_CUSTOM_TYPE = "claude-hook-rewake" as const;
 
+/**
+ * D-BG-205: custom-message type of a plain async hook's answer, named after
+ * Claude Code's `async_hook_response` attachment.
+ */
+const ASYNC_RESPONSE_CUSTOM_TYPE = "claude-hook-async-response" as const;
+
 // ──────────────────────────────────────────────────────────────────────────
 // Translator dispatch (PAYL-01 reuse; mirrors dispatch-exec.ts)
 // ──────────────────────────────────────────────────────────────────────────
@@ -108,8 +117,8 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
   PreCompact: translatePreCompact,
   PostCompact: translatePostCompact,
   SessionEnd: translateSessionEnd,
-  // Stop / StopFailure never take the async-rewake path (they have no async
-  // Pi surface); the entries satisfy the `Record` totality and are inert.
+  // A hook declaring `async` or `asyncRewake` reaches the registry from any
+  // event, the settle events included (D-BG-206).
   Stop: translateStop,
   StopFailure: translateStopFailure,
 };
@@ -135,6 +144,18 @@ interface RewakeExit {
   readonly ctx: ExtensionContext;
   readonly pi: ExtensionAPI;
   readonly label: string;
+  readonly lane: BackgroundLane;
+}
+
+/**
+ * The two background lanes: an `asyncRewake` hook wakes the model on exit 2
+ * (D-BG-201); a plain `async` hook gives its answer to the model's next call
+ * (D-BG-205). `asyncRewake` implies async, as upstream.
+ */
+type BackgroundLane = "rewake" | "plain";
+
+function laneOf(entry: RoutingEntry): BackgroundLane {
+  return entry.handlerDecl.asyncRewake === true ? "rewake" : "plain";
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -214,7 +235,12 @@ export async function spawnAndRegister(
     const capturedGeneration = runtime.currentGeneration();
     const transCtx = buildTranslationContext(ctx);
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
-    const exit: RewakeExit = { ctx, pi, label: rewakeLabel(entry.claudeEvent, stdinPayload) };
+    const exit: RewakeExit = {
+      ctx,
+      pi,
+      label: rewakeLabel(entry.claudeEvent, stdinPayload),
+      lane: laneOf(entry),
+    };
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareAsyncEnv(entry, transCtx, loc, dispatchId);
     const planValue = planSpawn(entry, hookPathVars(entry, transCtx, loc));
@@ -390,6 +416,37 @@ export async function spawnAndRegister(
 // Per-child exit / error handlers
 // ──────────────────────────────────────────────────────────────────────────
 
+interface ChildOutcome {
+  readonly code: number | null;
+  readonly signal: NodeJS.Signals | null;
+}
+
+/** The exit handler of each background lane. */
+const EXIT_HANDLERS: Record<
+  BackgroundLane,
+  (
+    runtime: HooksRuntime,
+    entry: HooksRuntimeChildEntry,
+    exit: RewakeExit,
+    outcome: ChildOutcome,
+  ) => void
+> = {
+  rewake: (runtime, entry, exit, outcome) => {
+    if (outcome.code !== 2) {
+      hookDebugLog(
+        `async-rewake: silent completion code=${outcome.code ?? "null"} signal=${outcome.signal ?? "null"} ` +
+          `dispatchId=${entry.dispatchId} plugin=${entry.pluginId}`,
+      );
+      return;
+    }
+
+    wakeOnExitTwo(runtime, entry, exit);
+  },
+  plain: (_runtime, entry, exit) => {
+    sendAsyncAnswer(entry, exit);
+  },
+};
+
 function finalizeChild(
   runtime: HooksRuntime,
   dispatchId: string,
@@ -433,15 +490,35 @@ function finalizeChild(
     return;
   }
 
-  if (outcome.code !== 2) {
-    hookDebugLog(
-      `async-rewake: silent completion code=${outcome.code ?? "null"} signal=${outcome.signal ?? "null"} ` +
-        `dispatchId=${dispatchId} plugin=${entry.pluginId}`,
-    );
-    return;
+  EXIT_HANDLERS[exit.lane](runtime, entry, exit, outcome);
+}
+
+/**
+ * D-BG-205: a plain async hook that ended, whatever its code, gives the model
+ * its answer's texts on the model's next call, never waking it; the user sees
+ * nothing.
+ */
+function sendAsyncAnswer(entry: HooksRuntimeChildEntry, { pi }: RewakeExit): void {
+  const texts = asyncAnswerTexts(entry.stdout.text(), entry.claudeEvent);
+  if (texts.length === 0) {
+    hookDebugLog(`async-hook: no answer on stdout (${entry.pluginId}/${entry.claudeEvent})`);
   }
 
-  wakeOnExitTwo(runtime, entry, exit);
+  for (const content of texts) {
+    try {
+      pi.sendMessage(
+        {
+          customType: ASYNC_RESPONSE_CUSTOM_TYPE,
+          content,
+          display: false,
+          details: { pluginId: entry.pluginId, dispatchId: entry.dispatchId },
+        },
+        { deliverAs: "nextTurn" },
+      );
+    } catch (err) {
+      hookDebugLog(`async-hook: sendMessage threw (${entry.pluginId}): ${errorMessage(err)}`);
+    }
+  }
 }
 
 /**

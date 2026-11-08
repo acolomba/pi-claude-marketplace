@@ -24,12 +24,13 @@ import { setTimeout as delay } from "node:timers/promises";
 import { Given, Then, When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
-import { waitForHookLifecycle } from "../../lib/hook-recorder.ts";
+import { HOOK_LIFECYCLE_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts";
 import { claudePluginPayloads } from "../../lib/pi-commands.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 import { isRunning, readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 
+import type { HookLifecycleEvent } from "../../lib/hook-recorder.ts";
 import type { RpcRecord } from "../../lib/pi-process.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -96,6 +97,26 @@ async function keepTurn(
   world.recordTurn({ prompt, disposition: "started", records, logs });
 }
 
+// Sends the prompt `text`, asserts that Pi started a turn, and waits for its
+// settle. Returns the prompt and the log lengths and record count from before
+// it, so a turn keeps only what the prompt added.
+async function promptToSettle(
+  world: ScenarioWorld,
+  text: string,
+): Promise<{
+  readonly message: string;
+  readonly lengths: ReadonlyMap<string, number>;
+  readonly from: number;
+}> {
+  const lengths = await readLogLengths(world.profileHarness());
+  const from = world.pi.recordCount();
+  const message = expandTokens(text, world.tokens);
+  const answer = await world.pi.request({ type: "prompt", message });
+  assert.strictEqual(promptDisposition(answer.response), "started", JSON.stringify(answer));
+  await waitForSettleAt(world, from);
+  return { message, lengths, from };
+}
+
 // Creates the release marker of `hook`, waits until a run of the hook takes
 // it, then for the end line the hook logs since `lengths`, and returns the
 // pid of that line.
@@ -132,12 +153,7 @@ When(
   "the user prompts {string} after the woken turn ends",
   async function (this: ScenarioWorld, text: string) {
     await waitForWokenTurn(this, 0);
-    const lengths = await readLogLengths(this.profileHarness());
-    const from = this.pi.recordCount();
-    const message = expandTokens(text, this.tokens);
-    const answer = await this.pi.request({ type: "prompt", message });
-    assert.strictEqual(promptDisposition(answer.response), "started", JSON.stringify(answer));
-    await waitForSettleAt(this, from);
+    const { message, lengths, from } = await promptToSettle(this, text);
     await keepTurn(this, message, lengths, from);
   },
 );
@@ -160,19 +176,61 @@ When(
     const lengths = await readLogLengths(this.profileHarness());
     const from = this.pi.recordCount();
     const pid = await releaseWaitingHook(this, hook, lengths);
-    const deadline = Date.now() + ASYNC_STEP_DEADLINE_MS;
-    while (isRunning(pid)) {
-      assert.ok(Date.now() < deadline, `pi did not reap the hook process ${pid}`);
-      await delay(ASYNC_POLL_MS);
-    }
-
-    await this.pi.request({ type: "get_state" });
-    const { response } = await this.pi.request({ type: "get_state" });
-    const state = response.data as { readonly isStreaming?: boolean } | undefined;
-    assert.strictEqual(state?.isStreaming, false, JSON.stringify(response));
+    await waitForHandledExit(this, pid);
     const started = this.pi.recordsSince(from).filter((record) => record.type === "agent_start");
     assert.deepStrictEqual(started, [], "the hook's exit started a turn");
     await keepTurn(this, "release", lengths, from);
+  },
+);
+
+// Waits until Pi reaped the hook process `pid`, then for two `get_state`
+// round trips, the second answering that Pi is not streaming.
+async function waitForHandledExit(world: ScenarioWorld, pid: number): Promise<void> {
+  const deadline = Date.now() + ASYNC_STEP_DEADLINE_MS;
+  while (isRunning(pid)) {
+    assert.ok(Date.now() < deadline, `pi did not reap the hook process ${pid}`);
+    await delay(ASYNC_POLL_MS);
+  }
+
+  await world.pi.request({ type: "get_state" });
+  const { response } = await world.pi.request({ type: "get_state" });
+  const state = response.data as { readonly isStreaming?: boolean } | undefined;
+  assert.strictEqual(state?.isStreaming, false, JSON.stringify(response));
+}
+
+// The log lengths `lengths` with the lifecycle log moved just past the end
+// line of `ended`, so a later wait finds only the lines after it.
+async function lengthsPast(
+  world: ScenarioWorld,
+  lengths: ReadonlyMap<string, number>,
+  ended: HookLifecycleEvent,
+): Promise<ReadonlyMap<string, number>> {
+  const logs = await readLogLinesSince(world.profileHarness(), lengths);
+  const lines = (logs.get(HOOK_LIFECYCLE_LOG) ?? []) as readonly HookLifecycleEvent[];
+  const index = lines.findIndex((line) => line.phase === "end" && line.pid === ended.pid);
+  const moved = new Map(lengths);
+  moved.set(HOOK_LIFECYCLE_LOG, (lengths.get(HOOK_LIFECYCLE_LOG) ?? 0) + index + 1);
+  return moved;
+}
+
+// A Stop hook that exits 2 wakes the model, and its run after the woken turn
+// sees `stop_hook_active` and ends quietly (D-BG-203, D-BG-206). The step
+// waits for each in order and keeps the whole span as one turn.
+When(
+  "the user prompts {string} and the hook {string} wakes the model once",
+  async function (this: ScenarioWorld, text: string, hook: string) {
+    const harness = this.profileHarness();
+    const { message, lengths, from } = await promptToSettle(this, text);
+    const first = await waitForHookLifecycle(harness, hook, "end", lengths, ASYNC_STEP_DEADLINE_MS);
+    const past = await lengthsPast(this, lengths, first);
+    await this.pi.waitForRecord(from, isRewakeSummaryRecord, ASYNC_STEP_DEADLINE_MS);
+    await waitForWokenTurn(this, from);
+    const settledAt = this.pi.recordCount();
+    const second = await waitForHookLifecycle(harness, hook, "end", past, ASYNC_STEP_DEADLINE_MS);
+    await waitForHandledExit(this, second.pid);
+    const later = this.pi.recordsSince(settledAt).filter((record) => record.type === "agent_start");
+    assert.deepStrictEqual(later, [], "the hook woke the model a second time");
+    await keepTurn(this, message, lengths, from);
   },
 );
 

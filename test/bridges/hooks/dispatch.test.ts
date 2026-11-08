@@ -529,7 +529,7 @@ describe("matcherFiresOnClosedSetValue", () => {
 });
 
 describe("collectBucketOutcomes", () => {
-  test("preserves matching observation order while degrading async rewake to noop", async () => {
+  test("preserves matching observation order and runs an async rewake entry through the executor", async () => {
     // arrange
     const runtime = createHooksRuntime();
     const cwd = "/workspace/dispatch-collection";
@@ -549,7 +549,7 @@ describe("collectBucketOutcomes", () => {
       ifPredicate: compileIfPredicate("Bash(npm test)", "PreToolUse", compileContext),
     });
     const asyncEntry = createRoutingEntry({
-      pluginId: "async-degraded",
+      pluginId: "async-background",
       claudeEvent: "PreToolUse",
       rawMatcher: "Bash",
       declarationIndex: 2,
@@ -592,6 +592,7 @@ describe("collectBucketOutcomes", () => {
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       {
+        "async-background": { kind: "noop" },
         "first-noop": { kind: "noop" },
         "second-noop": { kind: "noop" },
         "observed-block": { kind: "block", reason: "observe denial" },
@@ -602,7 +603,7 @@ describe("collectBucketOutcomes", () => {
     const expectedOutcomes = [
       {
         entry: createRoutingEntry({
-          pluginId: "async-degraded",
+          pluginId: "async-background",
           claudeEvent: "PreToolUse",
           rawMatcher: "Bash",
           declarationIndex: 2,
@@ -648,6 +649,7 @@ describe("collectBucketOutcomes", () => {
       },
     ];
     const expectedExecutorCalls: RecordedCall[] = [
+      { pluginId: "async-background", event: createToolCallEvent() },
       { pluginId: "first-noop", event: createToolCallEvent() },
       { pluginId: "second-noop", event: createToolCallEvent() },
       { pluginId: "observed-block", event: createToolCallEvent() },

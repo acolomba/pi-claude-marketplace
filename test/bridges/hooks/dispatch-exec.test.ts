@@ -503,6 +503,7 @@ function makeEntry(
     readonly shell?: string;
     readonly timeout?: number;
     readonly asyncRewake?: boolean;
+    readonly async?: unknown;
     readonly onFailure?: string;
   } = {},
 ): RoutingEntry {
@@ -513,6 +514,7 @@ function makeEntry(
     ...(input.shell === undefined ? {} : { shell: input.shell }),
     ...(input.timeout === undefined ? {} : { timeout: input.timeout }),
     ...(input.asyncRewake === undefined ? {} : { asyncRewake: input.asyncRewake }),
+    ...(input.async === undefined ? {} : { async: input.async }),
     ...(input.onFailure === undefined ? {} : { onFailure: input.onFailure }),
   } satisfies RoutingEntry["handlerDecl"];
 
@@ -1065,60 +1067,89 @@ test("contains a wrong-shape payload whose required property throws", async (t) 
   );
 });
 
-test("delegates only literal async true and preserves absent async stdin", async (t) => {
-  // arrange
-  const runtime = createHooksRuntime();
-  const caseRoot = await makeCaseRoot(t, "dispatch-async-");
-  const processChild = makeInjectedChild(t, { stdin: null, pid: 52_101 });
-  const processBoundary = observeSpawn(t, processChild);
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension api" });
-  const entry = makeEntry(caseRoot, {
-    claudeEvent: "UserPromptSubmit",
-    command: "async-hook",
-    args: ["--literal"],
-    timeout: 12,
-    asyncRewake: true,
-  });
-  const event = {
-    type: "input",
-    text: "async prompt",
-    source: "interactive",
-  } satisfies InputEvent;
-
-  // act
-  const hookOutcome = await dispatchHookExec(entry, event, makeContext(caseRoot), pi, runtime, {
-    spawnImpl: processBoundary.spawnImpl,
-    dispatchId: () => "dispatch-async-1",
-  });
-  processChild.emitError(new Error("async child cleanup"));
-  const call = await processBoundary.spawned;
-
-  // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
-  assert.deepStrictEqual(
-    {
-      args: call.args,
-      command: call.command,
-      cwd: call.options.cwd,
-      detached: call.options.detached,
-      marker: call.options.env?.PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH,
-      shell: call.options.shell,
-      stdio: call.options.stdio,
-    },
-    {
-      args: ["--literal"],
+for (const field of ["asyncRewake", "async"] as const) {
+  test(`delegates a literal ${field} true to the background and preserves absent stdin`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const caseRoot = await makeCaseRoot(t, "dispatch-async-");
+    const processChild = makeInjectedChild(t, { stdin: null, pid: 52_101 });
+    const processBoundary = observeSpawn(t, processChild);
+    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension api" });
+    const entry = makeEntry(caseRoot, {
+      claudeEvent: "UserPromptSubmit",
       command: "async-hook",
-      cwd: caseRoot,
-      detached: false,
-      marker: "dispatch-async-1",
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
-  assert.deepStrictEqual(processChild.stdinChunks, []);
-  assert.deepStrictEqual(processChild.stdinOrder, []);
-  verify(pi);
-});
+      args: ["--literal"],
+      timeout: 12,
+      [field]: true,
+    });
+    const event = {
+      type: "input",
+      text: "async prompt",
+      source: "interactive",
+    } satisfies InputEvent;
+
+    // act
+    const hookOutcome = await dispatchHookExec(entry, event, makeContext(caseRoot), pi, runtime, {
+      spawnImpl: processBoundary.spawnImpl,
+      dispatchId: () => "dispatch-async-1",
+    });
+    processChild.emitError(new Error("async child cleanup"));
+    const call = await processBoundary.spawned;
+
+    // assert
+    assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+    assert.deepStrictEqual(
+      {
+        args: call.args,
+        command: call.command,
+        cwd: call.options.cwd,
+        detached: call.options.detached,
+        marker: call.options.env?.PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH,
+        shell: call.options.shell,
+        stdio: call.options.stdio,
+      },
+      {
+        args: ["--literal"],
+        command: "async-hook",
+        cwd: caseRoot,
+        detached: false,
+        marker: "dispatch-async-1",
+        shell: false,
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+    assert.deepStrictEqual(processChild.stdinChunks, []);
+    assert.deepStrictEqual(processChild.stdinOrder, []);
+    verify(pi);
+  });
+}
+
+for (const value of ["yes", false]) {
+  test(`keeps an async value of ${JSON.stringify(value)} on the synchronous path`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const caseRoot = await makeCaseRoot(t, "dispatch-async-sync-");
+    const processChild = makeInjectedChild(t, { pid: 52_102 });
+    const processBoundary = observeSpawn(t, processChild);
+    const entry = makeEntry(caseRoot, { claudeEvent: "SessionStart", async: value });
+
+    // act
+    const outcome = dispatchHookExec(
+      entry,
+      { type: "session_start", reason: "startup" } satisfies SessionStartEvent,
+      makeContext(caseRoot),
+      undefined,
+      runtime,
+      { spawnImpl: processBoundary.spawnImpl },
+    );
+    const call = await processBoundary.spawned;
+    await processChild.close(0);
+
+    // assert
+    assert.deepStrictEqual(await outcome, { kind: "noop" });
+    assert.strictEqual(call.options.env?.PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH, undefined);
+  });
+}
 
 test("noops async dispatch without Pi before resolving locations or spawning", async (t) => {
   // arrange

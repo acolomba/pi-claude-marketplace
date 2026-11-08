@@ -261,12 +261,10 @@ async function runHooks(
  * (stop) among the group suppresses re-entry regardless of another hook's
  * block. A generation change during the run returns no outcome.
  *
- * A hook declaring `asyncRewake:true` cannot yield a SYNCHRONOUS decision --
- * `dispatchHookExec` routes it to the fire-and-forget spawn and returns `noop`
- * before a decision exists -- so running it here would silently drop its
- * block/stop desire. Such an entry is degraded to `noop` with a `hookDebugLog`
- * (rather than a pointless detached spawn) so the dropped decision is
- * observable.
+ * A hook declaring `async` or `asyncRewake` reaches the executor too, whose
+ * background branch spawns it and returns `noop`, so it never decides the
+ * settle; an `asyncRewake` one that exits 2 wakes the model through the
+ * registry, as Claude Code runs it (D-BG-206).
  *
  * Takes the same injected executor as the composite handlers, so one spy
  * drives both paths.
@@ -281,16 +279,9 @@ export async function collectBucketOutcomes(
   executor: HookExecutor = dispatchHookExec,
 ): Promise<BucketOutcome[]> {
   const hooks = matchingHooks(bucket, event, ctx, matcherFires);
-  const outcomes = await runHooks(runtime, hooks, async (entry) => {
-    if (entry.handlerDecl.asyncRewake !== true) {
-      return executor(entry, event, ctx, pi, runtime);
-    }
-
-    hookDebugLog(
-      `collectBucketOutcomes: asyncRewake entry cannot yield a synchronous decision (${entry.pluginId}/${entry.claudeEvent}); degrading to noop`,
-    );
-    return { kind: "noop" };
-  });
+  const outcomes = await runHooks(runtime, hooks, (entry) =>
+    executor(entry, event, ctx, pi, runtime),
+  );
   return outcomes ?? [];
 }
 
