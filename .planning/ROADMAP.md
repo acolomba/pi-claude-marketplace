@@ -609,7 +609,10 @@ Plans:
   3. `prune` while another process holds the state lock fails as lock held and removes nothing (PRUNE-02).
   4. A dependency that only a disabled plugin needs is kept or pruned as upstream does (PRUNE-02).
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 13-01-PLAN.md — the prune scenarios for the user-scope default, one preview per scope, and a disabled plugin's dependencies, with red proofs for them and for the existing usage-error and state-lock coverage
 
 ### Phase 14: Bootstrap
 
