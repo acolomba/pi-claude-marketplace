@@ -5,16 +5,16 @@ milestone_name: Behavioral Coverage Gaps
 current_phase: 01
 current_phase_name: Foundation
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-11-08T01:11:35.351Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-11-08T01:44:59.709Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 01 execution started
-state_head: 864b86830b21f764350454adc2669118ea78d05f
+state_head: 001542c2b1baa783d89fba0d463ad5366e4030da
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 8
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Foundation) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 01 execution started
 
@@ -427,6 +427,7 @@ archived milestone artifacts.
 | Phase 11 P13 | 47min | 3 tasks | 11 files |
 | Phase 4 P06 | 11min | 2 tasks | 1 files |
 | Phase 01 P01 | 6 min | 2 tasks | 6 files |
+| Phase 01 P02 | 28 min | 3 tasks | 11 files |
 
 ## Decisions
 
@@ -644,6 +645,8 @@ archived milestone artifacts.
 - [Phase 4]: Phase 4 gate reused the orchestrator's 8e801f4 results for 8c95f25 (planning-only diff) and ran test:modules; only the P4-DC-23 verdict-markers row fails under builtin
 - [Phase 01]: layout.md Behavioral gaps section reserves each stream's new feature file and verb module by full path; Phase 1 seeds only the new feature files that hold a seed, so Phases 4 and 6 create hook/tool-failure.feature and hook/session-end.feature (D-BG-14)
 - [Phase 01]: D-BG-01 to D-BG-16 recorded in PROJECT.md Key Decisions as pending the user's review; D-BG-04 profile wording and D-BG-16 local-branch wording applied to REQUIREMENTS, ROADMAP, and PROJECT
+- [Phase 01]: claudePluginPayloads stays exported for 01-07 through a .fallowrc.json ignoreExports entry, which 01-07 removes once pi-json-mode.ts imports it
+- [Phase 01]: Only a profile with withoutGitHubBaseOverride carries its environment and extraExtensions to a later terminal session; other profiles keep today's terminal launch
 
 ### mcp-4 decisions
 
@@ -946,6 +949,6 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-08T01:11:35.237Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-11-08T01:44:59.562Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
