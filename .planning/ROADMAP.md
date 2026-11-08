@@ -499,7 +499,12 @@ Plans:
   2. A matcher for each reason selects only that reason's run (SEND-01).
   3. A `SessionEnd` hook that exits non-zero, exits 2, or runs past its timeout does not keep the session from ending: the next session starts or Pi exits, and the run is recorded (SEND-01).
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 06-01-PLAN.md -- the session end verb steps, the resume and json-mode reason scenarios, and the four matcher scenarios (wave 1)
+- [ ] 06-02-PLAN.md -- cap a plugin SessionEnd hook's timeout at the 1.5 s budget (D-BG-604), with unit cases and the docs clause (wave 1)
+- [ ] 06-03-PLAN.md -- the failure scenarios on a new session and on a json-mode exit (wave 2)
 
 ### Phase 7: State Schema Migration
 
@@ -667,7 +672,7 @@ Plans:
 | 3. StopFailure Hooks | 0/TBD | Not started | - |
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |
 | 5. PostCompact Hooks | 0/TBD | Not started | - |
-| 6. SessionEnd Hooks | 0/TBD | Not started | - |
+| 6. SessionEnd Hooks | 0/3 | Planned | - |
 | 7. State Schema Migration | 0/TBD | Not started | - |
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
 | 9. Legacy MCP Entry Move | 0/TBD | Not started | - |

@@ -33,3 +33,13 @@ The autonomous run took the recommended option at every discuss question; those 
 - **P6-DC-11 (Low, open). One named budget constant.** `SESSION_END_BUDGET_SECONDS` also replaces the literal in the SessionEnd row of the defaults table (the row's value, not its order).
 - **P6-DC-12 (Low, open). Json-mode details.** The json turn is recorded with disposition `handled`, runs `/claude:plugin list`, keeps no results, and the json failure outline declares only the SessionEnd hook. Json mode stops printing before the session ends, so a SessionEnd notice never reaches the driver.
 - **P6-DC-13 (Low, open). The sleep-30 RPC row's red proof is just past the 30 s step timeout.** The json row's 25 s deadline is the reliable red proof.
+
+## Planning step
+
+- **P6-DC-14 (Low, open). No pattern-mapper run.** The research step read and measured every analog the plans copy (the session action recording, the json driver, the timeout tests), so the optional pattern-mapper agent was skipped; the AI-integration plan hook does not apply to this phase.
+- **P6-DC-15 (Low, open). The cap and the scenario rows that prove it land in different waves.** 06-02 lands the cap with a unit red proof; 06-03's `timeout: 60` rows prove it end to end and record a cap-off red run.
+- **P6-DC-16 (Low, open). The docs `timeout` row keeps its exact width.** Its Notes cell is the widest of the table, so a longer clause would make mdformat re-pad every row, including sibling-owned ones; the new SessionEnd clause must have the old clause's length, else it becomes a parent line. The 5 s kill-grace detail stays in the code comments and the HKTO-01 parent line.
+- **P6-DC-17 (Low, open). The RPC reason and matcher scenarios keep the setup new-session Given,** as `hook/session.feature` does; only the failure scenarios drop it (P6-DC-09).
+- **P6-DC-18 (Low, open). Proposed parent-line names.** BACKLOG ID `SESSIONENDENV-01` for the variable item and a sample CHANGELOG bullet; the parent may rename them.
+- **P6-DC-19 (Low, open). Step texts.** `the user has a saved pi session {string} in the project`, `the user resumes the saved pi session {string} with the hooks recording`, and `the user runs {string} in pi's json mode with the hooks recording`; a sibling hook phase that registers the same text would make an ambiguous step at the parent's merge.
+- **P6-DC-20 (Low, open). Researcher, planner, and checker ran as background agents** before the coordinator's foreground rule arrived; later dispatches run in the foreground, and commit messages moved to `/tmp/claude-1000/bg-phase-6/`. The two earlier commit titles were checked against their content and match.
