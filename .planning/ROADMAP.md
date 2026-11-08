@@ -347,7 +347,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 6: SessionEnd Hooks** - `SessionEnd` hooks run with every reason Pi produces, matchers select by reason, and a failing hook never keeps a session open
 - [ ] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched
 - [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
-- [ ] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay
+- [x] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay (completed 2026-11-08)
 - [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
 - [ ] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass
 - [ ] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled
@@ -544,10 +544,10 @@ Plans:
   2. The user's own, unmarked `mcp.json` entries stay byte for byte as they were (AMIG-02).
   3. A second load moves nothing and reports nothing, and each scenario passes under every MCP implementation it applies to (AMIG-01, AMIG-02).
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans complete
 
 Plans:
-- [ ] 09-01-PLAN.md — Four `@mcp` scenarios beside the seed (the user's own servers, a second load, the moved server running, the project scope), with the new Given in `mcp-server/legacy-move.steps.ts`
+- [x] 09-01-PLAN.md — Four `@mcp` scenarios beside the seed (the user's own servers, a second load, the moved server running, the project scope), with the new Given in `mcp-server/legacy-move.steps.ts`
 
 ### Phase 10: Model-Facing Tools
 
@@ -673,7 +673,7 @@ Plans:
 | 6. SessionEnd Hooks | 0/TBD | Not started | - |
 | 7. State Schema Migration | 0/TBD | Not started | - |
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
-| 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
+| 9. Legacy MCP Entry Move | 1/1 | Complete    | 2026-11-08 |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
 | 11. Device Flow Sign-In | 0/TBD | Not started | - |
 | 12. Browse Picker | 0/TBD | Not started | - |

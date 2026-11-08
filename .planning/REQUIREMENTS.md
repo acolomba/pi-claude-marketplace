@@ -33,8 +33,8 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 - [ ] **STMIG-02**: A `state.json` from a newer, unsupported schema is refused as unreadable, and nothing is changed.
 - [ ] **CFGMIG-01**: The first load with a `state.json` and no `claude-plugins.json` writes a config declaring every recorded marketplace and plugin, carrying the enabled state and the legacy `autoupdate` field.
 - [ ] **CFGMIG-02**: Later loads never rewrite the config, so the user's edits survive, and an invalid existing config is never overwritten.
-- [ ] **AMIG-01**: On load, a plugin's entries in a legacy `mcp.json` move to `mcp-adapter.json`, and its servers still run.
-- [ ] **AMIG-02**: The move leaves the user's own, unmarked `mcp.json` entries untouched.
+- [x] **AMIG-01**: On load, a plugin's entries in a legacy `mcp.json` move to `mcp-adapter.json`, and its servers still run.
+- [x] **AMIG-02**: The move leaves the user's own, unmarked `mcp.json` entries untouched.
 
 ### Model-facing tools
 
@@ -93,8 +93,8 @@ None.
 | STMIG-02 | Phase 7 | Pending |
 | CFGMIG-01 | Phase 8 | Pending |
 | CFGMIG-02 | Phase 8 | Pending |
-| AMIG-01 | Phase 9 | Pending |
-| AMIG-02 | Phase 9 | Pending |
+| AMIG-01 | Phase 9 | Complete |
+| AMIG-02 | Phase 9 | Complete |
 | TOOL-01 | Phase 10 | Pending |
 | TOOL-02 | Phase 10 | Pending |
 | TOOL-03 | Phase 10 | Pending |
