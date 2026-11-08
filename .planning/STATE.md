@@ -4,18 +4,18 @@ milestone: behavioral-gaps
 milestone_name: Behavioral Coverage Gaps
 current_phase: 2
 current_phase_name: Async Hooks
-status: ready_to_plan
-stopped_at: Phase 01 complete; Phases 2-16 ready for child sessions
-last_updated: "2026-11-08T12:42:22.861Z"
+status: verifying
+stopped_at: Phase 15 complete, ready to verify Phase 2
+last_updated: "2026-11-08T15:58:40.736Z"
 last_activity: 2026-11-08
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: 299047559d367c0d0a868515a2d473e7f6d00814
+last_activity_desc: Phase 15 complete, transitioned to Phase 2
+state_head: 57105b09760ddf47ef3ae2d4a8c960b357f2b872
 progress:
   total_phases: 16
-  completed_phases: 1
-  total_plans: 8
-  completed_plans: 8
-  percent: 6
+  completed_phases: 2
+  total_plans: 9
+  completed_plans: 9
+  percent: 13
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-07 when the behavioral-gaps milesto
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 01 — Foundation
+**Current focus:** Phase 15 — Marketplace State Lock
 
 ## Current Position
 
-Phase: 2-16 — stream phases, one child session each
-Plan: not planned
-Status: Phase 1 complete — child sessions start on the features/behavioral-gaps-phase-N branches
-Last activity: 2026-11-08 — Phase 01 complete, transitioned to Phase 2
+Phase: 2 — Async Hooks
+Plan: 2
+Status: Phase complete — ready for verification
+Last activity: 2026-11-08 — Phase 15 complete, transitioned to Phase 2
 
-Progress: [█░░░░░░░░░] 6%
+Progress: [█░░░░░░░░░] 13%
 
 
 ### mcp-4 closeout
@@ -972,5 +972,5 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-08T05:46:41.533Z
-Stopped at: Phase 01 complete; Phases 2-16 ready for child sessions
+Stopped at: Phase 15 complete, ready to verify Phase 2
 Resume file: None
