@@ -21,3 +21,13 @@ root log `.planning/DUBIOUS-CHOICES.md`.
 - **P12-DC-04 (High, open). Install-scope screen kept as is (D-BG-1202).** Pi offers `Project local (Recommended)`, `Project`, `User (global)`; Claude Code offers user, project, local with none recommended. No scenario exposes a bug there, so the scenarios pin today's rows and the parity change goes to BACKLOG as a parent line.
 - **P12-DC-05 (Low, open). Unavailable plugin rows pinned without an upstream reference.** The binary showed no browse-list treatment of an uninstallable catalog entry; the scenario pins Pi's `[unavailable]` / `not installable` row and its Info-only actions.
 - **P12-DC-06 (Low, open). Upstream's `Updated {date}` row part not added.** Pi's marketplace record carries no date the picker shows.
+
+## Research step
+
+- **P12-DC-07 (Medium, open). Reserved-name check in the count.** `browse` calls `assertRecordedMarketplaceName` as `list-flow` does, so a marketplace the list refuses shows no `available` count.
+- **P12-DC-08 (Low, open). Row text with an unreadable catalog.** `1 installed -- {source}` with no leading `•`; the source alone with no `--` when nothing is installed. Upstream puts the source on its own line, so it has no such case.
+- **P12-DC-09 (Low, open). `pluginCount` keeps its name with a new meaning.** It now counts offered plugins or is `undefined`, matching upstream's name and leaving `demos/browse-demo.ts` working untouched.
+- **P12-DC-10 (Medium, open). Seven terminal scenarios.** The first-screen seed is folded into one walk opened with the bare command, saving one terminal start.
+- **P12-DC-11 (Low, open). Scope-screen descriptions pinned as truncated.** The 120-column terminal cuts them at 84 characters mid-word; the scenario pins what the user sees.
+- **P12-DC-12 (Low, open). Unavailable plugin's Info-only actions stay unit-tested only.** No terminal scenario pins them.
+- **P12-DC-13 (Low, open). Pattern mapper skipped.** The research already maps every touched file to its analog with code excerpts, so the optional pattern-mapper step was not run.
