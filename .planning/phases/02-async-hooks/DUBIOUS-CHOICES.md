@@ -26,3 +26,11 @@ The autonomous run took the recommended option at every discuss question; those 
 - **P2-DC-07 (Medium, open). Project reap scope.** The project PID table is reaped only for a project Pi trusts, and the reap keeps the rows of children the live Pi owns (D-BG-207). Two live Pi processes in one scope still reap each other's hooks; that is deferred, not fixed.
 - **P2-DC-08 (Low, open). Deferred parity items.** Print and json mode synchronous `asyncRewake`, the official-marketplace stdout summary override, the missing-script message, summary and body sanitizing, and the run-time `{"async": true}` protocol are deferred as BACKLOG parent lines (02-CONTEXT.md, Deferred Ideas).
 - **P2-DC-09 (Low, open). Unpaired tests updated.** `test/architecture/hooks-async-rewake.test.ts` and the async cases of `test/integration/hooks-spawn-end-to-end.test.ts` pin the behavior this phase changes, so they change with it (D-BG-209), although no ownership row names them.
+
+## Research step
+
+- **P2-DC-10 (Medium, open). Discuss-step facts corrected.** Research showed that `/reload` and a new session rebuild the hooks runtime, so the in-memory kill never reaches the earlier load's children, and project-scope hooks survive `/reload` today; D-BG-207's reason was rewritten, and `hooks-spawn-end-to-end.test.ts` turned out to have no async case.
+- **P2-DC-11 (Medium, open). New session stops project-scope async hooks.** With the project-hydrate reap, a live Pi that starts a new session stops the earlier session's project-scope async hooks, as the user-scope factory reap already does; Claude Code leaves them running.
+- **P2-DC-12 (Medium, open). One lane call.** The rewake is sent as `{triggerTurn: true, deliverAs: "steer"}` with no `ctx.isIdle()` read; in Pi 1.5.0 that starts a run when idle and steers when streaming, the same behavior as D-BG-201's two branches.
+- **P2-DC-13 (Low, open). Pattern mapping skipped.** The research file already maps every edit point and analog, so the optional pattern-mapper agent was not run, to save shared machine time.
+- **P2-DC-14 (Low, open). json-output wording.** `docs/json-output.md` (an append-only closed-set file) describes the `async-rewake-summary` text as the author's summary; with the `Stop hook feedback` default that is not always true. Listed as a parent line, not edited.
