@@ -43,6 +43,7 @@ The cucumber suite now proves that an upgrade from release 0.6.0 (schema 1) or 0
 | 1 | da2fba9a | test(features): prove the first load migrates an older record |
 | 2 | 81a526fd | test(features): cover repeat loads and disabled plugins in migration |
 | 3 | c7b8927a | test(features): prove a newer installation record is left untouched |
+| SUMMARY | 500fee97 | (wrong title: a copy of c7b8927a's message; P7-DC-15) |
 
 ## Step text (final)
 
