@@ -576,14 +576,14 @@ Plans:
   3. An install from a GitHub git source on a cache miss runs the same flow, and an install whose clone is already cached runs none (DFLOW-03).
   4. The background autoupdate pass with no stored credential starts no Device Flow: the stand-in receives no device-code request, and the pass uses stored credentials only (DFLOW-04).
 
-**Plans**: 2 plans
+**Plans**: 2/2 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 11-01-PLAN.md — Marketplace add sign-in: the credential store steps, seed 1 extended, the next command reusing the token, and a denied or expired sign-in that leaves nothing (DFLOW-01, DFLOW-02)
+- [x] 11-01-PLAN.md — Marketplace add sign-in: the credential store steps, seed 1 extended, the next command reusing the token, and a denied or expired sign-in that leaves nothing (DFLOW-01, DFLOW-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 11-02-PLAN.md — The background pass with and without a stored GitHub credential, and a git-source install on a cache miss and a cache hit, with the phase's parent lines (DFLOW-03, DFLOW-04)
+- [x] 11-02-PLAN.md — The background pass with and without a stored GitHub credential, and a git-source install on a cache miss and a cache hit, with the phase's parent lines (DFLOW-03, DFLOW-04)
 
 ### Phase 12: Browse Picker
 
@@ -679,7 +679,7 @@ Plans:
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
 | 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
-| 11. Device Flow Sign-In | 0/TBD | Not started | - |
+| 11. Device Flow Sign-In | 2/2 | In Progress | - |
 | 12. Browse Picker | 0/TBD | Not started | - |
 | 13. Prune | 0/TBD | Not started | - |
 | 14. Bootstrap | 0/TBD | Not started | - |
