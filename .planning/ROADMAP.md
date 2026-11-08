@@ -514,11 +514,11 @@ Plans:
   2. That load rewrites the installation record in the current schema, and a second load changes nothing (STMIG-01).
   3. A `state.json` from a newer schema is reported as unreadable by the load and by a command, and the file, the config, and every installed component stay as they were (STMIG-02).
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 07-01-PLAN.md — Migration coverage: the migrated-record step, first and second loads after 0.6.0 and 0.19.2, a disabled plugin kept disabled, and the load and `disable` refusing a newer record, each with a red proof
+- [x] 07-01-PLAN.md — Migration coverage: the migrated-record step, first and second loads after 0.6.0 and 0.19.2, a disabled plugin kept disabled, and the load and `disable` refusing a newer record, each with a red proof
 
 ### Phase 8: First-Run Config Migration
 
@@ -672,7 +672,7 @@ Plans:
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |
 | 5. PostCompact Hooks | 0/TBD | Not started | - |
 | 6. SessionEnd Hooks | 0/TBD | Not started | - |
-| 7. State Schema Migration | 0/TBD | Not started | - |
+| 7. State Schema Migration | 1/1 | In progress (verifying) | - |
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
 | 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
