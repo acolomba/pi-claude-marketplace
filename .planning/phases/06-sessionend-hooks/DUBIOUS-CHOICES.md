@@ -25,3 +25,11 @@ The autonomous run took the recommended option at every discuss question; those 
 - **P6-DC-06 (Low, open). The resumed session is a hand-written session file (D-BG-601).** The profile Pi runs with `--no-session` and saves no session, so the `Given` writes a version-3 Pi session header with its own id and the project directory as its cwd, and `switch_session` resumes it.
 - **P6-DC-07 (Low, open). "Pi exits" is proven in json mode, not by an RPC stop (D-BG-603).** The profile Pi driver kills Pi after a 5-second grace and does not say whether Pi exited on its own; the json driver fails unless Pi exits 0 within 25 s.
 - **P6-DC-08 (Low, open). HKTO-01 counted as fixed by the cap (D-BG-604).** Its first point, a budget shared across the hooks, holds because the matching hooks of one event start together (D-CF5-09), so each gets the same 1.5 s; no deadline is threaded through the fan-out.
+
+## Research step
+
+- **P6-DC-09 (Medium, open). The failure scenarios start no setup session.** `the user has started a new pi session` also ends the startup session and runs the slow hook, so each slow row would wait twice and the red proof would land in the Given. The failure scenarios leave it out, unlike `hook/session.feature`; the runs then name the startup session `first`.
+- **P6-DC-10 (Low, open). The saved session sits directly in `{agent dir}/sessions/`.** Pi's own per-cwd folder name changes every run, so the transcript path would not be a stable literal; Pi's `/resume` list would not show the file, but `switch_session` takes the path directly.
+- **P6-DC-11 (Low, open). One named budget constant.** `SESSION_END_BUDGET_SECONDS` also replaces the literal in the SessionEnd row of the defaults table (the row's value, not its order).
+- **P6-DC-12 (Low, open). Json-mode details.** The json turn is recorded with disposition `handled`, runs `/claude:plugin list`, keeps no results, and the json failure outline declares only the SessionEnd hook. Json mode stops printing before the session ends, so a SessionEnd notice never reaches the driver.
+- **P6-DC-13 (Low, open). The sleep-30 RPC row's red proof is just past the 30 s step timeout.** The json row's 25 s deadline is the reliable red proof.
