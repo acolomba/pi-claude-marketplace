@@ -16,7 +16,11 @@
 //   - toolResultCompositeHandler(capturedEpoch) returns the closure
 //     registered on `tool_result`. ONE handler, TWO buckets: the body
 //     reads `event.isError` once and routes to PostToolUseFailure or
-//     PostToolUse (D-59-01 / DISP-01) before any hook runs.
+//     PostToolUse (D-59-01 / DISP-01) before any hook runs. A failed
+//     result under the turn's aborted signal is a call the user cancelled,
+//     and it runs no PostToolUseFailure hook, sync or async (D-BG-402).
+//     While pi-mcp-adapter is the active implementation, a result it marks
+//     with its MCP call failure codes counts as failed too (D-BG-404).
 //
 // Running a bucket, as Claude Code 2.1.316 runs an event's hooks:
 //   - filter: the per-event matcher, then the entry's `if` (MATCH-03).
@@ -822,13 +826,53 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   };
 }
 
+// D-BG-402: Claude Code fires no PostToolUseFailure hook on a running tool
+// that the user cancels, and Pi still reports such a call as a failed result,
+// under the turn's aborted signal.
+function isCancelledFailure(failed: boolean, ctx: ExtensionContext): boolean {
+  return failed && ctx.signal?.aborted === true;
+}
+
+// D-BG-404: pi-mcp-adapter returns a failed MCP tool call with no result-level
+// `isError` and sets the flag in its own `tool_result` handler, which Pi runs
+// after this extension's. Only its two MCP call failure codes count, and only
+// while it is the active implementation.
+const ADAPTER_FAILURE_CODES: ReadonlySet<string> = new Set(["tool_error", "call_failed"]);
+
+// D-BG-404: reads the result's details first, so the proxy rule is read only
+// for a result that carries one of the adapter's failure codes.
+function adapterReportsFailure(event: ToolResultEvent, tools: HookToolView): boolean {
+  const details: unknown = event.details;
+  const code =
+    typeof details === "object" && details !== null && "error" in details
+      ? details.error
+      : undefined;
+  return typeof code === "string" && ADAPTER_FAILURE_CODES.has(code) && tools.proxyRuleApplies();
+}
+
+// D-BG-404: the result as the hooks see it, marked failed when the adapter
+// reported a failure; Pi's own fields are shared, not copied.
+function routedToolResult(event: ToolResultEvent, tools: HookToolView): ToolResultEvent {
+  if (event.isError || !adapterReportsFailure(event, tools)) {
+    return event;
+  }
+
+  return { ...event, isError: true };
+}
+
 /**
  * D-59-01 / D-60-03: `tool_result` composite handler. Reads
  * `event.isError` once, picks the PostToolUseFailure bucket on truthy or
  * PostToolUse on falsy/undefined, then runs and folds the bucket's matching
  * hooks. DISP-01 (event.isError split) happens before any hook runs; DISP-03
  * epoch check at entry; while pi-mcp-adapter is the active implementation,
- * the call-mode `mcp` proxy runs no hook (D-CF5-12, MHK-02).
+ * the call-mode `mcp` proxy runs no hook (D-CF5-12, MHK-02). When the
+ * PostToolUseFailure bucket has hooks and the turn's signal is aborted, the
+ * call was cancelled and no hook of the bucket starts (D-BG-402); the signal
+ * is read only then. While pi-mcp-adapter is the active implementation, a
+ * result it marks with an MCP call failure code takes the PostToolUseFailure
+ * bucket, and every later step sees it failed (D-BG-404); the handler's
+ * return value never sets `isError` itself.
  *
  * Returns `ToolResultEventResult | undefined` via
  * `adaptToolResultResult` (D-60-03).
@@ -844,14 +888,20 @@ export function toolResultCompositeHandler(
   executor: HookExecutor = dispatchHookExec,
   tools: HookToolView = createHookToolView(pi),
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
-  return async (event, ctx) => {
+  return async (piEvent, ctx) => {
     if (capturedGeneration !== runtime.currentGeneration()) {
       return undefined;
     }
 
+    const event = routedToolResult(piEvent, tools);
     const claudeEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
     const bucket = runtime.getRoutingBucket(claudeEvent);
     if (bucket.length === 0) {
+      return undefined;
+    }
+
+    if (isCancelledFailure(event.isError, ctx)) {
+      hookDebugLog("dispatch: no PostToolUseFailure hook on a cancelled tool call");
       return undefined;
     }
 

@@ -19,7 +19,9 @@
 //     hook's feedback, `<Event>:<Tool> hook blocking error from command:
 //     "<command>": <message>`, without marking the result an error;
 //     `mutate.updatedToolOutput` returns its `content` and/or `isError` as
-//     Pi's `tool_result` value, since Pi keeps only returned changes;
+//     Pi's `tool_result` value, since Pi keeps only returned changes, on a
+//     PostToolUse result only: a PostToolUseFailure hook cannot replace the
+//     failed result (D-BG-405);
 //     `stop` debug-logs + returns `undefined` (Pi's
 //     `tool_result` cannot end the turn without aborting it); `noop` returns
 //     `undefined`. CR-01: the mutation surface is whitelisted to
@@ -298,6 +300,19 @@ function withFeedback(
   return [...event.content, feedback];
 }
 
+// D-BG-405: Claude Code's PostToolUseFailure branch reads only
+// `additionalContext`, so a failure hook's `updatedToolOutput` leaves the
+// failed result as the tool reported it.
+function failedResultPatch(
+  result: Extract<HookExecResult, { kind: "mutate" }>,
+): ToolResultEventResult | undefined {
+  if (result.updatedToolOutput !== undefined) {
+    hookDebugLog("adaptToolResult: updatedToolOutput ignored on a failed tool result");
+  }
+
+  return undefined;
+}
+
 /**
  * D-60-03: convert a folded `HookExecResult` to the Pi `tool_result`
  * handler return shape (`ToolResultEventResult | undefined`).
@@ -307,7 +322,9 @@ function withFeedback(
  * patch in that shape and leaves `event` alone. A `block` keeps the tool's output and returns it
  * with the hook's feedback after it, as Claude Code adds a PostToolUse
  * block's feedback after the tool result (D-CF5-11); the result is not
- * marked an error.
+ * marked an error. A mutation on a failed result changes nothing, as Claude
+ * Code's PostToolUseFailure branch reads only `additionalContext`, which
+ * `dispatch.ts` sends on its own path (D-BG-405).
  */
 export function adaptToolResultResult(
   result: HookExecResult,
@@ -321,7 +338,7 @@ export function adaptToolResultResult(
       return { content: withFeedback(event, result, context) };
 
     case "mutate":
-      return toolResultPatch(result.updatedToolOutput);
+      return event.isError ? failedResultPatch(result) : toolResultPatch(result.updatedToolOutput);
 
     case "stop":
       hookDebugLog(

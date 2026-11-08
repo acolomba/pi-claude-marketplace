@@ -342,7 +342,7 @@ the parent can resolve a conflicting merge.
 - [x] **Phase 1: Foundation** - Every stand-in, fixture writer, driver, and shared step the streams need, each proven by a seed, then every shared file frozen and the child-session brief written (completed 2026-11-08)
 - [ ] **Phase 2: Async Hooks** - `async` and `asyncRewake` hooks run in the background, wake the model on exit 2, never block their event, and stop on `/reload`
 - [x] **Phase 3: StopFailure Hooks** - `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload and error-type matchers (completed 2026-11-08)
-- [ ] **Phase 4: PostToolUseFailure Hooks** - `PostToolUseFailure` hooks run on failed tool calls with Claude Code's payload and tool matchers, and `PostToolUse` hooks do not
+- [x] **Phase 4: PostToolUseFailure Hooks** - `PostToolUseFailure` hooks run on failed tool calls with Claude Code's payload and tool matchers, and `PostToolUse` hooks do not (completed 2026-11-08)
 - [x] **Phase 5: PostCompact Hooks** - `PostCompact` hooks run after manual and automatic compactions with the trigger, and matchers select by trigger (completed 2026-11-08)
 - [x] **Phase 6: SessionEnd Hooks** - `SessionEnd` hooks run with every reason Pi produces, matchers select by reason, and a failing hook never keeps a session open (completed 2026-11-08)
 - [x] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched (completed 2026-11-08)
@@ -477,7 +477,17 @@ Plans:
   3. No `PostToolUse` hook runs on a failed call, and a successful call runs no `PostToolUseFailure` hook (TFAIL-01).
   4. What a `PostToolUseFailure` hook returns (additional context, a system message, an exit 2) reaches the model and the user as Claude Code delivers it (TFAIL-01).
 
-**Plans**: TBD
+**Plans**: 3/3 plans complete
+
+Plans:
+**Wave 1**
+- [x] 04-01-PLAN.md — A cancelled tool call runs no PostToolUseFailure hook (D-BG-402), and the payload gains `is_interrupt: false` (D-BG-401, D-BG-403)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 04-02-PLAN.md — A PostToolUseFailure hook's `updatedToolOutput` is ignored (D-BG-405), and the failed-read payload, matcher, split, and output scenarios
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 04-03-PLAN.md — A failed pi-mcp-adapter call runs PostToolUseFailure (D-BG-404), the failed plugin MCP call pair, and the phase's parent lines
 
 ### Phase 5: PostCompact Hooks
 
@@ -734,7 +744,7 @@ Plans:
 | 1. Foundation | 8/8 | Complete    | 2026-11-08 |
 | 2. Async Hooks | 0/TBD | Not started | - |
 | 3. StopFailure Hooks | 3/3 | Complete    | 2026-11-08 |
-| 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |
+| 4. PostToolUseFailure Hooks | 3/3 | Complete    | 2026-11-08 |
 | 5. PostCompact Hooks | 2/2 | Complete | 2026-11-08 |
 | 6. SessionEnd Hooks | 3/3 | Complete    | 2026-11-08 |
 | 7. State Schema Migration | 1/1 | Complete    | 2026-11-08 |

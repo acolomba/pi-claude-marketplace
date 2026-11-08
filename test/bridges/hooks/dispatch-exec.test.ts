@@ -699,6 +699,7 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
       tool_name: "Bash",
       tool_input: { command: "false" },
       error: "exit 1",
+      is_interrupt: false,
     },
   },
   {

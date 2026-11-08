@@ -1485,6 +1485,9 @@ describe("composite dispatch closure partitions", () => {
   }
 });
 
+// A plugin MCP tool under its Claude Code name, as the adapter cases call it.
+const ADAPTER_TOOL = "mcp__plugin_demo_stub__echo";
+
 describe("toolResultCompositeHandler", () => {
   test("returns undefined from a stale tool-result closure without dispatching", async () => {
     // arrange
@@ -1833,7 +1836,189 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(output, expectedOutput);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
+
+  test("starts no hook for a failed result under an aborted turn signal (D-BG-402)", async (t) => {
+    // arrange
+    const readDiagnostics = observeHookDebug(t);
+    const expectedCalls: RecordedCall[] = [];
+
+    // act
+    const { output, calls } = await runBashToolResult(true, AbortSignal.abort());
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(calls, expectedCalls);
+    assert.deepStrictEqual(readDiagnostics(), [
+      "[hooks] dispatch: no PostToolUseFailure hook on a cancelled tool call",
+    ]);
+  });
+
+  test("runs the PostToolUseFailure hook for a failed result under a live turn signal", async () => {
+    // arrange
+    const expectedCalls: RecordedCall[] = [
+      { pluginId: "failure", event: createToolResultEvent(true) },
+    ];
+
+    // act
+    const { calls } = await runBashToolResult(true, new AbortController().signal);
+
+    // assert
+    assert.deepStrictEqual(calls, expectedCalls);
+  });
+
+  test("runs the PostToolUse hook for a successful result under an aborted turn signal (D-BG-402)", async () => {
+    // arrange
+    const expectedCalls: RecordedCall[] = [
+      { pluginId: "after", event: createToolResultEvent(false) },
+    ];
+
+    // act
+    const { calls } = await runBashToolResult(false, AbortSignal.abort());
+
+    // assert
+    assert.deepStrictEqual(calls, expectedCalls);
+  });
+
+  for (const code of ["tool_error", "call_failed"]) {
+    test(`routes a pi-mcp-adapter ${code} result to the PostToolUseFailure hook (D-BG-404)`, async () => {
+      // arrange
+      const reads: string[] = [];
+      const expectedCalls: RecordedCall[] = [
+        {
+          pluginId: "failure-observer",
+          event: { ...adapterToolResult({ error: code }), isError: true },
+        },
+      ];
+
+      // act
+      const { calls } = await runAdapterToolResult({ error: code }, true, reads);
+
+      // assert
+      assert.deepStrictEqual(calls, expectedCalls);
+      assert.deepStrictEqual(reads, ["proxyRuleApplies", `identify ${ADAPTER_TOOL}`]);
+    });
+  }
+
+  test("keeps a tool_error result on PostToolUse while pi-mcp-adapter is not the active implementation (D-BG-404)", async () => {
+    // arrange
+    const reads: string[] = [];
+    const expectedCalls: RecordedCall[] = [
+      { pluginId: "success-observer", event: adapterToolResult({ error: "tool_error" }) },
+    ];
+
+    // act
+    const { calls } = await runAdapterToolResult({ error: "tool_error" }, false, reads);
+
+    // assert
+    assert.deepStrictEqual(calls, expectedCalls);
+    assert.deepStrictEqual(reads, ["proxyRuleApplies", `identify ${ADAPTER_TOOL}`]);
+  });
+
+  for (const { name, details } of [
+    { name: "undefined details", details: undefined },
+    { name: "null details", details: null },
+    { name: "details without an error", details: {} },
+    { name: "a non-string error", details: { error: 1 } },
+    { name: "another adapter code", details: { error: "input_required_needs_ui" } },
+  ]) {
+    test(`keeps a result with ${name} on PostToolUse without reading the proxy rule (D-BG-404)`, async () => {
+      // arrange
+      const reads: string[] = [];
+      const expectedCalls: RecordedCall[] = [
+        { pluginId: "success-observer", event: adapterToolResult(details) },
+      ];
+
+      // act
+      const { calls } = await runAdapterToolResult(details, true, reads);
+
+      // assert
+      assert.deepStrictEqual(calls, expectedCalls);
+      assert.deepStrictEqual(reads, [`identify ${ADAPTER_TOOL}`]);
+    });
+  }
+
+  test("labels a block on a pi-mcp-adapter failure as PostToolUseFailure (D-BG-404)", async () => {
+    // arrange
+    const reads: string[] = [];
+    const block: HookExecResult = { kind: "block", reason: "look again" };
+
+    // act
+    const { output } = await runAdapterToolResult({ error: "tool_error" }, true, reads, block);
+
+    // assert
+    assert.deepStrictEqual(output, {
+      content: [
+        { type: "text", text: "original output" },
+        {
+          type: "text",
+          text: `PostToolUseFailure:${ADAPTER_TOOL} hook blocking error from command: "printf failure-observer": look again`,
+        },
+      ],
+    });
+  });
+
+  test("starts no hook for a pi-mcp-adapter failure under an aborted turn signal (D-BG-402, D-BG-404)", async () => {
+    // arrange
+    const reads: string[] = [];
+    const expectedCalls: RecordedCall[] = [];
+
+    // act
+    const { calls } = await runAdapterToolResult(
+      { error: "tool_error" },
+      true,
+      reads,
+      { kind: "noop" },
+      AbortSignal.abort(),
+    );
+
+    // assert
+    assert.deepStrictEqual(calls, expectedCalls);
+  });
 });
+
+// Runs one bash tool result under `signal`, with a PostToolUse hook `after`
+// and a PostToolUseFailure hook `failure`, both matching Bash.
+async function runBashToolResult(
+  isError: boolean,
+  signal: AbortSignal,
+): Promise<{
+  readonly output: Awaited<ReturnType<ReturnType<typeof toolResultCompositeHandler>>>;
+  readonly calls: RecordedCall[];
+}> {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const context = createExtensionContext("/workspace/tool-result-signal");
+  context.signal = signal;
+  runtime.setRoutingBucket("PostToolUse", [
+    createRoutingEntry({
+      pluginId: "after",
+      claudeEvent: "PostToolUse",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
+    }),
+  ]);
+  runtime.setRoutingBucket("PostToolUseFailure", [
+    createRoutingEntry({
+      pluginId: "failure",
+      claudeEvent: "PostToolUseFailure",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
+    }),
+  ]);
+  const calls: RecordedCall[] = [];
+  const executor = createRecordingExecutor(
+    { after: { kind: "noop" }, failure: { kind: "noop" } },
+    calls,
+  );
+  const handler = toolResultCompositeHandler(
+    runtime,
+    runtime.currentGeneration(),
+    undefined,
+    executor,
+  );
+  const output = await handler(createToolResultEvent(isError), context);
+  return { output, calls };
+}
 
 describe("composite per-event adapters", () => {
   test("adapts a PreToolUse block without a reason to Claude Code's default hook error", async () => {
@@ -4798,3 +4983,58 @@ describe("built-in MCP tool names in tool results and if fields (MHK-01)", () =>
     });
   }
 });
+
+// A successful-looking result of `ADAPTER_TOOL` with `details`, as
+// pi-mcp-adapter returns a failed MCP call before its own handler flags it.
+function adapterToolResult(details: unknown): ToolResultEvent {
+  return { ...createToolResultEvent(false, ADAPTER_TOOL), details };
+}
+
+// Runs `adapterToolResult(details)` with a PostToolUse hook `success-observer`
+// and a PostToolUseFailure hook `failure-observer` on `ADAPTER_TOOL`, through a
+// view whose proxy rule gives `applies` and records its reads in `reads`.
+async function runAdapterToolResult(
+  details: unknown,
+  applies: boolean,
+  reads: string[],
+  failureResult: HookExecResult = { kind: "noop" },
+  signal: AbortSignal = new AbortController().signal,
+): Promise<{
+  readonly output: Awaited<ReturnType<ReturnType<typeof toolResultCompositeHandler>>>;
+  readonly calls: RecordedCall[];
+}> {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const context = createExtensionContext("/workspace/tool-result-adapter");
+  context.signal = signal;
+  runtime.setRoutingBucket("PostToolUse", [
+    createRoutingEntry({
+      pluginId: "success-observer",
+      claudeEvent: "PostToolUse",
+      rawMatcher: ADAPTER_TOOL,
+      declarationIndex: 0,
+    }),
+  ]);
+  runtime.setRoutingBucket("PostToolUseFailure", [
+    createRoutingEntry({
+      pluginId: "failure-observer",
+      claudeEvent: "PostToolUseFailure",
+      rawMatcher: ADAPTER_TOOL,
+      declarationIndex: 0,
+    }),
+  ]);
+  const calls: RecordedCall[] = [];
+  const executor = createRecordingExecutor(
+    { "success-observer": { kind: "noop" }, "failure-observer": failureResult },
+    calls,
+  );
+  const handler = toolResultCompositeHandler(
+    runtime,
+    runtime.currentGeneration(),
+    undefined,
+    executor,
+    createProxyRuleView(applies, reads),
+  );
+  const output = await handler(adapterToolResult(details), context);
+  return { output, calls };
+}

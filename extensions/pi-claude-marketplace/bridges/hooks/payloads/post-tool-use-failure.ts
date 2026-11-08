@@ -10,8 +10,10 @@
 // sends a failed tool's error as the string `error` and sends no
 // `tool_response`, so the text parts of the errored tool's
 // `event.content`, joined with newlines, become `error`; an image part
-// has no text and is left out. `tool_use_id`, `is_interrupt`, and
-// `duration_ms` are not sent (D-CF5-28).
+// has no text and is left out. `is_interrupt` is always `false`: the
+// bridge runs no PostToolUseFailure hook on a call the user cancels, so
+// every run is a failure the tool reported (D-BG-401, D-BG-402).
+// `tool_use_id` and `duration_ms` are not sent (D-CF5-28, D-BG-403).
 
 import { mapPiToClaudeToolName } from "../../../domain/components/hook-tool-names.ts";
 
@@ -26,6 +28,7 @@ export interface PostToolUseFailureStdin {
   readonly tool_name: string;
   readonly tool_input: unknown;
   readonly error: string;
+  readonly is_interrupt: false;
 }
 
 // The text parts of a failed tool's content, one per line.
@@ -52,5 +55,6 @@ export function translatePostToolUseFailure(
     tool_name: mapPiToClaudeToolName(event.toolName),
     tool_input: event.input,
     error: errorText(event.content),
+    is_interrupt: false,
   };
 }
