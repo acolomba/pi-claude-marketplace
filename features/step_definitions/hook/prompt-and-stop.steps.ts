@@ -15,6 +15,12 @@
  * tool returns and a follow-up only when it would otherwise stop. So the
  * step waits for the tool to start, queues the prompt, and keeps the whole
  * run as the last turn.
+ *
+ * An async rewake hook runs in the background, so its prompt's turn settles
+ * while the hook's script still waits for its release (D-BG-12). The
+ * background `When` waits for both the settle and the hook's start line in
+ * the lifecycle log, in either order, asserts that the hook has not ended,
+ * and keeps the run as the last turn.
  */
 
 import assert from "node:assert/strict";
@@ -22,17 +28,25 @@ import assert from "node:assert/strict";
 import { When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
+import { HOOK_LIFECYCLE_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 import { readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 
+import type { HookLifecycleEvent } from "../../lib/hook-recorder.ts";
 import type { RpcRecord } from "../../lib/pi-process.ts";
-import type { ScenarioWorld } from "../../support/world.ts";
+import type { ModelTurn, ScenarioWorld } from "../../support/world.ts";
 
 // Two scripted turns settle in well under a second each; the margin covers a
 // loaded CI runner and stays below the 30-second step timeout, so a turn the
 // Stop hooks never send back fails here.
 const REENTERED_TURNS_DEADLINE_MS = 20_000;
+
+// A scripted turn settles, and an async hook's script starts, in well under a
+// second; the margin covers a loaded CI runner and stays below the 30-second
+// step timeout, so a turn that never settles or a hook that never starts
+// fails here.
+const BACKGROUND_HOOK_DEADLINE_MS = 20_000;
 
 const DIALOG_METHODS: ReadonlySet<string> = new Set(["select", "confirm", "input", "editor"]);
 
@@ -83,20 +97,60 @@ function callsPastScript(logs: ReadonlyMap<string, readonly unknown[]>): string[
 }
 
 // Asserts that the run since `from` had no fault and no model call past the
-// script, and keeps its records and the log lines since `lengths` as the
-// last turn of `prompt`.
+// script, and returns its records and the log lines since `lengths` as the
+// turn of `prompt`.
+async function checkedRun(
+  world: ScenarioWorld,
+  prompt: string,
+  lengths: ReadonlyMap<string, number>,
+  from: number,
+): Promise<ModelTurn> {
+  const records = world.pi.recordsSince(from);
+  assert.deepStrictEqual(records.filter(isFault), []);
+  const logs = await readLogLinesSince(world.profileHarness(), lengths);
+  assert.deepStrictEqual(callsPastScript(logs), [], "the model was called past its script");
+  return { prompt, disposition: "started", records, logs };
+}
+
+// Keeps the checked run since `from` as the last turn of `prompt`.
 async function recordRun(
   world: ScenarioWorld,
   prompt: string,
   lengths: ReadonlyMap<string, number>,
   from: number,
 ): Promise<void> {
-  const records = world.pi.recordsSince(from);
-  assert.deepStrictEqual(records.filter(isFault), []);
-  const logs = await readLogLinesSince(world.profileHarness(), lengths);
-  assert.deepStrictEqual(callsPastScript(logs), [], "the model was called past its script");
-  world.recordTurn({ prompt, disposition: "started", records, logs });
+  world.recordTurn(await checkedRun(world, prompt, lengths, from));
 }
+
+// Sends `text`, waits for its turn to settle and for `hook` to log its start,
+// in either order, and asserts that the hook has not ended. Returns the turn,
+// after the checks `recordRun` makes.
+async function promptPastBackgroundHook(
+  world: ScenarioWorld,
+  text: string,
+  hook: string,
+): Promise<ModelTurn> {
+  const deadline = Date.now() + BACKGROUND_HOOK_DEADLINE_MS;
+  const harness = world.profileHarness();
+  const prompt = expandTokens(text, world.tokens);
+  const { lengths, from } = await startPrompt(world, prompt);
+  await Promise.all([
+    settledAfter(world, from, deadline),
+    waitForHookLifecycle(harness, hook, "start", deadline - Date.now()),
+  ]);
+  const turn = await checkedRun(world, prompt, lengths, from);
+  const lifecycle = (turn.logs.get(HOOK_LIFECYCLE_LOG) ?? []) as readonly HookLifecycleEvent[];
+  const ended = lifecycle.filter((event) => event.hook === hook && event.phase === "end");
+  assert.deepStrictEqual(ended, [], `the hook ${hook} ended before its release`);
+  return turn;
+}
+
+When(
+  "the user prompts {string} and the hook {string} goes on in the background",
+  async function (this: ScenarioWorld, text: string, hook: string) {
+    this.recordTurn(await promptPastBackgroundHook(this, text, hook));
+  },
+);
 
 When(
   "the user prompts {string} and the stop hooks send the turn back",

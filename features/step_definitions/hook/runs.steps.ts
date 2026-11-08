@@ -12,6 +12,12 @@
  * order it first appears in, and a session id inside a cell, such as the one
  * `CLAUDE_ENV_FILE` names, reads as that ordinal too (D-CF5-26). A turn that
  * ran no hook is stated by the no-runs step.
+ *
+ * A hook script that outlives its event also appends a start line and an end
+ * line to the harness log `hook-lifecycle.jsonl` (D-BG-12). The lifecycle
+ * step states the lines of the last turn whole, in append order, as the
+ * hook, the phase, and the exit code of an end line; the pid differs on
+ * every run, so no row states it.
  */
 
 import assert from "node:assert/strict";
@@ -25,14 +31,16 @@ import {
   publishRecordingHooks,
   recordingHooksText,
 } from "../../lib/hook-files.ts";
-import { HOOK_RUNS_LOG } from "../../lib/hook-recorder.ts";
+import { HOOK_LIFECYCLE_LOG, HOOK_RUNS_LOG } from "../../lib/hook-recorder.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
 
-import type { HookRun } from "../../lib/hook-recorder.ts";
+import type { HookLifecycleEvent, HookRun } from "../../lib/hook-recorder.ts";
 import type { RunTokens } from "../../lib/run-tokens.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
 const SESSION_ORDINALS: readonly string[] = ["first", "second", "third", "fourth"];
+
+const LIFECYCLE_COLUMNS: readonly string[] = ["hook", "phase", "exit code"];
 
 // The column of each stdin field: its words, with the two the table names
 // differently. Any other field reads as its words, so it shows up as a
@@ -146,3 +154,14 @@ Then("the hooks record no runs", function (this: ScenarioWorld) {
   assert.deepStrictEqual(this.requireTurn().logs.get(HOOK_RUNS_LOG) ?? [], []);
   this.markTurnCompared();
 });
+
+Then(
+  "the hook processes record these lifecycle events:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const events = (this.requireTurn().logs.get(HOOK_LIFECYCLE_LOG) ??
+      []) as readonly HookLifecycleEvent[];
+    const rows = events.map((event) => [event.hook, event.phase, String(event.code ?? "")]);
+    assert.deepStrictEqual([LIFECYCLE_COLUMNS, ...rows], table.raw());
+    this.markTurnCompared();
+  },
+);
