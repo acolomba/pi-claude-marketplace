@@ -8,12 +8,35 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { type DataTable, Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import type { ScenarioWorld } from "../../support/world.ts";
+
+// D-BG-1105: the git host's stored-credential step stores the loopback address
+// of the override host, so a credential that answers a github.com fill needs
+// its own step. Git's `store` helper reads both files from the sandbox HOME.
+Given(
+  "the user has stored a credential for github.com with the user {string} and the password {string}",
+  async function (this: ScenarioWorld, user: string, password: string): Promise<void> {
+    const login = `${encodeURIComponent(user)}:${encodeURIComponent(password)}`;
+    const files: Record<string, string> = {
+      ".gitconfig": "[credential]\n\thelper = store\n",
+      ".git-credentials": `https://${login}@github.com\n`,
+    };
+    const written = await Promise.all(
+      Object.entries(files).map(async ([name, text]) => {
+        const file = path.join(this.tokens.home, name);
+        await writeFile(file, text, { flag: "wx", mode: 0o600 });
+        this.onRelease(() => rm(file, { force: true }));
+        return [name, await readFile(file, "utf8")] as const;
+      }),
+    );
+    assert.deepStrictEqual(Object.fromEntries(written), files);
+  },
+);
 
 // The lines of the credential store in the sandbox HOME, in file order and
 // without blank lines. An absent store holds no lines.
