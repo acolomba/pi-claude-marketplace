@@ -6,10 +6,10 @@ current_phase: 2
 current_phase_name: Async Hooks
 status: ready_to_plan
 stopped_at: Phase 01 complete; Phases 2-16 ready for child sessions
-last_updated: "2026-11-08T07:24:51.172Z"
+last_updated: "2026-11-08T12:42:22.861Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: 15d5b81b8d893481f9e2e4c72bcc662414ea1947
+state_head: 299047559d367c0d0a868515a2d473e7f6d00814
 progress:
   total_phases: 16
   completed_phases: 1
@@ -205,6 +205,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261106-u9c | MCP implementation test gaps and the apply row fix (REVIEWSUGG-01 tests part) | 2026-11-07 | e27276c | — | .planning/quick/261106-u9c-mcp-implementation-test-gaps-reviewsugg-01-tests-part-see-pl |
 | 261107-36g | Name the unsupported kinds in the not-installable message (NOTINSTALLMSG-01) | 2026-11-07 | 93168c0 | — | [261107-36g-fix-notinstallmsg-01-name-the-unsupporte](./quick/261107-36g-fix-notinstallmsg-01-name-the-unsupporte/) |
 | 261107-lth | Install codegraph as a devDependency instead of globally | 2026-11-07 | 55cf1393 | — | [261107-lth-codegraph-local-install](./quick/261107-lth-codegraph-local-install/) |
+| 261108-a00 | Isolate the Pi home for every test run | 2026-11-08 | 29904755 | — | [261108-a00-isolate-the-pi-home-for-every-test-run](./quick/261108-a00-isolate-the-pi-home-for-every-test-run/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
