@@ -57,15 +57,84 @@ Feature: Plugin prune
     Then the project scope holds no git clones
     Then the git host receives no request
 
-  Scenario: Previewing a prune lists the dependency it would uninstall and removes nothing
+  Scenario: Pruning without a scope prunes the user scope alone
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
       | app  | 1.0.0   | lib          |
+      | tool | 1.0.0   | mid          |
+      | mid  | 1.1.0   |              |
       | lib  | 1.2.0   |              |
+    Given the marketplace "tools" is added to the user scope
     Given the marketplace "tools" is added to the project scope
-    Given the user has run "/claude:plugin install app@tools --scope project"
-    Given the user has run "/claude:plugin uninstall app@tools --scope project"
+    Given the user has run "/claude:plugin install app@tools --scope user"
+    Given the user has run "/claude:plugin uninstall app@tools --scope user"
+    Given the user has run "/claude:plugin install tool@tools --scope project"
+    Given the user has run "/claude:plugin uninstall tool@tools --scope project"
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin prune"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons           | scope | version |
+      | tools            | user              | lib@tools | lib  | uninstalled | dependency pruned | user  | 1.2.0   |
+    Then the user scope has no installed plugins
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | mid@tools | 1.1.0   | true    |
+    Then the project scope stages these skills and prompts:
+      | kind  | name      |
+      | skill | mid-skill |
+
+  Scenario: Previewing a prune of the user scope lists only its dependency and removes nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | tool | 1.0.0   | mid          |
+      | mid  | 1.1.0   |              |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" is added to the user scope
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope user"
+    Given the user has run "/claude:plugin uninstall app@tools --scope user"
+    Given the user has run "/claude:plugin install tool@tools --scope project"
+    Given the user has run "/claude:plugin uninstall tool@tools --scope project"
+    Given the config and installation record bytes of the user scope are remembered
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin prune --scope user --dry-run"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status         | reasons           | scope | version |
+      | tools            | user              | lib@tools | lib  | will uninstall | dependency pruned | user  | 1.2.0   |
+    Then the config and installation record bytes of the user scope are unchanged
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the user scope stages these skills and prompts:
+      | kind  | name      |
+      | skill | lib-skill |
+
+  Scenario: Previewing a prune of the project scope lists only its dependency and removes nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | tool | 1.0.0   | mid          |
+      | mid  | 1.1.0   |              |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" is added to the user scope
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope user"
+    Given the user has run "/claude:plugin uninstall app@tools --scope user"
+    Given the user has run "/claude:plugin install tool@tools --scope project"
+    Given the user has run "/claude:plugin uninstall tool@tools --scope project"
+    Given the config and installation record bytes of the user scope are remembered
+    Given the config and installation record bytes of the project scope are remembered
     When the user runs "/claude:plugin prune --scope project --dry-run"
     Then the result has these fields:
       | kind         | cascade |
@@ -73,13 +142,12 @@ Feature: Plugin prune
       | needs reload | false   |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id        | name | status         | reasons           | scope   | version |
-      | tools            | project           | lib@tools | lib  | will uninstall | dependency pruned | project | 1.2.0   |
-    Then the installation record of the project scope holds these plugins:
-      | id        | version | enabled |
-      | lib@tools | 1.2.0   | true    |
+      | tools            | project           | mid@tools | mid  | will uninstall | dependency pruned | project | 1.1.0   |
+    Then the config and installation record bytes of the user scope are unchanged
+    Then the config and installation record bytes of the project scope are unchanged
     Then the project scope stages these skills and prompts:
       | kind  | name      |
-      | skill | lib-skill |
+      | skill | mid-skill |
 
   Scenario: Pruning keeps a dependency that an installed plugin still needs
     Given the marketplace "tools" is published as a dir source
