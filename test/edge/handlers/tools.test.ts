@@ -1704,6 +1704,7 @@ describe("registerListPluginsTool", () => {
     });
     const expectedResult = {
       content: [{ type: "text", text: 'Marketplace "proj-mp" not found.' }],
+      isError: true,
       details: { marketplaces: [] },
     };
 
@@ -1722,7 +1723,7 @@ describe("registerListPluginsTool", () => {
     verifyBoundary();
   });
 
-  test("reports the marketplace as not found when no scope declares it", async (t) => {
+  test("reports a marketplace that no scope declares as a not-found tool error", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "marketplace-absent");
     const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
@@ -1731,6 +1732,7 @@ describe("registerListPluginsTool", () => {
     });
     const expectedResult = {
       content: [{ type: "text", text: 'Marketplace "ghost-mp" not found.' }],
+      isError: true,
       details: { marketplaces: [] },
     };
 
@@ -1875,6 +1877,7 @@ describe("registerListPluginsTool", () => {
     });
     const expectedResult = {
       content: [{ type: "text", text: 'Marketplace "https://***@git.example.com/o/r" not found.' }],
+      isError: true,
       details: { marketplaces: [] },
     };
 

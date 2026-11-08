@@ -41,7 +41,8 @@
 //
 // TC-9: each execute catches every failure of its body and returns
 // `loadFailure`'s error result, because Pi relays a thrown error's message to
-// the model unredacted.
+// the model unredacted. D-BG-1001: every error either tool reports is such a
+// returned result with `isError: true`, never a throw.
 
 import Type from "typebox";
 
@@ -103,7 +104,10 @@ const LIST_PLUGINS_PARAMS = Type.Object({
 interface ListToolResult {
   content: PiTextContentBlock[];
   details: { marketplaces: ReturnType<typeof toWireMarketplaces> };
-  /** Set on the load-failure result only. */
+  /**
+   * Set on the two error results: a failed load (TC-9), and a marketplace
+   * that no asked scope records (D-BG-1003).
+   */
   isError?: true;
 }
 
@@ -512,6 +516,7 @@ async function buildPluginListResult(
     if (!exists) {
       return {
         content: textContent(`Marketplace "${params.marketplace}" not found.`),
+        isError: true,
         details: { marketplaces: [] },
       };
     }
