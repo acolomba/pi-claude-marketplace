@@ -195,3 +195,41 @@ Feature: Plugin model tools
       | 3    | tool result | pi_claude_marketplace_plugin_list failed: Marketplace "ghost" not found.               |
       | 3    | assistant   | tool call pi_claude_marketplace_plugin_list {"marketplace":"extras","scope":"project"} |
       | 3    | tool result | pi_claude_marketplace_plugin_list failed: Marketplace "extras" not found.              |
+
+  Scenario: No call to either tool changes the config, the installation record, or what is installed
+    Given the config and installation record bytes of the project scope are remembered
+    Given the config and installation record bytes of the user scope are remembered
+    Given the scripted model plays these steps:
+      | reply                | tool                              | arguments                                                                                      |
+      |                      | pi_claude_marketplace_list        | {"scope":"user"}                                                                               |
+      |                      | pi_claude_marketplace_plugin_list | {"marketplace":"tools","scope":"project","installed":true,"available":true,"unavailable":true} |
+      |                      | pi_claude_marketplace_plugin_list | {"marketplace":"ghost"}                                                                        |
+      | Nothing was changed. |                                   |                                                                                                |
+    When the user prompts "Look at the marketplaces and plugins without changing anything."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                         |
+      | 1    | user        | Look at the marketplaces and plugins without changing anything.                                                                                                                                                                                                                                                                              |
+      | 2    | user        | Look at the marketplaces and plugins without changing anything.                                                                                                                                                                                                                                                                              |
+      | 2    | assistant   | tool call pi_claude_marketplace_list {"scope":"user"}                                                                                                                                                                                                                                                                                        |
+      | 2    | tool result | pi_claude_marketplace_list returned: [user] extras -- 1 plugin(s) -- {home}/marketplaces/extras                                                                                                                                                                                                                                              |
+      | 3    | user        | Look at the marketplaces and plugins without changing anything.                                                                                                                                                                                                                                                                              |
+      | 3    | assistant   | tool call pi_claude_marketplace_list {"scope":"user"}                                                                                                                                                                                                                                                                                        |
+      | 3    | tool result | pi_claude_marketplace_list returned: [user] extras -- 1 plugin(s) -- {home}/marketplaces/extras                                                                                                                                                                                                                                              |
+      | 3    | assistant   | tool call pi_claude_marketplace_plugin_list {"marketplace":"tools","scope":"project","installed":true,"available":true,"unavailable":true}                                                                                                                                                                                                   |
+      | 3    | tool result | pi_claude_marketplace_plugin_list returned: Marketplace tools (project)\n  [installed] alpha  1.0.0\n  [available] beta  1.0.0\n  [installed] delta  1.0.0  (unsupported component)\n  [unavailable] eps  1.0.0\n  [unavailable] gamma  1.0.0  (unsupported component)\n  [available] ghp\n  [unavailable] npmp  1.0.0  (unsupported source) |
+      | 4    | user        | Look at the marketplaces and plugins without changing anything.                                                                                                                                                                                                                                                                              |
+      | 4    | assistant   | tool call pi_claude_marketplace_list {"scope":"user"}                                                                                                                                                                                                                                                                                        |
+      | 4    | tool result | pi_claude_marketplace_list returned: [user] extras -- 1 plugin(s) -- {home}/marketplaces/extras                                                                                                                                                                                                                                              |
+      | 4    | assistant   | tool call pi_claude_marketplace_plugin_list {"marketplace":"tools","scope":"project","installed":true,"available":true,"unavailable":true}                                                                                                                                                                                                   |
+      | 4    | tool result | pi_claude_marketplace_plugin_list returned: Marketplace tools (project)\n  [installed] alpha  1.0.0\n  [available] beta  1.0.0\n  [installed] delta  1.0.0  (unsupported component)\n  [unavailable] eps  1.0.0\n  [unavailable] gamma  1.0.0  (unsupported component)\n  [available] ghp\n  [unavailable] npmp  1.0.0  (unsupported source) |
+      | 4    | assistant   | tool call pi_claude_marketplace_plugin_list {"marketplace":"ghost"}                                                                                                                                                                                                                                                                          |
+      | 4    | tool result | pi_claude_marketplace_plugin_list failed: Marketplace "ghost" not found.                                                                                                                                                                                                                                                                     |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the config and installation record bytes of the user scope are unchanged
+    Then the project scope stages these skills and prompts:
+      | kind  | name        |
+      | skill | alpha-skill |
+      | skill | delta-skill |
+    Then the user scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | kilo-skill |
