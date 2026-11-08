@@ -25,7 +25,7 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 - [x] **STOPF-01**: `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload, and matchers select them by error type.
 - [ ] **TFAIL-01**: `PostToolUseFailure` hooks run on a failed tool call with Claude Code's payload, matchers select them by tool, and a `PostToolUse` hook does not run on the failure.
 - [ ] **PCOMP-01**: `PostCompact` hooks run after a compaction with its trigger (`manual` or `auto`), and matchers select them by trigger.
-- [ ] **SEND-01**: `SessionEnd` hooks run with each reason Pi can produce, matchers select them by reason, and a failing `SessionEnd` hook does not keep the session from ending.
+- [x] **SEND-01**: `SessionEnd` hooks run with each reason Pi can produce, matchers select them by reason, and a failing `SessionEnd` hook does not keep the session from ending.
 
 ### Upgrades
 
@@ -88,7 +88,7 @@ None.
 | STOPF-01 | Phase 3 | Complete |
 | TFAIL-01 | Phase 4 | Pending |
 | PCOMP-01 | Phase 5 | Pending |
-| SEND-01 | Phase 6 | Pending |
+| SEND-01 | Phase 6 | Complete |
 | STMIG-01 | Phase 7 | Complete |
 | STMIG-02 | Phase 7 | Complete |
 | CFGMIG-01 | Phase 8 | Pending |

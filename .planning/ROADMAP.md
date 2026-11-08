@@ -344,7 +344,7 @@ the parent can resolve a conflicting merge.
 - [x] **Phase 3: StopFailure Hooks** - `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload and error-type matchers (completed 2026-11-08)
 - [ ] **Phase 4: PostToolUseFailure Hooks** - `PostToolUseFailure` hooks run on failed tool calls with Claude Code's payload and tool matchers, and `PostToolUse` hooks do not
 - [ ] **Phase 5: PostCompact Hooks** - `PostCompact` hooks run after manual and automatic compactions with the trigger, and matchers select by trigger
-- [ ] **Phase 6: SessionEnd Hooks** - `SessionEnd` hooks run with every reason Pi produces, matchers select by reason, and a failing hook never keeps a session open
+- [x] **Phase 6: SessionEnd Hooks** - `SessionEnd` hooks run with every reason Pi produces, matchers select by reason, and a failing hook never keeps a session open (completed 2026-11-08)
 - [x] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched (completed 2026-11-08)
 - [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
 - [x] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay (completed 2026-11-08)
@@ -512,9 +512,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 06-01-PLAN.md -- the session end verb steps, the resume and json-mode reason scenarios, and the four matcher scenarios (wave 1)
-- [ ] 06-02-PLAN.md -- cap a plugin SessionEnd hook's timeout at the 1.5 s budget (D-BG-604), with unit cases and the docs clause (wave 1)
-- [ ] 06-03-PLAN.md -- the failure scenarios on a new session and on a json-mode exit (wave 2)
+- [x] 06-01-PLAN.md -- the session end verb steps, the resume and json-mode reason scenarios, and the four matcher scenarios (wave 1)
+- [x] 06-02-PLAN.md -- cap a plugin SessionEnd hook's timeout at the 1.5 s budget (D-BG-604), with unit cases and the docs clause (wave 1)
+- [x] 06-03-PLAN.md -- the failure scenarios on a new session and on a json-mode exit (wave 2)
 
 ### Phase 7: State Schema Migration
 
@@ -712,7 +712,7 @@ Plans:
 | 3. StopFailure Hooks | 3/3 | Complete    | 2026-11-08 |
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |
 | 5. PostCompact Hooks | 0/TBD | Not started | - |
-| 6. SessionEnd Hooks | 0/3 | Planned | - |
+| 6. SessionEnd Hooks | 3/3 | Complete    | 2026-11-08 |
 | 7. State Schema Migration | 1/1 | Complete    | 2026-11-08 |
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
 | 9. Legacy MCP Entry Move | 1/1 | Complete    | 2026-11-08 |

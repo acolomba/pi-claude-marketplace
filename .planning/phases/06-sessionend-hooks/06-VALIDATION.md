@@ -2,8 +2,8 @@
 phase: "6"
 slug: "sessionend-hooks"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-11-08"
 ---
@@ -39,13 +39,13 @@ created: "2026-11-08"
 
 | Requirement | Behavior | Test Type | Automated Command | Status |
 |-------------|----------|-----------|-------------------|--------|
-| SEND-01 (1) | resume (switch_session) and json-mode quit run SessionEnd with Claude's reason and payload | behavioral | quick run command | ⬜ pending |
-| SEND-01 (2) | a matcher for clear, resume, other, prompt_input_exit selects only its run; logout never runs | behavioral | quick run command | ⬜ pending |
-| SEND-01 (3) | exit 1, exit 2, outlasting the budget, a longer declared timeout: the next session starts or Pi exits, and the run is recorded | behavioral | quick run command | ⬜ pending |
-| D-BG-604 | a declared blocking SessionEnd timeout is capped at 1.5 s with a debug line; 1.5 s kept; background lane kept | unit | `npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/hooks/timeout.ts` | ⬜ pending |
-| hygiene | no unused, undefined, or ambiguous step; no clone group | static | `npm run check:features`; `npx fallow dupes --fail-on-issues --format human` | ⬜ pending |
+| SEND-01 (1) | resume (switch_session) and json-mode quit run SessionEnd with Claude's reason and payload | behavioral | quick run command | ✅ green |
+| SEND-01 (2) | a matcher for clear, resume, other, prompt_input_exit selects only its run; logout never runs | behavioral | quick run command | ✅ green |
+| SEND-01 (3) | exit 1, exit 2, outlasting the budget, a longer declared timeout: the next session starts or Pi exits, and the run is recorded | behavioral | quick run command | ✅ green |
+| D-BG-604 | a declared blocking SessionEnd timeout is capped at 1.5 s with a debug line; 1.5 s kept; background lane kept | unit | `npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/hooks/timeout.ts` | ✅ green |
+| hygiene | no unused, undefined, or ambiguous step; no clone group | static | `npm run check:features`; `npx fallow dupes --fail-on-issues --format human` | ✅ green |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: ✅ green · ✅ green · ❌ red · ⚠️ flaky*
 
 ---
 
@@ -63,11 +63,11 @@ All phase behaviors have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-11-08

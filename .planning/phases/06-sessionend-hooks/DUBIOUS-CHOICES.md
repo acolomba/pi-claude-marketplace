@@ -51,3 +51,9 @@ The autonomous run took the recommended option at every discuss question; those 
 - **P6-DC-23 (Low, open). The exit-2 scenario starts a setup session.** Without one, the hook-error notice of the startup session's end missed the RPC stream once under load (Pi's RPC double bind) and appeared on a rerun; ending a session that `new_session` created makes the notice reliable.
 - **P6-DC-24 (Low, open). R6 for the json rows used a delayed settle.** A promise that never settles keeps nothing in Node's event loop, so the json Pi still exits 0; a settle delayed by a referenced 60 s timer is the plausible wrong implementation that the json rows catch.
 - **P6-DC-25 (Low, open). Two tasks per commit in 06-01 and 06-03.** Each plan's feature file and step changes landed in one commit.
+
+## Gates and verification
+
+- **P6-DC-26 (Medium, open). The phase gate passed after one rerun.** On the merged tree, `npm run check`'s adapter leg (default `--parallel 8`) failed 13 of 1732 scenarios outside the hook files under load; exactly those 13 passed on one rerun at `--parallel 3`. The builtin leg and direct coverage, which `npm run check` did not reach, ran separately and passed, and `npm run test:modules` passed. Both runs are recorded in 06-VERIFICATION.md.
+- **P6-DC-27 (Low, open). The code review found two info items and no fix.** Both are recorded decisions (P6-DC-01, P6-DC-22), so no review-fix round ran.
+- **P6-DC-28 (Low, open). STATE.md left as the parent's.** The milestone STATE.md tracks Phases 2 to 16 together; the phase's progress is recorded in its own ROADMAP and REQUIREMENTS entries, and the parent re-derives STATE at the merge.
