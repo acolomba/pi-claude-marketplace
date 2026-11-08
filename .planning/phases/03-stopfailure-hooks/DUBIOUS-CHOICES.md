@@ -43,3 +43,11 @@ The autonomous run took the recommended option at every discuss question. The an
 - **P3-DC-18 (Low, open). The planner filled the validation map.** It replaced the `3-xx` rows of `03-VALIDATION.md` with its task IDs.
 - **P3-DC-19 (Low, open). BACKLOG ID.** The parent line for the other closed-set events' lists proposes the ID `CLOSEDLIST-01`.
 - **P3-DC-20 (Low, open). Two planner detectors skipped.** The assumption-delta and schema-gate detectors did not run, because their fragments are not installed in this worktree. The api-coverage check ran and reported no external API.
+
+## Execution, review, and verification
+
+- **P3-DC-21 (Medium, open). Inline execution.** The Agent tool in this session has no foreground mode, so a subagent kept running after the phase session handed back. On the coordinator's instruction, the phase session executed all three plans, wrote the code review, and verified the phase itself. No executor, reviewer, or verifier subagent did this work. The review and the verification are self-checks, without an independent reader.
+- **P3-DC-22 (Low, open). Executor collision.** The first 03-01 executor was still committing Task 1 while the phase session edited the same worktree. Its commit failed in the hook ("files were modified by this hook"), so nothing wrong was committed. That executor's temporary break 1 never reached a commit either. Plan 03-01 landed as one commit (`772f8deb`), not three.
+- **P3-DC-23 (Low, open). One combined wave gate.** Waves 1 and 2 had no gate of their own. Each task ran its focused cucumber, unit, direct-coverage, and `check:static` runs, and the single phase gate (`npm run check` and `npm run test:modules`) ran after wave 3.
+- **P3-DC-24 (Medium, open). A load timeout left red.** In the phase gate, `mcp-server/lifecycle.feature:237` timed out three times at the pi-mcp-adapter start (load average about 88). That feature declares no hooks. The phase records it as an environment timeout for the parent's combined-tree gate, not as a phase failure. The 7 other timeouts passed on rerun.
+- **P3-DC-25 (Low, open). Test shapes.** The four D-BG-303 settle cases and the partition list cases are table-driven loops, and the translator's existing omit-envelope case now covers both optional fields. This avoids clone groups.

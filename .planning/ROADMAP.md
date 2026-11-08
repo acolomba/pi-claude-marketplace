@@ -341,7 +341,7 @@ the parent can resolve a conflicting merge.
 
 - [x] **Phase 1: Foundation** - Every stand-in, fixture writer, driver, and shared step the streams need, each proven by a seed, then every shared file frozen and the child-session brief written (completed 2026-11-08)
 - [ ] **Phase 2: Async Hooks** - `async` and `asyncRewake` hooks run in the background, wake the model on exit 2, never block their event, and stop on `/reload`
-- [ ] **Phase 3: StopFailure Hooks** - `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload and error-type matchers
+- [x] **Phase 3: StopFailure Hooks** - `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload and error-type matchers (completed 2026-11-08)
 - [ ] **Phase 4: PostToolUseFailure Hooks** - `PostToolUseFailure` hooks run on failed tool calls with Claude Code's payload and tool matchers, and `PostToolUse` hooks do not
 - [ ] **Phase 5: PostCompact Hooks** - `PostCompact` hooks run after manual and automatic compactions with the trigger, and matchers select by trigger
 - [ ] **Phase 6: SessionEnd Hooks** - `SessionEnd` hooks run with every reason Pi produces, matchers select by reason, and a failing hook never keeps a session open
@@ -450,17 +450,17 @@ Plans:
   3. A turn that ends normally runs no `StopFailure` hook, and on an error turn `Stop` hooks run or stay silent as Claude Code's do (STOPF-01).
   4. A `StopFailure` hook's output and exit code are handled as Claude Code handles them, and the next prompt in the session gets a normal turn (STOPF-01).
 
-**Plans**: 0/3 plans complete
+**Plans**: 3/3 plans complete
 
 Plans:
 **Wave 1**
-- [ ] 03-01-PLAN.md — Pin today's StopFailure behavior: payload, error-type matchers, no Stop on an error turn, ignored output, and a normal next turn
+- [x] 03-01-PLAN.md — Pin today's StopFailure behavior: payload, error-type matchers, no Stop on an error turn, ignored output, and a normal next turn
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03-02-PLAN.md — StopFailure matchers take `|` lists and Claude Code's 13 error types (D-BG-301, D-BG-302)
+- [x] 03-02-PLAN.md — StopFailure matchers take `|` lists and Claude Code's 13 error types (D-BG-301, D-BG-302)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 03-03-PLAN.md — Leave out an empty `last_assistant_message` (D-BG-303), and the parent lines
+- [x] 03-03-PLAN.md — Leave out an empty `last_assistant_message` (D-BG-303), and the parent lines
 
 ### Phase 4: PostToolUseFailure Hooks
 
@@ -674,7 +674,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Foundation | 8/8 | Complete    | 2026-11-08 |
 | 2. Async Hooks | 0/TBD | Not started | - |
-| 3. StopFailure Hooks | 0/TBD | Not started | - |
+| 3. StopFailure Hooks | 3/3 | Complete    | 2026-11-08 |
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |
 | 5. PostCompact Hooks | 0/TBD | Not started | - |
 | 6. SessionEnd Hooks | 0/TBD | Not started | - |
