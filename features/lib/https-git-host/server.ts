@@ -335,6 +335,11 @@ export class HttpsGitHost {
   readonly address: string;
   /** The certificate Pi trusts the host through. */
   readonly certificatePath: string;
+  /**
+   * The key of that certificate, which another loopback stand-in may serve
+   * with, so Pi needs no second CA file (D-BG-03).
+   */
+  readonly keyPath: string;
   /** The scratch HOME of every git that writes the repositories the host serves. */
   readonly gitHome: string;
   /** The owner a repository is served under when a caller names none. */
@@ -352,6 +357,7 @@ export class HttpsGitHost {
   private constructor(root: string, server: Server, port: number) {
     this.address = `127.0.0.1:${port}`;
     this.certificatePath = path.join(root, "cert.pem");
+    this.keyPath = path.join(root, "key.pem");
     this.gitHome = path.join(root, "home");
     this.repositories = path.join(root, "repositories");
     this.server = server;
