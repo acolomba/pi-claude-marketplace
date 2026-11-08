@@ -1957,7 +1957,9 @@ Code seams: `bridges/hooks/dispatch-exec.ts` (`spawnAndCollect`),
 `bridges/hooks/spawn-helpers.ts` (the shell-form default),
 `bridges/hooks/exec-timer.ts` (the ladder's documented cancel contract).
 
-## HKTO-01: `SessionEnd` hooks do not share a timeout budget
+## ~~HKTO-01: `SessionEnd` hooks do not share a timeout budget~~ -- CLOSED
+
+**CLOSED 2026-11-08** by behavioral-gaps Phase 6 (D-BG-604, commit `c5c5643b`). A turn-blocking SessionEnd hook's declared `timeout` is capped at the 1.5 s budget, because a plugin hook's `timeout` does not raise Claude Code's budget (hooks docs and the 2.1.319 budget function). The matching hooks of one event start together (D-CF5-09), so they share the 1.5 s. Still open (D-BG-605): no bounded wait like upstream's `boundMs`, so a hook that ignores SIGTERM holds the session for the 5 s SIGKILL grace, and a grandchild that keeps stdout open holds it until it exits (HKDR-01); and `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` is not read (SESSIONENDENV-01).
 
 Surfaced while landing PR #138 (2026-08-19). That change made the per-event
 `timeout` defaults match Claude Code -- 600 s for a `command` handler, lowered
@@ -4770,6 +4772,8 @@ Deferred by component-features Phase 5 (D-CF5-11). A PostToolUse or PostToolUseF
 
 Noted by component-features Phase 5. Claude Code shows `<hook name> hook error` and `Failed with non-blocking status code: ...` for a hook that exits with a code other than 0 and 2. The bridge shows nothing. No decision covers it yet.
 
+For SessionEnd, Claude Code 2.1.319 writes `SessionEnd hook [<command>] failed: <output>` to stderr for each failed hook with output after its bounded run. The bridge shows nothing for a non-blocking SessionEnd failure, and `features/hook/session-end.feature` states no notice for one (behavioral-gaps D-BG-603, P6-DC-04).
+
 ## HOOKPROMPTSTOP-01: a UserPromptSubmit `continue: false` stops silently
 
 Noted by component-features Phase 5. Claude Code shows `Operation stopped by hook: <reason>`. The bridge stops the prompt with no notice.
@@ -5059,3 +5063,43 @@ Noted 2026-11-07 (mcp-builtin, from 261106-u99, S2). No production code now read
 ## MIXEDREFUSAL-01: a refusal message names only the noted kind when another kind has no note
 
 Noted 2026-11-07 (mcp-builtin, from quick 261107-36g). When a plugin has a resolver note for one kind and also an unsupported kind with no note, such as an output style plus hooks declared in the manifest, the not-installable message names only the noted kind (`contains outputStyles`). The row's reason list already shows both. Candidate direction: in `refusalReasons` (`domain/plugin-resolver.ts`), add the token of each unsupported kind that no note covers.
+
+## LOCKFLIPSUBJECT-01: an unnamed autoupdate flip under a held lock reports `(unknown)`
+
+Noted 2026-11-08 (behavioral-gaps Phase 15, P15-DC-02). An unnamed `marketplace autoupdate` or `noautoupdate` under a held state lock reports the `(unknown)` aggregate subject, which unit tests pin. It could name the recorded marketplaces, as an unnamed `marketplace update` does. The flip without `--scope`, which writes the project scope and then fails on a held user lock, has no scenario. Candidate direction: name the recorded marketplaces in the failed row, and add a scenario for the cross-scope flip.
+
+## STATEREAD-01: some commands report a newer `state.json` without `{unreadable}`
+
+Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-03). A `state.json` from a newer schema gets `{unreadable}` from the load, `list`, `disable`, `pending`, and `apply`. `install` reports the plugin row failed with no reason, `update` reports `{unreadable manifest}`, and `uninstall` and `info` report an internal error whose cause is cut to `state.json at [path]`. All of them refuse and change nothing. Candidate direction: give those verbs' orchestrators the same `{unreadable}` row, and pin each with a scenario.
+
+## STATEVER-01: an old record with no plugins keeps its old schema version
+
+Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-06). A schema 1 or 2 `state.json` with no plugin records keeps its old `schemaVersion` on disk, because `loadState` writes only when it fills a field. Candidate direction: write the current schema version whenever the migration ran, even with no field filled.
+
+## BROWSESCOPE-01: the picker's install-scope screen differs from Claude Code's
+
+Noted 2026-11-08 (behavioral-gaps Phase 12, D-BG-1202). Claude Code 2.1.319 asks `Install for you (user scope)`, `Install for all collaborators on this repository (project scope)`, and `Install for you, in this repo only (local scope)`, in that order, and marks none recommended. Pi's picker lists `Project local (Recommended)`, `Project`, and `User (global)`. Candidate direction: reorder the screen to user, project, project local, drop `(Recommended)`, and update the scope-screen rows that `features/plugin/browse.feature` pins (scenario C).
+
+## DFLOWGAPS-01: Device Flow paths with no scenario
+
+Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-04). Device Flow in print mode (`DeviceFlowUnavailableError`) has no scenario; a sign-in stand-in that fails its code request has no scenario; GitLab's Device Flow has no stand-in or scenario. Candidate direction: add a scenario for each, and a GitLab stand-in beside the GitHub one.
+
+## DFLOWREASON-01: a denied and an expired sign-in read the same
+
+Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-02). A denied and an expired GitHub sign-in both show the bare `authentication required` row (GAUTH-05); the product's own reason texts reach only the debug log. Candidate direction: give each a user-facing reason, if the user wants to tell them apart.
+
+## CLOSEDLIST-01: `|` and `,` lists in the SessionStart, SessionEnd, PreCompact, and PostCompact matchers
+
+Noted 2026-11-08 (behavioral-gaps Phase 3, P3-DC-02). Claude Code reads a matcher of these events as a list of exact values separated by `|` or `,`. The bridge compares the whole matcher with the event's closed set, so a list drops as `closed-set` and the plugin installs only with `--partial`. StopFailure has its own list reading (D-BG-302). The fix for these four events changes the shared `nonToolMatcherCondition` and `matcherFiresOnClosedSetValue`, which a behavioral-gaps hook stream may not reshape (P3-DC-02).
+
+## HOOKPRECOMPACT-01: PreCompact output after /compact and as summary instructions
+
+Deferred by behavioral-gaps Phase 5 (D-BG-508). Claude Code 2.1.319 uses a PreCompact hook's exit-0 stdout as instructions for the compaction summary, at most 10,000 characters per hook, and after `/compact` shows `PreCompact [<command>] completed successfully: <stdout>` or `PreCompact [<command>] failed: <message>` lines before the PostCompact lines. The bridge does neither. No stream of the behavioral-gaps milestone owns the PreCompact arm.
+
+## SESSIONENDENV-01: `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` is not read
+
+Noted 2026-11-08 (behavioral-gaps Phase 6, D-BG-605, P6-DC-02). Claude Code reads the variable as the SessionEnd budget and as the timeout of each SessionEnd hook that declares none. Since D-BG-604 a plugin's SessionEnd hooks get at most 1.5 s, and the user cannot raise that. A scenario needs a hook that runs longer than 1.5 s and a timed release, which the frozen fixtures do not offer.
+
+## RPCENDNOTICE-01: a startup session's SessionEnd notice can miss the RPC stream
+
+Noted 2026-11-08 (behavioral-gaps Phase 6, P6-DC-23). A SessionEnd hook-error notice from the startup session of an RPC Pi can miss the RPC stream while Pi's double bind settles; related to the Pi 1.5.0 RPC double `session_start` item in Carried Forward.

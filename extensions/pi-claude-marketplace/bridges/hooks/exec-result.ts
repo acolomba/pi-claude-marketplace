@@ -35,10 +35,24 @@
 // order and keeps each hook's outcome, with its `systemMessage`, for the
 // output carriers.
 //
+// A PostCompact result also carries `postCompactRun`, how the hook ended
+// (D-BG-503). Only the exec layer sets it, and only the PostCompact notice
+// reads it; no other event's result has it.
+//
 // The union is a pure leaf -- no imports, no module-level state. NFR-7
 // (discriminated unions + exhaustive `kind` switches with no default arm)
 // drives the shape: any future arm requires updating every `kind`-switch
 // consumer.
+
+/**
+ * D-BG-503: how one PostCompact hook ended, as Claude Code 2.1.319 reports it
+ * after `/compact`: whether it succeeded (exit 0), and its output, untrimmed.
+ * The line that shows it trims the output.
+ */
+export interface PostCompactRun {
+  readonly succeeded: boolean;
+  readonly output: string;
+}
 
 /**
  * D-60-01: four-arm discriminated outcome type. Every wire-protocol parse
@@ -46,13 +60,20 @@
  * `kind` discriminator drives per-event adapter dispatch downstream.
  */
 export type HookExecResult =
-  | { kind: "noop"; suppressOutput?: boolean; additionalContext?: string; systemMessage?: string }
+  | {
+      kind: "noop";
+      suppressOutput?: boolean;
+      additionalContext?: string;
+      systemMessage?: string;
+      readonly postCompactRun?: PostCompactRun;
+    }
   | {
       kind: "block";
       reason?: string;
       fromStderr?: true;
       additionalContext?: string;
       systemMessage?: string;
+      readonly postCompactRun?: PostCompactRun;
     }
   | {
       kind: "mutate";
@@ -62,5 +83,12 @@ export type HookExecResult =
       permissionDecision?: "allow" | "deny" | "ask";
       permissionDecisionReason?: string;
       systemMessage?: string;
+      readonly postCompactRun?: PostCompactRun;
     }
-  | { kind: "stop"; stopReason?: string; additionalContext?: string; systemMessage?: string };
+  | {
+      kind: "stop";
+      stopReason?: string;
+      additionalContext?: string;
+      systemMessage?: string;
+      readonly postCompactRun?: PostCompactRun;
+    };

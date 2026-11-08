@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: behavioral-gaps
 milestone_name: Behavioral Coverage Gaps
-current_phase: 04
-current_phase_name: PostToolUseFailure Hooks
+current_phase: 2
+current_phase_name: Async Hooks
 status: executing
-stopped_at: Phase 01 complete; Phases 2-16 ready for child sessions
-last_updated: "2026-11-08T15:15:25.734Z"
+stopped_at: Phases 1, 3, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16 complete and merged; the other stream phases run in child sessions
+last_updated: "2026-11-08T15:58:40.736Z"
 last_activity: 2026-11-08
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: dff36e3f41c5ccfd33e83f81ab364d9548839ae8
+last_activity_desc: Merged Phase 6 (SessionEnd Hooks)
+state_head: 57105b09760ddf47ef3ae2d4a8c960b357f2b872
 progress:
   total_phases: 16
-  completed_phases: 1
-  total_plans: 11
-  completed_plans: 8
-  percent: 6
+  completed_phases: 12
+  total_plans: 9
+  completed_plans: 9
+  percent: 75
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-07 when the behavioral-gaps milesto
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 01 — Foundation
+**Current focus:** stream Phases 2-16 in child sessions; the parent merges each finished branch
 
 ## Current Position
 
-Phase: 04 (PostToolUseFailure Hooks) — READY TO EXECUTE
-Plan: not planned
-Status: Ready to execute
-Last activity: 2026-11-08 — Phase 01 complete, transitioned to Phase 2
+Phase: 2-16 — stream phases, one child session each
+Plan: per phase, in its own branch
+Status: Phases 1, 3, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16 complete and merged into features/behavioral-gaps
+Last activity: 2026-11-08 — merged Phase 6 (SessionEnd Hooks)
 
-Progress: [█░░░░░░░░░] 6%
+Progress: [████████░░] 75%
 
 
 ### mcp-4 closeout
@@ -972,5 +972,5 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-08T05:46:41.533Z
-Stopped at: Phase 01 complete; Phases 2-16 ready for child sessions
+Stopped at: Phases 1, 3, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16 complete and merged; the other stream phases run in child sessions
 Resume file: None

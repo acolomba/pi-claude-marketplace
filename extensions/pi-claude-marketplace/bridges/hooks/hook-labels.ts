@@ -9,7 +9,8 @@
 // A hook's `systemMessage` reaches the user as `<label> says: <text>`, a
 // blocked prompt as `UserPromptSubmit operation blocked by hook:\n<message>`.
 // A session or compaction hook is named by the value its matcher selects on:
-// `SessionStart:startup`.
+// `SessionStart:startup`. After `/compact`, each PostCompact hook shows as
+// `PostCompact [<command>] completed successfully` or `... failed` (D-BG-501).
 //
 // A leaf: no Pi and no runtime imports, so every adapter and every output
 // carrier can share one wording.
@@ -107,6 +108,18 @@ export function promptBlockedText(
   fromStderr: boolean,
 ): string {
   return `UserPromptSubmit operation blocked by hook:\n${blockMessage(reason, command, fromStderr)}`;
+}
+
+/**
+ * D-BG-501: one line of the notice that lists how each PostCompact hook ended
+ * after `/compact`, as Claude Code 2.1.319 words it: `PostCompact [<command>]
+ * completed successfully` or `PostCompact [<command>] failed`, then `: ` and
+ * the trimmed output when there is any.
+ */
+export function postCompactLineText(command: string, succeeded: boolean, output: string): string {
+  const head = `PostCompact [${command}] ${succeeded ? "completed successfully" : "failed"}`;
+  const text = output.trim();
+  return text === "" ? head : `${head}: ${text}`;
 }
 
 /**
