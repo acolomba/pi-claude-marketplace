@@ -45,3 +45,18 @@ void ({ kind: "block", reason: "no echo", fromStderr: false } satisfies HookExec
 void ({ kind: "noop", systemMessage: 7 } satisfies HookExecResult);
 // @ts-expect-error permission decisions use the closed allow, deny, and ask vocabulary
 void ({ kind: "mutate", permissionDecision: "prompt" } satisfies HookExecResult);
+
+void ({ kind: "noop", postCompactRun: { succeeded: true, output: "" } } satisfies HookExecResult);
+void ({
+  kind: "block",
+  reason: "not now",
+  fromStderr: true,
+  postCompactRun: { succeeded: false, output: "not now" },
+} satisfies HookExecResult);
+void ({
+  kind: "mutate",
+  postCompactRun: { succeeded: true, output: "{}" },
+} satisfies HookExecResult);
+void ({ kind: "stop", postCompactRun: { succeeded: true, output: "{}" } } satisfies HookExecResult);
+// @ts-expect-error whether a PostCompact hook succeeded is a boolean
+void ({ kind: "noop", postCompactRun: { succeeded: "yes", output: "" } } satisfies HookExecResult);

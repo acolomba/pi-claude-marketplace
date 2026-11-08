@@ -343,7 +343,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 2: Async Hooks** - `async` and `asyncRewake` hooks run in the background, wake the model on exit 2, never block their event, and stop on `/reload`
 - [x] **Phase 3: StopFailure Hooks** - `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload and error-type matchers (completed 2026-11-08)
 - [ ] **Phase 4: PostToolUseFailure Hooks** - `PostToolUseFailure` hooks run on failed tool calls with Claude Code's payload and tool matchers, and `PostToolUse` hooks do not
-- [ ] **Phase 5: PostCompact Hooks** - `PostCompact` hooks run after manual and automatic compactions with the trigger, and matchers select by trigger
+- [x] **Phase 5: PostCompact Hooks** - `PostCompact` hooks run after manual and automatic compactions with the trigger, and matchers select by trigger (completed 2026-11-08)
 - [ ] **Phase 6: SessionEnd Hooks** - `SessionEnd` hooks run with every reason Pi produces, matchers select by reason, and a failing hook never keeps a session open
 - [x] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched (completed 2026-11-08)
 - [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
@@ -493,7 +493,14 @@ Plans:
   2. A matcher `auto` selects only the automatic run, and a matcher `manual` only the manual run (PCOMP-01).
   3. A `PostCompact` hook's output and exit code are handled as Claude Code handles them, and the session continues after the compaction (PCOMP-01).
 
-**Plans**: TBD
+**Plans**: 2/2 plans complete
+
+Plans:
+**Wave 1**
+- [x] 05-01-PLAN.md — Output parity: one notice listing how each PostCompact hook ended after /compact, none after an automatic compaction (D-BG-501 to D-BG-504)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 05-02-PLAN.md — Coverage: overflow trigger, auto matcher, the session going on, docs, and parent lines
 
 ### Phase 6: SessionEnd Hooks
 
@@ -713,7 +720,7 @@ Plans:
 | 2. Async Hooks | 0/TBD | Not started | - |
 | 3. StopFailure Hooks | 3/3 | Complete    | 2026-11-08 |
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |
-| 5. PostCompact Hooks | 0/TBD | Not started | - |
+| 5. PostCompact Hooks | 2/2 | Complete | 2026-11-08 |
 | 6. SessionEnd Hooks | 0/TBD | Not started | - |
 | 7. State Schema Migration | 1/1 | Complete    | 2026-11-08 |
 | 8. First-Run Config Migration | 0/TBD | Not started | - |

@@ -37,7 +37,8 @@
 //      stderr, entry.claudeEvent)`, unless the hook failed and sets `onFailure: "block"`
 //      (D-CF5-18, `./on-failure.ts`): then a start failure (`error`), an exit
 //      other than 0 and 2, a timeout, or broken JSON stdout is a block. A JSON
-//      deny still wins over that block.
+//      deny still wins over that block. At every end of the process, a
+//      PostCompact result also carries how the hook ended (D-BG-503).
 //
 // Never-throws contract: every error path resolves to `{ kind: "noop" }` +
 // `hookDebugLog`, or to the onFailure block when the hook asks for one. The
@@ -66,7 +67,7 @@ import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
 import { hookPathVars, prepareHookEnv } from "./hook-env.ts";
 import { onFailureBlock } from "./on-failure.ts";
-import { translatePostCompact } from "./payloads/post-compact.ts";
+import { postCompactRunOf, translatePostCompact } from "./payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "./payloads/post-tool-use.ts";
 import { translatePreCompact } from "./payloads/pre-compact.ts";
@@ -84,6 +85,7 @@ import { parseHookStdout } from "./wire-protocol.ts";
 
 import type { SpawnDeps } from "./async-rewake/registry.ts";
 import type { HookExecResult } from "./exec-result.ts";
+import type { HookExitFacts } from "./on-failure.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
@@ -208,20 +210,35 @@ export async function dispatchHookExec(
     // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
     // The cause goes in as stderr, so the block reason ends with it.
     const noop: HookExecResult = { kind: "noop" };
-    return (
-      onFailureBlock(
-        entry,
-        {
-          startFailed: true,
-          timedOut: false,
-          exitCode: null,
-          stdout: "",
-          stderr: redactAbsolutePaths(errorMessage(err)),
-        },
-        noop,
-      ) ?? noop
-    );
+    const facts: HookExitFacts = {
+      startFailed: true,
+      timedOut: false,
+      exitCode: null,
+      stdout: "",
+      stderr: redactAbsolutePaths(errorMessage(err)),
+    };
+    return endedResult(entry, facts, noop, onFailureBlock(entry, facts, noop));
   }
+}
+
+/**
+ * The result a sync hook settles with: the onFailure block when there is one,
+ * else what the wire protocol read. A PostCompact result also carries how the
+ * hook ended, for the notice after `/compact` (D-BG-503); every other event's
+ * result is returned as it is.
+ */
+function endedResult(
+  entry: RoutingEntry,
+  facts: HookExitFacts,
+  answer: HookExecResult,
+  failure: HookExecResult | undefined,
+): HookExecResult {
+  const result = failure ?? answer;
+  if (entry.claudeEvent !== "PostCompact") {
+    return result;
+  }
+
+  return { ...result, postCompactRun: postCompactRunOf(facts, answer, failure !== undefined) };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -345,12 +362,17 @@ async function spawnAndCollect(
       );
       // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
       const noop: HookExecResult = { kind: "noop" };
-      const failure = onFailureBlock(
-        entry,
-        { startFailed: true, timedOut: false, exitCode: null, stdout: "", stderr: stderr.text() },
-        noop,
-      );
-      settle(failure ?? noop);
+      const facts: HookExitFacts = {
+        startFailed: true,
+        timedOut: false,
+        exitCode: null,
+        stdout: "",
+        stderr: stderr.text(),
+      };
+      const failure = onFailureBlock(entry, facts, noop);
+      // A PostCompact run reads the start error, redacted as the outer catch does.
+      const started = { ...facts, stderr: redactAbsolutePaths(errorMessage(err)) };
+      settle(endedResult(entry, started, noop, failure));
     });
 
     child.once("close", (code) => {
@@ -364,18 +386,14 @@ async function spawnAndCollect(
       const parsed = parseHookStdout(code, outText, errText, entry.claudeEvent);
       // D-CF5-18: a failed hook that sets onFailure "block" blocks whatever its
       // stdout says, except that a JSON deny keeps its own reason.
-      const failure = onFailureBlock(
-        entry,
-        {
-          startFailed: false,
-          timedOut: ladder.fired(),
-          exitCode: code,
-          stdout: outText,
-          stderr: errText,
-        },
-        parsed,
-      );
-      settle(failure ?? parsed);
+      const facts: HookExitFacts = {
+        startFailed: false,
+        timedOut: ladder.fired(),
+        exitCode: code,
+        stdout: outText,
+        stderr: errText,
+      };
+      settle(endedResult(entry, facts, parsed, onFailureBlock(entry, facts, parsed)));
     });
 
     // EPIPE defense: attach the error listener BEFORE write so a child
