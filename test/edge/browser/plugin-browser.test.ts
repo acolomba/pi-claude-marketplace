@@ -51,12 +51,14 @@ const marketplaces: readonly MarketplaceEntry[] = [
     name: "official",
     scope: "user",
     pluginCount: 5,
+    installedCount: 0,
     source: "github:anthropics/claude-plugins-official",
   },
   {
     name: "team-plugins",
     scope: "project",
     pluginCount: 0,
+    installedCount: 0,
     source: "github:your-org/team-plugins",
   },
 ];
@@ -110,12 +112,20 @@ function rendered(browser: PluginBrowser, width = 80): string {
 // ─── marketplace row (D-BG-1201) ───────────────────────────────────────────
 
 const MARKETPLACE_ROW_CASES: readonly {
-  readonly counts: Pick<MarketplaceEntry, "pluginCount">;
+  readonly counts: Pick<MarketplaceEntry, "pluginCount" | "installedCount">;
   readonly description: string;
 }[] = [
-  { counts: { pluginCount: 2 }, description: "2 available -- github:a/b" },
-  { counts: { pluginCount: 0 }, description: "0 available -- github:a/b" },
-  { counts: { pluginCount: undefined }, description: "github:a/b" },
+  { counts: { pluginCount: 2, installedCount: 0 }, description: "2 available -- github:a/b" },
+  { counts: { pluginCount: 0, installedCount: 0 }, description: "0 available -- github:a/b" },
+  { counts: { pluginCount: undefined, installedCount: 0 }, description: "github:a/b" },
+  {
+    counts: { pluginCount: 3, installedCount: 1 },
+    description: "3 available • 1 installed -- github:a/b",
+  },
+  {
+    counts: { pluginCount: undefined, installedCount: 1 },
+    description: "1 installed -- github:a/b",
+  },
 ];
 
 for (const { counts, description } of MARKETPLACE_ROW_CASES) {
@@ -150,6 +160,7 @@ const official: MarketplaceEntry = {
   name: "official",
   scope: "user",
   pluginCount: 1,
+  installedCount: 0,
   source: "github:anthropics/claude-plugins-official",
 };
 
@@ -388,6 +399,7 @@ test("PluginBrowser :: shows a scroll position once the marketplaces outrun one 
     name: `mp-${index.toString()}`,
     scope: "user",
     pluginCount: 0,
+    installedCount: 0,
     source: "github:acme/plugins",
   }));
   const browser = new PluginBrowser({
@@ -719,12 +731,14 @@ test("PluginBrowser :: same-name marketplaces across scopes open their respectiv
       name: "community",
       scope: "user",
       pluginCount: 1,
+      installedCount: 0,
       source: "github:user/community",
     },
     {
       name: "community",
       scope: "project",
       pluginCount: 2,
+      installedCount: 0,
       source: "github:project/community",
     },
   ];

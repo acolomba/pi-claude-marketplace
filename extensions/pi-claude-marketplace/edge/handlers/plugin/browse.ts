@@ -101,6 +101,7 @@ async function loadMarketplaceEntries(cwd: string): Promise<readonly Marketplace
         name: record.name,
         scope,
         pluginCount: await offeredPluginCount(record.name, source, recordedManifestPath(record)),
+        installedCount: Object.keys(record.plugins).length,
         source: sourceLogical(source),
       };
     }),

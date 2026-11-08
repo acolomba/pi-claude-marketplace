@@ -59,6 +59,8 @@ export interface MarketplaceEntry {
    * undefined when the catalog cannot be read (D-BG-1201).
    */
   readonly pluginCount: number | undefined;
+  /** The plugins the marketplace's installation record holds in its scope (D-BG-1201). */
+  readonly installedCount: number;
   readonly source: string;
 }
 
@@ -113,14 +115,20 @@ function capitalize(s: string): string {
 
 /**
  * D-BG-1201: a marketplace row reads as Claude Code's does, the catalog's
- * count of plugins, then Pi's `-- {source}` tail.
+ * count of plugins and, when any is installed, the installed count, then
+ * Pi's `-- {source}` tail.
  */
 function marketplaceDescription(m: MarketplaceEntry): string {
-  if (m.pluginCount === undefined) {
-    return m.source;
+  const parts: string[] = [];
+  if (m.pluginCount !== undefined) {
+    parts.push(`${m.pluginCount.toString()} available`);
   }
 
-  return `${m.pluginCount.toString()} available -- ${m.source}`;
+  if (m.installedCount > 0) {
+    parts.push(`${m.installedCount.toString()} installed`);
+  }
+
+  return parts.length === 0 ? m.source : `${parts.join(" • ")} -- ${m.source}`;
 }
 
 type RowStatus = PluginNotificationMessage["status"];

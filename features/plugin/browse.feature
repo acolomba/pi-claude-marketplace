@@ -32,23 +32,54 @@ Feature: Plugin browse
       | message      | browse takes no arguments.   |
       | usage        | Usage: /claude:plugin browse |
 
-  Scenario: The terminal picker lists the marketplaces of both scopes
+  Scenario: A bare plugin command opens the terminal picker on both scopes' marketplaces with the plugins each offers and has installed (D-BG-1201)
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "extras" offers these plugins:
+      | name  | version |
+      | lint  | 2.0.0   |
+      | fmt   | 1.0.0   |
+      | ghost | 3.0.0   |
+    Given the marketplace "extras" publishes this manifest:
+      """
+      {
+        "name": "extras",
+        "owner": { "name": "features" },
+        "plugins": [
+          { "name": "lint", "source": "./plugins/lint", "version": "2.0.0" },
+          { "name": "fmt", "source": "./plugins/fmt", "version": "1.0.0" },
+          { "name": "ghost", "source": "./plugins/ghost" }
+        ]
+      }
+      """
+    Given the marketplace "extras" is added to the project scope
+    Given the marketplace "extras" no longer holds the files of the plugin "ghost"
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
       | name | version |
       | app  | 1.0.0   |
     Given the marketplace "tools" is added to the user scope
-    Given the marketplace "extras" is published as a dir source
-    Given the marketplace "extras" offers these plugins:
-      | name | version |
-      | lint | 2.0.0   |
-      | fmt  | 1.0.0   |
-    Given the marketplace "extras" is added to the project scope
-    When the user opens the plugin picker with "/claude:plugin browse" in pi's terminal
+    Given the marketplace "broken" is published as a dir source
+    Given the marketplace "broken" is added to the user scope
+    Given the user has run "/claude:plugin install fmt@extras --scope project"
+    Given the manifest of the marketplace "broken" is no longer valid json
+    When the user opens the plugin picker with "/claude:plugin" in pi's terminal
     Then the plugin picker shows the screen "Browse Claude Plugin Marketplaces" with these rows:
-      | label            | description                               |
-      | extras [project] | 2 available -- {home}/marketplaces/extras |
-      | tools [user]     | 1 available -- {home}/marketplaces/tools  |
+      | label            | description                                             |
+      | extras [project] | 3 available • 1 installed -- {home}/marketplaces/extras |
+      | tools [user]     | 1 available -- {home}/marketplaces/tools                |
+      | broken [user]    | {home}/marketplaces/broken                              |
+    When the user chooses "extras [project]" in the plugin picker
+    Then the plugin picker shows the screen "Plugins in extras [project]" with these rows:
+      | label               | description     |
+      | [installed] fmt     | 1.0.0           |
+      | [unavailable] ghost | not installable |
+      | [available] lint    | 2.0.0           |
+    When the user chooses "[installed] fmt" in the plugin picker
+    Then the plugin picker shows the screen "Action: fmt @ extras" with these rows:
+      | label     | description                          |
+      | Uninstall | uninstall fmt@extras --scope project |
+      | Disable   | disable fmt@extras --scope project   |
+      | Info      | info fmt@extras --scope project      |
 
   Scenario: Choosing a plugin in the terminal picker installs it
     Given the marketplace "tools" is published as a dir source

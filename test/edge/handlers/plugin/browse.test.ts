@@ -332,10 +332,19 @@ function twoEntryCatalog(name: string): string {
   });
 }
 
-test("the marketplace row counts the plugins its catalog offers (D-BG-1201)", async (t) => {
+function oneInstalledPlugin(): MarketplaceRecord["plugins"] {
+  return {
+    alpha: buildInstalledPluginRecord(
+      { version: "1.0.0" },
+      { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    ) as unknown as MarketplaceRecord["plugins"][string],
+  };
+}
+
+test("the marketplace row counts the plugins its catalog offers and its scope has installed (D-BG-1201)", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "offered-count");
-  await seedMarketplace(scope.cwd, "official");
+  await seedMarketplace(scope.cwd, "official", oneInstalledPlugin());
   await writeCatalog(scope.cwd, twoEntryCatalog("official"));
   const root = path.join(scope.cwd, "marketplaces", "official");
 
@@ -343,15 +352,15 @@ test("the marketplace row counts the plugins its catalog offers (D-BG-1201)", as
   const { rows, ctx, ui } = await renderFirstScreen(scope.cwd);
 
   // assert
-  assert.deepStrictEqual(rows, firstScreen(`2 available -- ${root}`));
+  assert.deepStrictEqual(rows, firstScreen(`2 available • 1 installed -- ${root}`));
   verify(ctx);
   verify(ui);
 });
 
-test("the marketplace row shows the source alone when its catalog cannot be read", async (t) => {
+test("the marketplace row shows only the installed count when its catalog cannot be read", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "unreadable-catalog");
-  await seedMarketplace(scope.cwd, "official");
+  await seedMarketplace(scope.cwd, "official", oneInstalledPlugin());
   await writeCatalog(scope.cwd, "not json");
   const root = path.join(scope.cwd, "marketplaces", "official");
 
@@ -359,7 +368,7 @@ test("the marketplace row shows the source alone when its catalog cannot be read
   const { rows, ctx, ui } = await renderFirstScreen(scope.cwd);
 
   // assert
-  assert.deepStrictEqual(rows, firstScreen(root));
+  assert.deepStrictEqual(rows, firstScreen(`1 installed -- ${root}`));
   verify(ctx);
   verify(ui);
 });
