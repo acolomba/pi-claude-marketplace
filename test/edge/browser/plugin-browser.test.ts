@@ -51,12 +51,14 @@ const marketplaces: readonly MarketplaceEntry[] = [
     name: "official",
     scope: "user",
     pluginCount: 5,
+    installedCount: 0,
     source: "github:anthropics/claude-plugins-official",
   },
   {
     name: "team-plugins",
     scope: "project",
     pluginCount: 0,
+    installedCount: 0,
     source: "github:your-org/team-plugins",
   },
 ];
@@ -107,12 +109,58 @@ function rendered(browser: PluginBrowser, width = 80): string {
   return browser.render(width).join("\n");
 }
 
+// ─── marketplace row (D-BG-1201) ───────────────────────────────────────────
+
+const MARKETPLACE_ROW_CASES: readonly {
+  readonly counts: Pick<MarketplaceEntry, "pluginCount" | "installedCount">;
+  readonly description: string;
+}[] = [
+  { counts: { pluginCount: 2, installedCount: 0 }, description: "2 available -- github:a/b" },
+  { counts: { pluginCount: 0, installedCount: 0 }, description: "0 available -- github:a/b" },
+  { counts: { pluginCount: undefined, installedCount: 0 }, description: "github:a/b" },
+  {
+    counts: { pluginCount: 3, installedCount: 1 },
+    description: "3 available • 1 installed -- github:a/b",
+  },
+  {
+    counts: { pluginCount: undefined, installedCount: 1 },
+    description: "1 installed -- github:a/b",
+  },
+];
+
+for (const { counts, description } of MARKETPLACE_ROW_CASES) {
+  test(`PluginBrowser :: describes the marketplace row as "${description}" (D-BG-1201)`, () => {
+    // arrange
+    const browser = new PluginBrowser({
+      tui: noopTui(),
+      theme: identityTheme(),
+      marketplaces: [{ name: "mp", scope: "user", source: "github:a/b", ...counts }],
+      pluginLoader: () => Promise.resolve([]),
+      onSelect: () => undefined,
+      onCancel: () => undefined,
+    });
+
+    // act
+    const rows = browser.render(80);
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      "─".repeat(80),
+      " Browse Claude Plugin Marketplaces".padEnd(80),
+      `→ ${"mp [user]".padEnd(32)}${description}`,
+      " ↑↓ navigate • enter open • esc cancel".padEnd(80),
+      "─".repeat(80),
+    ]);
+  });
+}
+
 // ─── status projection, through the browser's own screens ──────────────────
 
 const official: MarketplaceEntry = {
   name: "official",
   scope: "user",
   pluginCount: 1,
+  installedCount: 0,
   source: "github:anthropics/claude-plugins-official",
 };
 
@@ -351,6 +399,7 @@ test("PluginBrowser :: shows a scroll position once the marketplaces outrun one 
     name: `mp-${index.toString()}`,
     scope: "user",
     pluginCount: 0,
+    installedCount: 0,
     source: "github:acme/plugins",
   }));
   const browser = new PluginBrowser({
@@ -682,12 +731,14 @@ test("PluginBrowser :: same-name marketplaces across scopes open their respectiv
       name: "community",
       scope: "user",
       pluginCount: 1,
+      installedCount: 0,
       source: "github:user/community",
     },
     {
       name: "community",
       scope: "project",
       pluginCount: 2,
+      installedCount: 0,
       source: "github:project/community",
     },
   ];

@@ -184,10 +184,7 @@ describe("partitionHooks", () => {
       ],
       StopFailure: [
         { matcher: "rate_limit", hooks: [{ type: "command", command: "rate" }] },
-        {
-          matcher: "rate_limit|server_error",
-          hooks: [{ type: "command", command: "compound" }],
-        },
+        { matcher: "network_error", hooks: [{ type: "command", command: "unknown" }] },
       ],
     };
 
@@ -202,15 +199,40 @@ describe("partitionHooks", () => {
       },
       dropped: [
         { kind: "group", event: "SessionStart", matcher: "bogus", cond: "closed-set" },
-        {
-          kind: "group",
-          event: "StopFailure",
-          matcher: "rate_limit|server_error",
-          cond: "closed-set",
-        },
+        { kind: "group", event: "StopFailure", matcher: "network_error", cond: "closed-set" },
       ],
     });
   });
+
+  for (const { matcher, kept } of [
+    { matcher: "rate_limit|overloaded", kept: true },
+    { matcher: "network_error|rate_limit", kept: true },
+    { matcher: "|rate_limit|", kept: true },
+    { matcher: "network_error|timeout", kept: false },
+    { matcher: "rate_limit|server-error", kept: false },
+    { matcher: "rate_limit,overloaded", kept: false },
+    { matcher: "|", kept: false },
+    { matcher: "Rate_Limit", kept: false },
+  ] as const) {
+    const group = { matcher, hooks: [{ type: "command", command: "observe" }] };
+    const expected = kept
+      ? { supported: { StopFailure: [group] }, dropped: [] }
+      : {
+          supported: {},
+          dropped: [{ kind: "group", event: "StopFailure", matcher, cond: "closed-set" }],
+        };
+
+    test(`partitions the StopFailure list matcher ${JSON.stringify(matcher)} as ${kept ? "kept" : "dropped"} (D-BG-302)`, () => {
+      // arrange
+      const config = { StopFailure: [group] };
+
+      // act
+      const partition = partitionHooks(config);
+
+      // assert
+      assert.deepStrictEqual(partition, expected);
+    });
+  }
 
   test("drops a group when every handler is unsupported", () => {
     // arrange

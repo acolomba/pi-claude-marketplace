@@ -1,8 +1,8 @@
 Feature: Marketplace state lock
 
-  A marketplace command that changes a scope fails and changes nothing while another process
-  holds the scope's state lock, and takes over a lock that a dead process left. A helper process
-  holds the lock as a second Pi would, and local marketplaces and a git host stand in for published ones.
+  Under D-06 a marketplace command that changes a scope fails as lock held and changes nothing while another process holds
+  its state lock (Claude Code writes without it), and runs as with no lock if that process died instead. A helper process
+  or an old lock directory plays that process, and local marketplaces and a git host stand in for published ones.
 
   Scenario: Removing a marketplace from the project scope while another process holds its state lock fails as lock held
     Given the marketplace "fixtures" is published as a dir source
@@ -159,20 +159,191 @@ Feature: Marketplace state lock
       | project | {project dir}/.pi | github      | acme/tools |
       | user    | {agent dir}       | github      | acme/tools |
 
+  Scenario Outline: Changing autoupdate while another process holds the state lock of the scope fails as lock held and changes nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the <scope> scope
+    Given a config in scope <scope> and layer base, with these marketplaces:
+      | name  | source                    | autoupdate          |
+      | tools | {home}/marketplaces/tools | <autoupdate before> |
+    Given the config and installation record bytes of the <scope> scope are remembered
+    Given another process holds the state lock of the <scope> scope
+    When the user runs "/claude:plugin marketplace <verb> tools --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons   | scope   | cause chain                                                                                                                                                                           | cause truncated | leaks | rollback partial |
+      | tools            | <scope>           | failed             | tools | tools | failed | lock held | <scope> | Another pi-claude-marketplace operation is in progress for <scope> scope (<scope root>/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+    Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
+      | name  | source                    | autoupdate          |
+      | tools | {home}/marketplaces/tools | <autoupdate before> |
+    Then the config and installation record bytes of the <scope> scope are unchanged
+
+    Examples:
+      | verb         | scope   | scope root        | autoupdate before |
+      | autoupdate   | project | {project dir}/.pi | false             |
+      | autoupdate   | user    | {agent dir}       | false             |
+      | noautoupdate | project | {project dir}/.pi | true              |
+      | noautoupdate | user    | {agent dir}       | true              |
+
   Scenario: Removing a marketplace while a process that died left the state lock of its scope removes it
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
     Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given a process that died left the state lock of the project scope
     When the user runs "/claude:plugin marketplace remove fixtures --scope project"
     Then the result has these fields:
       | kind         | cascade |
       | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status      | reasons | scope   |
+      | fixtures         | project           | removed            | demo@fixtures | demo | uninstalled |         | project |
+    Then the "claude-plugins.json" file of the project scope declares no marketplaces
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the installation record of the project scope holds no plugins
+    Then the project scope holds no marketplace record
+
+  Scenario: Removing a marketplace from the user scope while a process that died left its state lock removes it
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given a process that died left the state lock of the user scope
+    When the user runs "/claude:plugin marketplace remove fixtures --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status      | reasons | scope |
+      | fixtures         | user              | removed            | demo@fixtures | demo | uninstalled |         | user  |
+    Then the "claude-plugins.json" file of the user scope declares no marketplaces
+    Then the "claude-plugins.json" file of the user scope declares no plugins
+    Then the installation record of the user scope holds no plugins
+    Then the user scope holds no marketplace record
+
+  Scenario: Updating a marketplace in the project scope while a process that died left its state lock reports it up to date
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given a process that died left the state lock of the project scope
+    When the user runs "/claude:plugin marketplace update fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name     | scope   | status  |
-      | fixtures | project | removed |
-    Then the "claude-plugins.json" file of the project scope declares no marketplaces
-    Then the project scope holds no marketplace record
+      | name     | scope   | status  | reasons    |
+      | fixtures | project | skipped | up-to-date |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario: Updating a marketplace in the user scope while a process that died left its state lock reports it up to date
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given a process that died left the state lock of the user scope
+    When the user runs "/claude:plugin marketplace update fixtures --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name     | scope | status  | reasons    |
+      | fixtures | user  | skipped | up-to-date |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the user scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario Outline: Adding a marketplace while a process that died left the state lock of the scope adds it
+    Given the marketplace "tools" is published as a <source kind> source
+    Given a process that died left the state lock of the <scope> scope
+    When the user runs "/claude:plugin marketplace add <source> --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | <scope> | added  |
+    Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+
+    Examples:
+      | scope   | source kind | source                                                    |
+      | project | dir         | {home}/marketplaces/tools                                 |
+      | project | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+      | user    | dir         | {home}/marketplaces/tools                                 |
+      | user    | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+
+    @url
+    Examples:
+      | scope   | source kind | source                            |
+      | project | url         | https://{git host}/acme/tools.git |
+      | user    | url         | https://{git host}/acme/tools.git |
+
+    @github
+    Examples:
+      | scope   | source kind | source     |
+      | project | github      | acme/tools |
+      | user    | github      | acme/tools |
+
+  Scenario Outline: Changing autoupdate while a process that died left the state lock of the scope changes it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the <scope> scope
+    Given a config in scope <scope> and layer base, with these marketplaces:
+      | name  | source                    | autoupdate          |
+      | tools | {home}/marketplaces/tools | <autoupdate before> |
+    Given a process that died left the state lock of the <scope> scope
+    When the user runs "/claude:plugin marketplace <verb> tools --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status   |
+      | tools | <scope> | <status> |
+    Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
+      | name  | source                    | autoupdate         |
+      | tools | {home}/marketplaces/tools | <autoupdate after> |
+
+    Examples:
+      | verb         | scope   | autoupdate before | autoupdate after | status              |
+      | autoupdate   | project | false             | true             | autoupdate enabled  |
+      | autoupdate   | user    | false             | true             | autoupdate enabled  |
+      | noautoupdate | project | true              | false            | autoupdate disabled |
+      | noautoupdate | user    | true              | false            | autoupdate disabled |

@@ -5,6 +5,7 @@ import {
   BUCKET_A_EVENTS,
   NON_TOOL_EVENT_CLOSED_SETS,
   NON_TOOL_EVENT_FIELDS,
+  stopFailureMatcherTypes,
   TOOL_EVENTS,
   type BucketAEvent,
   type DispatchableEvent,
@@ -137,6 +138,9 @@ describe("NON_TOOL_EVENT_CLOSED_SETS", () => {
         "server_error",
         "max_output_tokens",
         "unknown",
+        "account_on_hold",
+        "verification_required",
+        "cloud_credential_error",
       ]),
     };
 
@@ -146,4 +150,30 @@ describe("NON_TOOL_EVENT_CLOSED_SETS", () => {
     // assert
     assert.deepStrictEqual(closedSets, expectedClosedSets);
   });
+});
+
+describe("stopFailureMatcherTypes", () => {
+  for (const { matcher, expectedTypes } of [
+    { matcher: "rate_limit", expectedTypes: ["rate_limit"] },
+    { matcher: "rate_limit|overloaded", expectedTypes: ["rate_limit", "overloaded"] },
+    { matcher: "|rate_limit||overloaded|", expectedTypes: ["rate_limit", "overloaded"] },
+    { matcher: "network_error|timeout", expectedTypes: ["network_error", "timeout"] },
+    { matcher: "|", expectedTypes: [] },
+    { matcher: "", expectedTypes: [] },
+    { matcher: "*", expectedTypes: [] },
+    { matcher: "rate_limit|server-error", expectedTypes: [] },
+    { matcher: "rate limit", expectedTypes: [] },
+    { matcher: "rate_limit,overloaded", expectedTypes: [] },
+  ] as const) {
+    test(`reads the matcher ${JSON.stringify(matcher)} as the list ${JSON.stringify(expectedTypes)} (D-BG-302)`, () => {
+      // arrange
+      const rawMatcher = matcher;
+
+      // act
+      const types = stopFailureMatcherTypes(rawMatcher);
+
+      // assert
+      assert.deepStrictEqual(types, expectedTypes);
+    });
+  }
 });

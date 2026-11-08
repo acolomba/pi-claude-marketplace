@@ -5059,3 +5059,31 @@ Noted 2026-11-07 (mcp-builtin, from 261106-u99, S2). No production code now read
 ## MIXEDREFUSAL-01: a refusal message names only the noted kind when another kind has no note
 
 Noted 2026-11-07 (mcp-builtin, from quick 261107-36g). When a plugin has a resolver note for one kind and also an unsupported kind with no note, such as an output style plus hooks declared in the manifest, the not-installable message names only the noted kind (`contains outputStyles`). The row's reason list already shows both. Candidate direction: in `refusalReasons` (`domain/plugin-resolver.ts`), add the token of each unsupported kind that no note covers.
+
+## LOCKFLIPSUBJECT-01: an unnamed autoupdate flip under a held lock reports `(unknown)`
+
+Noted 2026-11-08 (behavioral-gaps Phase 15, P15-DC-02). An unnamed `marketplace autoupdate` or `noautoupdate` under a held state lock reports the `(unknown)` aggregate subject, which unit tests pin. It could name the recorded marketplaces, as an unnamed `marketplace update` does. The flip without `--scope`, which writes the project scope and then fails on a held user lock, has no scenario. Candidate direction: name the recorded marketplaces in the failed row, and add a scenario for the cross-scope flip.
+
+## STATEREAD-01: some commands report a newer `state.json` without `{unreadable}`
+
+Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-03). A `state.json` from a newer schema gets `{unreadable}` from the load, `list`, `disable`, `pending`, and `apply`. `install` reports the plugin row failed with no reason, `update` reports `{unreadable manifest}`, and `uninstall` and `info` report an internal error whose cause is cut to `state.json at [path]`. All of them refuse and change nothing. Candidate direction: give those verbs' orchestrators the same `{unreadable}` row, and pin each with a scenario.
+
+## STATEVER-01: an old record with no plugins keeps its old schema version
+
+Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-06). A schema 1 or 2 `state.json` with no plugin records keeps its old `schemaVersion` on disk, because `loadState` writes only when it fills a field. Candidate direction: write the current schema version whenever the migration ran, even with no field filled.
+
+## BROWSESCOPE-01: the picker's install-scope screen differs from Claude Code's
+
+Noted 2026-11-08 (behavioral-gaps Phase 12, D-BG-1202). Claude Code 2.1.319 asks `Install for you (user scope)`, `Install for all collaborators on this repository (project scope)`, and `Install for you, in this repo only (local scope)`, in that order, and marks none recommended. Pi's picker lists `Project local (Recommended)`, `Project`, and `User (global)`. Candidate direction: reorder the screen to user, project, project local, drop `(Recommended)`, and update the scope-screen rows that `features/plugin/browse.feature` pins (scenario C).
+
+## DFLOWGAPS-01: Device Flow paths with no scenario
+
+Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-04). Device Flow in print mode (`DeviceFlowUnavailableError`) has no scenario; a sign-in stand-in that fails its code request has no scenario; GitLab's Device Flow has no stand-in or scenario. Candidate direction: add a scenario for each, and a GitLab stand-in beside the GitHub one.
+
+## DFLOWREASON-01: a denied and an expired sign-in read the same
+
+Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-02). A denied and an expired GitHub sign-in both show the bare `authentication required` row (GAUTH-05); the product's own reason texts reach only the debug log. Candidate direction: give each a user-facing reason, if the user wants to tell them apart.
+
+## CLOSEDLIST-01: `|` and `,` lists in the SessionStart, SessionEnd, PreCompact, and PostCompact matchers
+
+Noted 2026-11-08 (behavioral-gaps Phase 3, P3-DC-02). Claude Code reads a matcher of these events as a list of exact values separated by `|` or `,`. The bridge compares the whole matcher with the event's closed set, so a list drops as `closed-set` and the plugin installs only with `--partial`. StopFailure has its own list reading (D-BG-302). The fix for these four events changes the shared `nonToolMatcherCondition` and `matcherFiresOnClosedSetValue`, which a behavioral-gaps hook stream may not reshape (P3-DC-02).
