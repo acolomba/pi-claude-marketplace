@@ -58,3 +58,87 @@ Feature: Plugin subagent child
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
       | upd@fixtures  | 1.1.0   | true    |
+
+  @own-implementation
+  Scenario: A background child's load leaves a release 0.19.2 mcp.json for the next parent load to move
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" declares the mcp server "srv"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the mcp.json file of the user scope holds the servers of the plugin "demo@fixtures" as release 0.19.2 wrote them, beside the user's own server "mine"
+    Given pi runs with the scripted model as a pi-subagents background child
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the mcp configuration file "mcp.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "mine": {
+            "command": "pi-features-users-own-mcp-server"
+          },
+          "srv": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {}
+      }
+
+      """
+    When the user runs "/claude:plugin list" in pi's json mode
+    Then the command reports these results:
+      | kind    | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | Plugin list | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    Then the mcp configuration file "mcp.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "mine": {
+            "command": "pi-features-users-own-mcp-server"
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          }
+        }
+      }
+
+      """
