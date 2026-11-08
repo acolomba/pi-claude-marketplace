@@ -25,8 +25,10 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 
 **Goal:** The cucumber suite covers the user-visible behavior that the
 November 2026 coverage audit found untested, with every scenario failing
-without the behavior it names and passing under both the adapter and the
-builtin profiles.
+without the behavior it names and the whole `npm run test:cucumber` green under
+both the `adapter` and the `builtin` profile, where only a scenario with an MCP
+surface carries `@mcp` or an `@adapter-only` and `@builtin-only` pair and any
+other scenario runs once, under `adapter` (D-BG-04).
 
 **Target features:**
 

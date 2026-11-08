@@ -125,6 +125,76 @@ Phase 1 takes these names. No later phase creates a file or a module with one of
 
 No child phase edits `CHANGELOG.md`, `README.md`, `README.es.md`, the Key Decisions table of `.planning/PROJECT.md`, `.planning/BACKLOG.md`, or a frozen file. Each phase lists its lines for those files under "Parent lines" in its last plan's `SUMMARY.md`, and the parent session applies them at the merge or in Phase 6.
 
+## Behavioral gaps
+
+The behavioral-gaps milestone adds the scenarios that the November 2026 coverage audit found missing. Phase 1 runs alone. It builds and seeds every shared stand-in, then freezes the shared files. Then Phases 2 to 16 run in parallel child sessions, one per phase, each on the local branch `features/behavioral-gaps-phase-N` (D-BG-16). This section applies "Parallel work" to that milestone. It copies the "File ownership" section of `.planning/ROADMAP.md`.
+
+Product paths are relative to `extensions/pi-claude-marketplace/`, step module paths to `features/step_definitions/`, and feature paths to `features/`. Each phase owns the unit pair (`test/<same path>.test.ts`) of every product file it owns. A new test file takes a name that carries its phase's topic, so two phases never create the same file.
+
+### Frozen after Phase 1
+
+No stream edits these files. A change that a stream needs is a parent line, which the parent session applies on the milestone branch.
+
+- Build and CI: `package.json`, `package-lock.json`, `.github/workflows/ci.yml`, `cucumber.json`, `scripts/check-features.mjs`, `scripts/install-test-peers.mjs`, `.fallowrc.json`, `rule-packs/architecture.json`, and `eslint.config.js`.
+- Harness: `test/e2e/_rpc.ts`, `features/support/**`, and `features/lib/**`, with every library Phase 1 adds. A stream adds no file under `features/support/` or `features/lib/`. A small helper private to one of its step modules stays in that module.
+- Step modules: the shared modules `command`, `config`, `session`, `mcp-configuration`, `mcp-implementation`, `git-host`, `scope-state`, `claude-code-settings`, `model`, `completion`, `companion`, and `npm-registry`; every topic module, such as `plugin/publishing`, `plugin/installation`, `marketplace/publishing`, `marketplace/checkout`, `hook/runs`, `hook/session`, and `hook/tool-use`; and every other step module that exists when Phase 1 ends. A stream adds only the verb module that the table below gives it.
+- This skill, `.agents/skills/cucumber/**`.
+- Product: `platform/pi-api.ts` and any seam that Phase 1 adds for a stand-in.
+- Closed sets, frozen except for additions at the end: `shared/notification-types.ts` `Reason`, `shared/notification-wire.ts` `REASONS`, the reason table in `shared/notify-reasons.ts`, `test/architecture/notify-closed-set-locks.test.ts`, `docs/json-output.md`, and the catalog counters (`docs/output-catalog.md`, `EXPECTED_STATE_COUNT`, and `EXPECTED_UTF8_BYTES`).
+
+### What each phase owns
+
+| Phase                        | Feature files                             | Verb step module                       | Product it may fix                                                                                                                                                                                                                                        |
+| ---------------------------- | ----------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 (serial)                   | the seeds, in the stream files below      | every shared and topic module          | everything frozen above                                                                                                                                                                                                                                   |
+| 2 Async hooks                | NEW `hook/async.feature`                  | NEW `hook/async.steps.ts`              | `bridges/hooks/async-rewake/**`; the `async` and `asyncRewake` branches of the shared hook modules                                                                                                                                                        |
+| 3 StopFailure hooks          | NEW `hook/stop-failure.feature`           | NEW `hook/stop-failure.steps.ts`       | `bridges/hooks/payloads/stop-failure.ts`; the StopFailure arm of the shared hook modules                                                                                                                                                                  |
+| 4 PostToolUseFailure hooks   | NEW `hook/tool-failure.feature`           | NEW `hook/tool-failure.steps.ts`       | `bridges/hooks/payloads/post-tool-use-failure.ts`; the PostToolUseFailure arm of the shared hook modules                                                                                                                                                  |
+| 5 PostCompact hooks          | NEW `hook/compaction.feature`             | NEW `hook/compaction.steps.ts`         | `bridges/hooks/payloads/{post-compact,compact-trigger}.ts`; the PostCompact arm of the shared hook modules                                                                                                                                                |
+| 6 SessionEnd hooks           | NEW `hook/session-end.feature`            | NEW `hook/session-end.steps.ts`        | `bridges/hooks/payloads/session-end.ts`; the SessionEnd arm of the shared hook modules                                                                                                                                                                    |
+| 7 State schema migration     | NEW `plugin/state-migration.feature`      | NEW `plugin/state-migration.steps.ts`  | `persistence/migrate.ts`; the load and schema-version functions of `persistence/state-io.ts`                                                                                                                                                              |
+| 8 First-run config migration | NEW `plugin/config-migration.feature`     | NEW `plugin/config-migration.steps.ts` | `persistence/migrate-config.ts`; the invalid-config handling in `persistence/config-io.ts`; the MIG-01 step in `orchestrators/reconcile/read-pass.ts`                                                                                                     |
+| 9 Legacy MCP entry move      | NEW `mcp-server/legacy-move.feature`      | NEW `mcp-server/legacy-move.steps.ts`  | `orchestrators/reconcile/mcp-migration.ts`                                                                                                                                                                                                                |
+| 10 Model-facing tools        | NEW `plugin/model-tools.feature`          | NEW `plugin/model-tools.steps.ts`      | `edge/handlers/tools.ts`                                                                                                                                                                                                                                  |
+| 11 Device Flow sign-in       | NEW `marketplace/device-flow.feature`     | NEW `marketplace/device-flow.steps.ts` | `domain/{github-auth,auth-registry}.ts`; `orchestrators/auth-host.ts`; `platform/{git-credential,git-auth-callbacks}.ts`; the auth call in `orchestrators/plugin/clone-cache.ts`; the credential choice in `orchestrators/marketplace/background-pass.ts` |
+| 12 Browse picker             | `plugin/browse.feature` (exists)          | NEW `plugin/browse.steps.ts`           | `edge/browser/plugin-browser.ts`; `edge/handlers/plugin/browse.ts`; the browse arms of `edge/router.ts`                                                                                                                                                   |
+| 13 Prune                     | `plugin/prune.feature` (exists)           | NEW `plugin/prune.steps.ts`            | `orchestrators/plugin/{prune,prune-rollback}.ts`; `edge/handlers/plugin/prune.ts`; `domain/dependency-orphans.ts`                                                                                                                                         |
+| 14 Bootstrap                 | `plugin/bootstrap.feature` (exists)       | NEW `plugin/bootstrap.steps.ts`        | `orchestrators/plugin/bootstrap.ts`; `edge/handlers/plugin/bootstrap.ts`                                                                                                                                                                                  |
+| 15 Marketplace state lock    | `marketplace/state-lock.feature` (exists) | NEW `marketplace/state-lock.steps.ts`  | `orchestrators/marketplace/autoupdate.ts`; `edge/handlers/marketplace/autoupdate.ts`; `transaction/with-state-guard.ts`                                                                                                                                   |
+| 16 Background-child load     | NEW `plugin/subagent-child.feature`       | NEW `plugin/subagent-child.steps.ts`   | `platform/subagent-child.ts`; the background-child gates in `orchestrators/reconcile/load.ts` and `orchestrators/mcp/agent-grants-step.ts`                                                                                                                |
+
+### Reserved names
+
+Phase 1 reserves each new feature file and each new verb module of the table for its own stream. No other phase creates a file or a module with one of these names:
+
+- Phase 2: `hook/async.feature` and `hook/async.steps.ts`.
+- Phase 3: `hook/stop-failure.feature` and `hook/stop-failure.steps.ts`.
+- Phase 4: `hook/tool-failure.feature` and `hook/tool-failure.steps.ts`.
+- Phase 5: `hook/compaction.feature` and `hook/compaction.steps.ts`.
+- Phase 6: `hook/session-end.feature` and `hook/session-end.steps.ts`.
+- Phase 7: `plugin/state-migration.feature` and `plugin/state-migration.steps.ts`.
+- Phase 8: `plugin/config-migration.feature` and `plugin/config-migration.steps.ts`.
+- Phase 9: `mcp-server/legacy-move.feature` and `mcp-server/legacy-move.steps.ts`.
+- Phase 10: `plugin/model-tools.feature` and `plugin/model-tools.steps.ts`.
+- Phase 11: `marketplace/device-flow.feature` and `marketplace/device-flow.steps.ts`.
+- Phase 12: `plugin/browse.steps.ts`.
+- Phase 13: `plugin/prune.steps.ts`.
+- Phase 14: `plugin/bootstrap.steps.ts`.
+- Phase 15: `marketplace/state-lock.steps.ts`.
+- Phase 16: `plugin/subagent-child.feature` and `plugin/subagent-child.steps.ts`.
+
+Phase 1 creates none of these verb modules. It creates only the new feature files that hold a seed. No seed needs `hook/tool-failure.feature` or `hook/session-end.feature`, so Phases 4 and 6 create those files. The existing `plugin/browse.feature`, `plugin/prune.feature`, `plugin/bootstrap.feature`, and `marketplace/state-lock.feature` pass to their streams when Phase 1 merges.
+
+### Seeds
+
+Each seed scenario that Phase 1 puts in a stream's feature file passes to that stream. The stream may rewrite the seed, but it keeps every shared step that the seed uses in use, because `npm run check:features` fails on an unused step and the stream cannot remove one from a frozen module.
+
+The per-stream list of seed steps follows when the seeds land.
+
+### Parent-owned files
+
+No child phase edits `CHANGELOG.md`, `README.md`, `README.es.md`, the Key Decisions table of `.planning/PROJECT.md`, `.planning/BACKLOG.md`, the root log `.planning/DUBIOUS-CHOICES.md`, or a frozen file. Each phase lists its lines for those files under "Parent lines" in its last plan's `SUMMARY.md`, and the parent session applies them at the merge.
+
 ## Boundaries
 
 - The `.steps.ts` suffix is mandatory for step modules, and only step modules use it: `cucumber.json` loads step modules by that suffix, so it is also how a reader tells which files register steps. A step module lives under `features/step_definitions/` only.

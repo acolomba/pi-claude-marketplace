@@ -3,13 +3,13 @@
 **Defined:** 2026-11-07
 **Core Value:** A Pi user can install a Claude plugin and load each supported component as a working Pi artifact.
 
-Every requirement is met by cucumber scenarios under `features/` that fail without the behavior they name and pass under both the adapter and the builtin profiles. A scenario that exposes a product bug fixes it in the same phase, with Claude Code as the reference. The thin-spot requirements (BROWSE, PRUNE, BOOT, MLOCK) are first drafts that each phase's research may refine toward upstream behavior.
+Every requirement is met by cucumber scenarios under `features/` that fail without the behavior they name and pass `npm run test:cucumber`, which runs the `adapter` profile and then the `builtin` profile. A scenario with an MCP surface carries `@mcp` and runs under both profiles, a pair of `@adapter-only` and `@builtin-only` scenarios splits one whose expectation differs by implementation, and any other scenario runs once, under `adapter` (DUAL-02, D-BG-04). A scenario that exposes a product bug fixes it in the same phase, with Claude Code as the reference. The thin-spot requirements (BROWSE, PRUNE, BOOT, MLOCK) are first drafts that each phase's research may refine toward upstream behavior.
 
 ## Milestone Requirements
 
 ### Foundation
 
-- [ ] **FND-01**: The shared harness provides every stand-in, fixture writer, and shared step the stream phases name, each proven by a seed scenario under both profiles.
+- [ ] **FND-01**: The shared harness provides every stand-in, fixture writer, and shared step the stream phases name, each proven by a seed scenario that passes `npm run test:cucumber` (D-BG-04).
 - [ ] **FND-02**: Before the streams fork, the foundation files are listed as frozen in the roadmap, a child-session brief exists, and the combined tree passes `npm run check`.
 
 ### Async hooks
@@ -120,4 +120,4 @@ None.
 
 ---
 *Requirements defined: 2026-11-07*
-*Last updated: 2026-11-07 after roadmap creation (16 phases)*
+*Last updated: 2026-11-07 in Phase 1, which corrected the profile wording of the preamble and FND-01 (D-BG-04)*

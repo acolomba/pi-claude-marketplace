@@ -74,8 +74,10 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 
 **Milestone goal:** The cucumber suite covers the user-visible behavior that the
 November 2026 coverage audit found untested. Every scenario fails without the
-behavior it names and passes under both the `adapter` and the `builtin`
-cucumber profiles.
+behavior it names, and the whole `npm run test:cucumber` is green under both the
+`adapter` and the `builtin` profile. Only a scenario with an MCP surface carries
+`@mcp` or an `@adapter-only` and `@builtin-only` pair; any other scenario runs
+once, under `adapter` (D-BG-04).
 
 Inputs: `.planning/PROJECT.md` (Current Milestone), `.planning/REQUIREMENTS.md`
 (34 requirements), and the "Parallel work" rules in
@@ -93,9 +95,10 @@ run each wave's plans in parallel worktrees. It builds every shared stand-in,
 fixture writer, driver, and step that the streams need, then freezes every
 shared file (see File ownership).
 
-When Phase 1 is verified and pushed, the parent creates the fifteen branches
-`features/behavioral-gaps-phase-2` to `features/behavioral-gaps-phase-16` at
-the milestone head and pushes them. Phases 2-16 each depend on Phase 1 alone
+When Phase 1 is verified, the parent creates the fifteen branches
+`features/behavioral-gaps-phase-2` to `features/behavioral-gaps-phase-16` as
+local branches at the verified milestone head, and pushes nothing unless the
+user asks (D-BG-16). Phases 2-16 each depend on Phase 1 alone
 and on no other stream. They run concurrently: one child session per phase,
 each in its own git worktree on its own branch, running `gsd-autonomous --only
 N` through discuss, plan, execute, code review and fix, verification, and the
@@ -103,13 +106,12 @@ phase transition. Each child session reads
 `.planning/milestones/behavioral-gaps-CHILD-SESSION-BRIEF.md`, which Phase 1
 writes.
 
-- A child session commits and pushes only its own branch:
-  `git push -u origin features/behavioral-gaps-phase-N`. It never pushes
-  `main`, the milestone branch, or another phase's branch, and it opens no
-  pull request.
+- A child session commits only to its own branch and pushes nothing unless the
+  user asks (D-BG-16). It never commits to `main`, the milestone branch, or
+  another phase's branch, and it opens no pull request.
 - A child never runs the milestone lifecycle (audit, complete, cleanup).
 - A child that needs a change the parent made on the milestone branch, such as
-  a parent line to a frozen file, merges `origin/features/behavioral-gaps` into
+  a parent line to a frozen file, merges the local `features/behavioral-gaps` into
   its own branch. It never rebases and never merges a sibling's phase branch.
 - The parent merges each finished branch into `features/behavioral-gaps` with a
   merge commit and resolves the planning-file conflicts (see Merge procedure).
@@ -264,10 +266,12 @@ the parent can resolve a conflicting merge.
   new one lands as its own commit, and the later merge keeps both entries and
   fixes the counts.
 - **Behavioral tests.** Every scenario fails without the behavior it names, with
-  the red proof recorded in the plan SUMMARY, and passes under both cucumber
-  profiles (`npm run test:cucumber`). A scenario with an MCP surface carries
-  `@mcp` and runs under each profile; one whose expectation differs by
-  implementation is an `@adapter-only` and `@builtin-only` pair (DUAL-02).
+  the red proof recorded in the plan SUMMARY, and passes `npm run test:cucumber`,
+  which is green as a whole under both the `adapter` and the `builtin` profile
+  (D-BG-04). Only a scenario with an MCP surface carries `@mcp` and runs under
+  each profile; one whose expectation differs by implementation is an
+  `@adapter-only` and `@builtin-only` pair (DUAL-02). Any other scenario carries
+  no implementation tag and runs once, under `adapter`.
   Expected values are whole literals in the feature file. A scenario observes
   what the user or Pi sees: command results, Pi's registries, the hook
   recorder, the scripted model's call log, a stand-in's request log, the
@@ -302,7 +306,8 @@ the parent can resolve a conflicting merge.
 #### Merge procedure
 
 - The parent merges each finished phase branch into `features/behavioral-gaps`
-  with a merge commit, never a rebase, and pushes the milestone branch. At each
+  with a merge commit, never a rebase, and pushes nothing unless the user asks
+  (D-BG-16). At each
   merge it applies that phase's parent lines.
 - Planning-file conflicts: each child changes only its own checklist line, its
   own Phase Details block, its own Progress row, and its own Traceability rows,
@@ -367,9 +372,9 @@ The error turn, the automatic compaction, the json-mode and terminal run, and th
 **Success Criteria** (what must be TRUE):
   1. Each stand-in, fixture writer, and driver the streams name has a passing seed scenario: the hook recorder shows an async hook's run and its rewake; Pi completes a Device Flow sign-in against the loopback stand-in with no request to github.com; each earlier-release fixture loads in Pi; the scripted model's calls to the two marketplace tools return results that the scenario reads; the picker driver lists, chooses, and cancels in a real terminal; and a profile Pi starts as a background child (FND-01).
   2. The derived stand-ins have passing seeds too: a turn that the scripted model ends in a chosen error, an automatic compaction, a json-mode and a terminal run of one command, and a stale lock beside a live lock holder (FND-01).
-  3. Every seed passes under `npm run test:cucumber` (the `adapter` and `builtin` profiles), `npm run check:features` is green with every new shared step in use, and the cucumber skill's layout rules carry this milestone's ownership table and reserve each stream's feature file and verb module name (FND-01, FND-02).
+  3. Every seed passes `npm run test:cucumber`, which is green as a whole under the `adapter` and the `builtin` profile; only a seed with an MCP surface carries `@mcp`, and any other seed runs once, under `adapter` (D-BG-04); `npm run check:features` is green with every new shared step in use, and the cucumber skill's layout rules carry this milestone's ownership table and reserve each stream's feature file and verb module name (FND-01, FND-02).
   4. The "Frozen after Phase 1" list in this roadmap matches what Phase 1 left, `.planning/milestones/behavioral-gaps-CHILD-SESSION-BRIEF.md` exists and agrees with the Milestone rules, and the root log `.planning/DUBIOUS-CHOICES.md` exists (FND-02).
-  5. `npm run check` passes on the combined tree at the Phase 1 head, the CI behavioral timeouts hold the measured run with margin, and the fifteen `features/behavioral-gaps-phase-N` branches exist at that head (FND-02).
+  5. `npm run check` passes on the combined tree at the Phase 1 head, the CI behavioral timeouts hold the measured run with margin, and the fifteen `features/behavioral-gaps-phase-N` branches exist as local branches at that head (D-BG-16, FND-02).
 
 **Parallel structure** (suggested; the planner may split further, and plans in one wave own disjoint files):
 
