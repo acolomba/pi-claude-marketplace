@@ -1130,11 +1130,12 @@ async function registerHooksBridgeWith(
               routingState,
               generationIsCurrent,
             );
+            // D-BG-207: inside the try, so a context the hydrate could not
+            // read skips the reap too and never blocks SessionStart.
+            await reapProjectOrphans(runtime, ctx.cwd);
           } catch (err) {
             hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
           }
-
-          await reapProjectOrphans(runtime, ctx.cwd);
 
           if (!generationIsCurrent()) {
             return;
