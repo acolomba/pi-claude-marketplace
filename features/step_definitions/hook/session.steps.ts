@@ -20,6 +20,12 @@
  * quit run a Pi in the terminal beside the profile Pi, which installed the
  * plugin and stays idle. Both share the sandbox, so the terminal Pi's hook
  * runs land in the profile Pi's harness directory.
+ *
+ * A hook whose script waits goes on until a step creates its release marker,
+ * `$HOME/hook-releases/<name>` (D-BG-12). The extension shows an async rewake
+ * hook's declared rewake summary on every exit, so the release steps wait for
+ * the hook's end line in the lifecycle log and then for that summary, the
+ * sign that the extension handled the exit. A released hook must declare one.
  */
 
 import assert from "node:assert/strict";
@@ -29,7 +35,7 @@ import path from "node:path";
 import { Given, When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
-import { HOOK_RUNS_LOG } from "../../lib/hook-recorder.ts";
+import { HOOK_RUNS_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts";
 import { startSession } from "../../lib/pi-commands.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf, readModelCalls } from "../../lib/scripted-model/script.ts";
@@ -65,12 +71,33 @@ const HOOK_LOG_POLL_MS = 50;
 // margin covers a loaded CI runner and stays below the step timeout.
 const TERMINAL_PROMPT_RUN_TIMEOUT_MS = 20_000;
 
+// A released script exits within a second, and the extension shows its
+// rewake summary right after; the margin covers a loaded CI runner and stays
+// below the 30-second step timeout.
+const HOOK_RELEASE_TIMEOUT_MS = 20_000;
+
 // An extension error or a dialog during a session action is never expected.
 function faultsOf(records: readonly RpcRecord[]): readonly RpcRecord[] {
   return records.filter(
     (record) =>
       record.type === "extension_error" ||
       (record.type === "extension_ui_request" && DIALOG_METHODS.has(String(record.method))),
+  );
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Whether `record` is the `claude-plugin` entry of a rewake summary.
+function isRewakeSummary(record: RpcRecord): boolean {
+  const { entry } = record;
+  return (
+    record.type === "entry_appended" &&
+    isRecord(entry) &&
+    entry.customType === "claude-plugin" &&
+    isRecord(entry.data) &&
+    entry.data.kind === "async-rewake-summary"
   );
 }
 
@@ -146,6 +173,20 @@ async function waitForStartupRun(harness: string): Promise<void> {
   );
 }
 
+// Creates the release marker of `hook` in the sandbox home, then waits for
+// the hook's end line and for the rewake summary the extension shows after
+// it, and asserts that Pi reported no fault meanwhile.
+async function releaseHook(world: ScenarioWorld, hook: string): Promise<void> {
+  const deadline = Date.now() + HOOK_RELEASE_TIMEOUT_MS;
+  const from = world.pi.recordCount();
+  const releases = path.join(world.tokens.home, "hook-releases");
+  await mkdir(releases, { recursive: true });
+  await writeFile(path.join(releases, hook), "");
+  await waitForHookLifecycle(world.profileHarness(), hook, "end", deadline - Date.now());
+  await world.pi.waitForRecord(from, isRewakeSummary, deadline - Date.now());
+  assert.deepStrictEqual(faultsOf(world.pi.recordsSince(from)), []);
+}
+
 // RPC `compact` answers after Pi ran its `session_compact` handlers.
 async function compactSession(world: ScenarioWorld): Promise<void> {
   const { response } = await world.pi.request({ type: "compact" });
@@ -193,6 +234,13 @@ Given(
   async function (this: ScenarioWorld) {
     this.profileHarness();
     await compactSession(this);
+  },
+);
+
+Given(
+  "the user has released the hook {string}",
+  async function (this: ScenarioWorld, hook: string) {
+    await releaseHook(this, hook);
   },
 );
 
@@ -261,6 +309,13 @@ When(
       const forked = await this.pi.request({ type: "fork", entryId: first.entryId });
       assert.deepStrictEqual(forked.response.data, { text: first.text, cancelled: false });
     });
+  },
+);
+
+When(
+  "the user releases the hook {string} with the hooks recording",
+  async function (this: ScenarioWorld, hook: string) {
+    await recordSessionAction(this, "release", () => releaseHook(this, hook));
   },
 );
 

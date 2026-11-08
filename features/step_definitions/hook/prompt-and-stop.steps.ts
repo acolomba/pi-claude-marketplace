@@ -20,12 +20,12 @@
  * while the hook's script still waits for its release (D-BG-12). The
  * background `When` waits for both the settle and the hook's start line in
  * the lifecycle log, in either order, asserts that the hook has not ended,
- * and keeps the run as the last turn.
+ * and keeps the run as the last turn. Its `Given` form keeps no turn.
  */
 
 import assert from "node:assert/strict";
 
-import { When } from "@cucumber/cucumber";
+import { Given, When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
 import { HOOK_LIFECYCLE_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts";
@@ -144,6 +144,13 @@ async function promptPastBackgroundHook(
   assert.deepStrictEqual(ended, [], `the hook ${hook} ended before its release`);
   return turn;
 }
+
+Given(
+  "the user has prompted {string} and the hook {string} goes on in the background",
+  async function (this: ScenarioWorld, text: string, hook: string) {
+    await promptPastBackgroundHook(this, text, hook);
+  },
+);
 
 When(
   "the user prompts {string} and the hook {string} goes on in the background",
