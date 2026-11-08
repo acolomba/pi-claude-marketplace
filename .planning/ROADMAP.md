@@ -348,7 +348,7 @@ the parent can resolve a conflicting merge.
 - [x] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched (completed 2026-11-08)
 - [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
 - [x] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay (completed 2026-11-08)
-- [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
+- [x] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing (completed 2026-11-08)
 - [x] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass (completed 2026-11-08)
 - [x] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled (completed 2026-11-08)
 - [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
@@ -577,7 +577,14 @@ Plans:
   3. A call that names an unknown marketplace or scope returns an error result, which the model reads on its next request (TOOL-03).
   4. No call changes `state.json`, a config file, or anything installed (TOOL-03).
 
-**Plans**: TBD
+**Plans**: 2/2 plans complete
+
+Plans:
+**Wave 1**
+- [x] 10-01-PLAN.md — The list tool's optional scope, the not-found error result, disabled plugins under the `unavailable` filter, and `(no plugins)` for every empty block, each test-first in the unit pair
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 10-02-PLAN.md — The model-tool scenarios through the scripted model (both scopes and each scope, every status and filter, refused and unknown input as failed results, nothing changed on disk), with every red proof and the parent lines
 
 ### Phase 11: Device Flow Sign-In
 
@@ -711,7 +718,7 @@ Plans:
 | 7. State Schema Migration | 1/1 | Complete    | 2026-11-08 |
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
 | 9. Legacy MCP Entry Move | 1/1 | Complete    | 2026-11-08 |
-| 10. Model-Facing Tools | 0/TBD | Not started | - |
+| 10. Model-Facing Tools | 2/2 | Complete    | 2026-11-08 |
 | 11. Device Flow Sign-In | 2/2 | Complete    | 2026-11-08 |
 | 12. Browse Picker | 2/2 | Complete    | 2026-11-08 |
 | 13. Prune | 0/TBD | Not started | - |
@@ -724,7 +731,7 @@ Plans:
 - mcp-builtin: BACKLOG COMPLIMPL-01, STAMPTYPE-01, GRANTRUNARG-01, STAMPREQ-01, EDGEDEPSCASES-01, PENDAPPLY-01, CONTAINCATCH-01, BLTREPEAT-01, SUBCHILDVAR-01, BLTOWNER-01 (narrowed), DENYPIN-01, and the 17 deferred built-in MCP items in [BACKLOG.md](BACKLOG.md); Phase 2's one open Nyquist gap (a `/reload` implementation switch, MSEL-02); the Pi 1.5.0 RPC double `session_start` fix on `acolomba/pi` branch `fix/rpc-double-session-start`, for the user to report upstream.
 - component-features: upstream fixes wait on the user's review on forks `acolomba/pi` (`fix/input-transform-expand-opt-out`) and `acolomba/pi-subagents` (`fix/mcp-direct-tools-adapter-7`); MCPBG-01, PIEXPAND-01, WFLOCAL-01 and MCPCANARY-01 stay in [BACKLOG.md](BACKLOG.md); D-CF7-05 awaits a live probe of Claude Code.
 - `DEPADV-01` and `WOUT-01` remain in [BACKLOG.md](BACKLOG.md): Pi's shrinkwrap pins a nested `brace-expansion@5.0.9`, and workflow output is unobserved.
-- Open user choice from json-output `09/` (D-03): the LLM tools return `isError: true`, which Pi 0.87.1 ignores; throwing a redacted Error instead would set Pi's error flag.
+- Closed under D-BG-1001 (behavioral-gaps Phase 10, pending user review, P10-DC-01): the json-output `09/` D-03 choice. The LLM tools return `isError: true`, never throw; Pi 1.5.0 delivers a returned `isError` to the model as a failed tool result.
 - `DBLEMIT-01`, `PSRC-01`, `USRCFG-01`, `MIGR-01`, and `NAMEFOLD-01` stay in [BACKLOG.md](BACKLOG.md), out of this milestone's scope.
 - `HOSTED-DNS-01` remains accepted under D-PL5-31 until a hostname-resolution policy is designed and implemented.
 

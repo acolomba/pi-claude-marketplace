@@ -38,9 +38,9 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 ### Model-facing tools
 
-- [ ] **TOOL-01**: A model calling `pi_claude_marketplace_list` gets the configured marketplaces of both scopes, or of the scope it asks for.
-- [ ] **TOOL-02**: A model calling `pi_claude_marketplace_plugin_list` gets each plugin's compatibility and install status, filtered as it asks (installed, available, unavailable).
-- [ ] **TOOL-03**: A call naming an unknown marketplace or scope gets an error result, and neither tool changes anything on disk.
+- [x] **TOOL-01**: A model calling `pi_claude_marketplace_list` gets the configured marketplaces of both scopes, or of the scope it asks for.
+- [x] **TOOL-02**: A model calling `pi_claude_marketplace_plugin_list` gets each plugin's compatibility and install status, filtered as it asks (installed, available, unavailable).
+- [x] **TOOL-03**: A call naming an unknown marketplace or scope gets an error result, and neither tool changes anything on disk.
 
 ### Device Flow
 
@@ -95,9 +95,9 @@ None.
 | CFGMIG-02 | Phase 8 | Pending |
 | AMIG-01 | Phase 9 | Complete |
 | AMIG-02 | Phase 9 | Complete |
-| TOOL-01 | Phase 10 | Pending |
-| TOOL-02 | Phase 10 | Pending |
-| TOOL-03 | Phase 10 | Pending |
+| TOOL-01 | Phase 10 | Complete |
+| TOOL-02 | Phase 10 | Complete |
+| TOOL-03 | Phase 10 | Complete |
 | DFLOW-01 | Phase 11 | Complete |
 | DFLOW-02 | Phase 11 | Complete |
 | DFLOW-03 | Phase 11 | Complete |

@@ -234,3 +234,31 @@ Full text: `.planning/phases/03-stopfailure-hooks/DUBIOUS-CHOICES.md`.
 - **P3-DC-23 (Low, open).** One combined wave gate.
 - **P3-DC-24 (Medium, open).** A load timeout left red.
 - **P3-DC-25 (Low, open).** Test shapes.
+
+## Phase 10: Model-Facing Tools
+
+Full text: `.planning/phases/10-model-facing-tools/DUBIOUS-CHOICES.md`.
+
+- **P10-DC-01 (Medium, open).** The carried json-output D-03 choice closes as "return `isError: true`, never throw".
+- **P10-DC-02 (High, open).** A disabled plugin keeps the `[unavailable]` tag, and the `unavailable` filter now returns it.
+- **P10-DC-03 (Medium, open).** The list tool's `<N> plugin(s)` keeps counting installed plugins (D-09).
+- **P10-DC-04 (Low, open).** GSD's manager view resolves Phase 10 to an archived directory.
+- **P10-DC-05 (Medium, open).** `(no plugins)` for every block that keeps no rows.
+- **P10-DC-06 (Low, open).** "Each parameter form" read as 3-4 combined calls.
+- **P10-DC-07 (Low, open).** Research probes edited the owned `tools.ts` temporarily.
+- **P10-DC-08 (Low, open).** Shared pre-commit hook briefly in migration mode.
+- **P10-DC-09 (Low, open).** Pattern mapper skipped.
+- **P10-DC-10 (Low, open).** Plan shape.
+- **P10-DC-11 (Low, open).** One heavy Background.
+- **P10-DC-12 (Low, open).** Scenario grouping.
+- **P10-DC-13 (Low, open).** Description wording.
+- **P10-DC-14 (Low, open).** No-change scenario scope.
+- **P10-DC-15 (Low, open).** Shared unit fixture.
+- **P10-DC-16 (Low, open).** Stale count comment left.
+- **P10-DC-17 (Medium, open).** Isolation sentinel written in the parent checkout.
+- **P10-DC-18 (Medium, open).** Plan 10-02, the code review, the fixes, and the verification ran inline.
+- **P10-DC-19 (Low, open).** Sequential root pin simplified.
+- **P10-DC-20 (Low, open).** Empty-block copy.
+- **P10-DC-21 (Low, open).** Red proofs ran once.
+- **P10-DC-22 (Medium, open).** The list tool does not follow Phase 12's picker wording.
+- **P1-DC-48** (see the phase log).
