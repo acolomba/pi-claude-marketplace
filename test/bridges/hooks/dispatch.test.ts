@@ -3795,13 +3795,6 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       notices: ["SessionEnd:clear hook error: [printf ender]: bye"],
     },
     {
-      name: "a hook error for a PostCompact block after the event and its trigger",
-      claudeEvent: "PostCompact",
-      event: POST_COMPACT,
-      results: { compactor: { kind: "block" } },
-      notices: ["PostCompact:auto hook error: Blocked by hook"],
-    },
-    {
       name: "one compaction-blocked notice for the PreCompact blocks in routing order",
       claudeEvent: "PreCompact",
       event: PRE_COMPACT,
@@ -3962,6 +3955,130 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       host.capture.assertValid();
     });
   }
+});
+
+describe("PostCompact notices (D-BG-501 / D-BG-502 / D-BG-504)", () => {
+  const MANUAL = { reason: "manual" } as SessionCompactEvent;
+
+  function postCompactHandler(
+    entries: readonly RoutingEntry[],
+    pi: ExtensionAPI,
+    executor: HookExecutor,
+  ): ReturnType<typeof compositeHandlerFor<"PostCompact">> {
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostCompact", entries);
+    return compositeHandlerFor(runtime, "PostCompact", runtime.currentGeneration(), pi, executor);
+  }
+
+  test("lists each hook's end after a manual compaction in routing order whatever order the hooks finish in", async () => {
+    // arrange
+    const host = createNoticeHost("/workspace/post-compact");
+    const held = createHeldExecutor([]);
+    const handler = postCompactHandler(
+      routedEntries("PostCompact", ["first", "second", "third"]),
+      host.pi,
+      held.executor,
+    );
+
+    // act
+    const pending = handler(MANUAL, host.context);
+    await settleStartedHooks();
+    held.finish("third", { kind: "noop", postCompactRun: { succeeded: true, output: "" } });
+    held.finish("first", { kind: "noop", postCompactRun: { succeeded: true, output: "saved" } });
+    held.finish("second", {
+      kind: "block",
+      reason: "not now",
+      fromStderr: true,
+      postCompactRun: { succeeded: false, output: "not now" },
+    });
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry(
+        "PostCompact [printf first] completed successfully: saved\n" +
+          "PostCompact [printf second] failed: not now\n" +
+          "PostCompact [printf third] completed successfully",
+      ),
+    ]);
+    host.capture.assertValid();
+  });
+
+  for (const reason of ["threshold", "overflow"] as const) {
+    test(`shows nothing and writes one debug line after a ${reason} compaction`, async (t) => {
+      // arrange
+      const debugLines = observeHookDebug(t);
+      const host = createNoticeHost("/workspace/post-compact-auto");
+      const handler = postCompactHandler(
+        routedEntries("PostCompact", ["first", "second"]),
+        host.pi,
+        createRecordingExecutor(
+          {
+            first: { kind: "noop", postCompactRun: { succeeded: true, output: "" } },
+            second: { kind: "noop", postCompactRun: { succeeded: false, output: "boom" } },
+          },
+          [],
+        ),
+      );
+
+      // act
+      await handler({ reason } as SessionCompactEvent, host.context);
+
+      // assert
+      assert.deepStrictEqual(host.capture.entries, []);
+      assert.deepStrictEqual(debugLines(), [
+        "[hooks] dispatch: 2 PostCompact line(s) not shown after an automatic compaction",
+      ]);
+    });
+  }
+
+  test("shows nothing and writes no debug line for results that carry no run", async (t) => {
+    // arrange
+    const debugLines = observeHookDebug(t);
+    const host = createNoticeHost("/workspace/post-compact-none");
+    const handler = postCompactHandler(
+      routedEntries("PostCompact", ["quiet"]),
+      host.pi,
+      createRecordingExecutor({ quiet: { kind: "noop" } }, []),
+    );
+
+    // act
+    await handler(MANUAL, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, []);
+    assert.deepStrictEqual(debugLines(), []);
+  });
+
+  test("names each hook by its command and exec-form arguments", async () => {
+    // arrange
+    const [tagged, plain, bare] = routedEntries("PostCompact", ["tagged", "plain", "bare"]);
+    assert.ok(tagged !== undefined && plain !== undefined && bare !== undefined);
+    const host = createNoticeHost("/workspace/post-compact-commands");
+    const ran = { kind: "noop", postCompactRun: { succeeded: true, output: "" } } as const;
+    const handler = postCompactHandler(
+      [
+        { ...tagged, handlerDecl: { ...tagged.handlerDecl, args: ["note", 7] } },
+        { ...plain, handlerDecl: { ...plain.handlerDecl, args: "ignored" } },
+        { ...bare, handlerDecl: { type: "command", timeout: 1 } },
+      ] as RoutingEntry[],
+      host.pi,
+      createRecordingExecutor({ tagged: ran, plain: ran, bare: ran }, []),
+    );
+
+    // act
+    await handler(MANUAL, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry(
+        "PostCompact [printf tagged note 7] completed successfully\n" +
+          "PostCompact [printf plain] completed successfully\n" +
+          "PostCompact [] completed successfully",
+      ),
+    ]);
+  });
 });
 
 // Entries of `claudeEvent` with a match-all matcher, in routing order.
