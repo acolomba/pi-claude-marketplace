@@ -52,9 +52,18 @@ function isBorder(line: string): boolean {
   return /^─+$/u.test(line);
 }
 
+// A row splits at its first run of two or more spaces only, so a description
+// that holds such a run keeps its whole text.
 function pickerRow(line: string): PickerRow {
   const selected = line.startsWith(SELECTED_PREFIX);
-  const [label = "", description = ""] = line.slice(SELECTED_PREFIX.length).split(/ {2,}/u);
+  const body = line.slice(SELECTED_PREFIX.length);
+  const gap = / {2,}/u.exec(body);
+  if (gap === null) {
+    return { label: body, description: "", selected };
+  }
+
+  const label = body.slice(0, gap.index);
+  const description = body.slice(gap.index + gap[0].length);
   return { label, description, selected };
 }
 
@@ -137,32 +146,49 @@ export async function choosePickerRow(tui: PiTuiSession, label: string): Promise
     assert.fail(`the screen ${title} has no single row ${label}: ${JSON.stringify(labels)}`);
   }
 
-  const delta = target - rows.findIndex((row) => row.selected);
+  const selected = rows.findIndex((row) => row.selected);
+  if (selected === -1) {
+    assert.fail(`the screen ${title} selects no row: ${JSON.stringify(labels)}`);
+  }
+
+  const delta = target - selected;
   tui.typeText((delta > 0 ? DOWN_KEY : UP_KEY).repeat(Math.abs(delta)));
   await tui.waitForScreen(
     (lines) => readPickerScreen(lines)?.rows[target]?.selected === true,
     PICKER_STEP_MS,
     `the row ${label} selected`,
   );
+  const mark = tui.markOutput();
   tui.typeText(ENTER_KEY);
   await waitForScreenChange(tui, title);
   if (pickerFrame(tui.screenLines()) === undefined) {
-    await waitForActionNotice(tui, title);
+    await waitForActionNotice(tui, title, mark);
   }
+}
+
+// Whether `line` is a notice row of `plugin`: a glyph, the name, and a status
+// in parentheses (`<glyph> <name> [<scope>] <version> (<status>)`).
+function isPluginNoticeRow(line: string, plugin: string): boolean {
+  return line.trim().split(" ")[1] === plugin && /\([^()]+\)/u.test(line);
 }
 
 // Waits until the notice of the action the picker closed on shows, and the
 // terminal is quiet. The action and scope screens name their plugin in their
 // title (`Action: <plugin> @ <marketplace>`), and the notice of every action
-// names it on a row of its own.
-async function waitForActionNotice(tui: PiTuiSession, title: string): Promise<void> {
+// names it on a plugin row: a glyph, the name, and its status in parentheses.
+// The row counts only once Pi wrote it after `mark`, the output position
+// before the choice, so a row an earlier command left on the screen does not.
+async function waitForActionNotice(tui: PiTuiSession, title: string, mark: number): Promise<void> {
   const plugin = /(\S+) @ \S+/u.exec(title)?.[1];
   if (plugin === undefined) {
     assert.fail(`the plugin picker closed on the screen ${title}, which names no plugin`);
   }
 
   await tui.waitForScreen(
-    (lines) => lines.some((line) => line.trim().split(/\s+/u).includes(plugin)),
+    (lines) => {
+      const written = tui.textAfter(mark);
+      return lines.some((line) => isPluginNoticeRow(line, plugin) && written.includes(line.trim()));
+    },
     PICKER_STEP_MS,
     `the notice about ${plugin}`,
   );

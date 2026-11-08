@@ -467,10 +467,15 @@ export class PiTuiSession {
     return this.output.length;
   }
 
+  /** Returns the terminal text written after `mark`, with control sequences removed. */
+  textAfter(mark: number): string {
+    return removeTerminalControls(this.output.slice(mark));
+  }
+
   /** Waits until terminal output written after `mark` contains `text`. */
   async waitForTextAfter(text: string, mark: number, timeoutMs: number): Promise<void> {
     await this.waitFor(
-      () => removeTerminalControls(this.output.slice(mark)).includes(text),
+      () => this.textAfter(mark).includes(text),
       timeoutMs,
       `terminal text ${text}`,
     );
