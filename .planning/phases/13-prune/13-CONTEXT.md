@@ -47,6 +47,11 @@ Evidence: `strings` over the Claude Code 2.1.319 binary
 - **D-BG-1307: no product change is planned.** The research above finds the product already at parity for every criterion. A bug that a scenario exposes is fixed in this phase's own files (milestone bug policy); one in a frozen or sibling file becomes a parent line and a dubious choice.
 - No scenario has an MCP surface, so none carries an implementation tag; each runs once, under the `adapter` profile (D-BG-04).
 
+### Decisions after research (2026-11-08)
+
+- **D-BG-1308: each scope gets its own orphan in the two-scope scenarios.** The user scope orphans `lib` (through `app`), and the project scope orphans `mid` (through a new plugin `tool`, tool -> mid). A preview row takes its scope from the requested scope, so with the same orphan in both scopes a preview that reads the other scope's state would still pass. This replaces the same-`lib` setup under "Specific Ideas".
+- **D-BG-1309: the `enabled: false` declaration that a pruned disabled dependency leaves in `claude-plugins.json` is not fixed in this phase.** Claude Code's prune removal deletes `enabledPlugins[id]` for each pruned plugin (2.1.319, `bEi`); the product keeps the entry, because the shared sweep (`removeDependencyMember` in `orchestrators/plugin/uninstall.ts`, which this phase does not own) never touches the config layers. The entry has no effect a user sees in a command result (`pending` is empty, a later install enables the plugin). A fix only in `prune.ts` would leave `uninstall --prune` different and would need the rollback to cover the config files (NFR-3), so it becomes a parent line and a dubious choice, and the disabled-orphan scenario states no config outcome.
+
 ### Claude's Discretion
 
 - Scenario titles, the feature description's wording, and the order of scenarios in `prune.feature`.
