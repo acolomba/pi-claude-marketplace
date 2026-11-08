@@ -88,6 +88,28 @@ test("erases the display below, above, and whole", () => {
   ]);
 });
 
+test("keeps the screen on an erase of the scrollback alone", () => {
+  // arrange
+  const output = "aaa\r\nbbb\u001b[3J";
+
+  // act
+  const screen = terminalScreen(output, 2, 5);
+
+  // assert
+  assert.deepStrictEqual(screen, ["aaa", "bbb"]);
+});
+
+test("drops C1 control characters", () => {
+  // arrange
+  const output = "a\u0080b\u009bc\u009fd";
+
+  // act
+  const screen = terminalScreen(output, 1, 8);
+
+  // assert
+  assert.deepStrictEqual(screen, ["abcd"]);
+});
+
 test("erases a line from its start to the cursor", () => {
   // arrange
   const output = "abcdef\u001b[1;3H\u001b[1K";

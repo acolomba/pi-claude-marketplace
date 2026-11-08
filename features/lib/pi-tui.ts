@@ -220,12 +220,20 @@ class ScreenModel {
     this.wrapPending = false;
   }
 
+  // Erases below the cursor (mode 0), above it (mode 1), or the whole screen
+  // (mode 2). Mode 3 erases only the scrollback, which the model does not
+  // keep, so it leaves the screen as it is.
   private eraseDisplay(mode: number): void {
-    const [from, to] = mode === 1 ? [0, this.row - 1] : [this.row + 1, this.rows - 1];
-    if (mode >= 2) {
+    if (mode === 2) {
       this.cells.splice(0, this.rows, ...Array.from({ length: this.rows }, () => this.blankRow()));
       return;
     }
+
+    if (mode !== 0 && mode !== 1) {
+      return;
+    }
+
+    const [from, to] = mode === 1 ? [0, this.row - 1] : [this.row + 1, this.rows - 1];
 
     for (let row = from; row <= to; row += 1) {
       this.cells[row] = this.blankRow();
@@ -250,6 +258,12 @@ class ScreenModel {
   private blankRow(): string[] {
     return Array.from({ length: this.columns }, () => " ");
   }
+}
+
+// Whether a terminal prints `character` in a cell: not a C0 control, DEL, or
+// a C1 control (U+0080 to U+009F).
+function isPrintable(character: string): boolean {
+  return character >= " " && !(character >= "\u007f" && character <= "\u009f");
 }
 
 // Replays the escape sequence at `start` on `screen` and returns the index
@@ -280,8 +294,9 @@ function replayEscape(screen: ScreenModel, text: string, start: number): number 
  * `columns`, one string per row with its trailing spaces removed. It replays
  * printable text, carriage return, line feed (which scrolls on the last row),
  * cursor movement (`A`, `B`, `C`, `D`, `G`, `H`, `f`), and erase in display
- * and in line (`J`, `K`); it drops every other control sequence, character,
- * and command. Each code point takes one column, so a row a redraw rewrote
+ * and in line (`J`, `K`), where an erase of the scrollback (`3J`) leaves the
+ * screen as it is; it drops every other control sequence, control character
+ * (C0, DEL, and C1), and command. Each code point takes one column, so a row a redraw rewrote
  * reads as its last value.
  */
 // fallow-ignore-next-line unused-export -- test/architecture/pi-tui-screen.test.ts pins the screen model.
@@ -299,7 +314,7 @@ export function terminalScreen(output: string, rows: number, columns: number): s
       screen.carriageReturn();
     } else if (character === "\n") {
       screen.lineFeed();
-    } else if (character >= " " && character !== "\u007f") {
+    } else if (isPrintable(character)) {
       screen.print(character);
     }
 
