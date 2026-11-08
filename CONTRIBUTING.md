@@ -31,14 +31,27 @@ It installs the npm dependencies, including the pinned Pi version, and these too
 - [gsd-core](https://github.com/open-gsd/gsd-core)
 - [codegraph](https://github.com/colbymchenry/codegraph)
 
+The script has two stages, and you can run each one alone:
+
+- `scripts/init.sh --tools` installs the agent tooling: the third-party skills, gsd-core, and the fallow skills. This tooling does not depend on the checked-out code.
+- `scripts/init.sh --deps` installs what depends on the checked-out code: the git hooks, the npm dependencies, and the codegraph index.
+
 ### Claude Code cloud sessions
 
 Set the setup script of the cloud environment to:
 
 ```bash
 #!/bin/bash
-/home/user/pi-claude-marketplace/scripts/init.sh
+if [ -x pi-claude-marketplace/scripts/cloud-env-setup.sh ]; then
+    pi-claude-marketplace/scripts/cloud-env-setup.sh || echo "cloud-env-setup.sh failed" >&2
+fi
 ```
+
+The setup script runs before Claude Code starts. `scripts/cloud-env-setup.sh` installs Node 24, a `node` wrapper that makes root obey file modes, and pre-commit. Then it runs `scripts/init.sh --tools`. Claude Code reads agents and skills only when it starts, so the agent tooling must be in place before then. A failed setup only prints a message, because a setup script that fails stops the session from starting.
+
+The cloud environment saves the result of its setup and starts later sessions from that copy. So the setup does not install the npm dependencies or build the codegraph index: they depend on the branch. At every session start, the SessionStart hook (`scripts/init-session.sh`) runs `scripts/init.sh --deps`. The codegraph index builds in the background and takes about three minutes in a new checkout.
+
+Claude Code starts the MCP servers while the hook still installs the npm dependencies. So `.mcp.json` starts them through `scripts/mcp-server.sh`, which waits until the hook has finished, and `.claude/settings.json` sets `MCP_TIMEOUT` so that Claude Code waits long enough.
 
 ## Running Pi against the checkout
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Settings for a Claude Code cloud VM. scripts/init.sh and
-# scripts/init-session.sh source this file when CLAUDE_CODE_REMOTE is true.
-# Sourcing only sets variables and defines functions. cloud_env_install does
-# the work and returns non-zero on failure, so each caller decides how to
+# Settings for a Claude Code cloud VM. scripts/cloud-env-setup.sh,
+# scripts/init.sh, and scripts/init-session.sh source this file when they run
+# there. Sourcing only sets variables and defines functions. cloud_env_install
+# does the work and returns non-zero on failure, so each caller decides how to
 # report it.
 #
 # - Node: the VM puts Node 22 on PATH, and the checks need Node 24, the
@@ -12,14 +12,14 @@
 #   wrapper drops two capabilities, so a test that denies a file with chmod
 #   sees the error. The wrapper is not under HOME, because pre-commit ignores
 #   a node there and downloads its own, which the network policy blocks.
+# - pre-commit: installed with uv or pipx. Its hook environments are not built
+#   ahead, because the environment can serve other repositories.
 # - trufflehog: its Go toolchain download is blocked. SKIP leaves the hook to
 #   CI.
 # - LFS: the GitHub proxy cannot fetch LFS objects, so `git lfs install`
 #   leaves LFS files as pointers.
 # - Heap: ESLint over the whole tree needs more than the default V8 heap. The
 #   VM's own NODE_OPTIONS stay.
-# - Warmup: the first run builds the pre-commit hook environments in the
-#   background, so the setup script returns sooner.
 
 node_prefix=/opt/node24
 node_real="$node_prefix/bin/node"
@@ -50,8 +50,8 @@ cloud_session_exports() {
     printf 'export SKIP=%q\n' "$SKIP"
 }
 
-# Installs Node 24 when absent, writes the wrapper, and starts the warmup.
-# Run from the repository root.
+# Installs Node 24 when absent, writes the wrapper, and installs pre-commit
+# when absent. Writes nothing in the checkout.
 cloud_env_install() {
     if ! command -v setpriv >/dev/null 2>&1; then
         echo "scripts/cloud-env.sh: setpriv is required" >&2
@@ -82,19 +82,14 @@ WRAPPER
         return 1
     fi
 
-    # `pre-commit run` rather than `install-hooks`, which ignores SKIP and
-    # would try the blocked trufflehog build. The marker path is relative:
-    # both callers run from the repository root. PI_CM_CLOUD_WARMUP limits
-    # the hook, which runs this and then init.sh, to one warmup. pre-commit
-    # from uv is a shortcut: init.sh installs it when this step fails.
-    if [[ ! -e node_modules/.init-done && -z ${PI_CM_CLOUD_WARMUP-} ]]; then
-        export PI_CM_CLOUD_WARMUP=1
-        if ! command -v pre-commit >/dev/null 2>&1 && command -v uv >/dev/null 2>&1; then
-            uv tool install pre-commit || echo "scripts/cloud-env.sh: warmup skipped, uv could not install pre-commit" >&2
-        fi
-        if command -v pre-commit >/dev/null 2>&1; then
-            mkdir -p node_modules
-            (pre-commit run --files CONTRIBUTING.md >node_modules/.warmup.log 2>&1 &)
+    if ! command -v pre-commit >/dev/null 2>&1; then
+        if command -v uv >/dev/null 2>&1; then
+            uv tool install pre-commit || return 1
+        elif command -v pipx >/dev/null 2>&1; then
+            pipx install pre-commit || return 1
+        else
+            echo "scripts/cloud-env.sh: install pipx or uv first" >&2
+            return 1
         fi
     fi
 }

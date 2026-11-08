@@ -3,6 +3,9 @@
     "typescript-lsp@claude-plugins-official": true,
     "pr-review-toolkit@claude-plugins-official": true
   },
+  "env": {
+    "MCP_TIMEOUT": "300000"
+  },
   "hooks": {
     "UserPromptSubmit": [
       {

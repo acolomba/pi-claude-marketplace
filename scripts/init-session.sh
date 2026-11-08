@@ -4,9 +4,13 @@ set -euo pipefail
 # The desktop app runs SessionStart hooks from the main checkout and passes
 # the session's worktree as the input's cwd, so the worktree comes from the
 # input. A run by hand has no input, and an input without cwd prints the
-# string `undefined`.
-cwd=$(node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).cwd ?? ""' 2>/dev/null) || cwd=$PWD
+# string `undefined`. Hook processes inherit CLAUDE_CODE_SESSION_ID; the
+# input's session_id stands in when they do not.
+input=$(cat 2>/dev/null) || input=
+field() { printf '%s' "$input" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).$1 ?? ''" 2>/dev/null; }
+cwd=$(field cwd) || cwd=$PWD
 [[ -n $cwd && $cwd != undefined && $cwd != null ]] || cwd=$PWD
+session_id=${CLAUDE_CODE_SESSION_ID:-$(field session_id || true)}
 
 if ! top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null); then
     if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
@@ -16,9 +20,11 @@ if ! top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null); then
 fi
 
 # A Claude Code cloud VM: export its settings for the session's Bash commands
-# first, then install, then run init.sh unless a run has completed in this
-# clone. Every message goes to stdout: stdout reaches the session, stderr of
-# a hook that exits 0 does not.
+# first, then install what depends on the checked-out code. The environment's
+# setup installed the rest (scripts/cloud-env-setup.sh); the environment cache
+# can hold node_modules and an index from an older checkout, so they are
+# refreshed in every session. Every message goes to stdout: stdout reaches the
+# session, stderr of a hook that exits 0 does not.
 if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
     log=$top/node_modules/.init.log
     # The trap writes to a copy of the hook's stdout, because the failing
@@ -36,28 +42,27 @@ if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
         cloud_session_exports >>"$CLAUDE_ENV_FILE"
     fi
 
-    if ! cloud_env_install >>"$log" 2>&1; then
-        echo "scripts/cloud-env.sh failed. See $log"
-        tail -n 5 "$log"
-        exit 0
-    fi
-
-    if [[ -e node_modules/.init-done ]]; then
-        # shellcheck disable=SC2086 -- the variable holds zero or more flags
-        if ! { git lfs install --local $lfs_install_flags && npm install --no-audit --no-fund; } >>"$log" 2>&1; then
-            echo "scripts/init-session.sh: the node_modules refresh failed. See $log"
+    # an environment whose setup did not run cloud-env-setup.sh. Its tooling
+    # installs now, but Claude Code read the agents and skills already
+    if [[ ! -x $wrapper_dir/node || ! -e .claude/gsd-core/bin/gsd-tools.cjs ]]; then
+        if scripts/cloud-env-setup.sh >>"$log" 2>&1; then
+            echo "scripts/init-session.sh ran scripts/cloud-env-setup.sh, which the environment's setup script should run. Its agents and skills load at the next session. See CONTRIBUTING.md."
+        else
+            echo "scripts/cloud-env-setup.sh failed. See $log"
+            tail -n 5 "$log"
+            exit 0
         fi
+    fi
 
+    if ! scripts/init.sh --deps >>"$log" 2>&1; then
+        echo "scripts/init.sh --deps failed. See $log"
+        tail -n 5 "$log"
         exit 0
     fi
 
-    if scripts/init.sh >>"$log" 2>&1; then
-        echo "scripts/init-session.sh ran scripts/init.sh. Subagents and MCP servers load at the next session."
-    else
-        echo "scripts/init.sh failed. See $log"
-        tail -n 5 "$log"
-    fi
-
+    # scripts/mcp-server.sh waits for this session's id here, so an MCP server
+    # never starts from node_modules that the install above is replacing
+    printf '%s\n' "$session_id" >node_modules/.session-ready
     exit 0
 fi
 

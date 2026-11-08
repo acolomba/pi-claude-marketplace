@@ -2,9 +2,8 @@
   "mcpServers": {
     "codegraph": {
       "type": "stdio",
-      "command": "npx",
+      "command": "scripts/mcp-server.sh",
       "args": [
-        "--no",
         "codegraph",
         "serve",
         "--mcp"
@@ -13,9 +12,8 @@
     },
     "fallow": {
       "type": "stdio",
-      "command": "npx",
+      "command": "scripts/mcp-server.sh",
       "args": [
-        "--no",
         "fallow-mcp"
       ]
     }
