@@ -817,6 +817,21 @@ export class ScenarioWorld extends World {
     return script.slice(calls.filter((call) => !call.overflow).length);
   }
 
+  /**
+   * Returns the model calls past the end of the script, by number, or none
+   * when no profile Pi started. A turn's own check reads only its window, so
+   * this catches a call that came after the last turn settled.
+   */
+  async callsPastScript(): Promise<readonly string[]> {
+    const harness = this.profileHarnessDirectory;
+    if (harness === undefined) {
+      return [];
+    }
+
+    const calls = await readModelCalls(harness);
+    return calls.filter((call) => call.overflow).map((call) => `call ${call.index + 1}`);
+  }
+
   /** Adds a variable to the environment of the TUI session this scenario starts. */
   setTuiVariable(name: string, value: string): void {
     if (this.tuiSession !== undefined) {
@@ -1127,8 +1142,10 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
   // Pi has no script and no turn. The releases run even when the read fails.
   const lastTurnUncompared = this.lastTurnUncompared;
   let unusedScriptSteps: readonly ScriptStep[];
+  let callsPastScript: readonly string[];
   try {
     unusedScriptSteps = await this.unusedScriptSteps();
+    callsPastScript = await this.callsPastScript();
   } finally {
     await this.release();
   }
@@ -1156,6 +1173,7 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
       [],
       "no model call used these steps of the model script",
     );
+    assert.deepStrictEqual(callsPastScript, [], "the model was called past its script");
     assert.strictEqual(lastTurnUncompared, false, "no step compared the last model turn");
   }
 });

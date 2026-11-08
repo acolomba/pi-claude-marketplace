@@ -51,8 +51,10 @@
  *   `alone` if not. The files stay for the rest of the scenario.
  * - `waits`: `true` makes it wait, before the lines above, until
  *   `$HOME/hook-releases/<name>` exists, so the hook outlives its event until
- *   a step releases it. It gives up after 60 seconds, so a scenario that
- *   fails before the release leaves no process for long (D-BG-12).
+ *   a step releases it. It then removes the marker, so one release frees one
+ *   run and a later run of the same hook waits again. It gives up after 60
+ *   seconds, so a scenario that fails before the release leaves no process
+ *   for long (D-BG-12).
  *
  * These columns become fields of the handler: `timeout` (seconds, a number),
  * `if`, `on failure` (`block` or `continue`, the field `onFailure`), `once`
@@ -373,7 +375,8 @@ function lifecycleLines(name: string): string[] {
   ];
 }
 
-// The lines that wait for `$HOME/hook-releases/<name>`, or give up.
+// The lines that wait for `$HOME/hook-releases/<name>`, or give up, and
+// then take the marker, so it frees this run alone.
 function releaseLines(name: string): string[] {
   return [
     `release="$HOME/hook-releases/${name}"`,
@@ -382,6 +385,7 @@ function releaseLines(name: string): string[] {
     "  sleep 0.1",
     "  waited=$((waited + 1))",
     "done",
+    'rm -f "$release"',
   ];
 }
 

@@ -72,7 +72,7 @@ Feature: Hook async
       | Noted. |
     Given the user has prompted "say done" and the hook "wake" goes on in the background
     Given the user has released the hook "wake"
-    When the user prompts "next"
+    When the user prompts "next" and the hook "wake" goes on in the background
     Then the model receives these calls:
       | call | role      | text                                |
       | 2    | user      | say done                            |

@@ -36,6 +36,7 @@
  */
 
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -181,16 +182,31 @@ async function waitForStartupRun(harness: string): Promise<void> {
   );
 }
 
-// Creates the release marker of `hook` in the sandbox home, then waits for
-// the hook's end line and for the rewake summary the extension shows after
-// it, and asserts that Pi reported no fault meanwhile.
+// Waits until a run of a waiting hook removed the release marker `marker`,
+// which frees that one run, and fails after `deadline`.
+async function waitForReleaseTaken(marker: string, deadline: number): Promise<void> {
+  while (existsSync(marker)) {
+    assert.ok(Date.now() < deadline, `no run of the hook took its release marker ${marker}`);
+    await new Promise((resolve) => setTimeout(resolve, HOOK_LOG_POLL_MS));
+  }
+}
+
+// Creates the release marker of `hook` in the sandbox home and waits until a
+// run of the hook takes it, so it frees exactly one run. Then waits for an
+// end line of the hook that the log gained after the release and for the
+// rewake summary the extension shows after it, and asserts that Pi reported
+// no fault meanwhile.
 async function releaseHook(world: ScenarioWorld, hook: string): Promise<void> {
   const deadline = Date.now() + HOOK_RELEASE_TIMEOUT_MS;
+  const harness = world.profileHarness();
+  const lengths = await readLogLengths(harness);
   const from = world.pi.recordCount();
   const releases = path.join(world.tokens.home, "hook-releases");
+  const marker = path.join(releases, hook);
   await mkdir(releases, { recursive: true });
-  await writeFile(path.join(releases, hook), "");
-  await waitForHookLifecycle(world.profileHarness(), hook, "end", deadline - Date.now());
+  await writeFile(marker, "", { flag: "wx" });
+  await waitForReleaseTaken(marker, deadline);
+  await waitForHookLifecycle(harness, hook, "end", lengths, deadline - Date.now());
   await world.pi.waitForRecord(from, isRewakeSummary, deadline - Date.now());
   assert.deepStrictEqual(faultsOf(world.pi.recordsSince(from)), []);
 }
@@ -277,15 +293,27 @@ Given(
   },
 );
 // A waiting hook that the terminal Pi's start ran logs its start right after
-// its run, so the step waits for that line and checks that the process runs.
+// its run, so the step waits for a start line that the log gained after the
+// terminal Pi started and checks that the process of that line runs.
 Given(
   "the user has started pi in the terminal and the hook {string} goes on in the background",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld, hook: string) {
     const harness = this.profileHarness();
+    const lengths = await readLogLengths(harness);
     await this.startTuiSession();
-    await waitForHookLifecycle(harness, hook, "start", TERMINAL_STARTUP_RUN_TIMEOUT_MS);
-    await assertHookProcessesRunning(harness, "after the terminal pi started");
+    const started = await waitForHookLifecycle(
+      harness,
+      hook,
+      "start",
+      lengths,
+      TERMINAL_STARTUP_RUN_TIMEOUT_MS,
+    );
+    assert.strictEqual(
+      isRunning(started.pid),
+      true,
+      `the hook ${hook} that the terminal pi started is gone`,
+    );
   },
 );
 

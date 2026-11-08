@@ -144,27 +144,38 @@ function lifecycleEvent(argv: readonly string[]): HookLifecycleEvent {
   throw new Error(`a hook lifecycle line starts or ends a hook: ${argv.join(" ")}`);
 }
 
-// Returns every line of the hook lifecycle log in `harness`, in append order.
-async function readHookLifecycle(harness: string): Promise<readonly HookLifecycleEvent[]> {
-  const logs = await readLogLinesSince(harness, new Map());
+// Returns the lines the hook lifecycle log in `harness` gained since
+// `lengths` was read, in append order.
+async function readHookLifecycleSince(
+  harness: string,
+  lengths: ReadonlyMap<string, number>,
+): Promise<readonly HookLifecycleEvent[]> {
+  const logs = await readLogLinesSince(harness, lengths);
   return (logs.get(HOOK_LIFECYCLE_LOG) ?? []) as readonly HookLifecycleEvent[];
 }
 
 /**
- * Waits until the lifecycle log in `harness` holds a `phase` line of `hook`,
- * by reading it again every `LIFECYCLE_POLL_MS`, never for a fixed time
- * alone, and fails after `timeoutMs`.
+ * Waits until the lifecycle log in `harness` gained a `phase` line of `hook`
+ * since `lengths` was read, by reading it again every `LIFECYCLE_POLL_MS`,
+ * never for a fixed time alone, and returns the first such line. A line of an
+ * earlier run of the same hook never counts. Fails after `timeoutMs`.
  */
 export async function waitForHookLifecycle(
   harness: string,
   hook: string,
   phase: HookLifecycleEvent["phase"],
+  lengths: ReadonlyMap<string, number>,
   timeoutMs: number,
-): Promise<void> {
+): Promise<HookLifecycleEvent> {
   const deadline = Date.now() + timeoutMs;
   const logged = (event: HookLifecycleEvent): boolean =>
     event.hook === hook && event.phase === phase;
-  while (!(await readHookLifecycle(harness)).some(logged)) {
+  for (;;) {
+    const found = (await readHookLifecycleSince(harness, lengths)).find(logged);
+    if (found !== undefined) {
+      return found;
+    }
+
     if (Date.now() >= deadline) {
       throw new Error(`the hook ${hook} logged no ${phase} within ${timeoutMs} ms`);
     }

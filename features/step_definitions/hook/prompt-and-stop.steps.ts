@@ -136,7 +136,7 @@ async function promptPastBackgroundHook(
   const { lengths, from } = await startPrompt(world, prompt);
   await Promise.all([
     settledAfter(world, from, deadline),
-    waitForHookLifecycle(harness, hook, "start", deadline - Date.now()),
+    waitForHookLifecycle(harness, hook, "start", lengths, deadline - Date.now()),
   ]);
   const turn = await checkedRun(world, prompt, lengths, from);
   const lifecycle = (turn.logs.get(HOOK_LIFECYCLE_LOG) ?? []) as readonly HookLifecycleEvent[];
