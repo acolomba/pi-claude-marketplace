@@ -117,6 +117,7 @@ export class PiProcess {
   private stderr = "";
   private exited = false;
   private stopped = false;
+  private crashed = false;
 
   private constructor(child: PiChild) {
     this.child = child;
@@ -234,8 +235,8 @@ export class PiProcess {
 
   /**
    * Closes Pi's stdin, waits for it to exit, and kills whatever its group
-   * left. A second call does nothing: by then the group id may belong to an
-   * unrelated process.
+   * left, also after `crash()`. A second call does nothing: by then the group
+   * id may belong to an unrelated process.
    */
   async stop(): Promise<void> {
     if (this.stopped) {
@@ -261,14 +262,15 @@ export class PiProcess {
    * Kills Pi's own process with SIGKILL and waits for its exit, as a Pi that
    * dies does. The rest of its process group, such as async hook processes,
    * keeps running until the next load stops it (ASYNC-04), so this never
-   * kills the group. A later `stop()` or `crash()` does nothing.
+   * kills the group; the later `stop()` of the release does. A second
+   * `crash()` does nothing.
    */
   async crash(): Promise<void> {
-    if (this.stopped) {
+    if (this.stopped || this.crashed) {
       return;
     }
 
-    this.stopped = true;
+    this.crashed = true;
     if (!this.exited) {
       const exit = once(this.child, "exit");
       this.child.kill("SIGKILL");
