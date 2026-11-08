@@ -26,4 +26,32 @@ The log of the previous milestone is archived, unchanged, at
 
 ## Session-level choices
 
+- **S-01 (Medium, open). The stream phases ran as background agents of the parent session, not as separate sessions.** The user chose to run all fifteen at once from the parent. A background agent cannot dispatch a subagent in the foreground, and a background subagent stalled when its parent agent handed back, so from the first hours on every phase ran its execution, code review, fixes, and verification inline, following the gsd-* agent definitions, without separate reviewer or verifier agents. Each phase logs it.
+- **S-02 (Low, open). The phases shared one scratchpad at first.** Two phases wrote commit-message files of the same name there, and commit `4e3d127c` on the Phase 16 branch carries Phase 13's title. It was not amended (no history rewrites); each phase then moved to `/tmp/claude-1000/bg-phase-N/`.
+- **S-03 (Low, open). The agent isolation sentinel is shared.** The dispatch guard reads `.gsd/dispatch-isolation-sentinel.json` from the parent checkout, which the phases overwrote in turn; the phases worked around it with general-purpose agents and then inline work.
+- **S-04 (Low, open). A merge reuses the phase gate when the trees match.** When the milestone branch had not moved since a phase branched off, the merged tree equals the phase branch's tree, so the parent cites that phase's full `npm run check` instead of rerunning it (the gates.md reuse rule). Phase 15 merged this way.
+
 ## Phase 1: Foundation
+
+## Phase 15: Marketplace State Lock
+
+Full text: `.planning/phases/15-marketplace-state-lock/DUBIOUS-CHOICES.md`.
+
+- **P15-DC-01 (High, open).** The scenarios pin D-06, not Claude Code's fallback.
+- **P15-DC-02 (Medium, open).** No scenario for the unnamed or cross-scope flip.
+- **P15-DC-03 (Low, open).** The seed is rewritten.
+- **P15-DC-04 (Low, open).** No verb step module.
+- **P15-DC-05 (Low, open).** Research ran.
+- **P15-DC-06 (Medium, open).** The stale add twin checks no record.
+- **P15-DC-07 (Low, open).** The stale flip twin drops the remembered-bytes Given.
+- **P15-DC-08 (Low, open).** The seed keeps its title.
+- **P15-DC-09 (Low, open).** The researcher ran its red proofs in a scratch copy of the tree.
+- **P15-DC-10 (Low, open).** Pattern mapping skipped.
+- **P15-DC-11 (Low, open).** One plan with three tasks.
+- **P15-DC-12 (Low, open).** Planner wording choices.
+- **P15-DC-13 (Low, open).** Checker warning dismissed.
+- **P15-DC-14 (Medium, open).** Inline execution, review, and verification.
+- **P15-DC-15 (Low, open).** Tables aligned by a scratch script.
+- **P15-DC-16 (Low, open).** Early commit messages and gate logs lived in the session scratchpad.
+- **P15-DC-17 (Low, open).** Review, verification, security audit, and validation sign-off ran inline.
+- **P15-DC-18 (Low, open).** `phase.complete` rewrote STATE.md's frontmatter and Current Position.

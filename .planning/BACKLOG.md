@@ -5059,3 +5059,7 @@ Noted 2026-11-07 (mcp-builtin, from 261106-u99, S2). No production code now read
 ## MIXEDREFUSAL-01: a refusal message names only the noted kind when another kind has no note
 
 Noted 2026-11-07 (mcp-builtin, from quick 261107-36g). When a plugin has a resolver note for one kind and also an unsupported kind with no note, such as an output style plus hooks declared in the manifest, the not-installable message names only the noted kind (`contains outputStyles`). The row's reason list already shows both. Candidate direction: in `refusalReasons` (`domain/plugin-resolver.ts`), add the token of each unsupported kind that no note covers.
+
+## LOCKFLIPSUBJECT-01: an unnamed autoupdate flip under a held lock reports `(unknown)`
+
+Noted 2026-11-08 (behavioral-gaps Phase 15, P15-DC-02). An unnamed `marketplace autoupdate` or `noautoupdate` under a held state lock reports the `(unknown)` aggregate subject, which unit tests pin. It could name the recorded marketplaces, as an unnamed `marketplace update` does. The flip without `--scope`, which writes the project scope and then fails on a held user lock, has no scenario. Candidate direction: name the recorded marketplaces in the failed row, and add a scenario for the cross-scope flip.
