@@ -32,7 +32,8 @@ const USER_CODE = "WDJB-MJHT";
 const DEVICE_CODE = "stand-in-device-code";
 const VERIFICATION_URI = "https://github.com/login/device";
 const EXPIRES_IN_SECONDS = 900;
-const LOG_FILE = "github-device-flow.jsonl";
+/** The name of the sign-in stand-in's log in the harness directory. */
+export const DEVICE_FLOW_LOG = "github-device-flow.jsonl";
 
 const POLL_OUTCOMES = [
   "authorization_pending",
@@ -80,7 +81,7 @@ export function readPollScript(table: DataTable): PollOutcome[] {
 export async function readDeviceFlowRequests(harness: string): Promise<DeviceFlowRequest[]> {
   let text: string;
   try {
-    text = await readFile(path.join(harness, LOG_FILE), "utf8");
+    text = await readFile(path.join(harness, DEVICE_FLOW_LOG), "utf8");
   } catch (error: unknown) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return [];
@@ -158,7 +159,7 @@ export class GitHubDeviceFlow {
     ]);
     const server = createServer({ key, cert });
     const port = await listenOnLoopback(server);
-    return new GitHubDeviceFlow(server, port, script, path.join(harness, LOG_FILE));
+    return new GitHubDeviceFlow(server, port, script, path.join(harness, DEVICE_FLOW_LOG));
   }
 
   /** Closes every connection and stops listening. */

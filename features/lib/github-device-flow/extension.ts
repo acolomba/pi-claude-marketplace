@@ -45,7 +45,8 @@ import type { RequestOptions } from "node:https";
 export const GITHUB_REDIRECT_EXTENSION = fileURLToPath(import.meta.url);
 
 const CONFIG_FILE = "github-redirect.json";
-const LOG_FILE = "github-redirect.jsonl";
+/** The name of the redirect's log in the harness directory. */
+export const GITHUB_REDIRECT_LOG = "github-redirect.jsonl";
 /** One line of the redirect's log. */
 export type RedirectLogLine =
   | { readonly decision: "loaded"; readonly pid: number; readonly configured: boolean }
@@ -77,7 +78,7 @@ export async function writeRedirectConfig(home: string, config: RedirectConfig):
 
 /** Returns every line of the redirect's log in the harness directory `harness`, in append order. */
 export async function readRedirectLog(harness: string): Promise<RedirectLogLine[]> {
-  const text = await readFile(path.join(harness, LOG_FILE), "utf8");
+  const text = await readFile(path.join(harness, GITHUB_REDIRECT_LOG), "utf8");
   return text
     .split("\n")
     .flatMap((line) => (line === "" ? [] : [JSON.parse(line) as RedirectLogLine]));
@@ -255,7 +256,10 @@ class GitHubRedirect {
 export default function githubRedirect(): void {
   const home = process.env.HOME ?? "";
   const config = readConfig(home);
-  const redirect = new GitHubRedirect(config, path.join(harnessDirectory(home), LOG_FILE));
+  const redirect = new GitHubRedirect(
+    config,
+    path.join(harnessDirectory(home), GITHUB_REDIRECT_LOG),
+  );
   const httpsRequest = redirect.request(https.request, "https:");
   const httpRequest = redirect.request(http.request, "http:");
   Object.assign(https, { request: httpsRequest, get: redirect.get(httpsRequest) });

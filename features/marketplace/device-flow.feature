@@ -61,5 +61,3 @@ Feature: Marketplace device flow
       | method | url                                                                 | routed to |
       | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
       | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |

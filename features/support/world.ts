@@ -232,6 +232,9 @@ export class ScenarioWorld extends World {
   npmRegistry: NpmRegistry | undefined = undefined;
   // The npm registry's log length when the last `When` step started; `support/npm-registry.ts` sets it.
   npmRequestWindow: number | undefined = undefined;
+  // The line count of each log in the profile Pi's harness directory when the
+  // last `When` step started; `support/github-device-flow.ts` sets it.
+  harnessLogWindow: ReadonlyMap<string, number> | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
   private readonly gitRepositories = new Map<string, GitPluginRepository>();
   private readonly errorMessages = new Map<string, string>();
@@ -443,6 +446,19 @@ export class ScenarioWorld extends World {
     }
 
     return results;
+  }
+
+  /**
+   * Returns how many lines the harness log `log` held when the last `When`
+   * step started, so a step reads only the lines that `When` added.
+   */
+  harnessLogLinesBeforeLastWhen(log: string): number {
+    const window = this.harnessLogWindow;
+    if (window === undefined) {
+      throw new Error("no When step has run in this scenario");
+    }
+
+    return window.get(log) ?? 0;
   }
 
   /**

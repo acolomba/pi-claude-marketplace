@@ -25,10 +25,12 @@ import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import {
   GITHUB_REDIRECT_EXTENSION,
+  GITHUB_REDIRECT_LOG,
   readRedirectLog,
   writeRedirectConfig,
 } from "../lib/github-device-flow/extension.ts";
 import {
+  DEVICE_FLOW_LOG,
   GitHubDeviceFlow,
   readDeviceFlowRequests,
   readPollScript,
@@ -38,6 +40,7 @@ import { expandTokens } from "../lib/run-tokens.ts";
 import { harnessDirectory } from "../lib/turn-records.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 
+import type { DeviceFlowRequest } from "../lib/github-device-flow/server.ts";
 import type { GitHostArm } from "../lib/https-git-host/server.ts";
 import type { GitRepositoryReference } from "../support/git-repository.ts";
 import type { ScenarioWorld } from "../support/world.ts";
@@ -271,10 +274,16 @@ Then("the git host receives these requests:", function (this: ScenarioWorld, tab
   assert.deepStrictEqual([["method", "path", "status"], ...rows], table.raw());
 });
 
+// The sign-in requests of the last `When`.
+async function signInRequestsOfLastWhen(world: ScenarioWorld): Promise<DeviceFlowRequest[]> {
+  const requests = await readDeviceFlowRequests(world.profileHarness());
+  return requests.slice(world.harnessLogLinesBeforeLastWhen(DEVICE_FLOW_LOG));
+}
+
 Then(
   "github's sign-in receives these requests:",
   async function (this: ScenarioWorld, table: DataTable): Promise<void> {
-    const rows = (await readDeviceFlowRequests(this.profileHarness())).map((request) => [
+    const rows = (await signInRequestsOfLastWhen(this)).map((request) => [
       request.method,
       request.path,
       Object.entries(request.form)
@@ -286,14 +295,16 @@ Then(
 );
 
 Then("github's sign-in receives no request", async function (this: ScenarioWorld): Promise<void> {
-  assert.deepStrictEqual(await readDeviceFlowRequests(this.profileHarness()), []);
+  assert.deepStrictEqual(await signInRequestsOfLastWhen(this), []);
 });
 
 // The `loaded` lines are not requests; every routed and refused one is a row.
 Then(
   "pi routes these github requests:",
   async function (this: ScenarioWorld, table: DataTable): Promise<void> {
-    const rows = (await readRedirectLog(this.profileHarness())).flatMap((line) => {
+    const log = await readRedirectLog(this.profileHarness());
+    const lines = log.slice(this.harnessLogLinesBeforeLastWhen(GITHUB_REDIRECT_LOG));
+    const rows = lines.flatMap((line) => {
       switch (line.decision) {
         case "loaded":
           return [];
