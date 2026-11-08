@@ -295,3 +295,36 @@ Full text: `.planning/phases/05-postcompact-hooks/DUBIOUS-CHOICES.md`.
 - **P5-DC-26 (Low, open).** STATE.md not edited.
 - **P5-DC-27 (Low, open).** Commit titles checked.
 - **P1-DC-32** (see the phase log).
+
+## Phase 6: SessionEnd Hooks
+
+Full text: `.planning/phases/06-sessionend-hooks/DUBIOUS-CHOICES.md`.
+
+- **P6-DC-01 (High, open).** Plugin SessionEnd timeouts capped at 1.5 s (D-BG-604).
+- **P6-DC-02 (Medium, open).** `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` is not read (D-BG-605).
+- **P6-DC-03 (Medium, open).** No bounded SessionEnd wait (D-BG-605).
+- **P6-DC-04 (Medium, open).** The failure outlines state no notice for a non-blocking failure (D-BG-603).
+- **P6-DC-05 (Medium, open).** Ways a session ends that no scenario drives (D-BG-601).
+- **P6-DC-06 (Low, open).** The resumed session is a hand-written session file (D-BG-601).
+- **P6-DC-07 (Low, open).** "Pi exits" is proven in json mode, not by an RPC stop (D-BG-603).
+- **P6-DC-08 (Low, open).** HKTO-01 counted as fixed by the cap (D-BG-604).
+- **P6-DC-09 (Medium, open).** The failure scenarios start no setup session.
+- **P6-DC-10 (Low, open).** The saved session sits directly in `{agent dir}/sessions/`.
+- **P6-DC-11 (Low, open).** One named budget constant.
+- **P6-DC-12 (Low, open).** Json-mode details.
+- **P6-DC-13 (Low, open).** The sleep-30 RPC row's red proof is just past the 30 s step timeout.
+- **P6-DC-14 (Low, open).** No pattern-mapper run.
+- **P6-DC-15 (Low, open).** The cap and the scenario rows that prove it land in different waves.
+- **P6-DC-16 (Low, open).** The docs `timeout` row keeps its exact width.
+- **P6-DC-17 (Low, open).** The RPC reason and matcher scenarios keep the setup new-session Given.
+- **P6-DC-18 (Low, open).** Proposed parent-line names.
+- **P6-DC-19 (Low, open).** Step texts.
+- **P6-DC-20 (Low, open).** Researcher, planner, and checker ran as background agents.
+- **P6-DC-21 (Medium, open).** Plans, review, and verification ran inline in the child session.
+- **P6-DC-22 (Medium, open).** SessionEnd recorder runs are load-sensitive.
+- **P6-DC-23 (Low, open).** The exit-2 scenario starts a setup session.
+- **P6-DC-24 (Low, open).** R6 for the json rows used a delayed settle.
+- **P6-DC-25 (Low, open).** Two tasks per commit in 06-01 and 06-03.
+- **P6-DC-26 (Medium, open).** The phase gate passed after one rerun.
+- **P6-DC-27 (Low, open).** The code review found two info items and no fix.
+- **P6-DC-28 (Low, open).** STATE.md left as the parent's.
