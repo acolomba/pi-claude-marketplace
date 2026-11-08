@@ -17,7 +17,7 @@
 // drop partition, which is what makes this module's non-number arms reachable.
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { resolveTimeoutSeconds } from "../../../extensions/pi-claude-marketplace/bridges/hooks/timeout.ts";
 
@@ -372,4 +372,80 @@ test("preserves a large valid positive timeout without an upper clamp", () => {
 
   // assert
   assert.strictEqual(timeoutSeconds, 3_600_000);
+});
+
+// Turns the hooks debug channel on for one case and collects its lines.
+function sessionEndDebugLines(t: TestContext): string[] {
+  const previous = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const lines: string[] = [];
+  t.mock.method(console, "error", (...args: unknown[]): void => {
+    lines.push(args.join(" "));
+  });
+  return lines;
+}
+
+test("caps a longer declared blocking SessionEnd timeout at the 1.5 second budget (D-BG-604)", (t) => {
+  // arrange
+  const lines = sessionEndDebugLines(t);
+  const options = {
+    raw: 60,
+    event: "SessionEnd",
+    pluginId: "long-end-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 1.5);
+  assert.strictEqual(lines.length, 1);
+  assert.match(lines[0] ?? "", /^\[hooks\]/);
+  assert.match(lines[0] ?? "", /timeout 60 /);
+  assert.match(lines[0] ?? "", /long-end-plugin\/SessionEnd \(blocking\)/);
+  assert.match(lines[0] ?? "", /1\.5s SessionEnd budget/);
+});
+
+test("keeps a declared blocking SessionEnd timeout equal to the budget", (t) => {
+  // arrange
+  const lines = sessionEndDebugLines(t);
+  const options = {
+    raw: 1.5,
+    event: "SessionEnd",
+    pluginId: "budget-end-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 1.5);
+  assert.deepStrictEqual(lines, []);
+});
+
+test("keeps a longer declared background SessionEnd timeout", (t) => {
+  // arrange
+  const lines = sessionEndDebugLines(t);
+  const options = {
+    raw: 60,
+    event: "SessionEnd",
+    pluginId: "background-end-plugin",
+    lane: "background",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 60);
+  assert.deepStrictEqual(lines, []);
 });

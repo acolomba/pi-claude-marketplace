@@ -1957,7 +1957,9 @@ Code seams: `bridges/hooks/dispatch-exec.ts` (`spawnAndCollect`),
 `bridges/hooks/spawn-helpers.ts` (the shell-form default),
 `bridges/hooks/exec-timer.ts` (the ladder's documented cancel contract).
 
-## HKTO-01: `SessionEnd` hooks do not share a timeout budget
+## ~~HKTO-01: `SessionEnd` hooks do not share a timeout budget~~ -- CLOSED
+
+**CLOSED 2026-11-08** by behavioral-gaps Phase 6 (D-BG-604, commit `c5c5643b`). A turn-blocking SessionEnd hook's declared `timeout` is capped at the 1.5 s budget, because a plugin hook's `timeout` does not raise Claude Code's budget (hooks docs and the 2.1.319 budget function). The matching hooks of one event start together (D-CF5-09), so they share the 1.5 s. Still open (D-BG-605): no bounded wait like upstream's `boundMs`, so a hook that ignores SIGTERM holds the session for the 5 s SIGKILL grace, and a grandchild that keeps stdout open holds it until it exits (HKDR-01); and `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` is not read (SESSIONENDENV-01).
 
 Surfaced while landing PR #138 (2026-08-19). That change made the per-event
 `timeout` defaults match Claude Code -- 600 s for a `command` handler, lowered
@@ -4770,6 +4772,8 @@ Deferred by component-features Phase 5 (D-CF5-11). A PostToolUse or PostToolUseF
 
 Noted by component-features Phase 5. Claude Code shows `<hook name> hook error` and `Failed with non-blocking status code: ...` for a hook that exits with a code other than 0 and 2. The bridge shows nothing. No decision covers it yet.
 
+For SessionEnd, Claude Code 2.1.319 writes `SessionEnd hook [<command>] failed: <output>` to stderr for each failed hook with output after its bounded run. The bridge shows nothing for a non-blocking SessionEnd failure, and `features/hook/session-end.feature` states no notice for one (behavioral-gaps D-BG-603, P6-DC-04).
+
 ## HOOKPROMPTSTOP-01: a UserPromptSubmit `continue: false` stops silently
 
 Noted by component-features Phase 5. Claude Code shows `Operation stopped by hook: <reason>`. The bridge stops the prompt with no notice.
@@ -5087,3 +5091,27 @@ Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-02). A denied and an expired 
 ## CLOSEDLIST-01: `|` and `,` lists in the SessionStart, SessionEnd, PreCompact, and PostCompact matchers
 
 Noted 2026-11-08 (behavioral-gaps Phase 3, P3-DC-02). Claude Code reads a matcher of these events as a list of exact values separated by `|` or `,`. The bridge compares the whole matcher with the event's closed set, so a list drops as `closed-set` and the plugin installs only with `--partial`. StopFailure has its own list reading (D-BG-302). The fix for these four events changes the shared `nonToolMatcherCondition` and `matcherFiresOnClosedSetValue`, which a behavioral-gaps hook stream may not reshape (P3-DC-02).
+
+## HOOKPRECOMPACT-01: PreCompact output after /compact and as summary instructions
+
+Deferred by behavioral-gaps Phase 5 (D-BG-508). Claude Code 2.1.319 uses a PreCompact hook's exit-0 stdout as instructions for the compaction summary, at most 10,000 characters per hook, and after `/compact` shows `PreCompact [<command>] completed successfully: <stdout>` or `PreCompact [<command>] failed: <message>` lines before the PostCompact lines. The bridge does neither. No stream of the behavioral-gaps milestone owns the PreCompact arm.
+
+## SESSIONENDENV-01: `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` is not read
+
+Noted 2026-11-08 (behavioral-gaps Phase 6, D-BG-605, P6-DC-02). Claude Code reads the variable as the SessionEnd budget and as the timeout of each SessionEnd hook that declares none. Since D-BG-604 a plugin's SessionEnd hooks get at most 1.5 s, and the user cannot raise that. A scenario needs a hook that runs longer than 1.5 s and a timed release, which the frozen fixtures do not offer.
+
+## RPCENDNOTICE-01: a startup session's SessionEnd notice can miss the RPC stream
+
+Noted 2026-11-08 (behavioral-gaps Phase 6, P6-DC-23). A SessionEnd hook-error notice from the startup session of an RPC Pi can miss the RPC stream while Pi's double bind settles; related to the Pi 1.5.0 RPC double `session_start` item in Carried Forward.
+
+## PRUNECFG-01: a pruned disabled dependency keeps its `enabled: false` declaration
+
+Noted 2026-11-08 (behavioral-gaps Phase 13, D-BG-1309, P13-DC-04). When `prune` or `uninstall --prune` removes a dependency that the user disabled, the scope's `claude-plugins.json` keeps that plugin's `enabled: false` declaration; Claude Code 2.1.319's prune removal deletes `enabledPlugins[id]` for each plugin it removes. No command result shows the entry (`pending` is empty, and a later install enables the plugin). The shared sweep `removeDependencyMember` in `orchestrators/plugin/uninstall.ts` never touches the config layers. Candidate direction: drop the declaration in the shared sweep, let the prune rollback and the uninstall path restore the config files on a failure (NFR-3), and add the config Then to the disabled-dependency scenario of `features/plugin/prune.feature`.
+
+## PLUGALIAS-01: the CLI's plugin aliases, `autoremove` among them
+
+Noted 2026-11-08 (behavioral-gaps Phase 13, P13-DC-02). Claude Code's CLI names `autoremove` as an alias of `claude plugin prune` (2.1.319) and has the plugin aliases `i`, `remove`, and `rm`; the plugin subcommands of `/claude:plugin` have none of them, so `/claude:plugin autoremove` is an unknown subcommand. Prune is a CLI-only command upstream: the in-session `/plugin` has no prune. Candidate direction: decide whether the router takes the CLI's aliases (a router arm, usage, completions, and a usage-errors row for each) or record the divergence with a decision ID.
+
+## PRUNEISLAND-01: prune keeps an island of dependencies that declare each other
+
+Noted 2026-11-08 (behavioral-gaps Phase 13, P13-DC-03). Claude Code's orphan scan walks the dependencies of the plugins installed by name, so dependency plugins that only declare each other are orphans and its prune removes them. `pruneOrphans` (`domain/dependency-orphans.ts`) removes only a record that no remaining record declares, so such an island holds itself, as its PRUNE-03 comment documents and `test/domain/dependency-orphans.test.ts` pins. Install refuses a dependency cycle, so an island forms only when installed manifests change. Candidate direction: walk from the plugins installed by name, as upstream does, with a decision that amends PRUNE-03, or record the divergence.

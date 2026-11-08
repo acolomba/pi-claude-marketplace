@@ -24,8 +24,8 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 - [x] **STOPF-01**: `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload, and matchers select them by error type.
 - [ ] **TFAIL-01**: `PostToolUseFailure` hooks run on a failed tool call with Claude Code's payload, matchers select them by tool, and a `PostToolUse` hook does not run on the failure.
-- [ ] **PCOMP-01**: `PostCompact` hooks run after a compaction with its trigger (`manual` or `auto`), and matchers select them by trigger.
-- [ ] **SEND-01**: `SessionEnd` hooks run with each reason Pi can produce, matchers select them by reason, and a failing `SessionEnd` hook does not keep the session from ending.
+- [x] **PCOMP-01**: `PostCompact` hooks run after a compaction with its trigger (`manual` or `auto`), and matchers select them by trigger.
+- [x] **SEND-01**: `SessionEnd` hooks run with each reason Pi can produce, matchers select them by reason, and a failing `SessionEnd` hook does not keep the session from ending.
 
 ### Upgrades
 
@@ -38,9 +38,9 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 ### Model-facing tools
 
-- [ ] **TOOL-01**: A model calling `pi_claude_marketplace_list` gets the configured marketplaces of both scopes, or of the scope it asks for.
-- [ ] **TOOL-02**: A model calling `pi_claude_marketplace_plugin_list` gets each plugin's compatibility and install status, filtered as it asks (installed, available, unavailable).
-- [ ] **TOOL-03**: A call naming an unknown marketplace or scope gets an error result, and neither tool changes anything on disk.
+- [x] **TOOL-01**: A model calling `pi_claude_marketplace_list` gets the configured marketplaces of both scopes, or of the scope it asks for.
+- [x] **TOOL-02**: A model calling `pi_claude_marketplace_plugin_list` gets each plugin's compatibility and install status, filtered as it asks (installed, available, unavailable).
+- [x] **TOOL-03**: A call naming an unknown marketplace or scope gets an error result, and neither tool changes anything on disk.
 
 ### Device Flow
 
@@ -53,8 +53,8 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 - [x] **BROWSE-01**: In the terminal UI, `browse` and a bare `/claude:plugin` open the plugin picker, which lists the marketplaces and plugins of both scopes.
 - [x] **BROWSE-02**: Choosing a plugin in the picker installs it in its marketplace's scope; cancelling installs nothing.
-- [ ] **PRUNE-01**: `prune` without `--scope` behaves as Claude Code does, `--scope user|project` combines with `--dry-run`, and its usage errors are covered.
-- [ ] **PRUNE-02**: `prune` while another process holds the state lock fails as lock held and removes nothing, and a dependency only a disabled plugin needs is handled as upstream does.
+- [x] **PRUNE-01**: `prune` without `--scope` behaves as Claude Code does, `--scope user|project` combines with `--dry-run`, and its usage errors are covered.
+- [x] **PRUNE-02**: `prune` while another process holds the state lock fails as lock held and removes nothing, and a dependency only a disabled plugin needs is handled as upstream does.
 - [x] **BOOT-01**: `bootstrap` refuses `--scope` and arguments, and its json and rpc output carry the same outcome as the terminal UI.
 - [x] **BOOT-02**: `bootstrap` while another process holds the user scope's state lock fails as lock held and records nothing.
 - [x] **MLOCK-01**: `marketplace autoupdate` and `noautoupdate` while another process holds the state lock fail as lock held and change nothing.
@@ -87,25 +87,25 @@ None.
 | ASYNC-05 | Phase 2 | Pending |
 | STOPF-01 | Phase 3 | Complete |
 | TFAIL-01 | Phase 4 | Pending |
-| PCOMP-01 | Phase 5 | Pending |
-| SEND-01 | Phase 6 | Pending |
+| PCOMP-01 | Phase 5 | Complete |
+| SEND-01 | Phase 6 | Complete |
 | STMIG-01 | Phase 7 | Complete |
 | STMIG-02 | Phase 7 | Complete |
 | CFGMIG-01 | Phase 8 | Pending |
 | CFGMIG-02 | Phase 8 | Pending |
 | AMIG-01 | Phase 9 | Complete |
 | AMIG-02 | Phase 9 | Complete |
-| TOOL-01 | Phase 10 | Pending |
-| TOOL-02 | Phase 10 | Pending |
-| TOOL-03 | Phase 10 | Pending |
+| TOOL-01 | Phase 10 | Complete |
+| TOOL-02 | Phase 10 | Complete |
+| TOOL-03 | Phase 10 | Complete |
 | DFLOW-01 | Phase 11 | Complete |
 | DFLOW-02 | Phase 11 | Complete |
 | DFLOW-03 | Phase 11 | Complete |
 | DFLOW-04 | Phase 11 | Complete |
 | BROWSE-01 | Phase 12 | Complete |
 | BROWSE-02 | Phase 12 | Complete |
-| PRUNE-01 | Phase 13 | Pending |
-| PRUNE-02 | Phase 13 | Pending |
+| PRUNE-01 | Phase 13 | Complete |
+| PRUNE-02 | Phase 13 | Complete |
 | BOOT-01 | Phase 14 | Complete |
 | BOOT-02 | Phase 14 | Complete |
 | MLOCK-01 | Phase 15 | Complete |

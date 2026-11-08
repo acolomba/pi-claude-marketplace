@@ -73,6 +73,7 @@ import {
   hookEventLabel,
   hookMatchLabel,
   hookSaysText,
+  postCompactLineText,
   promptBlockedText,
 } from "./hook-labels.ts";
 import { ifFires } from "./if-field/index.ts";
@@ -479,8 +480,9 @@ function systemMessageNotices(
 /**
  * D-CF5-11 / D-CF5-18 / D-CF5-24: the notices a block shows the user. A
  * blocked prompt shows why once, with the first block in routing order. A
- * SessionStart, SessionEnd, or PostCompact block changes nothing, so each one
- * shows as the event's hook error, as Claude Code shows exit-2 stderr there.
+ * SessionStart or SessionEnd block changes nothing, so each one shows as the
+ * event's hook error, as Claude Code shows exit-2 stderr there. A PostCompact
+ * block shows in its hook's line after a manual compaction (D-BG-501).
  * A PreCompact block cancels the compaction and shows one notice that names
  * every blocking hook, as Claude Code reports a blocked compaction. A tool
  * block goes to the model instead.
@@ -497,7 +499,6 @@ function blockNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBuc
         : [];
     case "SessionStart":
     case "SessionEnd":
-    case "PostCompact":
       return blocks(folded.outcomes).map(({ reason, command, fromStderr }) =>
         hookErrorText(label, reason, command, fromStderr),
       );
@@ -507,11 +508,64 @@ function blockNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBuc
       return blocked.length > 0 ? [compactionBlockedText(blocked)] : [];
     }
 
+    // D-BG-501: the PostCompact notice lists every hook's end instead.
+    case "PostCompact":
+      return [];
+
     case "PreToolUse":
     case "PostToolUse":
     case "PostToolUseFailure":
       return [];
   }
+}
+
+/**
+ * D-BG-504: the command a PostCompact line names, as Claude Code shows a
+ * command hook: the declared `command` with its placeholders, then an
+ * exec-form hook's `args` joined by single spaces, each one as `planSpawn`
+ * passes it.
+ */
+function displayCommand(entry: RoutingEntry): string {
+  const { command, args } = entry.handlerDecl;
+  const words = Array.isArray(args)
+    ? args.map((arg: unknown) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
+    : [];
+  return [command ?? "", ...words].join(" ");
+}
+
+/**
+ * D-BG-501 / D-BG-502: the notice that lists how each PostCompact hook ended,
+ * one line per hook that carries its run, in routing order. Claude Code shows
+ * the lines after `/compact` only; after an automatic compaction they are
+ * dropped with a debug line.
+ */
+function postCompactNotices(
+  trigger: "manual" | "auto",
+  outcomes: readonly BucketOutcome[],
+): string[] {
+  const lines = outcomes.flatMap(({ entry, result }) =>
+    result.postCompactRun === undefined
+      ? []
+      : [
+          postCompactLineText(
+            displayCommand(entry),
+            result.postCompactRun.succeeded,
+            result.postCompactRun.output,
+          ),
+        ],
+  );
+  if (lines.length === 0) {
+    return [];
+  }
+
+  if (trigger === "auto") {
+    hookDebugLog(
+      `dispatch: ${lines.length} PostCompact line(s) not shown after an automatic compaction`,
+    );
+    return [];
+  }
+
+  return [lines.join("\n")];
 }
 
 // Each blocking outcome, in routing order, with the hook's declared command,
@@ -747,6 +801,11 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
     if (claudeEvent === "PreToolUse") {
       sendToolContext(pi, label, folded.result);
+    }
+
+    if (claudeEvent === "PostCompact") {
+      const trigger = compactTrigger((view.event as SessionCompactEvent).reason);
+      showHookNotices(ctx, pi, postCompactNotices(trigger, folded.outcomes));
     }
 
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };

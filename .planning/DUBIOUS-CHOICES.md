@@ -234,3 +234,122 @@ Full text: `.planning/phases/03-stopfailure-hooks/DUBIOUS-CHOICES.md`.
 - **P3-DC-23 (Low, open).** One combined wave gate.
 - **P3-DC-24 (Medium, open).** A load timeout left red.
 - **P3-DC-25 (Low, open).** Test shapes.
+
+## Phase 10: Model-Facing Tools
+
+Full text: `.planning/phases/10-model-facing-tools/DUBIOUS-CHOICES.md`.
+
+- **P10-DC-01 (Medium, open).** The carried json-output D-03 choice closes as "return `isError: true`, never throw".
+- **P10-DC-02 (High, open).** A disabled plugin keeps the `[unavailable]` tag, and the `unavailable` filter now returns it.
+- **P10-DC-03 (Medium, open).** The list tool's `<N> plugin(s)` keeps counting installed plugins (D-09).
+- **P10-DC-04 (Low, open).** GSD's manager view resolves Phase 10 to an archived directory.
+- **P10-DC-05 (Medium, open).** `(no plugins)` for every block that keeps no rows.
+- **P10-DC-06 (Low, open).** "Each parameter form" read as 3-4 combined calls.
+- **P10-DC-07 (Low, open).** Research probes edited the owned `tools.ts` temporarily.
+- **P10-DC-08 (Low, open).** Shared pre-commit hook briefly in migration mode.
+- **P10-DC-09 (Low, open).** Pattern mapper skipped.
+- **P10-DC-10 (Low, open).** Plan shape.
+- **P10-DC-11 (Low, open).** One heavy Background.
+- **P10-DC-12 (Low, open).** Scenario grouping.
+- **P10-DC-13 (Low, open).** Description wording.
+- **P10-DC-14 (Low, open).** No-change scenario scope.
+- **P10-DC-15 (Low, open).** Shared unit fixture.
+- **P10-DC-16 (Low, open).** Stale count comment left.
+- **P10-DC-17 (Medium, open).** Isolation sentinel written in the parent checkout.
+- **P10-DC-18 (Medium, open).** Plan 10-02, the code review, the fixes, and the verification ran inline.
+- **P10-DC-19 (Low, open).** Sequential root pin simplified.
+- **P10-DC-20 (Low, open).** Empty-block copy.
+- **P10-DC-21 (Low, open).** Red proofs ran once.
+- **P10-DC-22 (Medium, open).** The list tool does not follow Phase 12's picker wording.
+- **P1-DC-48** (see the phase log).
+
+## Phase 5: PostCompact Hooks
+
+Full text: `.planning/phases/05-postcompact-hooks/DUBIOUS-CHOICES.md`.
+
+- **P5-DC-01 (High, open).** PostCompact lines after `/compact` replace the hook error notice (D-BG-501).
+- **P5-DC-02 (High, open).** Nothing shown after an automatic compaction (D-BG-502).
+- **P5-DC-03 (Medium, open).** Two hook modules outside the enumerated shared list (D-BG-503).
+- **P5-DC-04 (Low, open).** One notice, not one per hook (D-BG-501).
+- **P5-DC-05 (Low, open).** The line's command includes exec-form arguments (D-BG-504).
+- **P5-DC-06 (Low, open).** Shared doc sentences are parent lines (D-BG-508).
+- **P5-DC-07 (Low, open).** Tooling: shared scratchpad and a stale manager projection.
+- **P5-DC-08 (Low, open).** Pattern mapper skipped.
+- **P5-DC-09 (Low, open).** The run is worked out in the payload module.
+- **P5-DC-10 (Medium, open).** The trigger gate is a branch in a shared function body.
+- **P5-DC-11 (Low, open).** Start errors are redacted.
+- **P5-DC-12 (Low, open).** Edge divergences in the run output.
+- **P5-DC-13 (Low, open).** Shared test loops change.
+- **P5-DC-14 (Low, open).** D-BG-506's rationale is refuted.
+- **P5-DC-15 (Low, open).** A third shared doc sentence.
+- **P5-DC-16 (Low, open).** Plan checker not run as a subagent.
+- **P5-DC-17 (Medium, open).** Execution, review, and verification inline.
+- **P5-DC-18 (Low, open).** One eleven-file commit.
+- **P5-DC-19 (Low, open).** Timeout line pinned in a scenario.
+- **P5-DC-20 (Low, open).** Exec-form row in scenario 4.
+- **P5-DC-21 (Medium, open).** Scenario 6 states Pi's compaction frame.
+- **P5-DC-22 (Low, open).** Planning details.
+- **P5-DC-23 (Low, open).** Plans' tasks folded into fewer commits.
+- **P5-DC-24 (Low, open).** Test regrouping skipped.
+- **P5-DC-25 (Medium, open).** Gate failures under load accepted on rerun.
+- **P5-DC-26 (Low, open).** STATE.md not edited.
+- **P5-DC-27 (Low, open).** Commit titles checked.
+- **P1-DC-32** (see the phase log).
+
+## Phase 6: SessionEnd Hooks
+
+Full text: `.planning/phases/06-sessionend-hooks/DUBIOUS-CHOICES.md`.
+
+- **P6-DC-01 (High, open).** Plugin SessionEnd timeouts capped at 1.5 s (D-BG-604).
+- **P6-DC-02 (Medium, open).** `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` is not read (D-BG-605).
+- **P6-DC-03 (Medium, open).** No bounded SessionEnd wait (D-BG-605).
+- **P6-DC-04 (Medium, open).** The failure outlines state no notice for a non-blocking failure (D-BG-603).
+- **P6-DC-05 (Medium, open).** Ways a session ends that no scenario drives (D-BG-601).
+- **P6-DC-06 (Low, open).** The resumed session is a hand-written session file (D-BG-601).
+- **P6-DC-07 (Low, open).** "Pi exits" is proven in json mode, not by an RPC stop (D-BG-603).
+- **P6-DC-08 (Low, open).** HKTO-01 counted as fixed by the cap (D-BG-604).
+- **P6-DC-09 (Medium, open).** The failure scenarios start no setup session.
+- **P6-DC-10 (Low, open).** The saved session sits directly in `{agent dir}/sessions/`.
+- **P6-DC-11 (Low, open).** One named budget constant.
+- **P6-DC-12 (Low, open).** Json-mode details.
+- **P6-DC-13 (Low, open).** The sleep-30 RPC row's red proof is just past the 30 s step timeout.
+- **P6-DC-14 (Low, open).** No pattern-mapper run.
+- **P6-DC-15 (Low, open).** The cap and the scenario rows that prove it land in different waves.
+- **P6-DC-16 (Low, open).** The docs `timeout` row keeps its exact width.
+- **P6-DC-17 (Low, open).** The RPC reason and matcher scenarios keep the setup new-session Given.
+- **P6-DC-18 (Low, open).** Proposed parent-line names.
+- **P6-DC-19 (Low, open).** Step texts.
+- **P6-DC-20 (Low, open).** Researcher, planner, and checker ran as background agents.
+- **P6-DC-21 (Medium, open).** Plans, review, and verification ran inline in the child session.
+- **P6-DC-22 (Medium, open).** SessionEnd recorder runs are load-sensitive.
+- **P6-DC-23 (Low, open).** The exit-2 scenario starts a setup session.
+- **P6-DC-24 (Low, open).** R6 for the json rows used a delayed settle.
+- **P6-DC-25 (Low, open).** Two tasks per commit in 06-01 and 06-03.
+- **P6-DC-26 (Medium, open).** The phase gate passed after one rerun.
+- **P6-DC-27 (Low, open).** The code review found two info items and no fix.
+- **P6-DC-28 (Low, open).** STATE.md left as the parent's.
+
+## Phase 13: Prune
+
+Full text: `.planning/phases/13-prune/DUBIOUS-CHOICES.md`.
+
+- **P13-DC-01 (Medium, open).** Criteria 2 and 3 met by scenarios the phase does not own.
+- **P13-DC-02 (Low, open).** Upstream's `autoremove` alias is not adopted.
+- **P13-DC-03 (Medium, open).** An island of dependencies that declare each other stays installed.
+- **P13-DC-04 (High, open).** A pruned disabled dependency leaves `enabled: false` in `claude-plugins.json`.
+- **P13-DC-05 (Low, open).** A separate orphan per scope.
+- **P13-DC-06 (Low, open).** The lock red proof edits a Phase 15 file locally.
+- **P13-DC-07 (Low, open).** The optional-peer cache was missing.
+- **P13-DC-08 (Low, open).** No pattern-mapper run.
+- **P13-DC-09 (Low, open).** Scenario placement.
+- **P13-DC-10 (Low, open).** M3 edits a file the phase does not own, locally.
+- **P13-DC-11 (Low, open).** Scenario D states the config.
+- **P13-DC-12 (Low, open).** One plan above the half-context estimate.
+- **P13-DC-13 (Low, open).** BACKLOG IDs.
+- **P13-DC-14 (Medium, open).** The plan, review, and verification ran inline, without subagents.
+- **P13-DC-15 (Low, open).** Gate reruns on the failing scenarios only.
+- **P13-DC-16 (Low, open).** The shared scratchpad leaked commit messages between phases.
+- **P13-DC-17 (Low, open).** The roadmap plan line was ticked by hand.
+- **P13-DC-18 (Low, open).** Security and validation records written inline.
+- **P13-DC-19 (Low, open).** The regression gate is the full check.
+- **P13-DC-20 (Low, open).** The transition's PROJECT.md step was skipped.

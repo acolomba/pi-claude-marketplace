@@ -2,10 +2,12 @@
 //
 // D-02: two read-only LLM tools exposed via `pi.registerTool`.
 //
-//   1. pi_claude_marketplace_list -- empty params; returns one line per
+//   1. pi_claude_marketplace_list -- one optional `scope` param (D-BG-1002);
+//      with no scope it lists both scopes, project first. Returns one line per
 //      marketplace in `[<scope>] <name> -- <N> plugin(s) -- <source.logical>`
-//      format, plus `details.marketplaces`, the wire marketplace blocks of the
-//      blocks `/claude:plugin marketplace list` emits (LLMT-01).
+//      format, where N counts the installed plugins (D-09, D-BG-1005), plus
+//      `details.marketplaces`, the wire marketplace blocks of the blocks
+//      `/claude:plugin marketplace list` emits (LLMT-01).
 //
 //   2. pi_claude_marketplace_plugin_list -- D-02 extended params: optional
 //      marketplace + scope + installed/available/unavailable filter booleans
@@ -39,7 +41,8 @@
 //
 // TC-9: each execute catches every failure of its body and returns
 // `loadFailure`'s error result, because Pi relays a thrown error's message to
-// the model unredacted.
+// the model unredacted. D-BG-1001: every error either tool reports is such a
+// returned result with `isError: true`, never a throw.
 
 import Type from "typebox";
 
@@ -67,7 +70,13 @@ import type { CascadeNotificationMessage } from "../../shared/notification-types
 
 // ─── LLM tool parameter schemas (TypeBox) ─────────────────────────────────
 
-const LIST_MARKETPLACES_PARAMS = Type.Object({});
+const LIST_MARKETPLACES_PARAMS = Type.Object({
+  scope: Type.Optional(
+    Type.Union([Type.Literal("user"), Type.Literal("project")], {
+      description: 'Scope whose marketplaces to list: "user" or "project". Default: both scopes.',
+    }),
+  ),
+});
 
 const LIST_PLUGINS_PARAMS = Type.Object({
   marketplace: Type.Optional(Type.String({ description: "Marketplace name to list plugins for." })),
@@ -77,7 +86,7 @@ const LIST_PLUGINS_PARAMS = Type.Object({
     }),
   ),
   installed: Type.Optional(
-    Type.Boolean({ description: "Include plugins installed in state.json." }),
+    Type.Boolean({ description: "Include installed plugins that are enabled." }),
   ),
   available: Type.Optional(
     Type.Boolean({
@@ -86,7 +95,8 @@ const LIST_PLUGINS_PARAMS = Type.Object({
   ),
   unavailable: Type.Optional(
     Type.Boolean({
-      description: "Include manifest-declared plugins that are not installable on this system.",
+      description:
+        "Include manifest-declared plugins that are not installable on this system, and installed plugins that are disabled.",
     }),
   ),
 });
@@ -95,7 +105,10 @@ const LIST_PLUGINS_PARAMS = Type.Object({
 interface ListToolResult {
   content: PiTextContentBlock[];
   details: { marketplaces: ReturnType<typeof toWireMarketplaces> };
-  /** Set on the load-failure result only. */
+  /**
+   * Set on the two error results: a failed load (TC-9), and a marketplace
+   * that no asked scope records (D-BG-1003).
+   */
   isError?: true;
 }
 
@@ -126,18 +139,25 @@ function loadFailure(subject: string, error: unknown): ListToolResult {
 
 // ─── Tool 1: pi_claude_marketplace_list ──────────────────────────────────────
 
-/** Builds the marketplace list tool's result from both scopes' records. */
+/**
+ * Builds the marketplace list tool's result from the records of the asked
+ * scope, or of both scopes when the call names none (D-BG-1002).
+ */
 async function buildMarketplaceListResult(
   pi: ExtensionAPI,
+  params: Type.Static<typeof LIST_MARKETPLACES_PARAMS>,
   ctx: ExtensionContext,
 ): Promise<ListToolResult> {
   // BLOCK C boundary: loadMarketplaceListEntries is the
   // orchestrators/marketplace/list.ts loader. One read returns each
-  // record with its scope and its list block across both scopes (no
-  // scope filter on this tool), so the content lines and the details
-  // below come from the same state (LLMT-01).
+  // record with its scope and its list block, for the asked scope or both
+  // scopes, so the content lines and the details below come from the same
+  // state (LLMT-01).
   const { cwd } = ctx;
-  const entries = await loadMarketplaceListEntries({ cwd });
+  const entries = await loadMarketplaceListEntries({
+    cwd,
+    ...(params.scope !== undefined && { scope: params.scope }),
+  });
 
   if (entries.length === 0) {
     return {
@@ -182,9 +202,9 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
     promptSnippet:
       "Use pi_claude_marketplace_list to inspect configured Claude plugin marketplaces.",
     parameters: LIST_MARKETPLACES_PARAMS,
-    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       try {
-        return await buildMarketplaceListResult(pi, ctx);
+        return await buildMarketplaceListResult(pi, params, ctx);
       } catch (error: unknown) {
         return loadFailure("marketplace list", error);
       }
@@ -363,8 +383,13 @@ async function loadToolPluginPayload(
     // `projectRowStatus` performs on the way back. Sending an all-true bag
     // instead of nothing would make `filtersPassive` false and strand both
     // fine-grained buckets, which have no tool parameter to turn them on.
+    // The `unavailable` bucket also holds the installed plugins that are
+    // disabled (D-BG-1004, D-54-01), which the payload loader files under its
+    // installed inventory, so that bucket forwards `installed: true` as well;
+    // the bucket filter in `renderPluginPayload` then drops the enabled
+    // installed rows the call did not ask for.
     ...(buckets.narrowed && {
-      ...(buckets.i && { installed: true }),
+      ...((buckets.i || buckets.u) && { installed: true }),
       ...(buckets.a && { available: true, remote: true }),
       ...(buckets.u && { unavailable: true, partial: true }),
     }),
@@ -426,7 +451,8 @@ type ToolPluginBlock = Awaited<ReturnType<typeof loadPluginListPayload>>[number]
 /**
  * Renders the content lines and keeps, per block, the rows the bucket filter
  * admits. Each kept block is the payload block with only those rows, in
- * order; a block whose rows the filter empties stays as a block with none.
+ * order. A block that keeps no rows stays as a block with none, and its
+ * header is followed by `(no plugins)` (D-BG-1008).
  */
 function renderPluginPayload(
   payload: Awaited<ReturnType<typeof loadPluginListPayload>>,
@@ -436,15 +462,6 @@ function renderPluginPayload(
   const marketplaces: ToolPluginBlock[] = [];
   for (const mp of payload) {
     lines.push(`Marketplace ${mp.name} (${mp.scope})`);
-
-    // Unparseable-manifest marketplace block (status: "failed", plugins: [])
-    // and zero-plugin manifest blocks both render as the bare-header form
-    // followed by the "(no plugins)" body line for shape stability.
-    if (mp.plugins.length === 0) {
-      lines.push("  (no plugins)");
-      marketplaces.push(mp);
-      continue;
-    }
 
     const kept: ToolPluginRow[] = [];
     for (const p of mp.plugins) {
@@ -463,6 +480,13 @@ function renderPluginPayload(
       };
       lines.push(renderPluginRow(row));
       kept.push(p);
+    }
+
+    // D-BG-1008: a block whose manifest could not be read, a block whose
+    // manifest declares no plugin, and a block whose rows the filters dropped
+    // all read "(no plugins)" under their header.
+    if (kept.length === 0) {
+      lines.push("  (no plugins)");
     }
 
     marketplaces.push({ ...mp, plugins: kept });
@@ -497,6 +521,7 @@ async function buildPluginListResult(
     if (!exists) {
       return {
         content: textContent(`Marketplace "${params.marketplace}" not found.`),
+        isError: true,
         details: { marketplaces: [] },
       };
     }

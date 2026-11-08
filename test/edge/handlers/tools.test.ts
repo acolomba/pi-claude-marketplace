@@ -417,7 +417,7 @@ function registerToolUnderTest(
 }
 
 describe("registerListMarketplacesTool", () => {
-  test("registers pi_claude_marketplace_list with an empty parameter schema", async (t) => {
+  test("registers pi_claude_marketplace_list with its scope parameter", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "list-registration");
     const { pi, registrations, verifyBoundary } = createToolBoundary();
@@ -427,7 +427,19 @@ describe("registerListMarketplacesTool", () => {
       description: "List configured Claude plugin marketplaces.",
       promptSnippet:
         "Use pi_claude_marketplace_list to inspect configured Claude plugin marketplaces.",
-      parameters: { type: "object", properties: {} },
+      parameters: {
+        type: "object",
+        properties: {
+          scope: {
+            anyOf: [
+              { type: "string", const: "user" },
+              { type: "string", const: "project" },
+            ],
+            description:
+              'Scope whose marketplaces to list: "user" or "project". Default: both scopes.',
+          },
+        },
+      },
     };
 
     // act
@@ -513,6 +525,95 @@ describe("registerListMarketplacesTool", () => {
 
     // act
     const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.strictEqual(scope.networkCallCount(), 0);
+    verifyBoundary();
+  });
+
+  for (const { requestedScope, marketplace } of [
+    { requestedScope: "project", marketplace: "proj-mp" },
+    { requestedScope: "user", marketplace: "user-mp" },
+  ] as const satisfies readonly { requestedScope: Scope; marketplace: string }[]) {
+    test(`narrows the list to the ${requestedScope} scope when the scope parameter is set`, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, `list-scope-${requestedScope}`);
+      await seedScope(scope.cwd, "project", [
+        {
+          name: "proj-mp",
+          plugins: [
+            { name: "alpha", manifestVersion: "1.0.0", installed: { version: "1.0.0" } },
+            { name: "bravo", manifestVersion: "1.0.0" },
+          ],
+        },
+      ]);
+      await seedScope(scope.cwd, "user", [
+        {
+          name: "user-mp",
+          plugins: [
+            { name: "charlie", manifestVersion: "1.0.0", installed: { version: "1.0.0" } },
+            { name: "delta", manifestVersion: "1.0.0" },
+          ],
+        },
+      ]);
+      const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+        registerListMarketplacesTool,
+        { value: scope.cwd, reads: 1 },
+        1,
+      );
+      const expectedResult = {
+        content: [
+          {
+            type: "text",
+            text: `[${requestedScope}] ${marketplace} -- 1 plugin(s) -- ${marketplaceRootIn(scope.cwd, marketplace)}`,
+          },
+        ],
+        details: { marketplaces: [{ name: marketplace, scope: requestedScope, plugins: [] }] },
+      };
+
+      // act
+      const listed = await registration.execute(
+        "call-1",
+        { scope: requestedScope },
+        undefined,
+        undefined,
+        ctx,
+      );
+
+      // assert
+      assert.deepStrictEqual(listed, expectedResult);
+      assert.strictEqual(scope.networkCallCount(), 0);
+      verifyBoundary();
+    });
+  }
+
+  test("reports no marketplaces configured when the named scope holds no record", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "list-empty-scope");
+    await seedScope(scope.cwd, "project", [
+      {
+        name: "proj-mp",
+        plugins: [{ name: "alpha", manifestVersion: "1.0.0", installed: { version: "1.0.0" } }],
+      },
+    ]);
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListMarketplacesTool,
+      { value: scope.cwd, reads: 1 },
+    );
+    const expectedResult = {
+      content: [{ type: "text", text: "No marketplaces configured." }],
+      details: { marketplaces: [] },
+    };
+
+    // act
+    const listed = await registration.execute(
+      "call-1",
+      { scope: "user" },
+      undefined,
+      undefined,
+      ctx,
+    );
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
@@ -803,7 +904,8 @@ const versionCases = [
 /**
  * One plugin per bucket the list orchestrator can put in this tool's payload:
  * an installed record, an installable candidate, a structurally uninstallable
- * candidate, a cold git-source candidate, and a partially available candidate.
+ * candidate, a cold git-source candidate, a partially available candidate, and
+ * a disabled record, which the tool lists under `unavailable` (D-BG-1004).
  *
  * The last two carry the CR-01 weight. The orchestrator gates them behind its
  * own `remote` and `partial` filters, and the tool declares neither parameter,
@@ -823,6 +925,7 @@ const mixedMarketplace = {
       pluginTree: false,
     },
     { name: "echo", manifestVersion: "5.0.0", declaresUnsupported: true },
+    { name: "foxtrot", manifestVersion: "6.0.0", installed: { version: "6.0.0", disabled: true } },
   ],
 } as const satisfies SeededMarketplace;
 
@@ -867,11 +970,21 @@ const partiallyAvailableRow = {
   version: "5.0.0",
 } as const satisfies ExpectedPluginRow;
 
+const disabledRow = {
+  status: "disabled",
+  name: "foxtrot",
+  id: "foxtrot@mixed-mp",
+  reasons: [],
+  version: "6.0.0",
+  scope: "project",
+} as const satisfies ExpectedPluginRow;
+
 const INSTALLED_LINE = "  [installed] alpha  1.0.0";
 const AVAILABLE_LINE = "  [available] bravo  2.0.0";
 const UNAVAILABLE_LINE = "  [unavailable] charlie  3.0.0  (source missing)";
 const REMOTE_LINE = "  [available] delta  4.0.0";
 const PARTIALLY_AVAILABLE_LINE = "  [unavailable] echo  5.0.0  (lsp)";
+const DISABLED_LINE = "  [unavailable] foxtrot  6.0.0";
 
 interface FilterCase {
   readonly title: string;
@@ -894,8 +1007,16 @@ const filterCases = [
       UNAVAILABLE_LINE,
       REMOTE_LINE,
       PARTIALLY_AVAILABLE_LINE,
+      DISABLED_LINE,
     ],
-    rows: [installedRow, availableRow, unavailableRow, remoteRow, partiallyAvailableRow],
+    rows: [
+      installedRow,
+      availableRow,
+      unavailableRow,
+      remoteRow,
+      partiallyAvailableRow,
+      disabledRow,
+    ],
   },
   {
     title: "narrows to the installed bucket when only installed is set",
@@ -913,17 +1034,18 @@ const filterCases = [
   },
   {
     // CR-01: the partially available row rides the `unavailable` parameter, on
-    // the same rule.
+    // the same rule. The disabled record rides it too, because the tool
+    // projects it onto that bucket (D-BG-1004, D-54-01).
     title: "narrows to the unavailable bucket when only unavailable is set",
     params: { unavailable: true },
-    lines: [UNAVAILABLE_LINE, PARTIALLY_AVAILABLE_LINE],
-    rows: [unavailableRow, partiallyAvailableRow],
+    lines: [UNAVAILABLE_LINE, PARTIALLY_AVAILABLE_LINE, DISABLED_LINE],
+    rows: [unavailableRow, partiallyAvailableRow, disabledRow],
   },
   {
     title: "unions the available and unavailable buckets when both are set",
     params: { available: true, unavailable: true },
-    lines: [AVAILABLE_LINE, UNAVAILABLE_LINE, REMOTE_LINE, PARTIALLY_AVAILABLE_LINE],
-    rows: [availableRow, unavailableRow, remoteRow, partiallyAvailableRow],
+    lines: [AVAILABLE_LINE, UNAVAILABLE_LINE, REMOTE_LINE, PARTIALLY_AVAILABLE_LINE, DISABLED_LINE],
+    rows: [availableRow, unavailableRow, remoteRow, partiallyAvailableRow, disabledRow],
   },
 ] as const satisfies readonly FilterCase[];
 
@@ -979,7 +1101,10 @@ describe("registerListPluginsTool", () => {
             ],
             description: 'Scope to look in: "user" or "project". Default: both scopes.',
           },
-          installed: { type: "boolean", description: "Include plugins installed in state.json." },
+          installed: {
+            type: "boolean",
+            description: "Include installed plugins that are enabled.",
+          },
           available: {
             type: "boolean",
             description:
@@ -988,7 +1113,7 @@ describe("registerListPluginsTool", () => {
           unavailable: {
             type: "boolean",
             description:
-              "Include manifest-declared plugins that are not installable on this system.",
+              "Include manifest-declared plugins that are not installable on this system, and installed plugins that are disabled.",
           },
         },
       },
@@ -1365,17 +1490,14 @@ describe("registerListPluginsTool", () => {
     });
   }
 
-  test("renders the header alone for a marketplace whose rows the filter empties", async (t) => {
+  test("renders the no-plugins body for a marketplace whose rows the filter empties", async (t) => {
     // arrange
-    // WR-05: the "(no plugins)" body belongs to a marketplace that declares
-    // none. A block whose rows the TOOL-side filter removed keeps its header
-    // and gains no body, which is the shape this case pins.
-    //
-    // Reaching that shape needs a row the two filters disagree about, because
-    // a row the ORCHESTRATOR drops leaves `mp.plugins` empty and takes the
-    // "(no plugins)" branch instead. A disabled record is the disagreement:
-    // the orchestrator counts it as installed inventory, and the tool projects
-    // it onto the `unavailable` bucket `installed: true` excludes.
+    // D-BG-1008: a block that keeps no rows reads "(no plugins)", whether the
+    // payload loader returned none or the tool's bucket filter dropped them.
+    // A disabled record under the `installed` filter is a row that reaches the
+    // tool's filter and is dropped there: the payload loader files it as
+    // installed inventory, and the tool projects it onto the `unavailable`
+    // bucket.
     const scope = await createHermeticScope(t, "filtered-empty");
     await seedScope(scope.cwd, "project", [
       {
@@ -1398,7 +1520,7 @@ describe("registerListPluginsTool", () => {
       1,
     );
     const expectedResult = {
-      content: [{ type: "text", text: "Marketplace filtered-mp (project)" }],
+      content: [{ type: "text", text: "Marketplace filtered-mp (project)\n  (no plugins)" }],
       details: { marketplaces: [{ name: "filtered-mp", scope: "project", plugins: [] }] },
     };
 
@@ -1603,6 +1725,7 @@ describe("registerListPluginsTool", () => {
     });
     const expectedResult = {
       content: [{ type: "text", text: 'Marketplace "proj-mp" not found.' }],
+      isError: true,
       details: { marketplaces: [] },
     };
 
@@ -1621,7 +1744,7 @@ describe("registerListPluginsTool", () => {
     verifyBoundary();
   });
 
-  test("reports the marketplace as not found when no scope declares it", async (t) => {
+  test("reports a marketplace that no scope declares as a not-found tool error", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "marketplace-absent");
     const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
@@ -1630,6 +1753,7 @@ describe("registerListPluginsTool", () => {
     });
     const expectedResult = {
       content: [{ type: "text", text: 'Marketplace "ghost-mp" not found.' }],
+      isError: true,
       details: { marketplaces: [] },
     };
 
@@ -1774,6 +1898,7 @@ describe("registerListPluginsTool", () => {
     });
     const expectedResult = {
       content: [{ type: "text", text: 'Marketplace "https://***@git.example.com/o/r" not found.' }],
+      isError: true,
       details: { marketplaces: [] },
     };
 
