@@ -5,17 +5,17 @@ milestone_name: Behavioral Coverage Gaps
 current_phase: 2
 current_phase_name: Async Hooks
 status: executing
-stopped_at: Phases 1, 7, 14, 15 complete and merged; the other stream phases run in child sessions
+stopped_at: Phases 1, 7, 9, 14, 15 complete and merged; the other stream phases run in child sessions
 last_updated: "2026-11-08T15:58:40.736Z"
 last_activity: 2026-11-08
-last_activity_desc: Merged Phase 7 (State Schema Migration)
+last_activity_desc: Merged Phase 9 (Legacy MCP Entry Move)
 state_head: 57105b09760ddf47ef3ae2d4a8c960b357f2b872
 progress:
   total_phases: 16
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 9
   completed_plans: 9
-  percent: 25
+  percent: 31
 ---
 
 # Project State
@@ -33,10 +33,10 @@ component as a working Pi artifact.
 
 Phase: 2-16 — stream phases, one child session each
 Plan: per phase, in its own branch
-Status: Phases 1, 7, 14, 15 complete and merged into features/behavioral-gaps
-Last activity: 2026-11-08 — merged Phase 7 (State Schema Migration)
+Status: Phases 1, 7, 9, 14, 15 complete and merged into features/behavioral-gaps
+Last activity: 2026-11-08 — merged Phase 9 (Legacy MCP Entry Move)
 
-Progress: [██░░░░░░░░] 25%
+Progress: [███░░░░░░░] 31%
 
 
 ### mcp-4 closeout
@@ -972,5 +972,5 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-08T05:46:41.533Z
-Stopped at: Phases 1, 7, 14, 15 complete and merged; the other stream phases run in child sessions
+Stopped at: Phases 1, 7, 9, 14, 15 complete and merged; the other stream phases run in child sessions
 Resume file: None

@@ -101,3 +101,21 @@ Full text: `.planning/phases/07-state-schema-migration/DUBIOUS-CHOICES.md`.
 - **P7-DC-17 (Low, open).** `_auto_chain_active` reset skipped.
 - **P7-DC-18 (Low, open).** Review Info item left unfixed.
 - **P7-DC-19 (Low, open).** Security and Nyquist records written inline.
+
+## Phase 9: Legacy MCP Entry Move
+
+Full text: `.planning/phases/09-legacy-mcp-entry-move/DUBIOUS-CHOICES.md`.
+
+- **P9-DC-01 (Medium, open).** "Byte for byte" read as the entries, not the file (D-BG-905).
+- **P9-DC-02 (Low, open).** A project-scope scenario beyond the criteria (D-BG-906).
+- **P9-DC-03 (Medium, open).** "Servers still run" proven by the tool listing, not a model call (D-BG-904).
+- **P9-DC-04 (Medium, open).** The unexpanded variable reference is `${ALPHA_HOME:-/srv/alpha}`.
+- **P9-DC-05 (Low, open).** Probes ran with `--parallel 1`.
+- **P9-DC-06 (Low, open).** The project-scope scenario adds the marketplace to the project scope.
+- **P9-DC-07 (Low, open).** The servers-run scenario does not pin the move's row.
+- **P9-DC-08 (Low, open).** Plan shape and checks.
+- **P9-DC-09 (Low, open).** The pattern-mapper step was skipped.
+- **P9-DC-10 (Low, open).** The new Given's wording.
+- **P9-DC-11 (Low, open).** The Given's marker check uses `"_piClaudeMarketplace" in entry`.
+- **P9-DC-12 (Low, open).** The red probe.
+- **P9-DC-13 (Medium, open).** Subagent dispatch.
