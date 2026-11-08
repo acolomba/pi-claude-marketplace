@@ -246,3 +246,27 @@ Feature: Hook tool failure
       | 2    | user        | read past the end of the notes                                                                                                                                                    |
       | 2    | assistant   | tool call read {"path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9}                                                                                          |
       | 2    | tool result | read failed: Offset 9 is beyond end of file (3 lines total)\nPostToolUseFailure:Read hook blocking error from command: "${CLAUDE_PLUGIN_ROOT}/hooks/block.sh": look at the offset |
+
+  @adapter-only
+  Scenario: A failed plugin MCP tool call through pi-mcp-adapter runs the PostToolUseFailure hooks its matchers select (D-BG-404)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name      | version |
+      | hook-demo | 1.0.0   |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name     | event              | matcher                                  |
+      | failure  | PostToolUseFailure | mcp__plugin_hook-demo_stub-server__echo  |
+      | prefixed | PostToolUseFailure | mcp__plugin_hook-demo_stub-server__.*    |
+      | other    | PostToolUseFailure | mcp__plugin_hook-demo_stub-server__other |
+      | after    | PostToolUse        | mcp__plugin_hook-demo_stub-server__echo  |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has the stub mcp server "stub-server" for its hooks, whose tool calls fail
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install hook-demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub-server" of the plugin "hook-demo"
+    Given the scripted model calls the tool "echo" of the hooks' stub mcp server "stub-server" of the plugin "hook-demo" through the mcp implementation with '{"text": "ping"}', then replies "Done."
+    When the user prompts "call the stub"
+    Then the hooks record these runs in any order:
+      | event              | session | tool name                               | tool input      | error            | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                             | CLAUDE_PLUGIN_DATA                                        | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUseFailure | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | Error: echo:ping | false        | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | Error: echo:ping | false        | {project dir} |                 | prefixed  | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
