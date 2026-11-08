@@ -55,3 +55,25 @@ Full text: `.planning/phases/15-marketplace-state-lock/DUBIOUS-CHOICES.md`.
 - **P15-DC-16 (Low, open).** Early commit messages and gate logs lived in the session scratchpad.
 - **P15-DC-17 (Low, open).** Review, verification, security audit, and validation sign-off ran inline.
 - **P15-DC-18 (Low, open).** `phase.complete` rewrote STATE.md's frontmatter and Current Position.
+
+## Phase 14: Bootstrap
+
+Full text: `.planning/phases/14-bootstrap/DUBIOUS-CHOICES.md`.
+
+- **P14-DC-01 (Medium, open).** No terminal scenario for the lock-held failure (D-BG-1404).
+- **P14-DC-02 (Medium, open).** The lock-held row names the source, not the marketplace (D-BG-1406).
+- **P14-DC-03 (Low, open).** No verb module (D-BG-1408).
+- **P14-DC-04 (Low, open).** Commit message clobbered in the shared scratchpad.
+- **P14-DC-05 (Low, open).** Research and pattern mapping skipped.
+- **P14-DC-06 (Medium, open).** Red proof for the refusal outline runs the add before the checks.
+- **P14-DC-07 (Low, open).** Wider checks in the json and terminal scenarios.
+- **P14-DC-08 (Low, open).** Outline title and scenario layout.
+- **P14-DC-09 (Low, open).** CONTEXT names the wrong step modules.
+- **P14-DC-10 (Low, open).** Attribution trailer.
+- **P14-DC-11 (Medium, open).** The plan ran inline, not in a gsd-executor subagent.
+- **P14-DC-12 (Low, open).** The pgrep check matches itself.
+- **P14-DC-13 (Medium, open).** Review fixes and verification ran inline.
+- **P14-DC-14 (Low, open).** Review dispositions.
+- **P14-DC-15 (Medium, open).** Json-mode timeouts under load accepted as load.
+- **P14-DC-16 (Low, open).** Regression gate, Nyquist, and security audits.
+- **P14-DC-17 (Low, open).** The parent's sentinel step and config-set step skipped.

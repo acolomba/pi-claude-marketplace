@@ -55,8 +55,8 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 - [ ] **BROWSE-02**: Choosing a plugin in the picker installs it in its marketplace's scope; cancelling installs nothing.
 - [ ] **PRUNE-01**: `prune` without `--scope` behaves as Claude Code does, `--scope user|project` combines with `--dry-run`, and its usage errors are covered.
 - [ ] **PRUNE-02**: `prune` while another process holds the state lock fails as lock held and removes nothing, and a dependency only a disabled plugin needs is handled as upstream does.
-- [ ] **BOOT-01**: `bootstrap` refuses `--scope` and arguments, and its json and rpc output carry the same outcome as the terminal UI.
-- [ ] **BOOT-02**: `bootstrap` while another process holds the user scope's state lock fails as lock held and records nothing.
+- [x] **BOOT-01**: `bootstrap` refuses `--scope` and arguments, and its json and rpc output carry the same outcome as the terminal UI.
+- [x] **BOOT-02**: `bootstrap` while another process holds the user scope's state lock fails as lock held and records nothing.
 - [x] **MLOCK-01**: `marketplace autoupdate` and `noautoupdate` while another process holds the state lock fail as lock held and change nothing.
 - [x] **MLOCK-02**: A lock file left by a process that has died does not block the marketplace verbs, as `proper-lockfile`'s stale handling defines.
 - [ ] **CHILD-01**: A load in a pi-subagents background child, with `autoapply` on and a pending change, installs, uninstalls, and updates nothing.
@@ -106,8 +106,8 @@ None.
 | BROWSE-02 | Phase 12 | Pending |
 | PRUNE-01 | Phase 13 | Pending |
 | PRUNE-02 | Phase 13 | Pending |
-| BOOT-01 | Phase 14 | Pending |
-| BOOT-02 | Phase 14 | Pending |
+| BOOT-01 | Phase 14 | Complete |
+| BOOT-02 | Phase 14 | Complete |
 | MLOCK-01 | Phase 15 | Complete |
 | MLOCK-02 | Phase 15 | Complete |
 | CHILD-01 | Phase 16 | Pending |
