@@ -592,14 +592,14 @@ Plans:
   2. Choosing a plugin installs it in its marketplace's scope, and `list` then shows it installed there (BROWSE-02).
   3. Cancelling the picker installs nothing and leaves both scopes as they were (BROWSE-02).
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans executed
 
 Plans:
 **Wave 1**
 - [x] 12-01-PLAN.md — The D-BG-1201 marketplace row (catalog plugins offered and installed) with its unit cases, and scenario B: the bare-command walk over both scopes' marketplaces, a marketplace's plugins, and an installed plugin's actions
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 12-02-PLAN.md — Installs from the picker in each scope with `list`, cancelling at the scope screen and on the first screen, the empty marketplace list, and the phase's parent lines
+- [x] 12-02-PLAN.md — Installs from the picker in each scope with `list`, cancelling at the scope screen and on the first screen, the empty marketplace list, and the phase's parent lines
 
 ### Phase 13: Prune
 
@@ -680,7 +680,7 @@ Plans:
 | 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
 | 11. Device Flow Sign-In | 0/TBD | Not started | - |
-| 12. Browse Picker | 1/2 | In Progress | - |
+| 12. Browse Picker | 2/2 | In Progress | - |
 | 13. Prune | 0/TBD | Not started | - |
 | 14. Bootstrap | 0/TBD | Not started | - |
 | 15. Marketplace State Lock | 0/TBD | Not started | - |
