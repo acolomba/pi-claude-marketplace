@@ -3,8 +3,8 @@ phase: "13"
 slug: "prune"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-11-08"
 ---
@@ -40,9 +40,9 @@ created: "2026-11-08"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 13-01-01 | 01 | 1 | PRUNE-01 | — | N/A | cucumber | `npx cucumber-js features/plugin/prune.feature` | ✅ | ⬜ pending |
-| 13-01-02 | 01 | 1 | PRUNE-02 | — | N/A | cucumber | `npx cucumber-js features/plugin/prune.feature` | ✅ | ⬜ pending |
-| 13-01-03 | 01 | 1 | PRUNE-01, PRUNE-02 | — | N/A | cucumber | `npx cucumber-js features/plugin/usage-errors.feature:88:102:135:167:203 features/plugin/state-lock.feature:331:358` | ✅ | ⬜ pending |
+| 13-01-01 | 01 | 1 | PRUNE-01 | — | N/A | cucumber | `npx cucumber-js features/plugin/prune.feature` | ✅ | ✅ green |
+| 13-01-02 | 01 | 1 | PRUNE-02 | — | N/A | cucumber | `npx cucumber-js features/plugin/prune.feature` | ✅ | ✅ green |
+| 13-01-03 | 01 | 1 | PRUNE-01, PRUNE-02 | — | N/A | cucumber | `npx cucumber-js features/plugin/usage-errors.feature:88:102:135:167:203 features/plugin/state-lock.feature:331:358` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -62,11 +62,11 @@ All phase behaviors have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-11-08
