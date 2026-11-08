@@ -111,3 +111,87 @@ Feature: Plugin model tools
       | 2    | user        | Which plugins are there everywhere?                                |
       | 2    | assistant   | tool call pi_claude_marketplace_plugin_list {"scope":"everywhere"} |
       | 2    | tool result | pi_claude_marketplace_plugin_list failed: invalid arguments: scope |
+
+  Scenario: The plugin list tool returns the install status and compatibility of every plugin
+    Given the scripted model plays these steps:
+      | reply                 | tool                              | arguments |
+      |                       | pi_claude_marketplace_plugin_list | {}        |
+      | Here are the plugins. |                                   |           |
+    When the user prompts "Which plugins are there?"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                                                                          |
+      | 1    | user        | Which plugins are there?                                                                                                                                                                                                                                                                                                                                                                                                      |
+      | 2    | user        | Which plugins are there?                                                                                                                                                                                                                                                                                                                                                                                                      |
+      | 2    | assistant   | tool call pi_claude_marketplace_plugin_list {}                                                                                                                                                                                                                                                                                                                                                                                |
+      | 2    | tool result | pi_claude_marketplace_plugin_list returned: Marketplace extras (user)\n  [installed] kilo  1.0.0\n  [available] lima  1.0.0\nMarketplace tools (project)\n  [installed] alpha  1.0.0\n  [available] beta  1.0.0\n  [installed] delta  1.0.0  (unsupported component)\n  [unavailable] eps  1.0.0\n  [unavailable] gamma  1.0.0  (unsupported component)\n  [available] ghp\n  [unavailable] npmp  1.0.0  (unsupported source) |
+
+  Scenario: The installed filter returns only the installed plugins that are enabled
+    Given the scripted model plays these steps:
+      | reply                        | tool                              | arguments          |
+      |                              | pi_claude_marketplace_plugin_list | {"installed":true} |
+      | Three plugins are installed. |                                   |                    |
+    When the user prompts "Which plugins are installed?"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                           |
+      | 1    | user        | Which plugins are installed?                                                                                                                                                                                   |
+      | 2    | user        | Which plugins are installed?                                                                                                                                                                                   |
+      | 2    | assistant   | tool call pi_claude_marketplace_plugin_list {"installed":true}                                                                                                                                                 |
+      | 2    | tool result | pi_claude_marketplace_plugin_list returned: Marketplace extras (user)\n  [installed] kilo  1.0.0\nMarketplace tools (project)\n  [installed] alpha  1.0.0\n  [installed] delta  1.0.0  (unsupported component) |
+
+  Scenario: The available filter returns the plugins the user can install, including git plugins not cloned yet
+    Given the scripted model plays these steps:
+      | reply                           | tool                              | arguments          |
+      |                                 | pi_claude_marketplace_plugin_list | {"available":true} |
+      | Three plugins can be installed. |                                   |                    |
+    When the user prompts "Which plugins can I install?"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                        |
+      | 1    | user        | Which plugins can I install?                                                                                                                                                |
+      | 2    | user        | Which plugins can I install?                                                                                                                                                |
+      | 2    | assistant   | tool call pi_claude_marketplace_plugin_list {"available":true}                                                                                                              |
+      | 2    | tool result | pi_claude_marketplace_plugin_list returned: Marketplace extras (user)\n  [available] lima  1.0.0\nMarketplace tools (project)\n  [available] beta  1.0.0\n  [available] ghp |
+
+  Scenario: The unavailable filter returns the plugins this system cannot install and the disabled ones
+    Given the scripted model plays these steps:
+      | reply                         | tool                              | arguments            |
+      |                               | pi_claude_marketplace_plugin_list | {"unavailable":true} |
+      | Three plugins cannot be used. |                                   |                      |
+    When the user prompts "Which plugins cannot be used here?"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                     |
+      | 1    | user        | Which plugins cannot be used here?                                                                                                                                                                                                                       |
+      | 2    | user        | Which plugins cannot be used here?                                                                                                                                                                                                                       |
+      | 2    | assistant   | tool call pi_claude_marketplace_plugin_list {"unavailable":true}                                                                                                                                                                                         |
+      | 2    | tool result | pi_claude_marketplace_plugin_list returned: Marketplace extras (user)\n  (no plugins)\nMarketplace tools (project)\n  [unavailable] eps  1.0.0\n  [unavailable] gamma  1.0.0  (unsupported component)\n  [unavailable] npmp  1.0.0  (unsupported source) |
+
+  Scenario: Two filters together return the plugins of either filter
+    Given the scripted model plays these steps:
+      | reply          | tool                              | arguments                             |
+      |                | pi_claude_marketplace_plugin_list | {"installed":true,"unavailable":true} |
+      | Here they are. |                                   |                                       |
+    When the user prompts "Which plugins are installed or unavailable?"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                 |
+      | 1    | user        | Which plugins are installed or unavailable?                                                                                                                                                                                                                                                                                                          |
+      | 2    | user        | Which plugins are installed or unavailable?                                                                                                                                                                                                                                                                                                          |
+      | 2    | assistant   | tool call pi_claude_marketplace_plugin_list {"installed":true,"unavailable":true}                                                                                                                                                                                                                                                                    |
+      | 2    | tool result | pi_claude_marketplace_plugin_list returned: Marketplace extras (user)\n  [installed] kilo  1.0.0\nMarketplace tools (project)\n  [installed] alpha  1.0.0\n  [installed] delta  1.0.0  (unsupported component)\n  [unavailable] eps  1.0.0\n  [unavailable] gamma  1.0.0  (unsupported component)\n  [unavailable] npmp  1.0.0  (unsupported source) |
+
+  Scenario: A plugin list call naming a marketplace the asked scopes do not record reaches the model as an error
+    Given the scripted model plays these steps:
+      | reply                          | tool                              | arguments                                  |
+      |                                | pi_claude_marketplace_plugin_list | {"marketplace":"ghost"}                    |
+      |                                | pi_claude_marketplace_plugin_list | {"marketplace":"extras","scope":"project"} |
+      | Neither marketplace was found. |                                   |                                            |
+    When the user prompts "Which plugins do the ghost and extras marketplaces offer?"
+    Then the model receives these calls:
+      | call | role        | text                                                                                   |
+      | 1    | user        | Which plugins do the ghost and extras marketplaces offer?                              |
+      | 2    | user        | Which plugins do the ghost and extras marketplaces offer?                              |
+      | 2    | assistant   | tool call pi_claude_marketplace_plugin_list {"marketplace":"ghost"}                    |
+      | 2    | tool result | pi_claude_marketplace_plugin_list failed: Marketplace "ghost" not found.               |
+      | 3    | user        | Which plugins do the ghost and extras marketplaces offer?                              |
+      | 3    | assistant   | tool call pi_claude_marketplace_plugin_list {"marketplace":"ghost"}                    |
+      | 3    | tool result | pi_claude_marketplace_plugin_list failed: Marketplace "ghost" not found.               |
+      | 3    | assistant   | tool call pi_claude_marketplace_plugin_list {"marketplace":"extras","scope":"project"} |
+      | 3    | tool result | pi_claude_marketplace_plugin_list failed: Marketplace "extras" not found.              |
