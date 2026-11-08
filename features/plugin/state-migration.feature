@@ -42,6 +42,17 @@ Feature: Plugin state migration
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
 
+  Scenario: The first load after an upgrade from release 0.6.0 rewrites the installation record in the current schema
+    Given the installation record of the user scope is rewritten as release "0.6.0" wrote it
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+    Then the migrated installation record of the user scope has schema version 3 and these plugins:
+      | id            | enabled | provenance |
+      | demo@fixtures | true    | explicit   |
+
   Scenario: A newer installation record is refused and left as it was
     Given the installation record of the user scope is rewritten with a schema version this release does not read
     Given the config and installation record bytes of the user scope are remembered
