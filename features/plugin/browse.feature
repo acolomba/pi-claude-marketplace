@@ -47,8 +47,8 @@ Feature: Plugin browse
     When the user opens the plugin picker with "/claude:plugin browse" in pi's terminal
     Then the plugin picker shows the screen "Browse Claude Plugin Marketplaces" with these rows:
       | label            | description                               |
-      | extras [project] | 0 plugin(s) -- {home}/marketplaces/extras |
-      | tools [user]     | 0 plugin(s) -- {home}/marketplaces/tools  |
+      | extras [project] | 2 available -- {home}/marketplaces/extras |
+      | tools [user]     | 1 available -- {home}/marketplaces/tools  |
 
   Scenario: Choosing a plugin in the terminal picker installs it
     Given the marketplace "tools" is published as a dir source

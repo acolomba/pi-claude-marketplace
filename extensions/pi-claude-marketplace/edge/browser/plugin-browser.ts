@@ -54,7 +54,11 @@ export interface PickerResult {
 export interface MarketplaceEntry {
   readonly name: string;
   readonly scope: Scope;
-  readonly pluginCount: number;
+  /**
+   * The plugin entries of the marketplace's catalog, installed or not, or
+   * undefined when the catalog cannot be read (D-BG-1201).
+   */
+  readonly pluginCount: number | undefined;
   readonly source: string;
 }
 
@@ -105,6 +109,18 @@ function capitalize(s: string): string {
   // `charAt` (not `s[0]`) so `noUncheckedIndexedAccess` keeps the result
   // `string` rather than `string | undefined`.
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * D-BG-1201: a marketplace row reads as Claude Code's does, the catalog's
+ * count of plugins, then Pi's `-- {source}` tail.
+ */
+function marketplaceDescription(m: MarketplaceEntry): string {
+  if (m.pluginCount === undefined) {
+    return m.source;
+  }
+
+  return `${m.pluginCount.toString()} available -- ${m.source}`;
 }
 
 type RowStatus = PluginNotificationMessage["status"];
@@ -293,7 +309,7 @@ export class PluginBrowser {
     const items: SelectItem[] = this.marketplaces.map((m) => ({
       value: `${m.scope}:${m.name}`,
       label: `${m.name} [${m.scope}]`,
-      description: `${m.pluginCount.toString()} plugin(s) -- ${m.source}`,
+      description: marketplaceDescription(m),
     }));
     const list = new SelectList(items, Math.min(items.length, MAX_VISIBLE), this.listTheme());
     list.onSelect = (item) => {
