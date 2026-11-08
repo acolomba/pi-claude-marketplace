@@ -80,3 +80,23 @@ want to reverse.
   reminder named another model. The parent's instructions fix the Opus 5.5
   trailer for this child session, so the warning was treated as a false
   positive and the plan was not revised.
+
+## Execution step
+
+- **P15-DC-14 (Medium, open). Inline execution, review, and verification.**
+  The agent isolation guard refused the `gsd-executor` dispatch: it reads the
+  dispatch-isolation sentinel of the parent checkout (this session's primary
+  directory), which the forced sentinel in this worktree cannot reach. The
+  child session ran plan 15-01 inline instead of using another agent type to
+  get around the guard. The parent then directed every remaining step
+  (execution, code review, fixes, verification) inline, because a background
+  subagent stalls when the session's turn ends.
+- **P15-DC-15 (Low, open). Tables aligned by a scratch script.** The script
+  reproduced every existing table byte for byte, so the live-holder scenarios
+  are unchanged (`diff` of lines 7-160 prints nothing).
+- **P15-DC-16 (Low, open). Early commit messages and gate logs lived in the
+  session scratchpad.** Before the parent's own-folder rule, the message files
+  of commits `fcc3dc40` to `714d15f8` and the wave-gate logs were in the
+  session-specific `scratchpad/p15/`. Every commit title was checked against
+  its content and matches; the gate logs were copied to
+  `/tmp/claude-1000/bg-phase-15/gate/`.
