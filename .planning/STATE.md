@@ -5,16 +5,16 @@ milestone_name: Behavioral Coverage Gaps
 current_phase: 01
 current_phase_name: Foundation
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-11-08T03:53:34.089Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-11-08T04:38:34.513Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 01 execution started
-state_head: 04e6ae1ee2ab1412faf829ebe8d2d6a59ad9aa1e
+state_head: f8c24a8069e59a259cbff73b9f7f3501ebfdc492
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Foundation) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 01 execution started
 
@@ -431,6 +431,7 @@ archived milestone artifacts.
 | Phase 01 P03 | 27 min | 3 tasks | 7 files |
 | Phase 01 P04 | 41 min | 3 tasks | 8 files |
 | Phase 01 P05 | 29 min | 3 tasks | 7 files |
+| Phase 01 P06 | 38 min | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -657,6 +658,8 @@ archived milestone artifacts.
 - [Phase 01]: 01-04: earlier-release state.json writers keep only each release's schema members (allow-lists from git show of v0.4.3, v0.6.0, v0.19.2 state-io.ts); the 0.4.3 rewrite leaves autoupdate absent when the base config declares none, as 0.4.3's marketplace add did; the legacy mcp.json is rebuilt from the plugin's .mcp.json with 0.19.2's stage logic
 - [Phase 01]: The ASYNC-04 crash seed installs in the user scope: the product's startup reap never reads the project-scope PID table (index.ts registers the hooks bridge with cwd homedir()), so a project-scope seed fails; Phase 2 must fix or license it
 - [Phase 01]: The /reload seed starts its waiting async hook on SessionStart startup in the terminal Pi, because a UserPromptSubmit hook would start again on the reload step's own prompt
+- [Phase 01]: Device Flow seeds reach github.com through an in-process redirect; D-BG-02 was not needed and the product is unchanged
+- [Phase 01]: The redirect's routing rule lives in features/lib/github-device-flow/routing.ts, because fallow's production run counts no test consumer
 
 ### mcp-4 decisions
 
@@ -960,6 +963,6 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-08T03:53:33.962Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-11-08T04:38:34.388Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None
