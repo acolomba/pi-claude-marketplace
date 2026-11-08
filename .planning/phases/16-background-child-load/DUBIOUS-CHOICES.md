@@ -84,3 +84,21 @@ only the judgment calls inside them are repeated here.
 - **P16-DC-11 (Low, open). Pattern mapper skipped.** The research already
   holds the exact scenario text and every step's source, and the phase adds no
   new code file to map.
+- **P16-DC-12 (Low, open). Three tasks.** The planner kept the 2-3 tasks
+  rule: the grant red proof joins the mcp.json task, and the SUMMARY is the
+  last step of the third task.
+- **P16-DC-13 (Low, open). Red-proof harness.** One control run of scenario A
+  in the unmutated scratch copy proves the copy sound; each restore is then
+  checked with `cmp` instead of a closing control run. Every run uses
+  `--parallel 2`.
+- **P16-DC-14 (Low, open). The seed's old title stays in the frozen
+  layout.md.** `.agents/skills/cucumber/rules/layout.md` "Seeds" keeps naming
+  "A background child's load leaves a declared plugin pending while autoapply
+  is on" after the rewrite; the parent may update it at the merge.
+- **P16-DC-15 (Low, open). Red-proof greps read cucumber's output format.**
+  They match cucumber 13.3.0's `Failed scenarios:` lines, which are not a
+  documented contract.
+- **P16-DC-16 (Low, open). Two `When` steps in scenarios A, B, and C.** A and
+  B prove the child half and the parent half in one run, because the parent
+  half is the evidence that the child left something to do; C reads one
+  session twice (D-BG-1605). The plan checker raised it as information only.

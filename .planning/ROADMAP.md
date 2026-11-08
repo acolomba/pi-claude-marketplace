@@ -656,7 +656,10 @@ Plans:
   2. A load in a background child moves no legacy `mcp.json` entry and rewrites no generated agent's grant (CHILD-02).
   3. The child still loads the installed plugin's components: its skills and commands are listed, and its hooks run (CHILD-02).
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+**Wave 1**
+- [ ] 16-01-PLAN.md — Four background-child scenarios (pending changes left for the parent, no legacy mcp.json move, skills and slash commands, a PreToolUse hook), each proven red, and the MGRT-02 grant red proof re-run
 
 ## Progress
 
