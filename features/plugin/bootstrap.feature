@@ -41,6 +41,18 @@ Feature: Plugin bootstrap
       | claude-plugins-official | anthropics/claude-plugins-official |
     Then the "claude-plugins.json" file of the project scope does not exist
 
+  Scenario: Bootstrapping in the terminal shows the result it reports over rpc
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    When the user runs "/claude:plugin bootstrap" in pi's terminal
+    Then pi's terminal shows this result of the command:
+      """
+      ● claude-plugins-official [user] (added)
+      """
+    Then the git host receives these requests:
+      | method | path                                                                      | status |
+      | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
+
   Scenario: Bootstrapping a second time leaves the official marketplace as it is
     Given the marketplace "claude-plugins-official" is published as the official marketplace
     Given the user has run "/claude:plugin bootstrap"

@@ -32,6 +32,10 @@ const RELOADED_TEXT = "Reloaded keybindings";
 // A reload rebuilds the extension runtime in well under this.
 const DEFAULT_RELOAD_MS = 20_000;
 
+// The pseudoterminal's size, which `pi-tui-pty.py` sets.
+const PTY_ROWS = 40;
+const PTY_COLUMNS = 120;
+
 /**
  * What `PiTuiSession.start` needs: the sandbox, the git environment, and the
  * time limits. D-CF2-12: a scenario that profiles the TUI, such as with the
@@ -118,6 +122,191 @@ function removeTerminalControls(text: string): string {
   }
 
   return plain;
+}
+
+// A screen of `rows` by `columns` cells and its cursor. A character printed
+// in the last column leaves the cursor there and wraps before the next one,
+// as a terminal does.
+class ScreenModel {
+  private readonly rows: number;
+  private readonly columns: number;
+  private readonly cells: string[][];
+  private row = 0;
+  private column = 0;
+  private wrapPending = false;
+
+  constructor(rows: number, columns: number) {
+    this.rows = rows;
+    this.columns = columns;
+    this.cells = Array.from({ length: rows }, () => this.blankRow());
+  }
+
+  print(character: string): void {
+    if (this.wrapPending) {
+      this.column = 0;
+      this.lineFeed();
+    }
+
+    const cells = this.cells[this.row];
+    if (cells !== undefined) {
+      cells[this.column] = character;
+    }
+
+    this.wrapPending = this.column === this.columns - 1;
+    this.column = Math.min(this.column + 1, this.columns - 1);
+  }
+
+  carriageReturn(): void {
+    this.moveTo(this.row, 0);
+  }
+
+  lineFeed(): void {
+    this.wrapPending = false;
+    if (this.row < this.rows - 1) {
+      this.row += 1;
+      return;
+    }
+
+    this.cells.shift();
+    this.cells.push(this.blankRow());
+  }
+
+  // Applies one control sequence: its parameter text and its final byte.
+  controlSequence(parameters: string, final: string): void {
+    if (/^[<=>?]/u.test(parameters)) {
+      return;
+    }
+
+    const [first = 0, second = 0] = parameters.split(";").map(Number);
+    const count = Math.max(first, 1);
+    switch (final) {
+      case "A":
+        this.moveTo(this.row - count, this.column);
+        break;
+      case "B":
+        this.moveTo(this.row + count, this.column);
+        break;
+      case "C":
+        this.moveTo(this.row, this.column + count);
+        break;
+      case "D":
+        this.moveTo(this.row, this.column - count);
+        break;
+      case "G":
+        this.moveTo(this.row, count - 1);
+        break;
+      case "H":
+      case "f":
+        this.moveTo(count - 1, Math.max(second, 1) - 1);
+        break;
+      case "J":
+        this.eraseDisplay(first);
+        break;
+      case "K":
+        this.eraseLine(this.row, first);
+        break;
+      default:
+        break;
+    }
+  }
+
+  lines(): string[] {
+    return this.cells.map((cells) => cells.join("").replace(/ +$/u, ""));
+  }
+
+  private moveTo(row: number, column: number): void {
+    this.row = Math.min(Math.max(row, 0), this.rows - 1);
+    this.column = Math.min(Math.max(column, 0), this.columns - 1);
+    this.wrapPending = false;
+  }
+
+  private eraseDisplay(mode: number): void {
+    const [from, to] = mode === 1 ? [0, this.row - 1] : [this.row + 1, this.rows - 1];
+    if (mode >= 2) {
+      this.cells.splice(0, this.rows, ...Array.from({ length: this.rows }, () => this.blankRow()));
+      return;
+    }
+
+    for (let row = from; row <= to; row += 1) {
+      this.cells[row] = this.blankRow();
+    }
+
+    this.eraseLine(this.row, mode);
+  }
+
+  // Erases from the cursor to the end of `row` (mode 0), from its start to the
+  // cursor (mode 1), or all of it (mode 2).
+  private eraseLine(row: number, mode: number): void {
+    const cells = this.cells[row];
+    if (cells === undefined) {
+      return;
+    }
+
+    const from = mode === 0 ? this.column : 0;
+    const to = mode === 1 ? this.column : this.columns - 1;
+    cells.fill(" ", from, to + 1);
+  }
+
+  private blankRow(): string[] {
+    return Array.from({ length: this.columns }, () => " ");
+  }
+}
+
+// Replays the escape sequence at `start` on `screen` and returns the index
+// after it. An operating system command, an application program command, and
+// a device control string end as an operating system command does.
+function replayEscape(screen: ScreenModel, text: string, start: number): number {
+  switch (text[start + 1]) {
+    case "[": {
+      const end = controlSequenceEnd(text, start + 2);
+      screen.controlSequence(text.slice(start + 2, end), text[end] ?? "");
+      return end + 1;
+    }
+
+    case "]":
+    case "_":
+    case "P":
+    case "^":
+      return operatingSystemCommandEnd(text, start + 2) + 1;
+    case undefined:
+      return start + 1;
+    default:
+      return start + 2;
+  }
+}
+
+/**
+ * Returns the screen that `output` leaves on a terminal of `rows` by
+ * `columns`, one string per row with its trailing spaces removed. It replays
+ * printable text, carriage return, line feed (which scrolls on the last row),
+ * cursor movement (`A`, `B`, `C`, `D`, `G`, `H`, `f`), and erase in display
+ * and in line (`J`, `K`); it drops every other control sequence, character,
+ * and command. Each code point takes one column, so a row a redraw rewrote
+ * reads as its last value.
+ */
+// fallow-ignore-next-line unused-export -- test/architecture/pi-tui-screen.test.ts pins the screen model.
+export function terminalScreen(output: string, rows: number, columns: number): string[] {
+  const screen = new ScreenModel(rows, columns);
+  let index = 0;
+  while (index < output.length) {
+    const character = String.fromCodePoint(output.codePointAt(index) ?? 0);
+    if (character === "\u001b") {
+      index = replayEscape(screen, output, index);
+      continue;
+    }
+
+    if (character === "\r") {
+      screen.carriageReturn();
+    } else if (character === "\n") {
+      screen.lineFeed();
+    } else if (character >= " " && character !== "\u007f") {
+      screen.print(character);
+    }
+
+    index += character.length;
+  }
+
+  return screen.lines();
 }
 
 /**
@@ -229,6 +418,11 @@ export class PiTuiSession {
     return removeTerminalControls(this.output);
   }
 
+  /** The terminal's current screen, one string per row with its trailing spaces removed. */
+  screenLines(): readonly string[] {
+    return terminalScreen(this.output, PTY_ROWS, PTY_COLUMNS);
+  }
+
   /** Types one line into the TUI. */
   sendLine(line: string): void {
     this.typeText(`${line}\r`);
@@ -246,6 +440,15 @@ export class PiTuiSession {
   /** Waits until the normalized terminal contains `text`. */
   async waitForText(text: string, timeoutMs: number): Promise<void> {
     await this.waitFor(() => this.text.includes(text), timeoutMs, `terminal text ${text}`);
+  }
+
+  /** Waits until `condition` holds for the terminal's current screen. */
+  async waitForScreen(
+    condition: (lines: readonly string[]) => boolean,
+    timeoutMs: number,
+    description: string,
+  ): Promise<void> {
+    await this.waitFor(() => condition(this.screenLines()), timeoutMs, description);
   }
 
   /**

@@ -2,7 +2,8 @@
  * @fileoverview Steps that run `/claude:plugin` commands in a headless Pi and
  * check the JSON results of the last `When` step, a command or a new session.
  * A command can also run in a one-shot Pi in json mode, whose results the
- * same steps read (D-BG-09).
+ * same steps read, or in Pi in a real terminal, whose notice a step reads
+ * from the terminal's current screen (D-BG-09).
  *
  * A `Given` command is setup and must succeed, unless its text says it
  * failed, warned, or did not fail.
@@ -33,10 +34,35 @@ import {
   resultsRowRecords,
   resultsTable,
 } from "../lib/result-rows.ts";
-import { expandTokens } from "../lib/run-tokens.ts";
+import { expandTokens, projectTokens } from "../lib/run-tokens.ts";
 
 import type { NotificationPayload } from "../lib/pi-commands.ts";
 import type { ScenarioWorld } from "../support/world.ts";
+
+// A command against the loopback git host finishes in about a second; the
+// deadline stays below the 30-second step timeout.
+const TERMINAL_COMMAND_MS = 20_000;
+
+// Pi redraws within milliseconds of a keystroke or a notice.
+const TERMINAL_QUIET_MS = 1_000;
+
+/**
+ * Returns the notice whose first row is `anchor` on `lines`, the screen with
+ * its run tokens projected: the rows from the last row that reads `anchor`
+ * down to the next blank row, without the indent Pi gives them all. Fails,
+ * with the screen, when no row reads `anchor`.
+ */
+function terminalNotice(lines: readonly string[], anchor: string): string {
+  const start = lines.map((line) => line.trim()).lastIndexOf(anchor.trim());
+  if (start === -1) {
+    assert.fail(`no notice starting ${JSON.stringify(anchor)} on the screen:\n${lines.join("\n")}`);
+  }
+
+  const end = lines.findIndex((line, index) => index > start && line.trim() === "");
+  const rows = lines.slice(start, end === -1 ? undefined : end);
+  const indent = Math.min(...rows.map((row) => row.length - row.trimStart().length));
+  return rows.map((row) => row.slice(indent)).join("\n");
+}
 
 /**
  * Runs the setup `command` and asserts that every result it emits has one of
@@ -108,6 +134,18 @@ When(
   },
 );
 
+// Pi shows no sign that an extension command is running, so the step waits
+// for the terminal to stay quiet after the command; the terminal result step
+// waits for the notice itself before it reads it.
+When(
+  "the user runs {string} in pi's terminal",
+  async function (this: ScenarioWorld, command: string) {
+    const tui = await this.startTuiSession();
+    tui.sendLine(expandTokens(command, this.tokens));
+    await tui.waitForQuiet(TERMINAL_QUIET_MS, TERMINAL_COMMAND_MS);
+  },
+);
+
 Then("the result has these fields:", function (this: ScenarioWorld, table: DataTable) {
   const stated = table.raw().map(([name]) => String(name));
   const fields = envelopeFields(this.lastResult(), this.tokens);
@@ -161,6 +199,26 @@ Then("the command result contains no absolute sandbox path", function (this: Sce
     assert.strictEqual(rendered.includes(root), false, `command result contains ${root}`);
   }
 });
+
+// The notice of the command the terminal ran, read from the current screen
+// and anchored on its own first row, so no text Pi draws reaches the
+// comparison. A redraw that replaced the notice shows its last value.
+Then(
+  "pi's terminal shows this result of the command:",
+  async function (this: ScenarioWorld, expected: string) {
+    const tui = this.requireTuiSession();
+    const [anchor = ""] = expected.split("\n");
+    const screen = (): string[] =>
+      tui.screenLines().map((line) => projectTokens("", line, this.tokens));
+    await tui.waitForScreen(
+      () => screen().some((line) => line.trim() === anchor.trim()),
+      TERMINAL_COMMAND_MS,
+      `the notice ${anchor}`,
+    );
+    await tui.waitForQuiet(TERMINAL_QUIET_MS, TERMINAL_COMMAND_MS);
+    assert.strictEqual(terminalNotice(screen(), anchor), expected);
+  },
+);
 
 // D-02: the marketplace and plugin rows of every result, in emission order.
 // Every result must have marketplace blocks, so no row goes unseen, or carry
