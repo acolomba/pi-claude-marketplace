@@ -40,3 +40,26 @@ Feature: Marketplace device flow
       | POST   | https://github.com/login/oauth/access_token                         | sign-in   |
       | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
       | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+
+  Scenario: A terminal session of a sign-in scenario sends the background update's GitHub requests to the git host
+    Given the marketplace "tools" is published as a github source
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+    Given pi runs with github's requests routed to the stand-ins
+    Given the user has run "/claude:plugin marketplace add acme/tools --scope user"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope user"
+    Given the tui session starts with the environment variable "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS" set to "0"
+    When the user sends the message "hello" in the tui session
+    Then the tui session reports no notice
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    Then github's sign-in receives no request
+    Then pi routes these github requests:
+      | method | url                                                                 | routed to |
+      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+      | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+      | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |

@@ -285,6 +285,10 @@ Then(
   },
 );
 
+Then("github's sign-in receives no request", async function (this: ScenarioWorld): Promise<void> {
+  assert.deepStrictEqual(await readDeviceFlowRequests(this.profileHarness()), []);
+});
+
 // The `loaded` lines are not requests; every routed and refused one is a row.
 Then(
   "pi routes these github requests:",
