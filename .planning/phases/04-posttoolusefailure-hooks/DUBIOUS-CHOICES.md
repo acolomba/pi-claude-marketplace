@@ -1,0 +1,23 @@
+# Phase 4 (PostToolUseFailure Hooks): Dubious Choices
+
+The choices Phase 4 made without the user. Entries are numbered in the
+milestone form `P{N}-DC-NN`, with N = 4.
+Only the Phase 4 child session writes this file: it copies each item from the
+report of each step and from the `## Dubious Choices` section of each plan
+SUMMARY.md. A subagent never edits this file. The parent merges it into the
+root log at the phase's merge.
+
+- **Severity.** High: changes what a user sees or diverges from upstream.
+  Medium: a judgment call a reviewer may reverse at low cost. Low: process,
+  naming, or tooling.
+- **Status.** `open` until the user reviews it.
+- **IDs.** `P{N}-DC-NN` is a choice of phase N; this log holds Phase 4's.
+
+## Discuss step
+
+The autonomous run took the recommended option at every discuss question; those answers are the decisions D-BG-401 to D-BG-403 in 04-CONTEXT.md. The choices below are the ones a reviewer may want to reverse.
+
+- **P4-DC-01 (High, open). `is_interrupt` is always `false` (D-BG-401).** Claude Code sends the boolean on every failure, and the bridge now sends it too, but Pi's `tool_result` event has no interrupt bit, so the value is a constant. It is correct only because D-BG-402 keeps the bridge from running these hooks on a cancelled call. It changes the expected row of the PostToolUseFailure scenario in the unowned `features/hook/tool-use.feature`, and it amends the PostToolUseFailure clause of D-CF5-28 for this one field.
+- **P4-DC-02 (Medium, open). The cancelled-call guard edits a shared function (D-BG-402).** The roadmap lets a hook-event phase add only new code paths and never reshape an existing function. The guard is one early return inside `toolResultCompositeHandler` in `bridges/hooks/dispatch.ts`, on the failure arm only, because no other place sees both the failed result and the turn's abort signal before the hooks start.
+- **P4-DC-03 (Medium, open). `tool_use_id`, `duration_ms`, and `mcp_server` stay out (D-BG-403).** Success criterion 1 asks for "Claude Code's payload", and Claude Code sends all three. They stay deferred under D-CF5-28 because the frozen runs step can state only whole literals (the ids and timings vary per run), and `mcp_server` would also change the PreToolUse and PostToolUse payloads, which no stream owns.
+- **P4-DC-04 (Medium, open). The failing MCP stand-in and the interrupt driver live in the verb module.** `features/lib/**` is frozen, and the frozen stub servers never fail, so the verb module writes a small failing wrapper into the published plugin and carries its own prompt-and-abort step. A later milestone may move either into `features/lib/`.
