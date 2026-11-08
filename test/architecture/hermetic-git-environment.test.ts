@@ -2,8 +2,9 @@
  * @fileoverview Checks that every git environment the suite builds is made from
  * scratch, so no inherited `GIT_*` variable reaches Pi, the git host, or a
  * fixture (DRV-03). Pi gets the run's GitHub base override, never the
- * shell's (GHB-01), and none when the run's environment has none (D-BG-01). The background update variables also stay in the shell:
- * Pi gets the update delay only from the run (D-PL8-09). A profile Pi gets
+ * shell's (GHB-01), and none when the run's environment has none (D-BG-01).
+ * The background update variables also stay in the shell: Pi gets the update
+ * delay only from the run (D-PL8-09). A profile Pi gets
  * the run's `TMPDIR`, inside the sandbox home, never the shell's (HAR-05),
  * and pi-subagents' background-child marker only from its profile (D-BG-10).
  */
