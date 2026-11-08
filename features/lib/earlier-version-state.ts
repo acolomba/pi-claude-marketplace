@@ -1,11 +1,17 @@
 /**
- * @fileoverview Writes the record and the declaration that an earlier
- * version's `marketplace add` wrote for a local marketplace, which today's add
- * may refuse, such as one under a reserved name.
+ * @fileoverview Writes a scope's `state.json` the way an earlier or a newer
+ * release left it (D-BG-13).
  *
- * The record goes into the scope's `state.json` beside any record it already
- * holds, and the declaration is the only marketplace of the scope's base
- * `claude-plugins.json`.
+ * One writer records the marketplace and the declaration that an earlier
+ * version's `marketplace add` wrote for a local marketplace, which today's add
+ * may refuse, such as one under a reserved name. The record goes into the
+ * scope's `state.json` beside any record it already holds, and the
+ * declaration is the only marketplace of the scope's base `claude-plugins.json`.
+ *
+ * Another rewrites the whole file into the shape that a named release
+ * persisted, from that release's schema in the repository's history, and one
+ * gives the file a schema version newer than this release reads. Every writer
+ * takes the scope root its caller names, which lies in the scenario's sandbox.
  */
 
 import { existsSync } from "node:fs";
@@ -109,4 +115,212 @@ export async function recordEarlierVersionCloneUrl(args: {
 /** The record of the marketplace `name` in the scope's `state.json` under `scopeRoot`. */
 export async function recordedMarketplace(scopeRoot: string, name: string): Promise<unknown> {
   return objectMember(await readObject(stateFilePath(scopeRoot)), "marketplaces")[name];
+}
+
+// The members one object of a release's `state.json` holds: those the
+// release's schema required, and those it let a writer leave out.
+interface ReleaseMembers {
+  readonly required: readonly string[];
+  readonly optional: readonly string[];
+}
+
+// The members a release kept on the file and on each object nested in it.
+interface ReleaseShape {
+  readonly schemaVersion: number;
+  readonly file: ReleaseMembers;
+  readonly marketplace: ReleaseMembers;
+  readonly source: ReleaseMembers;
+  readonly plugin: ReleaseMembers;
+  readonly compatibility: ReleaseMembers;
+  readonly resources: ReleaseMembers;
+}
+
+// The path source every release named here persisted, from `pathSource`.
+const PATH_SOURCE: ReleaseMembers = { required: ["kind", "raw", "logical"], optional: [] };
+
+const COMPATIBILITY: ReleaseMembers = {
+  required: ["installable", "notes", "supported", "unsupported"],
+  optional: [],
+};
+
+const MARKETPLACE: ReleaseMembers = {
+  required: [
+    "name",
+    "scope",
+    "source",
+    "addedFromCwd",
+    "manifestPath",
+    "marketplaceRoot",
+    "plugins",
+  ],
+  optional: ["lastUpdatedAt"],
+};
+
+const PLUGIN_BEFORE_ENABLED: ReleaseMembers = {
+  required: ["version", "resolvedSource", "compatibility", "resources", "installedAt", "updatedAt"],
+  optional: [],
+};
+
+const RESOURCES_WITH_HOOKS: ReleaseMembers = {
+  required: ["skills", "prompts", "agents", "mcpServers", "hooks"],
+  optional: [],
+};
+
+// Each release's shape, from `persistence/state-io.ts` at its tag.
+const RELEASE_SHAPES: ReadonlyMap<string, ReleaseShape> = new Map([
+  [
+    "0.6.0",
+    {
+      schemaVersion: 1,
+      file: { required: ["schemaVersion", "marketplaces"], optional: [] },
+      marketplace: MARKETPLACE,
+      source: PATH_SOURCE,
+      plugin: PLUGIN_BEFORE_ENABLED,
+      compatibility: COMPATIBILITY,
+      resources: RESOURCES_WITH_HOOKS,
+    },
+  ],
+  [
+    "0.19.2",
+    {
+      schemaVersion: 2,
+      file: {
+        required: ["schemaVersion", "marketplaces"],
+        optional: ["lastReconciledExtensionVersion"],
+      },
+      marketplace: MARKETPLACE,
+      source: PATH_SOURCE,
+      plugin: {
+        required: [...PLUGIN_BEFORE_ENABLED.required, "enabled"],
+        optional: ["resolvedSha", "hookEntries"],
+      },
+      compatibility: COMPATIBILITY,
+      resources: RESOURCES_WITH_HOOKS,
+    },
+  ],
+]);
+
+// The members of `holder` that `members` names, in their order in `holder`.
+// Throws with the first required member `holder` lacks.
+function keepMembers(
+  holder: Record<string, unknown>,
+  members: ReleaseMembers,
+  what: string,
+): Record<string, unknown> {
+  const missing = members.required.find((member) => !Object.hasOwn(holder, member));
+  if (missing !== undefined) {
+    throw new Error(`${what} has no ${missing} member, which the release required`);
+  }
+
+  const kept = new Set([...members.required, ...members.optional]);
+  return Object.fromEntries(Object.entries(holder).filter(([member]) => kept.has(member)));
+}
+
+// The nested object `holder[member]` with only the members `members` names.
+function keepNested(
+  holder: Record<string, unknown>,
+  member: string,
+  members: ReleaseMembers,
+  what: string,
+): Record<string, unknown> {
+  const nested = `the ${member} of ${what}`;
+  return keepMembers(jsonObject(holder[member], nested), members, nested);
+}
+
+// The plugin record `record` with only the members `shape` kept.
+function releasePlugin(
+  record: unknown,
+  shape: ReleaseShape,
+  what: string,
+): Record<string, unknown> {
+  const plugin = keepMembers(jsonObject(record, what), shape.plugin, what);
+  return {
+    ...plugin,
+    compatibility: keepNested(plugin, "compatibility", shape.compatibility, what),
+    resources: keepNested(plugin, "resources", shape.resources, what),
+  };
+}
+
+// The marketplace record `record` with only the members `shape` kept.
+function releaseMarketplace(
+  name: string,
+  record: unknown,
+  shape: ReleaseShape,
+): Record<string, unknown> {
+  const what = `the record of the marketplace ${name}`;
+  const marketplace = keepMembers(jsonObject(record, what), shape.marketplace, what);
+  const source = keepNested(marketplace, "source", shape.source, what);
+  if (source.kind !== "path") {
+    throw new Error(`${what} has a ${String(source.kind)} source; only a path source is written`);
+  }
+
+  const plugins = Object.entries(objectMember(marketplace, "plugins")).map(
+    ([plugin, pluginRecord]): [string, Record<string, unknown>] => [
+      plugin,
+      releasePlugin(pluginRecord, shape, `the record of ${plugin}@${name}`),
+    ],
+  );
+  return { ...marketplace, source, plugins: Object.fromEntries(plugins) };
+}
+
+/**
+ * Rewrites the `state.json` of the scope at `scopeRoot` into the shape that
+ * `release` persisted, and returns what it wrote. The file, each marketplace
+ * record, its path source, each plugin record, and its `compatibility` and
+ * `resources` keep only the members that release's schema declared, and the
+ * file gets that release's `schemaVersion`. A member today's install wrote
+ * that the release had no place for is dropped; a member the release required
+ * that the record lacks fails the rewrite with its name, as does a source
+ * other than a path.
+ *
+ * - `0.6.0` is the last release of schema version 1, whose plugin records
+ *   hold no `enabled`; commit `222a7344` (ENBL-02) ended that shape.
+ * - `0.19.2` is the last release of schema version 2, whose plugin records
+ *   hold no `provenance`; commit `8b6ac3bc` (schema version 3) ended it.
+ *
+ * Only the record is rewritten. The installed artifacts stay where today's
+ * install put them, which is not always where the release put them.
+ */
+export async function rewriteStateAsRelease(args: {
+  readonly scopeRoot: string;
+  readonly release: string;
+}): Promise<Record<string, unknown>> {
+  const { scopeRoot, release } = args;
+  const shape = RELEASE_SHAPES.get(release);
+  if (shape === undefined) {
+    throw new Error(`no state.json shape is known for release ${release}`);
+  }
+
+  const stateFile = stateFilePath(scopeRoot);
+  const state = keepMembers(
+    jsonObject(JSON.parse(await readFile(stateFile, "utf8")), stateFile),
+    shape.file,
+    stateFile,
+  );
+  const marketplaces = Object.entries(objectMember(state, "marketplaces")).map(
+    ([name, record]): [string, Record<string, unknown>] => [
+      name,
+      releaseMarketplace(name, record, shape),
+    ],
+  );
+  const written = {
+    ...state,
+    schemaVersion: shape.schemaVersion,
+    marketplaces: Object.fromEntries(marketplaces),
+  };
+  await writeFile(stateFile, `${JSON.stringify(written, null, 2)}\n`);
+  return written;
+}
+
+/**
+ * Sets the `schemaVersion` of the `state.json` of the scope at `scopeRoot` to
+ * one past the newest this release reads, as a newer release would write it,
+ * and keeps every other member. Returns the version it wrote.
+ */
+export async function rewriteStateWithNewerSchema(scopeRoot: string): Promise<number> {
+  const stateFile = stateFilePath(scopeRoot);
+  const state = jsonObject(JSON.parse(await readFile(stateFile, "utf8")), stateFile);
+  const schemaVersion = STATE_SCHEMA_VERSION + 1;
+  await writeFile(stateFile, `${JSON.stringify({ ...state, schemaVersion }, null, 2)}\n`);
+  return schemaVersion;
 }
