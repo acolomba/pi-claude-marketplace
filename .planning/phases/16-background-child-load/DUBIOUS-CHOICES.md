@@ -102,3 +102,20 @@ only the judgment calls inside them are repeated here.
   B prove the child half and the parent half in one run, because the parent
   half is the evidence that the child left something to do; C reads one
   session twice (D-BG-1605). The plan checker raised it as information only.
+
+## Execution step
+
+- **P16-DC-17 (Medium, open). The orchestrator finished the plan, review,
+  and verification inline.** The session's subagents run only in the
+  background and stop when its turn ends, so the coordinator told it to do the
+  remaining work itself: Tasks 2 and 3 of plan 16-01, the code review (by
+  `.claude/agents/gsd-code-reviewer.md`), fixes, and verification (by
+  `.claude/agents/gsd-verifier.md`), with no independent reviewer context.
+- **P16-DC-18 (Low, open). Two executors overlapped in Task 2.** A stopped
+  executor and a resumed one both appended scenario B; one cut the file back
+  to one copy, checked against RESEARCH.md. One executor also ran two read-only
+  inspection commands that chained git, which the rules forbid.
+- **P16-DC-19 (Low, open). The executor ran as a general-purpose agent.** The
+  isolation guard reads its dispatch sentinel from the session's harness
+  directory, the parent checkout, where another phase's sentinel sat; writing
+  one there would have touched the parent checkout.
