@@ -1402,27 +1402,50 @@ test("a length ending reports max-output classification without re-entry", async
   assert.deepStrictEqual(sent, []);
 });
 
-test("a failure without text reports unknown with an empty message", async () => {
-  // arrange
-  const runtime = createHooksRuntime();
-  runtime.advanceGeneration();
-  const events: unknown[] = [];
-  const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
-    events.push(event);
-    return Promise.resolve({ kind: "noop" });
-  };
+for (const { title, ending, expectedEvent } of [
+  {
+    title: "a failure without text reports unknown and leaves the assistant message out",
+    ending: failureEnd("error"),
+    expectedEvent: { error: "unknown" },
+  },
+  {
+    title: "a length ending without text reports max-output and leaves the assistant message out",
+    ending: failureEnd("length"),
+    expectedEvent: { error: "max_output_tokens" },
+  },
+  {
+    title: "error text of only whitespace leaves the assistant message out",
+    ending: failureEnd("error", " \n\t "),
+    expectedEvent: { error: "unknown" },
+  },
+  {
+    title: "error text reaches the failure observers trimmed",
+    ending: failureEnd("error", "  Rate limit exceeded (429)\n"),
+    expectedEvent: { error: "rate_limit", last_assistant_message: "Rate limit exceeded (429)" },
+  },
+]) {
+  test(`${title} (D-BG-303)`, async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const events: unknown[] = [];
+    const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
+      events.push(event);
+      return Promise.resolve({ kind: "noop" });
+    };
 
-  runtime.setRoutingBucket("StopFailure", [failureEntry("observer")]);
-  const { pi } = makePi();
-  const epoch = runtime.currentGeneration();
+    runtime.setRoutingBucket("StopFailure", [failureEntry("observer")]);
+    const { pi } = makePi();
+    const epoch = runtime.currentGeneration();
 
-  // act
-  agentEndCacheHandler(runtime, epoch)(failureEnd("error"));
-  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+    // act
+    agentEndCacheHandler(runtime, epoch)(ending);
+    await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
-  // assert
-  assert.deepStrictEqual(events, [{ error: "unknown", last_assistant_message: "" }]);
-});
+    // assert
+    assert.deepStrictEqual(events, [expectedEvent]);
+  });
+}
 
 test("all failure outcomes run in order and are then discarded", async () => {
   // arrange

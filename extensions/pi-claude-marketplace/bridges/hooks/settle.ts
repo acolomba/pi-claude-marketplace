@@ -376,7 +376,8 @@ async function runStopBucket(
  * Run the StopFailure bucket observation-only (SFAIL-01). Reached on `error` /
  * `length` settle endings. Builds the synthetic StopFailure event
  * (`error` = the classified error type; `last_assistant_message` = Pi's
- * rendered `errorMessage`, or "" when absent) and runs every hook whose
+ * rendered `errorMessage`, trimmed, and left out when empty, as Claude Code
+ * builds it, D-BG-303) and runs every hook whose
  * error-type matcher admits the classified error (SFAIL-03; match-all `""` /
  * `"*"` admits every type, and a `|` list admits each type it names,
  * D-BG-302) with no short-circuit, then DISCARDS the collected
@@ -401,9 +402,10 @@ async function runStopFailure(
     return;
   }
 
+  const errorText = (last.errorMessage ?? "").trim();
   const event: StopFailureEvent = {
     error: classifiedError,
-    last_assistant_message: last.errorMessage ?? "",
+    ...(errorText === "" ? {} : { last_assistant_message: errorText }),
   };
 
   // SFAIL-01: observation-only -- run every matching hook for its side effects

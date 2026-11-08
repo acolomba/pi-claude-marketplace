@@ -29,6 +29,14 @@ void ({
   error: "unknown",
   last_assistant_message: "Unclassified failure",
 } satisfies StopFailureStdin);
+void ({ error: "max_output_tokens" } satisfies StopFailureEvent);
+void ({
+  session_id: "session-type",
+  transcript_path: "/tmp/session-type.jsonl",
+  cwd: "/project-type",
+  hook_event_name: "StopFailure",
+  error: "max_output_tokens",
+} satisfies StopFailureStdin);
 
 void ({
   // @ts-expect-error a StopFailure event has a closed error vocabulary
@@ -87,11 +95,10 @@ test("emits the complete StopFailure envelope with error details", () => {
   assert.strictEqual(Object.hasOwn(stopFailurePayload, "error_details"), true);
 });
 
-test("omits error_details from the complete envelope when the event omits it", () => {
+test("omits error_details and last_assistant_message from the complete envelope when the event omits them (D-BG-303)", () => {
   // arrange
   const event = {
-    error: "unknown",
-    last_assistant_message: "",
+    error: "max_output_tokens",
   } satisfies StopFailureEvent;
   const context = {
     sessionId: "session-absent",
@@ -103,8 +110,7 @@ test("omits error_details from the complete envelope when the event omits it", (
     transcript_path: "/tmp/session-absent.jsonl",
     cwd: "/project-absent",
     hook_event_name: "StopFailure",
-    error: "unknown",
-    last_assistant_message: "",
+    error: "max_output_tokens",
   } satisfies StopFailureStdin;
 
   // act
@@ -113,6 +119,7 @@ test("omits error_details from the complete envelope when the event omits it", (
   // assert
   assert.deepStrictEqual(stopFailurePayload, expectedPayload);
   assert.strictEqual(Object.hasOwn(stopFailurePayload, "error_details"), false);
+  assert.strictEqual(Object.hasOwn(stopFailurePayload, "last_assistant_message"), false);
 });
 
 test("preserves an empty transcript path in the complete envelope", () => {
@@ -144,7 +151,7 @@ test("preserves an empty transcript path in the complete envelope", () => {
 });
 
 // ---------------------------------------------------------------------------
-// SFAIL-03: errorMessage-only classifier into the closed 10-value vocab
+// SFAIL-03: errorMessage-only classifier into the closed error-type vocab
 // ---------------------------------------------------------------------------
 
 test("classifies billing before every later error indicator", () => {
