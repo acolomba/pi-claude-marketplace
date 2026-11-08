@@ -577,7 +577,7 @@ Plans:
 **Discuss step**: Claude Code's `/plugin` picker as the reference for what it lists and where a chosen plugin installs; what the picker shows for a plugin that is already installed or unavailable.
 **Research flag**: yes. The upstream `/plugin` picker.
 **Success Criteria** (what must be TRUE):
-  1. In the terminal, `/claude:plugin browse` and a bare `/claude:plugin` open the picker, and it lists the marketplaces and plugins of both scopes (BROWSE-01).
+  1. In the terminal, `/claude:plugin browse` and a bare `/claude:plugin` open the picker, and it lists the marketplaces and plugins of both scopes (BROWSE-01). The Phase 1 seed in `plugin/browse.feature` pins a marketplace row of `0 plugin(s)` for a marketplace that offers plugins, because `edge/handlers/plugin/browse.ts` counts the installed plugins (`Object.keys(record.plugins)`); this phase checks the count against Claude Code and fixes the row or records the divergence.
   2. Choosing a plugin installs it in its marketplace's scope, and `list` then shows it installed there (BROWSE-02).
   3. Cancelling the picker installs nothing and leaves both scopes as they were (BROWSE-02).
 
