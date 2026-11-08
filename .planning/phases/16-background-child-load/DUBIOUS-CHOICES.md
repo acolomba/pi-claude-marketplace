@@ -52,3 +52,35 @@ only the judgment calls inside them are repeated here.
   and a stale verification, while no phase directory existed and `init.phase-op
   16` reported no context and no plans. The run followed `init.phase-op` and
   the disk.
+- **P16-DC-06 (Low, open). Commit 4e3d127c carries another phase's
+  message.** The context commit holds this phase's CONTEXT.md and this log, but
+  its message reads "docs(planning): record the prune coverage context": the
+  child sessions share one scratchpad directory, and another session rewrote
+  the generic message file between its write and the commit. History is not
+  rewritten (no amend, no rebase). Later commit messages live in a
+  phase-specific subdirectory.
+
+## Planning step
+
+- **P16-DC-07 (Low, open). Research ran although the roadmap says "Research
+  flag: no".** With `workflow.research` and Nyquist validation on, planning
+  without RESEARCH.md leaves no VALIDATION.md, and the only ways around it are
+  a question to the user or a `config-set`, which the brief forbids. The
+  researcher got the discuss step's probe results so that it only filled the
+  open tables and the validation map.
+- **P16-DC-08 (Low, open). Red proofs run in a scratch copy.** The
+  researcher ran each mutation in an untracked scratch copy of the tree with
+  `node_modules` linked, not in the worktree, because it was told to edit no
+  tracked file (researcher P16-R-01).
+- **P16-DC-09 (Medium, open). A second mutation for the hook red proof.** A
+  child load that discovers no resources leaves the PreToolUse scenario green,
+  because the hooks bridge registers at factory time and hydrates again at
+  `session_start`. Its red proof also skips the hooks bridge in a child
+  (`index.ts`), so the scenario proves that hooks run in a child, not that the
+  load rebuilds the routing (researcher P16-R-02).
+- **P16-DC-10 (Low, open). One plan, one wave.** The four scenarios share one
+  feature file, so they form one plan in one wave, which needs one full wave
+  gate before the phase gate (researcher P16-R-03).
+- **P16-DC-11 (Low, open). Pattern mapper skipped.** The research already
+  holds the exact scenario text and every step's source, and the phase adds no
+  new code file to map.
