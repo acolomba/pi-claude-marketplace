@@ -3949,3 +3949,31 @@ test("propagates a rejecting supplied executor out of the registered tool_call c
   );
   assert.deepStrictEqual(messages, []);
 });
+
+for (const trusted of [true, false]) {
+  test(`a project hydrate with trust ${String(trusted)} reaps only a trusted project PID table`, async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "event-router-project-reap-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const runtime = createHooksRuntime();
+    const locations = locationsFor("project", root);
+    const deadRow = {
+      pid: 4_194_305,
+      dispatchId: "dispatch-dead",
+      scope: "project",
+      marketplace: "catalog",
+      plugin: "plugin",
+      spawnedAt: "2026-11-08T00:00:00.000Z",
+    } as const;
+    await writePidTable(locations, [deadRow]);
+
+    // act
+    await createHooksHydration(runtime, EMPTY_STATE_READER).hydrateProjectScopeForCwd(
+      root,
+      trusted,
+    );
+
+    // assert
+    assert.deepStrictEqual(await readPidTable(locations), trusted ? [] : [deadRow]);
+  });
+}

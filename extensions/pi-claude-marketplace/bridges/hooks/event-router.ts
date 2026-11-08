@@ -1058,10 +1058,11 @@ async function registerHooksBridgeWith(
   // into the new one's `stopReason` gate.
   resetSettleState(runtime);
 
-  // HOOK-06 / D-62-05: SIGKILL every in-memory async-rewake child from
-  // the prior factory invocation BEFORE the persisted-orphan reap reads
-  // the PID table. The in-memory walk covers same-process /reload
-  // cycles; reapOrphans below covers cross-process crash recovery.
+  // HOOK-06 / D-62-05: SIGKILL every in-memory async-rewake child of this
+  // runtime BEFORE the persisted-orphan reap reads the PID table. Pi builds a
+  // new runtime for every load, so in production this walk finds nothing:
+  // the user-scope reap below and the project hydrate's reap stop an earlier
+  // load's children, on /reload and after a crash alike (D-BG-207).
   shutdownInMemoryChildren(runtime);
 
   const hydrated = await hydrateCacheFromDisk(opts, reader, routingState, generationIsCurrent);
@@ -1129,6 +1130,9 @@ async function registerHooksBridgeWith(
               routingState,
               generationIsCurrent,
             );
+            // D-BG-207: inside the try, so a context the hydrate could not
+            // read skips the reap too and never blocks SessionStart.
+            await reapProjectOrphans(runtime, ctx.cwd);
           } catch (err) {
             hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
           }
@@ -1247,6 +1251,22 @@ async function registerHooksBridgeWith(
   );
 }
 
+/**
+ * D-BG-207: reaps the project scope's PID table for the session's real `cwd`
+ * after the project hydrate, so the async hook processes an earlier load of
+ * this project left stop on /reload and at the next start after a crash. The
+ * factory's reap reads only the home directory's tables. A project Pi does
+ * not trust runs no hooks (D-LOC-01), so its table is left alone. The reap
+ * keeps the rows of children this runtime owns and never throws.
+ */
+async function reapProjectOrphans(runtime: HooksRuntime, cwd: string): Promise<void> {
+  if (!runtime.isProjectTrusted(cwd)) {
+    return;
+  }
+
+  await reapOrphans(runtime, locationsFor("project", cwd));
+}
+
 /** Binds every hooks hydration path to one runtime and one required state reader. */
 export function createHooksHydration(
   runtime: HooksRuntime,
@@ -1264,6 +1284,7 @@ export function createHooksHydration(
         routingState,
         generationIsCurrent,
       );
+      await reapProjectOrphans(runtime, cwd);
       if (!generationIsCurrent()) {
         return;
       }

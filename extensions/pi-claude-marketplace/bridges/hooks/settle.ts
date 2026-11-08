@@ -295,9 +295,9 @@ function showStopNotices(
  * Re-entry uses `sendMessage({deliverAs:"followUp", triggerTurn:true})` (the
  * agent is idle at settle, so `triggerTurn` starts the new turn),
  * display-suppressed, and passes once through the STOP-07 cap. A Stop hook
- * declaring `asyncRewake:true` cannot yield a synchronous decision and is
- * degraded to `noop` inside `collectBucketOutcomes` with a `hookDebugLog` --
- * no silent block loss.
+ * declaring `async` or `asyncRewake` runs in the background and returns
+ * `noop`; on exit 2 an `asyncRewake` one wakes the model through the registry
+ * (D-BG-206).
  *
  * The generation is re-checked AFTER the bucket's hooks finish: hook subprocesses
  * can outlive a `/reload`, and the entry-time guard in `settleHandlerFor` only

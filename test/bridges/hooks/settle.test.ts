@@ -915,14 +915,14 @@ test("a stop outcome suppresses a following block", async () => {
   assert.deepStrictEqual(sent, []);
 });
 
-test("an asynchronous Stop declaration degrades to noop", async () => {
+test("an asynchronous Stop declaration runs through the background noop of the executor", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
-    return Promise.resolve({ kind: "block", reason: "continue" });
+    return Promise.resolve({ kind: "noop" });
   };
 
   runtime.setRoutingBucket("Stop", [stopEntry("alpha", true)]);
@@ -932,7 +932,7 @@ test("an asynchronous Stop declaration degrades to noop", async () => {
   await runStop(runtime, pi, emptyContext, executor);
 
   // assert
-  assert.deepStrictEqual(fired, []);
+  assert.deepStrictEqual(fired, ["alpha"]);
   assert.deepStrictEqual(sent, []);
 });
 

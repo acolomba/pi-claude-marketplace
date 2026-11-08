@@ -24,7 +24,7 @@
  *
  * A hook whose script waits goes on until a step creates its release marker,
  * `$HOME/hook-releases/<name>` (D-BG-12). The extension shows an async rewake
- * hook's declared rewake summary on every exit, so the release steps wait for
+ * hook's rewake summary when it exits 2, so the release steps wait for
  * the hook's end line in the lifecycle log and then for that summary, the
  * sign that the extension handled the exit. A released hook must declare one.
  *

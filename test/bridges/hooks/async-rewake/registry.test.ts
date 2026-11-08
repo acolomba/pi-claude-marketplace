@@ -39,6 +39,9 @@ import type {
 } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 
+const PLAIN_ANSWER =
+  '{"systemMessage":"remember","hookSpecificOutput":{"additionalContext":"context"}}';
+
 interface SpawnCall {
   readonly command: string;
   readonly args: readonly string[];
@@ -119,14 +122,6 @@ for (const scenario of [
     injects: true,
   },
   {
-    name: "stale idle getter",
-    mode: "json",
-    failure: "idle",
-    summary: "scan complete",
-    emits: true,
-    injects: false,
-  },
-  {
     name: "stale generation",
     mode: "json",
     failure: "generation",
@@ -156,10 +151,6 @@ for (const scenario of [
 
         if (property === "ui") {
           return capture.ui;
-        }
-
-        if (property === "isIdle" && terminal && scenario.failure === "idle") {
-          throw new Error("stale idle");
         }
 
         return Reflect.get(target, property);
@@ -234,11 +225,11 @@ for (const scenario of [
             {
               message: {
                 customType: "claude-hook-rewake",
-                content: "Review finding:\n\nfinding",
+                content: "Review finding: finding",
                 display: false,
                 details: { pluginId: "plugin-lifecycle", dispatchId: "machine-dispatch" },
               },
-              options: { deliverAs: "nextTurn" },
+              options: { triggerTurn: true, deliverAs: "steer" },
             },
           ]
         : [],
@@ -268,6 +259,119 @@ for (const scenario of [
     capture.assertValid();
   });
 }
+
+for (const ending of [
+  { name: "exit 2", code: 2, signal: null, stdout: PLAIN_ANSWER, sent: ["remember", "context"] },
+  { name: "exit 0", code: 0, signal: null, stdout: PLAIN_ANSWER, sent: ["remember", "context"] },
+  {
+    name: "a signal",
+    code: null,
+    signal: "SIGTERM",
+    stdout: PLAIN_ANSWER,
+    sent: ["remember", "context"],
+  },
+  { name: "plain stdout", code: 0, signal: null, stdout: "plain text", sent: [] },
+] as const) {
+  test(`gives a plain async hook's answer to the next call after ${ending.name}`, async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-plain-"));
+    const locations = locationsFor("project", root);
+    const context = createContext(root, "session-plain", true);
+    const pi = createPi();
+    const child = createChild(24_701);
+
+    try {
+      await spawnAndRegister(
+        runtime,
+        createEntry(root, {
+          claudeEvent: "UserPromptSubmit",
+          handlerDecl: {
+            type: "command",
+            command: "/opt/hooks/note",
+            timeout: 600,
+            async: true,
+            rewakeSummary: "never shown",
+          },
+        }),
+        { type: "input", text: "prompt", source: "interactive" },
+        context.context,
+        pi.pi,
+        locations,
+        { spawnImpl: createSpawn(child.child, []), dispatchId: () => "dispatch-plain" },
+      );
+      child.stdout.end(ending.stdout);
+      await once(child.stdout, "end");
+
+      // act
+      child.emitExit(ending.code, ending.signal);
+      child.emitClose(ending.code, ending.signal);
+      await waitForPidTable(locations, []);
+
+      // assert
+      assert.deepStrictEqual(
+        pi.messages,
+        ending.sent.map((content) => ({
+          message: {
+            customType: "claude-hook-async-response",
+            content,
+            display: false,
+            details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-plain" },
+          },
+          options: { deliverAs: "nextTurn" },
+        })),
+      );
+      assert.deepStrictEqual(context.notifications, []);
+      assert.strictEqual(runtime.isStopHookActive(), false);
+    } finally {
+      shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await reapOrphans(runtime, locations, deadOrphanProbes());
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    }
+  });
+}
+
+test("contains a send failure of a plain async hook's answer", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-plain-fail-"));
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-plain-fail", true);
+  const pi = createPi();
+  pi.setSendError(new Error("send unavailable"));
+  const child = createChild(24_702);
+
+  try {
+    await spawnAndRegister(
+      runtime,
+      createEntry(root, {
+        handlerDecl: { type: "command", command: "/opt/hooks/note", timeout: 600, async: true },
+      }),
+      {},
+      context.context,
+      pi.pi,
+      locations,
+      { spawnImpl: createSpawn(child.child, []), dispatchId: () => "dispatch-plain-fail" },
+    );
+    child.stdout.end(PLAIN_ANSWER);
+    await once(child.stdout, "end");
+
+    // act
+    child.emitExit(0);
+    child.emitClose();
+    await waitForPidTable(locations, []);
+
+    // assert
+    assert.deepStrictEqual(pi.messages, []);
+    assert.deepStrictEqual(context.notifications, []);
+  } finally {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await reapOrphans(runtime, locations, deadOrphanProbes());
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
 
 interface ChildHarness {
   readonly child: ChildProcess;
@@ -688,6 +792,7 @@ test(
         createEntry(root, {
           pluginId: "plugin-runtime-first",
           handlerDecl: {
+            asyncRewake: true,
             type: "command",
             command: "/opt/hooks/runtime-first",
             timeout: 600,
@@ -712,6 +817,7 @@ test(
         createEntry(root, {
           pluginId: "plugin-runtime-second",
           handlerDecl: {
+            asyncRewake: true,
             type: "command",
             command: "/opt/hooks/runtime-second",
             timeout: 600,
@@ -752,14 +858,14 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: "Second finding:\n\nlive second body",
+            content: "Second finding: live second body",
             display: false,
             details: {
               pluginId: "plugin-runtime-second",
               dispatchId: "dispatch-runtime-second",
             },
           },
-          options: { deliverAs: "nextTurn" },
+          options: { triggerTurn: true, deliverAs: "steer" },
         },
       ]);
       assert.deepStrictEqual(secondContext.notifications, [
@@ -919,14 +1025,14 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: "Review finding:\n\nstderr-one-stderr-two",
+            content: "Review finding: stderr-one-stderr-two",
             display: false,
             details: {
               pluginId: "plugin-lifecycle",
               dispatchId: "dispatch-lifecycle",
             },
           },
-          options: { deliverAs: "nextTurn" },
+          options: { triggerTurn: true, deliverAs: "steer" },
         },
       ]);
       assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
@@ -1619,7 +1725,7 @@ test(
 );
 
 test(
-  "notifies a summary but does not inject for an ordinary exit",
+  "shows no summary and sends nothing for an ordinary exit",
   { concurrency: false },
   async (t) => {
     // arrange
@@ -1648,7 +1754,8 @@ test(
 
       // assert
       assert.deepStrictEqual(pi.messages, []);
-      assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
+      assert.deepStrictEqual(context.notifications, []);
+      assert.strictEqual(runtime.isStopHookActive(), false);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
@@ -1675,7 +1782,12 @@ test("records a signalled exit as silent completion", { concurrency: false }, as
     await spawnAndRegister(
       runtime,
       createEntry(root, {
-        handlerDecl: { type: "command", command: "/opt/hooks/signal", timeout: 600 },
+        handlerDecl: {
+          asyncRewake: true,
+          type: "command",
+          command: "/opt/hooks/signal",
+          timeout: 600,
+        },
       }),
       {},
       context.context,
@@ -1704,7 +1816,7 @@ test("records a signalled exit as silent completion", { concurrency: false }, as
 });
 
 test(
-  "does not inject an exit two whose streams are empty or absent",
+  "wakes the model with the default texts when an exit two prints nothing",
   { concurrency: false },
   async (t) => {
     // arrange
@@ -1721,7 +1833,12 @@ test(
       await spawnAndRegister(
         runtime,
         createEntry(root, {
-          handlerDecl: { type: "command", command: "/opt/hooks/empty", timeout: 600 },
+          handlerDecl: {
+            asyncRewake: true,
+            type: "command",
+            command: "/opt/hooks/empty",
+            timeout: 600,
+          },
         }),
         {},
         context.context,
@@ -1739,8 +1856,21 @@ test(
       // assert
       assert.strictEqual(child.child.stdout, null);
       assert.strictEqual(child.child.stderr, null);
-      assert.deepStrictEqual(pi.messages, []);
-      assert.deepStrictEqual(context.notifications, []);
+      assert.deepStrictEqual(pi.messages, [
+        {
+          message: {
+            customType: "claude-hook-rewake",
+            content: 'Stop hook blocking error from command "PreToolUse": ',
+            display: false,
+            details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-empty-exit-two" },
+          },
+          options: { triggerTurn: true, deliverAs: "steer" },
+        },
+      ]);
+      assert.deepStrictEqual(context.notifications, [
+        { text: "Stop hook feedback", severity: "info" },
+      ]);
+      assert.strictEqual(runtime.isStopHookActive(), true);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
       shutdownInMemoryChildren(runtime);
@@ -1751,7 +1881,7 @@ test(
   },
 );
 
-test("injects ordered stdout on the busy follow-up lane", { concurrency: false }, async (t) => {
+test("sends ordered stdout after a declared empty message", { concurrency: false }, async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-stdout-busy-"));
@@ -1767,6 +1897,7 @@ test("injects ordered stdout on the busy follow-up lane", { concurrency: false }
       runtime,
       createEntry(root, {
         handlerDecl: {
+          asyncRewake: true,
           type: "command",
           command: "/opt/hooks/stdout",
           timeout: 600,
@@ -1795,14 +1926,16 @@ test("injects ordered stdout on the busy follow-up lane", { concurrency: false }
       {
         message: {
           customType: "claude-hook-rewake",
-          content: "stdout-first-stdout-second",
+          content: " stdout-first-stdout-second",
           display: false,
           details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-stdout-busy" },
         },
-        options: { deliverAs: "followUp" },
+        options: { triggerTurn: true, deliverAs: "steer" },
       },
     ]);
-    assert.deepStrictEqual(context.notifications, []);
+    assert.deepStrictEqual(context.notifications, [
+      { text: "Stop hook feedback", severity: "info" },
+    ]);
     assert.deepStrictEqual(timers.clearHandles, timers.handles);
   } finally {
     shutdownInMemoryChildren(runtime);
@@ -1848,11 +1981,11 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: "Review finding:\n\nstderr-one-stderr-two",
+            content: "Review finding: stderr-one-stderr-two",
             display: false,
             details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-interleaved" },
           },
-          options: { deliverAs: "nextTurn" },
+          options: { triggerTurn: true, deliverAs: "steer" },
         },
       ]);
       assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
@@ -1900,11 +2033,11 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: `Review finding:\n\n${largeStderr}`,
+            content: `Review finding: ${largeStderr}`,
             display: false,
             details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-large" },
           },
-          options: { deliverAs: "nextTurn" },
+          options: { triggerTurn: true, deliverAs: "steer" },
         },
       ]);
       assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
@@ -1937,6 +2070,7 @@ test(
         runtime,
         createEntry(root, {
           handlerDecl: {
+            asyncRewake: true,
             type: "command",
             command: "/opt/hooks/early-exit",
             timeout: 600,
@@ -1971,17 +2105,19 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: "available-before-exit-after-exit",
+            content: " available-before-exit-after-exit",
             display: false,
             details: {
               pluginId: "plugin-lifecycle",
               dispatchId: "dispatch-exit-before-close",
             },
           },
-          options: { deliverAs: "nextTurn" },
+          options: { triggerTurn: true, deliverAs: "steer" },
         },
       ]);
-      assert.deepStrictEqual(context.notifications, []);
+      assert.deepStrictEqual(context.notifications, [
+        { text: "Stop hook feedback", severity: "info" },
+      ]);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
       shutdownInMemoryChildren(runtime);
@@ -2057,6 +2193,7 @@ test(
         runtime,
         createEntry(root, {
           handlerDecl: {
+            asyncRewake: true,
             type: "command",
             command: "/opt/hooks/send-failure",
             timeout: 600,
@@ -2080,7 +2217,9 @@ test(
 
       // assert
       assert.deepStrictEqual(pi.messages, []);
-      assert.deepStrictEqual(context.notifications, []);
+      assert.deepStrictEqual(context.notifications, [
+        { text: "Stop hook feedback", severity: "info" },
+      ]);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
@@ -2158,7 +2297,12 @@ test(
         runtime,
         createEntry(root, {
           pluginId: "plugin-first",
-          handlerDecl: { type: "command", command: "/opt/hooks/first", timeout: 600 },
+          handlerDecl: {
+            asyncRewake: true,
+            type: "command",
+            command: "/opt/hooks/first",
+            timeout: 600,
+          },
         }),
         {},
         context.context,
@@ -2189,7 +2333,12 @@ test(
         runtime,
         createEntry(root, {
           pluginId: "plugin-second",
-          handlerDecl: { type: "command", command: "/opt/hooks/second", timeout: 600 },
+          handlerDecl: {
+            asyncRewake: true,
+            type: "command",
+            command: "/opt/hooks/second",
+            timeout: 600,
+          },
         }),
         {},
         context.context,
@@ -2294,7 +2443,12 @@ test(
         runtime,
         createEntry(root, {
           pluginId: "plugin-failing-first",
-          handlerDecl: { type: "command", command: "/opt/hooks/failing-first", timeout: 600 },
+          handlerDecl: {
+            asyncRewake: true,
+            type: "command",
+            command: "/opt/hooks/failing-first",
+            timeout: 600,
+          },
         }),
         {},
         context.context,
@@ -2325,7 +2479,12 @@ test(
         runtime,
         createEntry(root, {
           pluginId: "plugin-surviving-second",
-          handlerDecl: { type: "command", command: "/opt/hooks/surviving-second", timeout: 600 },
+          handlerDecl: {
+            asyncRewake: true,
+            type: "command",
+            command: "/opt/hooks/surviving-second",
+            timeout: 600,
+          },
         }),
         {},
         context.context,
@@ -2377,7 +2536,7 @@ test(
         },
       ]);
       assert.deepStrictEqual(terminalWrite.entries, secondWrite.entries);
-      assert.deepStrictEqual(await readPidTable(locations), []);
+      assert.deepStrictEqual(await readPidTable(locations), secondWrite.entries);
       assert.strictEqual(persistence.writesStarted, 3);
       assert.strictEqual(persistence.maxActiveWrites, 1);
       assert.deepStrictEqual(unhandledRejections, []);
@@ -2425,7 +2584,12 @@ test(
         runtime,
         createEntry(root, {
           pluginId: "plugin-first",
-          handlerDecl: { type: "command", command: "/opt/hooks/first", timeout: 600 },
+          handlerDecl: {
+            asyncRewake: true,
+            type: "command",
+            command: "/opt/hooks/first",
+            timeout: 600,
+          },
         }),
         {},
         context.context,
@@ -2437,7 +2601,12 @@ test(
         runtime,
         createEntry(root, {
           pluginId: "plugin-second",
-          handlerDecl: { type: "command", command: "/opt/hooks/second", timeout: 600 },
+          handlerDecl: {
+            asyncRewake: true,
+            type: "command",
+            command: "/opt/hooks/second",
+            timeout: 600,
+          },
         }),
         {},
         context.context,
@@ -2527,7 +2696,12 @@ test(
           scope: "user",
           marketplace: "catalog-user",
           pluginId: "plugin-user",
-          handlerDecl: { type: "command", command: "/opt/hooks/user", timeout: 600 },
+          handlerDecl: {
+            asyncRewake: true,
+            type: "command",
+            command: "/opt/hooks/user",
+            timeout: 600,
+          },
         }),
         {},
         userContext.context,
@@ -2541,7 +2715,12 @@ test(
           scope: "project",
           marketplace: "catalog-project",
           pluginId: "plugin-project",
-          handlerDecl: { type: "command", command: "/opt/hooks/project", timeout: 600 },
+          handlerDecl: {
+            asyncRewake: true,
+            type: "command",
+            command: "/opt/hooks/project",
+            timeout: 600,
+          },
         }),
         {},
         projectContext.context,

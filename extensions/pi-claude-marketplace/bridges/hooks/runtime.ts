@@ -95,6 +95,13 @@ export interface HooksRuntime {
   readonly recordStopReentry: () => StopReentryTransition;
   readonly recordStopNonReentry: () => void;
   readonly recordUserInput: () => void;
+  /**
+   * D-BG-203: marks a turn an async rewake woke, as Claude Code queues the
+   * rewake with `stopHookActive: true`, so the Stop hooks that end it see
+   * `stop_hook_active: true`. It clears on the user's next input, as a Stop
+   * re-entry does, and does not count toward the STOP-07 re-entry cap.
+   */
+  readonly recordRewake: () => void;
   readonly registerChild: (entry: HooksRuntimeChildEntry) => void;
   readonly takeChild: (dispatchId: string) => HooksRuntimeChildEntry | undefined;
   readonly pidTableEntries: (loc: ScopedLocations) => readonly HooksRuntimePidEntry[];
@@ -274,6 +281,10 @@ export function createHooksRuntime(): HooksRuntime {
     recordUserInput(): void {
       stopHookActive = false;
       finishStopSequence();
+    },
+
+    recordRewake(): void {
+      stopHookActive = true;
     },
 
     registerChild(entry: HooksRuntimeChildEntry): void {

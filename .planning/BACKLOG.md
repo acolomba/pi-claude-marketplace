@@ -5127,3 +5127,35 @@ Noted 2026-11-08 (behavioral-gaps Phase 8, P8-DC-05). `shared/redact-absolute-pa
 ## AUTOAPPLYDEFAULTOFF-01: autoapply rewrites the config for a `defaultEnabled: false` plugin
 
 Noted 2026-11-08 (behavioral-gaps Phase 8, P8-DC-08). With autoapply on, a load stamps `enabled: false` into `claude-plugins.json` for a declared `defaultEnabled: false` plugin and writes the file again in its own format. It is the one load-time config write once the file exists (D-102-02, DFEN-04). Owner: the install path. Candidate direction: decide whether that stamp should wait for an explicit command.
+
+## ASYNCPRINT-01: Claude Code runs an `asyncRewake` hook synchronously in a non-interactive session without streaming input (`claude -p`)
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). Claude Code runs an `asyncRewake` hook synchronously in a non-interactive session without streaming input (`claude -p`); Pi's print and json modes still run it in the background, and no harness runs a prompt there.
+
+## ASYNCSUMJSON-01: Claude Code takes a `rewakeSummary` from a JSON line on stdout for a plugin of an official marketplace
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). Claude Code takes a `rewakeSummary` from a JSON line on stdout for a plugin of an official marketplace; the bridge reads only the declared field.
+
+## ASYNCMISSING-01: Claude Code reports an exit 2 from a hook whose script cannot be opened with its own message, once
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). Claude Code reports an exit 2 from a hook whose script cannot be opened with its own message, once; the bridge wakes the model with the interpreter's output.
+
+## ASYNCPIDS-01: two live Pi processes in one scope share its PID table
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). two live Pi processes in one scope share its PID table; one's start reaps the other's live hook processes, and the last writer's rows win (user scope before this phase; now the project scope too).
+
+## ASYNCMIDTURN-01: Claude Code may attach a finished plain async hook's answer at a tool boundary of a running turn
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). Claude Code may attach a finished plain async hook's answer at a tool boundary of a running turn; the bridge waits for the next prompt (Pi has no lane that does not continue the turn).
+
+## ASYNCSANITIZE-01: Claude Code collapses whitespace and caps the length of the summary, redacts some keys, and escapes a trailing `<` in the body
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). Claude Code collapses whitespace and caps the length of the summary, redacts some keys, and escapes a trailing `<` in the body; the bridge sends both as written.
+
+## ASYNCRUNTIME-01: the `{"async": true}` first stdout line that turns a synchronous hook asynchronous at run time is not supported
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). the `{"async": true}` first stdout line that turns a synchronous hook asynchronous at run time is not supported.
+
+## ASYNCNEWSESSION-01: a new session in a live Pi now stops the earlier session's project-scope async hooks, as the user-scope factory reap already did
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). a new session in a live Pi now stops the earlier session's project-scope async hooks, as the user-scope factory reap already did; Claude Code leaves them running. Keep, or reap only at load?

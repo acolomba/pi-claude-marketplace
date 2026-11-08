@@ -162,7 +162,9 @@ export async function dispatchHookExec(
   deps: SpawnDeps = {},
 ): Promise<HookExecResult> {
   const spawnImpl = deps.spawnImpl ?? spawn;
-  // HOOK-06 / EXEC-05 / D-62-01: asyncRewake delegation. Strict `=== true`
+  // HOOK-06 / EXEC-05 / D-62-01 / D-BG-205: background delegation of an
+  // `asyncRewake` or a plain `async` hook, which Claude Code runs in the
+  // background, so its exit code and decisions decide nothing. Strict `=== true`
   // discriminator (HOOK-03 lenient stance: any non-`true` value -- including
   // a string `"yes"` -- flows to the sync EXEC-01..04 path). The fold
   // cannot distinguish a sync `{kind:"noop"}` from this async-spawned
@@ -177,7 +179,7 @@ export async function dispatchHookExec(
   // `dispatch.ts` always thread the live `ExtensionAPI` through. When
   // the async arm fires without `pi`, the registry call is skipped and
   // the noop arm logged -- never throw.
-  if (entry.handlerDecl.asyncRewake === true) {
+  if (entry.handlerDecl.asyncRewake === true || entry.handlerDecl.async === true) {
     if (pi === undefined) {
       hookDebugLog(
         `async-rewake: pi missing on async dispatch (${entry.pluginId}/${entry.claudeEvent}); skipping spawn`,

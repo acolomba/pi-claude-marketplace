@@ -416,3 +416,36 @@ Full text: `.planning/phases/04-posttoolusefailure-hooks/DUBIOUS-CHOICES.md`.
 - **P4-DC-22 (Low, open).** Code review and verification ran inline, scoped to the phase's own commits.
 - **P4-DC-23 (Low, open).** The phase gate reran 8 unrelated adapter scenarios.
 - **P4-DC-24 (Low, open).** STATE.md was left at the milestone's version.
+
+## Phase 2: Async Hooks
+
+Full text: `.planning/phases/02-async-hooks/DUBIOUS-CHOICES.md`.
+
+- **P2-DC-01 (High, open).** ASYNC-02 reworded to upstream.
+- **P2-DC-02 (High, open).** An exit 2 wakes the model.
+- **P2-DC-03 (Medium, open).** Claude Code's default texts.
+- **P2-DC-04 (Medium, open).** A woken turn sets `stop_hook_active`.
+- **P2-DC-05 (Medium, open).** Plain async context waits for the next prompt.
+- **P2-DC-06 (Medium, open).** Stop and StopFailure async hooks run in the background.
+- **P2-DC-07 (Medium, open).** Project reap scope.
+- **P2-DC-08 (Low, open).** Deferred parity items.
+- **P2-DC-09 (Low, open).** Unpaired tests updated.
+- **P2-DC-10 (Medium, open).** Discuss-step facts corrected.
+- **P2-DC-11 (Medium, open).** New session stops project-scope async hooks.
+- **P2-DC-12 (Medium, open).** One lane call.
+- **P2-DC-13 (Low, open).** Pattern mapping skipped.
+- **P2-DC-14 (Low, open).** json-output wording.
+- **P2-DC-15 (Medium, open).** Tasks above the 5-file limit.
+- **P2-DC-16 (Medium, open).** Stop wake-once wait.
+- **P2-DC-17 (Medium, open).** Summary seed gains a second When.
+- **P2-DC-18 (Low, open).** Plan details.
+- **P2-DC-19 (Medium, open).** Plan check done inline, and the rest of the phase run inline.
+- **P2-DC-20 (Low, open).** Planner stalled once.
+- **P2-DC-21 (Low, open).** Plan tasks merged into commits.
+- **P2-DC-22 (Low, open).** Prompt hooks rerun in later prompts.
+- **P2-DC-23 (Low, open).** Killed plain async hooks still answer.
+- **P2-DC-24 (Medium, open).** Reap tests with an impossible pid.
+- **P2-DC-25 (Low, open).** Docs table re-padded.
+- **P2-DC-26 (Medium, open).** Woken-turn Stop flag survives a failed send.
+- **P2-DC-27 (Low, open).** Flaky unowned scenarios rerun.
+- **P2-DC-28 (Low, open).** Summary seed titles renamed.

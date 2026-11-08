@@ -340,7 +340,7 @@ the parent can resolve a conflicting merge.
   more), the CHANGELOG aggregate, and `/gsd-audit-milestone`.
 
 - [x] **Phase 1: Foundation** - Every stand-in, fixture writer, driver, and shared step the streams need, each proven by a seed, then every shared file frozen and the child-session brief written (completed 2026-11-08)
-- [ ] **Phase 2: Async Hooks** - `async` and `asyncRewake` hooks run in the background, wake the model on exit 2, never block their event, and stop on `/reload`
+- [x] **Phase 2: Async Hooks** - `async` and `asyncRewake` hooks run in the background, wake the model on exit 2, never block their event, and stop on `/reload` (completed 2026-11-08)
 - [x] **Phase 3: StopFailure Hooks** - `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload and error-type matchers (completed 2026-11-08)
 - [x] **Phase 4: PostToolUseFailure Hooks** - `PostToolUseFailure` hooks run on failed tool calls with Claude Code's payload and tool matchers, and `PostToolUse` hooks do not (completed 2026-11-08)
 - [x] **Phase 5: PostCompact Hooks** - `PostCompact` hooks run after manual and automatic compactions with the trigger, and matchers select by trigger (completed 2026-11-08)
@@ -421,7 +421,7 @@ Plans:
 
 ### Phase 2: Async Hooks
 
-**Goal**: A plugin's async hooks run in the background as Claude Code runs them: they never hold up the event they fired on, an `asyncRewake` hook that exits 2 wakes the model with its message, any other exit reaches only the user, and no hook process outlives a reload.
+**Goal**: A plugin's async hooks run in the background as Claude Code runs them: they never hold up the event they fired on, an `asyncRewake` hook that exits 2 wakes the model with its message and shows the user its summary, any other exit reaches neither, and no hook process outlives a reload.
 **Depends on**: Phase 1
 **Runs**: child session, branch `features/behavioral-gaps-phase-2`; merges last among the hook phases
 **Requirements**: ASYNC-01, ASYNC-02, ASYNC-03, ASYNC-04, ASYNC-05
@@ -429,12 +429,25 @@ Plans:
 **Research flag**: yes. A check of the async hook paths in the Claude Code binary.
 **Success Criteria** (what must be TRUE):
   1. An `asyncRewake` hook that exits 2 puts its `rewakeMessage` and its output into the model's context, and the scripted model's call log shows them on the next turn (ASYNC-01).
-  2. An `asyncRewake` hook that exits with any other code adds nothing to the model's context, and the user sees its `rewakeSummary` (ASYNC-02).
+  2. An `asyncRewake` hook that exits with any code other than 2 adds nothing to the model's context and shows the user nothing; one that exits 2 shows the user its `rewakeSummary`, or `Stop hook feedback` when it declares none (ASYNC-02, D-BG-204: Claude Code 2.1.319 shows the summary only on exit 2).
   3. A slow async hook on `PreToolUse` or on a prompt does not block or delay its event: the tool result and the reply arrive while the hook is still running (ASYNC-03).
   4. After `/reload`, no async hook process from the earlier load is still running, and the first load after a Pi process died stops the hook processes that process left (ASYNC-04). This holds for a project-scope install too. Today it does not: `index.ts` registers the hooks bridge with `{ cwd: homedir() }`, so `reapOrphans` (`bridges/hooks/event-router.ts`) reads the home directory's project PID table, and the project hydrate (`hydrateProjectScopeForCwdWith`) does not reap. The Phase 1 crash seed in `hook/async.feature` therefore installs in the user scope; this phase fixes the reap, or records a licensed divergence, and adds the project-scope scenario. Releasing a hook that declares no rewake summary, or one a terminal Pi started, needs new steps in `hook/async.steps.ts`.
   5. A hook with plain `async: true` behaves as Claude Code's does, or a scenario pins the divergence and names its license (ASYNC-05).
 
-**Plans**: TBD
+**Plans**: 3/3 plans complete
+
+Plans:
+**Wave 1**
+- [x] 02-01-PLAN.md — An exit-2 async rewake wakes the model with Claude Code's text, the summary shows only on exit 2, and the woken turn sets stop_hook_active; the two seeds rewritten and two scenarios added
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 02-02-PLAN.md — Plain async hooks run in the background and give their JSON answer to the model's next call; async Stop hooks run in the background and wake the model once
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 02-03-PLAN.md — The project hydrate reaps a project's leftover hook processes on reload and after a crash; the PreToolUse and steer scenarios; the async docs rows and the phase's parent lines
+
+**Cross-cutting constraints:** <!-- gsd:generated -->
+- Every scenario this plan adds carries no implementation tag, waits only on Pi records, lifecycle lines, and process exits, and fails without the behavior it names, with the red proof in the SUMMARY (D-BG-208).
 
 ### Phase 3: StopFailure Hooks
 
@@ -742,7 +755,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Foundation | 8/8 | Complete    | 2026-11-08 |
-| 2. Async Hooks | 0/TBD | Not started | - |
+| 2. Async Hooks | 3/3 | Complete    | 2026-11-08 |
 | 3. StopFailure Hooks | 3/3 | Complete    | 2026-11-08 |
 | 4. PostToolUseFailure Hooks | 3/3 | Complete    | 2026-11-08 |
 | 5. PostCompact Hooks | 2/2 | Complete | 2026-11-08 |

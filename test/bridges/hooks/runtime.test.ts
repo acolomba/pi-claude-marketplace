@@ -393,6 +393,31 @@ test("applies settle registration, input, and bounded reentry transitions", () =
   assert.strictEqual(runtime.isStopHookActive(), false);
 });
 
+test("marks a woken turn for the Stop hooks without counting toward the cap", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const settled = createHooksRuntime();
+
+  // act
+  runtime.recordRewake();
+  const activeAfterRewake = runtime.isStopHookActive();
+  const allowedTransitions = Array.from({ length: 7 }, () => runtime.recordStopReentry());
+  const cappedTransition = runtime.recordStopReentry();
+  runtime.recordUserInput();
+  settled.recordRewake();
+  settled.prepareSettleForRegistration();
+
+  // assert
+  assert.strictEqual(activeAfterRewake, true);
+  assert.deepStrictEqual(
+    allowedTransitions,
+    Array.from({ length: 7 }, () => ({ reenter: true, notifyCap: false })),
+  );
+  assert.deepStrictEqual(cappedTransition, { reenter: false, notifyCap: true });
+  assert.strictEqual(runtime.isStopHookActive(), false);
+  assert.strictEqual(settled.isStopHookActive(), false);
+});
+
 test("owns child removal, PID snapshots, and shutdown per runtime", () => {
   // arrange
   const firstRuntime = createHooksRuntime();
