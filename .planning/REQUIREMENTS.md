@@ -59,8 +59,8 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 - [ ] **BOOT-02**: `bootstrap` while another process holds the user scope's state lock fails as lock held and records nothing.
 - [ ] **MLOCK-01**: `marketplace autoupdate` and `noautoupdate` while another process holds the state lock fail as lock held and change nothing.
 - [ ] **MLOCK-02**: A lock file left by a process that has died does not block the marketplace verbs, as `proper-lockfile`'s stale handling defines.
-- [ ] **CHILD-01**: A load in a pi-subagents background child, with `autoapply` on and a pending change, installs, uninstalls, and updates nothing.
-- [ ] **CHILD-02**: A load in a background child moves no legacy `mcp.json` entry and rewrites no agent grant, yet still loads the installed components.
+- [x] **CHILD-01**: A load in a pi-subagents background child, with `autoapply` on and a pending change, installs, uninstalls, and updates nothing.
+- [x] **CHILD-02**: A load in a background child moves no legacy `mcp.json` entry and rewrites no agent grant, yet still loads the installed components.
 
 ## Future Requirements
 
@@ -110,8 +110,8 @@ None.
 | BOOT-02 | Phase 14 | Pending |
 | MLOCK-01 | Phase 15 | Pending |
 | MLOCK-02 | Phase 15 | Pending |
-| CHILD-01 | Phase 16 | Pending |
-| CHILD-02 | Phase 16 | Pending |
+| CHILD-01 | Phase 16 | Complete |
+| CHILD-02 | Phase 16 | Complete |
 
 **Coverage:**
 - Milestone requirements: 34 total
