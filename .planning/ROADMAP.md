@@ -348,7 +348,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched
 - [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
 - [ ] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay
-- [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
+- [x] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing (completed 2026-11-08)
 - [ ] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass
 - [ ] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled
 - [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
@@ -560,7 +560,7 @@ Plans:
   3. A call that names an unknown marketplace or scope returns an error result, which the model reads on its next request (TOOL-03).
   4. No call changes `state.json`, a config file, or anything installed (TOOL-03).
 
-**Plans**: 2 plans
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -678,7 +678,7 @@ Plans:
 | 7. State Schema Migration | 0/TBD | Not started | - |
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
 | 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
-| 10. Model-Facing Tools | 0/TBD | Not started | - |
+| 10. Model-Facing Tools | 2/2 | Complete    | 2026-11-08 |
 | 11. Device Flow Sign-In | 0/TBD | Not started | - |
 | 12. Browse Picker | 0/TBD | Not started | - |
 | 13. Prune | 0/TBD | Not started | - |

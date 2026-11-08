@@ -87,6 +87,6 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 
 1. `docs/competitive-analysis/pi-plugins.md:434`: `pi_claude_marketplace_list` takes an optional `scope` parameter (`user` or `project`), not "no parameters" (D-BG-1002).
 2. `CHANGELOG.md` under `## [Unreleased]`, one reader-facing bullet: the model-facing tools now return what the model asks for. `pi_claude_marketplace_list` takes an optional `scope`. `pi_claude_marketplace_plugin_list` reports a marketplace that the asked scopes do not record as a failed tool result. Its `unavailable` filter also returns installed plugins that are disabled. A marketplace with no matching plugin reads `(no plugins)`.
-3. `.planning/PROJECT.md` Key Decisions: one row each for D-BG-1001 to D-BG-1009, in the form of the D-BG rows, with title and decision from `10-CONTEXT.md`, each marked pending user review.
+3. `.planning/PROJECT.md` Key Decisions: one row each for D-BG-1001 to D-BG-1010, in the form of the D-BG rows, with title and decision from `10-CONTEXT.md`, each marked pending user review.
 4. `.planning/ROADMAP.md` "Carried Forward": the open json-output `09/` D-03 choice closes under D-BG-1001. Pi 1.5.0 delivers a returned `isError: true` to the model as a failed tool result. P10-DC-01 keeps the choice open for the user's review.
 5. No unowned feature file changed.
