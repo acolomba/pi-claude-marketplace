@@ -467,7 +467,17 @@ Plans:
   3. No `PostToolUse` hook runs on a failed call, and a successful call runs no `PostToolUseFailure` hook (TFAIL-01).
   4. What a `PostToolUseFailure` hook returns (additional context, a system message, an exit 2) reaches the model and the user as Claude Code delivers it (TFAIL-01).
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md — A cancelled tool call runs no PostToolUseFailure hook (D-BG-402), and the payload gains `is_interrupt: false` (D-BG-401, D-BG-403)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-02-PLAN.md — A PostToolUseFailure hook's `updatedToolOutput` is ignored (D-BG-405), and the failed-read payload, matcher, split, and output scenarios
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-03-PLAN.md — A failed pi-mcp-adapter call runs PostToolUseFailure (D-BG-404), the failed plugin MCP call pair, and the phase's parent lines
 
 ### Phase 5: PostCompact Hooks
 
