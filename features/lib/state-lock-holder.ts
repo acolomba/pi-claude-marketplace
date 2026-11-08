@@ -1,19 +1,20 @@
 /**
- * @fileoverview A stand-in for another process that holds a scope's state lock.
+ * @fileoverview Stand-ins for another process that holds a scope's state
+ * lock, and for one that died holding it.
  *
  * The product takes a scope's state lock with proper-lockfile before it
  * changes the scope (D-06). This module takes the same lock with the same
  * options in a child process, as a second Pi would. A step imports it, and
  * it spawns Node on its own file, so one module is both the parent side and
- * the child. The child keeps the lock fresh until its stdin closes. A lock
- * directory made by hand would not do: its mtime goes stale, so the lock
- * reads as free, ten seconds later.
+ * the child. A lock directory made by hand goes stale ten seconds after its
+ * mtime, so the child keeps a live lock fresh until its stdin closes, and
+ * `leaveStaleStateLock` writes a stale one on purpose (D-BG-11).
  */
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, stat, utimes } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
@@ -28,6 +29,10 @@ const READY_TIMEOUT_MS = 10_000;
 // The child releases the lock and exits within milliseconds of losing its
 // stdin; a child still running after this is hung.
 const EXIT_GRACE_MS = 5_000;
+
+// The age of a lock a dead holder left: six times the product's stale window,
+// so the lock never sits on the boundary of proper-lockfile's comparison.
+const STALE_LOCK_AGE_MS = 60_000;
 
 const TIMED_OUT = Symbol("timed out");
 
@@ -81,6 +86,26 @@ export async function holdStateLock(
     assert.deepStrictEqual(exited, [0, null], "the state lock holder did not exit cleanly");
     await assert.rejects(stat(lockFile), { code: "ENOENT" }, `${lockFile} is still held`);
   };
+}
+
+/**
+ * Leaves the state lock `lockFile` of the extension root `extensionRoot` as
+ * a holder that died leaves it: an empty lock directory whose mtime lies 60
+ * seconds in the past, far past the product's 10-second stale window. So
+ * proper-lockfile reads it as free, removes it with `rmdir`, and takes the
+ * lock on its single try (D-BG-11). The directory stays empty, because the
+ * `rmdir` of a non-empty one fails, and the product's takeover with it.
+ */
+export async function leaveStaleStateLock(extensionRoot: string, lockFile: string): Promise<void> {
+  await mkdir(extensionRoot, { recursive: true });
+  await mkdir(lockFile);
+  const past = new Date(Date.now() - STALE_LOCK_AGE_MS);
+  await utimes(lockFile, past, past);
+  assert.strictEqual(
+    await isStateLockHeld(extensionRoot, lockFile),
+    false,
+    `${lockFile} still reads as held`,
+  );
 }
 
 /** Whether a fresh lock holds the state lock `lockFile` of the extension root `extensionRoot`. */

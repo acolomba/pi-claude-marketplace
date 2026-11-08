@@ -1,8 +1,8 @@
 Feature: Marketplace state lock
 
-  A marketplace command that changes a scope fails and changes nothing while another
-  process holds the scope's state lock. A helper process holds the lock as a second Pi
-  would, and local marketplaces and a loopback https git host stand in for published ones.
+  A marketplace command that changes a scope fails and changes nothing while another process
+  holds the scope's state lock, and takes over a lock that a dead process left. A helper process
+  holds the lock as a second Pi would, and local marketplaces and a git host stand in for published ones.
 
   Scenario: Removing a marketplace from the project scope while another process holds its state lock fails as lock held
     Given the marketplace "fixtures" is published as a dir source
@@ -158,3 +158,21 @@ Feature: Marketplace state lock
       | scope   | scope root        | source kind | source     |
       | project | {project dir}/.pi | github      | acme/tools |
       | user    | {agent dir}       | github      | acme/tools |
+
+  Scenario: Removing a marketplace while a process that died left the state lock of its scope removes it
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given a process that died left the state lock of the project scope
+    When the user runs "/claude:plugin marketplace remove fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name     | scope   | status  |
+      | fixtures | project | removed |
+    Then the "claude-plugins.json" file of the project scope declares no marketplaces
+    Then the project scope holds no marketplace record
