@@ -38,6 +38,12 @@ import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 const COMMAND_DEFAULT_SECONDS = 600;
 
 /**
+ * Claude Code's SessionEnd budget, in seconds. A plugin hook's own `timeout`
+ * does not raise it (D-BG-604).
+ */
+const SESSION_END_BUDGET_SECONDS = 1.5;
+
+/**
  * The per-event defaults Claude Code applies to a TURN-BLOCKING handler.
  *
  * Total rather than `Partial` on purpose: a new `BucketAEvent` is a compile
@@ -47,12 +53,13 @@ const COMMAND_DEFAULT_SECONDS = 600;
  * `domain/components/hook-events.ts`.
  *
  * `UserPromptSubmit` is an exact match for upstream's 30 s. `SessionEnd` takes
- * upstream's 1.5 s figure, and approximates it twice over -- upstream shares
- * that budget across every SessionEnd hook, and caps a longer declared
- * `timeout` at 60 s, while the bridge applies it per hook and applies no
- * upstream-style ceiling of its own (`installTimerLadder` still clamps to what
- * a timer can represent). Exact when a session declares one such hook; far closer than
- * 600 s when it declares several. Both deviations are recorded as HKTO-01.
+ * upstream's 1.5 s budget, and a declared turn-blocking value above it is
+ * capped at it, because a plugin hook's `timeout` does not raise Claude Code's
+ * budget (D-BG-604). The matching hooks of one event start together
+ * (D-CF5-09), so they share the 1.5 s. Two upstream mechanisms are not built
+ * (D-BG-605): the user's override variable is not read, and no bounded wait
+ * ends the session early, so a hook that ignores SIGTERM still holds it for
+ * the ladder's 5 s kill grace.
  *
  * Upstream additionally lowers `MessageDisplay` to 10 s; Pi exposes no
  * render-time hook on assistant messages, so that event is not bridged and has
@@ -66,10 +73,31 @@ const BLOCKING_EVENT_DEFAULT_SECONDS: Record<BucketAEvent, number | undefined> =
   PostToolUseFailure: undefined,
   PreCompact: undefined,
   PostCompact: undefined,
-  SessionEnd: 1.5,
+  SessionEnd: SESSION_END_BUDGET_SECONDS,
   Stop: undefined,
   StopFailure: undefined,
 };
+
+/**
+ * A declared turn-blocking SessionEnd value above the budget, capped at it
+ * with a debug line (D-BG-604); any other value as declared.
+ */
+function capSessionEndTimeout(
+  seconds: number,
+  event: BucketAEvent,
+  pluginId: string,
+  lane: "blocking" | "background",
+): number {
+  if (lane !== "blocking" || event !== "SessionEnd" || seconds <= SESSION_END_BUDGET_SECONDS) {
+    return seconds;
+  }
+
+  hookDebugLog(
+    `resolveTimeoutSeconds: timeout ${seconds} on ${pluginId}/${event} (${lane}) ` +
+      `exceeds the ${SESSION_END_BUDGET_SECONDS}s SessionEnd budget; using the budget`,
+  );
+  return SESSION_END_BUDGET_SECONDS;
+}
 
 /**
  * Resolve a hook handler's timeout, in SECONDS.
@@ -93,9 +121,10 @@ const BLOCKING_EVENT_DEFAULT_SECONDS: Record<BucketAEvent, number | undefined> =
  * handler with a bad value repeats the line on every dispatch it survives;
  * that is the site holding the plugin, event, and lane needed to attribute it.
  *
- * The upper bound deliberately lives with the timer, not here:
+ * The general upper bound lives with the timer, not here:
  * `installTimerLadder` clamps to what `setTimeout` can represent, which is a
- * property of the timer API rather than of the config field.
+ * property of the timer API rather than of the config field. The SessionEnd
+ * ceiling is different: it is upstream's budget, so it is applied here.
  */
 export function resolveTimeoutSeconds(opts: {
   readonly raw: unknown;
@@ -105,7 +134,7 @@ export function resolveTimeoutSeconds(opts: {
 }): number {
   const { raw, event, pluginId, lane } = opts;
   if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
-    return raw;
+    return capSessionEndTimeout(raw, event, pluginId, lane);
   }
 
   const fallback =
