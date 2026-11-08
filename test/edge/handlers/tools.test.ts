@@ -417,7 +417,7 @@ function registerToolUnderTest(
 }
 
 describe("registerListMarketplacesTool", () => {
-  test("registers pi_claude_marketplace_list with an empty parameter schema", async (t) => {
+  test("registers pi_claude_marketplace_list with its scope parameter", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "list-registration");
     const { pi, registrations, verifyBoundary } = createToolBoundary();
@@ -427,7 +427,19 @@ describe("registerListMarketplacesTool", () => {
       description: "List configured Claude plugin marketplaces.",
       promptSnippet:
         "Use pi_claude_marketplace_list to inspect configured Claude plugin marketplaces.",
-      parameters: { type: "object", properties: {} },
+      parameters: {
+        type: "object",
+        properties: {
+          scope: {
+            anyOf: [
+              { type: "string", const: "user" },
+              { type: "string", const: "project" },
+            ],
+            description:
+              'Scope whose marketplaces to list: "user" or "project". Default: both scopes.',
+          },
+        },
+      },
     };
 
     // act
@@ -513,6 +525,95 @@ describe("registerListMarketplacesTool", () => {
 
     // act
     const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.strictEqual(scope.networkCallCount(), 0);
+    verifyBoundary();
+  });
+
+  for (const { requestedScope, marketplace } of [
+    { requestedScope: "project", marketplace: "proj-mp" },
+    { requestedScope: "user", marketplace: "user-mp" },
+  ] as const satisfies readonly { requestedScope: Scope; marketplace: string }[]) {
+    test(`narrows the list to the ${requestedScope} scope when the scope parameter is set`, async (t) => {
+      // arrange
+      const scope = await createHermeticScope(t, `list-scope-${requestedScope}`);
+      await seedScope(scope.cwd, "project", [
+        {
+          name: "proj-mp",
+          plugins: [
+            { name: "alpha", manifestVersion: "1.0.0", installed: { version: "1.0.0" } },
+            { name: "bravo", manifestVersion: "1.0.0" },
+          ],
+        },
+      ]);
+      await seedScope(scope.cwd, "user", [
+        {
+          name: "user-mp",
+          plugins: [
+            { name: "charlie", manifestVersion: "1.0.0", installed: { version: "1.0.0" } },
+            { name: "delta", manifestVersion: "1.0.0" },
+          ],
+        },
+      ]);
+      const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+        registerListMarketplacesTool,
+        { value: scope.cwd, reads: 1 },
+        1,
+      );
+      const expectedResult = {
+        content: [
+          {
+            type: "text",
+            text: `[${requestedScope}] ${marketplace} -- 1 plugin(s) -- ${marketplaceRootIn(scope.cwd, marketplace)}`,
+          },
+        ],
+        details: { marketplaces: [{ name: marketplace, scope: requestedScope, plugins: [] }] },
+      };
+
+      // act
+      const listed = await registration.execute(
+        "call-1",
+        { scope: requestedScope },
+        undefined,
+        undefined,
+        ctx,
+      );
+
+      // assert
+      assert.deepStrictEqual(listed, expectedResult);
+      assert.strictEqual(scope.networkCallCount(), 0);
+      verifyBoundary();
+    });
+  }
+
+  test("reports no marketplaces configured when the named scope holds no record", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "list-empty-scope");
+    await seedScope(scope.cwd, "project", [
+      {
+        name: "proj-mp",
+        plugins: [{ name: "alpha", manifestVersion: "1.0.0", installed: { version: "1.0.0" } }],
+      },
+    ]);
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListMarketplacesTool,
+      { value: scope.cwd, reads: 1 },
+    );
+    const expectedResult = {
+      content: [{ type: "text", text: "No marketplaces configured." }],
+      details: { marketplaces: [] },
+    };
+
+    // act
+    const listed = await registration.execute(
+      "call-1",
+      { scope: "user" },
+      undefined,
+      undefined,
+      ctx,
+    );
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);

@@ -2,10 +2,12 @@
 //
 // D-02: two read-only LLM tools exposed via `pi.registerTool`.
 //
-//   1. pi_claude_marketplace_list -- empty params; returns one line per
+//   1. pi_claude_marketplace_list -- one optional `scope` param (D-BG-1002);
+//      with no scope it lists both scopes, project first. Returns one line per
 //      marketplace in `[<scope>] <name> -- <N> plugin(s) -- <source.logical>`
-//      format, plus `details.marketplaces`, the wire marketplace blocks of the
-//      blocks `/claude:plugin marketplace list` emits (LLMT-01).
+//      format, where N counts the installed plugins (D-09, D-BG-1005), plus
+//      `details.marketplaces`, the wire marketplace blocks of the blocks
+//      `/claude:plugin marketplace list` emits (LLMT-01).
 //
 //   2. pi_claude_marketplace_plugin_list -- D-02 extended params: optional
 //      marketplace + scope + installed/available/unavailable filter booleans
@@ -67,7 +69,13 @@ import type { CascadeNotificationMessage } from "../../shared/notification-types
 
 // ─── LLM tool parameter schemas (TypeBox) ─────────────────────────────────
 
-const LIST_MARKETPLACES_PARAMS = Type.Object({});
+const LIST_MARKETPLACES_PARAMS = Type.Object({
+  scope: Type.Optional(
+    Type.Union([Type.Literal("user"), Type.Literal("project")], {
+      description: 'Scope whose marketplaces to list: "user" or "project". Default: both scopes.',
+    }),
+  ),
+});
 
 const LIST_PLUGINS_PARAMS = Type.Object({
   marketplace: Type.Optional(Type.String({ description: "Marketplace name to list plugins for." })),
@@ -126,18 +134,25 @@ function loadFailure(subject: string, error: unknown): ListToolResult {
 
 // ─── Tool 1: pi_claude_marketplace_list ──────────────────────────────────────
 
-/** Builds the marketplace list tool's result from both scopes' records. */
+/**
+ * Builds the marketplace list tool's result from the records of the asked
+ * scope, or of both scopes when the call names none (D-BG-1002).
+ */
 async function buildMarketplaceListResult(
   pi: ExtensionAPI,
+  params: Type.Static<typeof LIST_MARKETPLACES_PARAMS>,
   ctx: ExtensionContext,
 ): Promise<ListToolResult> {
   // BLOCK C boundary: loadMarketplaceListEntries is the
   // orchestrators/marketplace/list.ts loader. One read returns each
-  // record with its scope and its list block across both scopes (no
-  // scope filter on this tool), so the content lines and the details
-  // below come from the same state (LLMT-01).
+  // record with its scope and its list block, for the asked scope or both
+  // scopes, so the content lines and the details below come from the same
+  // state (LLMT-01).
   const { cwd } = ctx;
-  const entries = await loadMarketplaceListEntries({ cwd });
+  const entries = await loadMarketplaceListEntries({
+    cwd,
+    ...(params.scope !== undefined && { scope: params.scope }),
+  });
 
   if (entries.length === 0) {
     return {
@@ -182,9 +197,9 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
     promptSnippet:
       "Use pi_claude_marketplace_list to inspect configured Claude plugin marketplaces.",
     parameters: LIST_MARKETPLACES_PARAMS,
-    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       try {
-        return await buildMarketplaceListResult(pi, ctx);
+        return await buildMarketplaceListResult(pi, params, ctx);
       } catch (error: unknown) {
         return loadFailure("marketplace list", error);
       }
