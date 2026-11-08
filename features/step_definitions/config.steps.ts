@@ -8,8 +8,10 @@
  * marketplaces step expands the run tokens in each source. The third writes
  * the whole text, which can leave the file broken. A fourth delays that edit
  * until an npm response, so an install sees a config edit between dependency
- * transactions. Every other step only reads, so this module writes nothing
- * else and deletes nothing. `holds this text` compares the raw text of a
+ * transactions. One more deletes both configs of a scope, as a user can under
+ * a current release, so the next load runs the first-run migration (MIG-01).
+ * Every other step only reads, so this module writes nothing else and deletes
+ * nothing else. `holds this text` compares the raw text of a
  * config, while the byte snapshot steps prove a no-op leaves both the base
  * config and installation record untouched.
  *
@@ -28,7 +30,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
@@ -195,6 +197,19 @@ Given(
     const file = layerConfigPath(this, scope, layer);
     await writeLayerText(file, text);
     assert.strictEqual(await readFile(file, "utf8"), text, `${file} does not hold the text`);
+  },
+);
+
+// A user's deletion under a current release, not an earlier release's shape:
+// the installation record keeps today's schema, `enabled` included.
+Given(
+  "the user has deleted the config files of the {word} scope",
+  async function (this: ScenarioWorld, scope: string) {
+    const files = [...CONFIG_FILES].map((fileName) => configFilePath(this, fileName, scope));
+    await Promise.all(files.map((file) => rm(file, { force: true })));
+    for (const file of files) {
+      assert.strictEqual(existsSync(file), false, `${file} exists`);
+    }
   },
 );
 

@@ -17,7 +17,9 @@
  * marketplace, and set the scope a marketplace's record names, as a hand edit
  * of the installation record can. Others rewrite the whole installation record
  * as an earlier release wrote it, or with a schema version newer than this
- * release reads, as an upgrade or a downgrade leaves it (D-BG-13). The other steps
+ * release reads, as an upgrade or a downgrade leaves it (D-BG-13); the one
+ * for release 0.4.3 also deletes the scope's configs, which that release did
+ * not write. The other steps
  * only read; one of them lists the files of that `agents/` directory, and one
  * checks that the user scope holds no record of project installs.
  *
@@ -355,6 +357,20 @@ Given(
     const state = await readRecordFile(this, scope);
     assert.deepStrictEqual(state, written);
     assert.strictEqual(Reflect.get(state, "schemaVersion"), schemaVersion);
+  },
+);
+
+Given(
+  "the {word} scope holds what release 0.4.3 left: its installation record and no config",
+  async function (this: ScenarioWorld, scope: string) {
+    const scopeRoot = this.scopeRoot(scope);
+    const written = await rewriteStateAsRelease({ scopeRoot, release: "0.4.3" });
+    const state = await readRecordFile(this, scope);
+    assert.deepStrictEqual(state, written);
+    assert.strictEqual(Reflect.get(state, "schemaVersion"), 1);
+    for (const config of ["claude-plugins.json", "claude-plugins.local.json"]) {
+      assert.strictEqual(existsSync(path.join(scopeRoot, config)), false, `${config} exists`);
+    }
   },
 );
 

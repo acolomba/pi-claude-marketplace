@@ -15,7 +15,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { isPlainObject } from "./field-rows.ts";
@@ -125,8 +125,11 @@ interface ReleaseMembers {
 }
 
 // The members a release kept on the file and on each object nested in it.
+// A release `beforeConfig` wrote no config files, and kept a marketplace's
+// `autoupdate` on its record.
 interface ReleaseShape {
   readonly schemaVersion: number;
+  readonly beforeConfig: boolean;
   readonly file: ReleaseMembers;
   readonly marketplace: ReleaseMembers;
   readonly source: ReleaseMembers;
@@ -161,17 +164,36 @@ const PLUGIN_BEFORE_ENABLED: ReleaseMembers = {
   optional: [],
 };
 
+const RESOURCES_BEFORE_HOOKS: ReleaseMembers = {
+  required: ["skills", "prompts", "agents", "mcpServers"],
+  optional: [],
+};
+
 const RESOURCES_WITH_HOOKS: ReleaseMembers = {
-  required: ["skills", "prompts", "agents", "mcpServers", "hooks"],
+  required: [...RESOURCES_BEFORE_HOOKS.required, "hooks"],
   optional: [],
 };
 
 // Each release's shape, from `persistence/state-io.ts` at its tag.
 const RELEASE_SHAPES: ReadonlyMap<string, ReleaseShape> = new Map([
   [
+    "0.4.3",
+    {
+      schemaVersion: 1,
+      beforeConfig: true,
+      file: { required: ["schemaVersion", "marketplaces"], optional: [] },
+      marketplace: { ...MARKETPLACE, optional: [...MARKETPLACE.optional, "autoupdate"] },
+      source: PATH_SOURCE,
+      plugin: PLUGIN_BEFORE_ENABLED,
+      compatibility: COMPATIBILITY,
+      resources: RESOURCES_BEFORE_HOOKS,
+    },
+  ],
+  [
     "0.6.0",
     {
       schemaVersion: 1,
+      beforeConfig: false,
       file: { required: ["schemaVersion", "marketplaces"], optional: [] },
       marketplace: MARKETPLACE,
       source: PATH_SOURCE,
@@ -184,6 +206,7 @@ const RELEASE_SHAPES: ReadonlyMap<string, ReleaseShape> = new Map([
     "0.19.2",
     {
       schemaVersion: 2,
+      beforeConfig: false,
       file: {
         required: ["schemaVersion", "marketplaces"],
         optional: ["lastReconciledExtensionVersion"],
@@ -241,11 +264,25 @@ function releasePlugin(
   };
 }
 
-// The marketplace record `record` with only the members `shape` kept.
+// The `autoupdate` the base config of the scope at `scopeRoot` declares for
+// each marketplace that declares one.
+async function declaredAutoupdates(scopeRoot: string): Promise<ReadonlyMap<string, boolean>> {
+  const config = await readObject(path.join(scopeRoot, "claude-plugins.json"));
+  const declared = Object.entries(objectMember(config, "marketplaces")).map(
+    ([name, entry]): [string, unknown] => [name, objectMember({ entry }, "entry").autoupdate],
+  );
+  return new Map(
+    declared.filter((pair): pair is [string, boolean] => typeof pair[1] === "boolean"),
+  );
+}
+
+// The marketplace record `record` with only the members `shape` kept, and
+// with `autoupdate` when it is given.
 function releaseMarketplace(
   name: string,
   record: unknown,
   shape: ReleaseShape,
+  autoupdate: boolean | undefined,
 ): Record<string, unknown> {
   const what = `the record of the marketplace ${name}`;
   const marketplace = keepMembers(jsonObject(record, what), shape.marketplace, what);
@@ -260,7 +297,12 @@ function releaseMarketplace(
       releasePlugin(pluginRecord, shape, `the record of ${plugin}@${name}`),
     ],
   );
-  return { ...marketplace, source, plugins: Object.fromEntries(plugins) };
+  return {
+    ...marketplace,
+    ...(autoupdate === undefined ? {} : { autoupdate }),
+    source,
+    plugins: Object.fromEntries(plugins),
+  };
 }
 
 /**
@@ -273,6 +315,13 @@ function releaseMarketplace(
  * that the record lacks fails the rewrite with its name, as does a source
  * other than a path.
  *
+ * - `0.4.3` is the last release with no config files: commit `5f1d0c57`
+ *   added `claude-plugins.json` and `claude-plugins.local.json`, first
+ *   released in 0.5.0. Its records hold no `resources.hooks`, and each
+ *   marketplace record held its own `autoupdate`. The rewrite copies onto each
+ *   record the `autoupdate` the scope's base config declares for it, and
+ *   leaves the member out when the config declares none, as that release's
+ *   `marketplace add` did. It then deletes both config files.
  * - `0.6.0` is the last release of schema version 1, whose plugin records
  *   hold no `enabled`; commit `222a7344` (ENBL-02) ended that shape.
  * - `0.19.2` is the last release of schema version 2, whose plugin records
@@ -297,10 +346,13 @@ export async function rewriteStateAsRelease(args: {
     shape.file,
     stateFile,
   );
+  const autoupdates = shape.beforeConfig
+    ? await declaredAutoupdates(scopeRoot)
+    : new Map<string, boolean>();
   const marketplaces = Object.entries(objectMember(state, "marketplaces")).map(
     ([name, record]): [string, Record<string, unknown>] => [
       name,
-      releaseMarketplace(name, record, shape),
+      releaseMarketplace(name, record, shape, autoupdates.get(name)),
     ],
   );
   const written = {
@@ -309,6 +361,11 @@ export async function rewriteStateAsRelease(args: {
     marketplaces: Object.fromEntries(marketplaces),
   };
   await writeFile(stateFile, `${JSON.stringify(written, null, 2)}\n`);
+  if (shape.beforeConfig) {
+    await rm(path.join(scopeRoot, "claude-plugins.json"), { force: true });
+    await rm(path.join(scopeRoot, "claude-plugins.local.json"), { force: true });
+  }
+
   return written;
 }
 
