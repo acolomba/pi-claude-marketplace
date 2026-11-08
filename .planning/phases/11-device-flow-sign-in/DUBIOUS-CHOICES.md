@@ -124,3 +124,11 @@ they are not repeated here.
   ran as two runs of two edits each; each scenario failed at a step specific
   to its own edit. One run first timed out at Pi's start while the edited
   extension recompiled under load, and its rerun reached the steps.
+
+## Gate
+
+- **P11-DC-21 (Low, open). A doubled phase gate was stopped and rerun.** A
+  first start of the phase gate (`npm run check`, then `npm run
+  test:modules`) was launched twice by mistake and both copies wrote one log;
+  both were stopped mid-run (no result read from them) and the gate was run
+  once more from the start. The verification cites only that last run.

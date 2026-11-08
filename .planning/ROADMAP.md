@@ -349,7 +349,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
 - [ ] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay
 - [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
-- [ ] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass
+- [x] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass (completed 2026-11-08)
 - [ ] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled
 - [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
 - [ ] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock
@@ -576,7 +576,7 @@ Plans:
   3. An install from a GitHub git source on a cache miss runs the same flow, and an install whose clone is already cached runs none (DFLOW-03).
   4. The background autoupdate pass with no stored credential starts no Device Flow: the stand-in receives no device-code request, and the pass uses stored credentials only (DFLOW-04).
 
-**Plans**: 2/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -679,7 +679,7 @@ Plans:
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
 | 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
-| 11. Device Flow Sign-In | 2/2 | In Progress | - |
+| 11. Device Flow Sign-In | 2/2 | Complete    | 2026-11-08 |
 | 12. Browse Picker | 0/TBD | Not started | - |
 | 13. Prune | 0/TBD | Not started | - |
 | 14. Bootstrap | 0/TBD | Not started | - |
