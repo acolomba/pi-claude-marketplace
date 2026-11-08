@@ -157,7 +157,8 @@ Feature: Plugin bootstrap
     Then the user scope holds no git clones
     Then the git host receives no request
 
-  Scenario Outline: Bootstrap rejects <rejected> with its usage
+  Scenario Outline: Bootstrap rejects <rejected> with its usage and changes nothing
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
     When the user runs "/claude:plugin bootstrap <arguments>"
     Then the result has these fields:
       | kind         | usage-error                     |
@@ -165,6 +166,10 @@ Feature: Plugin bootstrap
       | needs reload | false                           |
       | message      | <message>                       |
       | usage        | Usage: /claude:plugin bootstrap |
+    Then the "claude-plugins.json" file of the user scope does not exist
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the user scope holds no git clones
+    Then the git host receives no request
 
     Examples:
       | rejected                | arguments       | message                                                          |
