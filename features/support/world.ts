@@ -46,6 +46,7 @@ import {
 
 import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { inLoadOrder, resolveCompanion } from "../lib/companions.ts";
+import { GITHUB_REDIRECT_EXTENSION } from "../lib/github-device-flow/extension.ts";
 import {
   classifyMcpImplementation,
   expectedMcpImplementation,
@@ -152,8 +153,8 @@ export interface PiProfile {
    * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, and a terminal session the
    * scenario starts afterwards gets the same environment and loads the same
    * `extraExtensions` (D-BG-01). `usePiWithProfile()` refuses it when
-   * `extraExtensions` is empty, because such a Pi would reach GitHub's real
-   * address with no extension to keep its requests on this machine.
+   * `extraExtensions` lacks the GitHub redirect, because such a Pi would reach
+   * GitHub's real address with nothing to keep its requests on this machine.
    */
   readonly withoutGitHubBaseOverride?: true;
 }
@@ -984,12 +985,13 @@ export class ScenarioWorld extends World {
 
   // Gives a later TUI session the environment and extensions of a profile Pi
   // that runs without the GitHub base override, and refuses such a profile
-  // with no extension to keep its requests local (D-BG-01).
+  // when it does not load the GitHub redirect, the extension that keeps its
+  // requests local (D-BG-01).
   private keepTerminalSessionLocal(profile: PiProfile): void {
     const extensions = profile.extraExtensions ?? [];
-    if (extensions.length === 0) {
+    if (!extensions.includes(GITHUB_REDIRECT_EXTENSION)) {
       throw new Error(
-        "a profile Pi without the GitHub base override needs an extension that keeps its requests local",
+        "a profile Pi without the GitHub base override must load the GitHub redirect",
       );
     }
 
