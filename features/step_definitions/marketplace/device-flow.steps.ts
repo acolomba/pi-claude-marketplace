@@ -43,3 +43,12 @@ Then(
     assert.deepStrictEqual([["protocol", "host", "user", "password"], ...rows], table.raw());
   },
 );
+
+// Git's `store` helper can leave an empty file after it erases a credential,
+// so an empty store and an absent one both hold no credentials.
+Then(
+  "the user's git credential store holds no credentials",
+  async function (this: ScenarioWorld): Promise<void> {
+    assert.deepStrictEqual(await credentialStoreLines(this), []);
+  },
+);
