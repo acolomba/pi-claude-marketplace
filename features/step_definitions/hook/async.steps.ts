@@ -183,6 +183,28 @@ When(
   },
 );
 
+// A rewake while a tool runs reaches the model at the run's next turn
+// boundary (D-BG-201). The scripted tool command waits for a marker that the
+// step creates only after the summary record, by which time the bridge has
+// queued the steer, so the order holds with no timed wait.
+When(
+  "the user prompts {string} and the hook {string} wakes the model while the tool runs",
+  async function (this: ScenarioWorld, text: string, hook: string) {
+    const lengths = await readLogLengths(this.profileHarness());
+    const from = this.pi.recordCount();
+    const message = expandTokens(text, this.tokens);
+    const answer = await this.pi.request({ type: "prompt", message });
+    assert.strictEqual(promptDisposition(answer.response), "started", JSON.stringify(answer));
+    const isToolStart = (record: RpcRecord): boolean => record.type === "tool_execution_start";
+    await this.pi.waitForRecord(from, isToolStart, ASYNC_STEP_DEADLINE_MS);
+    await releaseWaitingHook(this, hook, lengths);
+    await this.pi.waitForRecord(from, isRewakeSummaryRecord, ASYNC_STEP_DEADLINE_MS);
+    await writeFile(path.join(this.tokens.home, "hook-releases", "tool"), "", { flag: "wx" });
+    await waitForWokenTurn(this, from);
+    await keepTurn(this, message, lengths, from);
+  },
+);
+
 // Waits until Pi reaped the hook process `pid`, then for two `get_state`
 // round trips, the second answering that Pi is not streaming.
 async function waitForHandledExit(world: ScenarioWorld, pid: number): Promise<void> {

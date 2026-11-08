@@ -581,16 +581,18 @@ export function shutdownInMemoryChildren(runtime: HooksRuntime): void {
 }
 
 /**
- * D-62-05 factory-entry orphan reap. Reads the per-scope PID table;
- * for each recorded PID, probes liveness via `kill(pid, 0)`; on Linux,
- * verifies `/proc/<pid>/environ` carries our marker matching the
- * recorded `dispatchId`; SIGKILLs owned PIDs and soft-skips strangers.
- * On non-Linux, soft-skips every alive PID (the conservative path --
- * NEVER kill a stranger). Always unlinks the PID table at the end so
- * the next process starts from a clean slate.
+ * D-62-05 / D-BG-207 orphan reap. Reads the per-scope PID table; for each
+ * recorded PID this runtime does not own, probes liveness via `kill(pid, 0)`;
+ * on Linux, verifies `/proc/<pid>/environ` carries our marker matching the
+ * recorded `dispatchId`; SIGKILLs owned PIDs and soft-skips strangers. On
+ * non-Linux, soft-skips every alive PID (the conservative path -- NEVER kill a
+ * stranger). The rows of children this runtime still owns -- hooks the live
+ * load started -- are kept and written back; the table is unlinked only when
+ * this runtime owns no row of it, so the next process starts from a clean
+ * slate.
  *
  * `probes` is the injection point for that walk (see `OrphanProbes`): the
- * production caller in `event-router.ts` passes nothing and gets
+ * production callers in `event-router.ts` pass nothing and get
  * `DEFAULT_ORPHAN_PROBES`, while a test supplies recording stubs so the
  * kill / marker-match / soft-skip arms are observable without a real child.
  */
@@ -600,38 +602,52 @@ export async function reapOrphans(
   probes: OrphanProbes = DEFAULT_ORPHAN_PROBES,
 ): Promise<void> {
   await runtime.runPidTableOperation(pidTablePath(loc), async () => {
+    const owned = runtime.pidTableEntries(loc);
+    const ownedIds = new Set(owned.map((entry) => entry.dispatchId));
     const entries = await readPidTable(loc);
     for (const tableEntry of entries) {
-      if (!isPidAlive(tableEntry.pid, probes)) {
-        continue;
-      }
-
-      if (process.platform === "linux") {
+      if (!ownedIds.has(tableEntry.dispatchId)) {
         // eslint-disable-next-line no-await-in-loop -- bounded by the PID table's live orphans, one /proc read each
-        const marker = await readProcEnvironMarker(tableEntry.pid, probes);
-        if (marker !== tableEntry.dispatchId) {
-          hookDebugLog(
-            `async-rewake: orphan ${tableEntry.pid} marker mismatch -- skipping ` +
-              `(got=${marker ?? "(none)"} want=${tableEntry.dispatchId})`,
-          );
-          continue;
-        }
-      } else {
-        hookDebugLog(
-          `async-rewake: orphan ${tableEntry.pid} marker-check skipped (platform=${process.platform})`,
-        );
-        continue;
-      }
-
-      try {
-        probes.killProbe(tableEntry.pid, "SIGKILL");
-      } catch (err) {
-        hookDebugLog(`async-rewake: orphan ${tableEntry.pid} kill failed: ${errorMessage(err)}`);
+        await reapOrphan(tableEntry, probes);
       }
     }
 
-    await unlinkPidTable(loc);
+    await (owned.length > 0
+      ? writePidTable(
+          loc,
+          owned.map((entry) => ({ ...entry })),
+        )
+      : unlinkPidTable(loc));
   });
+}
+
+/** D-62-05: SIGKILLs one table row's process when it is alive and ours. */
+async function reapOrphan(tableEntry: PidTableEntry, probes: OrphanProbes): Promise<void> {
+  if (!isPidAlive(tableEntry.pid, probes)) {
+    return;
+  }
+
+  if (process.platform !== "linux") {
+    hookDebugLog(
+      `async-rewake: orphan ${tableEntry.pid} marker-check skipped (platform=${process.platform})`,
+    );
+    return;
+  }
+
+  const marker = await readProcEnvironMarker(tableEntry.pid, probes);
+  if (marker !== tableEntry.dispatchId) {
+    hookDebugLog(
+      `async-rewake: orphan ${tableEntry.pid} marker mismatch -- skipping ` +
+        `(got=${marker ?? "(none)"} want=${tableEntry.dispatchId})`,
+    );
+    return;
+  }
+
+  try {
+    probes.killProbe(tableEntry.pid, "SIGKILL");
+  } catch (err) {
+    hookDebugLog(`async-rewake: orphan ${tableEntry.pid} kill failed: ${errorMessage(err)}`);
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────

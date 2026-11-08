@@ -2536,7 +2536,7 @@ test(
         },
       ]);
       assert.deepStrictEqual(terminalWrite.entries, secondWrite.entries);
-      assert.deepStrictEqual(await readPidTable(locations), []);
+      assert.deepStrictEqual(await readPidTable(locations), secondWrite.entries);
       assert.strictEqual(persistence.writesStarted, 3);
       assert.strictEqual(persistence.maxActiveWrites, 1);
       assert.deepStrictEqual(unhandledRejections, []);
