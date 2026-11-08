@@ -2,9 +2,11 @@
 //
 // Bridge-owned asyncRewake registry. Spawns hook children detached-but-in-
 // parent-process-group, holds them in an in-memory Map keyed by a UUID
-// dispatchId, watches each child for exit code 2, and on exit-2 injects
-// (`rewakeMessage` + body) into Pi's model context via pi.sendMessage with
-// `display: false` matching Claude Code's <system-reminder> semantic.
+// dispatchId, watches each child for exit code 2, and on exit 2 wakes the
+// model with Claude Code 2.1.319's rewake text through pi.sendMessage with
+// `display: false` matching Claude Code's <system-reminder> semantic: an idle
+// Pi starts a turn with it, and a running turn reads it at its next turn
+// boundary (D-BG-201, D-BG-202).
 //
 // This is one of exactly FIVE sanctioned `node:child_process` import
 // sites in the extension tree (closed-set whitelist at
@@ -18,7 +20,7 @@
 // `detached: false` + the parent does NOT await child exit; a per-child
 // handler watches for code 2 and triggers the HOOK-06 injection contract via
 // `pi.sendMessage({ customType: "claude-hook-rewake", display: false, ... },
-// { deliverAs })`.
+// { triggerTurn: true, deliverAs: "steer" })`.
 //
 // Responsibility boundary: this module owns the synchronous spawn +
 // register step, the per-child exit handler (HOOK-06 inject + IL-2
@@ -31,7 +33,7 @@
 //
 // IL-2 EXEMPTION (T-62-09): the single sanctioned runtime notify call
 // in the entire `bridges/hooks/async-rewake/` subtree is the
-// `rewakeSummary` surface inside `onChildExit`, routed through
+// `rewakeSummary` surface of the exit-2 handler, routed through
 // `notifyAsyncRewakeSummary` in `shared/notification-dispatch.ts` so the fallow
 // rule `architecture/notify-chokepoint` stays green here.
 // Runtime notify is otherwise forbidden in bridge code; the exemption
@@ -71,6 +73,7 @@ import {
   writePidTable,
   type PidTableEntry,
 } from "./pid-table.ts";
+import { rewakeBody, rewakeLabel, rewakeSummaryText } from "./rewake-text.ts";
 
 import type { DispatchableEvent } from "../../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../../persistence/locations.ts";
@@ -88,9 +91,6 @@ import type { HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
  * to SIGKILL a stranger process that may have inherited a recycled pid.
  */
 const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
-
-/** HOOK-06: separator between `rewakeMessage` and the captured body. */
-const BODY_SEPARATOR = "\n\n";
 
 /** HOOK-06: custom-message type for the exit-2 injection. */
 const REWAKE_CUSTOM_TYPE = "claude-hook-rewake" as const;
@@ -126,6 +126,16 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
  */
 // fallow-ignore-next-line unused-type -- WR-01 compatibility: preserve the published registry row type; it remains internally consumed and has no replacement public binding.
 export type AsyncRewakeEntry = HooksRuntimeChildEntry;
+
+/**
+ * What the exit handler of one child needs from its dispatch: the event's
+ * context and API, and the hook's Claude label for the default rewake prefix.
+ */
+interface RewakeExit {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly label: string;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Production dependency contracts
@@ -182,7 +192,9 @@ export interface SpawnDeps {
  * `ctx: ExtensionContext` because `sendMessage` lives on `ExtensionAPI`
  * in the installed peer-dep snapshot; passing both lets the exit handler
  * close over `pi.sendMessage` while keeping `notifyAsyncRewakeSummary`
- * (the IL-2-exempt notify seam) and `ctx.isIdle()` available on `ctx`.
+ * (the IL-2-exempt notify seam) and `ctx.mode` available on `ctx`. On exit 2
+ * the user sees the summary and the model wakes; any other exit shows and
+ * sends nothing (D-BG-201, D-BG-204).
  */
 export async function spawnAndRegister(
   runtime: HooksRuntime,
@@ -202,6 +214,7 @@ export async function spawnAndRegister(
     const capturedGeneration = runtime.currentGeneration();
     const transCtx = buildTranslationContext(ctx);
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
+    const exit: RewakeExit = { ctx, pi, label: rewakeLabel(entry.claudeEvent, stdinPayload) };
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareAsyncEnv(entry, transCtx, loc, dispatchId);
     const planValue = planSpawn(entry, hookPathVars(entry, transCtx, loc));
@@ -318,7 +331,7 @@ export async function spawnAndRegister(
       }
 
       finalized = true;
-      finalizeChild(runtime, dispatchId, outcome, ctx, pi, pidTableWriter);
+      finalizeChild(runtime, dispatchId, outcome, exit, pidTableWriter);
     };
 
     const finalizeAfterOwnedStreams = (): void => {
@@ -381,8 +394,7 @@ function finalizeChild(
   runtime: HooksRuntime,
   dispatchId: string,
   outcome: { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined,
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  exit: RewakeExit,
   pidTableWriter: typeof writePidTable,
 ): void {
   const entry = runtime.takeChild(dispatchId);
@@ -402,8 +414,6 @@ function finalizeChild(
     return;
   }
 
-  const { code, signal } = outcome;
-
   // D-62-03 / D-59-03 captured-generation zombie defense. A slow child from
   // a prior `/reload` cycle must not inject into the freshly-hydrated
   // session.
@@ -417,44 +427,50 @@ function finalizeChild(
   }
 
   try {
-    requireNotificationMode(ctx.mode);
+    requireNotificationMode(exit.ctx.mode);
   } catch (err: unknown) {
     hookDebugLog(`async-rewake: mode unavailable (${entry.pluginId}): ${errorMessage(err)}`);
     return;
   }
 
-  // IL-2 EXEMPTION (T-62-09): `rewakeSummary` is the single sanctioned
-  // runtime notify call originating from `bridges/hooks/async-rewake/`,
-  // routed through the canonical `shared/notification-dispatch.ts` seam. Fires
-  // independently of exit code -- it is the upstream-mandated UI
-  // status surface, not a success-only signal.
-  if (entry.rewakeSummary !== undefined) {
-    try {
-      const run = openNotificationRun(pi, { kind: "hook" });
-      notifyAsyncRewakeSummary(ctx, run, entry.rewakeSummary);
-    } catch (err) {
-      hookDebugLog(`async-rewake: notify failed (${entry.pluginId}): ${errorMessage(err)}`);
-    }
-  }
-
-  if (code !== 2) {
+  if (outcome.code !== 2) {
     hookDebugLog(
-      `async-rewake: silent completion code=${code ?? "null"} signal=${signal ?? "null"} ` +
+      `async-rewake: silent completion code=${outcome.code ?? "null"} signal=${outcome.signal ?? "null"} ` +
         `dispatchId=${dispatchId} plugin=${entry.pluginId}`,
     );
     return;
   }
 
-  const stderrText = entry.stderr.text();
-  const body = stderrText.length > 0 ? stderrText : entry.stdout.text();
-  if (body.length === 0) {
-    hookDebugLog(`async-rewake: exit 2 with empty body -- no injection (${entry.pluginId})`);
-    return;
+  wakeOnExitTwo(runtime, entry, exit);
+}
+
+/**
+ * D-BG-201 / D-BG-202 / D-BG-204: an exit 2 shows the user the summary, then
+ * wakes the model with Claude Code's rewake text. One `triggerTurn` send
+ * starts a turn when Pi is idle and steers a running turn, as Claude Code's
+ * `next`-priority notification does; the summary goes first, so its record
+ * precedes the woken run's. Any other exit shows and sends nothing.
+ *
+ * IL-2 EXEMPTION (T-62-09): `rewakeSummary` is the single sanctioned runtime
+ * notify call originating from `bridges/hooks/async-rewake/`, routed through
+ * the canonical `shared/notification-dispatch.ts` seam.
+ */
+function wakeOnExitTwo(
+  runtime: HooksRuntime,
+  entry: HooksRuntimeChildEntry,
+  { ctx, pi, label }: RewakeExit,
+): void {
+  try {
+    const run = openNotificationRun(pi, { kind: "hook" });
+    notifyAsyncRewakeSummary(ctx, run, rewakeSummaryText(entry.rewakeSummary));
+  } catch (err) {
+    hookDebugLog(`async-rewake: notify failed (${entry.pluginId}): ${errorMessage(err)}`);
   }
 
-  const content = buildInjectionContent(entry.rewakeMessage, body);
+  // D-BG-203: the woken turn's Stop hooks see `stop_hook_active: true`.
+  runtime.recordRewake();
+  const content = rewakeBody(entry.rewakeMessage, label, entry.stderr.text(), entry.stdout.text());
   try {
-    const lane: "nextTurn" | "followUp" = ctx.isIdle() ? "nextTurn" : "followUp";
     pi.sendMessage(
       {
         customType: REWAKE_CUSTOM_TYPE,
@@ -462,26 +478,14 @@ function finalizeChild(
         display: false,
         details: {
           pluginId: entry.pluginId,
-          dispatchId,
+          dispatchId: entry.dispatchId,
         },
       },
-      { deliverAs: lane },
+      { triggerTurn: true, deliverAs: "steer" },
     );
   } catch (err) {
     hookDebugLog(`async-rewake: sendMessage threw (${entry.pluginId}): ${errorMessage(err)}`);
   }
-}
-
-/**
- * Compose the model-visible injection content: the `rewakeMessage`, when the
- * hook declares one, then the hook's whole output.
- */
-function buildInjectionContent(rewakeMessage: string | undefined, body: string): string {
-  if (rewakeMessage !== undefined && rewakeMessage.length > 0) {
-    return `${rewakeMessage}${BODY_SEPARATOR}${body}`;
-  }
-
-  return body;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

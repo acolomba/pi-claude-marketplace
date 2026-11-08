@@ -119,14 +119,6 @@ for (const scenario of [
     injects: true,
   },
   {
-    name: "stale idle getter",
-    mode: "json",
-    failure: "idle",
-    summary: "scan complete",
-    emits: true,
-    injects: false,
-  },
-  {
     name: "stale generation",
     mode: "json",
     failure: "generation",
@@ -156,10 +148,6 @@ for (const scenario of [
 
         if (property === "ui") {
           return capture.ui;
-        }
-
-        if (property === "isIdle" && terminal && scenario.failure === "idle") {
-          throw new Error("stale idle");
         }
 
         return Reflect.get(target, property);
@@ -234,11 +222,11 @@ for (const scenario of [
             {
               message: {
                 customType: "claude-hook-rewake",
-                content: "Review finding:\n\nfinding",
+                content: "Review finding: finding",
                 display: false,
                 details: { pluginId: "plugin-lifecycle", dispatchId: "machine-dispatch" },
               },
-              options: { deliverAs: "nextTurn" },
+              options: { triggerTurn: true, deliverAs: "steer" },
             },
           ]
         : [],
@@ -752,14 +740,14 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: "Second finding:\n\nlive second body",
+            content: "Second finding: live second body",
             display: false,
             details: {
               pluginId: "plugin-runtime-second",
               dispatchId: "dispatch-runtime-second",
             },
           },
-          options: { deliverAs: "nextTurn" },
+          options: { triggerTurn: true, deliverAs: "steer" },
         },
       ]);
       assert.deepStrictEqual(secondContext.notifications, [
@@ -919,14 +907,14 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: "Review finding:\n\nstderr-one-stderr-two",
+            content: "Review finding: stderr-one-stderr-two",
             display: false,
             details: {
               pluginId: "plugin-lifecycle",
               dispatchId: "dispatch-lifecycle",
             },
           },
-          options: { deliverAs: "nextTurn" },
+          options: { triggerTurn: true, deliverAs: "steer" },
         },
       ]);
       assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
@@ -1619,7 +1607,7 @@ test(
 );
 
 test(
-  "notifies a summary but does not inject for an ordinary exit",
+  "shows no summary and sends nothing for an ordinary exit",
   { concurrency: false },
   async (t) => {
     // arrange
@@ -1648,7 +1636,8 @@ test(
 
       // assert
       assert.deepStrictEqual(pi.messages, []);
-      assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
+      assert.deepStrictEqual(context.notifications, []);
+      assert.strictEqual(runtime.isStopHookActive(), false);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
@@ -1704,7 +1693,7 @@ test("records a signalled exit as silent completion", { concurrency: false }, as
 });
 
 test(
-  "does not inject an exit two whose streams are empty or absent",
+  "wakes the model with the default texts when an exit two prints nothing",
   { concurrency: false },
   async (t) => {
     // arrange
@@ -1739,8 +1728,21 @@ test(
       // assert
       assert.strictEqual(child.child.stdout, null);
       assert.strictEqual(child.child.stderr, null);
-      assert.deepStrictEqual(pi.messages, []);
-      assert.deepStrictEqual(context.notifications, []);
+      assert.deepStrictEqual(pi.messages, [
+        {
+          message: {
+            customType: "claude-hook-rewake",
+            content: 'Stop hook blocking error from command "PreToolUse": ',
+            display: false,
+            details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-empty-exit-two" },
+          },
+          options: { triggerTurn: true, deliverAs: "steer" },
+        },
+      ]);
+      assert.deepStrictEqual(context.notifications, [
+        { text: "Stop hook feedback", severity: "info" },
+      ]);
+      assert.strictEqual(runtime.isStopHookActive(), true);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
       shutdownInMemoryChildren(runtime);
@@ -1751,7 +1753,7 @@ test(
   },
 );
 
-test("injects ordered stdout on the busy follow-up lane", { concurrency: false }, async (t) => {
+test("sends ordered stdout after a declared empty message", { concurrency: false }, async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-stdout-busy-"));
@@ -1795,14 +1797,16 @@ test("injects ordered stdout on the busy follow-up lane", { concurrency: false }
       {
         message: {
           customType: "claude-hook-rewake",
-          content: "stdout-first-stdout-second",
+          content: " stdout-first-stdout-second",
           display: false,
           details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-stdout-busy" },
         },
-        options: { deliverAs: "followUp" },
+        options: { triggerTurn: true, deliverAs: "steer" },
       },
     ]);
-    assert.deepStrictEqual(context.notifications, []);
+    assert.deepStrictEqual(context.notifications, [
+      { text: "Stop hook feedback", severity: "info" },
+    ]);
     assert.deepStrictEqual(timers.clearHandles, timers.handles);
   } finally {
     shutdownInMemoryChildren(runtime);
@@ -1848,11 +1852,11 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: "Review finding:\n\nstderr-one-stderr-two",
+            content: "Review finding: stderr-one-stderr-two",
             display: false,
             details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-interleaved" },
           },
-          options: { deliverAs: "nextTurn" },
+          options: { triggerTurn: true, deliverAs: "steer" },
         },
       ]);
       assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
@@ -1900,11 +1904,11 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: `Review finding:\n\n${largeStderr}`,
+            content: `Review finding: ${largeStderr}`,
             display: false,
             details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-large" },
           },
-          options: { deliverAs: "nextTurn" },
+          options: { triggerTurn: true, deliverAs: "steer" },
         },
       ]);
       assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
@@ -1971,17 +1975,19 @@ test(
         {
           message: {
             customType: "claude-hook-rewake",
-            content: "available-before-exit-after-exit",
+            content: " available-before-exit-after-exit",
             display: false,
             details: {
               pluginId: "plugin-lifecycle",
               dispatchId: "dispatch-exit-before-close",
             },
           },
-          options: { deliverAs: "nextTurn" },
+          options: { triggerTurn: true, deliverAs: "steer" },
         },
       ]);
-      assert.deepStrictEqual(context.notifications, []);
+      assert.deepStrictEqual(context.notifications, [
+        { text: "Stop hook feedback", severity: "info" },
+      ]);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
       shutdownInMemoryChildren(runtime);
@@ -2080,7 +2086,9 @@ test(
 
       // assert
       assert.deepStrictEqual(pi.messages, []);
-      assert.deepStrictEqual(context.notifications, []);
+      assert.deepStrictEqual(context.notifications, [
+        { text: "Stop hook feedback", severity: "info" },
+      ]);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
