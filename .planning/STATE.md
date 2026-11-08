@@ -5,17 +5,17 @@ milestone_name: Behavioral Coverage Gaps
 current_phase: 2
 current_phase_name: Async Hooks
 status: executing
-stopped_at: Phases 1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
+stopped_at: Phases 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
 last_updated: "2026-11-08T15:58:40.736Z"
 last_activity: 2026-11-08
-last_activity_desc: Merged Phase 8 (First-Run Config Migration)
+last_activity_desc: Merged Phase 4 (PostToolUseFailure Hooks)
 state_head: 57105b09760ddf47ef3ae2d4a8c960b357f2b872
 progress:
   total_phases: 16
-  completed_phases: 14
+  completed_phases: 15
   total_plans: 9
   completed_plans: 9
-  percent: 88
+  percent: 94
 ---
 
 # Project State
@@ -33,10 +33,10 @@ component as a working Pi artifact.
 
 Phase: 2-16 — stream phases, one child session each
 Plan: per phase, in its own branch
-Status: Phases 1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged into features/behavioral-gaps
-Last activity: 2026-11-08 — merged Phase 8 (First-Run Config Migration)
+Status: Phases 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged into features/behavioral-gaps
+Last activity: 2026-11-08 — merged Phase 4 (PostToolUseFailure Hooks)
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 94%
 
 
 ### mcp-4 closeout
@@ -972,5 +972,5 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-08T05:46:41.533Z
-Stopped at: Phases 1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
+Stopped at: Phases 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
 Resume file: None

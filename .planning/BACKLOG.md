@@ -4760,9 +4760,13 @@ Deferred by component-features Phase 5 (D-CF5-20). Merge a `plugin.json` `hooks`
 
 Deferred by component-features Phase 5 (D-CF5-28, 05-09 addendum). Add `tool_use_id` and `mcp_server` to the tool stdin payloads, and `tool_use_id`, `is_interrupt`, and `duration_ms` to the PostToolUseFailure payload, as Claude Code sends them.
 
+Update 2026-11-08 (behavioral-gaps Phase 4): `is_interrupt` shipped in the PostToolUseFailure payload, always `false` (D-BG-401); `tool_use_id`, `duration_ms`, and `mcp_server` stay deferred (D-BG-403).
+
 ## HOOKOUTPUT-01: other `updatedToolOutput` shapes
 
 Deferred by component-features Phase 5. A PostToolUse `updatedToolOutput` is read only in Pi's `content`-array form. Read it in the tool's own output shape too, and read `updatedMCPToolOutput`.
+
+Update 2026-11-08 (behavioral-gaps Phase 4): this entry now concerns PostToolUse only; a PostToolUseFailure hook's `updatedToolOutput` is ignored, as in Claude Code (D-BG-405).
 
 ## HOOKPOSTSTOP-01: PostToolUse `continue: false`
 

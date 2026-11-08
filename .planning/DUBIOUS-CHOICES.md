@@ -387,3 +387,32 @@ Full text: `.planning/phases/08-first-run-config-migration/DUBIOUS-CHOICES.md`.
 - **P8-DC-26 (Low, open).** The review's one Info item (IN-01) is left unfixed.
 - **P8-DC-27 (Low, open).** The phase closed without `/gsd-secure-phase` or `/gsd-validate-phase`.
 - **P8-DC-28 (Low, open).** `phase.complete` advanced STATE.md's frontmatter and Current Position to Phase 2.
+
+## Phase 4: PostToolUseFailure Hooks
+
+Full text: `.planning/phases/04-posttoolusefailure-hooks/DUBIOUS-CHOICES.md`.
+
+- **P4-DC-01 (High, open).** `is_interrupt` is always `false` (D-BG-401).
+- **P4-DC-02 (Medium, open).** The cancelled-call guard edits a shared function (D-BG-402).
+- **P4-DC-03 (Medium, open).** `tool_use_id`, `duration_ms`, and `mcp_server` stay out (D-BG-403).
+- **P4-DC-04 (Medium, open).** The failing MCP stand-in and the interrupt driver live in the verb module.
+- **P4-DC-05 (High, open).** The adapter failure routing is fixed in a shared line (D-BG-404).
+- **P4-DC-06 (Medium, open).** `updatedToolOutput` on a failure is dropped (D-BG-405).
+- **P4-DC-07 (Medium, open).** The failing-MCP scenarios pin each implementation's error wording and skip the built-in stand-in.
+- **P4-DC-08 (Low, open).** Research side effects.
+- **P4-DC-09 (Medium, open).** Plan split.
+- **P4-DC-10 (Medium, open).** Pi's `read` wording is pinned in several scenarios.
+- **P4-DC-11 (Low, open).** The MCP pair's titles name their licenses.
+- **P4-DC-12 (Low, open).** The adapter check runs before the empty-bucket check.
+- **P4-DC-13 (Low, open).** No `if` row and long scenarios.
+- **P4-DC-14 (Low, open).** Plan checker run in the background.
+- **P4-DC-15 (Medium, open).** Execution ran inline after plan 04-01's Task 1.
+- **P4-DC-16 (Low, open).** The interrupt step's deadlines and helper shape.
+- **P4-DC-17 (Low, open).** The `is_interrupt` docs row landed in the guard commit (48dfc857).
+- **P4-DC-18 (Low, open).** Plan 04-02's scenarios R2 to R7 share one commit (80558dad).
+- **P4-DC-19 (Low, open).** Gate reruns under load.
+- **P4-DC-20 (Low, open).** The milestone merge commit d2dfb11d kept git's default message.
+- **P4-DC-21 (Low, open).** The wave 2 gate reran 35 unrelated adapter scenarios.
+- **P4-DC-22 (Low, open).** Code review and verification ran inline, scoped to the phase's own commits.
+- **P4-DC-23 (Low, open).** The phase gate reran 8 unrelated adapter scenarios.
+- **P4-DC-24 (Low, open).** STATE.md was left at the milestone's version.
