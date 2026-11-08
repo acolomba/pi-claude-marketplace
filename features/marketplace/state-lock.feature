@@ -1,8 +1,8 @@
 Feature: Marketplace state lock
 
-  A marketplace command that changes a scope fails and changes nothing while another process
-  holds the scope's state lock, and takes over a lock that a dead process left. A helper process
-  holds the lock as a second Pi would, and local marketplaces and a git host stand in for published ones.
+  Under D-06 a marketplace command that changes a scope fails as lock held and changes nothing while another process holds
+  its state lock (Claude Code writes without it), and runs as with no lock if that process died instead. A helper process
+  or an old lock directory plays that process, and local marketplaces and a git host stand in for published ones.
 
   Scenario: Removing a marketplace from the project scope while another process holds its state lock fails as lock held
     Given the marketplace "fixtures" is published as a dir source
@@ -158,6 +158,35 @@ Feature: Marketplace state lock
       | scope   | scope root        | source kind | source     |
       | project | {project dir}/.pi | github      | acme/tools |
       | user    | {agent dir}       | github      | acme/tools |
+
+  Scenario Outline: Changing autoupdate while another process holds the state lock of the scope fails as lock held and changes nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the <scope> scope
+    Given a config in scope <scope> and layer base, with these marketplaces:
+      | name  | source                    | autoupdate          |
+      | tools | {home}/marketplaces/tools | <autoupdate before> |
+    Given the config and installation record bytes of the <scope> scope are remembered
+    Given another process holds the state lock of the <scope> scope
+    When the user runs "/claude:plugin marketplace <verb> tools --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons   | scope   | cause chain                                                                                                                                                                           | cause truncated | leaks | rollback partial |
+      | tools            | <scope>           | failed             | tools | tools | failed | lock held | <scope> | Another pi-claude-marketplace operation is in progress for <scope> scope (<scope root>/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+    Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
+      | name  | source                    | autoupdate          |
+      | tools | {home}/marketplaces/tools | <autoupdate before> |
+    Then the config and installation record bytes of the <scope> scope are unchanged
+
+    Examples:
+      | verb         | scope   | scope root        | autoupdate before |
+      | autoupdate   | project | {project dir}/.pi | false             |
+      | autoupdate   | user    | {agent dir}       | false             |
+      | noautoupdate | project | {project dir}/.pi | true              |
+      | noautoupdate | user    | {agent dir}       | true              |
 
   Scenario: Removing a marketplace while a process that died left the state lock of its scope removes it
     Given the marketplace "fixtures" is published as a dir source
