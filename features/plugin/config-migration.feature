@@ -1,8 +1,8 @@
 Feature: Plugin config migration
 
   A user who upgrades from a release with no config gets one written from the installation
-  records on the first load. An earlier release's installation record, and a config the user
-  deleted, stand in for the upgrade, and a local marketplace stands in for a published one.
+  records on the first load, and no later load rewrites it. An earlier release's record and a
+  config the user deleted stand in for the upgrade; directory marketplaces stand in for published ones.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -90,6 +90,29 @@ Feature: Plugin config migration
       | id            | enabled |
       | demo@fixtures | false   |
       | app@fixtures  | false   |
+
+  Scenario: A later load keeps the user's edit to the config the first load wrote
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has deleted the config files of the user scope
+    Given the user has started a new pi session
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   | false   |
+    Given the config and installation record bytes of the user scope are remembered
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope |
+      | fixtures         | user              | demo@fixtures | demo | will disable |         | user  |
+      | fixtures         | user              | demo@fixtures | demo | will disable |         | user  |
+    Then the config and installation record bytes of the user scope are unchanged
 
   Scenario: The first load after an upgrade from release 0.4.3 writes the project config with autoupdate off
     Given the marketplace "fixtures" offers these plugins:
