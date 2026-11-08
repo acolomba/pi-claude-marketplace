@@ -5,16 +5,16 @@ milestone_name: Behavioral Coverage Gaps
 current_phase: 01
 current_phase_name: Foundation
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-11-08T02:17:35.088Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-11-08T03:06:30.559Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 01 execution started
-state_head: 4c1edaffba0ffb2a0de38bc6c1287206bb245f7b
+state_head: d5013987e1f25f1fa172d674f1795b28f7bf6107
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 8
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Foundation) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 01 execution started
 
@@ -429,6 +429,7 @@ archived milestone artifacts.
 | Phase 01 P01 | 6 min | 2 tasks | 6 files |
 | Phase 01 P02 | 28 min | 3 tasks | 11 files |
 | Phase 01 P03 | 27 min | 3 tasks | 7 files |
+| Phase 01 P04 | 41 min | 3 tasks | 8 files |
 
 ## Decisions
 
@@ -651,6 +652,8 @@ archived milestone artifacts.
 - [Phase 01]: [behavioral-gaps] The scripted model's context-tokens value rides on its call's own message and the stream wrapper strips it from every event (partials, error, done), so Pi never sees it and no module state holds it (D-BG-07)
 - [Phase 01]: [behavioral-gaps] Pi's tool-argument validation failure is projected to 'invalid arguments: <sorted paths>' by anchoring on the quoted tool name in a first line ending with a colon; projectToolResult applies it first to every failed result (TOOL-03)
 - [Phase 01]: [behavioral-gaps] The TOOL-01 seed installs demo so the list tool's installed-plugin count reads 1, not a 0 a broken counter would also print
+- [Phase 01]: 01-04: the deleted-config CFGMIG-01 seed pins today's MIG-01 output (a disabled plugin is declared {} and the load reports will enable), because buildConfigFromState writes every plugin entry as {}; Phase 8 owns the fix in persistence/migrate-config.ts and the seed rewrite (WINDOWS deviation)
+- [Phase 01]: 01-04: earlier-release state.json writers keep only each release's schema members (allow-lists from git show of v0.4.3, v0.6.0, v0.19.2 state-io.ts); the 0.4.3 rewrite leaves autoupdate absent when the base config declares none, as 0.4.3's marketplace add did; the legacy mcp.json is rebuilt from the plugin's .mcp.json with 0.19.2's stage logic
 
 ### mcp-4 decisions
 
@@ -953,6 +956,6 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-08T02:17:34.954Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-11-08T03:06:30.436Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None

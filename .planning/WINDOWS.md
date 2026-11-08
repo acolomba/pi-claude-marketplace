@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 13
+open_count: 14
 waived_count: 52
 fixed_count: 47
-total_count: 112
-last_updated: 2026-11-05T02:11:02.263Z
+total_count: 113
+last_updated: 2026-11-08T03:04:18.774Z
 ---
 
 # Broken Windows Ledger
@@ -127,6 +127,7 @@ last_updated: 2026-11-05T02:11:02.263Z
 | 110 | 1 | deviation | features/step_definitions/config.steps.ts |  | [lifecycle-coverage] No committed seed fails when the marketplaces config writer leaves a run token in a source: pending never reads the source of a marketplace it would add (DIFF-01, NFR-5). Close it in Phase 11 with a reconcile seed whose new session adds a marketplace declared only by this writer. | fixed |  | 2026-10-23T04:22:25.048Z | 2026-10-23T04:36:21.369Z |
 | 111 | 07 | deviation | test/edge/register.test.ts | 1851 | [plugin-lifecycle] registered prune cases pin one lockfile.lock call; the locked clone cleanup makes it two, so test:modules fails | open |  | 2026-10-27T05:29:00.773Z |  |
 | 112 | 2 | unmet-truth | features/mcp-server/lifecycle.feature |  | [mcp-builtin] 'A new session offers the plugin's tool again (BLT-01)' runs @adapter-only, not @mcp: Pi 1.5.0 RPC new_session emits session_start twice and Pi's built-in MCP leaves the first connection's stub running past the profile Pi, so the HAR-05 stand-in check fails the builtin run; lift to @mcp once the harness tolerates it | fixed |  | 2026-11-04T15:04:12.808Z | 2026-11-05T02:11:02.263Z |
+| 113 | 01 | deviation | features/plugin/config-migration.feature | 27 | [behavioral-gaps] CFGMIG-01 seed pins today's MIG-01 output for a deleted config: a disabled plugin is declared {} (enabled lost) and the load reports will enable; Phase 8 owns the fix in persistence/migrate-config.ts and the seed rewrite | open |  | 2026-11-08T03:04:18.774Z |  |
 
 ````json
 [
@@ -1528,6 +1529,19 @@ last_updated: 2026-11-05T02:11:02.263Z
     "reason": "",
     "recorded_at": "2026-11-04T15:04:12.808Z",
     "resolved_at": "2026-11-05T02:11:02.263Z",
+    "milestone": null
+  },
+  {
+    "id": 113,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "features/plugin/config-migration.feature",
+    "line": 27,
+    "description": "[behavioral-gaps] CFGMIG-01 seed pins today's MIG-01 output for a deleted config: a disabled plugin is declared {} (enabled lost) and the load reports will enable; Phase 8 owns the fix in persistence/migrate-config.ts and the seed rewrite",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-08T03:04:18.774Z",
+    "resolved_at": null,
     "milestone": null
   }
 ]
