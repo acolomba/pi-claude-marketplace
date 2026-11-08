@@ -20,6 +20,7 @@
 // `resetSettleState` clears the cache cell in `registerHooksBridge` for the
 // same reason.
 
+import { stopFailureMatcherTypes } from "../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyHookNotice, notifyStopHookOverrideCap } from "../../shared/notification-dispatch.ts";
@@ -377,7 +378,8 @@ async function runStopBucket(
  * (`error` = the classified error type; `last_assistant_message` = Pi's
  * rendered `errorMessage`, or "" when absent) and runs every hook whose
  * error-type matcher admits the classified error (SFAIL-03; match-all `""` /
- * `"*"` admits every type) with no short-circuit, then DISCARDS the collected
+ * `"*"` admits every type, and a `|` list admits each type it names,
+ * D-BG-302) with no short-circuit, then DISCARDS the collected
  * outcomes: StopFailure carries no decision control, so a blocking hook or an
  * exit-2 hook produces no re-entry and no loop-state mutation, and it cannot
  * suppress its peer observers. `stopHookActive`, the consecutive-block counter,
@@ -410,17 +412,19 @@ async function runStopFailure(
   // later observers; StopFailure has no decision lane, so every matching hook
   // must get to observe the failure.
   //
-  // SFAIL-03: the parse-time gate admits only match-all (`""` / `"*"`) and
-  // exact members of the closed error-type vocabulary, so the dispatch filter
-  // is literal equality against the classified error (the shared
-  // `matcherFiresOnClosedSetValue` predicate).
+  // SFAIL-03: the parse-time gate admits match-all (`""` / `"*"`), an exact
+  // member of the closed error-type vocabulary, or a `|` list with at least
+  // one member (D-BG-302), so a hook fires on the shared closed-set predicate
+  // or when the classified error is one of the types its list names.
   const outcomes = await collectBucketOutcomes(
     runtime,
     bucket,
     event,
     ctx,
     pi,
-    (entry) => matcherFiresOnClosedSetValue(entry, classifiedError),
+    (entry) =>
+      matcherFiresOnClosedSetValue(entry, classifiedError) ||
+      stopFailureMatcherTypes(entry.rawMatcher).includes(classifiedError),
     executor,
   );
 

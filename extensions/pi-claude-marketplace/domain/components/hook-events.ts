@@ -178,13 +178,11 @@ type NonToolEvent = Exclude<BucketAEvent, ToolEvent>;
  * sentinel exactly like `UserPromptSubmit`; any non-empty matcher trips
  * TOOL-02 as a `no-matcher-support` drop.
  *
- * `StopFailure` (ADMIT-01 / SFAIL-03) matches against a closed error-type
- * vocabulary. [ASSUMED -- field-name label] the `"error"` label names the
- * Claude-side matcher target field; the label is
- * non-load-bearing (the gate compares the raw matcher string to the closed
- * set regardless of the label), and field-name confirmation against the
- * upstream contract is deferred. What is load-bearing is the closed set in
- * `NON_TOOL_EVENT_CLOSED_SETS.StopFailure` below.
+ * `StopFailure` (ADMIT-01 / SFAIL-03) matches the `error` field of Claude
+ * Code's payload against a closed error-type vocabulary, and
+ * `stopFailureMatcherTypes` reads a `|` list matcher (D-BG-302). What is
+ * load-bearing is the closed set in `NON_TOOL_EVENT_CLOSED_SETS.StopFailure`
+ * below.
  */
 export const NON_TOOL_EVENT_FIELDS = {
   SessionStart: "source",
@@ -222,6 +220,24 @@ const STOP_FAILURE_ERROR_TYPES = [
  * above so the vocabulary lives in exactly one place.
  */
 export type StopFailureErrorType = (typeof STOP_FAILURE_ERROR_TYPES)[number];
+
+const STOP_FAILURE_LIST_MATCHER = /^[\w|]+$/;
+
+/**
+ * The error types a StopFailure matcher lists (D-BG-302). Claude Code reads a
+ * StopFailure matcher made only of letters, digits, `_`, and `|` as a `|` list
+ * of exact error types and drops empty alternatives. Any other matcher takes
+ * Claude Code's regular-expression path, which the bridge does not support
+ * (MATCH-V2-01), so it lists nothing. The callers handle `""` and `*` as
+ * match-all and check each listed type against the vocabulary.
+ */
+export function stopFailureMatcherTypes(rawMatcher: string): readonly string[] {
+  if (!STOP_FAILURE_LIST_MATCHER.test(rawMatcher)) {
+    return [];
+  }
+
+  return rawMatcher.split("|").filter((type) => type !== "");
+}
 
 /**
  * The SessionStart `source` vocabulary of Claude Code (D-CF5-01, D-CF1-10,
@@ -290,12 +306,10 @@ export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
  *     absence here confirms it (ADMIT-01).
  *
  *   - **StopFailure** (ADMIT-01 / SFAIL-03): the upstream error-type
- *     vocabulary is a closed 10-value set. Membership is exact whole-string
- *     byte-equality -- no case-folding, no normalization, and (unlike a
- *     tool matcher) no pipe-OR splitting: a compound `rate_limit|server_error`
- *     matcher is not tokenized, it is a single string absent from the set and
- *     therefore trips TOOL-02 as `closed-set`. Same table shape as
- *     SessionStart (D-58-06).
+ *     vocabulary is a closed set. Membership is exact and case-sensitive.
+ *     A `|` list matcher is admitted when at least one listed type is in the
+ *     set (D-BG-302); any other matcher, and a list with no type in the set,
+ *     trips TOOL-02 as `closed-set` (D-58-06, MATCH-V2-01).
  */
 export const NON_TOOL_EVENT_CLOSED_SETS = {
   // D-CF5-01 / D-CF1-10..12: Claude Code's whole SessionStart `source`
@@ -312,9 +326,9 @@ export const NON_TOOL_EVENT_CLOSED_SETS = {
   // UserPromptSubmit and Stop intentionally omitted -- the null sentinel in
   // NON_TOOL_EVENT_FIELDS is their no-matcher-support disposition.
   // SFAIL-03: the closed error-type vocabulary for StopFailure, built from
-  // the `STOP_FAILURE_ERROR_TYPES` single source of truth above. Exact
-  // whole-string membership only -- no pipe-OR splitting (a pipe compound is
-  // a single string absent from this set and trips `closed-set`).
+  // the `STOP_FAILURE_ERROR_TYPES` single source of truth above. Membership
+  // is exact; a `|` list is admitted when one listed type is a member
+  // (D-BG-302).
   StopFailure: new Set<string>(STOP_FAILURE_ERROR_TYPES),
 } satisfies Readonly<
   Record<Exclude<NonToolEvent, "UserPromptSubmit" | "Stop">, ReadonlySet<string>>

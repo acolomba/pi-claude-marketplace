@@ -1316,6 +1316,30 @@ test("an error ending reaches matching failure observers with its payload", asyn
   assert.deepStrictEqual(sent, []);
 });
 
+test("an error ending reaches the failure observers whose matcher lists its type (D-BG-302)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const observed: string[] = [];
+  const executor: HookExecutor = (entry): Promise<HookExecResult> => {
+    observed.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  runtime.setRoutingBucket("StopFailure", [
+    failureEntry("listed", "overloaded|rate_limit"),
+    failureEntry("unlisted", "overloaded|billing_error"),
+  ]);
+  const epoch = runtime.currentGeneration();
+
+  // act
+  agentEndCacheHandler(runtime, epoch)(failureEnd("error", "Rate limit exceeded (429)"));
+  await settleHandlerFor(runtime, epoch, makePi().pi, executor)(settledEvent, emptyContext);
+
+  // assert
+  assert.deepStrictEqual(observed, ["listed"]);
+});
+
 test("a reload during awaited StopFailure work discards the stale continuation", async () => {
   // arrange
   const runtime = createHooksRuntime();
