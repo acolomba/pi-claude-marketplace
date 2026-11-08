@@ -6,7 +6,7 @@
 
 const GITHUB_HOST = "github.com";
 const SIGN_IN_PREFIX = "/login/";
-const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 /** The `127.0.0.1:<port>` addresses the redirect sends `github.com` requests to. */
 export interface RedirectConfig {
