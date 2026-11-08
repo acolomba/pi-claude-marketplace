@@ -352,7 +352,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass
 - [ ] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled
 - [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
-- [ ] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock
+- [x] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock (completed 2026-11-08)
 - [ ] **Phase 15: Marketplace State Lock** - `marketplace autoupdate` and `noautoupdate` respect a held lock, and a lock left by a dead process blocks no marketplace verb
 - [ ] **Phase 16: Background-Child Load** - A load in a pi-subagents background child changes nothing installed, yet still loads the installed components
 
@@ -625,7 +625,7 @@ Plans:
   2. A bootstrap run in json mode and one over RPC carry the same outcome as the same run in the terminal (BOOT-01).
   3. `bootstrap` while another process holds the user scope's state lock fails as lock held, and adds and records nothing (BOOT-02).
 
-**Plans**: 1/1 plans executed
+**Plans**: 1/1 plans complete
 
 Plans:
 - [x] 14-01-PLAN.md — Pin bootstrap's refusals, its outcome in each output mode, and its held-lock failure (BOOT-01, BOOT-02)
@@ -678,7 +678,7 @@ Plans:
 | 11. Device Flow Sign-In | 0/TBD | Not started | - |
 | 12. Browse Picker | 0/TBD | Not started | - |
 | 13. Prune | 0/TBD | Not started | - |
-| 14. Bootstrap | 1/1 | In Progress | - |
+| 14. Bootstrap | 1/1 | Complete    | 2026-11-08 |
 | 15. Marketplace State Lock | 0/TBD | Not started | - |
 | 16. Background-Child Load | 0/TBD | Not started | - |
 
