@@ -388,11 +388,11 @@ The error turn, the automatic compaction, the json-mode and terminal run, and th
 | 2 | Terminal and process | `pi-tui.ts` and the picker driver, the json-mode run, the background-child launch (`features/support/pi-process.ts`, `world.ts`, `test/e2e/_rpc.ts`), the session and command steps; seeds in `plugin/{browse,bootstrap,subagent-child}.feature` |
 | 3 | Brief and gate | `.planning/milestones/behavioral-gaps-CHILD-SESSION-BRIEF.md`, the measured CI time and `.github/workflows/ci.yml`, the frozen-file record, `npm run check`, and the phase branches |
 
-**Plans**: 8 plans
+**Plans**: 1/8 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 01-01-PLAN.md — Rules and records: the cucumber layout section for the streams, the profile and branch wording, the Key Decisions rows, and the two dubious-choices logs
+- [x] 01-01-PLAN.md — Rules and records: the cucumber layout section for the streams, the profile and branch wording, the Key Decisions rows, and the two dubious-choices logs
 - [ ] 01-02-PLAN.md — Launch seams (child marker, optional GitHub base, crash and restart, one-shot launch, json arguments) with the background-child and stale-lock seeds
 - [ ] 01-03-PLAN.md — Scripted model: error turns and automatic compaction, and the model-tools seeds with the argument-validation projector
 - [ ] 01-04-PLAN.md — Earlier-release fixtures: `state.json` of 0.6.0, 0.19.2, 0.4.3 and a newer schema, a deleted config, and a 0.19.2 `mcp.json`, with their seeds
@@ -651,7 +651,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Foundation | 0/8 | Not started | - |
+| 1. Foundation | 1/8 | In Progress | - |
 | 2. Async Hooks | 0/TBD | Not started | - |
 | 3. StopFailure Hooks | 0/TBD | Not started | - |
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |
