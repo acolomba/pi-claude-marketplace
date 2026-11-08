@@ -142,3 +142,51 @@ Feature: Plugin subagent child
       }
 
       """
+
+  Scenario: A background child offers the skill and the slash command of an installed plugin
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "greet" described as "Greets a person by name." with this body:
+      """
+      Greet the person named in the arguments.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given pi runs with the scripted model as a pi-subagents background child
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+    When the user lists the slash commands pi offers
+    Then pi offers these slash commands from prompt templates:
+      | command     | description              |
+      | /demo:greet | Greets a person by name. |
+
+  Scenario: A background child runs an installed plugin's PreToolUse hook on a tool call its model makes
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name       | event      | matcher |
+      | bash-guard | PreToolUse | Bash    |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given pi runs with the scripted model as a pi-subagents background child
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments  | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | bash-guard | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                         |
+      | 1    | user        | run the echo                                 |
+      | 2    | user        | run the echo                                 |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"} |
+      | 2    | tool result | bash returned: from-model\n                  |
