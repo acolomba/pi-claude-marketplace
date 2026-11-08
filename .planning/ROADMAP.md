@@ -514,7 +514,7 @@ Plans:
 **Discuss step**: the declarations MIG-01 writes in each scope, including a `--local` marketplace (FIX-02) and the legacy `autoupdate` field; what the user sees when an existing config is invalid.
 **Research flag**: no. The contract is the project's own (MIG-01).
 **Success Criteria** (what must be TRUE):
-  1. In the user scope and in the project scope, the first load with a `state.json` and no `claude-plugins.json` writes a config that declares every recorded marketplace and plugin with its enabled state and the legacy `autoupdate` field, and `pending` then shows nothing to apply (CFGMIG-01).
+  1. In the user scope and in the project scope, the first load with a `state.json` and no `claude-plugins.json` writes a config that declares every recorded marketplace and plugin with its enabled state and the legacy `autoupdate` field, and `pending` then shows nothing to apply (CFGMIG-01). This includes a disabled plugin: today's rebuild (`buildConfigFromState` in `persistence/migrate-config.ts`) writes every plugin entry as `{}`, so the Phase 1 seed in `features/plugin/config-migration.feature` pins `will enable` for it. This phase fixes the rebuild and rewrites that seed to state `enabled` false.
   2. A user's edit to the written config survives every later load and `/reload` (CFGMIG-02).
   3. An existing config that is not valid is reported and stays byte for byte as it was (CFGMIG-02).
 
