@@ -204,3 +204,33 @@ Full text: `.planning/phases/16-background-child-load/DUBIOUS-CHOICES.md`.
 - **P16-DC-17 (Medium, open).** The orchestrator finished the plan, review, and verification inline.
 - **P16-DC-18 (Low, open).** Two executors overlapped in Task 2.
 - **P16-DC-19 (Low, open).** The executor ran as a general-purpose agent.
+
+## Phase 3: StopFailure Hooks
+
+Full text: `.planning/phases/03-stopfailure-hooks/DUBIOUS-CHOICES.md`.
+
+- **P3-DC-01 (High, open).** D-BG-301: three more StopFailure error types.
+- **P3-DC-02 (High, open).** D-BG-302: `|` lists on StopFailure matchers only.
+- **P3-DC-03 (Medium, open).** D-BG-303: `last_assistant_message` left out when empty.
+- **P3-DC-04 (Medium, open).** D-BG-304: no new classifier rules.
+- **P3-DC-05 (Low, open).** Fire-and-forget not pinned.
+- **P3-DC-06 (Low, open).** Settle keeps the shared matcher check.
+- **P3-DC-07 (Low, open).** Scenario messages.
+- **P3-DC-08 (Low, open).** Pi's empty assistant row.
+- **P3-DC-09 (Low, open).** Pattern mapper skipped.
+- **P3-DC-10 (Low, open).** Three plans in three waves.
+- **P3-DC-11 (Low, open).** The next-turn scenario's reason narrowed.
+- **P3-DC-12 (Low, open).** The list matcher.
+- **P3-DC-13 (Low, open).** Dropped matchers as an Outline.
+- **P3-DC-14 (Low, open).** Look-alike other matchers.
+- **P3-DC-15 (Low, open).** A seven-file tracer.
+- **P3-DC-16 (Low, open).** Docs row rewritten once.
+- **P3-DC-17 (Low, open).** Inline list rule in settle.
+- **P3-DC-18 (Low, open).** The planner filled the validation map.
+- **P3-DC-19 (Low, open).** BACKLOG ID.
+- **P3-DC-20 (Low, open).** Two planner detectors skipped.
+- **P3-DC-21 (Medium, open).** Inline execution.
+- **P3-DC-22 (Low, open).** Executor collision.
+- **P3-DC-23 (Low, open).** One combined wave gate.
+- **P3-DC-24 (Medium, open).** A load timeout left red.
+- **P3-DC-25 (Low, open).** Test shapes.

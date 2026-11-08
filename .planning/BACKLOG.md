@@ -5083,3 +5083,7 @@ Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-04). Device Flow in print mod
 ## DFLOWREASON-01: a denied and an expired sign-in read the same
 
 Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-02). A denied and an expired GitHub sign-in both show the bare `authentication required` row (GAUTH-05); the product's own reason texts reach only the debug log. Candidate direction: give each a user-facing reason, if the user wants to tell them apart.
+
+## CLOSEDLIST-01: `|` and `,` lists in the SessionStart, SessionEnd, PreCompact, and PostCompact matchers
+
+Noted 2026-11-08 (behavioral-gaps Phase 3, P3-DC-02). Claude Code reads a matcher of these events as a list of exact values separated by `|` or `,`. The bridge compares the whole matcher with the event's closed set, so a list drops as `closed-set` and the plugin installs only with `--partial`. StopFailure has its own list reading (D-BG-302). The fix for these four events changes the shared `nonToolMatcherCondition` and `matcherFiresOnClosedSetValue`, which a behavioral-gaps hook stream may not reshape (P3-DC-02).
