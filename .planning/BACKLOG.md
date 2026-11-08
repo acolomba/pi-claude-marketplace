@@ -5087,3 +5087,7 @@ Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-02). A denied and an expired 
 ## CLOSEDLIST-01: `|` and `,` lists in the SessionStart, SessionEnd, PreCompact, and PostCompact matchers
 
 Noted 2026-11-08 (behavioral-gaps Phase 3, P3-DC-02). Claude Code reads a matcher of these events as a list of exact values separated by `|` or `,`. The bridge compares the whole matcher with the event's closed set, so a list drops as `closed-set` and the plugin installs only with `--partial`. StopFailure has its own list reading (D-BG-302). The fix for these four events changes the shared `nonToolMatcherCondition` and `matcherFiresOnClosedSetValue`, which a behavioral-gaps hook stream may not reshape (P3-DC-02).
+
+## HOOKPRECOMPACT-01: PreCompact output after /compact and as summary instructions
+
+Deferred by behavioral-gaps Phase 5 (D-BG-508). Claude Code 2.1.319 uses a PreCompact hook's exit-0 stdout as instructions for the compaction summary, at most 10,000 characters per hook, and after `/compact` shows `PreCompact [<command>] completed successfully: <stdout>` or `PreCompact [<command>] failed: <message>` lines before the PostCompact lines. The bridge does neither. No stream of the behavioral-gaps milestone owns the PreCompact arm.

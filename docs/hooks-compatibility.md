@@ -238,7 +238,7 @@ A failed hook that prints a JSON `deny` (or a `decision` of `block`) on stdout i
 
 The block reason is `[<command>]: failed; blocking because onFailure is "block"`, then a new line and the hook's stderr. After a timeout, the reason says `timed out` in place of `failed`. When the hook prints no stderr, the reason ends after `"block"`. `<command>` is the declared `command` text, with its placeholders.
 
-The default, `continue`, lets the failure pass. The bridge ignores `onFailure` on `Stop` hooks and on `async` and `asyncRewake` hooks, as upstream, and writes a debug line. On `SessionStart`, `SessionEnd`, and `PostCompact`, which cannot block, the block shows as the event's hook error (D-CF5-24).
+The default, `continue`, lets the failure pass. The bridge ignores `onFailure` on `Stop` hooks and on `async` and `asyncRewake` hooks, as upstream, and writes a debug line. On `SessionStart` and `SessionEnd`, which cannot block, the block shows as the event's hook error (D-CF5-24). On `PostCompact`, the failure shows in the hook's line after `/compact` (D-BG-501).
 
 ## stdin, stdout, exit codes
 
@@ -300,10 +300,11 @@ A hook's `systemMessage` is shown to you and never sent to the model (D-CF5-14).
 
 `SessionEnd`, `PreCompact`, `PostCompact`, and `StopFailure` drop a `systemMessage` with a debug line, as upstream. An empty `systemMessage` shows nothing. When several hooks give a message, the messages show in routing order.
 
-The same notice kind carries three more notices (D-CF5-24):
+The same notice kind carries four more notices (D-CF5-24, D-BG-501):
 
 - A blocked prompt shows `UserPromptSubmit operation blocked by hook:` and the reason on the next line. The prompt does not reach the model. Upstream adds a third line, `Original prompt: <prompt>`. The bridge leaves it out.
-- A block on `SessionStart`, `SessionEnd`, or `PostCompact`, which cannot block, shows as `<label> hook error: <message>`. An exit 2 gives the message `[<command>]: <stderr>`.
+- A block on `SessionStart` or `SessionEnd`, which cannot block, shows as `<label> hook error: <message>`. An exit 2 gives the message `[<command>]: <stderr>`.
+- After `/compact`, one notice lists how each `PostCompact` hook ended, one line per hook (see [Compaction](#compaction)). An automatic compaction shows none (D-BG-501, D-BG-502).
 - A `PreCompact` block shows `Compaction blocked by PreCompact hook: <message>` (see [Compaction](#compaction)).
 
 A notice can echo data that a hook read, such as a tool input or a file. So every notice loses its terminal escape sequences, every other control character except a line break or a tab becomes a space, and a notice longer than 2,000 characters is cut and ends with `… (+N chars)`.

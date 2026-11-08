@@ -262,3 +262,36 @@ Full text: `.planning/phases/10-model-facing-tools/DUBIOUS-CHOICES.md`.
 - **P10-DC-21 (Low, open).** Red proofs ran once.
 - **P10-DC-22 (Medium, open).** The list tool does not follow Phase 12's picker wording.
 - **P1-DC-48** (see the phase log).
+
+## Phase 5: PostCompact Hooks
+
+Full text: `.planning/phases/05-postcompact-hooks/DUBIOUS-CHOICES.md`.
+
+- **P5-DC-01 (High, open).** PostCompact lines after `/compact` replace the hook error notice (D-BG-501).
+- **P5-DC-02 (High, open).** Nothing shown after an automatic compaction (D-BG-502).
+- **P5-DC-03 (Medium, open).** Two hook modules outside the enumerated shared list (D-BG-503).
+- **P5-DC-04 (Low, open).** One notice, not one per hook (D-BG-501).
+- **P5-DC-05 (Low, open).** The line's command includes exec-form arguments (D-BG-504).
+- **P5-DC-06 (Low, open).** Shared doc sentences are parent lines (D-BG-508).
+- **P5-DC-07 (Low, open).** Tooling: shared scratchpad and a stale manager projection.
+- **P5-DC-08 (Low, open).** Pattern mapper skipped.
+- **P5-DC-09 (Low, open).** The run is worked out in the payload module.
+- **P5-DC-10 (Medium, open).** The trigger gate is a branch in a shared function body.
+- **P5-DC-11 (Low, open).** Start errors are redacted.
+- **P5-DC-12 (Low, open).** Edge divergences in the run output.
+- **P5-DC-13 (Low, open).** Shared test loops change.
+- **P5-DC-14 (Low, open).** D-BG-506's rationale is refuted.
+- **P5-DC-15 (Low, open).** A third shared doc sentence.
+- **P5-DC-16 (Low, open).** Plan checker not run as a subagent.
+- **P5-DC-17 (Medium, open).** Execution, review, and verification inline.
+- **P5-DC-18 (Low, open).** One eleven-file commit.
+- **P5-DC-19 (Low, open).** Timeout line pinned in a scenario.
+- **P5-DC-20 (Low, open).** Exec-form row in scenario 4.
+- **P5-DC-21 (Medium, open).** Scenario 6 states Pi's compaction frame.
+- **P5-DC-22 (Low, open).** Planning details.
+- **P5-DC-23 (Low, open).** Plans' tasks folded into fewer commits.
+- **P5-DC-24 (Low, open).** Test regrouping skipped.
+- **P5-DC-25 (Medium, open).** Gate failures under load accepted on rerun.
+- **P5-DC-26 (Low, open).** STATE.md not edited.
+- **P5-DC-27 (Low, open).** Commit titles checked.
+- **P1-DC-32** (see the phase log).
