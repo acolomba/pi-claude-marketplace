@@ -1,0 +1,22 @@
+# Phase 9 (Legacy MCP Entry Move): Dubious Choices
+
+The choices Phase 9 made without the user. Entries are numbered in the
+milestone form `P{N}-DC-NN`, with N = 9.
+Only the phase's child session writes this file: it copies each item from the
+report of each step and from the `## Dubious Choices` section of each plan
+SUMMARY.md. A subagent never edits this file. The parent merges it into the
+root log `.planning/DUBIOUS-CHOICES.md` at the phase's merge.
+
+- **Severity.** High: changes what a user sees or diverges from upstream.
+  Medium: a judgment call a reviewer may reverse at low cost. Low: process,
+  naming, or tooling.
+- **Status.** `open` until the user reviews it.
+- **IDs.** `P{N}-DC-NN` is a choice of phase N; this log holds Phase 9's.
+
+## Discuss step
+
+The autonomous run took the recommended option at every discuss question; those answers are the decisions D-BG-901 to D-BG-907 in 09-CONTEXT.md. Three of them are judgment calls worth a review:
+
+- **P9-DC-01 (Medium, open). "Byte for byte" read as the entries, not the file (D-BG-905).** Success criterion 2 says the user's own entries stay byte for byte. The move rewrites `mcp.json` as two-space JSON and drops comments (AFILE-04), so the scenario writes the user's servers in that form and pins each entry's content and place, not the original file's formatting.
+- **P9-DC-02 (Low, open). A project-scope scenario beyond the criteria (D-BG-906).** The criteria name no scope; the phase adds one project-scope move scenario, because each scope keeps its own legacy file.
+- **P9-DC-03 (Medium, open). "Servers still run" proven by the tool listing, not a model call (D-BG-904).** Under the builtin profile the extension serves the server from the record whatever the files hold, so the listing alone passes without the move there; the scenario adds the whole `mcp.json` text so it fails without the move under both profiles.
