@@ -1833,7 +1833,93 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(output, expectedOutput);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
+
+  test("starts no hook for a failed result under an aborted turn signal (D-BG-402)", async (t) => {
+    // arrange
+    const readDiagnostics = observeHookDebug(t);
+    const expectedCalls: RecordedCall[] = [];
+
+    // act
+    const { output, calls } = await runBashToolResult(true, AbortSignal.abort());
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(calls, expectedCalls);
+    assert.deepStrictEqual(readDiagnostics(), [
+      "[hooks] dispatch: no PostToolUseFailure hook on a cancelled tool call",
+    ]);
+  });
+
+  test("runs the PostToolUseFailure hook for a failed result under a live turn signal", async () => {
+    // arrange
+    const expectedCalls: RecordedCall[] = [
+      { pluginId: "failure", event: createToolResultEvent(true) },
+    ];
+
+    // act
+    const { calls } = await runBashToolResult(true, new AbortController().signal);
+
+    // assert
+    assert.deepStrictEqual(calls, expectedCalls);
+  });
+
+  test("runs the PostToolUse hook for a successful result under an aborted turn signal (D-BG-402)", async () => {
+    // arrange
+    const expectedCalls: RecordedCall[] = [
+      { pluginId: "after", event: createToolResultEvent(false) },
+    ];
+
+    // act
+    const { calls } = await runBashToolResult(false, AbortSignal.abort());
+
+    // assert
+    assert.deepStrictEqual(calls, expectedCalls);
+  });
 });
+
+// Runs one bash tool result under `signal`, with a PostToolUse hook `after`
+// and a PostToolUseFailure hook `failure`, both matching Bash.
+async function runBashToolResult(
+  isError: boolean,
+  signal: AbortSignal,
+): Promise<{
+  readonly output: Awaited<ReturnType<ReturnType<typeof toolResultCompositeHandler>>>;
+  readonly calls: RecordedCall[];
+}> {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const context = createExtensionContext("/workspace/tool-result-signal");
+  context.signal = signal;
+  runtime.setRoutingBucket("PostToolUse", [
+    createRoutingEntry({
+      pluginId: "after",
+      claudeEvent: "PostToolUse",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
+    }),
+  ]);
+  runtime.setRoutingBucket("PostToolUseFailure", [
+    createRoutingEntry({
+      pluginId: "failure",
+      claudeEvent: "PostToolUseFailure",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
+    }),
+  ]);
+  const calls: RecordedCall[] = [];
+  const executor = createRecordingExecutor(
+    { after: { kind: "noop" }, failure: { kind: "noop" } },
+    calls,
+  );
+  const handler = toolResultCompositeHandler(
+    runtime,
+    runtime.currentGeneration(),
+    undefined,
+    executor,
+  );
+  const output = await handler(createToolResultEvent(isError), context);
+  return { output, calls };
+}
 
 describe("composite per-event adapters", () => {
   test("adapts a PreToolUse block without a reason to Claude Code's default hook error", async () => {
