@@ -31,6 +31,9 @@ import { fileURLToPath, urlToHttpOptions } from "node:url";
 
 import { harnessDirectory } from "../turn-records.ts";
 
+import { routeRequest } from "./routing.ts";
+
+import type { RedirectConfig, Route, RouteTarget } from "./routing.ts";
 import type { ClientRequest, IncomingMessage, OutgoingHttpHeaders } from "node:http";
 import type { RequestOptions } from "node:https";
 
@@ -39,25 +42,6 @@ export const GITHUB_REDIRECT_EXTENSION = fileURLToPath(import.meta.url);
 
 const CONFIG_FILE = "github-redirect.json";
 const LOG_FILE = "github-redirect.jsonl";
-const GITHUB_HOST = "github.com";
-const SIGN_IN_PREFIX = "/login/";
-const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
-
-/** The `127.0.0.1:<port>` addresses the redirect sends `github.com` requests to. */
-export interface RedirectConfig {
-  readonly gitHost: string;
-  readonly signIn: string;
-}
-
-/** The stand-in a routed request goes to. */
-export type RouteTarget = "git host" | "sign-in";
-
-/** What the redirect does with one request. */
-type Route =
-  | { readonly decision: "passed" }
-  | { readonly decision: "routed"; readonly target: RouteTarget; readonly url: string }
-  | { readonly decision: "refused"; readonly host: string };
-
 /** One line of the redirect's log. */
 export type RedirectLogLine =
   | { readonly decision: "loaded"; readonly pid: number; readonly configured: boolean }
@@ -77,20 +61,6 @@ type RequestFunction = (
 
 // A replacement `request` or `get`, which takes every argument form Node's do.
 type PatchedRequest = (...args: unknown[]) => ClientRequest;
-
-function routeRequest(url: URL, config: RedirectConfig | undefined): Route {
-  if (LOOPBACK_HOSTS.has(url.hostname)) {
-    return { decision: "passed" };
-  }
-
-  if (config === undefined || url.protocol !== "https:" || url.hostname !== GITHUB_HOST) {
-    return { decision: "refused", host: url.hostname };
-  }
-
-  const target: RouteTarget = url.pathname.startsWith(SIGN_IN_PREFIX) ? "sign-in" : "git host";
-  const address = target === "sign-in" ? config.signIn : config.gitHost;
-  return { decision: "routed", target, url: `https://${address}${url.pathname}${url.search}` };
-}
 
 /**
  * Writes the redirect's config to the sandbox home `home`, which must not
