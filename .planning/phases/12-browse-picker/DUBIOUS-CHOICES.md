@@ -31,3 +31,16 @@ root log `.planning/DUBIOUS-CHOICES.md`.
 - **P12-DC-11 (Low, open). Scope-screen descriptions pinned as truncated.** The 120-column terminal cuts them at 84 characters mid-word; the scenario pins what the user sees.
 - **P12-DC-12 (Low, open). Unavailable plugin's Info-only actions stay unit-tested only.** No terminal scenario pins them.
 - **P12-DC-13 (Low, open). Pattern mapper skipped.** The research already maps every touched file to its analog with code excerpts, so the optional pattern-mapper step was not run.
+
+## Planning step
+
+- **P12-DC-14 (Low, open). D-BG-1201 lands in two commits.** The tracer adds the offered count, the next task the ` • N installed` part, so each commit passes the coverage hook.
+- **P12-DC-15 (Medium, open). Scenario B's unavailable entry has no version.** So the row shows Pi's `not installable` description, a computed value the executor confirms or pins as observed.
+- **P12-DC-16 (Low, open). A unit case pins the look-alike-name refusal.** A catalog declaring `claude-plugins-v2` shows no count, mirroring list-flow's test (P12-DC-07).
+- **P12-DC-17 (Low, open). Bare-command red proof required.** B is the only scenario opened with a bare `/claude:plugin`, so its arm gets its own mutation proof.
+- **P12-DC-18 (Low, open). Seed titles change.** B, C and F get new titles, so the frozen `layout.md` Seeds entry for Phase 12 goes stale; it is a parent line.
+- **P12-DC-19 (Low, open). Decision IDs in two scenario titles.** B ends with `(D-BG-1201)` and C with `(D-BG-1202)`.
+- **P12-DC-20 (Low, open). BROWSE-02 wording unchanged.** C, D and E each install in the marketplace's own scope, so the requirement text still holds; P12-DC-03 carries the refinement.
+- **P12-DC-21 (Medium, open). Cancel red proofs may race.** Their mutations install only after the picker closes; a mutation that passes twice is reported unproven rather than weakening the scenario.
+- **P12-DC-22 (Low, open). BACKLOG ID `BROWSESCOPE-01` proposed** for the install-scope parity entry; the parent may rename it.
+- **P12-DC-23 (Low, open). Every task rated reversible, no decision checkpoint.** An autonomous run with D-BG-1201 and D-BG-1202 already settled.
