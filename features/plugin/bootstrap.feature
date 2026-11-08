@@ -3,7 +3,8 @@ Feature: Plugin bootstrap
   Bootstrap adds Claude Code's official marketplace to the user scope, where its
   autoupdate is on by default. A loopback https git host stands in for GitHub and
   serves the official marketplace through the GitHub base override. A one-shot Pi in
-  json mode and a Pi in a real terminal run the same command.
+  json mode and a Pi in a real terminal run the same command. A helper process holds
+  the user scope's state lock as a second Pi would.
 
   Scenario: Bootstrapping adds the official marketplace to the user scope with its autoupdate on by default
     Given the marketplace "claude-plugins-official" is published as the official marketplace
@@ -125,6 +126,21 @@ Feature: Plugin bootstrap
       | anthropics/claude-plugins-official | user              | failed             | anthropics/claude-plugins-official | anthropics/claude-plugins-official | failed | source missing | user  | HTTP Error: 404 Not Found, fetched https://{git host}/anthropics/claude-plugins-official.git | false           |       |                  |
     Then the "claude-plugins.json" file of the user scope does not exist
     Then the user scope holds no git clones
+
+  Scenario: Bootstrapping while another process holds the user scope's state lock fails as lock held and records nothing
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    Given another process holds the state lock of the user scope
+    When the user runs "/claude:plugin bootstrap"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                      |
+      | cascade | error    | false        | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name                   | marketplace scope | marketplace status | id                                 | name                               | status | reasons   | scope | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | anthropics/claude-plugins-official | user              | failed             | anthropics/claude-plugins-official | anthropics/claude-plugins-official | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+    Then the "claude-plugins.json" file of the user scope does not exist
+    Then the user scope holds no marketplace checkout
+    Then the user scope holds no git clones
+    Then the git host receives no request
 
   Scenario Outline: Bootstrap rejects <rejected> with its usage
     When the user runs "/claude:plugin bootstrap <arguments>"
