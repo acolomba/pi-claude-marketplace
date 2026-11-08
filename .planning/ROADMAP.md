@@ -383,7 +383,25 @@ The error turn, the automatic compaction, the json-mode and terminal run, and th
 | 2 | Terminal and process | `pi-tui.ts` and the picker driver, the json-mode run, the background-child launch (`features/support/pi-process.ts`, `world.ts`, `test/e2e/_rpc.ts`), the session and command steps; seeds in `plugin/{browse,bootstrap,subagent-child}.feature` |
 | 3 | Brief and gate | `.planning/milestones/behavioral-gaps-CHILD-SESSION-BRIEF.md`, the measured CI time and `.github/workflows/ci.yml`, the frozen-file record, `npm run check`, and the phase branches |
 
-**Plans**: TBD
+**Plans**: 8 plans
+
+Plans:
+**Wave 1**
+- [ ] 01-01-PLAN.md — Rules and records: the cucumber layout section for the streams, the profile and branch wording, the Key Decisions rows, and the two dubious-choices logs
+- [ ] 01-02-PLAN.md — Launch seams (child marker, optional GitHub base, crash and restart, one-shot launch, json arguments) with the background-child and stale-lock seeds
+- [ ] 01-03-PLAN.md — Scripted model: error turns and automatic compaction, and the model-tools seeds with the argument-validation projector
+- [ ] 01-04-PLAN.md — Earlier-release fixtures: `state.json` of 0.6.0, 0.19.2, 0.4.3 and a newer schema, a deleted config, and a 0.19.2 `mcp.json`, with their seeds
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-05-PLAN.md — Async hook stand-ins: lifecycle log, release, summary, rewake, and the stop of hooks a dead Pi left
+- [ ] 01-06-PLAN.md — GitHub Device Flow stand-in with the in-process redirect, its routing cases, and the sign-in and terminal seeds
+- [ ] 01-07-PLAN.md — Json-mode and terminal command runs, the terminal screen model, and the browse picker driver, with their seeds
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-08-PLAN.md — Frozen record, stand-in docs, child-session brief, combined-tree gate with CI timing, and the fifteen local branches
+
+**Cross-cutting constraints:** <!-- gsd:generated -->
+- No seed of this plan carries an MCP implementation tag (D-BG-05).
 
 ### Phase 2: Async Hooks
 
@@ -628,7 +646,7 @@ The error turn, the automatic compaction, the json-mode and terminal run, and th
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/8 | Not started | - |
 | 2. Async Hooks | 0/TBD | Not started | - |
 | 3. StopFailure Hooks | 0/TBD | Not started | - |
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |

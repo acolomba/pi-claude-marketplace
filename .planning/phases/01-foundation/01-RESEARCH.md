@@ -438,11 +438,11 @@ spawn(process.execPath, [
 | A6 | Seeds add under one minute per CI leg | Q12 | a timeout raise in ci.yml |
 | A7 | The redirect extension and usage-wrapper code shapes shown | Patterns | none (illustrative) |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Upstream projector for Pi's tool-argument validation text (TOOL-03).** What we know: the text is Pi's (validation.js:58-59). Unclear: whether Phase 10 needs the scope case at all. Recommendation: add a projector in `features/lib/upstream/pi.ts` now; it is small and the library freezes.
-2. **Picker reading strategy.** Recommendation: the browse seed exercises list + choose + cancel; if row reading fails, record a P1-DC and fall back to title-anchored, position-based choices.
-3. **Legacy-move seed scope.** The seed can prove the file move (both profiles, `@mcp`) without a profile Pi; "servers still run" is Phase 9's. Recommendation: file move only, to keep the seed cheap.
+1. **Upstream projector for Pi's tool-argument validation text (TOOL-03).** What we know: the text is Pi's (validation.js:58-59). Unclear: whether Phase 10 needs the scope case at all. Recommendation: add a projector in `features/lib/upstream/pi.ts` now; it is small and the library freezes. RESOLVED: adopted by plan 01-03 (`projectArgumentValidationFailure`).
+2. **Picker reading strategy.** Recommendation: the browse seed exercises list + choose + cancel; if row reading fails, record a P1-DC and fall back to title-anchored, position-based choices. RESOLVED: adopted by plan 01-07 Task 3 (screen model first; the fallback is recorded as a dubious choice).
+3. **Legacy-move seed scope.** The seed can prove the file move (both profiles, `@mcp`) without a profile Pi; "servers still run" is Phase 9's. Recommendation: file move only, to keep the seed cheap. RESOLVED: adopted by plan 01-04 (the `@mcp` legacy-move seed proves the move only).
 
 ## Environment Availability
 
