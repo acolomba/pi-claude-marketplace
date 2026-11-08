@@ -612,7 +612,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 13-01-PLAN.md — the prune scenarios for the user-scope default, one preview per scope, and a disabled plugin's dependencies, with red proofs for them and for the existing usage-error and state-lock coverage
+- [x] 13-01-PLAN.md — the prune scenarios for the user-scope default, one preview per scope, and a disabled plugin's dependencies, with red proofs for them and for the existing usage-error and state-lock coverage
 
 ### Phase 14: Bootstrap
 
@@ -677,7 +677,7 @@ Plans:
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
 | 11. Device Flow Sign-In | 0/TBD | Not started | - |
 | 12. Browse Picker | 0/TBD | Not started | - |
-| 13. Prune | 0/TBD | Not started | - |
+| 13. Prune | 1/1 | In progress | - |
 | 14. Bootstrap | 0/TBD | Not started | - |
 | 15. Marketplace State Lock | 0/TBD | Not started | - |
 | 16. Background-Child Load | 0/TBD | Not started | - |
