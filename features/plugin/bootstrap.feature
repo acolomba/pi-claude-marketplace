@@ -2,11 +2,30 @@ Feature: Plugin bootstrap
 
   Bootstrap adds Claude Code's official marketplace to the user scope, where its
   autoupdate is on by default. A loopback https git host stands in for GitHub and
-  serves the official marketplace through the GitHub base override.
+  serves the official marketplace through the GitHub base override. A one-shot Pi in
+  json mode and a Pi in a real terminal run the same command.
 
   Scenario: Bootstrapping adds the official marketplace to the user scope with its autoupdate on by default
     Given the marketplace "claude-plugins-official" is published as the official marketplace
     When the user runs "/claude:plugin bootstrap"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | false        |
+    Then the results list these marketplaces and plugins:
+      | marketplace name        | marketplace scope | marketplace status |
+      | claude-plugins-official | user              | added              |
+    Then the git host receives these requests:
+      | method | path                                                                      | status |
+      | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name                    | source                             |
+      | claude-plugins-official | anthropics/claude-plugins-official |
+    Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Bootstrapping in json mode reports the result it reports over rpc
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    When the user runs "/claude:plugin bootstrap" in pi's json mode
     Then the command reports these results:
       | kind    | severity | needs reload |
       | cascade | info     | false        |

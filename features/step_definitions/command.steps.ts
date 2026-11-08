@@ -1,6 +1,8 @@
 /**
  * @fileoverview Steps that run `/claude:plugin` commands in a headless Pi and
  * check the JSON results of the last `When` step, a command or a new session.
+ * A command can also run in a one-shot Pi in json mode, whose results the
+ * same steps read (D-BG-09).
  *
  * A `Given` command is setup and must succeed, unless its text says it
  * failed, warned, or did not fail.
@@ -23,6 +25,7 @@ import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { namesLike, recordTable } from "../lib/field-rows.ts";
 import { runCommandPayloads } from "../lib/pi-commands.ts";
+import { runJsonModeCommand } from "../lib/pi-json-mode.ts";
 import {
   envelopeFields,
   marketplaceRowRecords,
@@ -91,6 +94,19 @@ When("the user runs {string}", async function (this: ScenarioWorld, command: str
     "command",
   );
 });
+
+// D-BG-09: the same command in a one-shot Pi in json mode, whose results the
+// same `Then` steps read as an rpc command's.
+When(
+  "the user runs {string} in pi's json mode",
+  async function (this: ScenarioWorld, command: string) {
+    const payloads = await runJsonModeCommand(
+      await this.oneShotPiLaunch(),
+      expandTokens(command, this.tokens),
+    );
+    this.recordResults(payloads, "command");
+  },
+);
 
 Then("the result has these fields:", function (this: ScenarioWorld, table: DataTable) {
   const stated = table.raw().map(([name]) => String(name));
