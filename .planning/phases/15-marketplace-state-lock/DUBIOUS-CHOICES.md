@@ -60,3 +60,23 @@ want to reverse.
 - **P15-DC-09 (Low, open). The researcher ran its red proofs in a scratch copy
   of the tree,** with `node_modules` linked, so it would not edit the worktree.
   The executor repeats both red proofs in the worktree and records them.
+
+## Planning step
+
+- **P15-DC-10 (Low, open). Pattern mapping skipped.** The optional
+  pattern-mapper step did not run: the phase edits one feature file, and the
+  research already maps its analog scenarios.
+- **P15-DC-11 (Low, open). One plan with three tasks.** "Standard"
+  granularity suggests more plans, but every task edits the same feature file,
+  so more plans would only run one after another.
+- **P15-DC-12 (Low, open). Planner wording choices.** The Examples columns are
+  `autoupdate before` and `autoupdate after`; the stale add Outline drops the
+  unused `scope root` column; the user-scope stale remove twin's title names
+  its scope while the seed keeps its old title; the feature description runs
+  three lines of up to 122 characters; red proof A runs once, on the
+  17-scenario file of the first task.
+- **P15-DC-13 (Low, open). Checker warning dismissed.** The plan checker
+  flagged the `Claude Opus 5.5` commit trailer because its own session's
+  reminder named another model. The parent's instructions fix the Opus 5.5
+  trailer for this child session, so the warning was treated as a false
+  positive and the plan was not revised.
