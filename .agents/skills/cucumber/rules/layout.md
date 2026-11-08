@@ -203,7 +203,7 @@ Each entry below names the stream's seeds by title, then the steps that only tho
 - Phase 6: no seed. Phase 6 creates `hook/session-end.feature`.
 - Phase 7, `plugin/state-migration.feature`: "Pi lists the plugin of an installation record that release 0.6.0 wrote", "Pi lists the plugin of an installation record that release 0.19.2 wrote", and "A newer installation record is refused and left as it was".
   - `plugin/installation.steps.ts`: `the installation record of the {word} scope is rewritten as release {string} wrote it` and `the installation record of the {word} scope is rewritten with a schema version this release does not read`.
-- Phase 8, `plugin/config-migration.feature`: "The first load after an upgrade from release 0.4.3 writes the config from the records" and "The first load after the user deleted the config writes it without a disabled plugin's enabled state". The second seed pins a product gap that Phase 8 fixes (CFGMIG-01).
+- Phase 8, `plugin/config-migration.feature`: "The first load after an upgrade from release 0.4.3 writes the config from the records" and "The first load after the user deleted the config writes it with a disabled plugin's enabled state".
   - `plugin/installation.steps.ts`: `the {word} scope holds what release 0.4.3 left: its installation record and no config`.
   - `config.steps.ts`: `the user has deleted the config files of the {word} scope`.
 - Phase 9, `mcp-server/legacy-move.feature`: "A load moves a plugin's servers out of a release 0.19.2 mcp.json and keeps the user's own server" (`@mcp`).

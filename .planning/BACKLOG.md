@@ -5115,3 +5115,11 @@ Noted 2026-11-08 (behavioral-gaps Phase 13, P13-DC-02). Claude Code's CLI names 
 ## PRUNEISLAND-01: prune keeps an island of dependencies that declare each other
 
 Noted 2026-11-08 (behavioral-gaps Phase 13, P13-DC-03). Claude Code's orphan scan walks the dependencies of the plugins installed by name, so dependency plugins that only declare each other are orphans and its prune removes them. `pruneOrphans` (`domain/dependency-orphans.ts`) removes only a record that no remaining record declares, so such an island holds itself, as its PRUNE-03 comment documents and `test/domain/dependency-orphans.test.ts` pins. Install refuses a dependency cycle, so an island forms only when installed manifests change. Candidate direction: walk from the plugins installed by name, as upstream does, with a decision that amends PRUNE-03, or record the divergence.
+
+## REDACTPOINTER-01: the path redaction cuts a multi-segment JSON pointer
+
+Noted 2026-11-08 (behavioral-gaps Phase 8, P8-DC-05). `shared/redact-absolute-paths.ts` reads a JSON pointer with more than one segment in a schema-error cause, such as `/plugins/demo@fixtures/enabled`, as an absolute path and cuts it to `demo@fixtures/enabled`. Owner: the shared redaction and the invalid-config step of the read pass. Candidate direction: leave a JSON pointer that follows a schema-error prefix unredacted.
+
+## AUTOAPPLYDEFAULTOFF-01: autoapply rewrites the config for a `defaultEnabled: false` plugin
+
+Noted 2026-11-08 (behavioral-gaps Phase 8, P8-DC-08). With autoapply on, a load stamps `enabled: false` into `claude-plugins.json` for a declared `defaultEnabled: false` plugin and writes the file again in its own format. It is the one load-time config write once the file exists (D-102-02, DFEN-04). Owner: the install path. Candidate direction: decide whether that stamp should wait for an explicit command.

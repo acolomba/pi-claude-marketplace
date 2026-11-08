@@ -1,6 +1,7 @@
 // persistence/migrate-config.ts
 //
 // MIG-01 / MIG-02 / D-04 / D-v1.12-51-11 / D-13 / SPLIT-01 / SPLIT-02 / NFR-1 / NFR-10
+// D-BG-801 / D-BG-802 / D-BG-803
 //
 // Pure projection + thin ENOENT-gated orchestrator for first-run migration
 // from `state.json` to `claude-plugins.json`. Load-bearing contracts:
@@ -29,9 +30,10 @@ import {
   type PluginConfigEntry,
   type ScopeConfig,
 } from "./config-io.ts";
+import { isRecordedButDisabled } from "./state-io.ts";
 
 import type { ScopedLocations } from "./locations.ts";
-import type { ExtensionState } from "./state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "./state-io.ts";
 import type { ParsedSource } from "../domain/source.ts";
 
 /**
@@ -101,7 +103,9 @@ export type MigrateFirstRunResult =
  * ScopeConfig shape consumed by the reconcile planner.
  *
  * No I/O. Every state marketplace and every plugin (including
- * `compatibility.installable === false`) appears in the output, except what
+ * `compatibility.installable === false`) appears in the output, except a
+ * plugin that only a dependency cascade installed and the user did not
+ * disable (D-BG-802, D-04-02), and except what
  * `local` declares (FIX-02): a marketplace the local config declares is left
  * out with every plugin recorded under it, and so is a plugin key the local
  * config declares. The local config stays the only record of what is
@@ -109,7 +113,10 @@ export type MigrateFirstRunResult =
  * marketplace the local config declares is declared only there. Plugin
  * entries are flat-keyed `${pluginName}@${mpName}` (D-01) so the same
  * plugin name across two marketplaces does not collide. Each plugin entry
- * body is `{}` per D-04 (defaults applied at consume time).
+ * is what the user's own commands wrote for its record: `install` writes
+ * `{}`, and `disable` writes `{ enabled: false }` (D-BG-801). An absent
+ * `enabled` reads as enabled (D-04). A record the dependency check holds down
+ * is written `{}`, so the hold stays liftable (D-BG-803).
  *
  * `source` is recovered byte-stably via `(mp.source as ParsedSource).raw`
  * (SP-7 verbatim user input). Defense-in-depth: `loadState`'s ST-6 funnel
@@ -173,7 +180,7 @@ export function buildConfigFromState(
     }
 
     marketplaceEntries.push([mpName, entry]);
-    pluginEntries.push(...basePluginEntries(mpName, Object.keys(mp.plugins), local));
+    pluginEntries.push(...basePluginEntries(mpName, mp.plugins, local));
   }
 
   const marketplaces = Object.fromEntries(marketplaceEntries);
@@ -181,18 +188,46 @@ export function buildConfigFromState(
   return { schemaVersion: 1, marketplaces, plugins };
 }
 
-// The base config's plugin entries for one marketplace. Soft-degraded entries
-// (compatibility.installable === false) appear too; only a plugin key the
-// local config declares is left out (FIX-02).
+// The base config's plugin entries for one marketplace, each as
+// `declaredEntry` gives it. Soft-degraded entries
+// (compatibility.installable === false) appear too. A plugin key the local
+// config declares is left out (FIX-02), and so is a plugin that only a
+// dependency cascade installed (D-BG-802).
 function basePluginEntries(
   mpName: string,
-  pluginNames: readonly string[],
+  plugins: Readonly<Record<string, PluginInstallRecord>>,
   local: ScopeConfig,
 ): Array<[string, PluginConfigEntry]> {
-  return pluginNames
-    .map((pluginName) => `${pluginName}@${mpName}`)
-    .filter((key) => ownValue(local.plugins, key) === undefined)
-    .map((key) => [key, {}]);
+  return Object.entries(plugins).flatMap(
+    ([pluginName, record]): Array<[string, PluginConfigEntry]> => {
+      const key = `${pluginName}@${mpName}`;
+      if (ownValue(local.plugins, key) !== undefined) {
+        return [];
+      }
+
+      const entry = declaredEntry(record);
+      return entry === undefined ? [] : [[key, entry]];
+    },
+  );
+}
+
+// LOAD-01 / D-BG-803: the dependency check, not the user, disabled this
+// record. Persistence cannot import the planner's own reader of the marker.
+function isHeldByDependencyCheck(record: PluginInstallRecord): boolean {
+  return record.dependencyDisabled === true;
+}
+
+// D-BG-801 / D-BG-802 / D-BG-803: the entry the user's own commands wrote for
+// this record. `disable` wrote `{ enabled: false }`, also for a dependency the
+// user disabled by name. `install` wrote `{}`. A held record gets `{}` because
+// no lift overturns a declared `enabled: false`. A plugin that only a
+// dependency cascade installed was never declared (D-04-02).
+function declaredEntry(record: PluginInstallRecord): PluginConfigEntry | undefined {
+  if (isRecordedButDisabled(record) && !isHeldByDependencyCheck(record)) {
+    return { enabled: false };
+  }
+
+  return record.provenance === "dependency" ? undefined : {};
 }
 
 /**
