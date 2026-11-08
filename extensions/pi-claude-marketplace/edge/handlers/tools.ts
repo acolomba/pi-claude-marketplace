@@ -86,7 +86,7 @@ const LIST_PLUGINS_PARAMS = Type.Object({
     }),
   ),
   installed: Type.Optional(
-    Type.Boolean({ description: "Include plugins installed in state.json." }),
+    Type.Boolean({ description: "Include installed plugins that are enabled." }),
   ),
   available: Type.Optional(
     Type.Boolean({
@@ -95,7 +95,8 @@ const LIST_PLUGINS_PARAMS = Type.Object({
   ),
   unavailable: Type.Optional(
     Type.Boolean({
-      description: "Include manifest-declared plugins that are not installable on this system.",
+      description:
+        "Include manifest-declared plugins that are not installable on this system, and installed plugins that are disabled.",
     }),
   ),
 });
@@ -382,8 +383,13 @@ async function loadToolPluginPayload(
     // `projectRowStatus` performs on the way back. Sending an all-true bag
     // instead of nothing would make `filtersPassive` false and strand both
     // fine-grained buckets, which have no tool parameter to turn them on.
+    // The `unavailable` bucket also holds the installed plugins that are
+    // disabled (D-BG-1004, D-54-01), which the payload loader files under its
+    // installed inventory, so that bucket forwards `installed: true` as well;
+    // the bucket filter in `renderPluginPayload` then drops the enabled
+    // installed rows the call did not ask for.
     ...(buckets.narrowed && {
-      ...(buckets.i && { installed: true }),
+      ...((buckets.i || buckets.u) && { installed: true }),
       ...(buckets.a && { available: true, remote: true }),
       ...(buckets.u && { unavailable: true, partial: true }),
     }),
@@ -445,7 +451,8 @@ type ToolPluginBlock = Awaited<ReturnType<typeof loadPluginListPayload>>[number]
 /**
  * Renders the content lines and keeps, per block, the rows the bucket filter
  * admits. Each kept block is the payload block with only those rows, in
- * order; a block whose rows the filter empties stays as a block with none.
+ * order. A block that keeps no rows stays as a block with none, and its
+ * header is followed by `(no plugins)` (D-BG-1008).
  */
 function renderPluginPayload(
   payload: Awaited<ReturnType<typeof loadPluginListPayload>>,
@@ -455,15 +462,6 @@ function renderPluginPayload(
   const marketplaces: ToolPluginBlock[] = [];
   for (const mp of payload) {
     lines.push(`Marketplace ${mp.name} (${mp.scope})`);
-
-    // Unparseable-manifest marketplace block (status: "failed", plugins: [])
-    // and zero-plugin manifest blocks both render as the bare-header form
-    // followed by the "(no plugins)" body line for shape stability.
-    if (mp.plugins.length === 0) {
-      lines.push("  (no plugins)");
-      marketplaces.push(mp);
-      continue;
-    }
 
     const kept: ToolPluginRow[] = [];
     for (const p of mp.plugins) {
@@ -482,6 +480,13 @@ function renderPluginPayload(
       };
       lines.push(renderPluginRow(row));
       kept.push(p);
+    }
+
+    // D-BG-1008: a block whose manifest could not be read, a block whose
+    // manifest declares no plugin, and a block whose rows the filters dropped
+    // all read "(no plugins)" under their header.
+    if (kept.length === 0) {
+      lines.push("  (no plugins)");
     }
 
     marketplaces.push({ ...mp, plugins: kept });
