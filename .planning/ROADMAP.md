@@ -544,7 +544,10 @@ Plans:
   2. The user's own, unmarked `mcp.json` entries stay byte for byte as they were (AMIG-02).
   3. A second load moves nothing and reports nothing, and each scenario passes under every MCP implementation it applies to (AMIG-01, AMIG-02).
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 09-01-PLAN.md — Four `@mcp` scenarios beside the seed (the user's own servers, a second load, the moved server running, the project scope), with the new Given in `mcp-server/legacy-move.steps.ts`
 
 ### Phase 10: Model-Facing Tools
 
