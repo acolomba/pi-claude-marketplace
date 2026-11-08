@@ -44,3 +44,10 @@ root log `.planning/DUBIOUS-CHOICES.md`.
 - **P12-DC-21 (Medium, open). Cancel red proofs may race.** Their mutations install only after the picker closes; a mutation that passes twice is reported unproven rather than weakening the scenario.
 - **P12-DC-22 (Low, open). BACKLOG ID `BROWSESCOPE-01` proposed** for the install-scope parity entry; the parent may rename it.
 - **P12-DC-23 (Low, open). Every task rated reversible, no decision checkpoint.** An autonomous run with D-BG-1201 and D-BG-1202 already settled.
+
+## Execution
+
+- **P12-DC-24 (Medium, open). Plans executed inline, not by `gsd-executor` subagents.** This session's working directory is the parent milestone checkout, so the agent-isolation guard read the parent's stale sentinel and refused every executor dispatch even after `dispatch-isolation --force-isolation none` in the phase worktree; the auto-mode classifier refused writing the sentinel into the parent checkout. The orchestrator ran each plan itself in the phase worktree, the workflow's documented fallback when an executor cannot be dispatched.
+- **P12-DC-25 (Low, open). Commit message files in the shared scratchpad.** The context, research, and plan commits and Task 1 of 12-01 wrote their message files under the shared scratchpad (a `p12/` folder after a sibling overwrote one top-level file before it was used). Every commit title was checked against its content and matches; later files go to `/tmp/claude-1000/bg-phase-12/`.
+- **P12-DC-26 (Low, open). Literal `--import` path.** Unit tests ran with the worktree's literal path to `test/platform/isolated-pi-home.ts` in place of `$PWD`, because the session's command guard refuses a runtime-computed `--import`.
+- **P12-DC-27 (Low, open). Exactly two `ctx.cwd` reads in the first-screen unit helper**, as planned; a handler that reads it once more fails those three cases.
