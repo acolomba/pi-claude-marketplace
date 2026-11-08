@@ -514,7 +514,11 @@ Plans:
   2. That load rewrites the installation record in the current schema, and a second load changes nothing (STMIG-01).
   3. A `state.json` from a newer schema is reported as unreadable by the load and by a command, and the file, the config, and every installed component stay as they were (STMIG-02).
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+**Wave 1**
+- [ ] 07-01-PLAN.md — Migration coverage: the migrated-record step, first and second loads after 0.6.0 and 0.19.2, a disabled plugin kept disabled, and the load and `disable` refusing a newer record, each with a red proof
 
 ### Phase 8: First-Run Config Migration
 
