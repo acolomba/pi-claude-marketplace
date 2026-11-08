@@ -213,10 +213,19 @@ async function forwardEvents(
   outer.end(settledMessage(await inner.result()));
 }
 
-// The faux stream of one call, with the usage its reply step reports.
+// The faux stream of one call, with the usage its reply step reports. A
+// failure while forwarding ends the call in an error that names its cause,
+// so the turn fails with it and Node reports no unhandled rejection.
 function withContextUsage(inner: AssistantMessageEventStream): AssistantMessageEventStream {
   const outer = createAssistantMessageEventStream();
-  void forwardEvents(inner, outer);
+  forwardEvents(inner, outer).catch((error: unknown) => {
+    const message = fauxAssistantMessage([], {
+      stopReason: "error",
+      errorMessage: `scripted model: forwarding the faux stream failed: ${String(error)}`,
+    });
+    outer.push({ type: "error", reason: "error", error: message });
+    outer.end(message);
+  });
   return outer;
 }
 
