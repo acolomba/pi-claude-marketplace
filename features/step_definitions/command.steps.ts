@@ -129,6 +129,9 @@ When(
     const payloads = await runJsonModeCommand(
       await this.oneShotPiLaunch(),
       expandTokens(command, this.tokens),
+      (release) => {
+        this.onRelease(release);
+      },
     );
     this.recordResults(payloads, "command");
   },

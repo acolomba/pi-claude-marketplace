@@ -75,11 +75,15 @@ function customEntries(stdout: string): CustomEntryRecord["entry"][] {
  * json mode reads stdin to its end before it runs the command. Returns every
  * payload the command emitted, in emission order, each valid against the
  * payload schema (DRV-01). Fails, with Pi's stderr, on a non-zero exit, on no
- * payload, and once `timeoutMs` has passed, after it kills the process group.
+ * payload, and once `timeoutMs` has passed. Pi runs in a process group of its
+ * own, which the driver kills once Pi exits or the time passes, so nothing Pi
+ * started outlives the command. It hands that kill to `onRelease` before it
+ * waits, so the scenario's release frees the group when the wait is abandoned.
  */
 export async function runJsonModeCommand(
   launch: JsonModeLaunch,
   command: string,
+  onRelease: (release: () => void) => void,
   timeoutMs = DEFAULT_JSON_MODE_MS,
 ): Promise<readonly NotificationPayload[]> {
   const sandbox = await resolveRpcSandbox(launch.sandbox);
@@ -93,6 +97,16 @@ export async function runJsonModeCommand(
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
+  // A second kill could reach an unrelated group that took the id.
+  let groupKilled = false;
+  const killGroup = (): void => {
+    if (!groupKilled) {
+      groupKilled = true;
+      killProcessGroup(child);
+    }
+  };
+
+  onRelease(killGroup);
   const output = { stdout: "", stderr: "" };
   child.stdout.setEncoding("utf8").on("data", (chunk: string) => (output.stdout += chunk));
   child.stderr.setEncoding("utf8").on("data", (chunk: string) => (output.stderr += chunk));
@@ -100,11 +114,12 @@ export async function runJsonModeCommand(
   try {
     closed = await once(child, "close", { signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
-    killProcessGroup(child);
     throw new Error(
       `${command} in json mode failed or did not exit within ${timeoutMs} ms:\n${output.stderr}`,
       { cause: error },
     );
+  } finally {
+    killGroup();
   }
 
   const [exitCode] = closed;
