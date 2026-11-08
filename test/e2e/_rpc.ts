@@ -14,8 +14,9 @@
 // update delay for a scenario's own Pi, and nothing else. A scenario's profile
 // Pi (D-CF1-15) also loads the scripted model and the companions after the
 // real extension, and gets a typed `TMPDIR` inside the sandbox home, so the
-// temporary files of Pi and its companions stay in the sandbox (HAR-05). The
-// shell's `TMPDIR` is never inherited.
+// temporary files of Pi and its companions stay in the sandbox (HAR-05), and
+// pi-subagents' background-child marker `PI_SUBAGENT_CHILD` when its profile
+// sets it (D-BG-10). The shell's `TMPDIR` and marker are never inherited.
 // `--no-extensions` is never passed, because it also removes `builtin:mcp`.
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
@@ -66,9 +67,17 @@ export interface RpcGitEnvironment {
   readonly PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS?: string;
 }
 
-/** The one variable a profile Pi adds to the allowlist: its temporary directory (HAR-05). */
+/**
+ * The variables a profile Pi adds to the allowlist: its temporary directory
+ * (HAR-05), and the background-child marker when the profile sets it.
+ */
 export interface RpcProfileEnvironment {
   readonly TMPDIR: string;
+  /**
+   * The marker pi-subagents' runner sets before any extension of a background
+   * child loads, so the profile Pi starts as such a child (D-BG-10).
+   */
+  readonly PI_SUBAGENT_CHILD?: "1";
 }
 
 /**
@@ -216,7 +225,7 @@ export async function resolveRpcSandbox(sandbox: RpcSandbox): Promise<RpcSandbox
 
 /**
  * Returns the allowlist environment of every Pi child, plus `git` and the
- * profile's `TMPDIR` when given.
+ * profile's `TMPDIR` and background-child marker when given.
  */
 export function rpcChildEnvironment(
   sandbox: RpcSandbox,
@@ -242,6 +251,9 @@ export function rpcChildEnvironment(
 
   if (profileEnvironment !== undefined) {
     environment.TMPDIR = profileEnvironment.TMPDIR;
+    if (profileEnvironment.PI_SUBAGENT_CHILD !== undefined) {
+      environment.PI_SUBAGENT_CHILD = profileEnvironment.PI_SUBAGENT_CHILD;
+    }
   }
 
   return environment;

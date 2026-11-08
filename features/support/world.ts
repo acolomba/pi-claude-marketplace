@@ -130,6 +130,13 @@ export interface PiProfile {
   readonly companions: readonly CompanionName[];
   readonly extraExtensions?: readonly string[];
   readonly trust?: "trusted" | "untrusted";
+  /**
+   * The profile Pi's spawn environment carries `PI_SUBAGENT_CHILD=1`, as
+   * pi-subagents' runner sets it before any extension of a background child
+   * loads, so the product's child gates and pi-subagents both see a real
+   * child (D-BG-10, D-MB-12).
+   */
+  readonly subagentChild?: true;
 }
 
 /**
@@ -939,7 +946,10 @@ export class ScenarioWorld extends World {
         ...companions.map((companion) => companion.entry),
         ...(launch.extraExtensions ?? []),
       ],
-      environment: { TMPDIR: path.join(sandbox.home, "tmp") },
+      environment: {
+        TMPDIR: path.join(sandbox.home, "tmp"),
+        ...(launch.subagentChild === true ? { PI_SUBAGENT_CHILD: "1" } : {}),
+      },
       ...(launch.noMcp === true ? { noMcp: true } : {}),
     });
     // HAR-05: the profile Pi stops first, so a stand-in that exits when its

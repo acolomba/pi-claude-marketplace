@@ -1,7 +1,8 @@
 /**
  * @fileoverview Steps about the companion extensions of a profile Pi:
  * starting it with the companions a scenario names (HAR-01, D-CF1-15), in a
- * trusted or an untrusted project (D-CF1-07, HAR-06).
+ * trusted or an untrusted project (D-CF1-07, HAR-06), and starting it as a
+ * pi-subagents background child with no companion (D-BG-10).
  *
  * Each companion loads from the `pi.extensions` entry of its package in the
  * optional peer cache, at the declared floor. A companion that loaded lists
@@ -17,7 +18,7 @@ import path from "node:path";
 import { type DataTable, Given } from "@cucumber/cucumber";
 
 import { listedCommands } from "../../test/e2e/_rpc.ts";
-import { parseCompanionName, resolveCompanion } from "../lib/companions.ts";
+import { isInPeerCache, parseCompanionName, resolveCompanion } from "../lib/companions.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
@@ -70,6 +71,23 @@ Given(
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld, table: DataTable) {
     await startWithCompanions(this, table, "trusted");
+  },
+);
+
+// D-BG-10: the marker is in the spawn environment, as pi-subagents' runner
+// sets it before any extension loads, so every extension of this Pi reads a
+// background child. No companion loads, so no command comes from the
+// optional peer cache.
+Given(
+  "pi runs with the scripted model as a pi-subagents background child",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({ companions: [], subagentChild: true });
+    const { response } = await this.pi.request({ type: "get_commands" });
+    const fromPeerCache = listedCommands(response).filter(
+      ({ sourcePath }) => sourcePath !== undefined && isInPeerCache(sourcePath),
+    );
+    assert.deepStrictEqual(fromPeerCache, []);
   },
 );
 
