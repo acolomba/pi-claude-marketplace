@@ -844,8 +844,8 @@ const ADAPTER_FAILURE_CODES: ReadonlySet<string> = new Set(["tool_error", "call_
 function adapterReportsFailure(event: ToolResultEvent, tools: HookToolView): boolean {
   const details: unknown = event.details;
   const code =
-    typeof details === "object" && details !== null
-      ? (details as { readonly error?: unknown }).error
+    typeof details === "object" && details !== null && "error" in details
+      ? details.error
       : undefined;
   return typeof code === "string" && ADAPTER_FAILURE_CODES.has(code) && tools.proxyRuleApplies();
 }

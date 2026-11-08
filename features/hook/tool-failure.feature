@@ -2,9 +2,10 @@ Feature: Hook tool failure
 
   A failed tool call runs the plugin's PostToolUseFailure hooks with Claude
   Code's payload, and not its PostToolUse hooks; a call the user interrupts
-  runs neither (D-BG-402). A scripted model makes the calls, and hooks that
-  record each run stand in for the plugin's hooks. The payload leaves out
-  `tool_use_id` and `duration_ms` (D-CF5-28, D-BG-403).
+  runs neither (D-BG-402). A scripted model makes the calls, a stub MCP
+  server whose tool calls fail stands in for a plugin's MCP server, and hooks
+  that record each run stand in for the plugin's hooks. The payload leaves out
+  `tool_use_id`, `duration_ms`, and `mcp_server` (D-CF5-28, D-BG-403).
 
   Scenario: Interrupting a running command runs no PostToolUseFailure hook (D-BG-402)
     Given pi runs with the scripted model
