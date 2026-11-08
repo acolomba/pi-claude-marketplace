@@ -354,7 +354,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
 - [x] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock (completed 2026-11-08)
 - [x] **Phase 15: Marketplace State Lock** - `marketplace autoupdate` and `noautoupdate` respect a held lock, and a lock left by a dead process blocks no marketplace verb (completed 2026-11-08)
-- [ ] **Phase 16: Background-Child Load** - A load in a pi-subagents background child changes nothing installed, yet still loads the installed components
+- [x] **Phase 16: Background-Child Load** - A load in a pi-subagents background child changes nothing installed, yet still loads the installed components (completed 2026-11-08)
 
 ## Phase Details
 
@@ -683,7 +683,10 @@ Plans:
   2. A load in a background child moves no legacy `mcp.json` entry and rewrites no generated agent's grant (CHILD-02).
   3. The child still loads the installed plugin's components: its skills and commands are listed, and its hooks run (CHILD-02).
 
-**Plans**: TBD
+**Plans**: 1/1 plans complete
+
+**Wave 1**
+- [x] 16-01-PLAN.md — Four background-child scenarios (pending changes left for the parent, no legacy mcp.json move, skills and slash commands, a PreToolUse hook), each proven red, and the MGRT-02 grant red proof re-run
 
 ## Progress
 
@@ -704,7 +707,7 @@ Plans:
 | 13. Prune | 0/TBD | Not started | - |
 | 14. Bootstrap | 1/1 | Complete    | 2026-11-08 |
 | 15. Marketplace State Lock | 1/1 | Complete    | 2026-11-08 |
-| 16. Background-Child Load | 0/TBD | Not started | - |
+| 16. Background-Child Load | 1/1 | Complete    | 2026-11-08 |
 
 ## Carried Forward
 

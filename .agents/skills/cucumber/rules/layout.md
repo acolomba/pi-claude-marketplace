@@ -218,7 +218,7 @@ Each entry below names the stream's seeds by title, then the steps that only tho
   - `command.steps.ts`: `the user runs {string} in pi's json mode`, `the user runs {string} in pi's terminal`, and `pi's terminal shows this result of the command:`.
 - Phase 15, `marketplace/state-lock.feature`: "Removing a marketplace while a process that died left the state lock of its scope removes it".
   - `scope-state.steps.ts`: `a process that died left the state lock of the {word} scope`.
-- Phase 16, `plugin/subagent-child.feature`: "A background child's load leaves a declared plugin pending while autoapply is on".
+- Phase 16, `plugin/subagent-child.feature`: "A background child's load with autoapply on leaves a pending install, uninstall, and update for the next parent load".
   - `companion.steps.ts`: `pi runs with the scripted model as a pi-subagents background child`.
 
 ### Parent-owned files

@@ -180,3 +180,27 @@ Full text: `.planning/phases/11-device-flow-sign-in/DUBIOUS-CHOICES.md`.
 - **P11-DC-19 (Low, open).** One commit for both 11-02 tasks.
 - **P11-DC-20 (Low, open).** Combined red-proof runs.
 - **P11-DC-21 (Low, open).** A doubled phase gate was stopped and rerun.
+
+## Phase 16: Background-Child Load
+
+Full text: `.planning/phases/16-background-child-load/DUBIOUS-CHOICES.md`.
+
+- **P16-DC-01 (Medium, open).** "Still shows the change as pending" read as "the next parent load applies it".
+- **P16-DC-02 (Low, open).** No duplicate of the grant scenario.
+- **P16-DC-03 (Medium, open).** Hook input in a child.
+- **P16-DC-04 (Medium, open).** Legacy-move scenario tagged `@own-implementation`.
+- **P16-DC-05 (Low, open).** GSD manager projection ignored.
+- **P16-DC-06 (Low, open).** Commit 4e3d127c carries another phase's message.
+- **P16-DC-07 (Low, open).** Research ran although the roadmap says "Research flag: no".
+- **P16-DC-08 (Low, open).** Red proofs run in a scratch copy.
+- **P16-DC-09 (Medium, open).** A second mutation for the hook red proof.
+- **P16-DC-10 (Low, open).** One plan, one wave.
+- **P16-DC-11 (Low, open).** Pattern mapper skipped.
+- **P16-DC-12 (Low, open).** Three tasks.
+- **P16-DC-13 (Low, open).** Red-proof harness.
+- **P16-DC-14 (Low, open).** The seed's old title stays in the frozen layout.md.
+- **P16-DC-15 (Low, open).** Red-proof greps read cucumber's output format.
+- **P16-DC-16 (Low, open).** Two `When` steps in scenarios A, B, and C.
+- **P16-DC-17 (Medium, open).** The orchestrator finished the plan, review, and verification inline.
+- **P16-DC-18 (Low, open).** Two executors overlapped in Task 2.
+- **P16-DC-19 (Low, open).** The executor ran as a general-purpose agent.
