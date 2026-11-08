@@ -339,7 +339,7 @@ the parent can resolve a conflicting merge.
   raises the `.github/workflows/ci.yml` timeouts if the combined run needs
   more), the CHANGELOG aggregate, and `/gsd-audit-milestone`.
 
-- [ ] **Phase 1: Foundation** - Every stand-in, fixture writer, driver, and shared step the streams need, each proven by a seed, then every shared file frozen and the child-session brief written
+- [x] **Phase 1: Foundation** - Every stand-in, fixture writer, driver, and shared step the streams need, each proven by a seed, then every shared file frozen and the child-session brief written (completed 2026-11-08)
 - [ ] **Phase 2: Async Hooks** - `async` and `asyncRewake` hooks run in the background, wake the model on exit 2, never block their event, and stop on `/reload`
 - [ ] **Phase 3: StopFailure Hooks** - `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload and error-type matchers
 - [ ] **Phase 4: PostToolUseFailure Hooks** - `PostToolUseFailure` hooks run on failed tool calls with Claude Code's payload and tool matchers, and `PostToolUse` hooks do not
@@ -399,7 +399,7 @@ The error turn, the automatic compaction, the json-mode and terminal run, and th
 | 2 | Terminal and process | `pi-tui.ts` and the picker driver, the json-mode run, the background-child launch (`features/support/pi-process.ts`, `world.ts`, `test/e2e/_rpc.ts`), the session and command steps; seeds in `plugin/{browse,bootstrap,subagent-child}.feature` |
 | 3 | Brief and gate | `.planning/milestones/behavioral-gaps-CHILD-SESSION-BRIEF.md`, the measured CI time and `.github/workflows/ci.yml`, the frozen-file record, `npm run check`, and the phase branches |
 
-**Plans**: 8/8 plans executed
+**Plans**: 8/8 plans complete
 
 Plans:
 **Wave 1**
@@ -662,7 +662,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Foundation | 8/8 | In Progress | - |
+| 1. Foundation | 8/8 | Complete    | 2026-11-08 |
 | 2. Async Hooks | 0/TBD | Not started | - |
 | 3. StopFailure Hooks | 0/TBD | Not started | - |
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |

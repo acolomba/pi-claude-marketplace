@@ -35,7 +35,7 @@ covered_files:
   - features/lib/scripted-model/script.ts
   - features/lib/state-lock-holder.ts
   - features/support/world.ts
-covered_digest: "v4:sha256:e4d6aa31ea3024666f85bad21e2b38cfe8d841e74126ac9aab81773ced9e40c4"
+covered_digest: "v4:sha256:916ba577f092b57138cce9865be5a022daa4799d52801270f7c047c746b199cd"
 behavior_unverified: 0
 overrides_applied: 0
 ---
