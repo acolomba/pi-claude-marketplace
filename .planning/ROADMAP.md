@@ -353,7 +353,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled
 - [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
 - [ ] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock
-- [ ] **Phase 15: Marketplace State Lock** - `marketplace autoupdate` and `noautoupdate` respect a held lock, and a lock left by a dead process blocks no marketplace verb
+- [x] **Phase 15: Marketplace State Lock** - `marketplace autoupdate` and `noautoupdate` respect a held lock, and a lock left by a dead process blocks no marketplace verb (completed 2026-11-08)
 - [ ] **Phase 16: Background-Child Load** - A load in a pi-subagents background child changes nothing installed, yet still loads the installed components
 
 ## Phase Details
@@ -641,7 +641,7 @@ Plans:
   2. With a lock left by a process that has died, `marketplace add`, `remove`, `update`, `autoupdate`, and `noautoupdate` each complete as they would with no lock (MLOCK-02).
   3. A lock that a live process still holds keeps blocking the same verbs, so staleness is the only difference (MLOCK-02).
 
-**Plans**: 1/1 plans executed
+**Plans**: 1/1 plans complete
 
 Plans:
 - [x] 15-01-PLAN.md — The held-lock autoupdate and noautoupdate Outline (MLOCK-01), the stale-lock twins of every live-holder scenario with the seed rewritten (MLOCK-02), both red proofs, and the wave gate
@@ -679,7 +679,7 @@ Plans:
 | 12. Browse Picker | 0/TBD | Not started | - |
 | 13. Prune | 0/TBD | Not started | - |
 | 14. Bootstrap | 0/TBD | Not started | - |
-| 15. Marketplace State Lock | 1/1 | In Progress | - |
+| 15. Marketplace State Lock | 1/1 | Complete    | 2026-11-08 |
 | 16. Background-Child Load | 0/TBD | Not started | - |
 
 ## Carried Forward

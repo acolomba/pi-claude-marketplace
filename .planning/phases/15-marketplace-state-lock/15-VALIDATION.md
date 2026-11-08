@@ -3,8 +3,8 @@ phase: "15"
 slug: "marketplace-state-lock"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-11-08"
 ---
@@ -40,9 +40,9 @@ created: "2026-11-08"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 15-01-01 | 01 | 1 | MLOCK-01 | — | A flip under a live lock changes no config or record | cucumber | quick run command | ✅ | ⬜ pending |
-| 15-01-02 | 01 | 1 | MLOCK-02 | — | A stale lock blocks no verb; a live lock still blocks | cucumber | quick run command | ✅ | ⬜ pending |
-| 15-01-03 | 01 | 1 | MLOCK-01, MLOCK-02 | — | N/A | static + gate | `npm run check:features` and the full suite parts | ✅ | ⬜ pending |
+| 15-01-01 | 01 | 1 | MLOCK-01 | — | A flip under a live lock changes no config or record | cucumber | quick run command | ✅ | ✅ green |
+| 15-01-02 | 01 | 1 | MLOCK-02 | — | A stale lock blocks no verb; a live lock still blocks | cucumber | quick run command | ✅ | ✅ green |
+| 15-01-03 | 01 | 1 | MLOCK-01, MLOCK-02 | — | N/A | static + gate | `npm run check:features` and the full suite parts | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -62,11 +62,11 @@ All phase behaviors have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-11-08 (inline validation: every task ran its automated verify green; red proofs A and B in 15-01-SUMMARY.md)

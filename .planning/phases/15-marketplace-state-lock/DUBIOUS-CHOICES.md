@@ -100,3 +100,16 @@ want to reverse.
   session-specific `scratchpad/p15/`. Every commit title was checked against
   its content and matches; the gate logs were copied to
   `/tmp/claude-1000/bg-phase-15/gate/`.
+
+## Review, verification, and transition
+
+- **P15-DC-17 (Low, open). Review, verification, security audit, and
+  validation sign-off ran inline.** They follow `gsd-code-reviewer.md`,
+  `gsd-verifier.md`, and the secure-phase and validate-phase file shapes,
+  without their subagents (parent's rule). The review found no issues, so no
+  fix pass ran. VALIDATION.md was signed off from the recorded verify runs and
+  red proofs, not by a separate Nyquist auditor.
+- **P15-DC-18 (Low, open). `phase.complete` rewrote STATE.md's frontmatter
+  and Current Position** to "Phase 2, verifying". The parent keeps the
+  milestone branch's frontmatter and Current Position at the merge, so this
+  rewrite was left as the tool wrote it.

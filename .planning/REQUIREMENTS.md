@@ -57,8 +57,8 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 - [ ] **PRUNE-02**: `prune` while another process holds the state lock fails as lock held and removes nothing, and a dependency only a disabled plugin needs is handled as upstream does.
 - [ ] **BOOT-01**: `bootstrap` refuses `--scope` and arguments, and its json and rpc output carry the same outcome as the terminal UI.
 - [ ] **BOOT-02**: `bootstrap` while another process holds the user scope's state lock fails as lock held and records nothing.
-- [ ] **MLOCK-01**: `marketplace autoupdate` and `noautoupdate` while another process holds the state lock fail as lock held and change nothing.
-- [ ] **MLOCK-02**: A lock file left by a process that has died does not block the marketplace verbs, as `proper-lockfile`'s stale handling defines.
+- [x] **MLOCK-01**: `marketplace autoupdate` and `noautoupdate` while another process holds the state lock fail as lock held and change nothing.
+- [x] **MLOCK-02**: A lock file left by a process that has died does not block the marketplace verbs, as `proper-lockfile`'s stale handling defines.
 - [ ] **CHILD-01**: A load in a pi-subagents background child, with `autoapply` on and a pending change, installs, uninstalls, and updates nothing.
 - [ ] **CHILD-02**: A load in a background child moves no legacy `mcp.json` entry and rewrites no agent grant, yet still loads the installed components.
 
@@ -108,8 +108,8 @@ None.
 | PRUNE-02 | Phase 13 | Pending |
 | BOOT-01 | Phase 14 | Pending |
 | BOOT-02 | Phase 14 | Pending |
-| MLOCK-01 | Phase 15 | Pending |
-| MLOCK-02 | Phase 15 | Pending |
+| MLOCK-01 | Phase 15 | Complete |
+| MLOCK-02 | Phase 15 | Complete |
 | CHILD-01 | Phase 16 | Pending |
 | CHILD-02 | Phase 16 | Pending |
 
