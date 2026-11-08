@@ -22,3 +22,10 @@ The autonomous run took the recommended option at every discuss question. The an
 - **P3-DC-03 (Medium, open). D-BG-303: `last_assistant_message` left out when empty.** Upstream leaves the field out (`trim() || undefined`), and the bridge sent `""` on a `length` ending. A hook that reads the field with `jq -r` now gets `null` instead of an empty string on a `length` ending. The trim also applies to error text, but no scenario can state it, because cucumber trims table cells. A unit test pins it.
 - **P3-DC-04 (Medium, open). D-BG-304: no new classifier rules.** The D-88-02 substring table stays as it is. A bare overflow text without a status code (`prompt is too long: ...`) still classifies as `unknown`, where upstream says `invalid_request`. Real provider messages carry the `400` that the table already maps.
 - **P3-DC-05 (Low, open). Fire-and-forget not pinned.** Upstream does not await StopFailure hooks, and the bridge awaits them inside `agent_settled`. The difference is only timing, so no scenario pins it. The phase records it as a deferred idea.
+
+## Research step
+
+- **P3-DC-06 (Low, open). Settle keeps the shared matcher check.** D-BG-302 said the StopFailure predicate replaces `matcherFiresOnClosedSetValue` in `runStopFailure`. Settle is that function's only production consumer, so replacing it would make fallow report an unused export. The new predicate calls the shared check and adds the `|` list, and `dispatch.ts` stays unchanged.
+- **P3-DC-07 (Low, open). Scenario messages.** `Model not found (404)`, Anthropic's credit-balance text, and `The provider closed the connection` stand for `model_not_found`, `billing_error`, and `unknown`. A real Anthropic not-found error (`not_found_error`, no "model not found" text) classifies as `unknown` today; no scenario pins that.
+- **P3-DC-08 (Low, open). Pi's empty assistant row.** The next-prompt scenario states the empty `assistant` row Pi 1.5.0 sends for the failed turn, which ties it to how Pi builds its context.
+- **P3-DC-09 (Low, open). Pattern mapper skipped.** The research already maps every file and analog, so the plan step ran without a PATTERNS.md.
