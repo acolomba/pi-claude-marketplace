@@ -176,7 +176,8 @@ Then(
   },
 );
 
-// A step that finds no hook pid file would check nothing, so it fails.
+// A step that finds no hook pid file would check nothing, so it fails. It
+// reads the processes, not the turn, so it leaves the turn uncompared.
 Then("no hook process is running", async function (this: ScenarioWorld) {
   const deadline = Date.now() + HOOK_EXIT_TIMEOUT_MS;
   const pids = await readHookScriptPids(this.profileHarness());
@@ -188,5 +189,4 @@ Then("no hook process is running", async function (this: ScenarioWorld) {
   }
 
   assert.deepStrictEqual(running, [], "these hook processes are still running");
-  this.markTurnCompared();
 });

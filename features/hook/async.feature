@@ -53,6 +53,7 @@ Feature: Hook async
     Then the hooks show the user these rewake summaries:
       | text          |
       | wake finished |
+    Then the hooks record no runs
 
   Scenario: An async rewake hook that exits 2 puts its message into the model's next call
     Given pi runs with the scripted model
@@ -99,6 +100,7 @@ Feature: Hook async
     Given pi's process has died, leaving its hook processes running
     When the user starts pi again with the hooks recording
     Then no hook process is running
+    Then the hooks record no runs
     Then the session reports no results
 
   Scenario: Reloading Pi stops its waiting hook processes
