@@ -31,3 +31,13 @@ entries below are the ones a reviewer may want to reverse.
 - **P10-DC-07 (Low, open). Research probes edited the owned `tools.ts` temporarily** (restored byte for byte) and installed the optional test peers into this worktree's gitignored cache over the network.
 - **P10-DC-08 (Low, open). Shared pre-commit hook briefly in migration mode.** At about 09:00 the common `.git/hooks/pre-commit.legacy` (a copy left by the parallel `init.sh` runs) made the first context commit fail; another session repaired it at 09:05, and this phase changed nothing there.
 - **P10-DC-09 (Low, open). Pattern mapper skipped.** The research already names every file, analog, and unit-test line this phase touches, so the optional pattern-mapping agent was not spawned.
+
+## Planning step
+
+- **P10-DC-10 (Low, open). Plan shape.** Two plans in two waves, each led by its own tracer task; 10-01 keeps the small not-found fix as its own task and commit so each requirement's fix has one commit.
+- **P10-DC-11 (Low, open). One heavy Background.** All scenarios run over the full two-scope list-filters fixture (plus `lima` in `extras`), including the two refused-scope scenarios that do not need it; about 20 s per scenario in the adapter lifecycle leg.
+- **P10-DC-12 (Low, open). Scenario grouping.** The three single-filter scenarios are separate scenarios rather than an Outline, so each title names its bucket; the two not-found forms share one scenario with two calls.
+- **P10-DC-13 (Low, open). Description wording.** List scope: `Scope whose marketplaces to list: "user" or "project". Default: both scopes.`; `installed`: `Include installed plugins that are enabled.`; `unavailable`: `Include manifest-declared plugins that are not installable on this system, and installed plugins that are disabled.`
+- **P10-DC-14 (Low, open). No-change scenario scope.** It calls the list tool only with `{"scope":"user"}` (seed 1 pins the no-scope call), gets two planted proofs (a `state.json` write and a removed staged skill), and does not read the git host's request log for network use (NFR-5 stays with the unit tests).
+- **P10-DC-15 (Low, open). Shared unit fixture.** The disabled record `foxtrot` goes into the shared `mixedMarketplace` unit fixture, which changes all five filter cases.
+- **P10-DC-16 (Low, open). Stale count comment left.** `test/edge/handlers/tools.test.ts:177` says "28 of this suite's 53 cases" while the suite has 43; the plan leaves the pre-existing comment as it is.

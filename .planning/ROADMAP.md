@@ -560,7 +560,14 @@ Plans:
   3. A call that names an unknown marketplace or scope returns an error result, which the model reads on its next request (TOOL-03).
   4. No call changes `state.json`, a config file, or anything installed (TOOL-03).
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+- [ ] 10-01-PLAN.md — The list tool's optional scope, the not-found error result, disabled plugins under the `unavailable` filter, and `(no plugins)` for every empty block, each test-first in the unit pair
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 10-02-PLAN.md — The model-tool scenarios through the scripted model (both scopes and each scope, every status and filter, refused and unknown input as failed results, nothing changed on disk), with every red proof and the parent lines
 
 ### Phase 11: Device Flow Sign-In
 
