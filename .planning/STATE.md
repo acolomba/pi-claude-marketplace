@@ -5,16 +5,16 @@ milestone_name: Behavioral Coverage Gaps
 current_phase: 01
 current_phase_name: Foundation
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-11-08T04:38:34.513Z"
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-11-08T05:12:12.935Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 01 execution started
-state_head: f8c24a8069e59a259cbff73b9f7f3501ebfdc492
+state_head: 0aa76322b3a434c7681bd71a6a46956f56dbec8d
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Foundation) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 01 execution started
 
@@ -432,6 +432,7 @@ archived milestone artifacts.
 | Phase 01 P04 | 41 min | 3 tasks | 8 files |
 | Phase 01 P05 | 29 min | 3 tasks | 7 files |
 | Phase 01 P06 | 38 min | 3 tasks | 7 files |
+| Phase 01 P07 | 40min | 3 tasks | 9 files |
 
 ## Decisions
 
@@ -660,6 +661,9 @@ archived milestone artifacts.
 - [Phase 01]: The /reload seed starts its waiting async hook on SessionStart startup in the terminal Pi, because a UserPromptSubmit hook would start again on the reload step's own prompt
 - [Phase 01]: Device Flow seeds reach github.com through an in-process redirect; D-BG-02 was not needed and the product is unchanged
 - [Phase 01]: The redirect's routing rule lives in features/lib/github-device-flow/routing.ts, because fallow's production run counts no test consumer
+- [Phase 01]: The terminal command When waits only for a quiet window; the terminal result Then waits for its anchor row, because Pi shows no sign that an extension command is running
+- [Phase 01]: After a picker choice that closes the picker, the driver waits for a screen row naming the plugin from the closing screen's title
+- [Phase 01]: terminalScreen keeps its test-only export through a fallow-ignore-next-line unused-export marker
 
 ### mcp-4 decisions
 
@@ -963,6 +967,6 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-08T04:38:34.388Z
-Stopped at: Completed 01-06-PLAN.md
+Last session: 2026-11-08T05:12:12.818Z
+Stopped at: Completed 01-07-PLAN.md
 Resume file: None
