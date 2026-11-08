@@ -201,6 +201,13 @@ export const NON_TOOL_EVENT_FIELDS = {
  * `bridges/hooks/payloads/stop-failure.ts`) returns `StopFailureErrorType`,
  * so classifier output and matcher vocabulary cannot drift apart without a
  * compile error.
+ *
+ * These are Claude Code 2.1.319's 13 error types (its payload schema and its
+ * matcher list), with the newer types at the end (D-BG-301). Pi's error text
+ * never names `oauth_org_not_allowed` or the last three types, so
+ * `classifyStopFailure` never returns them and a hook that names only them
+ * never runs, while its plugin still installs available, as Claude Code
+ * admits the matcher (D-88-02).
  */
 const STOP_FAILURE_ERROR_TYPES = [
   "rate_limit",
@@ -213,6 +220,9 @@ const STOP_FAILURE_ERROR_TYPES = [
   "server_error",
   "max_output_tokens",
   "unknown",
+  "account_on_hold",
+  "verification_required",
+  "cloud_credential_error",
 ] as const;
 
 /**

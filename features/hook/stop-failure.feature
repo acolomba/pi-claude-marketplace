@@ -177,3 +177,77 @@ Feature: Hook stop failure
     Then the hooks record these runs:
       | event       | session | error      | last assistant message   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | StopFailure | first   | rate_limit | Rate limit reached (429) | {project dir} |                 | listed    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+  Scenario Outline: Info on a plugin whose StopFailure hook names <error type> shows it available
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher      |
+      | failure | StopFailure | <error type> |
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info               |
+      | marketplace details autoupdate | false                     |
+      | marketplace name               | fixtures                  |
+      | marketplace scope              | project                   |
+      | needs reload                   | false                     |
+      | plugin components hooks        | [{"event":"StopFailure"}] |
+      | plugin components resolved     | true                      |
+      | plugin components skills       | demo-skill                |
+      | plugin id                      | demo@fixtures             |
+      | plugin name                    | demo                      |
+      | plugin reasons                 |                           |
+      | plugin status                  | available                 |
+      | plugin version                 | 1.0.0                     |
+      | severity                       | info                      |
+
+    Examples:
+      | error type             |
+      | authentication_failed  |
+      | oauth_org_not_allowed  |
+      | account_on_hold        |
+      | verification_required  |
+      | billing_error          |
+      | rate_limit             |
+      | overloaded             |
+      | invalid_request        |
+      | model_not_found        |
+      | server_error           |
+      | unknown                |
+      | max_output_tokens      |
+      | cloud_credential_error |
+
+  Scenario Outline: Info on a plugin whose StopFailure matcher <matcher> matches no type Claude Code sends shows it partially available
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher   |
+      | failure | StopFailure | <matcher> |
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info                                                 |
+      | marketplace details autoupdate | false                                                       |
+      | marketplace name               | fixtures                                                    |
+      | marketplace scope              | project                                                     |
+      | needs reload                   | false                                                       |
+      | plugin components hooks        | [{"kind":"lenient","event":"StopFailure","supported":true}] |
+      | plugin components resolved     | true                                                        |
+      | plugin components skills       | demo-skill                                                  |
+      | plugin id                      | demo@fixtures                                               |
+      | plugin name                    | demo                                                        |
+      | plugin reasons                 | unsupported hooks                                           |
+      | plugin status                  | partially-available                                         |
+      | plugin version                 | 1.0.0                                                       |
+      | severity                       | info                                                        |
+
+    Examples:
+      | matcher                |
+      | network_error          |
+      | Rate_Limit             |
+      | network_error\|timeout |

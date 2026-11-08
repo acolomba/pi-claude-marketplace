@@ -138,6 +138,9 @@ describe("NON_TOOL_EVENT_CLOSED_SETS", () => {
         "server_error",
         "max_output_tokens",
         "unknown",
+        "account_on_hold",
+        "verification_required",
+        "cloud_credential_error",
       ]),
     };
 
