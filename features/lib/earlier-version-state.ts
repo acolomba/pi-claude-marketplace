@@ -30,8 +30,8 @@ function stateFilePath(scopeRoot: string): string {
   return path.join(scopeRoot, "pi-claude-marketplace", "state.json");
 }
 
-// `value` as a JSON object, throwing when it is anything else.
-function jsonObject(value: unknown, what: string): Record<string, unknown> {
+/** `value` as a JSON object, throwing with `what` when it is anything else. */
+export function jsonObject(value: unknown, what: string): Record<string, unknown> {
   if (!isPlainObject(value)) {
     throw new Error(`${what} is not a JSON object`);
   }
@@ -39,8 +39,8 @@ function jsonObject(value: unknown, what: string): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value));
 }
 
-// The JSON object `file` holds, or an empty object when it does not exist.
-async function readObject(file: string): Promise<Record<string, unknown>> {
+/** The JSON object `file` holds, or an empty object when it does not exist. */
+export async function readObject(file: string): Promise<Record<string, unknown>> {
   return existsSync(file) ? jsonObject(JSON.parse(await readFile(file, "utf8")), file) : {};
 }
 

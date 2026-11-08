@@ -1,0 +1,53 @@
+Feature: MCP server legacy move
+
+  A user upgrading from a release that wrote plugin MCP servers into mcp.json has them moved on
+  load. An mcp.json in that release's shape stands in for the upgrade, and a local marketplace
+  stands in for a published one.
+
+  @mcp
+  Scenario: A load moves a plugin's servers out of a release 0.19.2 mcp.json and keeps the user's own server
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" declares the mcp server "srv"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the mcp.json file of the user scope holds the servers of the plugin "demo@fixtures" as release 0.19.2 wrote them, beside the user's own server "mine"
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind          | severity | needs reload | notices | rows                                                                                                          |
+      | mcp-migration | info     | true         |         | [{"kind":"moved","scope":"user","plugin":"demo","marketplace":"fixtures","from":"srv","to":"plugin_demo_srv_"}] |
+    Then the mcp configuration file "mcp.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "mine": {
+            "command": "pi-features-users-own-mcp-server"
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          }
+        }
+      }
+
+      """
