@@ -346,12 +346,12 @@ the parent can resolve a conflicting merge.
 - [x] **Phase 5: PostCompact Hooks** - `PostCompact` hooks run after manual and automatic compactions with the trigger, and matchers select by trigger (completed 2026-11-08)
 - [x] **Phase 6: SessionEnd Hooks** - `SessionEnd` hooks run with every reason Pi produces, matchers select by reason, and a failing hook never keeps a session open (completed 2026-11-08)
 - [x] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched (completed 2026-11-08)
-- [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
+- [x] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config (completed 2026-11-08)
 - [x] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay (completed 2026-11-08)
 - [x] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing (completed 2026-11-08)
 - [x] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass (completed 2026-11-08)
 - [x] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled (completed 2026-11-08)
-- [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
+- [x] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream (completed 2026-11-08)
 - [x] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock (completed 2026-11-08)
 - [x] **Phase 15: Marketplace State Lock** - `marketplace autoupdate` and `noautoupdate` respect a held lock, and a lock left by a dead process blocks no marketplace verb (completed 2026-11-08)
 - [x] **Phase 16: Background-Child Load** - A load in a pi-subagents background child changes nothing installed, yet still loads the installed components (completed 2026-11-08)
@@ -565,7 +565,14 @@ Plans:
   2. A user's edit to the written config survives every later load and `/reload` (CFGMIG-02).
   3. An existing config that is not valid is reported and stays byte for byte as it was (CFGMIG-02).
 
-**Plans**: TBD
+**Plans**: 2/2 plans complete
+
+Plans:
+**Wave 1**
+- [x] 08-01-PLAN.md — Rebuild a config as the user's commands wrote it (disabled plugin, dependency, dependency-check hold) and cover CFGMIG-01 in both scopes
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 08-02-PLAN.md — Cover CFGMIG-02: the user's edit survives a load and a terminal reload, and invalid base and local configs are reported and kept; the phase's parent lines
 
 ### Phase 9: Legacy MCP Entry Move
 
@@ -669,7 +676,10 @@ Plans:
   3. `prune` while another process holds the state lock fails as lock held and removes nothing (PRUNE-02).
   4. A dependency that only a disabled plugin needs is kept or pruned as upstream does (PRUNE-02).
 
-**Plans**: TBD
+**Plans**: 1/1 plans complete
+
+Plans:
+- [x] 13-01-PLAN.md — the prune scenarios for the user-scope default, one preview per scope, and a disabled plugin's dependencies, with red proofs for them and for the existing usage-error and state-lock coverage
 
 ### Phase 14: Bootstrap
 
@@ -738,12 +748,12 @@ Plans:
 | 5. PostCompact Hooks | 2/2 | Complete | 2026-11-08 |
 | 6. SessionEnd Hooks | 3/3 | Complete    | 2026-11-08 |
 | 7. State Schema Migration | 1/1 | Complete    | 2026-11-08 |
-| 8. First-Run Config Migration | 0/TBD | Not started | - |
+| 8. First-Run Config Migration | 2/2 | Complete    | 2026-11-08 |
 | 9. Legacy MCP Entry Move | 1/1 | Complete    | 2026-11-08 |
 | 10. Model-Facing Tools | 2/2 | Complete    | 2026-11-08 |
 | 11. Device Flow Sign-In | 2/2 | Complete    | 2026-11-08 |
 | 12. Browse Picker | 2/2 | Complete    | 2026-11-08 |
-| 13. Prune | 0/TBD | Not started | - |
+| 13. Prune | 1/1 | Complete    | 2026-11-08 |
 | 14. Bootstrap | 1/1 | Complete    | 2026-11-08 |
 | 15. Marketplace State Lock | 1/1 | Complete    | 2026-11-08 |
 | 16. Background-Child Load | 1/1 | Complete    | 2026-11-08 |

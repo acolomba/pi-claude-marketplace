@@ -31,8 +31,8 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 - [x] **STMIG-01**: After an upgrade from an older `state.json` schema, the first load lists every recorded plugin as installed, its components work, and the state file is rewritten in the current schema.
 - [x] **STMIG-02**: A `state.json` from a newer, unsupported schema is refused as unreadable, and nothing is changed.
-- [ ] **CFGMIG-01**: The first load with a `state.json` and no `claude-plugins.json` writes a config declaring every recorded marketplace and plugin, carrying the enabled state and the legacy `autoupdate` field.
-- [ ] **CFGMIG-02**: Later loads never rewrite the config, so the user's edits survive, and an invalid existing config is never overwritten.
+- [x] **CFGMIG-01**: The first load with a `state.json` and no `claude-plugins.json` writes a config declaring every recorded marketplace and plugin, carrying the enabled state and the legacy `autoupdate` field.
+- [x] **CFGMIG-02**: Later loads never rewrite the config, so the user's edits survive, and an invalid existing config is never overwritten.
 - [x] **AMIG-01**: On load, a plugin's entries in a legacy `mcp.json` move to `mcp-adapter.json`, and its servers still run.
 - [x] **AMIG-02**: The move leaves the user's own, unmarked `mcp.json` entries untouched.
 
@@ -53,8 +53,8 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 - [x] **BROWSE-01**: In the terminal UI, `browse` and a bare `/claude:plugin` open the plugin picker, which lists the marketplaces and plugins of both scopes.
 - [x] **BROWSE-02**: Choosing a plugin in the picker installs it in its marketplace's scope; cancelling installs nothing.
-- [ ] **PRUNE-01**: `prune` without `--scope` behaves as Claude Code does, `--scope user|project` combines with `--dry-run`, and its usage errors are covered.
-- [ ] **PRUNE-02**: `prune` while another process holds the state lock fails as lock held and removes nothing, and a dependency only a disabled plugin needs is handled as upstream does.
+- [x] **PRUNE-01**: `prune` without `--scope` behaves as Claude Code does, `--scope user|project` combines with `--dry-run`, and its usage errors are covered.
+- [x] **PRUNE-02**: `prune` while another process holds the state lock fails as lock held and removes nothing, and a dependency only a disabled plugin needs is handled as upstream does.
 - [x] **BOOT-01**: `bootstrap` refuses `--scope` and arguments, and its json and rpc output carry the same outcome as the terminal UI.
 - [x] **BOOT-02**: `bootstrap` while another process holds the user scope's state lock fails as lock held and records nothing.
 - [x] **MLOCK-01**: `marketplace autoupdate` and `noautoupdate` while another process holds the state lock fail as lock held and change nothing.
@@ -91,8 +91,8 @@ None.
 | SEND-01 | Phase 6 | Complete |
 | STMIG-01 | Phase 7 | Complete |
 | STMIG-02 | Phase 7 | Complete |
-| CFGMIG-01 | Phase 8 | Pending |
-| CFGMIG-02 | Phase 8 | Pending |
+| CFGMIG-01 | Phase 8 | Complete |
+| CFGMIG-02 | Phase 8 | Complete |
 | AMIG-01 | Phase 9 | Complete |
 | AMIG-02 | Phase 9 | Complete |
 | TOOL-01 | Phase 10 | Complete |
@@ -104,8 +104,8 @@ None.
 | DFLOW-04 | Phase 11 | Complete |
 | BROWSE-01 | Phase 12 | Complete |
 | BROWSE-02 | Phase 12 | Complete |
-| PRUNE-01 | Phase 13 | Pending |
-| PRUNE-02 | Phase 13 | Pending |
+| PRUNE-01 | Phase 13 | Complete |
+| PRUNE-02 | Phase 13 | Complete |
 | BOOT-01 | Phase 14 | Complete |
 | BOOT-02 | Phase 14 | Complete |
 | MLOCK-01 | Phase 15 | Complete |
