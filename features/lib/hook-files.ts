@@ -73,7 +73,7 @@
  * and the scripts it writes.
  */
 
-import { chmod, readFile } from "node:fs/promises";
+import { chmod, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { HOOK_RECORDER_PATH } from "./hook-recorder.ts";
@@ -348,6 +348,9 @@ function meetingLines(name: string, other: string): string[] {
   ];
 }
 
+// The pid file of a lifecycle hook's script: `hook-<name>-<pid>.pid`.
+const HOOK_PID_FILE = /^hook-[a-z0-9-]+-\d+\.pid$/u;
+
 // Whether `hook`'s script logs its lifecycle and keeps a pid file (D-BG-12).
 function isLifecycleHook(hook: RecordingHook): boolean {
   return (
@@ -504,4 +507,16 @@ export async function publishRecordingHooks(
     }),
   );
   return path.join(directory, "hooks", "hooks.json");
+}
+
+/**
+ * Returns the pid that each lifecycle hook's pid file in `harness` holds, in
+ * file name order. A script that exited removed its file, and one that was
+ * killed left it behind (D-BG-12).
+ */
+export async function readHookScriptPids(harness: string): Promise<readonly number[]> {
+  const names = (await readdir(harness)).filter((name) => HOOK_PID_FILE.test(name)).sort();
+  return Promise.all(
+    names.map(async (name) => Number((await readFile(path.join(harness, name), "utf8")).trim())),
+  );
 }

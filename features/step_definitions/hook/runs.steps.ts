@@ -17,11 +17,14 @@
  * line to the harness log `hook-lifecycle.jsonl` (D-BG-12). The lifecycle
  * step states the lines of the last turn whole, in append order, as the
  * hook, the phase, and the exit code of an end line; the pid differs on
- * every run, so no row states it.
+ * every run, so no row states it. Such a script also keeps a pid file in the
+ * harness directory, and the no-process step reads only those files, so a
+ * stand-in of a Pi started later does not count (ASYNC-04).
  */
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
@@ -29,10 +32,12 @@ import { fieldRecord, recordTable } from "../../lib/field-rows.ts";
 import {
   parseRecordingHooks,
   publishRecordingHooks,
+  readHookScriptPids,
   recordingHooksText,
 } from "../../lib/hook-files.ts";
 import { HOOK_LIFECYCLE_LOG, HOOK_RUNS_LOG } from "../../lib/hook-recorder.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
+import { isRunning } from "../../lib/turn-records.ts";
 
 import type { HookLifecycleEvent, HookRun } from "../../lib/hook-recorder.ts";
 import type { RunTokens } from "../../lib/run-tokens.ts";
@@ -41,6 +46,11 @@ import type { ScenarioWorld } from "../../support/world.ts";
 const SESSION_ORDINALS: readonly string[] = ["first", "second", "third", "fourth"];
 
 const LIFECYCLE_COLUMNS: readonly string[] = ["hook", "phase", "exit code"];
+
+// How long the no-process step waits for a stopped hook process to exit: the
+// stand-in check's wait, which covers a loaded CI runner.
+const HOOK_EXIT_TIMEOUT_MS = 10_000;
+const HOOK_EXIT_POLL_MS = 50;
 
 // The column of each stdin field: its words, with the two the table names
 // differently. Any other field reads as its words, so it shows up as a
@@ -165,3 +175,18 @@ Then(
     this.markTurnCompared();
   },
 );
+
+// A step that finds no hook pid file would check nothing, so it fails.
+Then("no hook process is running", async function (this: ScenarioWorld) {
+  const deadline = Date.now() + HOOK_EXIT_TIMEOUT_MS;
+  const pids = await readHookScriptPids(this.profileHarness());
+  assert.notDeepStrictEqual(pids, [], "no hook process started in this scenario");
+  let running = pids.filter((pid) => isRunning(pid));
+  while (running.length > 0 && Date.now() < deadline) {
+    await delay(HOOK_EXIT_POLL_MS);
+    running = running.filter((pid) => isRunning(pid));
+  }
+
+  assert.deepStrictEqual(running, [], "these hook processes are still running");
+  this.markTurnCompared();
+});

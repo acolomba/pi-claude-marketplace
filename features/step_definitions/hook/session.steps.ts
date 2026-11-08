@@ -1,8 +1,9 @@
 /**
  * @fileoverview Steps about the session actions that run plugin hooks: a new
- * session, a compaction, a fork, and a stop of the profile Pi, a reload and a
- * quit of a Pi in the terminal, the setup they need, and each action
- * recording the hook runs it caused as a turn.
+ * session, a compaction, a fork, a stop, a release of a waiting hook, and a
+ * start after a crash of the profile Pi, a reload and a quit of a Pi in the
+ * terminal, the setup they need, and each action recording the hook runs it
+ * caused as a turn.
  *
  * A session action is not a prompt, so the model-turn `When` cannot read the
  * hook runs it causes. Each action `When` here reads the stand-in logs of the
@@ -26,6 +27,12 @@
  * hook's declared rewake summary on every exit, so the release steps wait for
  * the hook's end line in the lifecycle log and then for that summary, the
  * sign that the extension handled the exit. A released hook must declare one.
+ *
+ * A Pi that dies leaves its hook processes running, and the next Pi's load
+ * stops them (ASYNC-04). The crash step kills the profile Pi's own process
+ * and asserts that every hook process a pid file names still runs. The
+ * restart step starts the same launch again and keeps the new session's
+ * results and what the start added as the last turn.
  */
 
 import assert from "node:assert/strict";
@@ -35,11 +42,12 @@ import path from "node:path";
 import { Given, When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
+import { readHookScriptPids } from "../../lib/hook-files.ts";
 import { HOOK_RUNS_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts";
 import { startSession } from "../../lib/pi-commands.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf, readModelCalls } from "../../lib/scripted-model/script.ts";
-import { readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
+import { isRunning, readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { HookRun } from "../../lib/hook-recorder.ts";
@@ -187,6 +195,18 @@ async function releaseHook(world: ScenarioWorld, hook: string): Promise<void> {
   assert.deepStrictEqual(faultsOf(world.pi.recordsSince(from)), []);
 }
 
+// Asserts that some hook process started and that every process a hook pid
+// file in `harness` names still runs.
+async function assertHookProcessesRunning(harness: string, when: string): Promise<void> {
+  const pids = await readHookScriptPids(harness);
+  assert.notDeepStrictEqual(pids, [], `no hook process was running ${when}`);
+  assert.deepStrictEqual(
+    pids.filter((pid) => !isRunning(pid)),
+    [],
+    `these hook processes were gone ${when}`,
+  );
+}
+
 // RPC `compact` answers after Pi ran its `session_compact` handlers.
 async function compactSession(world: ScenarioWorld): Promise<void> {
   const { response } = await world.pi.request({ type: "compact" });
@@ -256,6 +276,27 @@ Given(
     await waitForStartupRun(harness);
   },
 );
+// A waiting hook that the terminal Pi's start ran logs its start right after
+// its run, so the step waits for that line and checks that the process runs.
+Given(
+  "the user has started pi in the terminal and the hook {string} goes on in the background",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld, hook: string) {
+    const harness = this.profileHarness();
+    await this.startTuiSession();
+    await waitForHookLifecycle(harness, hook, "start", TERMINAL_STARTUP_RUN_TIMEOUT_MS);
+    await assertHookProcessesRunning(harness, "after the terminal pi started");
+  },
+);
+
+Given(
+  "pi's process has died, leaving its hook processes running",
+  async function (this: ScenarioWorld) {
+    await this.crashPi();
+    await assertHookProcessesRunning(this.profileHarness(), "after pi died");
+  },
+);
+
 // A new session's payloads become the last results, as the plain new-session
 // `When` keeps them, so a payload no step states still fails the scenario.
 // `When` keeps them, so a payload no step states still fails the scenario.
@@ -316,6 +357,23 @@ When(
   "the user releases the hook {string} with the hooks recording",
   async function (this: ScenarioWorld, hook: string) {
     await recordSessionAction(this, "release", () => releaseHook(this, hook));
+  },
+);
+
+// The new Pi's records all come from its start, so the turn keeps every one.
+When(
+  "the user starts pi again with the hooks recording",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    const harness = this.profileHarness();
+    const lengths = await readLogLengths(harness);
+    const report = await this.restartPi("after-crash");
+    this.recordResults(report.payloads, "session");
+    this.skills = report.skills;
+    const records = this.pi.recordsSince(0);
+    assert.deepStrictEqual(faultsOf(records), []);
+    const logs = await readLogLinesSince(harness, lengths);
+    this.recordTurn({ prompt: "restart", disposition: "handled", records, logs });
   },
 );
 
