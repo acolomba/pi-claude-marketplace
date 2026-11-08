@@ -190,3 +190,48 @@ Feature: Plugin prune
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id        |
       | lib@tools |
+
+  Scenario: Pruning keeps a dependency that only a disabled plugin needs
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin disable app@tools --scope project"
+    When the user runs "/claude:plugin prune --scope project"
+    Then the result has these fields:
+      | kind         | prune-empty |
+      | severity     | info        |
+      | needs reload | false       |
+      | scope        | project     |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | false   |
+      | lib@tools | 1.2.0   | true    |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id        | enabled |
+      | app@tools | false   |
+
+  Scenario: Pruning removes a disabled dependency that nothing needs and what only it needs
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | mid          |
+      | mid  | 1.1.0   | lib          |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin uninstall app@tools --scope project"
+    Given the user has run "/claude:plugin disable mid@tools --scope project"
+    When the user runs "/claude:plugin prune --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons           | scope   | version |
+      | tools            | project           | mid@tools | mid  | uninstalled | dependency pruned | project | 1.1.0   |
+      | tools            | project           | lib@tools | lib  | uninstalled | dependency pruned | project | 1.2.0   |
+    Then the project scope has no installed plugins
