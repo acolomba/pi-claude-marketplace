@@ -350,7 +350,7 @@ the parent can resolve a conflicting merge.
 - [x] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay (completed 2026-11-08)
 - [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
 - [ ] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass
-- [ ] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled
+- [x] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled (completed 2026-11-08)
 - [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
 - [x] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock (completed 2026-11-08)
 - [x] **Phase 15: Marketplace State Lock** - `marketplace autoupdate` and `noautoupdate` respect a held lock, and a lock left by a dead process blocks no marketplace verb (completed 2026-11-08)
@@ -599,7 +599,14 @@ Plans:
   2. Choosing a plugin installs it in its marketplace's scope, and `list` then shows it installed there (BROWSE-02).
   3. Cancelling the picker installs nothing and leaves both scopes as they were (BROWSE-02).
 
-**Plans**: TBD
+**Plans**: 2/2 plans complete
+
+Plans:
+**Wave 1**
+- [x] 12-01-PLAN.md — The D-BG-1201 marketplace row (catalog plugins offered and installed) with its unit cases, and scenario B: the bare-command walk over both scopes' marketplaces, a marketplace's plugins, and an installed plugin's actions
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 12-02-PLAN.md — Installs from the picker in each scope with `list`, cancelling at the scope screen and on the first screen, the empty marketplace list, and the phase's parent lines
 
 ### Phase 13: Prune
 
@@ -686,7 +693,7 @@ Plans:
 | 9. Legacy MCP Entry Move | 1/1 | Complete    | 2026-11-08 |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
 | 11. Device Flow Sign-In | 0/TBD | Not started | - |
-| 12. Browse Picker | 0/TBD | Not started | - |
+| 12. Browse Picker | 2/2 | Complete    | 2026-11-08 |
 | 13. Prune | 0/TBD | Not started | - |
 | 14. Bootstrap | 1/1 | Complete    | 2026-11-08 |
 | 15. Marketplace State Lock | 1/1 | Complete    | 2026-11-08 |

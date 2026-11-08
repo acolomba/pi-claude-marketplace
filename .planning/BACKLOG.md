@@ -5071,3 +5071,7 @@ Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-03). A `state.json` from a newe
 ## STATEVER-01: an old record with no plugins keeps its old schema version
 
 Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-06). A schema 1 or 2 `state.json` with no plugin records keeps its old `schemaVersion` on disk, because `loadState` writes only when it fills a field. Candidate direction: write the current schema version whenever the migration ran, even with no field filled.
+
+## BROWSESCOPE-01: the picker's install-scope screen differs from Claude Code's
+
+Noted 2026-11-08 (behavioral-gaps Phase 12, D-BG-1202). Claude Code 2.1.319 asks `Install for you (user scope)`, `Install for all collaborators on this repository (project scope)`, and `Install for you, in this repo only (local scope)`, in that order, and marks none recommended. Pi's picker lists `Project local (Recommended)`, `Project`, and `User (global)`. Candidate direction: reorder the screen to user, project, project local, drop `(Recommended)`, and update the scope-screen rows that `features/plugin/browse.feature` pins (scenario C).

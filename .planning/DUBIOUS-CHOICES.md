@@ -119,3 +119,38 @@ Full text: `.planning/phases/09-legacy-mcp-entry-move/DUBIOUS-CHOICES.md`.
 - **P9-DC-11 (Low, open).** The Given's marker check uses `"_piClaudeMarketplace" in entry`.
 - **P9-DC-12 (Low, open).** The red probe.
 - **P9-DC-13 (Medium, open).** Subagent dispatch.
+
+## Phase 12: Browse Picker
+
+Full text: `.planning/phases/12-browse-picker/DUBIOUS-CHOICES.md`.
+
+- **P12-DC-01 (High, open).** Marketplace row wording changes, not only its count.
+- **P12-DC-02 (Medium, open).** Unreadable manifest leaves the count out.
+- **P12-DC-03 (Medium, open).** BROWSE-02's "its marketplace's scope" refined.
+- **P12-DC-04 (High, open).** Install-scope screen kept as is (D-BG-1202).
+- **P12-DC-05 (Low, open).** Unavailable plugin rows pinned without an upstream reference.
+- **P12-DC-06 (Low, open).** Upstream's `Updated {date}` row part not added.
+- **P12-DC-07 (Medium, open).** Reserved-name check in the count.
+- **P12-DC-08 (Low, open).** Row text with an unreadable catalog.
+- **P12-DC-09 (Low, open).** `pluginCount` keeps its name with a new meaning.
+- **P12-DC-10 (Medium, open).** Seven terminal scenarios.
+- **P12-DC-11 (Low, open).** Scope-screen descriptions pinned as truncated.
+- **P12-DC-12 (Low, open).** Unavailable plugin's Info-only actions stay unit-tested only.
+- **P12-DC-13 (Low, open).** Pattern mapper skipped.
+- **P12-DC-14 (Low, open).** D-BG-1201 lands in two commits.
+- **P12-DC-15 (Medium, open).** Scenario B's unavailable entry has no version.
+- **P12-DC-16 (Low, open).** A unit case pins the look-alike-name refusal.
+- **P12-DC-17 (Low, open).** Bare-command red proof required.
+- **P12-DC-18 (Low, open).** Seed titles change.
+- **P12-DC-19 (Low, open).** Decision IDs in two scenario titles.
+- **P12-DC-20 (Low, open).** BROWSE-02 wording unchanged.
+- **P12-DC-21 (Medium, open).** Cancel red proofs may race.
+- **P12-DC-22 (Low, open).** BACKLOG ID `BROWSESCOPE-01` proposed.
+- **P12-DC-23 (Low, open).** Every task rated reversible, no decision checkpoint.
+- **P12-DC-24 (Medium, open).** Plans executed inline, not by `gsd-executor` subagents.
+- **P12-DC-25 (Low, open).** Commit message files in the shared scratchpad.
+- **P12-DC-26 (Low, open).** Literal `--import` path.
+- **P12-DC-27 (Low, open).** Exactly two `ctx.cwd` reads in the first-screen unit helper.
+- **P12-DC-28 (Low, open).** 12-02's three tasks in one commit.
+- **P12-DC-29 (Low, open).** Scenario runs through a helper script.
+- **P12-DC-30 (Medium, open).** Review, fixes, and verification inline.
