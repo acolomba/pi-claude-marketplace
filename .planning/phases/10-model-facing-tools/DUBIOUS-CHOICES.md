@@ -41,3 +41,10 @@ entries below are the ones a reviewer may want to reverse.
 - **P10-DC-14 (Low, open). No-change scenario scope.** It calls the list tool only with `{"scope":"user"}` (seed 1 pins the no-scope call), gets two planted proofs (a `state.json` write and a removed staged skill), and does not read the git host's request log for network use (NFR-5 stays with the unit tests).
 - **P10-DC-15 (Low, open). Shared unit fixture.** The disabled record `foxtrot` goes into the shared `mixedMarketplace` unit fixture, which changes all five filter cases.
 - **P10-DC-16 (Low, open). Stale count comment left.** `test/edge/handlers/tools.test.ts:177` says "28 of this suite's 53 cases" while the suite has 43; the plan leaves the pre-existing comment as it is.
+
+## Execution step
+
+- **P10-DC-17 (Medium, open). Isolation sentinel written in the parent checkout.** The agent-isolation guard reads `.gsd/dispatch-isolation-sentinel.json` in the session's cwd, which is the parent checkout, so the 10-01 dispatch was unblocked by forcing the sentinel there (a gitignored runtime file) with phase 10's ID. The coordinator then forbade writes to the parent checkout; nothing else was written there.
+- **P10-DC-18 (Medium, open). Plan 10-02, the code review, the fixes, and the verification ran inline.** This session's Agent tool has no foreground mode, so a dispatched subagent keeps running after the orchestrator's turn ends; at the coordinator's instruction the rest of the phase ran in the orchestrating session itself, following the gsd-executor, gsd-code-reviewer, and gsd-verifier definitions, instead of in separate agents. Plan 10-01 ran in a gsd-executor agent.
+- **P10-DC-19 (Low, open). Sequential root pin simplified.** The 10-01 executor got a plain "this path and this branch, or halt" check instead of GSD's long `<project_root_pin>` guard script, which the session's command guard would likely have refused.
+- **P10-DC-20 (Low, open). Empty-block copy.** 10-01's empty-block rule pushes `{ ...mp, plugins: kept }` even for a block that had no rows, where the old code pushed `mp` itself; every field is equal.
