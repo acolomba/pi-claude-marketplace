@@ -51,8 +51,8 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 ### Thin spots
 
-- [ ] **BROWSE-01**: In the terminal UI, `browse` and a bare `/claude:plugin` open the plugin picker, which lists the marketplaces and plugins of both scopes.
-- [ ] **BROWSE-02**: Choosing a plugin in the picker installs it in its marketplace's scope; cancelling installs nothing.
+- [x] **BROWSE-01**: In the terminal UI, `browse` and a bare `/claude:plugin` open the plugin picker, which lists the marketplaces and plugins of both scopes.
+- [x] **BROWSE-02**: Choosing a plugin in the picker installs it in its marketplace's scope; cancelling installs nothing.
 - [ ] **PRUNE-01**: `prune` without `--scope` behaves as Claude Code does, `--scope user|project` combines with `--dry-run`, and its usage errors are covered.
 - [ ] **PRUNE-02**: `prune` while another process holds the state lock fails as lock held and removes nothing, and a dependency only a disabled plugin needs is handled as upstream does.
 - [ ] **BOOT-01**: `bootstrap` refuses `--scope` and arguments, and its json and rpc output carry the same outcome as the terminal UI.
@@ -102,8 +102,8 @@ None.
 | DFLOW-02 | Phase 11 | Pending |
 | DFLOW-03 | Phase 11 | Pending |
 | DFLOW-04 | Phase 11 | Pending |
-| BROWSE-01 | Phase 12 | Pending |
-| BROWSE-02 | Phase 12 | Pending |
+| BROWSE-01 | Phase 12 | Complete |
+| BROWSE-02 | Phase 12 | Complete |
 | PRUNE-01 | Phase 13 | Pending |
 | PRUNE-02 | Phase 13 | Pending |
 | BOOT-01 | Phase 14 | Pending |

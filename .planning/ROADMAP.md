@@ -350,7 +350,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay
 - [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
 - [ ] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass
-- [ ] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled
+- [x] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled (completed 2026-11-08)
 - [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
 - [ ] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock
 - [ ] **Phase 15: Marketplace State Lock** - `marketplace autoupdate` and `noautoupdate` respect a held lock, and a lock left by a dead process blocks no marketplace verb
@@ -592,7 +592,7 @@ Plans:
   2. Choosing a plugin installs it in its marketplace's scope, and `list` then shows it installed there (BROWSE-02).
   3. Cancelling the picker installs nothing and leaves both scopes as they were (BROWSE-02).
 
-**Plans**: 2/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -680,7 +680,7 @@ Plans:
 | 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
 | 11. Device Flow Sign-In | 0/TBD | Not started | - |
-| 12. Browse Picker | 2/2 | In Progress | - |
+| 12. Browse Picker | 2/2 | Complete    | 2026-11-08 |
 | 13. Prune | 0/TBD | Not started | - |
 | 14. Bootstrap | 0/TBD | Not started | - |
 | 15. Marketplace State Lock | 0/TBD | Not started | - |
