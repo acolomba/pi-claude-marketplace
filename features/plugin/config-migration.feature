@@ -136,6 +136,58 @@ Feature: Plugin config migration
       | 1    | user | after the reload |
     Then the config and installation record bytes of the user scope are unchanged
 
+  Scenario: A load reports a config that is not valid and keeps it byte for byte
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given a config in scope user and layer base, with this text:
+      """
+      """
+    Given the config and installation record bytes of the user scope are remembered
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | summary                      | tally label       | tally failures | tally warnings |
+      | cascade | error    | false        | Some operations have failed. | Reconcile pending | 2              | 0              |
+      | cascade | error    | false        | Some operations have failed. | Reconcile pending | 2              | 0              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name    | marketplace scope | marketplace status | marketplace reasons | id                                      | name                | status | reasons          | scope | cause chain                                     | cause truncated | leaks | rollback partial |
+      | claude-plugins.json | user              | failed             | invalid manifest    | claude-plugins.json@claude-plugins.json | claude-plugins.json | failed | invalid manifest | user  | JSON parse failed: Unexpected end of JSON input | false           |       |                  |
+      | claude-plugins.json | user              | failed             | invalid manifest    | claude-plugins.json@claude-plugins.json | claude-plugins.json | failed | invalid manifest | user  | JSON parse failed: Unexpected end of JSON input | false           |       |                  |
+    Then the config and installation record bytes of the user scope are unchanged
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: A load reports an unreadable local config and writes no project config
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/fixtures --scope project --local"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    Given a config in scope project and layer local, with this text:
+      """
+      { "plugins": [] }
+      """
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | summary                      | tally label       | tally failures | tally warnings |
+      | cascade | error    | false        | Some operations have failed. | Reconcile pending | 2              | 0              |
+      | cascade | error    | false        | Some operations have failed. | Reconcile pending | 2              | 0              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name          | marketplace scope | marketplace status | marketplace reasons | id                                                  | name                      | status | reasons          | scope   | cause chain                                        | cause truncated | leaks | rollback partial |
+      | claude-plugins.local.json | project           | failed             | invalid manifest    | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | schema validation failed: /plugins: must be object | false           |       |                  |
+      | claude-plugins.local.json | project           | failed             | invalid manifest    | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | schema validation failed: /plugins: must be object | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the "claude-plugins.local.json" file of the project scope holds this text:
+      """
+      { "plugins": [] }
+      """
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
   Scenario: The first load after an upgrade from release 0.4.3 writes the project config with autoupdate off
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
