@@ -351,7 +351,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
 - [ ] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass
 - [ ] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled
-- [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
+- [x] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream (completed 2026-11-08)
 - [ ] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock
 - [ ] **Phase 15: Marketplace State Lock** - `marketplace autoupdate` and `noautoupdate` respect a held lock, and a lock left by a dead process blocks no marketplace verb
 - [ ] **Phase 16: Background-Child Load** - A load in a pi-subagents background child changes nothing installed, yet still loads the installed components
@@ -609,7 +609,7 @@ Plans:
   3. `prune` while another process holds the state lock fails as lock held and removes nothing (PRUNE-02).
   4. A dependency that only a disabled plugin needs is kept or pruned as upstream does (PRUNE-02).
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans complete
 
 Plans:
 - [x] 13-01-PLAN.md — the prune scenarios for the user-scope default, one preview per scope, and a disabled plugin's dependencies, with red proofs for them and for the existing usage-error and state-lock coverage
@@ -677,7 +677,7 @@ Plans:
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
 | 11. Device Flow Sign-In | 0/TBD | Not started | - |
 | 12. Browse Picker | 0/TBD | Not started | - |
-| 13. Prune | 1/1 | In progress | - |
+| 13. Prune | 1/1 | Complete    | 2026-11-08 |
 | 14. Bootstrap | 0/TBD | Not started | - |
 | 15. Marketplace State Lock | 0/TBD | Not started | - |
 | 16. Background-Child Load | 0/TBD | Not started | - |
