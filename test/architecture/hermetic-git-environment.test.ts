@@ -2,7 +2,7 @@
  * @fileoverview Checks that every git environment the suite builds is made from
  * scratch, so no inherited `GIT_*` variable reaches Pi, the git host, or a
  * fixture (DRV-03). Pi gets the run's GitHub base override, never the
- * shell's (GHB-01). The background update variables also stay in the shell:
+ * shell's (GHB-01), and none when the run's environment has none (D-BG-01). The background update variables also stay in the shell:
  * Pi gets the update delay only from the run (D-PL8-09). A profile Pi gets
  * the run's `TMPDIR`, inside the sandbox home, never the shell's (HAR-05),
  * and pi-subagents' background-child marker only from its profile (D-BG-10).
@@ -132,6 +132,30 @@ describe("rpcChildEnvironment", () => {
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
       PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: "0",
+    });
+  });
+
+  test("omits the GitHub base override when the run's git environment has none", (t) => {
+    // arrange
+    inheritVariables(t);
+    const git = {
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+    } satisfies RpcGitEnvironment;
+
+    // act
+    const environment = rpcChildEnvironment(sandbox, git);
+
+    // assert
+    assert.deepStrictEqual(environment, {
+      HOME: "/sandbox/home",
+      PI_CODING_AGENT_DIR: "/sandbox/agent",
+      PI_OFFLINE: "1",
+      PATH: process.env.PATH ?? "",
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
     });
   });
 

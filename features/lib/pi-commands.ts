@@ -95,9 +95,11 @@ function assertQuiet(exchange: RpcExchange): void {
   );
 }
 
-// The extension's payloads among `entries`, each valid against the payload
-// schema (DRV-01).
-function claudePluginPayloads(
+/**
+ * Returns the extension's payloads among `entries`, each valid against the
+ * payload schema (DRV-01), so every driver validates them the same way.
+ */
+export function claudePluginPayloads(
   entries: ReadonlyArray<{ readonly customType?: string; readonly data?: unknown }>,
 ): NotificationPayload[] {
   return entries

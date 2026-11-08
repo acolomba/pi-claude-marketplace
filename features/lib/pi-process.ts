@@ -257,6 +257,25 @@ export class PiProcess {
     killProcessGroup(this.child);
   }
 
+  /**
+   * Kills Pi's own process with SIGKILL and waits for its exit, as a Pi that
+   * dies does. The rest of its process group, such as async hook processes,
+   * keeps running until the next load stops it (ASYNC-04), so this never
+   * kills the group. A later `stop()` or `crash()` does nothing.
+   */
+  async crash(): Promise<void> {
+    if (this.stopped) {
+      return;
+    }
+
+    this.stopped = true;
+    if (!this.exited) {
+      const exit = once(this.child, "exit");
+      this.child.kill("SIGKILL");
+      await exit;
+    }
+  }
+
   private write(record: RpcRecord): void {
     this.child.stdin.write(`${JSON.stringify(record)}\n`);
   }

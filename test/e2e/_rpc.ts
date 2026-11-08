@@ -58,7 +58,12 @@ export interface RpcGitEnvironment {
   readonly NODE_EXTRA_CA_CERTS: string;
   readonly GIT_CONFIG_NOSYSTEM: "1";
   readonly GIT_CONFIG_GLOBAL: string;
-  readonly PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: string;
+  /**
+   * The GitHub base override, copied only when set. A scenario Pi that
+   * reaches GitHub's real address through an in-process redirect starts
+   * without it, so GHB-02 does not turn Device Flow off (D-BG-01).
+   */
+  readonly PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL?: string;
   /**
    * The maximum delay of the background update, set only for a scenario's own
    * Pi (D-PL8-09). The run's shared Pi never sets it, so its background update
@@ -242,7 +247,10 @@ export function rpcChildEnvironment(
     environment.NODE_EXTRA_CA_CERTS = git.NODE_EXTRA_CA_CERTS;
     environment.GIT_CONFIG_NOSYSTEM = git.GIT_CONFIG_NOSYSTEM;
     environment.GIT_CONFIG_GLOBAL = git.GIT_CONFIG_GLOBAL;
-    environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
+    if (git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL !== undefined) {
+      environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
+    }
+
     if (git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS !== undefined) {
       environment.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS =
         git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS;
@@ -262,18 +270,19 @@ export function rpcChildEnvironment(
 /**
  * Returns the arguments that start the repository's Pi CLI in `mode` with the
  * real extension and `extraExtensions`, and with `--no-mcp` when `options`
- * asks for it. It never passes `--no-extensions`, which also removes
+ * asks for it. In `json` mode Pi prints each session event as one JSON line
+ * on stdout (D-BG-09). It never passes `--no-extensions`, which also removes
  * `builtin:mcp`.
  */
 export function piArguments(
-  mode: "rpc" | "tui",
+  mode: "rpc" | "tui" | "json",
   extraExtensions: readonly string[] = [],
   options: PiArgumentOptions = {},
 ): string[] {
   const extensions = [EXTENSION_ENTRY, ...extraExtensions];
   return [
     resolvePiRuntime(REPO_ROOT).cliPath,
-    ...(mode === "rpc" ? ["--mode", "rpc"] : []),
+    ...(mode === "tui" ? [] : ["--mode", mode]),
     "--offline",
     "--no-session",
     ...(options.noMcp === true ? ["--no-mcp"] : []),
