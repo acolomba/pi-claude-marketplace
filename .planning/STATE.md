@@ -4,17 +4,17 @@ milestone: behavioral-gaps
 milestone_name: Behavioral Coverage Gaps
 current_phase: 01
 current_phase_name: Foundation
-status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-11-08T05:12:12.935Z"
+status: verifying
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-11-08T05:46:41.660Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 01 execution started
-state_head: 0aa76322b3a434c7681bd71a6a46956f56dbec8d
+state_head: 6c04eb67925f0420fde602bc7efadde25ae9670a
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 01 (Foundation) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-07 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -433,6 +433,7 @@ archived milestone artifacts.
 | Phase 01 P05 | 29 min | 3 tasks | 7 files |
 | Phase 01 P06 | 38 min | 3 tasks | 7 files |
 | Phase 01 P07 | 40min | 3 tasks | 9 files |
+| Phase 01 P08 | 20 min | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -664,6 +665,8 @@ archived milestone artifacts.
 - [Phase 01]: The terminal command When waits only for a quiet window; the terminal result Then waits for its anchor row, because Pi shows no sign that an extension command is running
 - [Phase 01]: After a picker choice that closes the picker, the driver waits for a screen row naming the plugin from the closing screen's title
 - [Phase 01]: terminalScreen keeps its test-only export through a fallow-ignore-next-line unused-export marker
+- [Phase 01]: Child phases number decisions in per-phase blocks D-BG-N01 to D-BG-N99 (Phase 2 from D-BG-201), departing from D-BG-15's single sequence
+- [Phase 01]: CI behavioral timeouts stay at 15 minutes: local legs 1 m 50 s, 3 m 08 s, 56 s at the Phase 1 head (D-CF1-16)
 
 ### mcp-4 decisions
 
@@ -967,6 +970,6 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-08T05:12:12.818Z
-Stopped at: Completed 01-07-PLAN.md
+Last session: 2026-11-08T05:46:41.533Z
+Stopped at: Completed 01-08-PLAN.md
 Resume file: None

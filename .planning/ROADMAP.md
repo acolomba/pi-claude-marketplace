@@ -399,7 +399,7 @@ The error turn, the automatic compaction, the json-mode and terminal run, and th
 | 2 | Terminal and process | `pi-tui.ts` and the picker driver, the json-mode run, the background-child launch (`features/support/pi-process.ts`, `world.ts`, `test/e2e/_rpc.ts`), the session and command steps; seeds in `plugin/{browse,bootstrap,subagent-child}.feature` |
 | 3 | Brief and gate | `.planning/milestones/behavioral-gaps-CHILD-SESSION-BRIEF.md`, the measured CI time and `.github/workflows/ci.yml`, the frozen-file record, `npm run check`, and the phase branches |
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans executed
 
 Plans:
 **Wave 1**
@@ -414,7 +414,7 @@ Plans:
 - [x] 01-07-PLAN.md — Json-mode and terminal command runs, the terminal screen model, and the browse picker driver, with their seeds
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 01-08-PLAN.md — Frozen record, stand-in docs, child-session brief, combined-tree gate with CI timing, and the fifteen local branches
+- [x] 01-08-PLAN.md — Frozen record, stand-in docs, child-session brief, combined-tree gate with CI timing, and the fifteen local branches
 
 **Cross-cutting constraints:** <!-- gsd:generated -->
 - No seed of this plan carries an MCP implementation tag (D-BG-05).
@@ -662,7 +662,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Foundation | 7/8 | In Progress | - |
+| 1. Foundation | 8/8 | In Progress | - |
 | 2. Async Hooks | 0/TBD | Not started | - |
 | 3. StopFailure Hooks | 0/TBD | Not started | - |
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |

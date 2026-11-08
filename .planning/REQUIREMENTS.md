@@ -9,8 +9,8 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 ### Foundation
 
-- [ ] **FND-01**: The shared harness provides every stand-in, fixture writer, and shared step the stream phases name, each proven by a seed scenario that passes `npm run test:cucumber` (D-BG-04).
-- [ ] **FND-02**: Before the streams fork, the foundation files are listed as frozen in the roadmap, a child-session brief exists, and the combined tree passes `npm run check`.
+- [x] **FND-01**: The shared harness provides every stand-in, fixture writer, and shared step the stream phases name, each proven by a seed scenario that passes `npm run test:cucumber` (D-BG-04).
+- [x] **FND-02**: Before the streams fork, the foundation files are listed as frozen in the roadmap, a child-session brief exists, and the combined tree passes `npm run check`.
 
 ### Async hooks
 
@@ -78,8 +78,8 @@ None.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FND-01 | Phase 1 | Pending |
-| FND-02 | Phase 1 | Pending |
+| FND-01 | Phase 1 | Complete |
+| FND-02 | Phase 1 | Complete |
 | ASYNC-01 | Phase 2 | Pending |
 | ASYNC-02 | Phase 2 | Pending |
 | ASYNC-03 | Phase 2 | Pending |
