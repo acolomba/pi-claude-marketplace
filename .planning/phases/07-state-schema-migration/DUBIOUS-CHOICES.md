@@ -43,3 +43,8 @@ The autonomous run took the recommended option at every discuss question; those 
 - **P7-DC-15 (Medium, open). One commit carries a wrong title.** Commit `500fee97` holds the plan SUMMARY and the ROADMAP and STATE updates, but its message is a copy of the previous commit's (`test(features): prove a newer installation record is left untouched`): the new message file was not written before the commit ran. It was not amended (the brief forbids `--amend`).
 - **P7-DC-16 (Low, open). Executor details.** The R3 sabotage replaced the write with `void stateJsonPath;` so the file still type-checks; S10's "unstages nothing" uses the frozen staged-files step; the adapter gate leg took about 30 minutes under the shared load.
 - **P7-DC-17 (Low, open). `_auto_chain_active` reset skipped.** execute-phase's initialize step resets `workflow._auto_chain_active` with `config-set`, which the brief forbids; init already read it as false.
+
+## Review, verification, and transition
+
+- **P7-DC-18 (Low, open). Review Info item left unfixed.** The inline review found one Info item (IN-01: a narrowing failure message names only the marketplace). The auto-fix scope is Critical and Warning, and fixing it would have changed a build input after the full gate, so it stays as is.
+- **P7-DC-19 (Low, open). Security and Nyquist records written inline.** `phase.complete` warned that no SECURITY.md existed and VALIDATION.md was still a draft. The orchestrator wrote 07-SECURITY.md from the plan's threat register (`threats_open: 0`) and marked 07-VALIDATION.md validated, without running `/gsd-secure-phase` or `/gsd-validate-phase`.

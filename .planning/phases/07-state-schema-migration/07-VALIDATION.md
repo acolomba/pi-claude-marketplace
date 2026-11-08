@@ -3,8 +3,8 @@ phase: "7"
 slug: "state-schema-migration"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-11-08"
 ---
@@ -40,9 +40,9 @@ created: "2026-11-08"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 7-01-01 | 01 | 1 | STMIG-01 | — | N/A | behavioral | quick run command | ❌ W0 (step module new) | ⬜ pending |
-| 7-01-02 | 01 | 1 | STMIG-01 | — | N/A | behavioral | quick run command | ✅ (after 7-01-01) | ⬜ pending |
-| 7-01-03 | 01 | 1 | STMIG-02 | T-07-01 | a newer record is never rewritten | behavioral | quick run command | ✅ (seed) | ⬜ pending |
+| 7-01-01 | 01 | 1 | STMIG-01 | — | N/A | behavioral | quick run command | ❌ W0 (step module new) | ✅ green |
+| 7-01-02 | 01 | 1 | STMIG-01 | — | N/A | behavioral | quick run command | ✅ (after 7-01-01) | ✅ green |
+| 7-01-03 | 01 | 1 | STMIG-02 | T-07-01 | a newer record is never rewritten | behavioral | quick run command | ✅ (seed) | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -62,11 +62,11 @@ All phase behaviors have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-11-08 (inline audit; every task had an automated verify and red proofs)
