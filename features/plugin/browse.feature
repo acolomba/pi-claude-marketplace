@@ -65,7 +65,7 @@ Feature: Plugin browse
       | id        | version | enabled |
       | app@tools | 1.0.0   | true    |
 
-  Scenario: Cancelling the terminal picker installs nothing
+  Scenario: Cancelling the terminal picker at the install scope installs nothing
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
       | name | version |
@@ -77,6 +77,9 @@ Feature: Plugin browse
       | lint | 2.0.0   |
     Given the marketplace "extras" is added to the project scope
     When the user opens the plugin picker with "/claude:plugin browse" in pi's terminal
+    When the user chooses "tools [user]" in the plugin picker
+    When the user chooses "[available] app" in the plugin picker
+    When the user chooses "Install" in the plugin picker
     When the user cancels the plugin picker
     Then the user scope has no installed plugins
     Then the project scope has no installed plugins
