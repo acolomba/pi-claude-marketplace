@@ -28,10 +28,16 @@ export function projectReadResult(text: string, failed: boolean): string {
   return text.replace(CONTINUATION_PATTERN, `\n\n${CONTINUATION_TOKEN}`);
 }
 
-// Pi 1.5.0 refuses arguments with a first line that names the tool in quotes
-// and ends with a colon, one indented `- <path>: <message>` line per refused
-// argument, then a blank line and the arguments it received.
+// Pi 1.5.0 refuses arguments with the first line `Validation failed for tool
+// "<tool>":`, one indented `- <path>: <message>` line per refused argument,
+// then a blank line and the arguments it received. Only that first line marks
+// the refusal, so a failure text this extension writes, which may quote its
+// tool's name and list items, stays exact.
 const VALIDATION_PATH_PATTERN = /^\s+-\s+([^\s:]+):/u;
+
+function validationFailureFirstLine(tool: string): string {
+  return `Validation failed for tool "${tool}":`;
+}
 
 /**
  * The failure text of a call of `tool` whose arguments Pi's validation
@@ -40,7 +46,7 @@ const VALIDATION_PATH_PATTERN = /^\s+-\s+([^\s:]+):/u;
  */
 export function projectArgumentValidationFailure(tool: string, text: string): string | undefined {
   const [first = "", ...rest] = text.split("\n");
-  if (!first.includes(`"${tool}"`) || !first.trimEnd().endsWith(":")) {
+  if (first.trimEnd() !== validationFailureFirstLine(tool)) {
     return undefined;
   }
 
