@@ -15,7 +15,7 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 ### Async hooks
 
 - [ ] **ASYNC-01**: An `asyncRewake` hook that exits 2 gets its `rewakeMessage` and output into the model's context, which the model sees on its next turn.
-- [ ] **ASYNC-02**: An `asyncRewake` hook that exits with any other code adds nothing to the model's context, and its `rewakeSummary` reaches the user.
+- [ ] **ASYNC-02**: An `asyncRewake` hook that exits with any code other than 2 adds nothing to the model's context and shows the user nothing; one that exits 2 shows the user its `rewakeSummary`, or `Stop hook feedback` when it declares none, as Claude Code does (D-BG-204).
 - [ ] **ASYNC-03**: An `asyncRewake` hook never blocks or delays the event it fired on; a `PreToolUse` async hook does not block the tool.
 - [ ] **ASYNC-04**: `/reload` stops the async hook processes still running, and the next load reaps the ones an earlier Pi process left behind.
 - [ ] **ASYNC-05**: A hook declaring plain `async: true` behaves as Claude Code does, or the divergence is recorded with its license.

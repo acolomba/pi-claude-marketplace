@@ -421,7 +421,7 @@ Plans:
 
 ### Phase 2: Async Hooks
 
-**Goal**: A plugin's async hooks run in the background as Claude Code runs them: they never hold up the event they fired on, an `asyncRewake` hook that exits 2 wakes the model with its message, any other exit reaches only the user, and no hook process outlives a reload.
+**Goal**: A plugin's async hooks run in the background as Claude Code runs them: they never hold up the event they fired on, an `asyncRewake` hook that exits 2 wakes the model with its message and shows the user its summary, any other exit reaches neither, and no hook process outlives a reload.
 **Depends on**: Phase 1
 **Runs**: child session, branch `features/behavioral-gaps-phase-2`; merges last among the hook phases
 **Requirements**: ASYNC-01, ASYNC-02, ASYNC-03, ASYNC-04, ASYNC-05
@@ -429,7 +429,7 @@ Plans:
 **Research flag**: yes. A check of the async hook paths in the Claude Code binary.
 **Success Criteria** (what must be TRUE):
   1. An `asyncRewake` hook that exits 2 puts its `rewakeMessage` and its output into the model's context, and the scripted model's call log shows them on the next turn (ASYNC-01).
-  2. An `asyncRewake` hook that exits with any other code adds nothing to the model's context, and the user sees its `rewakeSummary` (ASYNC-02).
+  2. An `asyncRewake` hook that exits with any code other than 2 adds nothing to the model's context and shows the user nothing; one that exits 2 shows the user its `rewakeSummary`, or `Stop hook feedback` when it declares none (ASYNC-02, D-BG-204: Claude Code 2.1.319 shows the summary only on exit 2).
   3. A slow async hook on `PreToolUse` or on a prompt does not block or delay its event: the tool result and the reply arrive while the hook is still running (ASYNC-03).
   4. After `/reload`, no async hook process from the earlier load is still running, and the first load after a Pi process died stops the hook processes that process left (ASYNC-04). This holds for a project-scope install too. Today it does not: `index.ts` registers the hooks bridge with `{ cwd: homedir() }`, so `reapOrphans` (`bridges/hooks/event-router.ts`) reads the home directory's project PID table, and the project hydrate (`hydrateProjectScopeForCwdWith`) does not reap. The Phase 1 crash seed in `hook/async.feature` therefore installs in the user scope; this phase fixes the reap, or records a licensed divergence, and adds the project-scope scenario. Releasing a hook that declares no rewake summary, or one a terminal Pi started, needs new steps in `hook/async.steps.ts`.
   5. A hook with plain `async: true` behaves as Claude Code's does, or a scenario pins the divergence and names its license (ASYNC-05).
