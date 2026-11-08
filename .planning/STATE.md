@@ -5,16 +5,16 @@ milestone_name: Behavioral Coverage Gaps
 current_phase: 01
 current_phase_name: Foundation
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-11-08T01:44:59.709Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-11-08T02:17:35.088Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 01 execution started
-state_head: 001542c2b1baa783d89fba0d463ad5366e4030da
+state_head: 4c1edaffba0ffb2a0de38bc6c1287206bb245f7b
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 8
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Foundation) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 01 execution started
 
@@ -428,6 +428,7 @@ archived milestone artifacts.
 | Phase 4 P06 | 11min | 2 tasks | 1 files |
 | Phase 01 P01 | 6 min | 2 tasks | 6 files |
 | Phase 01 P02 | 28 min | 3 tasks | 11 files |
+| Phase 01 P03 | 27 min | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -647,6 +648,9 @@ archived milestone artifacts.
 - [Phase 01]: D-BG-01 to D-BG-16 recorded in PROJECT.md Key Decisions as pending the user's review; D-BG-04 profile wording and D-BG-16 local-branch wording applied to REQUIREMENTS, ROADMAP, and PROJECT
 - [Phase 01]: claudePluginPayloads stays exported for 01-07 through a .fallowrc.json ignoreExports entry, which 01-07 removes once pi-json-mode.ts imports it
 - [Phase 01]: Only a profile with withoutGitHubBaseOverride carries its environment and extraExtensions to a later terminal session; other profiles keep today's terminal launch
+- [Phase 01]: [behavioral-gaps] The scripted model's context-tokens value rides on its call's own message and the stream wrapper strips it from every event (partials, error, done), so Pi never sees it and no module state holds it (D-BG-07)
+- [Phase 01]: [behavioral-gaps] Pi's tool-argument validation failure is projected to 'invalid arguments: <sorted paths>' by anchoring on the quoted tool name in a first line ending with a colon; projectToolResult applies it first to every failed result (TOOL-03)
+- [Phase 01]: [behavioral-gaps] The TOOL-01 seed installs demo so the list tool's installed-plugin count reads 1, not a 0 a broken counter would also print
 
 ### mcp-4 decisions
 
@@ -949,6 +953,6 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-08T01:44:59.562Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-11-08T02:17:34.954Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
