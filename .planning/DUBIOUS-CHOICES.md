@@ -353,3 +353,36 @@ Full text: `.planning/phases/13-prune/DUBIOUS-CHOICES.md`.
 - **P13-DC-18 (Low, open).** Security and validation records written inline.
 - **P13-DC-19 (Low, open).** The regression gate is the full check.
 - **P13-DC-20 (Low, open).** The transition's PROJECT.md step was skipped.
+
+## Phase 8: First-Run Config Migration
+
+Full text: `.planning/phases/08-first-run-config-migration/DUBIOUS-CHOICES.md`.
+
+- **P8-DC-01 (Medium, open).** D-BG-802: a rebuilt config leaves out cascade-installed dependencies.
+- **P8-DC-02 (Low, open).** D-BG-806: a new session stands in for a later load.
+- **P8-DC-03 (Low, open).** D-BG-804: a deleted config loses `autoupdate`.
+- **P8-DC-04 (Medium, open).** The edit scenario writes the user's edit through the plugins step, not `with this text:`.
+- **P8-DC-05 (Low, open).** The invalid-config scenarios pin an empty file's `Unexpected end of JSON input`, or a one-segment schema error such as `{ "plugins": [] }`.
+- **P8-DC-06 (Low, open).** Node 24's JSON error text was not observed.
+- **P8-DC-07 (Low, open).** `migrate-config.ts` is not added to `DISABLED_STATE_TARGETS`.
+- **P8-DC-08 (Low, open).** A load with autoapply on can still rewrite the config in one case.
+- **P8-DC-09 (Low, open).** Project 0.4.3 `autoupdate` setup.
+- **P8-DC-10 (Low, open).** The project-scope `pending` scenario uses a deleted config with a disabled plugin.
+- **P8-DC-11 (Low, open).** Two plans in sequence, split by requirement.
+- **P8-DC-12 (Low, open).** The feature's Background keeps only the publish step.
+- **P8-DC-13 (Medium, open).** An extra scenario S-P5, which research did not plan.
+- **P8-DC-14 (Low, open).** S-U5 kept.
+- **P8-DC-15 (Low, open).** The project 0.4.3 scenario pins `autoupdate` false.
+- **P8-DC-16 (Low, open).** The unit cases are one data-driven loop of five rows.
+- **P8-DC-17 (Low, open).** No scenario runs `pending` against an invalid config.
+- **P8-DC-18 (Low, open).** The tracer task bundles the fix, unit rows, seed rewrite, and README line in one commit.
+- **P8-DC-19 (Low, open).** Every decision rated reversible; no checkpoint task.
+- **P8-DC-20 (Low, open).** The planner edited ROADMAP.md's Phase 8 `Plans` entry itself.
+- **P8-DC-21 (Medium, open).** Execution, code review, fixes, and verification ran inline in the phase session, not in subagents.
+- **P8-DC-22 (Low, open).** The dispatch-isolation sentinel was forced in the parent checkout's `.gsd/`.
+- **P8-DC-23 (Low, open).** Executor prompts passed the execution-context workflow files by path.
+- **P8-DC-24 (Low, open).** Planning commits used the shared scratchpad for message files.
+- **P8-DC-25 (Low, open).** The wave 1 gate's adapter leg had two timeouts under machine load.
+- **P8-DC-26 (Low, open).** The review's one Info item (IN-01) is left unfixed.
+- **P8-DC-27 (Low, open).** The phase closed without `/gsd-secure-phase` or `/gsd-validate-phase`.
+- **P8-DC-28 (Low, open).** `phase.complete` advanced STATE.md's frontmatter and Current Position to Phase 2.

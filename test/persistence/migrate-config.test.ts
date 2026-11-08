@@ -45,7 +45,7 @@ async function createCaseLocations(t: TestContext) {
   return { directory, locations };
 }
 
-function populatedState(): ExtensionState {
+function populatedState(plugins: Record<string, PluginInstallRecord> = {}): ExtensionState {
   return {
     schemaVersion: 2,
     marketplaces: {
@@ -56,7 +56,7 @@ function populatedState(): ExtensionState {
         addedFromCwd: "/project",
         manifestPath: "/catalog/marketplace.json",
         marketplaceRoot: "/catalog",
-        plugins: {},
+        plugins,
       },
     },
   };
@@ -110,6 +110,59 @@ test("projects an empty state as a complete version-one config", () => {
   // assert
   assert.deepStrictEqual(config, expectedConfig);
 });
+
+for (const { title, record, plugins } of [
+  {
+    title: "D-BG-801: projects a plugin the user disabled as enabled false",
+    record: { ...recordedPlugin(), enabled: false },
+    plugins: { "app@catalog": { enabled: false } },
+  },
+  {
+    title: "D-BG-803: projects a plugin the dependency check holds down as an empty entry",
+    record: { ...recordedPlugin(), enabled: false, dependencyDisabled: true },
+    plugins: { "app@catalog": {} },
+  },
+  {
+    title: "D-BG-802: leaves out an enabled plugin installed only as a dependency",
+    record: { ...recordedPlugin(), provenance: "dependency" },
+    plugins: {},
+  },
+  {
+    title: "D-BG-802: projects a dependency the user disabled as enabled false",
+    record: { ...recordedPlugin(), provenance: "dependency", enabled: false },
+    plugins: { "app@catalog": { enabled: false } },
+  },
+  {
+    title: "D-BG-802: leaves out a dependency the dependency check holds down",
+    record: {
+      ...recordedPlugin(),
+      provenance: "dependency",
+      enabled: false,
+      dependencyDisabled: true,
+    },
+    plugins: {},
+  },
+] satisfies ReadonlyArray<{
+  readonly title: string;
+  readonly record: PluginInstallRecord;
+  readonly plugins: CompleteProjection["plugins"];
+}>) {
+  test(title, () => {
+    // arrange
+    const state = populatedState({ app: record });
+    const expectedConfig = {
+      schemaVersion: 1,
+      marketplaces: { catalog: { source: "./catalog" } },
+      plugins,
+    } satisfies CompleteProjection;
+
+    // act
+    const config = buildConfigFromState(state, {});
+
+    // assert
+    assert.deepStrictEqual(config, expectedConfig);
+  });
+}
 
 test("projects complete marketplaces, plugins, legacy flags, and nullish sources", () => {
   // arrange
