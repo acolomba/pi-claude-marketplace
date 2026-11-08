@@ -625,7 +625,10 @@ Plans:
   2. A bootstrap run in json mode and one over RPC carry the same outcome as the same run in the terminal (BOOT-01).
   3. `bootstrap` while another process holds the user scope's state lock fails as lock held, and adds and records nothing (BOOT-02).
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 14-01-PLAN.md — Pin bootstrap's refusals, its outcome in each output mode, and its held-lock failure (BOOT-01, BOOT-02)
 
 ### Phase 15: Marketplace State Lock
 

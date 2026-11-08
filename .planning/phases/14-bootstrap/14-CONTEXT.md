@@ -21,7 +21,7 @@ Upstream: Claude Code has no `bootstrap` command. The 2.1.319 binary has no `plu
 <decisions>
 ## Implementation Decisions
 
-The parent probed today's behavior on the phase head (`7e961d04`) with a scratch feature file, then deleted it. A copy is at `/tmp/claude-1000/-home-acolomba-pi-claude-marketplace/45e74ef7-b24a-4893-854b-b4c04365a440/scratchpad/zz-probe14.feature`. Every expectation below passed under the `adapter` profile, so the phase expects no product bug.
+The parent probed today's behavior on the phase head (`7e961d04`) with a scratch feature file, then deleted it. A copy is at `/tmp/claude-1000/-home-acolomba-pi-claude-marketplace/45e74ef7-b24a-4893-854b-b4c04365a440/scratchpad/p14/zz-probe14.feature`. Every expectation below passed under the `adapter` profile, so the phase expects no product bug.
 
 ### Refusals (BOOT-01, criterion 1)
 
