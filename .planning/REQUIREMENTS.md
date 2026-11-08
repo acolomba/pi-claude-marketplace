@@ -44,10 +44,10 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 ### Device Flow
 
-- [ ] **DFLOW-01**: Adding a GitHub marketplace that needs a credential the user has not stored shows a user code and a verification URL, then clones once the user authorizes.
-- [ ] **DFLOW-02**: An authorization that is denied or expires fails as authentication required and records nothing.
-- [ ] **DFLOW-03**: An install from a GitHub git source runs the same flow on a cache miss.
-- [ ] **DFLOW-04**: The background autoupdate pass never starts a Device Flow; it uses stored credentials only.
+- [x] **DFLOW-01**: Adding a GitHub marketplace that needs a credential the user has not stored shows a user code and a verification URL, then clones once the user authorizes.
+- [x] **DFLOW-02**: An authorization that is denied or expires fails as authentication required and records nothing.
+- [x] **DFLOW-03**: An install from a GitHub git source runs the same flow on a cache miss.
+- [x] **DFLOW-04**: The background autoupdate pass never starts a Device Flow; it uses stored credentials only.
 
 ### Thin spots
 
@@ -98,10 +98,10 @@ None.
 | TOOL-01 | Phase 10 | Pending |
 | TOOL-02 | Phase 10 | Pending |
 | TOOL-03 | Phase 10 | Pending |
-| DFLOW-01 | Phase 11 | Pending |
-| DFLOW-02 | Phase 11 | Pending |
-| DFLOW-03 | Phase 11 | Pending |
-| DFLOW-04 | Phase 11 | Pending |
+| DFLOW-01 | Phase 11 | Complete |
+| DFLOW-02 | Phase 11 | Complete |
+| DFLOW-03 | Phase 11 | Complete |
+| DFLOW-04 | Phase 11 | Complete |
 | BROWSE-01 | Phase 12 | Complete |
 | BROWSE-02 | Phase 12 | Complete |
 | PRUNE-01 | Phase 13 | Pending |

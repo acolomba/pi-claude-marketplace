@@ -5075,3 +5075,11 @@ Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-06). A schema 1 or 2 `state.jso
 ## BROWSESCOPE-01: the picker's install-scope screen differs from Claude Code's
 
 Noted 2026-11-08 (behavioral-gaps Phase 12, D-BG-1202). Claude Code 2.1.319 asks `Install for you (user scope)`, `Install for all collaborators on this repository (project scope)`, and `Install for you, in this repo only (local scope)`, in that order, and marks none recommended. Pi's picker lists `Project local (Recommended)`, `Project`, and `User (global)`. Candidate direction: reorder the screen to user, project, project local, drop `(Recommended)`, and update the scope-screen rows that `features/plugin/browse.feature` pins (scenario C).
+
+## DFLOWGAPS-01: Device Flow paths with no scenario
+
+Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-04). Device Flow in print mode (`DeviceFlowUnavailableError`) has no scenario; a sign-in stand-in that fails its code request has no scenario; GitLab's Device Flow has no stand-in or scenario. Candidate direction: add a scenario for each, and a GitLab stand-in beside the GitHub one.
+
+## DFLOWREASON-01: a denied and an expired sign-in read the same
+
+Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-02). A denied and an expired GitHub sign-in both show the bare `authentication required` row (GAUTH-05); the product's own reason texts reach only the debug log. Candidate direction: give each a user-facing reason, if the user wants to tell them apart.

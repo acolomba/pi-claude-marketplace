@@ -349,7 +349,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
 - [x] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay (completed 2026-11-08)
 - [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
-- [ ] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass
+- [x] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass (completed 2026-11-08)
 - [x] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled (completed 2026-11-08)
 - [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
 - [x] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock (completed 2026-11-08)
@@ -583,7 +583,14 @@ Plans:
   3. An install from a GitHub git source on a cache miss runs the same flow, and an install whose clone is already cached runs none (DFLOW-03).
   4. The background autoupdate pass with no stored credential starts no Device Flow: the stand-in receives no device-code request, and the pass uses stored credentials only (DFLOW-04).
 
-**Plans**: TBD
+**Plans**: 2/2 plans complete
+
+Plans:
+**Wave 1**
+- [x] 11-01-PLAN.md — Marketplace add sign-in: the credential store steps, seed 1 extended, the next command reusing the token, and a denied or expired sign-in that leaves nothing (DFLOW-01, DFLOW-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 11-02-PLAN.md — The background pass with and without a stored GitHub credential, and a git-source install on a cache miss and a cache hit, with the phase's parent lines (DFLOW-03, DFLOW-04)
 
 ### Phase 12: Browse Picker
 
@@ -692,7 +699,7 @@ Plans:
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
 | 9. Legacy MCP Entry Move | 1/1 | Complete    | 2026-11-08 |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
-| 11. Device Flow Sign-In | 0/TBD | Not started | - |
+| 11. Device Flow Sign-In | 2/2 | Complete    | 2026-11-08 |
 | 12. Browse Picker | 2/2 | Complete    | 2026-11-08 |
 | 13. Prune | 0/TBD | Not started | - |
 | 14. Bootstrap | 1/1 | Complete    | 2026-11-08 |

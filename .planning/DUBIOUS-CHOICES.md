@@ -154,3 +154,29 @@ Full text: `.planning/phases/12-browse-picker/DUBIOUS-CHOICES.md`.
 - **P12-DC-28 (Low, open).** 12-02's three tasks in one commit.
 - **P12-DC-29 (Low, open).** Scenario runs through a helper script.
 - **P12-DC-30 (Medium, open).** Review, fixes, and verification inline.
+
+## Phase 11: Device Flow Sign-In
+
+Full text: `.planning/phases/11-device-flow-sign-in/DUBIOUS-CHOICES.md`.
+
+- **P11-DC-01 (Medium, open).** No upstream sign-in to compare.
+- **P11-DC-02 (Medium, open).** A denied and an expired sign-in read the same.
+- **P11-DC-03 (Low, open).** The credential store file as the observation.
+- **P11-DC-04 (Low, open).** Out of scope.
+- **P11-DC-05 (Low, open).** No research step.
+- **P11-DC-06 (Medium, open).** Cache-hit shape (D-BG-1104 amended).
+- **P11-DC-07 (Low, open).** The DFLOW-03 pair is not minimal.
+- **P11-DC-08 (Low, open).** Two-row outline.
+- **P11-DC-09 (Low, open).** DFLOW-04 red proof removes two guards.
+- **P11-DC-10 (Low, open).** A stored github.com credential Given of the phase's own.
+- **P11-DC-11 (Low, open).** Lean plan context.
+- **P11-DC-12 (Low, open).** Executors dispatched as general-purpose agents.
+- **P11-DC-13 (Low, open).** Skipped GSD writes.
+- **P11-DC-14 (Low, open).** Seed 1's sign-in table realigned (11-01).
+- **P11-DC-15 (Low, open).** The credential store table has no path column (11-01).
+- **P11-DC-16 (Low, open).** Shared hook repair.
+- **P11-DC-17 (Low, open).** Shared scratchpad.
+- **P11-DC-18 (Low, open).** Inline execution after 11-01.
+- **P11-DC-19 (Low, open).** One commit for both 11-02 tasks.
+- **P11-DC-20 (Low, open).** Combined red-proof runs.
+- **P11-DC-21 (Low, open).** A doubled phase gate was stopped and rerun.
