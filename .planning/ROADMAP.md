@@ -641,7 +641,10 @@ Plans:
   2. With a lock left by a process that has died, `marketplace add`, `remove`, `update`, `autoupdate`, and `noautoupdate` each complete as they would with no lock (MLOCK-02).
   3. A lock that a live process still holds keeps blocking the same verbs, so staleness is the only difference (MLOCK-02).
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 15-01-PLAN.md — The held-lock autoupdate and noautoupdate Outline (MLOCK-01), the stale-lock twins of every live-holder scenario with the seed rewritten (MLOCK-02), both red proofs, and the wave gate
 
 ### Phase 16: Background-Child Load
 
