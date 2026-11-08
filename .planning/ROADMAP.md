@@ -434,7 +434,20 @@ Plans:
   4. After `/reload`, no async hook process from the earlier load is still running, and the first load after a Pi process died stops the hook processes that process left (ASYNC-04). This holds for a project-scope install too. Today it does not: `index.ts` registers the hooks bridge with `{ cwd: homedir() }`, so `reapOrphans` (`bridges/hooks/event-router.ts`) reads the home directory's project PID table, and the project hydrate (`hydrateProjectScopeForCwdWith`) does not reap. The Phase 1 crash seed in `hook/async.feature` therefore installs in the user scope; this phase fixes the reap, or records a licensed divergence, and adds the project-scope scenario. Releasing a hook that declares no rewake summary, or one a terminal Pi started, needs new steps in `hook/async.steps.ts`.
   5. A hook with plain `async: true` behaves as Claude Code's does, or a scenario pins the divergence and names its license (ASYNC-05).
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+**Wave 1**
+- [ ] 02-01-PLAN.md — An exit-2 async rewake wakes the model with Claude Code's text, the summary shows only on exit 2, and the woken turn sets stop_hook_active; the two seeds rewritten and two scenarios added
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-02-PLAN.md — Plain async hooks run in the background and give their JSON answer to the model's next call; async Stop hooks run in the background and wake the model once
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 02-03-PLAN.md — The project hydrate reaps a project's leftover hook processes on reload and after a crash; the PreToolUse and steer scenarios; the async docs rows and the phase's parent lines
+
+**Cross-cutting constraints:** <!-- gsd:generated -->
+- Every scenario this plan adds carries no implementation tag, waits only on Pi records, lifecycle lines, and process exits, and fails without the behavior it names, with the red proof in the SUMMARY (D-BG-208).
 
 ### Phase 3: StopFailure Hooks
 
