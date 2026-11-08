@@ -22,19 +22,19 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 ### Hook events
 
-- [ ] **STOPF-01**: `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload, and matchers select them by error type.
+- [x] **STOPF-01**: `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload, and matchers select them by error type.
 - [ ] **TFAIL-01**: `PostToolUseFailure` hooks run on a failed tool call with Claude Code's payload, matchers select them by tool, and a `PostToolUse` hook does not run on the failure.
 - [ ] **PCOMP-01**: `PostCompact` hooks run after a compaction with its trigger (`manual` or `auto`), and matchers select them by trigger.
 - [ ] **SEND-01**: `SessionEnd` hooks run with each reason Pi can produce, matchers select them by reason, and a failing `SessionEnd` hook does not keep the session from ending.
 
 ### Upgrades
 
-- [ ] **STMIG-01**: After an upgrade from an older `state.json` schema, the first load lists every recorded plugin as installed, its components work, and the state file is rewritten in the current schema.
-- [ ] **STMIG-02**: A `state.json` from a newer, unsupported schema is refused as unreadable, and nothing is changed.
+- [x] **STMIG-01**: After an upgrade from an older `state.json` schema, the first load lists every recorded plugin as installed, its components work, and the state file is rewritten in the current schema.
+- [x] **STMIG-02**: A `state.json` from a newer, unsupported schema is refused as unreadable, and nothing is changed.
 - [ ] **CFGMIG-01**: The first load with a `state.json` and no `claude-plugins.json` writes a config declaring every recorded marketplace and plugin, carrying the enabled state and the legacy `autoupdate` field.
 - [ ] **CFGMIG-02**: Later loads never rewrite the config, so the user's edits survive, and an invalid existing config is never overwritten.
-- [ ] **AMIG-01**: On load, a plugin's entries in a legacy `mcp.json` move to `mcp-adapter.json`, and its servers still run.
-- [ ] **AMIG-02**: The move leaves the user's own, unmarked `mcp.json` entries untouched.
+- [x] **AMIG-01**: On load, a plugin's entries in a legacy `mcp.json` move to `mcp-adapter.json`, and its servers still run.
+- [x] **AMIG-02**: The move leaves the user's own, unmarked `mcp.json` entries untouched.
 
 ### Model-facing tools
 
@@ -44,23 +44,23 @@ Every requirement is met by cucumber scenarios under `features/` that fail witho
 
 ### Device Flow
 
-- [ ] **DFLOW-01**: Adding a GitHub marketplace that needs a credential the user has not stored shows a user code and a verification URL, then clones once the user authorizes.
-- [ ] **DFLOW-02**: An authorization that is denied or expires fails as authentication required and records nothing.
-- [ ] **DFLOW-03**: An install from a GitHub git source runs the same flow on a cache miss.
-- [ ] **DFLOW-04**: The background autoupdate pass never starts a Device Flow; it uses stored credentials only.
+- [x] **DFLOW-01**: Adding a GitHub marketplace that needs a credential the user has not stored shows a user code and a verification URL, then clones once the user authorizes.
+- [x] **DFLOW-02**: An authorization that is denied or expires fails as authentication required and records nothing.
+- [x] **DFLOW-03**: An install from a GitHub git source runs the same flow on a cache miss.
+- [x] **DFLOW-04**: The background autoupdate pass never starts a Device Flow; it uses stored credentials only.
 
 ### Thin spots
 
-- [ ] **BROWSE-01**: In the terminal UI, `browse` and a bare `/claude:plugin` open the plugin picker, which lists the marketplaces and plugins of both scopes.
-- [ ] **BROWSE-02**: Choosing a plugin in the picker installs it in its marketplace's scope; cancelling installs nothing.
+- [x] **BROWSE-01**: In the terminal UI, `browse` and a bare `/claude:plugin` open the plugin picker, which lists the marketplaces and plugins of both scopes.
+- [x] **BROWSE-02**: Choosing a plugin in the picker installs it in its marketplace's scope; cancelling installs nothing.
 - [ ] **PRUNE-01**: `prune` without `--scope` behaves as Claude Code does, `--scope user|project` combines with `--dry-run`, and its usage errors are covered.
 - [ ] **PRUNE-02**: `prune` while another process holds the state lock fails as lock held and removes nothing, and a dependency only a disabled plugin needs is handled as upstream does.
-- [ ] **BOOT-01**: `bootstrap` refuses `--scope` and arguments, and its json and rpc output carry the same outcome as the terminal UI.
-- [ ] **BOOT-02**: `bootstrap` while another process holds the user scope's state lock fails as lock held and records nothing.
-- [ ] **MLOCK-01**: `marketplace autoupdate` and `noautoupdate` while another process holds the state lock fail as lock held and change nothing.
-- [ ] **MLOCK-02**: A lock file left by a process that has died does not block the marketplace verbs, as `proper-lockfile`'s stale handling defines.
-- [ ] **CHILD-01**: A load in a pi-subagents background child, with `autoapply` on and a pending change, installs, uninstalls, and updates nothing.
-- [ ] **CHILD-02**: A load in a background child moves no legacy `mcp.json` entry and rewrites no agent grant, yet still loads the installed components.
+- [x] **BOOT-01**: `bootstrap` refuses `--scope` and arguments, and its json and rpc output carry the same outcome as the terminal UI.
+- [x] **BOOT-02**: `bootstrap` while another process holds the user scope's state lock fails as lock held and records nothing.
+- [x] **MLOCK-01**: `marketplace autoupdate` and `noautoupdate` while another process holds the state lock fail as lock held and change nothing.
+- [x] **MLOCK-02**: A lock file left by a process that has died does not block the marketplace verbs, as `proper-lockfile`'s stale handling defines.
+- [x] **CHILD-01**: A load in a pi-subagents background child, with `autoapply` on and a pending change, installs, uninstalls, and updates nothing.
+- [x] **CHILD-02**: A load in a background child moves no legacy `mcp.json` entry and rewrites no agent grant, yet still loads the installed components.
 
 ## Future Requirements
 
@@ -85,33 +85,33 @@ None.
 | ASYNC-03 | Phase 2 | Pending |
 | ASYNC-04 | Phase 2 | Pending |
 | ASYNC-05 | Phase 2 | Pending |
-| STOPF-01 | Phase 3 | Pending |
+| STOPF-01 | Phase 3 | Complete |
 | TFAIL-01 | Phase 4 | Pending |
 | PCOMP-01 | Phase 5 | Pending |
 | SEND-01 | Phase 6 | Pending |
-| STMIG-01 | Phase 7 | Pending |
-| STMIG-02 | Phase 7 | Pending |
+| STMIG-01 | Phase 7 | Complete |
+| STMIG-02 | Phase 7 | Complete |
 | CFGMIG-01 | Phase 8 | Pending |
 | CFGMIG-02 | Phase 8 | Pending |
-| AMIG-01 | Phase 9 | Pending |
-| AMIG-02 | Phase 9 | Pending |
+| AMIG-01 | Phase 9 | Complete |
+| AMIG-02 | Phase 9 | Complete |
 | TOOL-01 | Phase 10 | Pending |
 | TOOL-02 | Phase 10 | Pending |
 | TOOL-03 | Phase 10 | Pending |
-| DFLOW-01 | Phase 11 | Pending |
-| DFLOW-02 | Phase 11 | Pending |
-| DFLOW-03 | Phase 11 | Pending |
-| DFLOW-04 | Phase 11 | Pending |
-| BROWSE-01 | Phase 12 | Pending |
-| BROWSE-02 | Phase 12 | Pending |
+| DFLOW-01 | Phase 11 | Complete |
+| DFLOW-02 | Phase 11 | Complete |
+| DFLOW-03 | Phase 11 | Complete |
+| DFLOW-04 | Phase 11 | Complete |
+| BROWSE-01 | Phase 12 | Complete |
+| BROWSE-02 | Phase 12 | Complete |
 | PRUNE-01 | Phase 13 | Pending |
 | PRUNE-02 | Phase 13 | Pending |
-| BOOT-01 | Phase 14 | Pending |
-| BOOT-02 | Phase 14 | Pending |
-| MLOCK-01 | Phase 15 | Pending |
-| MLOCK-02 | Phase 15 | Pending |
-| CHILD-01 | Phase 16 | Pending |
-| CHILD-02 | Phase 16 | Pending |
+| BOOT-01 | Phase 14 | Complete |
+| BOOT-02 | Phase 14 | Complete |
+| MLOCK-01 | Phase 15 | Complete |
+| MLOCK-02 | Phase 15 | Complete |
+| CHILD-01 | Phase 16 | Complete |
+| CHILD-02 | Phase 16 | Complete |
 
 **Coverage:**
 - Milestone requirements: 34 total

@@ -211,14 +211,14 @@ Each entry below names the stream's seeds by title, then the steps that only tho
 - Phase 10, `plugin/model-tools.feature`: "The model reads the marketplaces the list tool returns" and "A plugin list call with a scope the tool does not accept reaches the model as invalid arguments". They use common steps only. The second seed reads Pi's argument-validation text through the projection in `features/lib/upstream/pi.ts`.
 - Phase 11, `marketplace/device-flow.feature`: "Adding a private GitHub marketplace signs in through Device Flow and clones it" and "A terminal session of a sign-in scenario sends the background update's GitHub requests to the git host".
   - `git-host.steps.ts`: `github's sign-in answers its polls with these outcomes:`, `the user's git keeps credentials in its credential store`, `pi runs with github's requests routed to the stand-ins`, `github's sign-in receives these requests:`, `github's sign-in receives no request`, and `pi routes these github requests:`.
-- Phase 12, `plugin/browse.feature`: "The terminal picker lists the marketplaces of both scopes", "Choosing a plugin in the terminal picker installs it", and "Cancelling the terminal picker at the install scope installs nothing". The first seed pins the `0 plugin(s)` count that Phase 12 checks (BROWSE-01).
+- Phase 12, `plugin/browse.feature`: "A bare plugin command opens the terminal picker on both scopes' marketplaces with the plugins each offers and has installed (D-BG-1201)", "Choosing User (global) in the terminal picker installs the plugin in the user scope (D-BG-1202)", and "Cancelling the terminal picker at the install scope leaves both scopes as they were".
   - `plugin/picker.steps.ts`: `the user opens the plugin picker with {string} in pi's terminal`, `the plugin picker shows the screen {string} with these rows:`, `the user chooses {string} in the plugin picker`, and `the user cancels the plugin picker`.
 - Phase 13: no seed in `plugin/prune.feature`.
 - Phase 14, `plugin/bootstrap.feature`: "Bootstrapping in json mode reports the result it reports over rpc" and "Bootstrapping in the terminal shows the result it reports over rpc".
   - `command.steps.ts`: `the user runs {string} in pi's json mode`, `the user runs {string} in pi's terminal`, and `pi's terminal shows this result of the command:`.
 - Phase 15, `marketplace/state-lock.feature`: "Removing a marketplace while a process that died left the state lock of its scope removes it".
   - `scope-state.steps.ts`: `a process that died left the state lock of the {word} scope`.
-- Phase 16, `plugin/subagent-child.feature`: "A background child's load leaves a declared plugin pending while autoapply is on".
+- Phase 16, `plugin/subagent-child.feature`: "A background child's load with autoapply on leaves a pending install, uninstall, and update for the next parent load".
   - `companion.steps.ts`: `pi runs with the scripted model as a pi-subagents background child`.
 
 ### Parent-owned files

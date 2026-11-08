@@ -2,6 +2,7 @@ import {
   BUCKET_A_EVENTS,
   NON_TOOL_EVENT_CLOSED_SETS,
   NON_TOOL_EVENT_FIELDS,
+  stopFailureMatcherTypes,
   TOOL_EVENTS,
   type BucketAEvent,
   type ToolEvent,
@@ -44,10 +45,22 @@ function toolMatcherCondition(rawMatcher: string): MatcherCondition | null {
   return null;
 }
 
+/** D-BG-302: a StopFailure list is kept when one listed type is in the set. */
+function stopFailureMatcherCondition(rawMatcher: string): MatcherCondition | null {
+  const types = stopFailureMatcherTypes(rawMatcher);
+  return types.some((type) => NON_TOOL_EVENT_CLOSED_SETS.StopFailure.has(type))
+    ? null
+    : "closed-set";
+}
+
 function nonToolMatcherCondition(
   event: Exclude<BucketAEvent, ToolEvent>,
   rawMatcher: string,
 ): MatcherCondition | null {
+  if (event === "StopFailure") {
+    return stopFailureMatcherCondition(rawMatcher);
+  }
+
   if (NON_TOOL_EVENT_FIELDS[event] === null) {
     return "no-matcher-support";
   }

@@ -5,7 +5,7 @@
 // `translateStopFailure` consumes the synthetic StopFailure event the settle
 // handler builds and emits the Claude `StopFailure` stdin envelope.
 // `classifyStopFailure` maps Pi's rendered `errorMessage` into the closed
-// 10-value error-type vocabulary (D-88-02: errorMessage-only), with `unknown`
+// error-type vocabulary (D-88-02: errorMessage-only), with `unknown`
 // as the in-vocabulary fallback and a deterministic `length ->
 // max_output_tokens` map.
 
@@ -20,19 +20,20 @@ export interface StopFailureStdin {
   readonly hook_event_name: "StopFailure";
   readonly error: StopFailureErrorType;
   readonly error_details?: string;
-  readonly last_assistant_message: string;
+  readonly last_assistant_message?: string;
 }
 
 /**
  * Synthetic StopFailure event the settle handler passes into the translator
  * slot. Not a Pi event type -- assembled at settle time from the classified
- * error type, optional detail text, and the cached last-assistant message
- * (which for a failure ending is Pi's rendered error text).
+ * error type, optional detail text, and the assistant message: Pi's rendered
+ * error text, trimmed, and absent when that text is empty, as Claude Code
+ * builds it (D-BG-303).
  */
 export interface StopFailureEvent {
   readonly error: StopFailureErrorType;
   readonly error_details?: string;
-  readonly last_assistant_message: string;
+  readonly last_assistant_message?: string;
 }
 
 export function translateStopFailure(
@@ -46,7 +47,9 @@ export function translateStopFailure(
     hook_event_name: "StopFailure",
     error: event.error,
     ...(event.error_details !== undefined ? { error_details: event.error_details } : {}),
-    last_assistant_message: event.last_assistant_message,
+    ...(event.last_assistant_message !== undefined
+      ? { last_assistant_message: event.last_assistant_message }
+      : {}),
   };
 }
 
@@ -109,7 +112,7 @@ const CLASSIFIER_TABLE: ReadonlyArray<
 export type FailureStopReason = Extract<StopReason, "error" | "length">;
 
 /**
- * Classify a StopFailure ending into the closed 10-value error-type vocabulary
+ * Classify a StopFailure ending into the closed error-type vocabulary
  * (SFAIL-03, D-88-02). Two inputs only -- Pi's rendered `errorMessage` and the
  * run's `stopReason` -- with no `after_provider_response` subscription and no
  * HTTP-status cell (the firming variant was declined). `stopReason "length"`

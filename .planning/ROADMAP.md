@@ -341,20 +341,20 @@ the parent can resolve a conflicting merge.
 
 - [x] **Phase 1: Foundation** - Every stand-in, fixture writer, driver, and shared step the streams need, each proven by a seed, then every shared file frozen and the child-session brief written (completed 2026-11-08)
 - [ ] **Phase 2: Async Hooks** - `async` and `asyncRewake` hooks run in the background, wake the model on exit 2, never block their event, and stop on `/reload`
-- [ ] **Phase 3: StopFailure Hooks** - `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload and error-type matchers
+- [x] **Phase 3: StopFailure Hooks** - `StopFailure` hooks run when a turn ends in an error, with Claude Code's payload and error-type matchers (completed 2026-11-08)
 - [ ] **Phase 4: PostToolUseFailure Hooks** - `PostToolUseFailure` hooks run on failed tool calls with Claude Code's payload and tool matchers, and `PostToolUse` hooks do not
 - [ ] **Phase 5: PostCompact Hooks** - `PostCompact` hooks run after manual and automatic compactions with the trigger, and matchers select by trigger
 - [ ] **Phase 6: SessionEnd Hooks** - `SessionEnd` hooks run with every reason Pi produces, matchers select by reason, and a failing hook never keeps a session open
-- [ ] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched
+- [x] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched (completed 2026-11-08)
 - [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
-- [ ] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay
+- [x] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay (completed 2026-11-08)
 - [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
-- [ ] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass
-- [ ] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled
+- [x] **Phase 11: Device Flow Sign-In** - GitHub Device Flow signs in on a marketplace add and on a git-source install cache miss, fails clean, and never runs in the background pass (completed 2026-11-08)
+- [x] **Phase 12: Browse Picker** - In the terminal, `browse` and a bare `/claude:plugin` open a picker that installs the chosen plugin, or nothing when cancelled (completed 2026-11-08)
 - [ ] **Phase 13: Prune** - `prune` scope handling, `--dry-run`, usage errors, the state lock, and dependencies of disabled plugins behave as upstream
-- [ ] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock
-- [ ] **Phase 15: Marketplace State Lock** - `marketplace autoupdate` and `noautoupdate` respect a held lock, and a lock left by a dead process blocks no marketplace verb
-- [ ] **Phase 16: Background-Child Load** - A load in a pi-subagents background child changes nothing installed, yet still loads the installed components
+- [x] **Phase 14: Bootstrap** - `bootstrap` refuses a scope and arguments, reports the same outcome in every output mode, and respects the state lock (completed 2026-11-08)
+- [x] **Phase 15: Marketplace State Lock** - `marketplace autoupdate` and `noautoupdate` respect a held lock, and a lock left by a dead process blocks no marketplace verb (completed 2026-11-08)
+- [x] **Phase 16: Background-Child Load** - A load in a pi-subagents background child changes nothing installed, yet still loads the installed components (completed 2026-11-08)
 
 ## Phase Details
 
@@ -463,7 +463,17 @@ Plans:
   3. A turn that ends normally runs no `StopFailure` hook, and on an error turn `Stop` hooks run or stay silent as Claude Code's do (STOPF-01).
   4. A `StopFailure` hook's output and exit code are handled as Claude Code handles them, and the next prompt in the session gets a normal turn (STOPF-01).
 
-**Plans**: TBD
+**Plans**: 3/3 plans complete
+
+Plans:
+**Wave 1**
+- [x] 03-01-PLAN.md — Pin today's StopFailure behavior: payload, error-type matchers, no Stop on an error turn, ignored output, and a normal next turn
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 03-02-PLAN.md — StopFailure matchers take `|` lists and Claude Code's 13 error types (D-BG-301, D-BG-302)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 03-03-PLAN.md — Leave out an empty `last_assistant_message` (D-BG-303), and the parent lines
 
 ### Phase 4: PostToolUseFailure Hooks
 
@@ -527,7 +537,11 @@ Plans:
   2. That load rewrites the installation record in the current schema, and a second load changes nothing (STMIG-01).
   3. A `state.json` from a newer schema is reported as unreadable by the load and by a command, and the file, the config, and every installed component stay as they were (STMIG-02).
 
-**Plans**: TBD
+**Plans**: 1/1 plans complete
+
+Plans:
+**Wave 1**
+- [x] 07-01-PLAN.md — Migration coverage: the migrated-record step, first and second loads after 0.6.0 and 0.19.2, a disabled plugin kept disabled, and the load and `disable` refusing a newer record, each with a red proof
 
 ### Phase 8: First-Run Config Migration
 
@@ -557,7 +571,10 @@ Plans:
   2. The user's own, unmarked `mcp.json` entries stay byte for byte as they were (AMIG-02).
   3. A second load moves nothing and reports nothing, and each scenario passes under every MCP implementation it applies to (AMIG-01, AMIG-02).
 
-**Plans**: TBD
+**Plans**: 1/1 plans complete
+
+Plans:
+- [x] 09-01-PLAN.md — Four `@mcp` scenarios beside the seed (the user's own servers, a second load, the moved server running, the project scope), with the new Given in `mcp-server/legacy-move.steps.ts`
 
 ### Phase 10: Model-Facing Tools
 
@@ -589,7 +606,14 @@ Plans:
   3. An install from a GitHub git source on a cache miss runs the same flow, and an install whose clone is already cached runs none (DFLOW-03).
   4. The background autoupdate pass with no stored credential starts no Device Flow: the stand-in receives no device-code request, and the pass uses stored credentials only (DFLOW-04).
 
-**Plans**: TBD
+**Plans**: 2/2 plans complete
+
+Plans:
+**Wave 1**
+- [x] 11-01-PLAN.md — Marketplace add sign-in: the credential store steps, seed 1 extended, the next command reusing the token, and a denied or expired sign-in that leaves nothing (DFLOW-01, DFLOW-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 11-02-PLAN.md — The background pass with and without a stored GitHub credential, and a git-source install on a cache miss and a cache hit, with the phase's parent lines (DFLOW-03, DFLOW-04)
 
 ### Phase 12: Browse Picker
 
@@ -605,7 +629,14 @@ Plans:
   2. Choosing a plugin installs it in its marketplace's scope, and `list` then shows it installed there (BROWSE-02).
   3. Cancelling the picker installs nothing and leaves both scopes as they were (BROWSE-02).
 
-**Plans**: TBD
+**Plans**: 2/2 plans complete
+
+Plans:
+**Wave 1**
+- [x] 12-01-PLAN.md — The D-BG-1201 marketplace row (catalog plugins offered and installed) with its unit cases, and scenario B: the bare-command walk over both scopes' marketplaces, a marketplace's plugins, and an installed plugin's actions
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 12-02-PLAN.md — Installs from the picker in each scope with `list`, cancelling at the scope screen and on the first screen, the empty marketplace list, and the phase's parent lines
 
 ### Phase 13: Prune
 
@@ -638,7 +669,10 @@ Plans:
   2. A bootstrap run in json mode and one over RPC carry the same outcome as the same run in the terminal (BOOT-01).
   3. `bootstrap` while another process holds the user scope's state lock fails as lock held, and adds and records nothing (BOOT-02).
 
-**Plans**: TBD
+**Plans**: 1/1 plans complete
+
+Plans:
+- [x] 14-01-PLAN.md — Pin bootstrap's refusals, its outcome in each output mode, and its held-lock failure (BOOT-01, BOOT-02)
 
 ### Phase 15: Marketplace State Lock
 
@@ -654,7 +688,10 @@ Plans:
   2. With a lock left by a process that has died, `marketplace add`, `remove`, `update`, `autoupdate`, and `noautoupdate` each complete as they would with no lock (MLOCK-02).
   3. A lock that a live process still holds keeps blocking the same verbs, so staleness is the only difference (MLOCK-02).
 
-**Plans**: TBD
+**Plans**: 1/1 plans complete
+
+Plans:
+- [x] 15-01-PLAN.md — The held-lock autoupdate and noautoupdate Outline (MLOCK-01), the stale-lock twins of every live-holder scenario with the seed rewritten (MLOCK-02), both red proofs, and the wave gate
 
 ### Phase 16: Background-Child Load
 
@@ -669,7 +706,10 @@ Plans:
   2. A load in a background child moves no legacy `mcp.json` entry and rewrites no generated agent's grant (CHILD-02).
   3. The child still loads the installed plugin's components: its skills and commands are listed, and its hooks run (CHILD-02).
 
-**Plans**: TBD
+**Plans**: 1/1 plans complete
+
+**Wave 1**
+- [x] 16-01-PLAN.md — Four background-child scenarios (pending changes left for the parent, no legacy mcp.json move, skills and slash commands, a PreToolUse hook), each proven red, and the MGRT-02 grant red proof re-run
 
 ## Progress
 
@@ -677,20 +717,20 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Foundation | 8/8 | Complete    | 2026-11-08 |
 | 2. Async Hooks | 0/TBD | Not started | - |
-| 3. StopFailure Hooks | 0/TBD | Not started | - |
+| 3. StopFailure Hooks | 3/3 | Complete    | 2026-11-08 |
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |
 | 5. PostCompact Hooks | 0/TBD | Not started | - |
 | 6. SessionEnd Hooks | 0/TBD | Not started | - |
-| 7. State Schema Migration | 0/TBD | Not started | - |
+| 7. State Schema Migration | 1/1 | Complete    | 2026-11-08 |
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
-| 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
+| 9. Legacy MCP Entry Move | 1/1 | Complete    | 2026-11-08 |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
-| 11. Device Flow Sign-In | 0/TBD | Not started | - |
-| 12. Browse Picker | 0/TBD | Not started | - |
+| 11. Device Flow Sign-In | 2/2 | Complete    | 2026-11-08 |
+| 12. Browse Picker | 2/2 | Complete    | 2026-11-08 |
 | 13. Prune | 0/TBD | Not started | - |
-| 14. Bootstrap | 0/TBD | Not started | - |
-| 15. Marketplace State Lock | 0/TBD | Not started | - |
-| 16. Background-Child Load | 0/TBD | Not started | - |
+| 14. Bootstrap | 1/1 | Complete    | 2026-11-08 |
+| 15. Marketplace State Lock | 1/1 | Complete    | 2026-11-08 |
+| 16. Background-Child Load | 1/1 | Complete    | 2026-11-08 |
 
 ## Carried Forward
 
