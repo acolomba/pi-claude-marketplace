@@ -49,8 +49,11 @@ const TERMINAL_QUIET_MS = 1_000;
 /**
  * Returns the notice whose first row is `anchor` on `lines`, the screen with
  * its run tokens projected: the rows from the last row that reads `anchor`
- * down to the next blank row, without the indent Pi gives them all. Fails,
- * with the screen, when no row reads `anchor`.
+ * down to the border row of Pi's editor, without the blank rows at the end
+ * and without the indent Pi gives them all. A blank row inside the notice,
+ * such as one between its blocks, stays, so the comparison sees the whole
+ * notice and any other text Pi drew above its editor. Fails, with the
+ * screen, when no row reads `anchor`.
  */
 function terminalNotice(lines: readonly string[], anchor: string): string {
   const start = lines.map((line) => line.trim()).lastIndexOf(anchor.trim());
@@ -58,9 +61,12 @@ function terminalNotice(lines: readonly string[], anchor: string): string {
     assert.fail(`no notice starting ${JSON.stringify(anchor)} on the screen:\n${lines.join("\n")}`);
   }
 
-  const end = lines.findIndex((line, index) => index > start && line.trim() === "");
-  const rows = lines.slice(start, end === -1 ? undefined : end);
-  const indent = Math.min(...rows.map((row) => row.length - row.trimStart().length));
+  const border = lines.findIndex((line, index) => index > start && /^─+$/u.test(line.trim()));
+  const below = lines.slice(start, border === -1 ? undefined : border);
+  const rows = below.slice(0, below.map((row) => row.trim() !== "").lastIndexOf(true) + 1);
+  const indent = Math.min(
+    ...rows.filter((row) => row.trim() !== "").map((row) => row.length - row.trimStart().length),
+  );
   return rows.map((row) => row.slice(indent)).join("\n");
 }
 
@@ -204,8 +210,8 @@ Then("the command result contains no absolute sandbox path", function (this: Sce
 });
 
 // The notice of the command the terminal ran, read from the current screen
-// and anchored on its own first row, so no text Pi draws reaches the
-// comparison. A redraw that replaced the notice shows its last value.
+// from its own first row down to Pi's editor. A redraw that replaced the
+// notice shows its last value.
 Then(
   "pi's terminal shows this result of the command:",
   async function (this: ScenarioWorld, expected: string) {
