@@ -29,3 +29,16 @@ The autonomous run took the recommended option at every discuss question; those 
 - **P8-DC-08 (Low, open). A load with autoapply on can still rewrite the config in one case.** A declared install of a `defaultEnabled: false` plugin stamps `{ "enabled": false }` and re-serializes the file (D-102-02 / DFEN-04). That is a recorded decision in the install path, which this phase does not own: parent note, no fix.
 - **P8-DC-09 (Low, open). Project 0.4.3 `autoupdate` setup.** To pin `false`, a scenario turns autoupdate on and then off, because a bare `noautoupdate` writes nothing to the config.
 - **P8-DC-10 (Low, open). The project-scope `pending` scenario uses a deleted config with a disabled plugin** rather than the 0.4.3 upgrade, so its red proof is simply the unfixed rebuild.
+
+## Planning step
+
+- **P8-DC-11 (Low, open). Two plans in sequence, split by requirement** (08-01 CFGMIG-01, 08-02 CFGMIG-02); they cannot share a wave because both edit the feature file.
+- **P8-DC-12 (Low, open). The feature's Background keeps only the publish step;** every scenario states its own plugin offer and marketplace add, so the project scenarios do not inherit a user-scope add they never use.
+- **P8-DC-13 (Medium, open). An extra scenario S-P5, which research did not plan:** a project scope with one marketplace in the local config and one in the base config gets a rebuilt base config with only the base one. Without it, an implementation that skips the migration whenever a local config exists would still pass S-P3. It deletes both configs and rewrites the local one with existing steps instead of adding a step module.
+- **P8-DC-14 (Low, open). S-U5 kept:** a dependency the user disabled stays declared `enabled: false` (the D-BG-802 exception is user-visible).
+- **P8-DC-15 (Low, open). The project 0.4.3 scenario pins `autoupdate` false;** the user seed pins true.
+- **P8-DC-16 (Low, open). The unit cases are one data-driven loop of five rows** to avoid a fallow clone group; the fifth row (a dependency the check holds down is left out) is not named in CONTEXT.
+- **P8-DC-17 (Low, open). No scenario runs `pending` against an invalid config;** the load prints the block `composePendingReport` builds, so D-BG-807's "pending reports the same block" is taken as covered.
+- **P8-DC-18 (Low, open). The tracer task bundles the fix, unit rows, seed rewrite, and README line in one commit,** because the commit hook checks 100% direct coverage of the staged pair.
+- **P8-DC-19 (Low, open). Every decision rated reversible; no checkpoint task,** because the run must not stop.
+- **P8-DC-20 (Low, open). The planner edited ROADMAP.md's Phase 8 `Plans` entry itself.**
