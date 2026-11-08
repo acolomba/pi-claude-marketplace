@@ -20,10 +20,23 @@
  * retryable, and starts its own recovery for them, which makes more calls; a
  * seed uses a message that is neither, such as `Authentication failed (401)`.
  * A reply step with stop reason `length` ends its call with that stop reason.
+ *
+ * A reply step with context tokens reports them as the usage of its own call
+ * (D-BG-07). The faux core replaces the usage of every scripted message with
+ * its own estimate, so the player carries the value on the message it returns,
+ * a plain field the faux core's copies keep, and the provider's stream wraps
+ * the faux stream: it removes the field from every event, and on the `done`
+ * event it sets the usage to that many input tokens. The value rides on the
+ * call's own message, so no state outlives the call and a child agent's Pi
+ * cannot inherit it. Pi compacts on its own, with reason `threshold`, when the
+ * context tokens of a reply exceed the context window minus `reserveTokens`:
+ * 128000 - 16384 = 111616 for `faux-1`. Pi reads input above the context
+ * window as an overflow instead.
  */
 
 import { appendFile } from "node:fs/promises";
 
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import {
   fauxAssistantMessage,
   createFauxCore,
@@ -36,7 +49,14 @@ import { harnessDirectory } from "../turn-records.ts";
 import { modelCallsPath, readModelCalls, readModelScript } from "./script.ts";
 
 import type { ModelCall } from "./script.ts";
-import type { AssistantMessage, Message, Tool } from "@earendil-works/pi-ai";
+import type {
+  AssistantMessage,
+  AssistantMessageEvent,
+  AssistantMessageEventStream,
+  Message,
+  Tool,
+  Usage,
+} from "@earendil-works/pi-ai";
 import type { FauxResponseFactory } from "@earendil-works/pi-ai/providers/faux";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -130,6 +150,76 @@ function toolsOf(messages: readonly Message[]): ModelCall["tools"] {
   }));
 }
 
+// The field that carries a reply step's context tokens from the player to the
+// provider's stream, on the message of that call only.
+const CONTEXT_TOKENS_FIELD = "scriptedContextTokens";
+
+function withContextTokens(message: AssistantMessage, tokens: number): AssistantMessage {
+  const carried: AssistantMessage & Record<typeof CONTEXT_TOKENS_FIELD, number> = {
+    ...message,
+    [CONTEXT_TOKENS_FIELD]: tokens,
+  };
+  return carried;
+}
+
+// The message without the carrier field, and the context tokens it carried.
+function takeContextTokens(message: AssistantMessage): [AssistantMessage, number | undefined] {
+  if (!(CONTEXT_TOKENS_FIELD in message)) {
+    return [message, undefined];
+  }
+
+  const { [CONTEXT_TOKENS_FIELD]: tokens, ...rest } = message;
+  return [rest, typeof tokens === "number" ? tokens : undefined];
+}
+
+function contextUsage(tokens: number): Usage {
+  return {
+    input: tokens,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: tokens,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  };
+}
+
+// The final message as Pi receives it: without the carrier, and with the
+// usage of the context tokens it carried.
+function settledMessage(message: AssistantMessage): AssistantMessage {
+  const [rest, tokens] = takeContextTokens(message);
+  return tokens === undefined ? rest : { ...rest, usage: contextUsage(tokens) };
+}
+
+function forwardedEvent(event: AssistantMessageEvent): AssistantMessageEvent {
+  if (event.type === "done") {
+    return { ...event, message: settledMessage(event.message) };
+  }
+
+  if (event.type === "error") {
+    return { ...event, error: takeContextTokens(event.error)[0] };
+  }
+
+  return { ...event, partial: takeContextTokens(event.partial)[0] };
+}
+
+async function forwardEvents(
+  inner: AssistantMessageEventStream,
+  outer: AssistantMessageEventStream,
+): Promise<void> {
+  for await (const event of inner) {
+    outer.push(forwardedEvent(event));
+  }
+
+  outer.end(settledMessage(await inner.result()));
+}
+
+// The faux stream of one call, with the usage its reply step reports.
+function withContextUsage(inner: AssistantMessageEventStream): AssistantMessageEventStream {
+  const outer = createAssistantMessageEventStream();
+  void forwardEvents(inner, outer);
+  return outer;
+}
+
 async function playNextStep(messages: readonly Message[]): Promise<AssistantMessage> {
   const harness = harnessDirectory(process.env.HOME ?? "");
   const [script, calls] = await Promise.all([readModelScript(harness), readModelCalls(harness)]);
@@ -154,7 +244,12 @@ async function playNextStep(messages: readonly Message[]): Promise<AssistantMess
   }
 
   if ("reply" in step) {
-    return fauxAssistantMessage([fauxText(step.reply)], { stopReason: step.stopReason ?? "stop" });
+    const message = fauxAssistantMessage([fauxText(step.reply)], {
+      stopReason: step.stopReason ?? "stop",
+    });
+    return step.contextTokens === undefined
+      ? message
+      : withContextTokens(message, step.contextTokens);
   }
 
   // The script validator admits only JSON values, so the arguments are a JSON object.
@@ -184,7 +279,8 @@ export default function scriptedModel(pi: ExtensionAPI): void {
     baseUrl: "http://localhost:0",
     apiKey: "scripted-model",
     api: faux.api,
-    streamSimple: faux.streamSimple,
+    streamSimple: (model, context, options) =>
+      withContextUsage(faux.streamSimple(model, context, options)),
     models: faux.models.map((model) => ({
       id: model.id,
       name: model.name,

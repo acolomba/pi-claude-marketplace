@@ -11,7 +11,8 @@
  *
  * A step is a reply, a tool call, or an error that ends the call with stop
  * reason `error` and the message the scenario chooses. A reply may end with
- * stop reason `length` instead of `stop` (D-BG-06).
+ * stop reason `length` instead of `stop` (D-BG-06), and may report the
+ * context tokens of its own call, so Pi starts its own compaction (D-BG-07).
  */
 
 import { readFile, writeFile } from "node:fs/promises";
@@ -24,11 +25,16 @@ import { projectToolResult, projectUserText } from "../upstream/index.ts";
 
 /**
  * One step of a model script: a reply text, which may end with stop reason
- * `length`; one tool call; or an error message that ends the call with stop
- * reason `error` (D-BG-06).
+ * `length` and may report the context tokens of its call; one tool call; or
+ * an error message that ends the call with stop reason `error` (D-BG-06,
+ * D-BG-07).
  */
 export type ScriptStep =
-  | { readonly reply: string; readonly stopReason?: "length" }
+  | {
+      readonly reply: string;
+      readonly stopReason?: "length";
+      readonly contextTokens?: number;
+    }
   | { readonly tool: string; readonly arguments: Readonly<Record<string, unknown>> }
   | { readonly error: string };
 
@@ -39,7 +45,11 @@ const SCRIPT_VALIDATOR = Compile(
   Type.Array(
     Type.Union([
       Type.Object(
-        { reply: Type.String(), stopReason: Type.Optional(Type.Literal("length")) },
+        {
+          reply: Type.String(),
+          stopReason: Type.Optional(Type.Literal("length")),
+          contextTokens: Type.Optional(Type.Integer({ minimum: 1 })),
+        },
         { additionalProperties: false },
       ),
       Type.Object(
@@ -72,13 +82,14 @@ const SCRIPT_COLUMNS: ReadonlySet<string> = new Set([
   "arguments",
   "error",
   "stop reason",
+  "context tokens",
 ]);
 
 // The columns that each name a kind of step; a row sets exactly one.
 const STEP_KINDS = ["reply", "tool", "error"] as const;
 
 // The columns that only a reply row may set.
-const REPLY_ONLY_COLUMNS: readonly string[] = ["stop reason"];
+const REPLY_ONLY_COLUMNS: readonly string[] = ["stop reason", "context tokens"];
 
 type Cell = (column: string) => string;
 
@@ -117,18 +128,39 @@ function parseArguments(text: string, row: number): Readonly<Record<string, unkn
   return parsed as Readonly<Record<string, unknown>>;
 }
 
+function replyStopReason(text: string, row: number): { stopReason?: "length" } {
+  if (text === "") {
+    return {};
+  }
+
+  if (text !== "length") {
+    throw new Error(`model script row ${row}: the stop reason ${text} is not length`);
+  }
+
+  return { stopReason: text };
+}
+
+function replyContextTokens(text: string, row: number): { contextTokens?: number } {
+  if (text === "") {
+    return {};
+  }
+
+  const tokens = Number(text);
+  if (!/^[1-9]\d*$/.test(text) || !Number.isSafeInteger(tokens)) {
+    throw new Error(
+      `model script row ${row}: the context tokens ${text} are not a positive integer`,
+    );
+  }
+
+  return { contextTokens: tokens };
+}
+
 function replyStep(cell: Cell, row: number): ScriptStep {
-  const reply = cell("reply");
-  const stopReason = cell("stop reason");
-  if (stopReason === "") {
-    return { reply };
-  }
-
-  if (stopReason !== "length") {
-    throw new Error(`model script row ${row}: the stop reason ${stopReason} is not length`);
-  }
-
-  return { reply, stopReason };
+  return {
+    reply: cell("reply"),
+    ...replyStopReason(cell("stop reason"), row),
+    ...replyContextTokens(cell("context tokens"), row),
+  };
 }
 
 function toolStep(cell: Cell, row: number): ScriptStep {
