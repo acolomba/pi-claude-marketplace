@@ -12,6 +12,14 @@
  * `overflow: true` and fails: there is no fallback reply. Two processes that
  * call at the same moment would read the same count and take the same step,
  * so a scenario must not make concurrent model calls.
+ *
+ * An error step ends its call with stop reason `error` and the step's message,
+ * which the faux core streams as an error event (D-BG-06). A profile Pi turns
+ * auto retry off, so one error step is one call. Pi reads some messages as a
+ * context overflow (such as one that starts `prompt is too long`) or as
+ * retryable, and starts its own recovery for them, which makes more calls; a
+ * seed uses a message that is neither, such as `Authentication failed (401)`.
+ * A reply step with stop reason `length` ends its call with that stop reason.
  */
 
 import { appendFile } from "node:fs/promises";
@@ -141,8 +149,12 @@ async function playNextStep(messages: readonly Message[]): Promise<AssistantMess
     );
   }
 
+  if ("error" in step) {
+    return fauxAssistantMessage([], { stopReason: "error", errorMessage: step.error });
+  }
+
   if ("reply" in step) {
-    return fauxAssistantMessage([fauxText(step.reply)]);
+    return fauxAssistantMessage([fauxText(step.reply)], { stopReason: step.stopReason ?? "stop" });
   }
 
   // The script validator admits only JSON values, so the arguments are a JSON object.

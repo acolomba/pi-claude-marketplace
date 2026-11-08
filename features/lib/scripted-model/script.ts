@@ -8,6 +8,10 @@
  * array of steps. The call log holds one JSON line per model call; its line
  * count is the index of the next step, so the model keeps no count in memory.
  * A call past the end of the script is logged with `overflow: true`.
+ *
+ * A step is a reply, a tool call, or an error that ends the call with stop
+ * reason `error` and the message the scenario chooses. A reply may end with
+ * stop reason `length` instead of `stop` (D-BG-06).
  */
 
 import { readFile, writeFile } from "node:fs/promises";
@@ -18,10 +22,15 @@ import { Compile } from "typebox/compile";
 
 import { projectToolResult, projectUserText } from "../upstream/index.ts";
 
-/** One step of a model script: a reply text, or one tool call. */
+/**
+ * One step of a model script: a reply text, which may end with stop reason
+ * `length`; one tool call; or an error message that ends the call with stop
+ * reason `error` (D-BG-06).
+ */
 export type ScriptStep =
-  | { readonly reply: string }
-  | { readonly tool: string; readonly arguments: Readonly<Record<string, unknown>> };
+  | { readonly reply: string; readonly stopReason?: "length" }
+  | { readonly tool: string; readonly arguments: Readonly<Record<string, unknown>> }
+  | { readonly error: string };
 
 const SCRIPT_FILE = "model-script.json";
 const CALLS_FILE = "model-calls.jsonl";
@@ -29,11 +38,15 @@ const CALLS_FILE = "model-calls.jsonl";
 const SCRIPT_VALIDATOR = Compile(
   Type.Array(
     Type.Union([
-      Type.Object({ reply: Type.String() }, { additionalProperties: false }),
+      Type.Object(
+        { reply: Type.String(), stopReason: Type.Optional(Type.Literal("length")) },
+        { additionalProperties: false },
+      ),
       Type.Object(
         { tool: Type.String(), arguments: Type.Record(Type.String(), Type.Unknown()) },
         { additionalProperties: false },
       ),
+      Type.Object({ error: Type.String() }, { additionalProperties: false }),
     ]),
   ),
 );
@@ -53,7 +66,21 @@ const CALL_VALIDATOR = Compile(CALL_SCHEMA);
 /** One model call as the scripted model logged it, whole. */
 export type ModelCall = Type.Static<typeof CALL_SCHEMA>;
 
-const SCRIPT_COLUMNS: ReadonlySet<string> = new Set(["reply", "tool", "arguments"]);
+const SCRIPT_COLUMNS: ReadonlySet<string> = new Set([
+  "reply",
+  "tool",
+  "arguments",
+  "error",
+  "stop reason",
+]);
+
+// The columns that each name a kind of step; a row sets exactly one.
+const STEP_KINDS = ["reply", "tool", "error"] as const;
+
+// The columns that only a reply row may set.
+const REPLY_ONLY_COLUMNS: readonly string[] = ["stop reason"];
+
+type Cell = (column: string) => string;
 
 // The path of the script file in the harness directory `harness`.
 function modelScriptPath(harness: string): string {
@@ -90,6 +117,44 @@ function parseArguments(text: string, row: number): Readonly<Record<string, unkn
   return parsed as Readonly<Record<string, unknown>>;
 }
 
+function replyStep(cell: Cell, row: number): ScriptStep {
+  const reply = cell("reply");
+  const stopReason = cell("stop reason");
+  if (stopReason === "") {
+    return { reply };
+  }
+
+  if (stopReason !== "length") {
+    throw new Error(`model script row ${row}: the stop reason ${stopReason} is not length`);
+  }
+
+  return { reply, stopReason };
+}
+
+function toolStep(cell: Cell, row: number): ScriptStep {
+  const argumentsText = cell("arguments");
+  if (argumentsText === "") {
+    throw new Error(`model script row ${row} needs arguments for its tool`);
+  }
+
+  return { tool: cell("tool"), arguments: parseArguments(argumentsText, row) };
+}
+
+// Refuses a column set on a row of a kind that does not take it.
+function checkRowColumns(cell: Cell, kind: (typeof STEP_KINDS)[number], row: number): void {
+  if (kind !== "tool" && cell("arguments") !== "") {
+    throw new Error(`model script row ${row} has arguments but no tool`);
+  }
+
+  const misplaced =
+    kind === "reply" ? [] : REPLY_ONLY_COLUMNS.filter((column) => cell(column) !== "");
+  if (misplaced.length > 0) {
+    throw new Error(
+      `model script row ${row} sets ${misplaced.join(", ")}, which only a reply takes`,
+    );
+  }
+}
+
 function parseScriptRow(
   header: readonly string[],
   cells: readonly string[],
@@ -99,29 +164,29 @@ function parseScriptRow(
     throw new Error(`model script row ${row} has ${cells.length} cells, not ${header.length}`);
   }
 
-  const cell = (column: string): string => cells[header.indexOf(column)] ?? "";
-  const reply = cell("reply");
-  const tool = cell("tool");
-  const argumentsText = cell("arguments");
-  if (tool === "") {
-    if (reply === "" || argumentsText !== "") {
-      throw new Error(`model script row ${row} needs a reply and no arguments`);
-    }
-
-    return { reply };
+  const cell: Cell = (column) => cells[header.indexOf(column)] ?? "";
+  const kinds = STEP_KINDS.filter((kind) => cell(kind) !== "");
+  const [kind] = kinds;
+  if (kind === undefined || kinds.length > 1) {
+    throw new Error(`model script row ${row} needs exactly one of a reply, a tool, or an error`);
   }
 
-  if (reply !== "" || argumentsText === "") {
-    throw new Error(`model script row ${row} needs arguments for its tool and no reply`);
+  checkRowColumns(cell, kind, row);
+  switch (kind) {
+    case "reply":
+      return replyStep(cell, row);
+    case "tool":
+      return toolStep(cell, row);
+    case "error":
+      return { error: cell("error") };
   }
-
-  return { tool, arguments: parseArguments(argumentsText, row) };
 }
 
 /**
  * Reads a model script from the raw rows of a table, header first. Each row
- * is a reply, or a tool call with its arguments as a JSON object. Throws on a
- * missing or unknown column and on a row that is neither.
+ * is a reply, a tool call with its arguments as a JSON object, or an error.
+ * Throws on a missing or unknown column, on a row that sets none or more than
+ * one of them, and on a column set on a row of a kind that does not take it.
  */
 export function parseScriptTable(rows: readonly (readonly string[])[]): ScriptStep[] {
   const [header, ...body] = rows;
