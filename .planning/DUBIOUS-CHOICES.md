@@ -77,3 +77,27 @@ Full text: `.planning/phases/14-bootstrap/DUBIOUS-CHOICES.md`.
 - **P14-DC-15 (Medium, open).** Json-mode timeouts under load accepted as load.
 - **P14-DC-16 (Low, open).** Regression gate, Nyquist, and security audits.
 - **P14-DC-17 (Low, open).** The parent's sentinel step and config-set step skipped.
+
+## Phase 7: State Schema Migration
+
+Full text: `.planning/phases/07-state-schema-migration/DUBIOUS-CHOICES.md`.
+
+- **P7-DC-01 (Medium, open).** Release 0.4.3 left to Phase 8.
+- **P7-DC-02 (Medium, open).** A new step reads the record's schema version and provenance.
+- **P7-DC-03 (Medium, open).** Other commands' unreadable reports are not pinned or fixed.
+- **P7-DC-04 (Medium, open).** A refused newer record keeps the installed components working.
+- **P7-DC-05 (Low, open).** The migration write stays fire-and-forget.
+- **P7-DC-06 (Low, open).** An old record with no plugins keeps its old schema version.
+- **P7-DC-07 (Low, open).** UI and AI gates skipped as false positives.
+- **P7-DC-08 (Low, open).** Research ran although the roadmap's research flag is "no".
+- **P7-DC-09 (Low, open).** Pattern mapper skipped.
+- **P7-DC-10 (Low, open).** Planner's choices.
+- **P7-DC-11 (Low, open).** Commit attribution.
+- **P7-DC-12 (Medium, open).** Inline execution, review, and verification.
+- **P7-DC-13 (Low, open).** Root-pin guard not run.
+- **P7-DC-14 (Low, open).** Gate and commit-message location.
+- **P7-DC-15 (Medium, open).** One commit carries a wrong title.
+- **P7-DC-16 (Low, open).** Executor details.
+- **P7-DC-17 (Low, open).** `_auto_chain_active` reset skipped.
+- **P7-DC-18 (Low, open).** Review Info item left unfixed.
+- **P7-DC-19 (Low, open).** Security and Nyquist records written inline.

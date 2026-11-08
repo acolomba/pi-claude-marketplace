@@ -5063,3 +5063,11 @@ Noted 2026-11-07 (mcp-builtin, from quick 261107-36g). When a plugin has a resol
 ## LOCKFLIPSUBJECT-01: an unnamed autoupdate flip under a held lock reports `(unknown)`
 
 Noted 2026-11-08 (behavioral-gaps Phase 15, P15-DC-02). An unnamed `marketplace autoupdate` or `noautoupdate` under a held state lock reports the `(unknown)` aggregate subject, which unit tests pin. It could name the recorded marketplaces, as an unnamed `marketplace update` does. The flip without `--scope`, which writes the project scope and then fails on a held user lock, has no scenario. Candidate direction: name the recorded marketplaces in the failed row, and add a scenario for the cross-scope flip.
+
+## STATEREAD-01: some commands report a newer `state.json` without `{unreadable}`
+
+Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-03). A `state.json` from a newer schema gets `{unreadable}` from the load, `list`, `disable`, `pending`, and `apply`. `install` reports the plugin row failed with no reason, `update` reports `{unreadable manifest}`, and `uninstall` and `info` report an internal error whose cause is cut to `state.json at [path]`. All of them refuse and change nothing. Candidate direction: give those verbs' orchestrators the same `{unreadable}` row, and pin each with a scenario.
+
+## STATEVER-01: an old record with no plugins keeps its old schema version
+
+Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-06). A schema 1 or 2 `state.json` with no plugin records keeps its old `schemaVersion` on disk, because `loadState` writes only when it fills a field. Candidate direction: write the current schema version whenever the migration ran, even with no field filled.

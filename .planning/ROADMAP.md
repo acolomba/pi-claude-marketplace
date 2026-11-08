@@ -345,7 +345,7 @@ the parent can resolve a conflicting merge.
 - [ ] **Phase 4: PostToolUseFailure Hooks** - `PostToolUseFailure` hooks run on failed tool calls with Claude Code's payload and tool matchers, and `PostToolUse` hooks do not
 - [ ] **Phase 5: PostCompact Hooks** - `PostCompact` hooks run after manual and automatic compactions with the trigger, and matchers select by trigger
 - [ ] **Phase 6: SessionEnd Hooks** - `SessionEnd` hooks run with every reason Pi produces, matchers select by reason, and a failing hook never keeps a session open
-- [ ] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched
+- [x] **Phase 7: State Schema Migration** - An older `state.json` upgrades on the first load with every plugin still working; a newer one is refused and left untouched (completed 2026-11-08)
 - [ ] **Phase 8: First-Run Config Migration** - The first load writes the config from the records, and no later load overwrites the user's config
 - [ ] **Phase 9: Legacy MCP Entry Move** - A plugin's legacy `mcp.json` entries move to `mcp-adapter.json` with its servers still running, and the user's own entries stay
 - [ ] **Phase 10: Model-Facing Tools** - The two marketplace tools give the model the marketplaces and plugins it asks for, an error for bad input, and change nothing
@@ -514,7 +514,11 @@ Plans:
   2. That load rewrites the installation record in the current schema, and a second load changes nothing (STMIG-01).
   3. A `state.json` from a newer schema is reported as unreadable by the load and by a command, and the file, the config, and every installed component stay as they were (STMIG-02).
 
-**Plans**: TBD
+**Plans**: 1/1 plans complete
+
+Plans:
+**Wave 1**
+- [x] 07-01-PLAN.md — Migration coverage: the migrated-record step, first and second loads after 0.6.0 and 0.19.2, a disabled plugin kept disabled, and the load and `disable` refusing a newer record, each with a red proof
 
 ### Phase 8: First-Run Config Migration
 
@@ -674,7 +678,7 @@ Plans:
 | 4. PostToolUseFailure Hooks | 0/TBD | Not started | - |
 | 5. PostCompact Hooks | 0/TBD | Not started | - |
 | 6. SessionEnd Hooks | 0/TBD | Not started | - |
-| 7. State Schema Migration | 0/TBD | Not started | - |
+| 7. State Schema Migration | 1/1 | Complete    | 2026-11-08 |
 | 8. First-Run Config Migration | 0/TBD | Not started | - |
 | 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
