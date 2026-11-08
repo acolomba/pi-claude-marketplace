@@ -567,7 +567,7 @@ Plans:
 - [x] 10-01-PLAN.md — The list tool's optional scope, the not-found error result, disabled plugins under the `unavailable` filter, and `(no plugins)` for every empty block, each test-first in the unit pair
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 10-02-PLAN.md — The model-tool scenarios through the scripted model (both scopes and each scope, every status and filter, refused and unknown input as failed results, nothing changed on disk), with every red proof and the parent lines
+- [x] 10-02-PLAN.md — The model-tool scenarios through the scripted model (both scopes and each scope, every status and filter, refused and unknown input as failed results, nothing changed on disk), with every red proof and the parent lines
 
 ### Phase 11: Device Flow Sign-In
 
