@@ -2,8 +2,8 @@
 phase: "05"
 slug: "postcompact-hooks"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-11-08"
 ---
