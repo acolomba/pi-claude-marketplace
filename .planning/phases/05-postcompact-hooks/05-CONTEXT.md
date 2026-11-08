@@ -117,5 +117,3 @@ The phase touches the upstream contract (hook translation), so each material que
 - **Pipe and regex matchers on PostCompact** (`manual|auto`): D-CF5-04 keeps an exact closed set; not researched further.
 
 </deferred>
-</content>
-</invoke>

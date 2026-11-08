@@ -483,7 +483,14 @@ Plans:
   2. A matcher `auto` selects only the automatic run, and a matcher `manual` only the manual run (PCOMP-01).
   3. A `PostCompact` hook's output and exit code are handled as Claude Code handles them, and the session continues after the compaction (PCOMP-01).
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+- [ ] 05-01-PLAN.md — Output parity: one notice listing how each PostCompact hook ended after /compact, none after an automatic compaction (D-BG-501 to D-BG-504)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 05-02-PLAN.md — Coverage: overflow trigger, auto matcher, the session going on, docs, and parent lines
 
 ### Phase 6: SessionEnd Hooks
 
