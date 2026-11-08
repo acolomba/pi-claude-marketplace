@@ -5,16 +5,16 @@ milestone_name: Behavioral Coverage Gaps
 current_phase: 01
 current_phase_name: Foundation
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-11-08T03:06:30.559Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-11-08T03:53:34.089Z"
 last_activity: 2026-11-07
 last_activity_desc: Phase 01 execution started
-state_head: d5013987e1f25f1fa172d674f1795b28f7bf6107
+state_head: 04e6ae1ee2ab1412faf829ebe8d2d6a59ad9aa1e
 progress:
   total_phases: 16
   completed_phases: 0
   total_plans: 8
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Foundation) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-11-07 — Phase 01 execution started
 
@@ -430,6 +430,7 @@ archived milestone artifacts.
 | Phase 01 P02 | 28 min | 3 tasks | 11 files |
 | Phase 01 P03 | 27 min | 3 tasks | 7 files |
 | Phase 01 P04 | 41 min | 3 tasks | 8 files |
+| Phase 01 P05 | 29 min | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -654,6 +655,8 @@ archived milestone artifacts.
 - [Phase 01]: [behavioral-gaps] The TOOL-01 seed installs demo so the list tool's installed-plugin count reads 1, not a 0 a broken counter would also print
 - [Phase 01]: 01-04: the deleted-config CFGMIG-01 seed pins today's MIG-01 output (a disabled plugin is declared {} and the load reports will enable), because buildConfigFromState writes every plugin entry as {}; Phase 8 owns the fix in persistence/migrate-config.ts and the seed rewrite (WINDOWS deviation)
 - [Phase 01]: 01-04: earlier-release state.json writers keep only each release's schema members (allow-lists from git show of v0.4.3, v0.6.0, v0.19.2 state-io.ts); the 0.4.3 rewrite leaves autoupdate absent when the base config declares none, as 0.4.3's marketplace add did; the legacy mcp.json is rebuilt from the plugin's .mcp.json with 0.19.2's stage logic
+- [Phase 01]: The ASYNC-04 crash seed installs in the user scope: the product's startup reap never reads the project-scope PID table (index.ts registers the hooks bridge with cwd homedir()), so a project-scope seed fails; Phase 2 must fix or license it
+- [Phase 01]: The /reload seed starts its waiting async hook on SessionStart startup in the terminal Pi, because a UserPromptSubmit hook would start again on the reload step's own prompt
 
 ### mcp-4 decisions
 
@@ -953,9 +956,10 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
   last `@` (D-76-04), Claude Code at the first; a parity decision for later.
 - [Milestone] Phases 1-7 read stale verification (later phases touched files
   their reports cover); the milestone audit must re-verify them.
+- ASYNC-04 product gap: the next Pi start does not stop async rewake hooks a dead Pi left in the project scope; reapOrphans runs only at bridge registration with cwd homedir() (index.ts:153, event-router.ts:1077) and the project hydrate reaps nothing. Phase 2 must fix or license it (01-05-SUMMARY Issues)
 
 ## Session Continuity
 
-Last session: 2026-11-08T03:06:30.436Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-11-08T03:53:33.962Z
+Stopped at: Completed 01-05-PLAN.md
 Resume file: None
