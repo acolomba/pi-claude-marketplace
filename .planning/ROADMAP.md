@@ -529,11 +529,11 @@ Plans:
   2. A user's edit to the written config survives every later load and `/reload` (CFGMIG-02).
   3. An existing config that is not valid is reported and stays byte for byte as it was (CFGMIG-02).
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 08-01-PLAN.md — Rebuild a config as the user's commands wrote it (disabled plugin, dependency, dependency-check hold) and cover CFGMIG-01 in both scopes
+- [x] 08-01-PLAN.md — Rebuild a config as the user's commands wrote it (disabled plugin, dependency, dependency-check hold) and cover CFGMIG-01 in both scopes
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 08-02-PLAN.md — Cover CFGMIG-02: the user's edit survives a load and a terminal reload, and invalid base and local configs are reported and kept; the phase's parent lines
@@ -676,7 +676,7 @@ Plans:
 | 5. PostCompact Hooks | 0/TBD | Not started | - |
 | 6. SessionEnd Hooks | 0/TBD | Not started | - |
 | 7. State Schema Migration | 0/TBD | Not started | - |
-| 8. First-Run Config Migration | 0/TBD | Not started | - |
+| 8. First-Run Config Migration | 1/2 | In Progress | - |
 | 9. Legacy MCP Entry Move | 0/TBD | Not started | - |
 | 10. Model-Facing Tools | 0/TBD | Not started | - |
 | 11. Device Flow Sign-In | 0/TBD | Not started | - |

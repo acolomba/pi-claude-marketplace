@@ -42,3 +42,10 @@ The autonomous run took the recommended option at every discuss question; those 
 - **P8-DC-18 (Low, open). The tracer task bundles the fix, unit rows, seed rewrite, and README line in one commit,** because the commit hook checks 100% direct coverage of the staged pair.
 - **P8-DC-19 (Low, open). Every decision rated reversible; no checkpoint task,** because the run must not stop.
 - **P8-DC-20 (Low, open). The planner edited ROADMAP.md's Phase 8 `Plans` entry itself.**
+
+## Execution step
+
+- **P8-DC-21 (Medium, open). Execution, code review, fixes, and verification ran inline in the phase session, not in subagents.** The coordinator ordered it mid-phase: this session's Agent tool has no foreground mode, and a background subagent stalls when the session's turn ends. The 08-01 executor was stopped after it had rewritten the seed and measured its red run (nothing committed); the session finished 08-01 and ran 08-02, the review, and the verification itself, following `execute-plan.md`, `.claude/agents/gsd-code-reviewer.md`, and `.claude/agents/gsd-verifier.md`. The research, pattern-mapping, planning, and plan-check steps did run in subagents.
+- **P8-DC-22 (Low, open). The dispatch-isolation sentinel was forced in the parent checkout's `.gsd/`.** The GSD isolation guard hook reads the sentinel from the session's cwd, which is the parent checkout `/home/acolomba/src/pi-claude-marketplace-behavioral-gaps`, not this phase's worktree, so the 08-01 executor dispatch was refused until `dispatch-isolation --force-isolation none --phase 08 --plan 08-01` ran there. That writes only the gitignored runtime file `.gsd/dispatch-isolation-sentinel.json`, which other phases' sessions also write (it held a Phase 10 record before).
+- **P8-DC-23 (Low, open). Executor prompts passed the execution-context workflow files by path** (the executor read them) instead of inlining them verbatim, and the sequential root pin as a script file under the phase scratch dir.
+- **P8-DC-24 (Low, open). Planning commits used the shared scratchpad for message files** before the coordinator's scratch-dir rule; their titles were checked against their contents and match.
