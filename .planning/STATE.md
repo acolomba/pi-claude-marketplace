@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: behavioral-gaps
 milestone_name: Behavioral Coverage Gaps
-current_phase: 2
-current_phase_name: Async Hooks
-status: executing
-stopped_at: Phases 1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
-last_updated: "2026-11-08T15:58:40.736Z"
+current_phase: 4
+current_phase_name: PostToolUseFailure Hooks
+status: verifying
+stopped_at: Phase 2 complete, ready to verify Phase 4
+last_updated: "2026-11-08T19:02:36.107Z"
 last_activity: 2026-11-08
-last_activity_desc: Merged Phase 8 (First-Run Config Migration)
-state_head: 57105b09760ddf47ef3ae2d4a8c960b357f2b872
+last_activity_desc: Phase 2 complete, transitioned to Phase 4
+state_head: e2839ec317638e574a7d0f6c702949fc75943faa
 progress:
   total_phases: 16
-  completed_phases: 14
-  total_plans: 9
-  completed_plans: 9
-  percent: 88
+  completed_phases: 15
+  total_plans: 33
+  completed_plans: 33
+  percent: 94
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 2-16 — stream phases, one child session each
-Plan: per phase, in its own branch
-Status: Phases 1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged into features/behavioral-gaps
-Last activity: 2026-11-08 — merged Phase 8 (First-Run Config Migration)
+Phase: 4 — PostToolUseFailure Hooks
+Plan: 6
+Status: Phase complete — ready for verification
+Last activity: 2026-11-08 — Phase 2 complete, transitioned to Phase 4
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 94%
 
 
 ### mcp-4 closeout
@@ -972,5 +972,5 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-08T05:46:41.533Z
-Stopped at: Phases 1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
+Stopped at: Phase 2 complete, ready to verify Phase 4
 Resume file: None
