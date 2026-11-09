@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for.
+- More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
 
   - A plugin's `async` hooks, Stop hooks included, now run in the background and give their JSON answer to the model's next call.
   - An `asyncRewake` hook that exits 2 now wakes the model with Claude Code's text and shows its summary, by default `Stop hook feedback`.
