@@ -380,3 +380,26 @@ Feature: Hook async
       | 2    | assistant   | tool call bash {"command":"until [ -e {home}/hook-releases/tool ]; do sleep 0.1; done; echo released"} |
       | 2    | tool result | bash returned: released\n |
       | 2    | user        | The hook woke the model. woke up |
+
+  Scenario: An async rewake that reaches a running turn leaves stop hook active false for the Stop hooks of that turn
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event            | matcher | form   | async rewake | waits | exit code | stderr  | rewake message           |
+      | wake | UserPromptSubmit | *       | script | true         | true  | 2         | woke up | The hook woke the model. |
+      | stop | Stop             |         | script |              |       |           |         |                          |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments |
+      |       | bash | {"command": "until [ -e {home}/hook-releases/tool ]; do sleep 0.1; done; echo released"} |
+      | Done. |      |           |
+    When the user prompts "run the tool" and the hook "wake" wakes the model while the tool runs
+    Then the hooks record these runs:
+      | event            | session | prompt       | last assistant message | stop hook active | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | run the tool |                        |                  | {project dir} |                 | wake      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | Stop             | first   |              | Done.                  | false            | {project dir} |                 | stop      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |

@@ -1870,7 +1870,7 @@ test(
       assert.deepStrictEqual(context.notifications, [
         { text: "Stop hook feedback", severity: "info" },
       ]);
-      assert.strictEqual(runtime.isStopHookActive(), true);
+      assert.strictEqual(runtime.isStopHookActive(), false);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
       shutdownInMemoryChildren(runtime);
@@ -2220,6 +2220,7 @@ test(
       assert.deepStrictEqual(context.notifications, [
         { text: "Stop hook feedback", severity: "info" },
       ]);
+      assert.strictEqual(runtime.isStopHookActive(), false);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {

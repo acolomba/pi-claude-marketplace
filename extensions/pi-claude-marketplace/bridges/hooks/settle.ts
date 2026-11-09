@@ -65,9 +65,11 @@ export function resetSettleState(runtime: HooksRuntime): void {
 
 /**
  * `input`-event reset closure (STOP-07). A genuine user `input` event clears
- * `stop_hook_active` and resets the consecutive-block counter + one-shot latch;
- * bridge-injected `sendMessage` re-entries do NOT pass through `input`, so the
- * flag survives a re-entry and clears only when the user actually types. Generation-
+ * the Stop re-entry flag and resets the consecutive-block counter + one-shot
+ * latch; bridge-injected `sendMessage` re-entries do NOT pass through `input`,
+ * so the flag survives a re-entry and clears only when the user actually
+ * types. A run that an async rewake woke keeps `stop_hook_active` true until
+ * that run settles (D-BG-210). Generation-
  * guarded like the other settle handlers so a stale closure from a prior
  * `/reload` cannot reset the live session's state. Registered as a dedicated
  * `pi.on("input", ...)` subscription in `registerHooksBridge` (Pi supports

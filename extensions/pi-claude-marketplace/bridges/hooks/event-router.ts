@@ -64,7 +64,11 @@ import { requireNotificationMode } from "../../shared/notification-run.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { SCOPES } from "../../shared/types.ts";
 
-import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
+import {
+  reapOrphans,
+  REWAKE_CUSTOM_TYPE,
+  shutdownInMemoryChildren,
+} from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapters.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
@@ -234,6 +238,11 @@ function contextPart(
  * With nothing to send, the handler returns undefined. Pi's runner emits
  * `before_agent_start` on every agent turn, so that is the path for every
  * turn after the drain.
+ *
+ * D-BG-210: before the drain, the handler records whether an async rewake
+ * started the run, which Pi tells by starting it with the rewake's own
+ * custom message. The Stop hooks at the end of that run see
+ * `stop_hook_active: true`; any other run start clears the mark.
  */
 function createBeforeAgentStartHandler(
   runtime: HooksRuntime,
@@ -241,7 +250,10 @@ function createBeforeAgentStartHandler(
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
-  return () => {
+  return (event) => {
+    runtime.recordRunStart(
+      event.messageType === "custom" && event.message.customType === REWAKE_CUSTOM_TYPE,
+    );
     const content = [
       contextPart("SessionStart", runtime.drainPendingSessionStartContext()),
       contextPart("UserPromptSubmit", runtime.drainPendingPromptContext()),
@@ -1241,10 +1253,11 @@ async function registerHooksBridgeWith(
     bind((generation) => settleHandlerFor(runtime, generation, pi, opts.executor)),
   );
   // STOP-07 loop-protection reset: a dedicated second `input` subscription
-  // (distinct from the UserPromptSubmit dispatch handler above) clears
-  // `stop_hook_active` and resets the consecutive-block counter + one-shot cap
+  // (distinct from the UserPromptSubmit dispatch handler above) clears the
+  // Stop re-entry flag and resets the consecutive-block counter + one-shot cap
   // latch on a genuine user input. Bridge-injected `sendMessage` re-entries do
-  // NOT pass through `input`, so the flag never self-clears.
+  // NOT pass through `input`, so the flag never self-clears. The woken mark of
+  // an async rewake ends at the next run start instead (D-BG-210).
   pi.on(
     "input",
     bindWithMode((generation) => inputResetHandlerFor(runtime, generation)),
