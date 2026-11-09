@@ -5,8 +5,8 @@ milestone_name: Behavioral Coverage Gaps
 status: Awaiting next milestone
 stopped_at: Milestone behavioral-gaps completed and archived (override_closeout)
 last_updated: "2026-11-09T02:48:37.424Z"
-last_activity: 2026-11-08
-last_activity_desc: Milestone behavioral-gaps completed and archived
+last_activity: 2026-11-09
+last_activity_desc: Quick batch 261109-cpi fixed the reviewed dubious choices
 state_head: f2c24525be39370e75e28867def5564bafdd2318
 progress:
   total_phases: 16
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: Milestone behavioral-gaps complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-08 — Milestone behavioral-gaps completed and archived
+Last activity: 2026-11-09 -- Quick batch 261109-cpi fixed the six reviewed dubious choices
 
 
 ### mcp-4 closeout
@@ -213,6 +213,9 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261109-cpo | P7-DC-04: when a load refuses a newer state.json (schema version above this release's), stop offering that scope's installed components (ski | 2026-11-09 | 6f908fd5 | — | .planning/quick/261109-cpo-p7-dc-04-when-a-load-refuses-a-newer-state-json-schema-versi |
 | 261109-cpj | Model-facing list tool (extensions/pi-claude-marketplace/edge/handlers/tools.ts): an installed-but-disabled plugin shows a new `[disabled]` | 2026-11-09 | bcd68aa6 | — | .planning/quick/261109-cpj-model-facing-list-tool-extensions-pi-claude-marketplace-edge |
 | 261109-cpk | CLOSEDLIST-01: accept `\|` and `,` matcher lists on SessionStart, SessionEnd, PreCompact, and PostCompact hooks, as StopFailure already does | 2026-11-09 | ae298e7b | — | .planning/quick/261109-cpk-closedlist-01-accept-and-matcher-lists-on-sessionstart-sessi |
+| 261108-og5 | Split the cloud environment setup from the per-session init | 2026-11-08 | 57e5b7d | — | [261108-og5-split-cloud-environment-setup-from-per-s](./quick/261108-og5-split-cloud-environment-setup-from-per-s/) |
+| 25 | Run the cloud setup script with no guard; one environment per repository | 2026-11-09 | d495d39 | — | — |
+| 261109-jm6 | Move the init scripts to scripts/init and state each one's purpose | 2026-11-09 | 4e964d6 | — | [261109-jm6-move-the-init-scripts-to-scripts-init-an](./quick/261109-jm6-move-the-init-scripts-to-scripts-init-an/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 

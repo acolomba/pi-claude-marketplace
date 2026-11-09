@@ -26,6 +26,8 @@
   - The browse picker no longer marks `Project local` as `(Recommended)` when it asks where to install a plugin.
   - Internal: behavioral tests now cover the state and config migrations, the legacy MCP move, Device Flow sign-in, `prune`, `bootstrap`, the marketplace state lock, and background-child loads.
 
+- Internal: cloud sessions now install the npm dependencies and the codegraph index at every start, and the environment setup installs only the tools. (#309)
+
 ## [0.23.0] - 2026-11-07
 
 - Plugin MCP servers now also run through Pi's built-in MCP, switching between it and pi-mcp-adapter needs no plugin command, and Pi 1.5.0 is required. Thanks to @backstabslash, who requested this in #275. (#303)

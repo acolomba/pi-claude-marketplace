@@ -1,6 +1,6 @@
 ---
 name: new-workspace
-description: Create a ready-to-use git worktree for the current repository at ~/src/<repo>-<name> on a new branch features/<name>, branched from a freshly fetched origin/main, then run the repo's scripts/init.sh in it so dependencies, skills, and agent tooling are installed. Use when the user asks to create a new workspace, worktree, or feature-branch environment for the current repo, or invokes /new-workspace <name>.
+description: Create a ready-to-use git worktree for the current repository at ~/src/<repo>-<name> on a new branch features/<name>, branched from a freshly fetched origin/main, then run the repo's scripts/init/init.sh in it so dependencies, skills, and agent tooling are installed. Use when the user asks to create a new workspace, worktree, or feature-branch environment for the current repo, or invokes /new-workspace <name>.
 ---
 
 # New Workspace
@@ -32,7 +32,7 @@ Do not use GSD's `/gsd-workspace` here. Its worktree strategy nests the repo und
 
    ```bash
    git -C "$repo_root" fetch origin main
-   git -C "$repo_root" cat-file -e origin/main:scripts/init.sh
+   git -C "$repo_root" cat-file -e origin/main:scripts/init/init.sh
    ```
 
    The branch starts from `origin/main`, not from the current `HEAD`, so it is never out of date, even when the local checkout is behind. If the fetch fails, report it and stop. Do not fall back to an older base.
@@ -49,14 +49,14 @@ Do not use GSD's `/gsd-workspace` here. Its worktree strategy nests the repo und
 5. Run the setup script in the new worktree:
 
    ```bash
-   bash "$target/scripts/init.sh"
+   bash "$target/scripts/init/init.sh"
    ```
 
    It installs npm dependencies, GSD, skills, codegraph, and the fallow agent wiring. It takes several minutes and can run longer than a foreground tool timeout, so start it detached (for example, as a background task) and wait for it to exit. Judge the result by its exit code.
 
    Near the end, the script prints "Failed" for some pre-commit hooks, such as the dash fixer and mdformat. This is expected. The codegraph and fallow installers rewrite `AGENTS.md`, and those hooks restore the committed text. The script ignores their exit status. Do not report these lines as a problem when the script exits 0 and `git status` is clean.
 
-   If the script exits non-zero, show the end of its output and stop. Keep the worktree, and tell the user to fix the cause and run `scripts/init.sh` again from the worktree.
+   If the script exits non-zero, show the end of its output and stop. Keep the worktree, and tell the user to fix the cause and run `scripts/init/init.sh` again from the worktree.
 
 6. Report:
 
