@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Internal: cloud sessions now install the npm dependencies and the codegraph index at every start, and the environment setup installs only the tools. (#309)
+
 ## [0.23.0] - 2026-11-07
 
 - Plugin MCP servers now also run through Pi's built-in MCP, switching between it and pi-mcp-adapter needs no plugin command, and Pi 1.5.0 is required. Thanks to @backstabslash, who requested this in #275. (#303)
