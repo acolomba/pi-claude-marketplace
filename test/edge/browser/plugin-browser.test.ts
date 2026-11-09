@@ -487,7 +487,7 @@ test("PluginBrowser :: marketplaces -> plugins -> actions -> esc back to plugins
   assert.strictEqual(cancelled, true);
 });
 
-test("PluginBrowser :: available plugin offers Install -> Scope screen -> Project local (Recommended) commits project scope with local:true", async () => {
+test("PluginBrowser :: available plugin offers Install -> Scope screen -> Project local commits project scope with local:true", async () => {
   // arrange
   let picked: PickerResult | null = null;
   const browser = makeBrowser(
@@ -512,7 +512,7 @@ test("PluginBrowser :: available plugin offers Install -> Scope screen -> Projec
   assert.ok(actionsScreen.includes("Install"), actionsScreen);
   assert.ok(!actionsScreen.includes("Uninstall"), actionsScreen);
   assert.ok(scopeScreen.includes("Install avail-plug @ official: Select Scope"), scopeScreen);
-  assert.ok(scopeScreen.includes("Project local (Recommended)"), scopeScreen);
+  assert.ok(scopeScreen.includes("Project local"), scopeScreen);
   assert.ok(scopeScreen.includes("Project"), scopeScreen);
   assert.ok(scopeScreen.includes("User (global)"), scopeScreen);
   assert.deepStrictEqual(picked, {
@@ -610,7 +610,7 @@ test("PluginBrowser :: scope screen names the config each choice installs into",
       ),
     [
       [
-        "Project local (Recommended)",
+        "Project local",
         "Install in the local config (.pi/claude-plugins.local.json, gitignored, this repo only)",
       ],
       [
