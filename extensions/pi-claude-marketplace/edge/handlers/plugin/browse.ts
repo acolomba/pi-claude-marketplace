@@ -7,27 +7,23 @@
 // component). Non-TUI modes receive a refusal naming the `list` command.
 //
 // Data is read-only (`loadMarketplaceEntries` -> `loadVisibleMarketplaces`
-// and each catalog through `loadMarketplaceManifest`, NFR-5 / NFR-8, and the
-// per-marketplace `pluginLoader` -> `loadPluginListPayload`). The
-// chosen action is dispatched to the existing install/uninstall/info/
-// enable/disable handlers with a constructed `<plugin>@<marketplace>
-// --scope <scope>` arg string, so arg-parsing, usage errors, and notify
-// surfaces stay byte-identical with the typed subcommands.
+// and each catalog counted through the shared `edge/marketplace-counts.ts`,
+// NFR-5 / NFR-8, and the per-marketplace `pluginLoader` ->
+// `loadPluginListPayload`). The chosen action is dispatched to the existing
+// install/uninstall/info/enable/disable handlers with a constructed
+// `<plugin>@<marketplace> --scope <scope>` arg string, so arg-parsing, usage
+// errors, and notify surfaces stay byte-identical with the typed subcommands.
 //
 // IL-2: no direct `ctx.ui.notify` -- the action handlers route through
 // shared/notify.ts themselves. BLOCK C: imports from picker/ (sibling),
 // orchestrators/, domain/, shared/ (types), platform/ (types).
 
-import { loadMarketplaceManifest } from "../../../domain/manifest.ts";
-import { assertRecordedMarketplaceName } from "../../../domain/name.ts";
 import { sourceLogical, type ParsedSource } from "../../../domain/source.ts";
 import {
   loadVisibleMarketplaces,
   recordedManifestPath,
 } from "../../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../../orchestrators/plugin/list-flow.ts";
-import { hookDebugLog } from "../../../shared/debug-log.ts";
-import { errorMessage } from "../../../shared/errors.ts";
 import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { tokenizeArgs } from "../../args.ts";
 import {
@@ -35,6 +31,7 @@ import {
   type MarketplaceEntry,
   type PickerResult,
 } from "../../browser/plugin-browser.ts";
+import { offeredPluginCount } from "../../marketplace-counts.ts";
 
 import { rejectUnknownFlag } from "./shared.ts";
 
@@ -63,34 +60,10 @@ export interface BrowseActionHandlers {
 }
 
 /**
- * D-BG-1201: the number of plugin entries a marketplace's catalog offers, as
- * Claude Code counts them, or undefined when the catalog cannot be read or
- * declares a name Claude Code refuses (D-PL5-28). The loader returns its
- * cached parse by reference, so only its length is read.
- */
-async function offeredPluginCount(
-  name: string,
-  source: ParsedSource,
-  manifestPath: string,
-): Promise<number | undefined> {
-  try {
-    const manifest = await loadMarketplaceManifest(manifestPath);
-    assertRecordedMarketplaceName(name, source, manifest.name);
-    return manifest.plugins.length;
-  } catch (err) {
-    hookDebugLog(
-      `browse: manifest load failed for ${manifestPath}: ${errorMessage(err)}`,
-      "browser",
-    );
-    return undefined;
-  }
-}
-
-/**
  * Eager marketplace-row projection. `loadVisibleMarketplaces` returns the
- * persistence-tier record verbatim, and each catalog is read through
- * `loadMarketplaceManifest` (NFR-5, NFR-8); the browse handler only needs
- * the display fields to seed the picker's first screen.
+ * persistence-tier record verbatim, and each catalog is counted through the
+ * shared `offeredPluginCount` (D-BG-1201, NFR-5, NFR-8); the browse handler
+ * only needs the display fields to seed the picker's first screen.
  */
 async function loadMarketplaceEntries(cwd: string): Promise<readonly MarketplaceEntry[]> {
   const visible = await loadVisibleMarketplaces({ cwd });

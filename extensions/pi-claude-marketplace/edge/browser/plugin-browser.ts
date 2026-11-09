@@ -13,9 +13,10 @@
 // disable handlers.
 //
 // BLOCK C: imports only from shared/ (types), platform/ (Theme + DynamicBorder
-// chokepoint), and the `@earendil-works/pi-tui` peer dep, which the Pi peer
-// chokepoint does not restrict. No orchestrators/ or domain/ import -- this
-// file is pure UI.
+// chokepoint), the `@earendil-works/pi-tui` peer dep, which the Pi peer
+// chokepoint does not restrict, and `edge/marketplace-counts.ts`, the
+// D-BG-1201 row wording this picker shares with the list tool. No direct
+// orchestrators/ or domain/ import -- this file is pure UI.
 
 import {
   Container,
@@ -34,6 +35,7 @@ import {
   pluginVersion,
   type PluginNotificationMessage,
 } from "../../shared/notification-types.ts";
+import { marketplaceDescription } from "../marketplace-counts.ts";
 
 import type { Scope } from "../../shared/types.ts";
 
@@ -111,24 +113,6 @@ function capitalize(s: string): string {
   // `charAt` (not `s[0]`) so `noUncheckedIndexedAccess` keeps the result
   // `string` rather than `string | undefined`.
   return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-/**
- * D-BG-1201: a marketplace row reads as Claude Code's does, the catalog's
- * count of plugins and, when any is installed, the installed count, then
- * Pi's `-- {source}` tail.
- */
-function marketplaceDescription(m: MarketplaceEntry): string {
-  const parts: string[] = [];
-  if (m.pluginCount !== undefined) {
-    parts.push(`${m.pluginCount.toString()} available`);
-  }
-
-  if (m.installedCount > 0) {
-    parts.push(`${m.installedCount.toString()} installed`);
-  }
-
-  return parts.length === 0 ? m.source : `${parts.join(" • ")} -- ${m.source}`;
 }
 
 type RowStatus = PluginNotificationMessage["status"];

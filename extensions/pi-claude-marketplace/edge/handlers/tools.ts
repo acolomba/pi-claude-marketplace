@@ -4,9 +4,11 @@
 //
 //   1. pi_claude_marketplace_list -- one optional `scope` param (D-BG-1002);
 //      with no scope it lists both scopes, project first. Returns one line per
-//      marketplace in `[<scope>] <name> -- <N> plugin(s) -- <source.logical>`
-//      format, where N counts the installed plugins (D-09, D-BG-1005), plus
-//      `details.marketplaces`, the wire marketplace blocks of the blocks
+//      marketplace in the form
+//      `[<scope>] <name> -- <offered> available • <installed> installed -- <source.logical>`,
+//      worded by `edge/marketplace-counts.ts` as the browse picker words its
+//      marketplace rows (D-BG-1012, D-BG-1201), plus `details.marketplaces`,
+//      the wire marketplace blocks of the blocks
 //      `/claude:plugin marketplace list` emits (LLMT-01).
 //
 //   2. pi_claude_marketplace_plugin_list -- D-02 extended params: optional
@@ -15,7 +17,8 @@
 //      `details.marketplaces`, the wire marketplace blocks of the JSON strategy.
 //
 // BLOCK C: this file imports only from domain/ (source.ts), orchestrators/,
-// shared/, and platform/ (types), plus the typebox runtime. The structured
+// shared/, platform/ (types), and the sibling `edge/marketplace-counts.ts`,
+// plus the typebox runtime. The structured
 // loaders `loadVisibleMarketplaces` and `loadPluginListPayload` were added
 // to their respective orchestrators in this plan precisely to keep the tool
 // execute bodies on the right side of the import boundary.
@@ -27,8 +30,10 @@
 // composes for each block and row (LLMT-01, D-09).
 //
 // Status semantics (D-09): state.json has NO plugin.installed
-// boolean. Presence of `mp.plugins[name]` === installed. Per-marketplace
-// plugin count for the list tool is `Object.keys(mp.plugins).length`.
+// boolean. Presence of `mp.plugins[name]` === installed. The list tool's
+// installed count is `Object.keys(mp.plugins).length`, every recorded plugin,
+// disabled ones included, and its available count is the number of entries
+// in the marketplace's catalog (D-BG-1012, D-BG-1201).
 //
 // The plugin tool's content lines keep the three-bucket projection: the
 // `(upgradable)` plugin variant shows as `[installed]` there (the plugin IS
@@ -49,7 +54,10 @@ import Type from "typebox";
 import { sourceLogical } from "../../domain/source.ts";
 import { MARKETPLACE_LIST_CONTEXT } from "../../orchestrators/marketplace/list.messaging.ts";
 import { loadMarketplaceListEntries } from "../../orchestrators/marketplace/list.ts";
-import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
+import {
+  loadVisibleMarketplaces,
+  recordedManifestPath,
+} from "../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../orchestrators/plugin/list-flow.ts";
 import { LIST_CONTEXT as PLUGIN_LIST_CONTEXT } from "../../orchestrators/plugin/list.messaging.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -58,6 +66,7 @@ import { presentCascade } from "../../shared/notification-present.ts";
 import { openNotificationSnapshot } from "../../shared/notification-run.ts";
 import { pluginVersion } from "../../shared/notification-types.ts";
 import { redactCredentials } from "../../shared/redact-credentials.ts";
+import { marketplaceDescription, offeredPluginCount } from "../marketplace-counts.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type {
@@ -166,15 +175,20 @@ async function buildMarketplaceListResult(
     };
   }
 
-  const lines: string[] = [];
-  for (const { scope, record } of entries) {
-    const source = record.source as ParsedSource;
-    const pluginCount = Object.keys(record.plugins).length;
-    const logical = sourceLogical(source);
-    // Line shape (D-02):
-    //   [<scope>] <name> -- <N> plugin(s) -- <source.logical>
-    lines.push(`[${scope}] ${record.name} -- ${pluginCount.toString()} plugin(s) -- ${logical}`);
-  }
+  // Line shape (D-BG-1012, D-BG-1201):
+  //   [<scope>] <name> -- <offered> available • <installed> installed -- <source.logical>
+  // Each count part is left out under the picker's rules.
+  const lines = await Promise.all(
+    entries.map(async ({ scope, record }) => {
+      const source = record.source as ParsedSource;
+      const description = marketplaceDescription({
+        pluginCount: await offeredPluginCount(record.name, source, recordedManifestPath(record)),
+        installedCount: Object.keys(record.plugins).length,
+        source: sourceLogical(source),
+      });
+      return `[${scope}] ${record.name} -- ${description}`;
+    }),
+  );
 
   // LLMT-01 / D-09: the details are the wire blocks of the blocks
   // `/claude:plugin marketplace list` emits, under its row policies.

@@ -512,7 +512,7 @@ describe("registerListMarketplacesTool", () => {
       content: [
         {
           type: "text",
-          text: `[project] proj-mp -- 1 plugin(s) -- ${projectRoot}\n[user] user-mp -- 0 plugin(s) -- ${userRoot}`,
+          text: `[project] proj-mp -- 1 available • 1 installed -- ${projectRoot}\n[user] user-mp -- 0 available -- ${userRoot}`,
         },
       ],
       details: {
@@ -566,7 +566,7 @@ describe("registerListMarketplacesTool", () => {
         content: [
           {
             type: "text",
-            text: `[${requestedScope}] ${marketplace} -- 1 plugin(s) -- ${marketplaceRootIn(scope.cwd, marketplace)}`,
+            text: `[${requestedScope}] ${marketplace} -- 2 available • 1 installed -- ${marketplaceRootIn(scope.cwd, marketplace)}`,
           },
         ],
         details: { marketplaces: [{ name: marketplace, scope: requestedScope, plugins: [] }] },
@@ -637,7 +637,7 @@ describe("registerListMarketplacesTool", () => {
       1,
     );
     const expectedResult = {
-      content: [{ type: "text", text: `[user] dated-mp -- 0 plugin(s) -- ${datedRoot}` }],
+      content: [{ type: "text", text: `[user] dated-mp -- 0 available -- ${datedRoot}` }],
       details: {
         marketplaces: [
           {
@@ -676,10 +676,40 @@ describe("registerListMarketplacesTool", () => {
       content: [
         {
           type: "text",
-          text: "[project] url-mp -- 0 plugin(s) -- https://***@git.example.com/o/r",
+          text: "[project] url-mp -- https://***@git.example.com/o/r",
         },
       ],
       details: { marketplaces: [{ name: "url-mp", scope: "project", plugins: [] }] },
+    };
+
+    // act
+    const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.strictEqual(scope.networkCallCount(), 0);
+    verifyBoundary();
+  });
+
+  test("leaves the available count out of the line of a marketplace whose catalog cannot be read", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "list-unreadable-catalog");
+    await seedScope(scope.cwd, "project", [
+      {
+        name: "torn-mp",
+        plugins: [{ name: "echo", manifestVersion: "1.0.0", installed: { version: "1.0.0" } }],
+      },
+    ]);
+    await writeFile(manifestPathIn(scope.cwd, "torn-mp"), "{ not json", "utf8");
+    const tornRoot = marketplaceRootIn(scope.cwd, "torn-mp");
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListMarketplacesTool,
+      { value: scope.cwd, reads: 1 },
+      1,
+    );
+    const expectedResult = {
+      content: [{ type: "text", text: `[project] torn-mp -- 1 installed -- ${tornRoot}` }],
+      details: { marketplaces: [{ name: "torn-mp", scope: "project", plugins: [] }] },
     };
 
     // act

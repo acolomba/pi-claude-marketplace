@@ -61,11 +61,11 @@ Feature: Plugin model tools
       | Two marketplaces are set up. |                            |           |
     When the user prompts "Which marketplaces are set up?"
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                         |
-      | 1    | user        | Which marketplaces are set up?                                                                                                                               |
-      | 2    | user        | Which marketplaces are set up?                                                                                                                               |
-      | 2    | assistant   | tool call pi_claude_marketplace_list {}                                                                                                                      |
-      | 2    | tool result | pi_claude_marketplace_list returned: [project] tools -- 3 plugin(s) -- {home}/marketplaces/tools\n[user] extras -- 1 plugin(s) -- {home}/marketplaces/extras |
+      | call | role        | text                                                                                                                                                                                     |
+      | 1    | user        | Which marketplaces are set up?                                                                                                                                                           |
+      | 2    | user        | Which marketplaces are set up?                                                                                                                                                           |
+      | 2    | assistant   | tool call pi_claude_marketplace_list {}                                                                                                                                                  |
+      | 2    | tool result | pi_claude_marketplace_list returned: [project] tools -- 7 available • 3 installed -- {home}/marketplaces/tools\n[user] extras -- 2 available • 1 installed -- {home}/marketplaces/extras |
 
   Scenario: A list call with a scope returns only the marketplaces of that scope
     Given the scripted model plays these steps:
@@ -75,16 +75,16 @@ Feature: Plugin model tools
       | Each scope has one marketplace. |                            |                     |
     When the user prompts "Which marketplaces does each scope have?"
     Then the model receives these calls:
-      | call | role        | text                                                                                             |
-      | 1    | user        | Which marketplaces does each scope have?                                                         |
-      | 2    | user        | Which marketplaces does each scope have?                                                         |
-      | 2    | assistant   | tool call pi_claude_marketplace_list {"scope":"user"}                                            |
-      | 2    | tool result | pi_claude_marketplace_list returned: [user] extras -- 1 plugin(s) -- {home}/marketplaces/extras  |
-      | 3    | user        | Which marketplaces does each scope have?                                                         |
-      | 3    | assistant   | tool call pi_claude_marketplace_list {"scope":"user"}                                            |
-      | 3    | tool result | pi_claude_marketplace_list returned: [user] extras -- 1 plugin(s) -- {home}/marketplaces/extras  |
-      | 3    | assistant   | tool call pi_claude_marketplace_list {"scope":"project"}                                         |
-      | 3    | tool result | pi_claude_marketplace_list returned: [project] tools -- 3 plugin(s) -- {home}/marketplaces/tools |
+      | call | role        | text                                                                                                           |
+      | 1    | user        | Which marketplaces does each scope have?                                                                       |
+      | 2    | user        | Which marketplaces does each scope have?                                                                       |
+      | 2    | assistant   | tool call pi_claude_marketplace_list {"scope":"user"}                                                          |
+      | 2    | tool result | pi_claude_marketplace_list returned: [user] extras -- 2 available • 1 installed -- {home}/marketplaces/extras  |
+      | 3    | user        | Which marketplaces does each scope have?                                                                       |
+      | 3    | assistant   | tool call pi_claude_marketplace_list {"scope":"user"}                                                          |
+      | 3    | tool result | pi_claude_marketplace_list returned: [user] extras -- 2 available • 1 installed -- {home}/marketplaces/extras  |
+      | 3    | assistant   | tool call pi_claude_marketplace_list {"scope":"project"}                                                       |
+      | 3    | tool result | pi_claude_marketplace_list returned: [project] tools -- 7 available • 3 installed -- {home}/marketplaces/tools |
 
   Scenario: A list call with a scope the tool does not accept reaches the model as invalid arguments
     Given the scripted model plays these steps:
@@ -211,15 +211,15 @@ Feature: Plugin model tools
       | 1    | user        | Look at the marketplaces and plugins without changing anything.                                                                                                                                                                                                                                                                              |
       | 2    | user        | Look at the marketplaces and plugins without changing anything.                                                                                                                                                                                                                                                                              |
       | 2    | assistant   | tool call pi_claude_marketplace_list {"scope":"user"}                                                                                                                                                                                                                                                                                        |
-      | 2    | tool result | pi_claude_marketplace_list returned: [user] extras -- 1 plugin(s) -- {home}/marketplaces/extras                                                                                                                                                                                                                                              |
+      | 2    | tool result | pi_claude_marketplace_list returned: [user] extras -- 2 available • 1 installed -- {home}/marketplaces/extras                                                                                                                                                                                                                                |
       | 3    | user        | Look at the marketplaces and plugins without changing anything.                                                                                                                                                                                                                                                                              |
       | 3    | assistant   | tool call pi_claude_marketplace_list {"scope":"user"}                                                                                                                                                                                                                                                                                        |
-      | 3    | tool result | pi_claude_marketplace_list returned: [user] extras -- 1 plugin(s) -- {home}/marketplaces/extras                                                                                                                                                                                                                                              |
+      | 3    | tool result | pi_claude_marketplace_list returned: [user] extras -- 2 available • 1 installed -- {home}/marketplaces/extras                                                                                                                                                                                                                                |
       | 3    | assistant   | tool call pi_claude_marketplace_plugin_list {"marketplace":"tools","scope":"project","installed":true,"available":true,"unavailable":true}                                                                                                                                                                                                   |
       | 3    | tool result | pi_claude_marketplace_plugin_list returned: Marketplace tools (project)\n  [installed] alpha  1.0.0\n  [available] beta  1.0.0\n  [installed] delta  1.0.0  (unsupported component)\n  [unavailable] eps  1.0.0\n  [unavailable] gamma  1.0.0  (unsupported component)\n  [available] ghp\n  [unavailable] npmp  1.0.0  (unsupported source) |
       | 4    | user        | Look at the marketplaces and plugins without changing anything.                                                                                                                                                                                                                                                                              |
       | 4    | assistant   | tool call pi_claude_marketplace_list {"scope":"user"}                                                                                                                                                                                                                                                                                        |
-      | 4    | tool result | pi_claude_marketplace_list returned: [user] extras -- 1 plugin(s) -- {home}/marketplaces/extras                                                                                                                                                                                                                                              |
+      | 4    | tool result | pi_claude_marketplace_list returned: [user] extras -- 2 available • 1 installed -- {home}/marketplaces/extras                                                                                                                                                                                                                                |
       | 4    | assistant   | tool call pi_claude_marketplace_plugin_list {"marketplace":"tools","scope":"project","installed":true,"available":true,"unavailable":true}                                                                                                                                                                                                   |
       | 4    | tool result | pi_claude_marketplace_plugin_list returned: Marketplace tools (project)\n  [installed] alpha  1.0.0\n  [available] beta  1.0.0\n  [installed] delta  1.0.0  (unsupported component)\n  [unavailable] eps  1.0.0\n  [unavailable] gamma  1.0.0  (unsupported component)\n  [available] ghp\n  [unavailable] npmp  1.0.0  (unsupported source) |
       | 4    | assistant   | tool call pi_claude_marketplace_plugin_list {"marketplace":"ghost"}                                                                                                                                                                                                                                                                          |
