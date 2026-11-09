@@ -4,18 +4,21 @@
 //
 //   1. pi_claude_marketplace_list -- one optional `scope` param (D-BG-1002);
 //      with no scope it lists both scopes, project first. Returns one line per
-//      marketplace in `[<scope>] <name> -- <N> plugin(s) -- <source.logical>`
-//      format, where N counts the installed plugins (D-09, D-BG-1005), plus
-//      `details.marketplaces`, the wire marketplace blocks of the blocks
+//      marketplace in the form
+//      `[<scope>] <name> -- <offered> available • <installed> installed -- <source.logical>`,
+//      worded by `edge/marketplace-counts.ts` as the browse picker words its
+//      marketplace rows (D-BG-1012, D-BG-1201), plus `details.marketplaces`,
+//      the wire marketplace blocks of the blocks
 //      `/claude:plugin marketplace list` emits (LLMT-01).
 //
 //   2. pi_claude_marketplace_plugin_list -- D-02 extended params: optional
-//      marketplace + scope + installed/available/unavailable filter booleans
-//      (PL-1 union semantics). Returns rendered text + structured
+//      marketplace + scope + installed/available/unavailable/disabled filter
+//      booleans (PL-1 union semantics, D-BG-1011). Returns rendered text + structured
 //      `details.marketplaces`, the wire marketplace blocks of the JSON strategy.
 //
 // BLOCK C: this file imports only from domain/ (source.ts), orchestrators/,
-// shared/, and platform/ (types), plus the typebox runtime. The structured
+// shared/, platform/ (types), and the sibling `edge/marketplace-counts.ts`,
+// plus the typebox runtime. The structured
 // loaders `loadVisibleMarketplaces` and `loadPluginListPayload` were added
 // to their respective orchestrators in this plan precisely to keep the tool
 // execute bodies on the right side of the import boundary.
@@ -27,10 +30,13 @@
 // composes for each block and row (LLMT-01, D-09).
 //
 // Status semantics (D-09): state.json has NO plugin.installed
-// boolean. Presence of `mp.plugins[name]` === installed. Per-marketplace
-// plugin count for the list tool is `Object.keys(mp.plugins).length`.
+// boolean. Presence of `mp.plugins[name]` === installed. The list tool's
+// installed count is `Object.keys(mp.plugins).length`, every recorded plugin,
+// disabled ones included, and its available count is the number of entries
+// in the marketplace's catalog (D-BG-1012, D-BG-1201).
 //
-// The plugin tool's content lines keep the three-bucket projection: the
+// The plugin tool's content lines keep the four-tag projection (D-BG-1011):
+// `[installed]`, `[disabled]`, `[available]`, and `[unavailable]`. The
 // `(upgradable)` plugin variant shows as `[installed]` there (the plugin IS
 // installed; the upgrade status is for the slash-command surface per
 // MSG-PL-4). Its details carry each row's verbatim status (LLMT-01).
@@ -49,7 +55,10 @@ import Type from "typebox";
 import { sourceLogical } from "../../domain/source.ts";
 import { MARKETPLACE_LIST_CONTEXT } from "../../orchestrators/marketplace/list.messaging.ts";
 import { loadMarketplaceListEntries } from "../../orchestrators/marketplace/list.ts";
-import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
+import {
+  loadVisibleMarketplaces,
+  recordedManifestPath,
+} from "../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../orchestrators/plugin/list-flow.ts";
 import { LIST_CONTEXT as PLUGIN_LIST_CONTEXT } from "../../orchestrators/plugin/list.messaging.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -58,6 +67,7 @@ import { presentCascade } from "../../shared/notification-present.ts";
 import { openNotificationSnapshot } from "../../shared/notification-run.ts";
 import { pluginVersion } from "../../shared/notification-types.ts";
 import { redactCredentials } from "../../shared/redact-credentials.ts";
+import { marketplaceDescription, offeredPluginCount } from "../marketplace-counts.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type {
@@ -95,9 +105,11 @@ const LIST_PLUGINS_PARAMS = Type.Object({
   ),
   unavailable: Type.Optional(
     Type.Boolean({
-      description:
-        "Include manifest-declared plugins that are not installable on this system, and installed plugins that are disabled.",
+      description: "Include manifest-declared plugins that are not installable on this system.",
     }),
+  ),
+  disabled: Type.Optional(
+    Type.Boolean({ description: "Include installed plugins that are disabled." }),
   ),
 });
 
@@ -166,15 +178,20 @@ async function buildMarketplaceListResult(
     };
   }
 
-  const lines: string[] = [];
-  for (const { scope, record } of entries) {
-    const source = record.source as ParsedSource;
-    const pluginCount = Object.keys(record.plugins).length;
-    const logical = sourceLogical(source);
-    // Line shape (D-02):
-    //   [<scope>] <name> -- <N> plugin(s) -- <source.logical>
-    lines.push(`[${scope}] ${record.name} -- ${pluginCount.toString()} plugin(s) -- ${logical}`);
-  }
+  // Line shape (D-BG-1012, D-BG-1201):
+  //   [<scope>] <name> -- <offered> available • <installed> installed -- <source.logical>
+  // Each count part is left out under the picker's rules.
+  const lines = await Promise.all(
+    entries.map(async ({ scope, record }) => {
+      const source = record.source as ParsedSource;
+      const description = marketplaceDescription({
+        pluginCount: await offeredPluginCount(record.name, source, recordedManifestPath(record)),
+        installedCount: Object.keys(record.plugins).length,
+        source: sourceLogical(source),
+      });
+      return `[${scope}] ${record.name} -- ${description}`;
+    }),
+  );
 
   // LLMT-01 / D-09: the details are the wire blocks of the blocks
   // `/claude:plugin marketplace list` emits, under its row policies.
@@ -218,13 +235,14 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
  * The flat-line projection of a single plugin row for the LLM-tool surface.
  * The slash-command surface uses the catalog form via the renderer; the
  * tool surface keeps a stable, machine-friendly line shape so the agent
- * can pattern-match on `[installed]` / `[available]` / `[unavailable]`.
+ * can pattern-match on `[installed]` / `[disabled]` / `[available]` /
+ * `[unavailable]` (D-BG-1011).
  *
  * The `(upgradable)` status maps to `[installed]` in this projection (the
  * plugin IS installed; the upgrade status is internal to the slash-command
  * surface per MSG-PL-4).
  */
-type ToolPluginStatus = "installed" | "available" | "unavailable";
+type ToolPluginStatus = "installed" | "disabled" | "available" | "unavailable";
 
 interface PluginRow {
   name: string;
@@ -233,7 +251,7 @@ interface PluginRow {
   reasons?: readonly string[];
 }
 
-/** Projects the producer's nine list-row variants into the tool's three buckets. */
+/** Projects the producer's nine list-row variants into the tool's four tags (D-BG-1011). */
 function projectRowStatus(status: ToolPluginRow["status"]): ToolPluginStatus {
   switch (status) {
     // The list orchestrator emits the steady-state inventory row as
@@ -260,13 +278,13 @@ function projectRowStatus(status: ToolPluginRow["status"]): ToolPluginStatus {
     case "partially-available":
       // USTAT-02 / D-64-01: a not-installed, partially-available plugin projects
       // onto the coarse `unavailable` tool bucket -- the LLM-tool surface has no
-      // distinct `partially-available` bucket (mirrors `disabled` -> `unavailable`).
+      // distinct `partially-available` bucket.
       return "unavailable";
     case "disabled":
-      // D-54-01 / ENBL-04: a disabled plugin is recorded but its artifacts
-      // are not materialized -- the LLM-tool projection treats it as not
-      // currently usable, mirroring `unavailable`.
-      return "unavailable";
+      // D-BG-1011 / ENBL-04: a disabled plugin is installed but not loaded. It
+      // reads `[disabled]`, as in the browse picker, and only the `disabled`
+      // filter selects it.
+      return "disabled";
   }
 }
 
@@ -274,6 +292,8 @@ function statusLabel(status: ToolPluginStatus): string {
   switch (status) {
     case "installed":
       return "[installed]";
+    case "disabled":
+      return "[disabled]";
     case "available":
       return "[available]";
     case "unavailable":
@@ -308,6 +328,7 @@ function renderPluginRow(row: PluginRow): string {
  */
 interface ToolFilterBuckets {
   readonly i: boolean;
+  readonly d: boolean;
   readonly a: boolean;
   readonly u: boolean;
   readonly narrowed: boolean;
@@ -317,25 +338,32 @@ function applyFilter(params: {
   installed?: boolean;
   available?: boolean;
   unavailable?: boolean;
+  disabled?: boolean;
 }): ToolFilterBuckets {
   const anyFilter =
-    params.installed === true || params.available === true || params.unavailable === true;
+    params.installed === true ||
+    params.available === true ||
+    params.unavailable === true ||
+    params.disabled === true;
   if (!anyFilter) {
-    return { i: true, a: true, u: true, narrowed: false };
+    return { i: true, d: true, a: true, u: true, narrowed: false };
   }
 
   return {
     i: params.installed === true,
+    d: params.disabled === true,
     a: params.available === true,
     u: params.unavailable === true,
     narrowed: true,
   };
 }
 
-function statusKey(status: ToolPluginStatus): "i" | "a" | "u" {
+function statusKey(status: ToolPluginStatus): "i" | "d" | "a" | "u" {
   switch (status) {
     case "installed":
       return "i";
+    case "disabled":
+      return "d";
     case "available":
       return "a";
     case "unavailable":
@@ -383,13 +411,12 @@ async function loadToolPluginPayload(
     // `projectRowStatus` performs on the way back. Sending an all-true bag
     // instead of nothing would make `filtersPassive` false and strand both
     // fine-grained buckets, which have no tool parameter to turn them on.
-    // The `unavailable` bucket also holds the installed plugins that are
-    // disabled (D-BG-1004, D-54-01), which the payload loader files under its
-    // installed inventory, so that bucket forwards `installed: true` as well;
-    // the bucket filter in `renderPluginPayload` then drops the enabled
-    // installed rows the call did not ask for.
+    // Disabled rows come with the payload loader's installed inventory, so
+    // the `installed` and `disabled` buckets both ask for installed rows, and
+    // `renderPluginPayload` keeps only the tags the call asked for
+    // (D-BG-1011).
     ...(buckets.narrowed && {
-      ...((buckets.i || buckets.u) && { installed: true }),
+      ...((buckets.i || buckets.d) && { installed: true }),
       ...(buckets.a && { available: true, remote: true }),
       ...(buckets.u && { unavailable: true, partial: true }),
     }),
@@ -456,7 +483,7 @@ type ToolPluginBlock = Awaited<ReturnType<typeof loadPluginListPayload>>[number]
  */
 function renderPluginPayload(
   payload: Awaited<ReturnType<typeof loadPluginListPayload>>,
-  buckets: { i: boolean; a: boolean; u: boolean },
+  buckets: { i: boolean; d: boolean; a: boolean; u: boolean },
 ): { lines: string[]; marketplaces: ToolPluginBlock[] } {
   const lines: string[] = [];
   const marketplaces: ToolPluginBlock[] = [];
