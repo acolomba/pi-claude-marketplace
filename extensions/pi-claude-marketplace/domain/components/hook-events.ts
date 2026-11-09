@@ -179,8 +179,9 @@ type NonToolEvent = Exclude<BucketAEvent, ToolEvent>;
  * TOOL-02 as a `no-matcher-support` drop.
  *
  * `StopFailure` (ADMIT-01 / SFAIL-03) matches the `error` field of Claude
- * Code's payload against a closed error-type vocabulary, and
- * `stopFailureMatcherTypes` reads a `|` list matcher (D-BG-302). What is
+ * Code's payload against a closed error-type vocabulary. Like the other
+ * events with a field, its matcher may be a list, which
+ * `closedSetMatcherValues` reads (D-BG-302, CLOSEDLIST-01). What is
  * load-bearing is the closed set in `NON_TOOL_EVENT_CLOSED_SETS.StopFailure`
  * below.
  */
@@ -231,22 +232,29 @@ const STOP_FAILURE_ERROR_TYPES = [
  */
 export type StopFailureErrorType = (typeof STOP_FAILURE_ERROR_TYPES)[number];
 
-const STOP_FAILURE_LIST_MATCHER = /^[\w|]+$/;
+const NARROW_LIST_MATCHER = /^[\w|]+$/;
+const WIDE_LIST_MATCHER = /^[\w|, -]+$/;
 
 /**
- * The error types a StopFailure matcher lists (D-BG-302). Claude Code reads a
- * StopFailure matcher made only of letters, digits, `_`, and `|` as a `|` list
- * of exact error types and drops empty alternatives. Any other matcher takes
+ * The values a closed-set matcher lists, read as Claude Code reads it. A
+ * StopFailure matcher made only of letters, digits, `_`, and `|` is a `|` list
+ * (D-BG-302). A matcher of the other events made only of letters, digits, `_`,
+ * `-`, spaces, `,`, and `|` is a list separated by `|` or `,` (CLOSEDLIST-01).
+ * Each value is trimmed, and empty values are dropped. Any other matcher takes
  * Claude Code's regular-expression path, which the bridge does not support
  * (MATCH-V2-01), so it lists nothing. The callers handle `""` and `*` as
- * match-all and check each listed type against the vocabulary.
+ * match-all and check each listed value against the event's closed set.
  */
-export function stopFailureMatcherTypes(rawMatcher: string): readonly string[] {
-  if (!STOP_FAILURE_LIST_MATCHER.test(rawMatcher)) {
+export function closedSetMatcherValues(event: BucketAEvent, rawMatcher: string): readonly string[] {
+  const shape = event === "StopFailure" ? NARROW_LIST_MATCHER : WIDE_LIST_MATCHER;
+  if (!shape.test(rawMatcher)) {
     return [];
   }
 
-  return rawMatcher.split("|").filter((type) => type !== "");
+  return rawMatcher
+    .split(/[|,]/)
+    .map((value) => value.trim())
+    .filter((value) => value !== "");
 }
 
 /**
@@ -277,8 +285,9 @@ export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
 
 /**
  * Closed set of Claude-side matcher values admissible per non-tool
- * bucket-A event. A value not in the set (or an entry not
- * present here at all) trips TOOL-02 at parse time per D-58-06.
+ * bucket-A event. A matcher is a list of values (`closedSetMatcherValues`,
+ * D-BG-302, CLOSEDLIST-01), and a matcher that lists no value of the set (or
+ * an event not present here at all) trips TOOL-02 at parse time per D-58-06.
  *
  * Per-event derivation:
  *
