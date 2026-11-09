@@ -1,7 +1,7 @@
 Feature: Plugin state migration
 
-  A user who upgrades keeps every plugin an earlier release installed, and a record that a newer
-  release wrote is refused and left as it was. Installation records rewritten in the shapes those
+  An upgrade keeps every plugin an earlier release installed. A record that a newer release wrote is
+  refused and left as it was, and its scope offers no skill. Records rewritten in the shapes those
   releases persisted stand in for a real upgrade, and a local marketplace for a published one.
 
   Background:
@@ -113,7 +113,7 @@ Feature: Plugin state migration
       | (list)           | user              | (list)@(list) | (list) | failed | unreadable | user  | state.json at {agent dir}/pi-claude-marketplace/state.json has an unsupported schema version | false           |       |                  |
     Then the config and installation record bytes of the user scope are unchanged
 
-  Scenario: A load refuses a newer installation record and leaves it as it was
+  Scenario: A load refuses a newer installation record, leaves it as it was, and offers none of its plugins' skills
     Given the installation record of the user scope is rewritten with a schema version this release does not read
     Given the config and installation record bytes of the user scope are remembered
     When the user starts a new pi session
@@ -127,10 +127,34 @@ Feature: Plugin state migration
       | marketplace name | marketplace scope | marketplace status | marketplace reasons | id                    | name       | status | reasons    | scope | cause chain                                                | cause truncated | leaks | rollback partial |
       | state.json       | user              | failed             | unreadable          | state.json@state.json | state.json | failed | unreadable | user  | state.json at state.json has an unsupported schema version | false           |       |                  |
       | state.json       | user              | failed             | unreadable          | state.json@state.json | state.json | failed | unreadable | user  | state.json at state.json has an unsupported schema version | false           |       |                  |
-    Then the session offers these skills:
-      | command           | description            |
-      | /skill:demo-skill | A skill of demo 1.0.0. |
+    Then the session offers no skills
     Then the config and installation record bytes of the user scope are unchanged
+    Then the user scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario: A load that refuses the user scope's newer installation record still offers the project scope's skills
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name   | version |
+      | helper | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install helper@tools --scope project"
+    Given the installation record of the user scope is rewritten with a schema version this release does not read
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                      | tally label | tally failures | tally warnings | reason                                                                                       | scope |
+      | reconcile-applied-cascade | error    | false        | Some operations have failed. | Reconcile   | 2              | 0              |                                                                                              |       |
+      | plugin-path-skipped       | warning  | false        |                              |             |                |                | state.json at {agent dir}/pi-claude-marketplace/state.json has an unsupported schema version | user  |
+      | reconcile-applied-cascade | error    | false        | Some operations have failed. | Reconcile   | 2              | 0              |                                                                                              |       |
+      | plugin-path-skipped       | warning  | false        |                              |             |                |                | state.json at {agent dir}/pi-claude-marketplace/state.json has an unsupported schema version | user  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id                    | name       | status | reasons    | scope | cause chain                                                | cause truncated | leaks | rollback partial |
+      | state.json       | user              | failed             | unreadable          | state.json@state.json | state.json | failed | unreadable | user  | state.json at state.json has an unsupported schema version | false           |       |                  |
+      | state.json       | user              | failed             | unreadable          | state.json@state.json | state.json | failed | unreadable | user  | state.json at state.json has an unsupported schema version | false           |       |                  |
+    Then the session offers these skills:
+      | command             | description              |
+      | /skill:helper-skill | A skill of helper 1.0.0. |
 
   Scenario: Disabling a plugin refuses a newer installation record and changes nothing
     Given the installation record of the user scope is rewritten with a schema version this release does not read
