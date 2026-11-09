@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+- More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for.
+
+  - A plugin's `async` hooks, Stop hooks included, now run in the background and give their JSON answer to the model's next call.
+  - An `asyncRewake` hook that exits 2 now wakes the model with Claude Code's text and shows its summary, by default `Stop hook feedback`.
+  - A project plugin's async hook processes now stop on `/reload` and after a crash.
+  - `StopFailure` hook matchers now accept Claude Code's newer error types and `|` lists of error types.
+  - A `StopFailure` hook now gets no `last_assistant_message` when Pi reports no error text.
+  - A tool call you cancel now runs no `PostToolUseFailure` hook, and the hook input now carries `is_interrupt`.
+  - A failed MCP tool call through pi-mcp-adapter now runs `PostToolUseFailure` hooks instead of `PostToolUse` hooks.
+  - A `PostToolUseFailure` hook's `updatedToolOutput` no longer replaces the failed result.
+  - After `/compact`, `PostCompact` hooks now show one notice of how each hook ended, and an automatic compaction shows none.
+  - A `PostCompact` block no longer shows as a hook error.
+  - A `SessionEnd` hook now gets at most 1.5 seconds, so it no longer holds a new session, a resume, or a quit open.
+  - A config that a load writes from the installation records now keeps your disabled plugins disabled and leaves out plugins installed only as dependencies.
+  - `pi_claude_marketplace_list` now takes an optional `scope`.
+  - `pi_claude_marketplace_plugin_list` now reports an unknown marketplace as a failed tool result, and its `unavailable` filter also returns disabled plugins.
+  - The browse picker's marketplace rows now count the available and the installed plugins, such as `3 available • 1 installed`.
+  - Internal: behavioral tests now cover the state and config migrations, the legacy MCP move, Device Flow sign-in, `prune`, `bootstrap`, the marketplace state lock, and background-child loads.
+
 ## [0.23.0] - 2026-11-07
 
 - Plugin MCP servers now also run through Pi's built-in MCP, switching between it and pi-mcp-adapter needs no plugin command, and Pi 1.5.0 is required. Thanks to @backstabslash, who requested this in #275. (#303)
