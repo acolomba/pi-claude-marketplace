@@ -1,9 +1,9 @@
 // extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts
 //
 // Bridge-owned registry of background hooks: `asyncRewake` and plain `async`
-// (D-BG-205). Spawns hook children detached-but-in-
-// parent-process-group, holds them in an in-memory Map keyed by a UUID
-// dispatchId, and watches each child. A plain async child gives its JSON
+// (D-BG-205). Spawns each hook child as the leader of its own process group
+// (`detached` off Windows, ../process-group.ts), holds them in an in-memory
+// Map keyed by a UUID dispatchId, and watches each child. A plain async child gives its JSON
 // answer to the model on its next call; an asyncRewake child that exits 2
 // wakes the model with Claude Code 2.1.319's rewake text through pi.sendMessage with
 // `display: false` matching Claude Code's <system-reminder> semantic: an idle
@@ -19,7 +19,7 @@
 // (EXEC-01..04 sync path), platform/package-manager.ts (D-PL9-11), and
 // platform/prompt-shell.ts. This
 // site (HOOK-06 / EXEC-05 / D-62-01) diverges from the sync site:
-// `detached: false` + the parent does NOT await child exit; a per-child
+// the parent does NOT await child exit; a per-child
 // handler watches for code 2 and triggers the HOOK-06 injection contract via
 // `pi.sendMessage({ customType: "claude-hook-rewake", display: false, ... },
 // { triggerTurn: true, deliverAs: "steer" })`.
@@ -63,6 +63,7 @@ import { translateSessionStart } from "../payloads/session-start.ts";
 import { translateStopFailure } from "../payloads/stop-failure.ts";
 import { translateStop } from "../payloads/stop.ts";
 import { translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
+import { asGroupLeader, type SignalGroup } from "../process-group.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { collectStreamText } from "../stream-text.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
@@ -200,6 +201,12 @@ const DEFAULT_ORPHAN_PROBES: OrphanProbes = {
  */
 export interface SpawnDeps {
   readonly spawnImpl?: typeof spawn;
+  /**
+   * Signals the process group a hook leads. With Node's `spawn` it defaults
+   * to Node's group signal; with a `spawnImpl` of the caller's it defaults to
+   * none, so each signal reaches the child alone (../process-group.ts).
+   */
+  readonly signalGroup?: SignalGroup;
   readonly dispatchId?: () => string;
   readonly pidTableWriter?: typeof writePidTable;
 }
@@ -263,7 +270,10 @@ export async function spawnAndRegister(
         env,
         stdio: ["pipe", "pipe", "pipe"],
         shell: planValue.shell,
-        detached: false,
+        // The hook leads its own process group, which the ladder, `/reload`,
+        // and the orphan reap signal (../process-group.ts). A detached Windows
+        // process would open a console window of its own.
+        detached: process.platform !== "win32",
       });
     } catch (err) {
       hookDebugLog(
@@ -318,8 +328,9 @@ export async function spawnAndRegister(
       );
     });
 
+    const hookProcess = asGroupLeader(child, deps);
     const ladder = installTimerLadder(
-      child,
+      hookProcess,
       timeoutSeconds,
       `${entry.pluginId}/${entry.claudeEvent}`,
     );
@@ -336,7 +347,7 @@ export async function spawnAndRegister(
       spawnedAt: new Date().toISOString(),
       rewakeMessage: typeof rewakeMessageField === "string" ? rewakeMessageField : undefined,
       rewakeSummary: typeof rewakeSummaryField === "string" ? rewakeSummaryField : undefined,
-      child,
+      child: hookProcess,
       ladder,
       stdout,
       stderr,
@@ -563,8 +574,8 @@ function wakeOnExitTwo(entry: HooksRuntimeChildEntry, { ctx, pi, label }: Rewake
 
 /**
  * D-62-05 `/reload` cleanup walk. Iterates the in-memory registry,
- * cancels each timer ladder, and SIGKILLs each tracked child
- * best-effort. Idempotent: repeated calls on an empty registry are
+ * cancels each timer ladder, and SIGKILLs the process group of each tracked
+ * child best-effort. Idempotent: repeated calls on an empty registry are
  * no-ops. The persisted PID table is NOT touched here -- the orphan
  * reap path is responsible for draining that surface.
  */
@@ -576,7 +587,8 @@ export function shutdownInMemoryChildren(runtime: HooksRuntime): void {
  * D-62-05 / D-BG-207 orphan reap. Reads the per-scope PID table; for each
  * recorded PID this runtime does not own, probes liveness via `kill(pid, 0)`;
  * on Linux, verifies `/proc/<pid>/environ` carries our marker matching the
- * recorded `dispatchId`; SIGKILLs owned PIDs and soft-skips strangers. On
+ * recorded `dispatchId`; SIGKILLs the process group of each owned PID and
+ * soft-skips strangers. On
  * non-Linux, soft-skips every alive PID (the conservative path -- NEVER kill a
  * stranger). The rows of children this runtime still owns -- hooks the live
  * load started -- are kept and written back; the table is unlinked only when
@@ -613,7 +625,7 @@ export async function reapOrphans(
   });
 }
 
-/** D-62-05: SIGKILLs one table row's process when it is alive and ours. */
+/** D-62-05: SIGKILLs one table row's process group when it is alive and ours. */
 async function reapOrphan(tableEntry: PidTableEntry, probes: OrphanProbes): Promise<void> {
   if (!isPidAlive(tableEntry.pid, probes)) {
     return;
@@ -636,9 +648,23 @@ async function reapOrphan(tableEntry: PidTableEntry, probes: OrphanProbes): Prom
   }
 
   try {
-    probes.killProbe(tableEntry.pid, "SIGKILL");
+    killOrphanGroup(tableEntry.pid, probes);
   } catch (err) {
     hookDebugLog(`async-rewake: orphan ${tableEntry.pid} kill failed: ${errorMessage(err)}`);
+  }
+}
+
+/**
+ * SIGKILLs the process group an orphan leads, so the kill also reaches what
+ * the hook's shell started (../process-group.ts). A process that leads no
+ * group, such as one an earlier release spawned in Pi's group, gets the kill
+ * alone.
+ */
+function killOrphanGroup(pid: number, probes: OrphanProbes): void {
+  try {
+    probes.killProbe(-pid, "SIGKILL");
+  } catch {
+    probes.killProbe(pid, "SIGKILL");
   }
 }
 

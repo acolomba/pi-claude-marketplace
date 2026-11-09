@@ -22,7 +22,10 @@
 //      ?? true })`. Note: `args: []` is exec-form -- the discriminator is
 //      "args defined" not "args non-empty". The exec form gets the three
 //      path variables substituted into `command` and `args` (D-CF5-15).
-//   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02). `ladder.cancel()`
+//      Off Windows the hook is spawned `detached`, so it leads its own
+//      process group.
+//   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02) against that
+//      process group (`./process-group.ts`). `ladder.cancel()`
 //      runs from the shared `settle()` closure, which both `child.once(
 //      "close", ...)` and `child.once("error", ...)` call, to close the
 //      TOCTOU window against the timer firing on a recycled pid.
@@ -77,6 +80,7 @@ import { translateSessionStart } from "./payloads/session-start.ts";
 import { translateStopFailure } from "./payloads/stop-failure.ts";
 import { translateStop } from "./payloads/stop.ts";
 import { translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
+import { asGroupLeader } from "./process-group.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
 import { collectStreamText } from "./stream-text.ts";
 import { resolveTimeoutSeconds } from "./timeout.ts";
@@ -161,7 +165,6 @@ export async function dispatchHookExec(
   runtime: HooksRuntime,
   deps: SpawnDeps = {},
 ): Promise<HookExecResult> {
-  const spawnImpl = deps.spawnImpl ?? spawn;
   // HOOK-06 / EXEC-05 / D-62-01 / D-BG-205: background delegation of an
   // `asyncRewake` or a plain `async` hook, which Claude Code runs in the
   // background, so its exit code and decisions decide nothing. Strict `=== true`
@@ -206,7 +209,7 @@ export async function dispatchHookExec(
     const loc = locationsFor(entry.scope, transCtx.cwd);
     const env = await prepareHookEnv(entry, transCtx, loc);
     const vars = hookPathVars(entry, transCtx, loc);
-    return await spawnAndCollect(entry, vars, env, stdinJson, spawnImpl);
+    return await spawnAndCollect(entry, vars, env, stdinJson, deps);
   } catch (err) {
     hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
     // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
@@ -317,8 +320,9 @@ async function spawnAndCollect(
   vars: ClaudePluginVars,
   env: NodeJS.ProcessEnv,
   stdinJson: string,
-  spawnImpl: typeof spawn = spawn,
+  deps: SpawnDeps,
 ): Promise<HookExecResult> {
+  const spawnImpl = deps.spawnImpl ?? spawn;
   const plan = planSpawn(entry, vars);
   const timeoutSeconds = resolveTimeoutSeconds({
     raw: entry.handlerDecl.timeout,
@@ -334,12 +338,16 @@ async function spawnAndCollect(
     env,
     stdio: ["pipe", "pipe", "pipe"],
     shell: plan.shell,
+    // The hook leads its own process group, which the ladder signals
+    // (./process-group.ts). A detached Windows process would open a console
+    // window of its own.
+    detached: process.platform !== "win32",
   });
 
   return await new Promise<HookExecResult>((resolve) => {
     let settled = false;
 
-    const ladder = installTimerLadder(child, timeoutSeconds, ladderLabel);
+    const ladder = installTimerLadder(asGroupLeader(child, deps), timeoutSeconds, ladderLabel);
 
     const settle = (result: HookExecResult): void => {
       if (settled) {

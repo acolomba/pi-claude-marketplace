@@ -8,6 +8,7 @@
   - An `asyncRewake` hook that exits 2 now wakes the model with Claude Code's text and shows its summary, by default `Stop hook feedback`.
   - A `Stop` hook now gets `stop_hook_active: true` at the end of a turn that an `asyncRewake` hook woke, and not in later turns.
   - A project plugin's async hook processes now stop on `/reload` and after a crash.
+  - A hook's timeout, `/reload`, and the start after a crash now stop every process of the hook, such as the script in `script.sh || true`.
   - `StopFailure` hook matchers now accept Claude Code's newer error types and `|` lists, and `SessionStart`, `SessionEnd`, `PreCompact`, and `PostCompact` matchers accept `|` and `,` lists. Reinstall a plugin installed with `--partial` to run these hooks.
   - A `StopFailure` hook now gets no `last_assistant_message` when Pi reports no error text.
   - A tool call you cancel now runs no `PostToolUseFailure` hook, and the hook input now carries `is_interrupt`.

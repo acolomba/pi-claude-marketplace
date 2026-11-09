@@ -296,10 +296,10 @@ export class PiProcess {
 
   /**
    * Kills Pi's own process with SIGKILL and waits for its exit, as a Pi that
-   * dies does. The rest of its process group, such as async hook processes,
-   * keeps running until the next load stops it (ASYNC-04), so this never
-   * kills the group; the later `stop()` of the release does. A second
-   * `crash()` does nothing.
+   * dies does. The rest of its process group keeps running, and so do its
+   * async hook processes, which run in process groups of their own, until the
+   * next load stops them (ASYNC-04). So this never kills the group; the later
+   * `stop()` of the release does. A second `crash()` does nothing.
    */
   async crash(): Promise<void> {
     if (this.stopped || this.crashed) {

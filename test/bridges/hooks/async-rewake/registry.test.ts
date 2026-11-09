@@ -1007,7 +1007,7 @@ test(
             env: expectedEnvironment,
             stdio: ["pipe", "pipe", "pipe"],
             shell: false,
-            detached: false,
+            detached: process.platform !== "win32",
           },
         },
       ]);
@@ -1602,6 +1602,79 @@ test("contains a synchronous stdin end failure and cleans the registered child",
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
 });
+
+interface GroupStop {
+  readonly name: string;
+  readonly stop: (t: TestContext, runtime: ReturnType<typeof createHooksRuntime>) => void;
+  readonly timeout: number;
+  readonly expectedSignal: NodeJS.Signals;
+}
+
+const GROUP_STOPS: readonly GroupStop[] = [
+  {
+    name: "at its timeout",
+    stop: (t) => {
+      t.mock.timers.tick(1_000);
+    },
+    timeout: 1,
+    expectedSignal: "SIGTERM",
+  },
+  {
+    name: "on the reload walk",
+    stop: (_t, runtime) => {
+      shutdownInMemoryChildren(runtime);
+    },
+    timeout: 600,
+    expectedSignal: "SIGKILL",
+  },
+];
+
+for (const { name, stop, timeout, expectedSignal } of GROUP_STOPS) {
+  test(`starts a background hook as a process group leader and signals the group ${name}`, async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const runtime = createHooksRuntime();
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-group-"));
+    const locations = locationsFor("project", root);
+    const entry = createEntry(root, {
+      handlerDecl: {
+        type: "command",
+        command: "/opt/hooks/scan",
+        args: [],
+        timeout,
+        asyncRewake: true,
+      },
+    });
+    const context = createContext(root, "session-group", true);
+    const pi = createPi();
+    const child = createChild(24_690);
+    const spawnCalls: SpawnCall[] = [];
+    const groupSignals: Array<readonly [number, NodeJS.Signals | undefined]> = [];
+    t.after(async () => {
+      shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    });
+
+    // act
+    await spawnAndRegister(runtime, entry, {}, context.context, pi.pi, locations, {
+      spawnImpl: createSpawn(child.child, spawnCalls),
+      signalGroup: (pid, signal) => {
+        groupSignals.push([pid, signal]);
+      },
+      dispatchId: () => "dispatch-group",
+    });
+    stop(t, runtime);
+
+    // assert
+    assert.deepStrictEqual(
+      spawnCalls.map((call) => call.options.detached),
+      [process.platform !== "win32"],
+    );
+    assert.deepStrictEqual(groupSignals, [[24_690, expectedSignal]]);
+    assert.deepStrictEqual(child.signals, []);
+  });
+}
 
 function destroyChild(child: ChildHarness): void {
   child.child.removeAllListeners();
@@ -2843,7 +2916,7 @@ function setCasePlatform(t: TestContext, platform: NodeJS.Platform): void {
 }
 
 test(
-  "kills a Linux orphan only after liveness and exact marker proof",
+  "kills a Linux orphan's process group only after liveness and exact marker proof",
   { concurrency: false },
   async (t) => {
     // arrange
@@ -2886,7 +2959,7 @@ test(
       assert.deepStrictEqual(calls, [
         { kind: "kill", pid: 31_001, signal: 0 },
         { kind: "environ", pid: 31_001 },
-        { kind: "kill", pid: 31_001, signal: "SIGKILL" },
+        { kind: "kill", pid: -31_001, signal: "SIGKILL" },
       ]);
       assert.strictEqual(tableState, "ENOENT");
     } finally {
@@ -3038,7 +3111,7 @@ test(
       // assert
       assert.deepStrictEqual(calls, [
         { pid: 31_005, signal: 0 },
-        { pid: 31_005, signal: "SIGKILL" },
+        { pid: -31_005, signal: "SIGKILL" },
       ]);
       assert.strictEqual(tableState, "ENOENT");
     } finally {
@@ -3185,7 +3258,60 @@ test(
       // assert
       assert.deepStrictEqual(calls, [
         { pid: 31_009, signal: 0 },
+        { pid: -31_009, signal: "SIGKILL" },
         { pid: 31_009, signal: "SIGKILL" },
+      ]);
+      assert.strictEqual(tableState, "ENOENT");
+    } finally {
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    }
+  },
+);
+
+test(
+  "kills an owned orphan alone when it leads no process group",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-orphan-no-group-"));
+    setCasePlatform(t, "linux");
+    const locations = locationsFor("project", root);
+    await writePidTable(locations, [
+      {
+        pid: 31_011,
+        dispatchId: "dispatch-no-group",
+        scope: "project",
+        marketplace: "catalog-no-group",
+        plugin: "plugin-no-group",
+        spawnedAt: "2026-08-31T12:05:00.000Z",
+      },
+    ]);
+    const calls: Array<{ readonly pid: number; readonly signal: number | NodeJS.Signals }> = [];
+    const probes = {
+      killProbe(pid, signal): void {
+        calls.push({ pid, signal });
+        if (pid < 0) {
+          const error = new Error("no such process group") as NodeJS.ErrnoException;
+          error.code = "ESRCH";
+          throw error;
+        }
+      },
+      environReader(): Promise<string> {
+        return Promise.resolve(`PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-no-group`);
+      },
+    } satisfies OrphanProbes;
+
+    try {
+      // act
+      await reapOrphans(runtime, locations, probes);
+      const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
+
+      // assert
+      assert.deepStrictEqual(calls, [
+        { pid: 31_011, signal: 0 },
+        { pid: -31_011, signal: "SIGKILL" },
+        { pid: 31_011, signal: "SIGKILL" },
       ]);
       assert.strictEqual(tableState, "ENOENT");
     } finally {

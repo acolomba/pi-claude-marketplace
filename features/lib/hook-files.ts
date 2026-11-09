@@ -66,7 +66,8 @@
  * A script hook that sets `async`, `async rewake`, or `waits` is a lifecycle
  * hook (D-BG-12). Right after recording, its script writes its pid to
  * `<harness dir>/hook-<name>-<pid>.pid`, which the release of the profile Pi
- * checks as a stand-in's, and runs the recorder in its lifecycle mode with
+ * reads to stop the script and then checks as a stand-in's, and runs the
+ * recorder in its lifecycle mode with
  * `start`. When it exits, it runs the recorder with `end` and its exit code,
  * then removes the pid file. Every other hook writes neither.
  *
@@ -523,4 +524,21 @@ export async function readHookScriptPids(harness: string): Promise<readonly numb
   return Promise.all(
     names.map(async (name) => Number((await readFile(path.join(harness, name), "utf8")).trim())),
   );
+}
+
+/**
+ * SIGKILLs each lifecycle hook script that a pid file in `harness` names and
+ * that still runs. Pi starts each hook as the leader of a process group of its
+ * own, so stopping a Pi and its group leaves the hook running; a scenario's
+ * release stops what the scenario left, so that a waiting script cannot take
+ * the release marker of a later scenario.
+ */
+export async function stopHookScripts(harness: string): Promise<void> {
+  for (const pid of await readHookScriptPids(harness)) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // The script has already exited.
+    }
+  }
 }

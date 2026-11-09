@@ -1116,7 +1116,7 @@ for (const field of ["asyncRewake", "async"] as const) {
         args: ["--literal"],
         command: "async-hook",
         cwd: caseRoot,
-        detached: false,
+        detached: process.platform !== "win32",
         marker: "dispatch-async-1",
         shell: false,
         stdio: ["pipe", "pipe", "pipe"],
@@ -1801,6 +1801,41 @@ test("blocks a hook its timeout killed with the timed out message", async (t) =>
     kind: "block",
     reason: '[guard]: timed out; blocking because onFailure is "block"',
   });
+});
+
+test("starts a blocking hook as a process group leader and signals the group at its timeout", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const caseRoot = await makeCaseRoot(t, "dispatch-group-");
+  const processChild = makeInjectedChild(t, { pid: 52_103 });
+  const processBoundary = observeSpawn(t, processChild);
+  const groupSignals: Array<readonly [number, NodeJS.Signals | undefined]> = [];
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    makeEntry(caseRoot, { command: "guard", timeout: 1 }),
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    createHooksRuntime(),
+    {
+      spawnImpl: processBoundary.spawnImpl,
+      signalGroup: (pid, signal) => {
+        groupSignals.push([pid, signal]);
+      },
+    },
+  );
+  const call = await processBoundary.spawned;
+  t.mock.timers.tick(1_000);
+  const signalsAtTimeout = [...groupSignals];
+  await processChild.close(null, "SIGTERM");
+  const hookOutcome = await pendingOutcome;
+
+  // assert
+  assert.strictEqual(call.options.detached, process.platform !== "win32");
+  assert.deepStrictEqual(signalsAtTimeout, [[52_103, "SIGTERM"]]);
+  assert.deepStrictEqual(processChild.killSignals, []);
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
 });
 
 const POST_COMPACT_EVENT = {

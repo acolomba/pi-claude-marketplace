@@ -47,6 +47,7 @@ import {
 import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { inLoadOrder, resolveCompanion } from "../lib/companions.ts";
 import { GITHUB_REDIRECT_EXTENSION } from "../lib/github-device-flow/extension.ts";
+import { stopHookScripts } from "../lib/hook-files.ts";
 import {
   classifyMcpImplementation,
   expectedMcpImplementation,
@@ -709,7 +710,8 @@ export class ScenarioWorld extends World {
 
   /**
    * Kills this scenario's profile Pi as a Pi that dies does, leaving the rest
-   * of its process group running (ASYNC-04). The crashed Pi stays the Pi the
+   * of its process group and its hook processes running (ASYNC-04). The
+   * crashed Pi stays the Pi the
    * steps talk to until `restartPi("after-crash")` replaces it. Fails when no
    * profile Pi of this scenario is running.
    */
@@ -1051,6 +1053,7 @@ export class ScenarioWorld extends World {
     }
 
     await this.pi.stop();
+    await stopHookScripts(harness);
     await assertStandInsStopped(harness);
     if (restart === "builtin-on") {
       await turnOnBuiltinMcp(agentDir);
@@ -1100,9 +1103,12 @@ export class ScenarioWorld extends World {
       ...(launch.noMcp === true ? { noMcp: true } : {}),
     });
     // HAR-05: the profile Pi stops first, so a stand-in that exits when its
-    // stdin closes has exited before its pid file is checked.
+    // stdin closes has exited before its pid file is checked. Pi starts each
+    // hook in a process group of its own, which stopping Pi leaves running,
+    // so the release stops the hook scripts apart.
     this.onRelease(async () => {
       await pi.stop();
+      await stopHookScripts(harness);
       await assertStandInsStopped(harness);
     });
     this.scenarioPi = pi;
