@@ -220,6 +220,66 @@ Feature: Hook session
       | PreCompact  | first   | manual  |                                                                          | {project dir} |                 | pre-manual  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
       | PostCompact | first   | manual  | No prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A. | {project dir} |                 | post-manual | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
 
+  Scenario: A list matcher selects the PreCompact and PostCompact runs of a compaction
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name        | event       | matcher          |
+      | pre-listed  | PreCompact  | auto, manual     |
+      | pre-other   | PreCompact  | threshold\|auto  |
+      | post-listed | PostCompact | overflow\|manual |
+      | post-other  | PostCompact | threshold, auto  |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply      |
+      | Hello.     |
+      | Summary A. |
+    Given the user has prompted "hello" with the hooks recording
+    When the user compacts the session with the hooks recording
+    Then the hooks record these runs:
+      | event       | session | trigger | compact summary                                                          | cwd           | transcript path | arguments   | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreCompact  | first   | manual  |                                                                          | {project dir} |                 | pre-listed  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostCompact | first   | manual  | No prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A. | {project dir} |                 | post-listed | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+  Scenario Outline: Info on a plugin whose <event> matcher <matcher> lists no value Claude Code sends shows it partially available
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event   | matcher   |
+      | session | <event> | <matcher> |
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info                                             |
+      | marketplace details autoupdate | false                                                   |
+      | marketplace name               | fixtures                                                |
+      | marketplace scope              | project                                                 |
+      | needs reload                   | false                                                   |
+      | plugin components hooks        | [{"kind":"lenient","event":"<event>","supported":true}] |
+      | plugin components resolved     | true                                                    |
+      | plugin components skills       | demo-skill                                              |
+      | plugin id                      | demo@fixtures                                           |
+      | plugin name                    | demo                                                    |
+      | plugin reasons                 | unsupported hooks                                       |
+      | plugin status                  | partially-available                                     |
+      | plugin version                 | 1.0.0                                                   |
+      | severity                       | info                                                    |
+
+    Examples:
+      | event        | matcher             |
+      | SessionStart | reload\|quit        |
+      | SessionEnd   | Clear, Resume       |
+      | PreCompact   | threshold, overflow |
+      | PostCompact  | Manual\|Auto        |
+
   Scenario: Forking a session runs SessionEnd with reason resume and SessionStart with source fork
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

@@ -251,6 +251,7 @@ Feature: Hook stop failure
       | network_error          |
       | Rate_Limit             |
       | network_error\|timeout |
+      | rate_limit, overloaded |
 
   Scenario: A reply cut off at the output limit runs the StopFailure hook with no assistant message
     Given pi runs with the scripted model
