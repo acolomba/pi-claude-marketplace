@@ -9,7 +9,9 @@
  * which rebuilds the extension runtime, then checks that no plugin,
  * marketplace, or skill is left and that the session reported no payload. So
  * no scenario sees the state of another, and the run order is random to
- * prove it.
+ * prove it. Pi keeps one kind of state that no new session clears: its trust
+ * decision for the project, once a session started while the project held a
+ * resource that needs one. `Before()` replaces such a Pi with a new process.
  *
  * The shared Pi follows the cucumber profile (DUAL-01, P1-DC-03). Under the
  * adapter profile it also loads pi-mcp-adapter from the optional peer cache,
@@ -209,9 +211,11 @@ BeforeAll({ timeout: RUN_START_TIMEOUT_MS }, async (): Promise<void> => {
 
 Before(async (): Promise<void> => {
   const run = currentRun();
-  // A scenario that failed mid-request leaves Pi busy or gone; the next
-  // scenario gets a new process, which starts in the emptied sandbox below.
-  const replaced = !run.pi.idle;
+  // A scenario that failed mid-request leaves Pi busy or gone, and one that
+  // started a session while the project held a resource that needs a trust
+  // decision leaves Pi holding that decision; the next scenario gets a new
+  // process, which starts in the emptied sandbox below.
+  const replaced = !run.pi.idle || run.pi.decidedProjectTrust;
   if (replaced) {
     await run.pi.stop();
   }
