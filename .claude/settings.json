@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/init-session.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/init/init-session.sh",
             "timeout": 1200
           }
         ]
@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/init-worktree.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/init/init-worktree.sh"
           }
         ]
       }

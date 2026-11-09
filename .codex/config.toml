@@ -23,4 +23,4 @@ matcher = "startup|resume|fork"
 
 [[hooks.SessionStart.hooks]]
 type = "command"
-command = "bash scripts/init-worktree.sh"
+command = "bash scripts/init/init-worktree.sh"

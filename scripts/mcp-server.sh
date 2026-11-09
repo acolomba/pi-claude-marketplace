@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Starts an MCP server from this checkout's node_modules: the bin name, then
-# its arguments. In a Claude Code cloud session, Claude Code starts the MCP
-# servers while the SessionStart hook still installs node_modules, so this
-# waits until scripts/init-session.sh marks node_modules ready for this
-# session. MCP_TIMEOUT in .claude/settings.json gives Claude Code's connect
-# more time than this wait.
+# Starts an MCP server from this checkout's node_modules: the bin name, then its
+# arguments. In a Claude Code cloud session, node_modules is still installing
+# when Claude Code starts the MCP servers, and Claude Code does not retry a
+# server that fails to start. So the script waits until init-session.sh marks
+# node_modules ready for this session. MCP_TIMEOUT in .claude/settings.json is
+# longer than this wait.
 set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)

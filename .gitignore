@@ -1,5 +1,5 @@
 # ai harnesses
-# third-party skills; scripts/init.sh fetches the latest version of each
+# third-party skills; scripts/init/init.sh fetches the latest version of each
 /.agents/skills/fallow/
 /.agents/skills/fallow-setup/
 /.agents/skills/herdr/

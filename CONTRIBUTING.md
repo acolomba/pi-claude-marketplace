@@ -22,7 +22,7 @@ Prerequisites:
 Run this command to set up development tools and dependencies in a fresh clone or worktree.
 
 ```bash
-./scripts/init.sh
+./scripts/init/init.sh
 ```
 
 It installs the npm dependencies, including the pinned Pi version, and these tools:
@@ -33,8 +33,8 @@ It installs the npm dependencies, including the pinned Pi version, and these too
 
 The script has two stages, and you can run each one alone:
 
-- `scripts/init.sh --tools` installs the agent tooling: the third-party skills, gsd-core, and the fallow skills. This tooling does not depend on the checked-out code.
-- `scripts/init.sh --deps` installs what depends on the checked-out code: the git hooks, the npm dependencies, and the codegraph index.
+- `scripts/init/init.sh --tools` installs the agent tooling: the third-party skills, gsd-core, and the fallow skills. This tooling does not depend on the checked-out code.
+- `scripts/init/init.sh --deps` installs what depends on the checked-out code: the git hooks, the npm dependencies, and the codegraph index.
 
 ### Claude Code cloud sessions
 
@@ -42,14 +42,8 @@ Create a cloud environment for this repository only, and do not use it for sessi
 
 ```bash
 #!/bin/bash
-pi-claude-marketplace/scripts/cloud-env-setup.sh
+pi-claude-marketplace/scripts/init/cloud-env-setup.sh
 ```
-
-The setup script runs in the directory above the checkout, before Claude Code starts. `scripts/cloud-env-setup.sh` installs Node 24, a `node` wrapper that makes root obey file modes, and pre-commit. Then it runs `scripts/init.sh --tools`. Claude Code reads agents and skills only when it starts, so the agent tooling must be in place before then. If the setup fails, the session still starts and shows a notice that the setup script failed.
-
-The cloud environment saves the result of its setup and starts later sessions from that copy. So the setup does not install the npm dependencies or build the codegraph index: they depend on the branch. At every session start, the SessionStart hook (`scripts/init-session.sh`) runs `scripts/init.sh --deps`. The codegraph index builds in the background and takes about three minutes in a new checkout.
-
-Claude Code starts the MCP servers while the hook still installs the npm dependencies. So `.mcp.json` starts them through `scripts/mcp-server.sh`, which waits until the hook has finished, and `.claude/settings.json` sets `MCP_TIMEOUT` so that Claude Code waits long enough.
 
 ## Running Pi against the checkout
 
