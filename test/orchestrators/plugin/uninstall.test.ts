@@ -36,6 +36,7 @@ import {
 import { createUninstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import {
   createUninstallPlugin,
+  REAL_UNINSTALL_TRANSACTION,
   UninstallRefusedError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
@@ -58,6 +59,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -7920,6 +7922,75 @@ test("PRUNECFG-01 / NFR-10: a symlinked layer refuses the delete, and the uninst
         },
         { linked: linkedText, link: linked, state: stateBefore },
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRUNECFG-01 / NFR-3: a refused save of uninstall --prune leaves the deleted entries deleted, and the same command run again converges", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-config-retry-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPruneLayers(locations, cwd, {
+        base: '{"schemaVersion":1,"plugins":{"x@mp":{},"d1@mp":{"enabled":false}}}\n',
+        local: EMPTY_LAYER,
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const refusingSave = createUninstallPlugin(
+        {
+          ...REAL_UNINSTALL_TRANSACTION,
+          withLockedStateTransaction: (target, run) =>
+            withLockedStateTransaction(target, run, {
+              saveState: () => Promise.reject(new Error("state save failed")),
+            }),
+        },
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      );
+      const first = makeCtx();
+      const second = makeCtx();
+      const prunedBase = configText({ schemaVersion: 1, plugins: {} });
+
+      // act
+      const firstOutcome = await refusingSave({
+        ctx: first.ctx,
+        run: first.run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+      const afterFirst = {
+        base: await readFile(locations.baseConfigJsonPath, "utf8"),
+        state: await readFile(locations.stateJsonPath, "utf8"),
+      };
+      const secondOutcome = await uninstallXWithPrune(second.ctx, second.run, cwd);
+
+      // assert
+      assert.deepStrictEqual(
+        { firstOutcome, secondOutcome },
+        {
+          firstOutcome: undefined,
+          secondOutcome: undefined,
+        },
+      );
+      assert.deepStrictEqual(first.notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ x v0.0.1 (failed) {unreadable}\n" +
+            "    cause: state save failed",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(afterFirst, { base: prunedBase, state: stateBefore });
+      assert.deepStrictEqual(second.notifications, [PRUNE_SCOPE_REPORT]);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+      assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), prunedBase);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

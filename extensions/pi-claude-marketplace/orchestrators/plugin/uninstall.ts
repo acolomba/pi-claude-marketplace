@@ -869,6 +869,16 @@ export interface PrunedMember {
 }
 
 /**
+ * NFR-3: one config layer the `--prune` sweep rewrote and the exact bytes it
+ * wrote there. A prune rollback restores the layer only while it still holds
+ * these bytes.
+ */
+export interface ConfigLayerWrite {
+  readonly path: string;
+  readonly bytes: Buffer;
+}
+
+/**
  * D-05-13: the warning row for a pruned member whose cascade did not fully
  * unstage. It uses `warning` because other members may have been removed while
  * this one plugin fell short. The member's record remains installed, so its
@@ -964,7 +974,8 @@ async function removeDependencyMember(args: {
  * PRUNECFG-01: before the member loop it refuses on an invalid config file of
  * the scope, and after the loop it deletes the removed members'
  * `enabled: false` declarations from those files. Both steps can throw, which
- * aborts the caller's save.
+ * aborts the caller's save. `recordConfigWrite` receives each layer write the
+ * moment it lands, so a rollback knows every write a stopped pass made.
  */
 export async function sweepOrphans(args: {
   readonly snapshot: DeclarationSnapshot;
@@ -973,8 +984,9 @@ export async function sweepOrphans(args: {
   readonly keepData: boolean;
   readonly cascade: typeof cascadeUnstagePlugin;
   readonly transaction: UninstallTransaction;
+  readonly recordConfigWrite: (write: ConfigLayerWrite) => void;
 }): Promise<PrunedMember[]> {
-  const { snapshot, initiallyGone, ...removal } = args;
+  const { snapshot, initiallyGone, recordConfigWrite, ...removal } = args;
   const gone = new Set(initiallyGone);
   const order = pruneOrphans(snapshot.candidates, snapshot.index, gone);
   // Every key `pruneOrphans` returns is a candidate's key, so the filter
@@ -1003,7 +1015,11 @@ export async function sweepOrphans(args: {
     pruned.push(result);
   }
 
-  await dropPrunedDisabledDeclarations({ locations: removal.locations, members: pruned });
+  await dropPrunedDisabledDeclarations({
+    locations: removal.locations,
+    members: pruned,
+    recordConfigWrite,
+  });
   return pruned;
 }
 
@@ -1049,6 +1065,7 @@ async function readPruneLayers(
 async function dropPrunedDisabledDeclarations(args: {
   readonly locations: ScopedLocations;
   readonly members: readonly PrunedMember[];
+  readonly recordConfigWrite: (write: ConfigLayerWrite) => void;
 }): Promise<void> {
   const keys = args.members
     .filter((member) => member.removed)
@@ -1071,8 +1088,24 @@ async function dropPrunedDisabledDeclarations(args: {
     }
 
     // eslint-disable-next-line no-await-in-loop -- one read-modify-write per layer file
-    await deletePluginConfigEntries(loaded.config, layerPath, args.locations.scopeRoot, disabled);
+    const bytes = await deletePluginConfigEntries(
+      loaded.config,
+      layerPath,
+      args.locations.scopeRoot,
+      disabled,
+    );
+    args.recordConfigWrite({ path: layerPath, bytes });
   }
+}
+
+/**
+ * NFR-3: the named uninstall keeps no record of the sweep's config writes. A
+ * refused save of `uninstall --prune` leaves the deleted declarations deleted,
+ * as it leaves the named plugin's own deleted declaration, and the same
+ * command run again converges. Only `prune` has a rollback.
+ */
+function discardConfigWrite(_write: ConfigLayerWrite): void {
+  return undefined;
 }
 
 /**
@@ -1650,6 +1683,7 @@ async function runUninstallOutcome(
             keepData,
             cascade,
             transaction,
+            recordConfigWrite: discardConfigWrite,
           })),
         );
         dependents = survivingDependents(dependents, prunedMembers);
