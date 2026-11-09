@@ -207,6 +207,12 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261107-36g | Name the unsupported kinds in the not-installable message (NOTINSTALLMSG-01) | 2026-11-07 | 93168c0 | — | [261107-36g-fix-notinstallmsg-01-name-the-unsupporte](./quick/261107-36g-fix-notinstallmsg-01-name-the-unsupporte/) |
 | 261107-lth | Install codegraph as a devDependency instead of globally | 2026-11-07 | 55cf1393 | — | [261107-lth-codegraph-local-install](./quick/261107-lth-codegraph-local-install/) |
 | 261108-a00 | Isolate the Pi home for every test run | 2026-11-08 | 29904755 | — | [261108-a00-isolate-the-pi-home-for-every-test-run](./quick/261108-a00-isolate-the-pi-home-for-every-test-run/) |
+| 261109-cpl | PRUNECFG-01: prune and `uninstall --prune` drop a removed dependency's `enabled: false` declaration from the scope's claude-plugins.json (sh | 2026-11-09 | 65833926 | — | .planning/quick/261109-cpl-prunecfg-01-prune-and-uninstall-prune-drop-a-removed-depende |
+| 261109-cpm | Browse picker install-scope screen: drop the `(Recommended)` marker from the `Project local` option and keep the option order (reverses D-BG | 2026-11-09 | 80eadf5f | — | .planning/quick/261109-cpm-browse-picker-install-scope-screen-drop-the-recommended-mark |
+| 261109-cpn | Async rewake: `stop_hook_active` is true only for the woken turn, as in Claude Code 2.1.319, not until the user's next input, and it is not | 2026-11-09 | 58d91f65 | — | .planning/quick/261109-cpn-async-rewake-stop-hook-active-is-true-only-for-the-woken-tur |
+| 261109-cpo | P7-DC-04: when a load refuses a newer state.json (schema version above this release's), stop offering that scope's installed components (ski | 2026-11-09 | 6f908fd5 | — | .planning/quick/261109-cpo-p7-dc-04-when-a-load-refuses-a-newer-state-json-schema-versi |
+| 261109-cpj | Model-facing list tool (extensions/pi-claude-marketplace/edge/handlers/tools.ts): an installed-but-disabled plugin shows a new `[disabled]` | 2026-11-09 | bcd68aa6 | — | .planning/quick/261109-cpj-model-facing-list-tool-extensions-pi-claude-marketplace-edge |
+| 261109-cpk | CLOSEDLIST-01: accept `\|` and `,` matcher lists on SessionStart, SessionEnd, PreCompact, and PostCompact hooks, as StopFailure already does | 2026-11-09 | ae298e7b | — | .planning/quick/261109-cpk-closedlist-01-accept-and-matcher-lists-on-sessionstart-sessi |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 

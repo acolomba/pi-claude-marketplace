@@ -10,7 +10,8 @@ user go through this log together when the run ends.
   naming, or tooling.
 - **Status.** `open` until reviewed with the user. The user reviewed the log
   on 2026-11-09: each entry now reads `accepted`, `accepted, divergence kept
-  in <BACKLOG id>`, or `fix before the PR`.
+  in <BACKLOG id>`, or `fixed by quick <id>` (the nine the user asked to
+  change, fixed by quick batch 261109-cpi before the PR).
 - **IDs.** `S-NN` is a session-level choice. `P{N}-DC-NN` is a choice of
   phase N.
 
@@ -26,25 +27,32 @@ The log of the previous milestone is archived, unchanged, at
 
 ## Decisions waiting on you
 
-None. The review on 2026-11-09 accepted every entry except these, which get
-fixed on `features/behavioral-gaps` before its PR:
+None. The review on 2026-11-09 accepted every entry except these, which quick
+batch 261109-cpi fixed on `features/behavioral-gaps` before its PR:
 
 - P10-DC-02, P10-DC-03, P10-DC-22: the model-facing list tool shows a
   disabled plugin as `[disabled]`, with a `disabled` filter; `installed`
   covers enabled plugins and `unavailable` the plugins this system cannot
   install. The marketplace line takes the picker's `{n} available •
   {m} installed` wording. This supersedes D-BG-1004, D-BG-1005, D-BG-1010,
-  and the tool projection of D-54-01.
+  and the tool projection of D-54-01. Fixed by quick 261109-cpj (D-BG-1011,
+  D-BG-1012).
 - P3-DC-02: `|` and `,` lists on the SessionStart, SessionEnd, PreCompact,
-  and PostCompact matchers, as for StopFailure (CLOSEDLIST-01).
+  and PostCompact matchers, as for StopFailure (CLOSEDLIST-01). Fixed by
+  quick 261109-cpk (D-BG-302).
 - P13-DC-04: prune and `uninstall --prune` drop a removed dependency's
-  `enabled: false` declaration (PRUNECFG-01, reverses D-BG-1309).
+  `enabled: false` declaration (PRUNECFG-01, reverses D-BG-1309). Fixed by
+  quick 261109-cpl (D-BG-1310).
 - P12-DC-04: the picker's install-scope screen drops `(Recommended)`
-  (reverses D-BG-1202; the rest of BROWSESCOPE-01 stays open).
+  (fixed by quick 261109-cpm, D-BG-1203 supersedes D-BG-1202; the rest of
+  BROWSESCOPE-01 stays open).
 - P2-DC-04, P2-DC-26: `stop_hook_active` is set for the woken turn only,
-  and not left set after a failed send (amends D-BG-203).
+  and not left set after a failed send (amends D-BG-203). Fixed by quick
+  261109-cpn (D-BG-210).
 - P7-DC-04: a load that refuses a newer `state.json` stops offering the
-  installed components (amends D-BG-703 and STMIG-02).
+  installed components (amends D-BG-703 and STMIG-02). Fixed by quick
+  261109-cpo (D-BG-705), widened to any unreadable record: it stops offering
+  the scope's skills and prompts, and UNREADABLECOMPANIONS-01 carries the rest.
 
 Seven accepted Medium divergences stay open in BACKLOG: STATEREAD-01,
 SESSIONENDENV-01, HKDR-01, HOOKERRNOTE-01, PRUNEISLAND-01,
@@ -112,7 +120,7 @@ Full text: `.planning/phases/07-state-schema-migration/DUBIOUS-CHOICES.md`.
 - **P7-DC-01 (Medium, accepted).** Release 0.4.3 left to Phase 8.
 - **P7-DC-02 (Medium, accepted).** A new step reads the record's schema version and provenance.
 - **P7-DC-03 (Medium, accepted, divergence kept in STATEREAD-01).** Other commands' unreadable reports are not pinned or fixed.
-- **P7-DC-04 (Medium, fix before the PR: the user asked to stop offering installed components when the record is refused).** A refused newer record keeps the installed components working.
+- **P7-DC-04 (Medium, fixed by quick 261109-cpo (D-BG-705)).** A refused newer record keeps the installed components working.
 - **P7-DC-05 (Low, accepted).** The migration write stays fire-and-forget.
 - **P7-DC-06 (Low, accepted).** An old record with no plugins keeps its old schema version.
 - **P7-DC-07 (Low, accepted).** UI and AI gates skipped as false positives.
@@ -154,7 +162,7 @@ Full text: `.planning/phases/12-browse-picker/DUBIOUS-CHOICES.md`.
 - **P12-DC-01 (High, accepted).** Marketplace row wording changes, not only its count.
 - **P12-DC-02 (Medium, accepted).** Unreadable manifest leaves the count out.
 - **P12-DC-03 (Medium, accepted).** BROWSE-02's "its marketplace's scope" refined.
-- **P12-DC-04 (High, fix before the PR: the user asked to drop the `(Recommended)` marker).** Install-scope screen kept as is (D-BG-1202).
+- **P12-DC-04 (High, fixed by quick 261109-cpm: the user asked to drop the `(Recommended)` marker).** Install-scope screen drops the marker and keeps its order (D-BG-1203, supersedes D-BG-1202).
 - **P12-DC-05 (Low, accepted).** Unavailable plugin rows pinned without an upstream reference.
 - **P12-DC-06 (Low, accepted).** Upstream's `Updated {date}` row part not added.
 - **P12-DC-07 (Medium, accepted).** Reserved-name check in the count.
@@ -237,7 +245,7 @@ Full text: `.planning/phases/16-background-child-load/DUBIOUS-CHOICES.md`.
 Full text: `.planning/phases/03-stopfailure-hooks/DUBIOUS-CHOICES.md`.
 
 - **P3-DC-01 (High, accepted).** D-BG-301: three more StopFailure error types.
-- **P3-DC-02 (High, fix before the PR: the user asked for `|` and `,` lists on the four other closed-set events (CLOSEDLIST-01)).** D-BG-302: `|` lists on StopFailure matchers only.
+- **P3-DC-02 (High, fixed by quick 261109-cpk (D-BG-302, extended by CLOSEDLIST-01)).** D-BG-302: `|` lists on StopFailure matchers only.
 - **P3-DC-03 (Medium, accepted).** D-BG-303: `last_assistant_message` left out when empty.
 - **P3-DC-04 (Medium, accepted).** D-BG-304: no new classifier rules.
 - **P3-DC-05 (Low, accepted).** Fire-and-forget not pinned.
@@ -267,8 +275,8 @@ Full text: `.planning/phases/03-stopfailure-hooks/DUBIOUS-CHOICES.md`.
 Full text: `.planning/phases/10-model-facing-tools/DUBIOUS-CHOICES.md`.
 
 - **P10-DC-01 (Medium, accepted).** The carried json-output D-03 choice closes as "return `isError: true`, never throw".
-- **P10-DC-02 (High, fix before the PR: the user chose a `[disabled]` tag with its own `disabled` filter).** A disabled plugin keeps the `[unavailable]` tag, and the `unavailable` filter now returns it.
-- **P10-DC-03 (Medium, fix before the PR: the list tool takes the picker's `{n} available • {m} installed` wording).** The list tool's `<N> plugin(s)` keeps counting installed plugins (D-09).
+- **P10-DC-02 (High, fixed by quick 261109-cpj (D-BG-1011)).** A disabled plugin keeps the `[unavailable]` tag, and the `unavailable` filter now returns it.
+- **P10-DC-03 (Medium, fixed by quick 261109-cpj (D-BG-1012)).** The list tool's `<N> plugin(s)` keeps counting installed plugins (D-09).
 - **P10-DC-04 (Low, accepted).** GSD's manager view resolves Phase 10 to an archived directory.
 - **P10-DC-05 (Medium, accepted).** `(no plugins)` for every block that keeps no rows.
 - **P10-DC-06 (Low, accepted).** "Each parameter form" read as 3-4 combined calls.
@@ -287,7 +295,7 @@ Full text: `.planning/phases/10-model-facing-tools/DUBIOUS-CHOICES.md`.
 - **P10-DC-19 (Low, accepted).** Sequential root pin simplified.
 - **P10-DC-20 (Low, accepted).** Empty-block copy.
 - **P10-DC-21 (Low, accepted).** Red proofs ran once.
-- **P10-DC-22 (Medium, fix before the PR: the list tool takes the picker's `{n} available • {m} installed` wording).** The list tool does not follow Phase 12's picker wording.
+- **P10-DC-22 (Medium, fixed by quick 261109-cpj (D-BG-1012)).** The list tool does not follow Phase 12's picker wording.
 - **P1-DC-48** (see the phase log).
 
 ## Phase 5: PostCompact Hooks
@@ -363,7 +371,7 @@ Full text: `.planning/phases/13-prune/DUBIOUS-CHOICES.md`.
 - **P13-DC-01 (Medium, accepted).** Criteria 2 and 3 met by scenarios the phase does not own.
 - **P13-DC-02 (Low, accepted).** Upstream's `autoremove` alias is not adopted.
 - **P13-DC-03 (Medium, accepted, divergence kept in PRUNEISLAND-01).** An island of dependencies that declare each other stays installed.
-- **P13-DC-04 (High, fix before the PR: the user asked to drop the declaration in the shared sweep (PRUNECFG-01)).** A pruned disabled dependency leaves `enabled: false` in `claude-plugins.json`.
+- **P13-DC-04 (High, fixed by quick 261109-cpl (D-BG-1310)).** A pruned disabled dependency leaves `enabled: false` in `claude-plugins.json`.
 - **P13-DC-05 (Low, accepted).** A separate orphan per scope.
 - **P13-DC-06 (Low, accepted).** The lock red proof edits a Phase 15 file locally.
 - **P13-DC-07 (Low, accepted).** The optional-peer cache was missing.
@@ -450,7 +458,7 @@ Full text: `.planning/phases/02-async-hooks/DUBIOUS-CHOICES.md`.
 - **P2-DC-01 (High, accepted).** ASYNC-02 reworded to upstream.
 - **P2-DC-02 (High, accepted).** An exit 2 wakes the model.
 - **P2-DC-03 (Medium, accepted).** Claude Code's default texts.
-- **P2-DC-04 (Medium, fix before the PR: the user asked to clear `stop_hook_active` when the woken turn ends).** A woken turn sets `stop_hook_active`.
+- **P2-DC-04 (Medium, fixed by quick 261109-cpn (D-BG-210)).** A woken turn sets `stop_hook_active`.
 - **P2-DC-05 (Medium, accepted).** Plain async context waits for the next prompt.
 - **P2-DC-06 (Medium, accepted).** Stop and StopFailure async hooks run in the background.
 - **P2-DC-07 (Medium, accepted, divergence kept in ASYNCPIDS-01).** Project reap scope.
@@ -472,6 +480,6 @@ Full text: `.planning/phases/02-async-hooks/DUBIOUS-CHOICES.md`.
 - **P2-DC-23 (Low, accepted).** Killed plain async hooks still answer.
 - **P2-DC-24 (Medium, accepted).** Reap tests with an impossible pid.
 - **P2-DC-25 (Low, accepted).** Docs table re-padded.
-- **P2-DC-26 (Medium, fix before the PR: the user asked to clear `stop_hook_active` when the send fails).** Woken-turn Stop flag survives a failed send.
+- **P2-DC-26 (Medium, fixed by quick 261109-cpn (D-BG-210)).** Woken-turn Stop flag survives a failed send.
 - **P2-DC-27 (Low, accepted).** Flaky unowned scenarios rerun.
 - **P2-DC-28 (Low, accepted).** Summary seed titles renamed.
