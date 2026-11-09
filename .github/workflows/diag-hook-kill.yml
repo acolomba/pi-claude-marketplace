@@ -1,0 +1,132 @@
+name: Diagnose hook kill (temporary)
+
+# Temporary diagnostic for the CI-only hook kill failures on PR #310. It is
+# removed before the fix lands.
+
+on:
+  push:
+    branches:
+      - features/behavioral-gaps
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: diagnose hook kill (Node 24)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Describe the shell and the tools
+        run: |
+          grep -E '^(PRETTY_NAME|VERSION_ID)=' /etc/os-release
+          ls -l /bin/sh
+          readlink -f /bin/sh
+          dpkg-query -W -f='${Package} ${Version}\n' dash bash coreutils rust-coreutils procps 2>/dev/null || true
+          readlink -f "$(command -v sleep)"
+          sleep --version 2>&1 | head -n 1 || true
+          ps -o pid,ppid,comm,args -p 1
+          node --version
+
+      - name: Probe how sh -c runs a script
+        run: |
+          probe="$RUNNER_TEMP/probe"
+          mkdir -p "$probe"
+          cat > "$probe/probe-hook.sh" <<'EOF'
+          #!/bin/sh
+          stdin=$(cat)
+          echo "script pid=$$ ppid=$PPID" >&2
+          sleep 30 </dev/null >/dev/null 2>&1
+          exit 0
+          EOF
+          chmod 755 "$probe/probe-hook.sh"
+          cat > "$probe/probe.mjs" <<'EOF'
+          import { execFileSync, spawn } from "node:child_process";
+          import { setTimeout as delay } from "node:timers/promises";
+
+          const root = process.argv[2];
+          const table = () =>
+            execFileSync("ps", ["-eo", "pid,ppid,stat,args"], { encoding: "utf8" })
+              .split("\n")
+              .filter((line) => line.includes("probe-hook.sh"))
+              .map((line) => `    ${line}`)
+              .join("\n");
+          for (const command of ["${PROBE_ROOT}/probe-hook.sh", `${root}/probe-hook.sh`]) {
+            const started = Date.now();
+            const child = spawn(command, [], {
+              shell: true,
+              stdio: ["pipe", "pipe", "pipe"],
+              env: { ...process.env, PROBE_ROOT: root },
+            });
+            let stderr = "";
+            child.stderr.on("data", (chunk) => {
+              stderr += chunk;
+            });
+            child.stdout.resume();
+            child.once("exit", (code, signal) => {
+              console.log(`  exit code=${code} signal=${signal} at ${Date.now() - started} ms`);
+            });
+            const closed = new Promise((resolve) => {
+              child.once("close", (code, signal) => {
+                resolve(`close code=${code} signal=${signal} at ${Date.now() - started} ms`);
+              });
+            });
+            child.stdin.end("{}");
+            await delay(1000);
+            console.log(`command: ${command}`);
+            console.log(`  child.pid=${child.pid}; ${stderr.trim()}`);
+            console.log(table());
+            child.kill("SIGTERM");
+            const timeout = delay(3000).then(() => "no close within 3 s of the SIGTERM");
+            console.log(`  ${await Promise.race([closed, timeout])}`);
+            console.log(table());
+            try {
+              execFileSync("pkill", ["-KILL", "-f", "probe-hook.sh"]);
+            } catch {
+              // nothing left to kill
+            }
+            await delay(500);
+          }
+          process.exit(0);
+          EOF
+          node "$probe/probe.mjs" "$probe"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run the two hook features with a process sampler
+        run: |
+          (
+            while :; do
+              echo "== $(date +%T.%N)"
+              ps -eo pid,ppid,pgid,stat,etimes,args | grep -E 'hooks/|hook-recorder|sleep [0-9]' | grep -v grep
+              sleep 0.5
+            done
+          ) > "$RUNNER_TEMP/ps.log" 2>&1 &
+          sampler=$!
+          status=0
+          npm run test:cucumber:profile -- --profile adapter features/hook/async.feature features/hook/session-end.feature || status=$?
+          kill "$sampler" || true
+          cp "$RUNNER_TEMP/ps.log" ps.log
+          exit "$status"
+
+      - name: Save the process samples
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hook-kill-ps-log
+          path: ps.log
+          if-no-files-found: warn
+          retention-days: 3
