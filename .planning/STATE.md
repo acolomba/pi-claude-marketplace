@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: mcp-builtin
 status: Awaiting next milestone
 stopped_at: "Milestone mcp-builtin archived, reviewed, and merged (PR #303)"
-last_updated: "2026-11-09T08:21:50.225Z"
+last_updated: "2026-11-09T14:18:04.158Z"
 last_activity: 2026-11-08
 last_activity_desc: "PR #303 merged; mcp-builtin review logs moved into the milestone archive"
-state_head: d495d39e66493f2343eadbab6487c6240fb561ea
+state_head: 4e964d6337e85c3709882cec82d5ca7ac0a5c242
 milestone_name: MCP Built-in
 progress:
   total_phases: 6
@@ -35,7 +35,7 @@ the PR for `claude/quirky-planck-hhm592` and the upstream branches on
 Phase: Milestone mcp-builtin complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-08 - Completed quick task 261108-og5: split the cloud environment setup from the per-session init
+Last activity: 2026-11-09 - Completed quick task 261109-jm6: move the init scripts to scripts/init
 
 
 ### mcp-4 closeout
@@ -206,6 +206,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261107-lth | Install codegraph as a devDependency instead of globally | 2026-11-07 | 55cf1393 | — | [261107-lth-codegraph-local-install](./quick/261107-lth-codegraph-local-install/) |
 | 261108-og5 | Split the cloud environment setup from the per-session init | 2026-11-08 | 57e5b7d | — | [261108-og5-split-cloud-environment-setup-from-per-s](./quick/261108-og5-split-cloud-environment-setup-from-per-s/) |
 | 25 | Run the cloud setup script with no guard; one environment per repository | 2026-11-09 | d495d39 | — | — |
+| 261109-jm6 | Move the init scripts to scripts/init and state each one's purpose | 2026-11-09 | 4e964d6 | — | [261109-jm6-move-the-init-scripts-to-scripts-init-an](./quick/261109-jm6-move-the-init-scripts-to-scripts-init-an/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
