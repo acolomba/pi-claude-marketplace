@@ -833,7 +833,7 @@ const versionCases = [
       manifestVersion: "1.0.0",
       installed: { version: "1.0.0", disabled: true },
     },
-    line: "  [unavailable] alpha  1.0.0",
+    line: "  [disabled] alpha  1.0.0",
     row: {
       status: "disabled",
       name: "alpha",
@@ -935,7 +935,7 @@ const versionCases = [
  * One plugin per bucket the list orchestrator can put in this tool's payload:
  * an installed record, an installable candidate, a structurally uninstallable
  * candidate, a cold git-source candidate, a partially available candidate, and
- * a disabled record, which the tool lists under `unavailable` (D-BG-1004).
+ * a disabled record, which the tool lists under `disabled` (D-BG-1011).
  *
  * The last two carry the CR-01 weight. The orchestrator gates them behind its
  * own `remote` and `partial` filters, and the tool declares neither parameter,
@@ -1014,7 +1014,7 @@ const AVAILABLE_LINE = "  [available] bravo  2.0.0";
 const UNAVAILABLE_LINE = "  [unavailable] charlie  3.0.0  (source missing)";
 const REMOTE_LINE = "  [available] delta  4.0.0";
 const PARTIALLY_AVAILABLE_LINE = "  [unavailable] echo  5.0.0  (lsp)";
-const DISABLED_LINE = "  [unavailable] foxtrot  6.0.0";
+const DISABLED_LINE = "  [disabled] foxtrot  6.0.0";
 
 interface FilterCase {
   readonly title: string;
@@ -1022,6 +1022,7 @@ interface FilterCase {
     readonly installed?: boolean;
     readonly available?: boolean;
     readonly unavailable?: boolean;
+    readonly disabled?: boolean;
   };
   readonly lines: readonly string[];
   readonly rows: readonly ExpectedPluginRow[];
@@ -1064,18 +1065,29 @@ const filterCases = [
   },
   {
     // CR-01: the partially available row rides the `unavailable` parameter, on
-    // the same rule. The disabled record rides it too, because the tool
-    // projects it onto that bucket (D-BG-1004, D-54-01).
+    // the same rule. A disabled record has its own bucket (D-BG-1011).
     title: "narrows to the unavailable bucket when only unavailable is set",
     params: { unavailable: true },
-    lines: [UNAVAILABLE_LINE, PARTIALLY_AVAILABLE_LINE, DISABLED_LINE],
-    rows: [unavailableRow, partiallyAvailableRow, disabledRow],
+    lines: [UNAVAILABLE_LINE, PARTIALLY_AVAILABLE_LINE],
+    rows: [unavailableRow, partiallyAvailableRow],
+  },
+  {
+    title: "narrows to the disabled bucket when only disabled is set",
+    params: { disabled: true },
+    lines: [DISABLED_LINE],
+    rows: [disabledRow],
   },
   {
     title: "unions the available and unavailable buckets when both are set",
     params: { available: true, unavailable: true },
-    lines: [AVAILABLE_LINE, UNAVAILABLE_LINE, REMOTE_LINE, PARTIALLY_AVAILABLE_LINE, DISABLED_LINE],
-    rows: [availableRow, unavailableRow, remoteRow, partiallyAvailableRow, disabledRow],
+    lines: [AVAILABLE_LINE, UNAVAILABLE_LINE, REMOTE_LINE, PARTIALLY_AVAILABLE_LINE],
+    rows: [availableRow, unavailableRow, remoteRow, partiallyAvailableRow],
+  },
+  {
+    title: "unions the unavailable and disabled buckets when both are set",
+    params: { unavailable: true, disabled: true },
+    lines: [UNAVAILABLE_LINE, PARTIALLY_AVAILABLE_LINE, DISABLED_LINE],
+    rows: [unavailableRow, partiallyAvailableRow, disabledRow],
   },
 ] as const satisfies readonly FilterCase[];
 
@@ -1143,7 +1155,11 @@ describe("registerListPluginsTool", () => {
           unavailable: {
             type: "boolean",
             description:
-              "Include manifest-declared plugins that are not installable on this system, and installed plugins that are disabled.",
+              "Include manifest-declared plugins that are not installable on this system.",
+          },
+          disabled: {
+            type: "boolean",
+            description: "Include installed plugins that are disabled.",
           },
         },
       },
@@ -1374,7 +1390,7 @@ describe("registerListPluginsTool", () => {
       content: [
         {
           type: "text",
-          text: "Marketplace absent-disabled-mp (project)\n  [unavailable] alpha  1.0.0  (not in manifest)",
+          text: "Marketplace absent-disabled-mp (project)\n  [disabled] alpha  1.0.0  (not in manifest)",
         },
       ],
       details: {
@@ -1526,8 +1542,8 @@ describe("registerListPluginsTool", () => {
     // payload loader returned none or the tool's bucket filter dropped them.
     // A disabled record under the `installed` filter is a row that reaches the
     // tool's filter and is dropped there: the payload loader files it as
-    // installed inventory, and the tool projects it onto the `unavailable`
-    // bucket.
+    // installed inventory, and the tool files it under the `disabled` bucket
+    // (D-BG-1011).
     const scope = await createHermeticScope(t, "filtered-empty");
     await seedScope(scope.cwd, "project", [
       {

@@ -12,8 +12,8 @@
 //      `/claude:plugin marketplace list` emits (LLMT-01).
 //
 //   2. pi_claude_marketplace_plugin_list -- D-02 extended params: optional
-//      marketplace + scope + installed/available/unavailable filter booleans
-//      (PL-1 union semantics). Returns rendered text + structured
+//      marketplace + scope + installed/available/unavailable/disabled filter
+//      booleans (PL-1 union semantics, D-BG-1011). Returns rendered text + structured
 //      `details.marketplaces`, the wire marketplace blocks of the JSON strategy.
 //
 // BLOCK C: this file imports only from domain/ (source.ts), orchestrators/,
@@ -35,7 +35,8 @@
 // disabled ones included, and its available count is the number of entries
 // in the marketplace's catalog (D-BG-1012, D-BG-1201).
 //
-// The plugin tool's content lines keep the three-bucket projection: the
+// The plugin tool's content lines keep the four-tag projection (D-BG-1011):
+// `[installed]`, `[disabled]`, `[available]`, and `[unavailable]`. The
 // `(upgradable)` plugin variant shows as `[installed]` there (the plugin IS
 // installed; the upgrade status is for the slash-command surface per
 // MSG-PL-4). Its details carry each row's verbatim status (LLMT-01).
@@ -104,9 +105,11 @@ const LIST_PLUGINS_PARAMS = Type.Object({
   ),
   unavailable: Type.Optional(
     Type.Boolean({
-      description:
-        "Include manifest-declared plugins that are not installable on this system, and installed plugins that are disabled.",
+      description: "Include manifest-declared plugins that are not installable on this system.",
     }),
+  ),
+  disabled: Type.Optional(
+    Type.Boolean({ description: "Include installed plugins that are disabled." }),
   ),
 });
 
@@ -232,13 +235,14 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
  * The flat-line projection of a single plugin row for the LLM-tool surface.
  * The slash-command surface uses the catalog form via the renderer; the
  * tool surface keeps a stable, machine-friendly line shape so the agent
- * can pattern-match on `[installed]` / `[available]` / `[unavailable]`.
+ * can pattern-match on `[installed]` / `[disabled]` / `[available]` /
+ * `[unavailable]` (D-BG-1011).
  *
  * The `(upgradable)` status maps to `[installed]` in this projection (the
  * plugin IS installed; the upgrade status is internal to the slash-command
  * surface per MSG-PL-4).
  */
-type ToolPluginStatus = "installed" | "available" | "unavailable";
+type ToolPluginStatus = "installed" | "disabled" | "available" | "unavailable";
 
 interface PluginRow {
   name: string;
@@ -247,7 +251,7 @@ interface PluginRow {
   reasons?: readonly string[];
 }
 
-/** Projects the producer's nine list-row variants into the tool's three buckets. */
+/** Projects the producer's nine list-row variants into the tool's four tags (D-BG-1011). */
 function projectRowStatus(status: ToolPluginRow["status"]): ToolPluginStatus {
   switch (status) {
     // The list orchestrator emits the steady-state inventory row as
@@ -274,13 +278,13 @@ function projectRowStatus(status: ToolPluginRow["status"]): ToolPluginStatus {
     case "partially-available":
       // USTAT-02 / D-64-01: a not-installed, partially-available plugin projects
       // onto the coarse `unavailable` tool bucket -- the LLM-tool surface has no
-      // distinct `partially-available` bucket (mirrors `disabled` -> `unavailable`).
+      // distinct `partially-available` bucket.
       return "unavailable";
     case "disabled":
-      // D-54-01 / ENBL-04: a disabled plugin is recorded but its artifacts
-      // are not materialized -- the LLM-tool projection treats it as not
-      // currently usable, mirroring `unavailable`.
-      return "unavailable";
+      // D-BG-1011 / ENBL-04: a disabled plugin is installed but not loaded. It
+      // reads `[disabled]`, as in the browse picker, and only the `disabled`
+      // filter selects it.
+      return "disabled";
   }
 }
 
@@ -288,6 +292,8 @@ function statusLabel(status: ToolPluginStatus): string {
   switch (status) {
     case "installed":
       return "[installed]";
+    case "disabled":
+      return "[disabled]";
     case "available":
       return "[available]";
     case "unavailable":
@@ -322,6 +328,7 @@ function renderPluginRow(row: PluginRow): string {
  */
 interface ToolFilterBuckets {
   readonly i: boolean;
+  readonly d: boolean;
   readonly a: boolean;
   readonly u: boolean;
   readonly narrowed: boolean;
@@ -331,25 +338,32 @@ function applyFilter(params: {
   installed?: boolean;
   available?: boolean;
   unavailable?: boolean;
+  disabled?: boolean;
 }): ToolFilterBuckets {
   const anyFilter =
-    params.installed === true || params.available === true || params.unavailable === true;
+    params.installed === true ||
+    params.available === true ||
+    params.unavailable === true ||
+    params.disabled === true;
   if (!anyFilter) {
-    return { i: true, a: true, u: true, narrowed: false };
+    return { i: true, d: true, a: true, u: true, narrowed: false };
   }
 
   return {
     i: params.installed === true,
+    d: params.disabled === true,
     a: params.available === true,
     u: params.unavailable === true,
     narrowed: true,
   };
 }
 
-function statusKey(status: ToolPluginStatus): "i" | "a" | "u" {
+function statusKey(status: ToolPluginStatus): "i" | "d" | "a" | "u" {
   switch (status) {
     case "installed":
       return "i";
+    case "disabled":
+      return "d";
     case "available":
       return "a";
     case "unavailable":
@@ -397,13 +411,12 @@ async function loadToolPluginPayload(
     // `projectRowStatus` performs on the way back. Sending an all-true bag
     // instead of nothing would make `filtersPassive` false and strand both
     // fine-grained buckets, which have no tool parameter to turn them on.
-    // The `unavailable` bucket also holds the installed plugins that are
-    // disabled (D-BG-1004, D-54-01), which the payload loader files under its
-    // installed inventory, so that bucket forwards `installed: true` as well;
-    // the bucket filter in `renderPluginPayload` then drops the enabled
-    // installed rows the call did not ask for.
+    // Disabled rows come with the payload loader's installed inventory, so
+    // the `installed` and `disabled` buckets both ask for installed rows, and
+    // `renderPluginPayload` keeps only the tags the call asked for
+    // (D-BG-1011).
     ...(buckets.narrowed && {
-      ...((buckets.i || buckets.u) && { installed: true }),
+      ...((buckets.i || buckets.d) && { installed: true }),
       ...(buckets.a && { available: true, remote: true }),
       ...(buckets.u && { unavailable: true, partial: true }),
     }),
@@ -470,7 +483,7 @@ type ToolPluginBlock = Awaited<ReturnType<typeof loadPluginListPayload>>[number]
  */
 function renderPluginPayload(
   payload: Awaited<ReturnType<typeof loadPluginListPayload>>,
-  buckets: { i: boolean; a: boolean; u: boolean },
+  buckets: { i: boolean; d: boolean; a: boolean; u: boolean },
 ): { lines: string[]; marketplaces: ToolPluginBlock[] } {
   const lines: string[] = [];
   const marketplaces: ToolPluginBlock[] = [];
