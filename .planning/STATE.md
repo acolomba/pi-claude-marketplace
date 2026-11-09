@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: behavioral-gaps
-milestone_name: Behavioral Coverage Gaps
 status: Awaiting next milestone
 stopped_at: Milestone behavioral-gaps completed and archived (override_closeout)
-last_updated: "2026-11-09T02:48:37.424Z"
+last_updated: "2026-11-09T19:20:40.614Z"
 last_activity: 2026-11-09
 last_activity_desc: Quick batch 261109-cpi fixed the reviewed dubious choices
-state_head: f2c24525be39370e75e28867def5564bafdd2318
+state_head: 6be7cb0cd7ed380c539420503ed8a01edda563d4
 progress:
   total_phases: 16
   completed_phases: 16
   total_plans: 36
   completed_plans: 36
   percent: 100
+milestone_name: Behavioral Coverage Gaps
 current_phase: null
 current_phase_name: null
 ---
@@ -216,6 +216,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261108-og5 | Split the cloud environment setup from the per-session init | 2026-11-08 | 57e5b7d | — | [261108-og5-split-cloud-environment-setup-from-per-s](./quick/261108-og5-split-cloud-environment-setup-from-per-s/) |
 | 25 | Run the cloud setup script with no guard; one environment per repository | 2026-11-09 | d495d39 | — | — |
 | 261109-jm6 | Move the init scripts to scripts/init and state each one's purpose | 2026-11-09 | 4e964d6 | — | [261109-jm6-move-the-init-scripts-to-scripts-init-an](./quick/261109-jm6-move-the-init-scripts-to-scripts-init-an/) |
+| 34 | Run one cucumber worker per available CPU, at most 8 (CI timeouts on PR #310) | 2026-11-09 | 6be7cb0c | — | — |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
