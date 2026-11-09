@@ -6,7 +6,9 @@
 - All 16 phases are complete, verified, and merged. Each merge applied its parent lines: Key Decisions rows, BACKLOG entries, frozen-file seed titles, and docs. The root `.planning/DUBIOUS-CHOICES.md` holds every phase's entries plus the session-level ones S-01 to S-05.
 - The CHANGELOG lines of each phase are collected, not yet written, in `/tmp/claude-1000/-home-acolomba-pi-claude-marketplace/45e74ef7-b24a-4893-854b-b4c04365a440/scratchpad/changelog-lines.md`. That scratchpad may be gone in a new session; the same lines are in each phase's last SUMMARY.md under "Parent lines".
 
-## Open blocker: parallel adapter-profile flakes
+## Resolved blocker: parallel adapter-profile flakes
+
+**Resolved 2026-11-08 by `d04a5106`.** The cause was scenario order, not load. Pi 1.5.0 keeps each directory's trust decision in memory for the life of the process (`projectTrustByCwd`). `features/mcp-server/legacy-move.feature:206` made the worker's shared Pi decide that the project is untrusted, and every later trust-gated scenario in that worker failed. `Before()` now replaces a shared Pi after it decides project trust. Session record: `.planning/debug/resolved/adapter-profile-parallel-flakes.md`. Follow-up questions: AMIGTRUST-01 and WORKERHOMEDIR-01 in BACKLOG. The original notes follow.
 
 The final `npm run check` passes every part except the cucumber adapter profile, which fails 10 to 18 of about 1,770 scenarios per run, a different set each run, at low load (load average about 8). Every failure passes when rerun alone or in a small group. The failures are new-session loads (no SessionStart hook run, no skill offered), autoupdate in a new session, autoapply, and `--local` or dependency commands. Builtin (152/152), direct coverage, and `test:modules` pass.
 
