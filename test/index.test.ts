@@ -44,7 +44,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1128,7 +1128,7 @@ for (const mode of ["json", "rpc"]) {
       const userState = await seedUnreadableStateAt(
         path.join(scope.agentDir, "pi-claude-marketplace"),
       );
-      const promptPath = await seedPrompt(scope.cwd, "kept.md");
+      await seedPrompt(scope.cwd, "withheld.md");
       const capture = createJsonCapture();
       const loaded = await loadExtension(
         0,
@@ -1164,7 +1164,7 @@ for (const mode of ["json", "rpc"]) {
       ]);
 
       // assert
-      assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [promptPath] });
+      assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
       assert.deepStrictEqual(
         [process.env.PATH, process.env.PI_CLAUDE_MARKETPLACE_PATH],
         ["/usr/bin", ""],
@@ -1913,11 +1913,23 @@ test(
     );
     process.env.PATH = "/usr/bin";
     Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
-    const invalidProjectCwd = `${scope.cwd}\0`;
+    // A skills directory that links to itself fails its read with ELOOP, a
+    // hard discovery failure, while that project's missing record reads as
+    // the default state.
+    const loopingProjectCwd = path.join(scope.cwd, "looping-project");
+    const loopingSkillsDir = path.join(
+      loopingProjectCwd,
+      ".pi",
+      "pi-claude-marketplace",
+      "resources",
+      "skills",
+    );
+    await mkdir(path.dirname(loopingSkillsDir), { recursive: true });
+    await symlink(loopingSkillsDir, loopingSkillsDir, "dir");
     const replacement = eventReplacingCwdRead(
       discoverEvent(scope.cwd),
       CWD_READS_PER_DISCOVER,
-      invalidProjectCwd,
+      loopingProjectCwd,
     );
     const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
     const configPath = path.join(scope.cwd, ".pi", "claude-plugins.json");
