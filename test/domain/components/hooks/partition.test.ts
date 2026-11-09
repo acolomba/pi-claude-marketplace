@@ -204,27 +204,36 @@ describe("partitionHooks", () => {
     });
   });
 
-  for (const { matcher, kept } of [
-    { matcher: "rate_limit|overloaded", kept: true },
-    { matcher: "network_error|rate_limit", kept: true },
-    { matcher: "|rate_limit|", kept: true },
-    { matcher: "network_error|timeout", kept: false },
-    { matcher: "rate_limit|server-error", kept: false },
-    { matcher: "rate_limit,overloaded", kept: false },
-    { matcher: "|", kept: false },
-    { matcher: "Rate_Limit", kept: false },
+  for (const { event, matcher, kept } of [
+    { event: "StopFailure", matcher: "rate_limit|overloaded", kept: true },
+    { event: "StopFailure", matcher: "network_error|rate_limit", kept: true },
+    { event: "StopFailure", matcher: "|rate_limit|", kept: true },
+    { event: "StopFailure", matcher: "network_error|timeout", kept: false },
+    { event: "StopFailure", matcher: "rate_limit|server-error", kept: false },
+    { event: "StopFailure", matcher: "rate_limit,overloaded", kept: false },
+    { event: "StopFailure", matcher: "|", kept: false },
+    { event: "StopFailure", matcher: "Rate_Limit", kept: false },
+    { event: "SessionStart", matcher: "reload, clear", kept: true },
+    { event: "SessionEnd", matcher: "quit|clear", kept: true },
+    { event: "PreCompact", matcher: "auto, manual", kept: true },
+    { event: "PostCompact", matcher: " manual ", kept: true },
+    { event: "SessionStart", matcher: "reload|quit", kept: false },
+    { event: "SessionEnd", matcher: "Clear, Resume", kept: false },
+    { event: "PreCompact", matcher: "threshold, overflow", kept: false },
+    { event: "PostCompact", matcher: "manual.*", kept: false },
+    { event: "PostCompact", matcher: ", |", kept: false },
   ] as const) {
     const group = { matcher, hooks: [{ type: "command", command: "observe" }] };
     const expected = kept
-      ? { supported: { StopFailure: [group] }, dropped: [] }
+      ? { supported: { [event]: [group] }, dropped: [] }
       : {
           supported: {},
-          dropped: [{ kind: "group", event: "StopFailure", matcher, cond: "closed-set" }],
+          dropped: [{ kind: "group", event, matcher, cond: "closed-set" }],
         };
 
-    test(`partitions the StopFailure list matcher ${JSON.stringify(matcher)} as ${kept ? "kept" : "dropped"} (D-BG-302)`, () => {
+    test(`partitions the ${event} list matcher ${JSON.stringify(matcher)} as ${kept ? "kept" : "dropped"} (D-BG-302, CLOSEDLIST-01)`, () => {
       // arrange
-      const config = { StopFailure: [group] };
+      const config = { [event]: [group] };
 
       // act
       const partition = partitionHooks(config);

@@ -20,7 +20,6 @@
 // `resetSettleState` clears the cache cell in `registerHooksBridge` for the
 // same reason.
 
-import { stopFailureMatcherTypes } from "../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyHookNotice, notifyStopHookOverrideCap } from "../../shared/notification-dispatch.ts";
@@ -418,17 +417,15 @@ async function runStopFailure(
   //
   // SFAIL-03: the parse-time gate admits match-all (`""` / `"*"`), an exact
   // member of the closed error-type vocabulary, or a `|` list with at least
-  // one member (D-BG-302), so a hook fires on the shared closed-set predicate
-  // or when the classified error is one of the types its list names.
+  // one member (D-BG-302), and the shared closed-set predicate reads that `|`
+  // list, so a hook fires when the classified error is one of its types.
   const outcomes = await collectBucketOutcomes(
     runtime,
     bucket,
     event,
     ctx,
     pi,
-    (entry) =>
-      matcherFiresOnClosedSetValue(entry, classifiedError) ||
-      stopFailureMatcherTypes(entry.rawMatcher).includes(classifiedError),
+    (entry) => matcherFiresOnClosedSetValue(entry, classifiedError),
     executor,
   );
 

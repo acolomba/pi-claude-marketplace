@@ -503,17 +503,36 @@ describe("compositeHandlerFor", () => {
 });
 
 describe("matcherFiresOnClosedSetValue", () => {
-  for (const { rawMatcher, value, expected } of [
-    { rawMatcher: "", value: "startup", expected: true },
-    { rawMatcher: "*", value: "reload", expected: true },
-    { rawMatcher: "resume", value: "resume", expected: true },
-    { rawMatcher: "fork", value: "startup", expected: false },
+  for (const { claudeEvent, rawMatcher, value, expected } of [
+    { claudeEvent: "SessionStart", rawMatcher: "", value: "startup", expected: true },
+    { claudeEvent: "SessionStart", rawMatcher: "*", value: "reload", expected: true },
+    { claudeEvent: "SessionStart", rawMatcher: "resume", value: "resume", expected: true },
+    { claudeEvent: "SessionStart", rawMatcher: "fork", value: "startup", expected: false },
+    { claudeEvent: "SessionStart", rawMatcher: "reload, clear", value: "clear", expected: true },
+    { claudeEvent: "SessionStart", rawMatcher: "resume|fork", value: "clear", expected: false },
+    { claudeEvent: "SessionEnd", rawMatcher: "quit|clear", value: "clear", expected: true },
+    { claudeEvent: "SessionEnd", rawMatcher: "Clear, Resume", value: "clear", expected: false },
+    { claudeEvent: "PreCompact", rawMatcher: "auto, manual", value: "manual", expected: true },
+    { claudeEvent: "PostCompact", rawMatcher: " manual ", value: "manual", expected: true },
+    { claudeEvent: "PostCompact", rawMatcher: "manual.*", value: "manual", expected: false },
+    {
+      claudeEvent: "StopFailure",
+      rawMatcher: "rate_limit|overloaded",
+      value: "overloaded",
+      expected: true,
+    },
+    {
+      claudeEvent: "StopFailure",
+      rawMatcher: "rate_limit, overloaded",
+      value: "overloaded",
+      expected: false,
+    },
   ] as const) {
-    test(`reports ${String(expected)} for raw matcher ${JSON.stringify(rawMatcher)}`, () => {
+    test(`reports ${String(expected)} for the ${claudeEvent} raw matcher ${JSON.stringify(rawMatcher)} and value ${JSON.stringify(value)}`, () => {
       // arrange
       const entry = createRoutingEntry({
         pluginId: `closed-${rawMatcher || "empty"}`,
-        claudeEvent: "SessionStart",
+        claudeEvent,
         rawMatcher,
         declarationIndex: 0,
       });

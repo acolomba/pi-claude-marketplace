@@ -52,6 +52,7 @@
 // tables (DISP-03 zombie-defense belt-and-suspenders), and a run whose
 // generation changed while its hooks ran folds to noop.
 
+import { closedSetMatcherValues } from "../../domain/components/hook-events.ts";
 import {
   claudeFormToolName,
   MCP_TOOL_PREFIX,
@@ -167,16 +168,19 @@ function matcherFiresOnToolEvent(matcher: ParsedMatcher, tool: McpToolIdentity):
 
 /**
  * Closed-set matcher-fires predicate shared by the session and compaction
- * composite paths and the settle-time StopFailure path. The parser admits
- * only match-all (`""` / `"*"`) and exact members of the per-event closed
- * set at parse time, so dispatch-time filtering is literal equality against
- * the event's Claude-side value (the mapped SessionStart `source` and
- * SessionEnd `reason`, D-CF5-01 / D-CF5-02; the PreCompact and PostCompact
- * `trigger`, D-CF5-04; the classified StopFailure error type).
+ * composite paths and the settle-time StopFailure path. The parser keeps only
+ * match-all (`""` / `"*"`) and lists with a member of the event's closed set
+ * (D-BG-302, CLOSEDLIST-01), so a hook fires when the event's Claude-side
+ * value is one of its listed values, exactly and case-sensitively (the mapped
+ * SessionStart `source` and SessionEnd `reason`, D-CF5-01 / D-CF5-02; the
+ * PreCompact and PostCompact `trigger`, D-CF5-04; the classified StopFailure
+ * error type).
  */
 export function matcherFiresOnClosedSetValue(entry: RoutingEntry, value: string): boolean {
   const raw = entry.rawMatcher;
-  return raw === "" || raw === "*" || raw === value;
+  return (
+    raw === "" || raw === "*" || closedSetMatcherValues(entry.claudeEvent, raw).includes(value)
+  );
 }
 
 // ──────────────────────────────────────────────────────────────────────────
