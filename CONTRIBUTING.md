@@ -22,7 +22,7 @@ Prerequisites:
 Run this command to set up development tools and dependencies in a fresh clone or worktree.
 
 ```bash
-./scripts/init.sh
+./scripts/init/init.sh
 ```
 
 It installs the npm dependencies, including the pinned Pi version, and these tools:
@@ -31,13 +31,18 @@ It installs the npm dependencies, including the pinned Pi version, and these too
 - [gsd-core](https://github.com/open-gsd/gsd-core)
 - [codegraph](https://github.com/colbymchenry/codegraph)
 
+The script has two stages, and you can run each one alone:
+
+- `scripts/init/init.sh --tools` installs the agent tooling: the third-party skills, gsd-core, and the fallow skills. This tooling does not depend on the checked-out code.
+- `scripts/init/init.sh --deps` installs what depends on the checked-out code: the git hooks, the npm dependencies, and the codegraph index.
+
 ### Claude Code cloud sessions
 
-Set the setup script of the cloud environment to:
+Create a cloud environment for this repository only, and do not use it for sessions with other repositories. Set its setup script to:
 
 ```bash
 #!/bin/bash
-/home/user/pi-claude-marketplace/scripts/init.sh
+pi-claude-marketplace/scripts/init/cloud-env-setup.sh
 ```
 
 ## Running Pi against the checkout

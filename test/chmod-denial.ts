@@ -3,7 +3,7 @@
 // its default capabilities, CAP_DAC_OVERRIDE and CAP_DAC_READ_SEARCH. It
 // denies every other user. It also denies a uid 0 whose bounding set dropped
 // both capabilities, which is how the Claude Code cloud VM runs Node
-// (scripts/cloud-env.sh). So the suites probe the condition, not the uid.
+// (scripts/init/cloud-env.sh). So the suites probe the condition, not the uid.
 
 import { chmod, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,7 +11,7 @@ import path from "node:path";
 
 /** The remedy a guard names when a mode does not deny this process. */
 export const CHMOD_DENIAL_HINT =
-  "Run this suite as a non-root user, or run node through the wrapper that scripts/cloud-env.sh writes on a Claude Code cloud VM.";
+  "Run this suite as a non-root user, or run node through the wrapper that scripts/init/cloud-env.sh writes on a Claude Code cloud VM.";
 
 let cached: Promise<boolean> | undefined;
 
