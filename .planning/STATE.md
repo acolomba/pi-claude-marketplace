@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: mcp-builtin
 status: Awaiting next milestone
 stopped_at: "Milestone mcp-builtin archived, reviewed, and merged (PR #303)"
-last_updated: "2026-11-08T19:11:29.911Z"
-last_activity: 2026-11-07
+last_updated: "2026-11-09T08:21:50.225Z"
+last_activity: 2026-11-08
 last_activity_desc: "PR #303 merged; mcp-builtin review logs moved into the milestone archive"
-state_head: 917724c8181c8b90bddd51c576915560f1c54f6d
+state_head: d495d39e66493f2343eadbab6487c6240fb561ea
 milestone_name: MCP Built-in
 progress:
   total_phases: 6
@@ -205,6 +205,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261107-36g | Name the unsupported kinds in the not-installable message (NOTINSTALLMSG-01) | 2026-11-07 | 93168c0 | — | [261107-36g-fix-notinstallmsg-01-name-the-unsupporte](./quick/261107-36g-fix-notinstallmsg-01-name-the-unsupporte/) |
 | 261107-lth | Install codegraph as a devDependency instead of globally | 2026-11-07 | 55cf1393 | — | [261107-lth-codegraph-local-install](./quick/261107-lth-codegraph-local-install/) |
 | 261108-og5 | Split the cloud environment setup from the per-session init | 2026-11-08 | 57e5b7d | — | [261108-og5-split-cloud-environment-setup-from-per-s](./quick/261108-og5-split-cloud-environment-setup-from-per-s/) |
+| 25 | Run the cloud setup script with no guard; one environment per repository | 2026-11-09 | d495d39 | — | — |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 

@@ -38,16 +38,14 @@ The script has two stages, and you can run each one alone:
 
 ### Claude Code cloud sessions
 
-Set the setup script of the cloud environment to:
+Create a cloud environment for this repository only, and do not use it for sessions with other repositories. Set its setup script to:
 
 ```bash
 #!/bin/bash
-if [ -x pi-claude-marketplace/scripts/cloud-env-setup.sh ]; then
-    pi-claude-marketplace/scripts/cloud-env-setup.sh || echo "cloud-env-setup.sh failed" >&2
-fi
+pi-claude-marketplace/scripts/cloud-env-setup.sh
 ```
 
-The setup script runs before Claude Code starts. `scripts/cloud-env-setup.sh` installs Node 24, a `node` wrapper that makes root obey file modes, and pre-commit. Then it runs `scripts/init.sh --tools`. Claude Code reads agents and skills only when it starts, so the agent tooling must be in place before then. A failed setup only prints a message, because a setup script that fails stops the session from starting.
+The setup script runs in the directory above the checkout, before Claude Code starts. `scripts/cloud-env-setup.sh` installs Node 24, a `node` wrapper that makes root obey file modes, and pre-commit. Then it runs `scripts/init.sh --tools`. Claude Code reads agents and skills only when it starts, so the agent tooling must be in place before then. If the setup fails, the session still starts and shows a notice that the setup script failed.
 
 The cloud environment saves the result of its setup and starts later sessions from that copy. So the setup does not install the npm dependencies or build the codegraph index: they depend on the branch. At every session start, the SessionStart hook (`scripts/init-session.sh`) runs `scripts/init.sh --deps`. The codegraph index builds in the background and takes about three minutes in a new checkout.
 
