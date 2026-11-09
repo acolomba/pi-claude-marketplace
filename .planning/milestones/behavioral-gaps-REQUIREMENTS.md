@@ -1,3 +1,12 @@
+# Requirements Archive: behavioral-gaps Behavioral Coverage Gaps
+
+**Archived:** 2026-11-08
+**Status:** SHIPPED
+
+For current requirements, see `.planning/REQUIREMENTS.md`.
+
+---
+
 # Requirements: pi-claude-marketplace -- behavioral-gaps
 
 **Defined:** 2026-11-07

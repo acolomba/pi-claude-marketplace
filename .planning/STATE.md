@@ -2,41 +2,39 @@
 gsd_state_version: "1.0"
 milestone: behavioral-gaps
 milestone_name: Behavioral Coverage Gaps
-current_phase: 2
-current_phase_name: Async Hooks
-status: executing
-stopped_at: Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
-last_updated: "2026-11-08T15:58:40.736Z"
+status: Awaiting next milestone
+stopped_at: Milestone behavioral-gaps completed and archived (override_closeout)
+last_updated: "2026-11-09T02:48:37.424Z"
 last_activity: 2026-11-08
-last_activity_desc: Merged Phase 2 (Async Hooks)
-state_head: 57105b09760ddf47ef3ae2d4a8c960b357f2b872
+last_activity_desc: Milestone behavioral-gaps completed and archived
+state_head: f2c24525be39370e75e28867def5564bafdd2318
 progress:
   total_phases: 16
   completed_phases: 16
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 36
+  completed_plans: 36
   percent: 100
+current_phase: null
+current_phase_name: null
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-07 when the behavioral-gaps milestone started)
+See: `.planning/PROJECT.md` (updated 2026-11-08 when the behavioral-gaps milestone closed)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** stream Phases 2-16 in child sessions; the parent merges each finished branch
+**Current focus:** Planning the next milestone; behavioral-gaps awaits the user's review of its dubious choices and a PR
 
 ## Current Position
 
-Phase: 2-16 — stream phases, one child session each
-Plan: per phase, in its own branch
-Status: Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged into features/behavioral-gaps
-Last activity: 2026-11-08 — merged Phase 2 (Async Hooks)
-
-Progress: [██████████] 100%
+Phase: Milestone behavioral-gaps complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-08 — Milestone behavioral-gaps completed and archived
 
 
 ### mcp-4 closeout
@@ -134,6 +132,9 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| verification_override | Phase 01 (foundation): verification `stale`; the flake fix `d04a5106` changed `features/lib/pi-process.ts` and `layout.md` after it; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
+| verification_override | Phase 04 (PostToolUseFailure hooks): verification `stale`; later hooks phases changed `bridges/hooks/dispatch.ts`, its tests, and `docs/hooks-compatibility.md`; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
+| verification_override | Phase 06 (SessionEnd hooks): verification `stale`; later hooks phases changed `bridges/hooks/timeout.ts` and `docs/hooks-compatibility.md`; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
 | verification_override | Phase 02 (built-in materialization): `human_needed`, 5/7 must-haves at the combined-tree re-verification (c7a0358); the milestone closed with an override, MS-06 | resolved 2026-11-06 — re-verified `passed` 7/7 after the review fixes | 2026-11-05 | mcp-builtin |
 | uat_gaps       | 02/02-UAT.md: 2 pending manual scenarios (BLT-04 "reported, never silent" as `info` plus `/mcp`; `/reload` and `/new` in a real Pi with built-in MCP), P2-DC-100 | resolved 2026-11-06 — 02-UAT 2/2 passed (283db43) | 2026-11-05 | mcp-builtin |
 | todos          | 2026-10-13-cucumber-rules-trial.md: try the cucumber rules on another repository (§3; reviewed in Phase 10 and not folded) | acknowledged — still pending | 2026-10-21 | marketplace-features |
@@ -288,13 +289,11 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-
-- Squash-merge PR #303 (version 0.23.0) when the user says so, then record
-  the merge date and squash SHA in ROADMAP.md, MILESTONES.md, PROJECT.md and
-  RETROSPECTIVE.md, and tag `v0.23.0` to publish.
-- Decide BACKLOG GRANTFORMGAP-01 (an agent whose other grant form maps to
-  nothing keeps stale grants after a switch).
-- Then start the next milestone with the `new-gsd-milestone` skill.
+- Review the High entries of `.planning/DUBIOUS-CHOICES.md` and the pending D-BG decision rows in PROJECT.md
+- Run the CI timing check of the three behavioral legs against the 15-minute job timeouts (D-CF1-16)
+- Offer the version bump, then open the PR for `features/behavioral-gaps`
+- Remove the 15 phase worktrees `~/src/pi-claude-marketplace-behavioral-gaps-phase-N` and their branches
+- Start the next milestone with /gsd-new-milestone
 
 
 ## Performance Metrics

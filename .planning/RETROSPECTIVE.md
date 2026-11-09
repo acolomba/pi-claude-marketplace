@@ -2,6 +2,46 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: behavioral-gaps -- Behavioral Coverage Gaps
+
+**Completed:** 2026-11-08 on `features/behavioral-gaps` (not yet pushed, no PR or npm release yet)
+**Phases:** 16 | **Plans:** 36 | **Tasks:** 34 | **Requirements:** 34/34 | **Audit:** `tech_debt`, no blockers (integration 11/11, flows 16/16); phases 1, 4, and 6 closed with a stale-verification override
+
+### What Was Built
+
+- A frozen foundation harness: an async-hook recorder, loopback GitHub Device Flow and git stand-ins, earlier-release `state.json` and `mcp.json` fixture writers, a scripted model that calls the marketplace tools and ends turns in chosen errors, a terminal picker driver, and a background-child Pi.
+- Scenarios for async and `asyncRewake` hooks, `StopFailure`, `PostToolUseFailure`, `PostCompact`, and `SessionEnd`, with the product fixes they exposed: payloads, matchers, and the 1.5-second `SessionEnd` cap.
+- Scenarios for the state and config migrations, the legacy MCP move, the model-facing tools, Device Flow sign-in, `browse`, `prune`, `bootstrap`, the marketplace state lock, and the background-child load, plus fixes to the config rebuild, the tools, and the picker counts.
+
+### What Worked
+
+- **Fifteen stream phases in parallel child sessions** on local branches, each owning only its feature file and verb module. The frozen-file contract held: the integration check found no stream edit to a shared harness file.
+- **Red proofs for every scenario** (natural or planted) kept the new coverage honest.
+- **Treating the flakes as a debug session, not a rerun problem.** Grouping failures by worker showed they all followed one scenario in one worker, which turned a "probabilistic" failure into an ordered pair.
+
+### What Was Inefficient
+
+- **Single full runs per tree to bisect a flake.** The bisect table pointed at suite size and merge order, both wrong, because one run cannot prove a tree clean.
+- **Verifications went stale on merge:** later hooks phases changed files that phases 4 and 6 had verified, so the close needed an override instead of fresh fingerprints.
+- **Several SUMMARYs omitted `requirements_completed`,** which the audit had to reconcile by hand from the VERIFICATION files.
+
+### Patterns Established
+
+- **The cucumber reset covers process memory, not only files:** a shared Pi that decides project trust is replaced before the next scenario (`world-and-stand-ins.md`).
+- **Each stream phase gets a reserved feature file and verb module,** listed in `layout.md` before any child starts.
+
+### Key Lessons
+
+1. When a parallel suite flakes, record the worker and order of each failure first; test pollution clusters by worker, load flakes do not.
+2. A long-lived test process keeps the host's in-memory caches (here Pi's `projectTrustByCwd`); a file reset alone does not isolate scenarios.
+3. Merge phases that touch the same product module before verifying the later one, or plan a combined-tree re-verification.
+
+### Cost Observations
+
+- Model mix: Opus parent, child sessions, and debugger; Sonnet integration checker; exact percentages were not recorded.
+- Sessions: one parent, fifteen child sessions, and one debug session.
+- Timeline: 2026-11-07 -> 2026-11-08 (256 commits).
+
 ## Milestone: mcp-builtin -- MCP Built-in
 
 **Completed:** 2026-11-05 on `features/mcp-builtin` (PR [#303](https://github.com/acolomba/pi-claude-marketplace/pull/303), version 0.23.0, not yet merged; closed autonomously, reviewed with the user on 2026-11-06)

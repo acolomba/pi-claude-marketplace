@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Current Milestone: behavioral-gaps -- Behavioral Coverage Gaps
+## Previous Milestone: behavioral-gaps -- Behavioral Coverage Gaps (branch: features/behavioral-gaps, started 2026-11-07, completed 2026-11-08, not yet pushed, no PR or npm release yet)
 
 **Goal:** The cucumber suite covers the user-visible behavior that the
 November 2026 coverage audit found untested, with every scenario failing
@@ -57,6 +57,12 @@ plugin features (LSP servers, `userConfig`, channels).
 
 **Bug policy:** as in component-features. A scenario that exposes a product
 bug fixes it in the same phase, with Claude Code as the reference.
+
+**Outcome:** 34/34 requirements, 16 phases, 36 plans; 1779 adapter-profile and
+153 builtin-profile scenarios, and `npm run check` passes on the combined tree.
+The audit reads `tech_debt` with no blockers. The D-BG decision rows below and
+the High entries of [DUBIOUS-CHOICES.md](DUBIOUS-CHOICES.md) await the user's
+review.
 
 ## Previous Milestone: mcp-builtin -- MCP Built-in (branch: features/mcp-builtin, started 2026-11-04, completed 2026-11-05, PR [#303](https://github.com/acolomba/pi-claude-marketplace/pull/303), version 0.23.0, not yet merged)
 
@@ -839,6 +845,20 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
+**Completed on branch `features/behavioral-gaps`, not yet pushed:** milestone
+`behavioral-gaps` (2026-11-08, Phases 1-16, 36 plans, 34/34 requirements;
+archived to `.planning/milestones/behavioral-gaps-*`). Behavioral scenarios
+now cover async and `asyncRewake` hooks, `StopFailure`, `PostToolUseFailure`,
+`PostCompact`, and `SessionEnd` hooks, the state and config migrations, the
+legacy MCP move, the two model-facing tools, GitHub Device Flow sign-in,
+`browse`, `prune`, `bootstrap`, the marketplace state lock, and a pi-subagents
+background child's load. The product fixes they exposed landed with them: the
+hook payloads, matchers, and the 1.5-second `SessionEnd` cap, the first-load
+config rebuild, the model-facing tools' `scope` and error results, and the
+picker's plugin counts. The adapter-profile order flakes came from Pi's
+per-process project-trust cache in the shared worker Pi and were fixed in the
+harness (`d04a5106`).
+
 **Completed on branch `features/mcp-builtin`, PR [#303](https://github.com/acolomba/pi-claude-marketplace/pull/303) open:** milestone
 `mcp-builtin` (2026-11-05, Phases 1-6, 55 plans, 31/31 requirements;
 archived to `.planning/milestones/mcp-builtin-*`). A plugin's MCP servers now
@@ -1021,9 +1041,10 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-The behavioral-gaps requirements are in
-[REQUIREMENTS.md](REQUIREMENTS.md). The 31 mcp-builtin requirements are validated and
+No milestone is active. The 34 behavioral-gaps requirements are validated and
 archived in
+[milestones/behavioral-gaps-REQUIREMENTS.md](milestones/behavioral-gaps-REQUIREMENTS.md).
+The 31 mcp-builtin requirements are validated and archived in
 [milestones/mcp-builtin-REQUIREMENTS.md](milestones/mcp-builtin-REQUIREMENTS.md).
 Earlier milestones: the 62 component-features requirements are validated
 and archived in
@@ -1040,6 +1061,16 @@ the 36 json-output requirements in
 
 ### Validated
 
+- ✓ The cucumber suite covers the behavior the November 2026 coverage audit
+  found untested: async hooks and rewake, `StopFailure`, `PostToolUseFailure`,
+  `PostCompact`, `SessionEnd`, the `state.json` and first-run config
+  migrations, the legacy MCP move, the model-facing tools, Device Flow
+  sign-in, `browse`, `prune`, `bootstrap`, the marketplace state lock, and the
+  background-child load, each scenario failing without its behavior --
+  behavioral-gaps Phases 1-16 (FND-01..02, ASYNC-01..05, STOPF-01, TFAIL-01,
+  PCOMP-01, SEND-01, STMIG-01..02, CFGMIG-01..02, AMIG-01..02, TOOL-01..03,
+  DFLOW-01..04, BROWSE-01..02, PRUNE-01..02, BOOT-01..02, MLOCK-01..02,
+  CHILD-01..02)
 - ✓ The combined mcp-builtin tree is ready to ship: the CHANGELOG, both
   READMEs, and `docs/hooks-compatibility.md` describe built-in MCP support,
   the three `requires` markers, and the naming divergence; no closed-set
