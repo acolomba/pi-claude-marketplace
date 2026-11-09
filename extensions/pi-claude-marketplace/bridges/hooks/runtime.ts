@@ -91,17 +91,23 @@ export interface HooksRuntime {
   readonly prepareSettleForRegistration: () => void;
   readonly recordLastAssistant: (message: AssistantMessage | undefined) => void;
   readonly takeLastAssistant: () => AssistantMessage | undefined;
+  /**
+   * The value of a Stop payload's `stop_hook_active`: true after a Stop
+   * re-entry (STOP-07), or in a run that an async rewake started (D-BG-210).
+   */
   readonly isStopHookActive: () => boolean;
   readonly recordStopReentry: () => StopReentryTransition;
   readonly recordStopNonReentry: () => void;
   readonly recordUserInput: () => void;
   /**
-   * D-BG-203: marks a turn an async rewake woke, as Claude Code queues the
-   * rewake with `stopHookActive: true`, so the Stop hooks that end it see
-   * `stop_hook_active: true`. It clears on the user's next input, as a Stop
-   * re-entry does, and does not count toward the STOP-07 re-entry cap.
+   * D-BG-210: records whether the run that starts is one an async rewake
+   * started. Claude Code starts the query that a rewake wakes with its Stop
+   * guard set and keeps it to that query's end, so the Stop hooks at the end
+   * of that run see `stop_hook_active: true`, and the next run start clears
+   * the mark. User input that joins the woken run leaves the mark. The mark
+   * leaves the Stop re-entry flag and the STOP-07 cap as they are.
    */
-  readonly recordRewake: () => void;
+  readonly recordRunStart: (startedByRewake: boolean) => void;
   readonly registerChild: (entry: HooksRuntimeChildEntry) => void;
   readonly takeChild: (dispatchId: string) => HooksRuntimeChildEntry | undefined;
   readonly pidTableEntries: (loc: ScopedLocations) => readonly HooksRuntimePidEntry[];
@@ -172,6 +178,7 @@ export function createHooksRuntime(): HooksRuntime {
   const pendingFollowUpContext = createContextBuffer<PendingFollowUpContext>();
   let lastAssistant: AssistantMessage | undefined;
   let stopHookActive = false;
+  let runStartedByRewake = false;
   let consecutiveBlockCount = 0;
   let capNotifiedThisSession = false;
 
@@ -183,6 +190,7 @@ export function createHooksRuntime(): HooksRuntime {
   function prepareSettleForRegistration(): void {
     lastAssistant = undefined;
     stopHookActive = false;
+    runStartedByRewake = false;
     finishStopSequence();
   }
 
@@ -261,7 +269,7 @@ export function createHooksRuntime(): HooksRuntime {
     },
 
     isStopHookActive(): boolean {
-      return stopHookActive;
+      return stopHookActive || runStartedByRewake;
     },
 
     recordStopReentry(): StopReentryTransition {
@@ -283,8 +291,8 @@ export function createHooksRuntime(): HooksRuntime {
       finishStopSequence();
     },
 
-    recordRewake(): void {
-      stopHookActive = true;
+    recordRunStart(startedByRewake: boolean): void {
+      runStartedByRewake = startedByRewake;
     },
 
     registerChild(entry: HooksRuntimeChildEntry): void {

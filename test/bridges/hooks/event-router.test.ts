@@ -1532,6 +1532,98 @@ test("registered before_agent_start rejects a stale epoch without draining live 
   ]);
 });
 
+// A run that Pi starts with the custom message `customType`.
+function customTurn(customType: string): BeforeAgentStartEvent {
+  return {
+    type: "before_agent_start",
+    messageType: "custom",
+    message: { role: "custom", customType, content: "wake up", display: false, timestamp: 1 },
+    systemPrompt: "base prompt",
+    systemPromptOptions: {},
+  } as BeforeAgentStartEvent;
+}
+
+for (const { title, event, woken } of [
+  {
+    title: "marks the run that an async rewake starts as woken",
+    event: customTurn("claude-hook-rewake"),
+    woken: true,
+  },
+  {
+    title: "clears the woken mark for a run that a prompt starts",
+    event: PROMPT_TURN,
+    woken: false,
+  },
+  {
+    title: "clears the woken mark for a run that another custom message starts",
+    event: customTurn("claude-hook-stop-block"),
+    woken: false,
+  },
+]) {
+  test(`registered before_agent_start ${title} (D-BG-210)`, async (t) => {
+    // arrange
+    const { runtime, handler, context } = await beforeAgentStartFixture(t);
+    runtime.recordRunStart(!woken);
+
+    // act
+    const promptUpdate = await handler(event, context);
+
+    // assert
+    assert.strictEqual(promptUpdate, undefined);
+    assert.strictEqual(runtime.isStopHookActive(), woken);
+  });
+}
+
+test("registered handlers give stop_hook_active to the Stop hooks of the woken run only (D-BG-210)", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const { root } = await createHermeticEnvironment(t, "hooks-router-woken-run-");
+  const { pi, registrations } = makeRecordingPi();
+  const context = makeContext(root, root);
+  const stopHookActive: boolean[] = [];
+  const executor: HookExecutor = (_entry, event) => {
+    stopHookActive.push((event as { stop_hook_active: boolean }).stop_hook_active);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor,
+  });
+  runtime.setRoutingBucket("Stop", [
+    {
+      scope: "user",
+      marketplace: "catalog",
+      pluginId: "alpha",
+      resolvedSource: asAbsolutePluginRoot("/router/user/alpha"),
+      claudeEvent: "Stop",
+      matcher: parseMatcher(""),
+      rawMatcher: "",
+      handlerDecl: { type: "command", command: "stop-hook" },
+      declarationIndex: 0,
+      ifPredicate: MATCH_ALL_IF,
+    },
+  ]);
+  const startRun = registeredHandler(registrations, "before_agent_start");
+  const endRun = registeredHandler(registrations, "agent_end");
+  const settleRun = registeredHandler(registrations, "agent_settled");
+  const runEnding = {
+    type: "agent_end",
+    messages: [{ ...assistantForBookkeeping(), stopReason: "stop" }],
+  } as AgentEndEvent;
+
+  // act
+  await startRun(customTurn("claude-hook-rewake"), context);
+  await endRun(runEnding, context);
+  await settleRun({ type: "agent_settled" }, context);
+  await startRun(customTurn("another-extension-message"), context);
+  await endRun(runEnding, context);
+  await settleRun({ type: "agent_settled" }, context);
+
+  // assert
+  assert.deepStrictEqual(stopHookActive, [true, false]);
+});
+
 test("registered turn_end sends a follow-up's context before the agent reads it (D-CF5-13)", async (t) => {
   // arrange
   const runtime = createHooksRuntime();

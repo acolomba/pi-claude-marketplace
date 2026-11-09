@@ -95,8 +95,11 @@ import type { HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
  */
 const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
 
-/** HOOK-06: custom-message type for the exit-2 injection. */
-const REWAKE_CUSTOM_TYPE = "claude-hook-rewake" as const;
+/**
+ * HOOK-06: custom-message type for the exit-2 injection. The hooks bridge also
+ * reads it to recognize the run that a rewake wakes (D-BG-210).
+ */
+export const REWAKE_CUSTOM_TYPE = "claude-hook-rewake" as const;
 
 /**
  * D-BG-205: custom-message type of a plain async hook's answer, named after
@@ -424,14 +427,9 @@ interface ChildOutcome {
 /** The exit handler of each background lane. */
 const EXIT_HANDLERS: Record<
   BackgroundLane,
-  (
-    runtime: HooksRuntime,
-    entry: HooksRuntimeChildEntry,
-    exit: RewakeExit,
-    outcome: ChildOutcome,
-  ) => void
+  (entry: HooksRuntimeChildEntry, exit: RewakeExit, outcome: ChildOutcome) => void
 > = {
-  rewake: (runtime, entry, exit, outcome) => {
+  rewake: (entry, exit, outcome) => {
     if (outcome.code !== 2) {
       hookDebugLog(
         `async-rewake: silent completion code=${outcome.code ?? "null"} signal=${outcome.signal ?? "null"} ` +
@@ -440,9 +438,9 @@ const EXIT_HANDLERS: Record<
       return;
     }
 
-    wakeOnExitTwo(runtime, entry, exit);
+    wakeOnExitTwo(entry, exit);
   },
-  plain: (_runtime, entry, exit) => {
+  plain: (entry, exit) => {
     sendAsyncAnswer(entry, exit);
   },
 };
@@ -490,7 +488,7 @@ function finalizeChild(
     return;
   }
 
-  EXIT_HANDLERS[exit.lane](runtime, entry, exit, outcome);
+  EXIT_HANDLERS[exit.lane](entry, exit, outcome);
 }
 
 /**
@@ -532,11 +530,7 @@ function sendAsyncAnswer(entry: HooksRuntimeChildEntry, { pi }: RewakeExit): voi
  * notify call originating from `bridges/hooks/async-rewake/`, routed through
  * the canonical `shared/notification-dispatch.ts` seam.
  */
-function wakeOnExitTwo(
-  runtime: HooksRuntime,
-  entry: HooksRuntimeChildEntry,
-  { ctx, pi, label }: RewakeExit,
-): void {
+function wakeOnExitTwo(entry: HooksRuntimeChildEntry, { ctx, pi, label }: RewakeExit): void {
   try {
     const run = openNotificationRun(pi, { kind: "hook" });
     notifyAsyncRewakeSummary(ctx, run, rewakeSummaryText(entry.rewakeSummary));
@@ -544,8 +538,6 @@ function wakeOnExitTwo(
     hookDebugLog(`async-rewake: notify failed (${entry.pluginId}): ${errorMessage(err)}`);
   }
 
-  // D-BG-203: the woken turn's Stop hooks see `stop_hook_active: true`.
-  runtime.recordRewake();
   const content = rewakeBody(entry.rewakeMessage, label, entry.stderr.text(), entry.stdout.text());
   try {
     pi.sendMessage(
