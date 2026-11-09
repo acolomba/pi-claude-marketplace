@@ -58,6 +58,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -7554,6 +7555,371 @@ test("D-05-13: a pruned member whose cascade reports no cause renders the fallba
         },
       ]);
       assert.deepStrictEqual(await recordedInventory(locations), { "d1@mp": ["mp-d1-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PRUNECFG-01 / D-BG-1310: the sweep deletes each removed dependency's
+// `enabled: false` declaration from both config files of the scope, and fails
+// closed on a config file it cannot read or write.
+
+/** The success report of `uninstall x --prune` over `PRUNE_SCOPE`. */
+const PRUNE_SCOPE_REPORT: NotifyRecord = {
+  message:
+    "● mp [project]\n" +
+    "  ○ x v0.0.1 (uninstalled)\n" +
+    "  ○ d1 v0.0.1 (uninstalled) {dependency pruned}\n" +
+    "\n" +
+    "● mp2 [project]\n" +
+    "  ○ o v0.0.1 (uninstalled) {dependency pruned}\n" +
+    "  ○ d2 v0.0.1 (uninstalled) {dependency pruned}\n" +
+    "\n" +
+    "/reload to pick up changes",
+};
+
+/** The exact text `saveConfig` writes for `config`. */
+function configText(config: object): string {
+  return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+/** Seed `PRUNE_SCOPE` and write each given layer config as the exact text given. */
+async function seedPruneLayers(
+  locations: ReturnType<typeof locationsFor>,
+  cwd: string,
+  layers: { readonly base?: string; readonly local?: string },
+): Promise<void> {
+  await seedDeclaringScope(locations, PRUNE_SCOPE, cwd);
+  if (layers.base !== undefined) {
+    await writeFile(locations.baseConfigJsonPath, layers.base, "utf8");
+  }
+
+  if (layers.local !== undefined) {
+    await writeFile(locations.localConfigJsonPath, layers.local, "utf8");
+  }
+}
+
+/** `uninstall x@mp --scope project --prune` through a fresh owner. */
+function uninstallXWithPrune(
+  ctx: ExtensionContext,
+  run: NotificationRun,
+  cwd: string,
+  cascade?: typeof cascadeUnstagePlugin,
+): Promise<UninstallPluginOutcome | undefined> {
+  return uninstallWithFreshOwner({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "x",
+    prune: true,
+    ...(cascade !== undefined && { cascade }),
+  });
+}
+
+/**
+ * The real cascade, which first writes invalid text to the local config when
+ * it unstages `plugin`.
+ */
+function corruptingLocalOn(
+  plugin: string,
+  locations: ReturnType<typeof locationsFor>,
+): typeof cascadeUnstagePlugin {
+  return async (name, marketplace, scopeLocations, installed) => {
+    if (name === plugin) {
+      await writeFile(locations.localConfigJsonPath, "{ not json", "utf8");
+    }
+
+    return cascadeUnstagePlugin(name, marketplace, scopeLocations, installed);
+  };
+}
+
+test("PRUNECFG-01: uninstall --prune deletes each removed dependency's enabled: false entry from both layers and keeps every other entry", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-config-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPruneLayers(locations, cwd, {
+        base: '{"schemaVersion":1,"plugins":{"x@mp":{},"d1@mp":{"enabled":false},"o@mp2":{}}}\n',
+        local:
+          '{"schemaVersion":1,"plugins":{"d2@mp2":{"enabled":false},"keep@mp":{"enabled":false}}}\n',
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallXWithPrune(ctx, run, cwd);
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [PRUNE_SCOPE_REPORT]);
+      assert.deepStrictEqual(
+        {
+          base: await readFile(locations.baseConfigJsonPath, "utf8"),
+          local: await readFile(locations.localConfigJsonPath, "utf8"),
+        },
+        {
+          base: configText({ schemaVersion: 1, plugins: { "o@mp2": {} } }),
+          local: configText({ schemaVersion: 1, plugins: { "keep@mp": { enabled: false } } }),
+        },
+      );
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRUNECFG-01: a dependency that fails to unstage keeps its enabled: false entry", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-config-failed-member-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const local = '{"schemaVersion":1,"plugins":{"d2@mp2":{"enabled":false}}}\n';
+      await seedPruneLayers(locations, cwd, {
+        base: '{"schemaVersion":1,"plugins":{"x@mp":{}}}\n',
+        local,
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const cause = new AgentsUnstageFailureError("Agents unstage refused: foreign content", [
+        { generatedName: "d2-agent", targetPath: "/agents/d2-agent.md", reason: "missing marker" },
+      ]);
+
+      // act
+      const outcome = await uninstallXWithPrune(
+        ctx,
+        run,
+        cwd,
+        cascadeFailingFor("d2", cause, { skills: ["mp2-d2-skill"] }),
+      );
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [prunePartialFailureNotification("source mismatch")]);
+      assert.deepStrictEqual(
+        {
+          base: await readFile(locations.baseConfigJsonPath, "utf8"),
+          local: await readFile(locations.localConfigJsonPath, "utf8"),
+        },
+        { base: configText({ schemaVersion: 1, plugins: {} }), local },
+      );
+      assert.deepStrictEqual(await recordedInventory(locations), { "d2@mp2": ["mp2-d2-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRUNECFG-01: a sweep with no disabled entry to delete rewrites no layer and creates none", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-config-no-op-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const local = '{"schemaVersion":1,"plugins":{"o@mp2":{}}}\n';
+      await seedPruneLayers(locations, cwd, { local });
+      const seededAt = new Date("2020-01-01T00:00:00.000Z");
+      await utimes(locations.localConfigJsonPath, seededAt, seededAt);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallXWithPrune(ctx, run, cwd);
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [PRUNE_SCOPE_REPORT]);
+      assert.deepStrictEqual(
+        {
+          base: await pathExists(locations.baseConfigJsonPath),
+          local: await readFile(locations.localConfigJsonPath, "utf8"),
+          localMtime: (await stat(locations.localConfigJsonPath)).mtimeMs,
+        },
+        { base: false, local, localMtime: seededAt.getTime() },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRUNECFG-01: a layer that turns invalid during the sweep fails the uninstall unsaved and keeps its text", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-config-invalid-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPruneLayers(locations, cwd, {
+        base: '{"schemaVersion":1,"plugins":{"x@mp":{},"d1@mp":{"enabled":false}}}\n',
+        local: '{"schemaVersion":1,"plugins":{"d2@mp2":{"enabled":false}}}\n',
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallXWithPrune(ctx, run, cwd, corruptingLocalOn("o", locations));
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ x v0.0.1 (failed) {unreadable}\n" +
+            '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(
+        {
+          base: await readFile(locations.baseConfigJsonPath, "utf8"),
+          local: await readFile(locations.localConfigJsonPath, "utf8"),
+          state: await readFile(locations.stateJsonPath, "utf8"),
+        },
+        {
+          base: configText({ schemaVersion: 1, plugins: { "d1@mp": { enabled: false } } }),
+          local: "{ not json",
+          state: stateBefore,
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRUNECFG-01: a layer that turns invalid before the member loop refuses before any member leaves disk", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-config-invalid-early-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPruneLayers(locations, cwd, {
+        local: '{"schemaVersion":1,"plugins":{"d2@mp2":{"enabled":false}}}\n',
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallXWithPrune(ctx, run, cwd, corruptingLocalOn("x", locations));
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ x v0.0.1 (failed) {unreadable}\n" +
+            '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(await stagedSkills(locations, PRUNE_SCOPE_SKILLS), {
+        "mp-x-skill": false,
+        "mp-d1-skill": true,
+        "mp2-d2-skill": true,
+        "mp2-o-skill": true,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRUNECFG-01: a layer write that fails fails the uninstall unsaved and keeps the entry", async () => {
+  if (!(await chmodDeniesThisProcess())) {
+    throw new Error(`A 0o555 scope root does not deny this process. ${CHMOD_DENIAL_HINT}`);
+  }
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-config-write-failed-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const base = '{"schemaVersion":1,"plugins":{"d1@mp":{"enabled":false}}}\n';
+      await seedPruneLayers(locations, cwd, { base });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await chmod(locations.scopeRoot, 0o555);
+      let outcome: UninstallPluginOutcome | undefined;
+      try {
+        outcome = await uninstallXWithPrune(ctx, run, cwd);
+      } finally {
+        await chmod(locations.scopeRoot, 0o755);
+      }
+
+      // assert
+      assert.equal(outcome, undefined);
+      // write-file-atomic names its temporary file with a random suffix.
+      assert.deepStrictEqual(
+        notifications.map((notification) => ({
+          ...notification,
+          message: notification.message.replace(/\.json\.\d+'$/u, ".json.<suffix>'"),
+        })),
+        [
+          {
+            message:
+              "A plugin operation has failed.\n\n● mp [project]\n" +
+              "  ⊘ x v0.0.1 (failed) {permission denied}\n" +
+              `    cause: EACCES: permission denied, open '${locations.baseConfigJsonPath}.<suffix>'`,
+            severity: "error",
+          },
+        ],
+      );
+      assert.deepStrictEqual(
+        {
+          base: await readFile(locations.baseConfigJsonPath, "utf8"),
+          state: await readFile(locations.stateJsonPath, "utf8"),
+        },
+        { base, state: stateBefore },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRUNECFG-01 / NFR-10: a symlinked layer refuses the delete, and the uninstall fails unsaved", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-config-symlink-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPruneLayers(locations, cwd, {});
+      const linked = path.join(cwd, "linked-claude-plugins.json");
+      const linkedText = '{"schemaVersion":1,"plugins":{"d1@mp":{"enabled":false}}}\n';
+      await writeFile(linked, linkedText, "utf8");
+      await symlink(linked, locations.baseConfigJsonPath);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallXWithPrune(ctx, run, cwd);
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ x v0.0.1 (failed) {unreadable}\n" +
+            `    cause: saveConfig contains symlink ${locations.baseConfigJsonPath} -> ${linked} ` +
+            `(parent: ${locations.scopeRoot}, target: ${locations.baseConfigJsonPath}).`,
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(
+        {
+          linked: await readFile(linked, "utf8"),
+          link: await readlink(locations.baseConfigJsonPath),
+          state: await readFile(locations.stateJsonPath, "utf8"),
+        },
+        { linked: linkedText, link: linked, state: stateBefore },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

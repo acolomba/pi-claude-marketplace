@@ -23,7 +23,10 @@
 //     D-05-01..03 / D-05-10 (`prune`): sweep the orphaned dependency records
 //       out of the SAME snapshot -- pruneOrphans over the guard's index, then
 //       the per-member removal body for each key, in that order; a member
-//       failure is a warning row, never a throw, and the members never save
+//       failure is a warning row, never a throw, and the members never save;
+//       then PRUNECFG-01 / D-BG-1310 deletes each removed member's
+//       `enabled: false` declaration from both layers, failing closed on an
+//       invalid layer or a failed write
 //     await tx.save()  // WR-04: explicit save on mutating arms ONLY -- ONCE,
 //                      // after the primary AND every pruned member
 //   })
@@ -77,11 +80,19 @@ import {
   isHeldBy,
   pruneOrphans,
 } from "../../domain/dependency-orphans.ts";
-import { loadConfig } from "../../persistence/config-io.ts";
-import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
+import { isDeclaredEnabled, loadConfig } from "../../persistence/config-io.ts";
+import {
+  deletePluginConfigEntries,
+  deletePluginConfigEntry,
+} from "../../persistence/config-write-back.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { StateLockHeldError, errorMessage, isErrnoException } from "../../shared/errors.ts";
+import {
+  LayerConfigUnreadableError,
+  StateLockHeldError,
+  errorMessage,
+  isErrnoException,
+} from "../../shared/errors.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -128,7 +139,7 @@ import {
 import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-index.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { DeclarationIndex, DeclaringLayers } from "../../domain/dependency-orphans.ts";
-import type { ScopeConfig } from "../../persistence/config-io.ts";
+import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -888,9 +899,8 @@ function buildMemberFailedRow(member: IndexedRecord, cause: Error): PluginFailed
  * - Any other partial failure: the dropped artifacts are folded out of the
  *   record in place, so the saved row never claims artifacts gone from disk.
  * It never saves the transaction -- the one save runs after the sweep -- and
- * never sweeps the config layers: a dependency-provenance record is declared
- * in neither config file (D-04-02), and a hand-authored declaration for one is
- * the user's desired state, which the next reload honours by reinstalling.
+ * writes no config file: `sweepOrphans` then deletes each removed member's
+ * `enabled: false` declaration from both layers, once for the whole sweep.
  */
 async function removeDependencyMember(args: {
   readonly member: IndexedRecord;
@@ -950,6 +960,11 @@ async function removeDependencyMember(args: {
  * removal: every holder of a key precedes it in the order, so the check is
  * exact when it runs, and a key only a failed member holds is kept -- the
  * sweep removes only what nothing remaining declares (D-05-01).
+ *
+ * PRUNECFG-01: before the member loop it refuses on an invalid config file of
+ * the scope, and after the loop it deletes the removed members'
+ * `enabled: false` declarations from those files. Both steps can throw, which
+ * aborts the caller's save.
  */
 export async function sweepOrphans(args: {
   readonly snapshot: DeclarationSnapshot;
@@ -967,6 +982,12 @@ export async function sweepOrphans(args: {
   const members = order.flatMap((key) =>
     snapshot.candidates.filter((candidate) => candidate.key === key),
   );
+  // PRUNECFG-01: an invalid config file refuses the sweep before any member
+  // leaves disk, so the refusal needs no rollback.
+  if (members.length > 0) {
+    await readPruneLayers(removal.locations);
+  }
+
   const pruned: PrunedMember[] = [];
   for (const member of members) {
     if (isHeldBy(snapshot.index, gone, member.key)) {
@@ -982,7 +1003,76 @@ export async function sweepOrphans(args: {
     pruned.push(result);
   }
 
+  await dropPrunedDisabledDeclarations({ locations: removal.locations, members: pruned });
   return pruned;
+}
+
+/**
+ * PRUNECFG-01: both config files of the scope, read fresh. An invalid file
+ * throws `LayerConfigUnreadableError`, named by its basename only, because the
+ * sweep cannot tell which of its declarations it would have to delete: the
+ * command fails closed instead of leaving them.
+ */
+async function readPruneLayers(
+  locations: ScopedLocations,
+): Promise<readonly { readonly layerPath: string; readonly loaded: ConfigLoadResult }[]> {
+  const layerPaths = [locations.baseConfigJsonPath, locations.localConfigJsonPath];
+  const layers = await Promise.all(
+    layerPaths.map(async (layerPath) => ({ layerPath, loaded: await loadConfig(layerPath) })),
+  );
+  const invalid = layers.find((layer) => layer.loaded.status === "invalid");
+  if (invalid !== undefined) {
+    throw new LayerConfigUnreadableError(path.basename(invalid.layerPath));
+  }
+
+  return layers;
+}
+
+/**
+ * PRUNECFG-01 / D-BG-1310: delete the `enabled: false` declaration of each
+ * member the sweep removed from both config files of the scope, with one write
+ * per file. Claude Code 2.1.319 deletes a pruned plugin's `enabledPlugins`
+ * entry from the settings of the prune scope, and here a scope keeps its
+ * declarations in two layer files (SC-1).
+ *
+ * - An enabled declaration stays: it is the user's request to install
+ *   (D-04-02).
+ * - A member that failed to unstage keeps its record and its declaration
+ *   (D-05-13).
+ * - A layer with nothing to delete is not rewritten, and an absent layer is
+ *   not created (WR-02).
+ * - Both layers are read again before either is written, so an edit made
+ *   during the sweep is kept, and a layer that turned invalid since the check
+ *   before the member loop throws with no config change. A failed write and a
+ *   containment refusal (NFR-10) throw as they are.
+ */
+async function dropPrunedDisabledDeclarations(args: {
+  readonly locations: ScopedLocations;
+  readonly members: readonly PrunedMember[];
+}): Promise<void> {
+  const keys = args.members
+    .filter((member) => member.removed)
+    .map((member) => `${member.plugin}@${member.marketplace}`);
+  if (keys.length === 0) {
+    return;
+  }
+
+  for (const { layerPath, loaded } of await readPruneLayers(args.locations)) {
+    if (loaded.status !== "valid") {
+      continue;
+    }
+
+    const disabled = keys.filter((key) => {
+      const entry = ownValue(loaded.config.plugins, key);
+      return entry !== undefined && !isDeclaredEnabled(entry);
+    });
+    if (disabled.length === 0) {
+      continue;
+    }
+
+    // eslint-disable-next-line no-await-in-loop -- one read-modify-write per layer file
+    await deletePluginConfigEntries(loaded.config, layerPath, args.locations.scopeRoot, disabled);
+  }
 }
 
 /**
@@ -1570,7 +1660,8 @@ async function runUninstallOutcome(
       // primary's commit, the config write-back and the sweep. State persists
       // AFTER the config write-back (a write-back throw aborts the save,
       // keeping the record intact for retry); the member body never throws,
-      // so a member failure cannot abort it.
+      // so a member failure cannot abort it, while the sweep's own config
+      // step can, as the primary's write-back can (PRUNECFG-01).
       await tx.save();
       routeEffect.removeAfterSave = true;
     });

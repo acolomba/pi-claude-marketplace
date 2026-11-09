@@ -158,16 +158,35 @@ export async function deletePluginConfigEntry(
   plugin: string,
   marketplace: string,
 ): Promise<void> {
-  const key = `${plugin}@${marketplace}`;
+  await deletePluginConfigEntries(current, targetConfigPath, scopeRoot, [
+    `${plugin}@${marketplace}`,
+  ]);
+}
+
+/**
+ * Delete the listed `plugin@marketplace` keys in one write. Every other plugin
+ * entry, the marketplaces map, and unknown forward-compat fields stay. Returns
+ * the exact bytes written, so a caller can tell its own write from a later
+ * edit (NFR-3).
+ */
+export async function deletePluginConfigEntries(
+  current: ScopeConfig,
+  targetConfigPath: string,
+  scopeRoot: string,
+  keys: readonly string[],
+): Promise<Buffer> {
   const plugins = { ...current.plugins };
-  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- plugins is a dynamic-key Record<string, ...>.
-  delete plugins[key];
+  for (const key of keys) {
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- plugins is a dynamic-key Record<string, ...>.
+    delete plugins[key];
+  }
+
   const patched: ScopeConfig = {
     ...current,
     schemaVersion: 1,
     plugins,
   };
-  await saveConfig(targetConfigPath, patched, scopeRoot);
+  return saveConfig(targetConfigPath, patched, scopeRoot);
 }
 
 /**
