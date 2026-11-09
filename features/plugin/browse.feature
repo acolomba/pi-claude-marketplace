@@ -81,7 +81,7 @@ Feature: Plugin browse
       | Disable   | disable fmt@extras --scope project   |
       | Info      | info fmt@extras --scope project      |
 
-  Scenario: Choosing User (global) in the terminal picker installs the plugin in the user scope (D-BG-1202)
+  Scenario: Choosing User (global) in the terminal picker installs the plugin in the user scope (D-BG-1203)
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
       | name | version |
@@ -96,10 +96,10 @@ Feature: Plugin browse
       | Info    | info app@tools --scope user           |
     When the user chooses "Install" in the plugin picker
     Then the plugin picker shows the screen "Install app @ tools: Select Scope" with these rows:
-      | label                       | description                                                                          |
-      | Project local (Recommended) | Install in the local config (.pi/claude-plugins.local.json, gitignored, this repo on |
-      | Project                     | Install in the base config (.pi/claude-plugins.json, for all collaborators on this r |
-      | User (global)               | Install in the user scope's base config (~/.pi/agent/claude-plugins.json, all projec |
+      | label         | description                                                                          |
+      | Project local | Install in the local config (.pi/claude-plugins.local.json, gitignored, this repo on |
+      | Project       | Install in the base config (.pi/claude-plugins.json, for all collaborators on this r |
+      | User (global) | Install in the user scope's base config (~/.pi/agent/claude-plugins.json, all projec |
     When the user chooses "User (global)" in the plugin picker
     Then the installation record of the user scope holds these plugins:
       | id        | version | enabled |
@@ -139,7 +139,7 @@ Feature: Plugin browse
     When the user chooses "extras [project]" in the plugin picker
     When the user chooses "[available] lint" in the plugin picker
     When the user chooses "Install" in the plugin picker
-    When the user chooses "Project local (Recommended)" in the plugin picker
+    When the user chooses "Project local" in the plugin picker
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id          |
       | lint@extras |

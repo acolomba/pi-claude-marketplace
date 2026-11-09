@@ -465,7 +465,7 @@ export class PluginBrowser {
     const items: SelectItem[] = [
       {
         value: "project-local",
-        label: "Project local (Recommended)",
+        label: "Project local",
         description:
           "Install in the local config (.pi/claude-plugins.local.json, gitignored, this repo only)",
       },
