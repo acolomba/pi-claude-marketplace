@@ -1179,6 +1179,117 @@ test("NFR-3: MCP config files holding the recorded unstage bytes restore from th
   });
 });
 
+test("PRUNECFG-01 / NFR-3: a rollback restores each config layer that still holds the sweep's own write", async () => {
+  await withHermeticEnvironment("prune-rollback-config-own-write-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const originalBase = Buffer.from(
+      '{"schemaVersion":1,"plugins":{"orphan@mp":{"enabled":false}}}\n',
+    );
+    const originalLocal = Buffer.from(
+      '{"plugins":{"orphan@mp":{"enabled":false}},"schemaVersion":1}\n',
+    );
+    await writeFile(locations.baseConfigJsonPath, originalBase);
+    await writeFile(locations.localConfigJsonPath, originalLocal);
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
+    const ownBytes = Buffer.from('{\n  "schemaVersion": 1,\n  "plugins": {}\n}\n');
+    await writeFile(locations.baseConfigJsonPath, ownBytes);
+    await writeFile(locations.localConfigJsonPath, ownBytes);
+    rollback.recordConfigWrites([
+      { path: locations.baseConfigJsonPath, bytes: ownBytes },
+      { path: locations.localConfigJsonPath, bytes: ownBytes },
+    ]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(failures, []);
+    assert.deepStrictEqual(
+      {
+        base: await readFile(locations.baseConfigJsonPath),
+        local: await readFile(locations.localConfigJsonPath),
+      },
+      { base: originalBase, local: originalLocal },
+    );
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
+  });
+});
+
+test("PRUNECFG-01 / NFR-3: a config layer that another writer changed after the sweep keeps the change, and its original stays in the backup", async () => {
+  await withHermeticEnvironment("prune-rollback-config-edited-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{"schemaVersion":1,"plugins":{"orphan@mp":{"enabled":false}}}\n');
+    await writeFile(locations.baseConfigJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
+    const ownBytes = Buffer.from('{\n  "schemaVersion": 1,\n  "plugins": {}\n}\n');
+    await writeFile(locations.baseConfigJsonPath, ownBytes);
+    rollback.recordConfigWrites([{ path: locations.baseConfigJsonPath, bytes: ownBytes }]);
+    const independent = Buffer.from('{"schemaVersion":1,"plugins":{"other@mp":{}}}\n');
+    await writeFile(locations.baseConfigJsonPath, independent);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [
+        {
+          phase: "config",
+          message: `Prune rollback found an occupied metadata path at ${locations.baseConfigJsonPath}.`,
+        },
+      ],
+    );
+    assert.deepStrictEqual(
+      {
+        live: await readFile(locations.baseConfigJsonPath),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "8")),
+      },
+      { live: independent, backup: original },
+    );
+  });
+});
+
+test("PRUNECFG-01: the recovery manifest lists both config layers after the state entry, and an absent layer stays absent", async () => {
+  await withHermeticEnvironment("prune-rollback-config-manifest-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    await writeFile(locations.baseConfigJsonPath, '{"schemaVersion":1}\n');
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
+    const manifest = JSON.parse(
+      await readFile(
+        path.join(locations.extensionRoot, rollback.backupName, "manifest.json"),
+        "utf8",
+      ),
+    ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(manifest.entries.slice(-3), [
+      {
+        phase: "state",
+        root: "pi-claude-marketplace",
+        target: "state.json",
+        backup: "7",
+      },
+      { phase: "config", root: ".", target: "claude-plugins.json", backup: "8" },
+      { phase: "local config", root: ".", target: "claude-plugins.local.json", backup: null },
+    ]);
+    assert.deepStrictEqual(failures, []);
+    await assert.rejects(lstat(locations.localConfigJsonPath), { code: "ENOENT" });
+  });
+});
+
 test("NFR-3: an adapter edit after the recorded unstage write stays current with its backup", async () => {
   await withHermeticEnvironment("prune-rollback-own-write-edited-", async ({ cwd }) => {
     // arrange

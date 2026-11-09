@@ -235,3 +235,58 @@ Feature: Plugin prune
       | tools            | project           | mid@tools | mid  | uninstalled | dependency pruned | project | 1.1.0   |
       | tools            | project           | lib@tools | lib  | uninstalled | dependency pruned | project | 1.2.0   |
     Then the project scope has no installed plugins
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
+  Scenario: Pruning a dependency the user disabled in the local config drops its local declaration
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin uninstall app@tools --scope project"
+    Given the user has run "/claude:plugin disable lib@tools --scope project --local"
+    When the user runs "/claude:plugin prune --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons           | scope   | version |
+      | tools            | project           | lib@tools | lib  | uninstalled | dependency pruned | project | 1.2.0   |
+    Then the project scope has no installed plugins
+    Then the "claude-plugins.local.json" file of the project scope declares no plugins
+
+  Scenario: Pruning refuses and keeps the dependency while a config file of the scope is invalid
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin uninstall app@tools --scope project"
+    Given a config in scope project and layer local, with this text:
+      """
+      { not json
+      """
+    When the user runs "/claude:plugin prune --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id              | name    | status | reasons    | scope   | cause chain                                                      | cause truncated | leaks | rollback partial |
+      | (prune)          | project           | (prune)@(prune) | (prune) | failed | unreadable | project | Config file "claude-plugins.local.json" failed schema validation. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | lib@tools | 1.2.0   | true    |
+    Then the project scope stages these skills and prompts:
+      | kind  | name      |
+      | skill | lib-skill |
+    Then the "claude-plugins.local.json" file of the project scope holds this text:
+      """
+      { not json
+      """

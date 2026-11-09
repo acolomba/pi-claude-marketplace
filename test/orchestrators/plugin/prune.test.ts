@@ -192,6 +192,43 @@ async function seedRecord(scope: Scope, cwd: string, manifestText: string): Prom
   await saveState(locations.extensionRoot, state);
 }
 
+/** A layer config that declares the seeded orphan disabled. */
+const ORPHAN_DISABLED_LAYER = '{"schemaVersion":1,"plugins":{"orphan@mp":{"enabled":false}}}\n';
+
+/** `seedRecord`'s one-orphan project scope, with each given layer config written as the exact text given. */
+async function seedOrphanLayers(
+  cwd: string,
+  layers: { readonly base?: string; readonly local?: string },
+): Promise<void> {
+  await seedRecord(
+    "project",
+    cwd,
+    JSON.stringify({ name: "mp", plugins: [{ name: "orphan", source: "./orphan" }] }),
+  );
+  const locations = locationsFor("project", cwd);
+  if (layers.base !== undefined) {
+    await writeFile(locations.baseConfigJsonPath, layers.base);
+  }
+
+  if (layers.local !== undefined) {
+    await writeFile(locations.localConfigJsonPath, layers.local);
+  }
+}
+
+/** The real transaction, whose state save runs `before` and then rejects. */
+function failingSave(before: () => Promise<void>): UninstallTransaction {
+  return {
+    ...REAL_UNINSTALL_TRANSACTION,
+    withLockedStateTransaction: (target, run) =>
+      withLockedStateTransaction(target, run, {
+        saveState: async () => {
+          await before();
+          throw new Error("state save failed");
+        },
+      }),
+  };
+}
+
 test("removes an orphan from the default user scope and reports it", async () => {
   await withHermeticEnvironment("prune-owner-user-", async ({ cwd }) => {
     // arrange
@@ -757,6 +794,167 @@ test("a failed save without directory artifacts completes rollback", async () =>
         severity: "error",
       },
     ]);
+  });
+});
+
+test("PRUNECFG-01 / NFR-3: a failed save restores both config layers byte for byte", async () => {
+  await withHermeticEnvironment("prune-owner-save-config-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedOrphanLayers(cwd, {
+      base: ORPHAN_DISABLED_LAYER,
+      local: '{"plugins":{"orphan@mp":{"enabled":false}},"schemaVersion":1}\n',
+    });
+    const originalState = await readFile(locations.stateJsonPath);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(failingSave(() => Promise.resolve()))({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        base: await readFile(locations.baseConfigJsonPath, "utf8"),
+        local: await readFile(locations.localConfigJsonPath, "utf8"),
+        state: await readFile(locations.stateJsonPath),
+      },
+      {
+        base: ORPHAN_DISABLED_LAYER,
+        local: '{"plugins":{"orphan@mp":{"enabled":false}},"schemaVersion":1}\n',
+        state: originalState,
+      },
+    );
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n    cause: state save failed",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("PRUNECFG-01: prune deletes the removed dependency's enabled: false entry from both layers", async () => {
+  await withHermeticEnvironment("prune-owner-config-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedOrphanLayers(cwd, {
+      base: '{"schemaVersion":1,"plugins":{"orphan@mp":{"enabled":false},"other@mp":{}}}\n',
+      local: ORPHAN_DISABLED_LAYER,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(
+      {
+        base: await readFile(locations.baseConfigJsonPath, "utf8"),
+        local: await readFile(locations.localConfigJsonPath, "utf8"),
+      },
+      {
+        base: '{\n  "schemaVersion": 1,\n  "plugins": {\n    "other@mp": {}\n  }\n}\n',
+        local: '{\n  "schemaVersion": 1,\n  "plugins": {}\n}\n',
+      },
+    );
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
+  });
+});
+
+test("PRUNECFG-01 / NFR-3: a config edit after the sweep's write survives a failed save, with its original in the recovery backup", async () => {
+  await withHermeticEnvironment("prune-owner-save-config-edited-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedOrphanLayers(cwd, { base: ORPHAN_DISABLED_LAYER });
+    const independent = '{"schemaVersion":1,"plugins":{"edited@mp":{}}}\n';
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(failingSave(() => writeFile(locations.baseConfigJsonPath, independent)))({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+    });
+
+    // assert
+    const backupRoot = path.join(locations.extensionRoot, "prune-backup-ABC123");
+    const manifest = JSON.parse(await readFile(path.join(backupRoot, "manifest.json"), "utf8")) as {
+      entries: Array<{ phase: string; backup: string | null }>;
+    };
+    const configBackup = manifest.entries.find((entry) => entry.phase === "config")?.backup;
+    assert.deepStrictEqual(
+      {
+        live: await readFile(locations.baseConfigJsonPath, "utf8"),
+        backup: await readFile(path.join(backupRoot, configBackup ?? "missing"), "utf8"),
+      },
+      { live: independent, backup: ORPHAN_DISABLED_LAYER },
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n" +
+          "    [config] (rollback failed)\n" +
+          "      cause: Prune rollback found an occupied metadata path at claude-plugins.json.",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("PRUNECFG-01: an invalid config file refuses the prune before the orphan leaves disk", async () => {
+  await withHermeticEnvironment("prune-owner-config-invalid-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedOrphanLayers(cwd, { local: "{ not json" });
+    const originalState = await readFile(locations.stateJsonPath);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n" +
+          '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      {
+        local: await readFile(locations.localConfigJsonPath, "utf8"),
+        state: await readFile(locations.stateJsonPath),
+        backups: (await readdir(locations.extensionRoot)).filter((name) =>
+          name.startsWith("prune-backup-"),
+        ),
+      },
+      { local: "{ not json", state: originalState, backups: [] },
+    );
   });
 });
 
