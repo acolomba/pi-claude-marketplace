@@ -15,6 +15,13 @@
 // `./async-rewake/registry.ts` from `exit`. The exit-state guard below is the
 // inner belt over those suspenders.
 //
+// One exception: a child that leads a process group of its own
+// (`./process-group.ts`) can exit from the SIGTERM leg while a member of its
+// group ignores SIGTERM and runs on. Once the SIGTERM leg has fired,
+// `cancel()` keeps the SIGKILL leg for such a child, and that leg signals the
+// group when the group still has a member (HKDR-01). The group id stays
+// reserved while a member lives, so that signal cannot reach a recycled id.
+//
 // The structural `ChildLike` interface lets this module stay outside
 // the `node:child_process` import whitelist, which
 // `test/architecture/no-shell-out.test.ts` pins at exactly five sanctioned
@@ -53,6 +60,11 @@ export interface ChildLike {
   exitCode?: number | null | undefined;
   /** `null` while the child is alive; the signal that terminated it. */
   signalCode?: NodeJS.Signals | null | undefined;
+  /**
+   * Whether the process group the child leads still has a member. Only a
+   * child that leads a group of its own has it (`./process-group.ts`).
+   */
+  groupAlive?: () => boolean;
   kill(signal?: NodeJS.Signals): boolean;
 }
 
@@ -72,10 +84,21 @@ function hasExited(child: ChildLike): boolean {
 }
 
 /**
+ * Whether the SIGKILL leg has a process to signal: the child itself, or, once
+ * the SIGTERM leg has signalled the child's process group, a member of that
+ * group that ignored SIGTERM and outlived the child (HKDR-01).
+ */
+function needsSigkill(child: ChildLike, sigtermFired: boolean): boolean {
+  return !hasExited(child) || (sigtermFired && child.groupAlive?.() === true);
+}
+
+/**
  * Handle returned by `installTimerLadder`. `cancel()` is idempotent and
  * MUST be called on the child's natural `exit` AND `error` events to
  * close the TOCTOU window against the SIGTERM/SIGKILL timers firing
- * against a recycled pid.
+ * against a recycled pid. Once the SIGTERM leg has fired, `cancel()` keeps the
+ * SIGKILL leg of a child that leads a process group, so a member of the group
+ * that ignored SIGTERM still gets it.
  *
  * `fired()` is `true` once the SIGTERM leg has signalled a child that was
  * still running at its deadline, and `false` before that, after a `cancel()`
@@ -122,8 +145,9 @@ function normalizeSeconds(timeoutSeconds: number, label: string): number {
 
 /**
  * EXEC-02: install the SIGTERM -> 5s -> SIGKILL escalation ladder against
- * `child`. The SIGTERM timer fires at `timeoutSeconds`; if the child is still
- * alive 5 seconds later, the SIGKILL timer fires. Both timers `.unref()` so a
+ * `child`. The SIGTERM timer fires at `timeoutSeconds`; if the child, or a
+ * member of the process group it leads, is still alive 5 seconds later, the
+ * SIGKILL timer fires. Both timers `.unref()` so a
  * leaked timer never holds the loop open. Both callbacks guard on
  * `hasExited` -- exit state, NOT `child.killed`; see that function's
  * docstring for why the difference is load-bearing -- so a natural-exit
@@ -172,10 +196,10 @@ export function installTimerLadder(
 
   let sigkillTimer: NodeJS.Timeout | null = setTimeout(
     () => {
-      if (!hasExited(child)) {
+      if (needsSigkill(child, sigtermFired)) {
         hookDebugLog(
           `exec-timer: SIGKILL after ${seconds + SIGKILL_GRACE_SECONDS}s (${label}); ` +
-            `the child ignored SIGTERM`,
+            `the child or a process of its group ignored SIGTERM`,
         );
         const sent = child.kill("SIGKILL");
         if (!sent) {
@@ -194,7 +218,10 @@ export function installTimerLadder(
         sigtermTimer = null;
       }
 
-      if (sigkillTimer !== null) {
+      // A member of the child's group may outlive the child that the SIGTERM
+      // leg ended, so the SIGKILL leg stays for it (HKDR-01).
+      const groupMayOutlive = sigtermFired && child.groupAlive !== undefined;
+      if (sigkillTimer !== null && !groupMayOutlive) {
         clearTimeout(sigkillTimer);
         sigkillTimer = null;
       }

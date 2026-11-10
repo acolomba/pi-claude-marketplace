@@ -486,6 +486,13 @@ function createChild(pid: number | undefined, options: ChildOptions = {}): Child
       return;
     },
   }) satisfies ChildProcess;
+  // `Object.assign` copies each getter's value once, so the exit state is
+  // defined again as live accessors, as a `ChildProcess` reports it.
+  Object.defineProperties(child, {
+    exitCode: { configurable: true, enumerable: true, get: () => exitCode },
+    signalCode: { configurable: true, enumerable: true, get: () => signalCode },
+    killed: { configurable: true, enumerable: true, get: () => killed },
+  });
 
   return {
     child,
@@ -1649,7 +1656,7 @@ for (const { name, stop, timeout, expectedSignal } of GROUP_STOPS) {
     const pi = createPi();
     const child = createChild(24_690);
     const spawnCalls: SpawnCall[] = [];
-    const groupSignals: Array<readonly [number, NodeJS.Signals | undefined]> = [];
+    const groupSignals: Array<readonly [number, NodeJS.Signals | 0 | undefined]> = [];
     t.after(async () => {
       shutdownInMemoryChildren(runtime);
       destroyChild(child);
@@ -1675,6 +1682,52 @@ for (const { name, stop, timeout, expectedSignal } of GROUP_STOPS) {
     assert.deepStrictEqual(child.signals, []);
   });
 }
+
+test("sends SIGKILL to the group of a background hook whose shell its SIGTERM ended while a member runs on", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-group-sigkill-"));
+  const locations = locationsFor("project", root);
+  const entry = createEntry(root, {
+    handlerDecl: {
+      type: "command",
+      command: "/opt/hooks/scan",
+      args: [],
+      timeout: 1,
+      asyncRewake: true,
+    },
+  });
+  const context = createContext(root, "session-group-sigkill", true);
+  const pi = createPi();
+  const child = createChild(24_691);
+  const groupSignals: Array<readonly [number, NodeJS.Signals | 0 | undefined]> = [];
+  t.after(async () => {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  });
+
+  // act
+  await spawnAndRegister(runtime, entry, {}, context.context, pi.pi, locations, {
+    spawnImpl: createSpawn(child.child, []),
+    signalGroup: (pid, signal) => {
+      groupSignals.push([pid, signal]);
+    },
+    dispatchId: () => "dispatch-group-sigkill",
+  });
+  t.mock.timers.tick(1_000);
+  child.emitExit(null, "SIGTERM");
+  t.mock.timers.tick(5_000);
+
+  // assert
+  assert.deepStrictEqual(groupSignals, [
+    [24_691, "SIGTERM"],
+    [24_691, 0],
+    [24_691, "SIGKILL"],
+  ]);
+  assert.deepStrictEqual(child.signals, []);
+});
 
 function destroyChild(child: ChildHarness): void {
   child.child.removeAllListeners();

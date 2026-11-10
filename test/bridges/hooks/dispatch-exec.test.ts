@@ -1809,7 +1809,7 @@ test("starts a blocking hook as a process group leader and signals the group at 
   const caseRoot = await makeCaseRoot(t, "dispatch-group-");
   const processChild = makeInjectedChild(t, { pid: 52_103 });
   const processBoundary = observeSpawn(t, processChild);
-  const groupSignals: Array<readonly [number, NodeJS.Signals | undefined]> = [];
+  const groupSignals: Array<readonly [number, NodeJS.Signals | 0 | undefined]> = [];
 
   // act
   const pendingOutcome = dispatchHookExec(
@@ -1834,6 +1834,46 @@ test("starts a blocking hook as a process group leader and signals the group at 
   // assert
   assert.strictEqual(call.options.detached, process.platform !== "win32");
   assert.deepStrictEqual(signalsAtTimeout, [[52_103, "SIGTERM"]]);
+  assert.deepStrictEqual(processChild.killSignals, []);
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+});
+
+test("sends SIGKILL to the group of a blocking hook whose shell its SIGTERM ended while a member runs on", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const caseRoot = await makeCaseRoot(t, "dispatch-group-sigkill-");
+  const processChild = makeInjectedChild(t, { pid: 52_104 });
+  const processBoundary = observeSpawn(t, processChild);
+  const groupSignals: Array<readonly [number, NodeJS.Signals | 0 | undefined]> = [];
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    makeEntry(caseRoot, { command: "guard", timeout: 1 }),
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    createHooksRuntime(),
+    {
+      spawnImpl: processBoundary.spawnImpl,
+      signalGroup: (pid, signal) => {
+        groupSignals.push([pid, signal]);
+      },
+    },
+  );
+  await processBoundary.spawned;
+  t.mock.timers.tick(1_000);
+  processChild.emitExit(null, "SIGTERM");
+  t.mock.timers.tick(5_000);
+  const signalsAtGrace = [...groupSignals];
+  await processChild.close(null, "SIGTERM");
+  const hookOutcome = await pendingOutcome;
+
+  // assert
+  assert.deepStrictEqual(signalsAtGrace, [
+    [52_104, "SIGTERM"],
+    [52_104, 0],
+    [52_104, "SIGKILL"],
+  ]);
   assert.deepStrictEqual(processChild.killSignals, []);
   assert.deepStrictEqual(hookOutcome, { kind: "noop" });
 });

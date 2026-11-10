@@ -42,7 +42,7 @@ test("returns the child itself for a caller's own spawn that brings no group sig
 test("signals the group that the child leads instead of the child", () => {
   // arrange
   const { child, signals } = hookChild(4242);
-  const groupSignals: Array<readonly [number, NodeJS.Signals | undefined]> = [];
+  const groupSignals: Array<readonly [number, NodeJS.Signals | 0 | undefined]> = [];
   const hookProcess = asGroupLeader(child, {
     spawnImpl: () => child,
     signalGroup: (pid, signal) => {
@@ -100,7 +100,7 @@ for (const { pid } of [{ pid: undefined }, { pid: 0 }, { pid: 1 }]) {
   test(`signals the child alone when its pid is ${String(pid)}`, () => {
     // arrange
     const { child, signals } = hookChild(pid);
-    const groupSignals: Array<readonly [number, NodeJS.Signals | undefined]> = [];
+    const groupSignals: Array<readonly [number, NodeJS.Signals | 0 | undefined]> = [];
     const hookProcess = asGroupLeader(child, {
       signalGroup: (groupPid, signal) => {
         groupSignals.push([groupPid, signal]);
@@ -134,3 +134,60 @@ test("reads the exit state of the child as it changes", () => {
     { exitCode: 0, signalCode: "SIGTERM" },
   );
 });
+
+test("reports a live group after a signal 0 probe of the group", () => {
+  // arrange
+  const { child, signals } = hookChild(4242);
+  const groupSignals: Array<readonly [number, NodeJS.Signals | 0 | undefined]> = [];
+  const hookProcess = asGroupLeader(child, {
+    signalGroup: (pid, signal) => {
+      groupSignals.push([pid, signal]);
+    },
+  });
+
+  // act
+  const alive = hookProcess.groupAlive?.();
+
+  // assert
+  assert.strictEqual(alive, true);
+  assert.deepStrictEqual(groupSignals, [[4242, 0]]);
+  assert.deepStrictEqual(signals, []);
+});
+
+test("reports a group with no member left when the probe fails", () => {
+  // arrange
+  const { child } = hookChild(4242);
+  const hookProcess = asGroupLeader(child, {
+    signalGroup: () => {
+      const error = new Error("no such process group") as NodeJS.ErrnoException;
+      error.code = "ESRCH";
+      throw error;
+    },
+  });
+
+  // act
+  const alive = hookProcess.groupAlive?.();
+
+  // assert
+  assert.strictEqual(alive, false);
+});
+
+for (const { pid } of [{ pid: undefined }, { pid: 0 }, { pid: 1 }]) {
+  test(`reports no live group without probing when the pid is ${String(pid)}`, () => {
+    // arrange
+    const { child } = hookChild(pid);
+    const groupSignals: Array<readonly [number, NodeJS.Signals | 0 | undefined]> = [];
+    const hookProcess = asGroupLeader(child, {
+      signalGroup: (groupPid, signal) => {
+        groupSignals.push([groupPid, signal]);
+      },
+    });
+
+    // act
+    const alive = hookProcess.groupAlive?.();
+
+    // assert
+    assert.strictEqual(alive, false);
+    assert.deepStrictEqual(groupSignals, []);
+  });
+}

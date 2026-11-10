@@ -49,6 +49,8 @@
  *   waits at most 3 seconds for `$HOME/hook-meetings/<meets>`, the file of
  *   another hook of the table. It records `met` if that file appeared and
  *   `alone` if not. The files stay for the rest of the scenario.
+ * - `sigterm`: `ignore` makes it ignore SIGTERM from its first line, and so
+ *   do the commands it runs, so only a SIGKILL ends it before its end.
  * - `waits`: `true` makes it wait, before the lines above, until
  *   `$HOME/hook-releases/<name>` exists, so the hook outlives its event until
  *   a step releases it. It then removes the marker, so one release frees one
@@ -115,6 +117,7 @@ export interface RecordingHook {
   readonly rewakeMessage?: string;
   readonly rewakeSummary?: string;
   readonly waits?: true;
+  readonly sigterm?: "ignore";
 }
 
 const REQUIRED_COLUMNS = ["name", "event", "matcher"] as const;
@@ -137,6 +140,7 @@ const BEHAVIOR_FIELDS = {
   meets: "meets",
   "on reentry": "onReentry",
   waits: "waits",
+  sigterm: "sigterm",
 } as const satisfies Record<string, keyof RecordingHook>;
 
 // The directory, in the plugin, of every hook script.
@@ -230,6 +234,7 @@ const COLUMN_PARSERS: Readonly<Record<string, (cell: string) => Partial<Recordin
     oneOf(cell, ["true"], "a hook's waits");
     return { waits: true };
   },
+  sigterm: (cell) => ({ sigterm: oneOf(cell, ["ignore"], "a hook's sigterm") }),
 };
 
 // Checks the header and returns the parser of each optional column, in order.
@@ -418,6 +423,8 @@ function scriptText(hook: RecordingHook): string {
   const recorder = `"${process.execPath}" "${HOOK_RECORDER_PATH}" ${hook.name}${marker} "$@"`;
   return `${[
     "#!/bin/sh",
+    // An ignored signal stays ignored in every command the script runs.
+    ...(hook.sigterm === "ignore" ? ["trap '' TERM"] : []),
     "stdin=$(cat)",
     ...meeting,
     `printf '%s' "$stdin" | ${recorder}`,

@@ -135,9 +135,9 @@ Feature: Hook session end
       | name | version |
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
-      | name  | event        | matcher | form   | arguments   | exit code   | stderr   | timeout   | sleep   |
-      | end   | SessionEnd   | *       | script | <arguments> | <exit code> | <stderr> | <timeout> | <sleep> |
-      | start | SessionStart | *       |        |             |             |          |           |         |
+      | name  | event        | matcher | form   | arguments   | exit code   | stderr   | timeout   | sleep   | sigterm   |
+      | end   | SessionEnd   | *       | script | <arguments> | <exit code> | <stderr> | <timeout> | <sleep> | <sigterm> |
+      | start | SessionStart | *       |        |             |             |          |           |         |           |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user starts a new pi session with the hooks recording
@@ -147,11 +147,12 @@ Feature: Hook session end
       | SessionStart | second  |        | clear  | {project dir} |                 | start     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-second.env | second                 | second            | 1          |
 
     Examples:
-      | arguments        | exit code | stderr         | timeout | sleep |
-      |                  | 1         | cleanup failed |         |       |
-      |                  |           |                |         | 30    |
-      |                  |           |                | 60      | 60    |
-      | ["\|\|", "true"] |           |                |         | 30    |
+      | arguments        | exit code | stderr         | timeout | sleep | sigterm |
+      |                  | 1         | cleanup failed |         |       |         |
+      |                  |           |                |         | 30    |         |
+      |                  |           |                | 60      | 60    |         |
+      | ["\|\|", "true"] |           |                |         | 30    |         |
+      | ["\|\|", "true"] |           |                |         | 30    | ignore  |
 
   Scenario: A SessionEnd hook that exits 2 shows its error and does not keep the next session from starting
     Given pi runs with the scripted model
@@ -182,8 +183,8 @@ Feature: Hook session end
       | name | version |
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
-      | name | event      | matcher | form   | arguments   | exit code   | stderr   | timeout   | sleep   |
-      | end  | SessionEnd | *       | script | <arguments> | <exit code> | <stderr> | <timeout> | <sleep> |
+      | name | event      | matcher | form   | arguments   | exit code   | stderr   | timeout   | sleep   | sigterm   |
+      | end  | SessionEnd | *       | script | <arguments> | <exit code> | <stderr> | <timeout> | <sleep> | <sigterm> |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin list" in pi's json mode with the hooks recording
@@ -192,9 +193,10 @@ Feature: Hook session end
       | SessionEnd | first   | other  | {project dir} |                 | end       | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
 
     Examples:
-      | arguments        | exit code | stderr         | timeout | sleep |
-      |                  | 1         | cleanup failed |         |       |
-      |                  | 2         | cleanup failed |         |       |
-      |                  |           |                |         | 30    |
-      |                  |           |                | 60      | 60    |
-      | ["\|\|", "true"] |           |                |         | 30    |
+      | arguments        | exit code | stderr         | timeout | sleep | sigterm |
+      |                  | 1         | cleanup failed |         |       |         |
+      |                  | 2         | cleanup failed |         |       |         |
+      |                  |           |                |         | 30    |         |
+      |                  |           |                | 60      | 60    |         |
+      | ["\|\|", "true"] |           |                |         | 30    |         |
+      | ["\|\|", "true"] |           |                |         | 30    | ignore  |

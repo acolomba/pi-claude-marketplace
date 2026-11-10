@@ -14,8 +14,11 @@
 
 import type { ChildLike } from "./exec-timer.ts";
 
-/** Signals the POSIX process group that `pid` leads; throws when it cannot. */
-export type SignalGroup = (pid: number, signal: NodeJS.Signals | undefined) => void;
+/**
+ * Signals the POSIX process group that `pid` leads; throws when it cannot.
+ * Signal `0` only probes whether the group still has a member.
+ */
+export type SignalGroup = (pid: number, signal: NodeJS.Signals | 0 | undefined) => void;
 
 /** Node's group signal: `process.kill` of the group's negative id. */
 const signalProcessGroup: SignalGroup = (pid, signal) => {
@@ -29,8 +32,9 @@ export interface GroupSignalDeps {
 }
 
 /**
- * `child` with a `kill` that signals the process group the child leads. The
- * exit state reads through to the child.
+ * `child` with a `kill` that signals the process group the child leads, and a
+ * `groupAlive` that probes that group. The exit state reads through to the
+ * child.
  *
  * The group signal is `deps.signalGroup`, or Node's when the lane spawns with
  * Node's own `spawn`, which the lanes ask for a group leader. A caller that
@@ -49,6 +53,12 @@ export function asGroupLeader(
     return child;
   }
 
+  // The id of the group the child leads, or undefined when its pid names none.
+  const groupId = (): number | undefined => {
+    const { pid } = child;
+    return pid === undefined || pid < 2 ? undefined : pid;
+  };
+
   return {
     get exitCode() {
       return child.exitCode;
@@ -56,14 +66,28 @@ export function asGroupLeader(
     get signalCode() {
       return child.signalCode;
     },
+    groupAlive(): boolean {
+      const group = groupId();
+      if (group === undefined) {
+        return false;
+      }
+
+      try {
+        signalGroup(group, 0);
+        return true;
+      } catch {
+        // No member is left, or none can be signalled.
+        return false;
+      }
+    },
     kill(signal?: NodeJS.Signals): boolean {
-      const { pid } = child;
-      if (pid === undefined || pid < 2) {
+      const group = groupId();
+      if (group === undefined) {
         return child.kill(signal);
       }
 
       try {
-        signalGroup(pid, signal);
+        signalGroup(group, signal);
         return true;
       } catch {
         // The group is gone or cannot be signalled; the child alone still can.
