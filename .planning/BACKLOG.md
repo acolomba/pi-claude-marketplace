@@ -1926,36 +1926,31 @@ invariant for the lazy-hydrate path: boot with a user-scope-only
 Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
 `ensureSharedDataDir`), `test/integration/hooks-dispatch-end-to-end.test.ts`.
 
-## HKDR-01: the blocking lane settles on `close`, so a surviving grandchild can pin a turn
+## HKDR-01: a hook process that the kill does not reach can still pin a turn
 
-Surfaced by review while landing PR #138 (2026-08-19), alongside the dead
-SIGKILL escalation that PR fixed.
+Narrowed 2026-11-10 by D-BG-211. Both hook lanes now spawn a hook as the
+leader of its own process group and send every signal to the group, and once
+the ladder's SIGTERM has fired, its SIGKILL follows after the grace whenever
+the group still has a member, also after the hook's shell exited. A grandchild
+that stays in the hook's group no longer pins a turn past the SIGKILL grace.
 
-`spawnAndCollect` (`bridges/hooks/dispatch-exec.ts`) resolves only from the
-child's `error` and `close` handlers. `close` fires when every stdio stream has
-closed, not when the child exits. Hook handlers spawn shell-form by default, so
-the ladder's signals reach `/bin/sh`; a grandchild that inherited the stdout
-pipe and outlives it keeps that pipe open, `close` never fires, and the promise
-never settles. `reduceBucket` awaits the executor with no deadline, so the turn
-does not complete.
+What remains:
 
-The async lane does not share the defect -- it listens on `exit`
-(`bridges/hooks/async-rewake/registry.ts`) -- and it has a `/reload` backstop
-in `shutdownInMemoryChildren`. The blocking lane has neither.
+- A descendant that leaves the hook's process group, such as one that calls
+  `setsid` or `setpgid`, gets no signal from the timeout, `/reload`, or the
+  orphan reap. Claude Code 2.1.319 also signals every descendant it finds with
+  `ps -A -o pid=,ppid=,pgid=` (its `mE` kill). If such a descendant keeps the
+  hook's stdout open, the blocking lane, which settles on `close`, waits until
+  it exits.
+- A group member that keeps the hook's stdout open after the hook's shell
+  exits on its own, before the timeout, also holds the blocking lane until it
+  exits: the SIGTERM leg finds the shell gone and sends nothing, so no SIGKILL
+  follows. Claude Code does not kill it either; it stops waiting after a
+  bounded drain of the streams (the `boundMs` wait that D-BG-605 defers).
 
-The comments that stated the ladder's cancel contract in terms of `exit`,
-while this lane wires `close`, were corrected when this item was filed. What
-remains here is the behavior alone, not the drift that hid it.
-
-**Fix shape.** Settle on `exit` as well as `close`, with a short drain window
-after `exit` so a normally-behaved handler's tail output is not truncated --
-the reason `close` was chosen in the first place. A `detached: true` spawn plus
-a process-group kill would close the grandchild case properly but is a larger
-change with its own `/reload` implications.
-
-Code seams: `bridges/hooks/dispatch-exec.ts` (`spawnAndCollect`),
-`bridges/hooks/spawn-helpers.ts` (the shell-form default),
-`bridges/hooks/exec-timer.ts` (the ladder's documented cancel contract).
+Code seams: `bridges/hooks/process-group.ts` (the group signal),
+`bridges/hooks/exec-timer.ts` (the ladder), `bridges/hooks/dispatch-exec.ts`
+(`spawnAndCollect`, which settles on `close`).
 
 ## ~~HKTO-01: `SessionEnd` hooks do not share a timeout budget~~ -- CLOSED
 
