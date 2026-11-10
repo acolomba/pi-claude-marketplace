@@ -196,6 +196,11 @@ export class PiProcess {
     return this.trustDecided;
   }
 
+  /** Returns everything Pi has written to stderr so far. */
+  get stderrText(): string {
+    return this.stderr;
+  }
+
   /** Returns how many records Pi has printed so far. */
   recordCount(): number {
     return this.records.length;
