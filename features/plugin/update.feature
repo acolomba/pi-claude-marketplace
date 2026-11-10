@@ -43,7 +43,7 @@ Feature: Plugin update
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id           | name    | status | reasons       | cause chain                                             | cause truncated | leaks | rollback partial | scope   |
-      | gits             | project           | unknown@gits | unknown | failed | network error | Expected "# service=git-upload-pack\\n" but received "". | false           |       |                  | project |
+      | gits             | project           | unknown@gits | unknown | failed | network error | Empty response from git server.                         | false           |       |                  | project |
     When the git host serves the plugin "unknown" again
     When the git host sends an invalid response for the marketplace "gits"
     When the user runs "/claude:plugin update unknown@gits --scope project"
@@ -54,7 +54,7 @@ Feature: Plugin update
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id   | name | status | reasons       | cause chain                                             | cause truncated | leaks | rollback partial | scope   |
-      | gits             | project           | gits@gits | gits | failed | network error | Expected "# service=git-upload-pack\\n" but received "". | false           |       |                  | project |
+      | gits             | project           | gits@gits | gits | failed | network error | Empty response from git server.                         | false           |       |                  | project |
 
   Scenario: An invalid cloned manifest does not suggest retrying
     Given the marketplace "broken" is published as a url source
