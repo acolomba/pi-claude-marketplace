@@ -15,7 +15,11 @@
  * writes the agents of every plugin, plant an agents index entry that claims
  * a file there, move a plugin's recorded plugin root outside its
  * marketplace, and set the scope a marketplace's record names, as a hand edit
- * of the installation record can. The other steps
+ * of the installation record can. Others rewrite the whole installation record
+ * as an earlier release wrote it, or with a schema version newer than this
+ * release reads, as an upgrade or a downgrade leaves it (D-BG-13); the one
+ * for release 0.4.3 also deletes the scope's configs, which that release did
+ * not write. The other steps
  * only read; one of them lists the files of that `agents/` directory, and one
  * checks that the user scope holds no record of project installs.
  *
@@ -30,6 +34,10 @@ import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
+import {
+  rewriteStateAsRelease,
+  rewriteStateWithNewerSchema,
+} from "../../lib/earlier-version-state.ts";
 import { isPlainObject } from "../../lib/field-rows.ts";
 import { readGitClones } from "../../lib/git-clones.ts";
 import {
@@ -114,6 +122,20 @@ async function recordedPlugins(root: string): Promise<readonly RecordedPlugin[]>
       recordedPlugin(`${plugin}@${marketplace}`, record, file, content),
     );
   });
+}
+
+// The schema version each earlier release wrote, from its `state.json` schema.
+const RELEASE_SCHEMA_VERSIONS: ReadonlyMap<string, number> = new Map([
+  ["0.6.0", 1],
+  ["0.19.2", 2],
+]);
+
+// The JSON object the scope's installation record file holds.
+async function readRecordFile(world: ScenarioWorld, scope: string): Promise<object> {
+  const file = path.join(extensionRoot(world, scope), "state.json");
+  const state: unknown = JSON.parse(await readFile(file, "utf8"));
+  assert.ok(isPlainObject(state), `${file} is not a JSON object`);
+  return state;
 }
 
 // The data directory of the plugin `id` (`plugin@marketplace`) in the scope.
@@ -323,6 +345,41 @@ Given(
     }));
     const record = await readMarketplaceRecord(scopeRoot, marketplace);
     assert.equal(record.scope, named);
+  },
+);
+
+Given(
+  "the installation record of the {word} scope is rewritten as release {string} wrote it",
+  async function (this: ScenarioWorld, scope: string, release: string) {
+    const schemaVersion = RELEASE_SCHEMA_VERSIONS.get(release);
+    assert.ok(schemaVersion !== undefined, `${release} is not a release with a known record`);
+    const written = await rewriteStateAsRelease({ scopeRoot: this.scopeRoot(scope), release });
+    const state = await readRecordFile(this, scope);
+    assert.deepStrictEqual(state, written);
+    assert.strictEqual(Reflect.get(state, "schemaVersion"), schemaVersion);
+  },
+);
+
+Given(
+  "the {word} scope holds what release 0.4.3 left: its installation record and no config",
+  async function (this: ScenarioWorld, scope: string) {
+    const scopeRoot = this.scopeRoot(scope);
+    const written = await rewriteStateAsRelease({ scopeRoot, release: "0.4.3" });
+    const state = await readRecordFile(this, scope);
+    assert.deepStrictEqual(state, written);
+    assert.strictEqual(Reflect.get(state, "schemaVersion"), 1);
+    for (const config of ["claude-plugins.json", "claude-plugins.local.json"]) {
+      assert.strictEqual(existsSync(path.join(scopeRoot, config)), false, `${config} exists`);
+    }
+  },
+);
+
+Given(
+  "the installation record of the {word} scope is rewritten with a schema version this release does not read",
+  async function (this: ScenarioWorld, scope: string) {
+    const schemaVersion = await rewriteStateWithNewerSchema(this.scopeRoot(scope));
+    const state = await readRecordFile(this, scope);
+    assert.strictEqual(Reflect.get(state, "schemaVersion"), schemaVersion);
   },
 );
 

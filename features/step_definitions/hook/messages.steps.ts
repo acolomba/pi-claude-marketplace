@@ -1,12 +1,14 @@
 /**
  * @fileoverview Steps about the hook notices a turn showed the user: each
- * hook's system message and the report of a block (HOOK-05).
+ * hook's system message and the report of a block (HOOK-05), and the rewake
+ * summary of an async rewake hook that exited (D-BG-12).
  *
  * The extension shows a hook notice through its notify chokepoint, which in
  * an RPC session appends it as a `claude-plugin` entry of kind `hook-notice`.
  * Pi reports every appended entry as an `entry_appended` record, so the step
  * reads the notices from the records of the last turn, in emission order, each
- * valid against the published payload schema (D-CF5-14).
+ * valid against the published payload schema (D-CF5-14). A rewake summary is
+ * a `claude-plugin` entry of kind `async-rewake-summary`, read the same way.
  */
 
 import assert from "node:assert/strict";
@@ -24,6 +26,8 @@ import type { ScenarioWorld } from "../../support/world.ts";
 const PAYLOAD_VALIDATOR = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
 
 const NOTICE_COLUMNS: readonly string[] = ["severity", "text"];
+
+const SUMMARY_COLUMNS: readonly string[] = ["text"];
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -61,11 +65,14 @@ function statedNotice(row: readonly string[]): Record<string, unknown> {
   };
 }
 
-// The hook notices of the last turn, with the run tokens projected.
-function turnNotices(world: ScenarioWorld): Record<string, unknown>[] {
+// The hook payloads of `kind` in the last turn, with the run tokens projected.
+function turnPayloads(
+  world: ScenarioWorld,
+  kind: "hook-notice" | "async-rewake-summary",
+): Record<string, unknown>[] {
   return world.requireTurn().records.flatMap((record) => {
     const payload = payloadOf(record);
-    return payload?.kind === "hook-notice"
+    return payload?.kind === kind
       ? [{ ...payload, text: projectTokens("text", payload.text, world.tokens) }]
       : [];
   });
@@ -75,7 +82,7 @@ Then("the hooks show the user these messages:", function (this: ScenarioWorld, t
   const [header = [], ...rows] = table.raw();
   assert.deepStrictEqual(header, NOTICE_COLUMNS);
   assert.deepStrictEqual(
-    turnNotices(this),
+    turnPayloads(this, "hook-notice"),
     rows.map((row) => statedNotice(row)),
   );
   this.markTurnCompared();
@@ -85,6 +92,28 @@ Then("the hooks show the user these messages:", function (this: ScenarioWorld, t
 // hook notice has a step of its own. It reads every record of the turn, so a
 // notice appended to the session that a new session replaced counts too.
 Then("the hooks show the user no messages", function (this: ScenarioWorld) {
-  assert.deepStrictEqual(turnNotices(this), []);
+  assert.deepStrictEqual(turnPayloads(this, "hook-notice"), []);
   this.markTurnCompared();
 });
+
+// A rewake summary is always info and never asks for a reload, so a row
+// states only its text.
+Then(
+  "the hooks show the user these rewake summaries:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const [header = [], ...rows] = table.raw();
+    assert.deepStrictEqual(header, SUMMARY_COLUMNS);
+    assert.deepStrictEqual(
+      turnPayloads(this, "async-rewake-summary"),
+      rows.map(([text]) => ({
+        schemaVersion: 1,
+        origin: { kind: "hook" },
+        kind: "async-rewake-summary",
+        severity: "info",
+        needsReload: false,
+        text,
+      })),
+    );
+    this.markTurnCompared();
+  },
+);

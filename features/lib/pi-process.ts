@@ -15,10 +15,20 @@
  * printed it, whether or not a request is in flight. A model turn goes on
  * after Pi answers its prompt, so the step that runs one reads the log from
  * the record count before the prompt until `agent_settled` (HAR-03).
+ *
+ * Pi decides whether it trusts a project when it builds a session's runtime
+ * while the project holds a resource that needs that decision, and it keeps
+ * the decision in memory, by directory, until it exits (`projectTrustByCwd`
+ * in Pi's `main.js`). A later session in the same directory reads that
+ * decision, not the trust store and not the project's files. So the process
+ * records each request that builds a runtime while its project holds such a
+ * resource, and a Pi that serves the next scenario must be a new process.
  */
 
 import { once } from "node:events";
 import { createInterface } from "node:readline";
+
+import { hasTrustRequiringProjectResources } from "@earendil-works/pi-coding-agent";
 
 import { killProcessGroup, startRpcPi } from "../../test/e2e/_rpc.ts";
 
@@ -76,6 +86,15 @@ export const DIALOG_METHODS: ReadonlySet<string> = new Set([
 // Pi exits within a second of losing stdin; past this the group is killed.
 const STOP_GRACE_MS = 5_000;
 
+// The RPC requests that make Pi build a new runtime for the session, which is
+// when it decides the project's trust.
+const RUNTIME_REQUESTS: ReadonlySet<string> = new Set([
+  "new_session",
+  "switch_session",
+  "fork",
+  "clone",
+]);
+
 function isRecord(value: unknown): value is RpcRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -109,6 +128,7 @@ function parseLine(line: string): RpcRecord | undefined {
  */
 export class PiProcess {
   private readonly child: PiChild;
+  private readonly cwd: string;
   private readonly records: RpcRecord[] = [];
   private readonly waiters = new Set<RecordWaiter>();
   private pending: PendingRequest | undefined = undefined;
@@ -117,9 +137,12 @@ export class PiProcess {
   private stderr = "";
   private exited = false;
   private stopped = false;
+  private crashed = false;
+  private trustDecided = false;
 
-  private constructor(child: PiChild) {
+  private constructor(child: PiChild, cwd: string) {
     this.child = child;
+    this.cwd = cwd;
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       this.stderr += chunk;
@@ -152,7 +175,7 @@ export class PiProcess {
     git: RpcGitEnvironment,
     profile?: RpcProfile,
   ): Promise<PiProcess> {
-    return new PiProcess(await startRpcPi(sandbox, git, profile));
+    return new PiProcess(await startRpcPi(sandbox, git, profile), sandbox.cwd);
   }
 
   /**
@@ -162,6 +185,20 @@ export class PiProcess {
    */
   get idle(): boolean {
     return !this.exited && this.pending === undefined && !this.inTurn;
+  }
+
+  /**
+   * Whether a request built a runtime while the project held a resource that
+   * needs a trust decision, so Pi keeps a trust decision for the project
+   * until it exits. An emptied project does not clear it.
+   */
+  get decidedProjectTrust(): boolean {
+    return this.trustDecided;
+  }
+
+  /** Returns everything Pi has written to stderr so far. */
+  get stderrText(): string {
+    return this.stderr;
   }
 
   /** Returns how many records Pi has printed so far. */
@@ -225,6 +262,11 @@ export class PiProcess {
       throw new Error(`Pi has exited:\n${this.stderr}`);
     }
 
+    // Read before Pi builds the runtime, from the files Pi reads then.
+    if (RUNTIME_REQUESTS.has(request.type) && hasTrustRequiringProjectResources(this.cwd)) {
+      this.trustDecided = true;
+    }
+
     const id = `r${this.nextId++}`;
     return new Promise((resolve, reject) => {
       this.pending = { id, entries: [], extensionErrors: [], dialogs: [], resolve, reject };
@@ -234,8 +276,8 @@ export class PiProcess {
 
   /**
    * Closes Pi's stdin, waits for it to exit, and kills whatever its group
-   * left. A second call does nothing: by then the group id may belong to an
-   * unrelated process.
+   * left, also after `crash()`. A second call does nothing: by then the group
+   * id may belong to an unrelated process.
    */
   async stop(): Promise<void> {
     if (this.stopped) {
@@ -255,6 +297,26 @@ export class PiProcess {
     }
 
     killProcessGroup(this.child);
+  }
+
+  /**
+   * Kills Pi's own process with SIGKILL and waits for its exit, as a Pi that
+   * dies does. The rest of its process group keeps running, and so do its
+   * async hook processes, which run in process groups of their own, until the
+   * next load stops them (ASYNC-04). So this never kills the group; the later
+   * `stop()` of the release does. A second `crash()` does nothing.
+   */
+  async crash(): Promise<void> {
+    if (this.stopped || this.crashed) {
+      return;
+    }
+
+    this.crashed = true;
+    if (!this.exited) {
+      const exit = once(this.child, "exit");
+      this.child.kill("SIGKILL");
+      await exit;
+    }
   }
 
   private write(record: RpcRecord): void {

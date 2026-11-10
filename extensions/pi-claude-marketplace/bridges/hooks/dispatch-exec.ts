@@ -22,7 +22,10 @@
 //      ?? true })`. Note: `args: []` is exec-form -- the discriminator is
 //      "args defined" not "args non-empty". The exec form gets the three
 //      path variables substituted into `command` and `args` (D-CF5-15).
-//   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02). `ladder.cancel()`
+//      Off Windows the hook is spawned `detached`, so it leads its own
+//      process group.
+//   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02) against that
+//      process group (`./process-group.ts`). `ladder.cancel()`
 //      runs from the shared `settle()` closure, which both `child.once(
 //      "close", ...)` and `child.once("error", ...)` call, to close the
 //      TOCTOU window against the timer firing on a recycled pid.
@@ -37,7 +40,8 @@
 //      stderr, entry.claudeEvent)`, unless the hook failed and sets `onFailure: "block"`
 //      (D-CF5-18, `./on-failure.ts`): then a start failure (`error`), an exit
 //      other than 0 and 2, a timeout, or broken JSON stdout is a block. A JSON
-//      deny still wins over that block.
+//      deny still wins over that block. At every end of the process, a
+//      PostCompact result also carries how the hook ended (D-BG-503).
 //
 // Never-throws contract: every error path resolves to `{ kind: "noop" }` +
 // `hookDebugLog`, or to the onFailure block when the hook asks for one. The
@@ -66,7 +70,7 @@ import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
 import { hookPathVars, prepareHookEnv } from "./hook-env.ts";
 import { onFailureBlock } from "./on-failure.ts";
-import { translatePostCompact } from "./payloads/post-compact.ts";
+import { postCompactRunOf, translatePostCompact } from "./payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "./payloads/post-tool-use.ts";
 import { translatePreCompact } from "./payloads/pre-compact.ts";
@@ -76,6 +80,7 @@ import { translateSessionStart } from "./payloads/session-start.ts";
 import { translateStopFailure } from "./payloads/stop-failure.ts";
 import { translateStop } from "./payloads/stop.ts";
 import { translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
+import { asGroupLeader } from "./process-group.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
 import { collectStreamText } from "./stream-text.ts";
 import { resolveTimeoutSeconds } from "./timeout.ts";
@@ -84,6 +89,7 @@ import { parseHookStdout } from "./wire-protocol.ts";
 
 import type { SpawnDeps } from "./async-rewake/registry.ts";
 import type { HookExecResult } from "./exec-result.ts";
+import type { HookExitFacts } from "./on-failure.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
@@ -159,8 +165,9 @@ export async function dispatchHookExec(
   runtime: HooksRuntime,
   deps: SpawnDeps = {},
 ): Promise<HookExecResult> {
-  const spawnImpl = deps.spawnImpl ?? spawn;
-  // HOOK-06 / EXEC-05 / D-62-01: asyncRewake delegation. Strict `=== true`
+  // HOOK-06 / EXEC-05 / D-62-01 / D-BG-205: background delegation of an
+  // `asyncRewake` or a plain `async` hook, which Claude Code runs in the
+  // background, so its exit code and decisions decide nothing. Strict `=== true`
   // discriminator (HOOK-03 lenient stance: any non-`true` value -- including
   // a string `"yes"` -- flows to the sync EXEC-01..04 path). The fold
   // cannot distinguish a sync `{kind:"noop"}` from this async-spawned
@@ -175,7 +182,7 @@ export async function dispatchHookExec(
   // `dispatch.ts` always thread the live `ExtensionAPI` through. When
   // the async arm fires without `pi`, the registry call is skipped and
   // the noop arm logged -- never throw.
-  if (entry.handlerDecl.asyncRewake === true) {
+  if (entry.handlerDecl.asyncRewake === true || entry.handlerDecl.async === true) {
     if (pi === undefined) {
       hookDebugLog(
         `async-rewake: pi missing on async dispatch (${entry.pluginId}/${entry.claudeEvent}); skipping spawn`,
@@ -202,26 +209,41 @@ export async function dispatchHookExec(
     const loc = locationsFor(entry.scope, transCtx.cwd);
     const env = await prepareHookEnv(entry, transCtx, loc);
     const vars = hookPathVars(entry, transCtx, loc);
-    return await spawnAndCollect(entry, vars, env, stdinJson, spawnImpl);
+    return await spawnAndCollect(entry, vars, env, stdinJson, deps);
   } catch (err) {
     hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
     // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
     // The cause goes in as stderr, so the block reason ends with it.
     const noop: HookExecResult = { kind: "noop" };
-    return (
-      onFailureBlock(
-        entry,
-        {
-          startFailed: true,
-          timedOut: false,
-          exitCode: null,
-          stdout: "",
-          stderr: redactAbsolutePaths(errorMessage(err)),
-        },
-        noop,
-      ) ?? noop
-    );
+    const facts: HookExitFacts = {
+      startFailed: true,
+      timedOut: false,
+      exitCode: null,
+      stdout: "",
+      stderr: redactAbsolutePaths(errorMessage(err)),
+    };
+    return endedResult(entry, facts, noop, onFailureBlock(entry, facts, noop));
   }
+}
+
+/**
+ * The result a sync hook settles with: the onFailure block when there is one,
+ * else what the wire protocol read. A PostCompact result also carries how the
+ * hook ended, for the notice after `/compact` (D-BG-503); every other event's
+ * result is returned as it is.
+ */
+function endedResult(
+  entry: RoutingEntry,
+  facts: HookExitFacts,
+  answer: HookExecResult,
+  failure: HookExecResult | undefined,
+): HookExecResult {
+  const result = failure ?? answer;
+  if (entry.claudeEvent !== "PostCompact") {
+    return result;
+  }
+
+  return { ...result, postCompactRun: postCompactRunOf(facts, answer, failure !== undefined) };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -298,8 +320,9 @@ async function spawnAndCollect(
   vars: ClaudePluginVars,
   env: NodeJS.ProcessEnv,
   stdinJson: string,
-  spawnImpl: typeof spawn = spawn,
+  deps: SpawnDeps,
 ): Promise<HookExecResult> {
+  const spawnImpl = deps.spawnImpl ?? spawn;
   const plan = planSpawn(entry, vars);
   const timeoutSeconds = resolveTimeoutSeconds({
     raw: entry.handlerDecl.timeout,
@@ -315,12 +338,16 @@ async function spawnAndCollect(
     env,
     stdio: ["pipe", "pipe", "pipe"],
     shell: plan.shell,
+    // The hook leads its own process group, which the ladder signals
+    // (./process-group.ts). A detached Windows process would open a console
+    // window of its own.
+    detached: process.platform !== "win32",
   });
 
   return await new Promise<HookExecResult>((resolve) => {
     let settled = false;
 
-    const ladder = installTimerLadder(child, timeoutSeconds, ladderLabel);
+    const ladder = installTimerLadder(asGroupLeader(child, deps), timeoutSeconds, ladderLabel);
 
     const settle = (result: HookExecResult): void => {
       if (settled) {
@@ -345,12 +372,17 @@ async function spawnAndCollect(
       );
       // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
       const noop: HookExecResult = { kind: "noop" };
-      const failure = onFailureBlock(
-        entry,
-        { startFailed: true, timedOut: false, exitCode: null, stdout: "", stderr: stderr.text() },
-        noop,
-      );
-      settle(failure ?? noop);
+      const facts: HookExitFacts = {
+        startFailed: true,
+        timedOut: false,
+        exitCode: null,
+        stdout: "",
+        stderr: stderr.text(),
+      };
+      const failure = onFailureBlock(entry, facts, noop);
+      // A PostCompact run reads the start error, redacted as the outer catch does.
+      const started = { ...facts, stderr: redactAbsolutePaths(errorMessage(err)) };
+      settle(endedResult(entry, started, noop, failure));
     });
 
     child.once("close", (code) => {
@@ -364,18 +396,14 @@ async function spawnAndCollect(
       const parsed = parseHookStdout(code, outText, errText, entry.claudeEvent);
       // D-CF5-18: a failed hook that sets onFailure "block" blocks whatever its
       // stdout says, except that a JSON deny keeps its own reason.
-      const failure = onFailureBlock(
-        entry,
-        {
-          startFailed: false,
-          timedOut: ladder.fired(),
-          exitCode: code,
-          stdout: outText,
-          stderr: errText,
-        },
-        parsed,
-      );
-      settle(failure ?? parsed);
+      const facts: HookExitFacts = {
+        startFailed: false,
+        timedOut: ladder.fired(),
+        exitCode: code,
+        stdout: outText,
+        stderr: errText,
+      };
+      settle(endedResult(entry, facts, parsed, onFailureBlock(entry, facts, parsed)));
     });
 
     // EPIPE defense: attach the error listener BEFORE write so a child

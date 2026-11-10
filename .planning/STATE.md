@@ -1,41 +1,40 @@
 ---
 gsd_state_version: "1.0"
-milestone: mcp-builtin
+milestone: behavioral-gaps
 status: Awaiting next milestone
-stopped_at: "Milestone mcp-builtin archived, reviewed, and merged (PR #303)"
-last_updated: "2026-11-09T14:18:04.158Z"
-last_activity: 2026-11-08
-last_activity_desc: "PR #303 merged; mcp-builtin review logs moved into the milestone archive"
-state_head: 4e964d6337e85c3709882cec82d5ca7ac0a5c242
-milestone_name: MCP Built-in
+stopped_at: Milestone behavioral-gaps completed and archived (override_closeout)
+last_updated: "2026-11-10T19:57:18.434Z"
+last_activity: 2026-11-09
+last_activity_desc: Quick batch 261109-cpi fixed the reviewed dubious choices
+state_head: ecc72b9de832ab19c2cc72212b0e2684c136dc52
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 55
-  completed_plans: 55
+  total_phases: 16
+  completed_phases: 16
+  total_plans: 36
+  completed_plans: 36
   percent: 100
+milestone_name: Behavioral Coverage Gaps
+current_phase: null
+current_phase_name: null
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-05 after the mcp-builtin milestone closed)
+See: `.planning/PROJECT.md` (updated 2026-11-08 when the behavioral-gaps milestone closed)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** the next milestone (mcp-builtin merged as PR #303)
-The mcp-builtin review log is `.planning/milestones/mcp-builtin-DUBIOUS-CHOICES.md`. Still open from component-features:
-the PR for `claude/quirky-planck-hhm592` and the upstream branches on
-`acolomba/pi` and `acolomba/pi-subagents`.
+**Current focus:** Planning the next milestone; behavioral-gaps awaits the user's review of its dubious choices and a PR
 
 ## Current Position
 
-Phase: Milestone mcp-builtin complete
+Phase: Milestone behavioral-gaps complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-09 - Completed quick task 261109-jm6: move the init scripts to scripts/init
+Last activity: 2026-11-09 -- Quick batch 261109-cpi fixed the six reviewed dubious choices
 
 
 ### mcp-4 closeout
@@ -133,6 +132,9 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| verification_override | Phase 01 (foundation): verification `stale`; the flake fix `d04a5106` changed `features/lib/pi-process.ts` and `layout.md` after it; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
+| verification_override | Phase 04 (PostToolUseFailure hooks): verification `stale`; later hooks phases changed `bridges/hooks/dispatch.ts`, its tests, and `docs/hooks-compatibility.md`; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
+| verification_override | Phase 06 (SessionEnd hooks): verification `stale`; later hooks phases changed `bridges/hooks/timeout.ts` and `docs/hooks-compatibility.md`; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
 | verification_override | Phase 02 (built-in materialization): `human_needed`, 5/7 must-haves at the combined-tree re-verification (c7a0358); the milestone closed with an override, MS-06 | resolved 2026-11-06 — re-verified `passed` 7/7 after the review fixes | 2026-11-05 | mcp-builtin |
 | uat_gaps       | 02/02-UAT.md: 2 pending manual scenarios (BLT-04 "reported, never silent" as `info` plus `/mcp`; `/reload` and `/new` in a real Pi with built-in MCP), P2-DC-100 | resolved 2026-11-06 — 02-UAT 2/2 passed (283db43) | 2026-11-05 | mcp-builtin |
 | todos          | 2026-10-13-cucumber-rules-trial.md: try the cucumber rules on another repository (§3; reviewed in Phase 10 and not folded) | acknowledged — still pending | 2026-10-21 | marketplace-features |
@@ -204,9 +206,18 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261106-u9c | MCP implementation test gaps and the apply row fix (REVIEWSUGG-01 tests part) | 2026-11-07 | e27276c | — | .planning/quick/261106-u9c-mcp-implementation-test-gaps-reviewsugg-01-tests-part-see-pl |
 | 261107-36g | Name the unsupported kinds in the not-installable message (NOTINSTALLMSG-01) | 2026-11-07 | 93168c0 | — | [261107-36g-fix-notinstallmsg-01-name-the-unsupporte](./quick/261107-36g-fix-notinstallmsg-01-name-the-unsupporte/) |
 | 261107-lth | Install codegraph as a devDependency instead of globally | 2026-11-07 | 55cf1393 | — | [261107-lth-codegraph-local-install](./quick/261107-lth-codegraph-local-install/) |
+| 261108-a00 | Isolate the Pi home for every test run | 2026-11-08 | 29904755 | — | [261108-a00-isolate-the-pi-home-for-every-test-run](./quick/261108-a00-isolate-the-pi-home-for-every-test-run/) |
+| 261109-cpl | PRUNECFG-01: prune and `uninstall --prune` drop a removed dependency's `enabled: false` declaration from the scope's claude-plugins.json (sh | 2026-11-09 | 65833926 | — | .planning/quick/261109-cpl-prunecfg-01-prune-and-uninstall-prune-drop-a-removed-depende |
+| 261109-cpm | Browse picker install-scope screen: drop the `(Recommended)` marker from the `Project local` option and keep the option order (reverses D-BG | 2026-11-09 | 80eadf5f | — | .planning/quick/261109-cpm-browse-picker-install-scope-screen-drop-the-recommended-mark |
+| 261109-cpn | Async rewake: `stop_hook_active` is true only for the woken turn, as in Claude Code 2.1.319, not until the user's next input, and it is not | 2026-11-09 | 58d91f65 | — | .planning/quick/261109-cpn-async-rewake-stop-hook-active-is-true-only-for-the-woken-tur |
+| 261109-cpo | P7-DC-04: when a load refuses a newer state.json (schema version above this release's), stop offering that scope's installed components (ski | 2026-11-09 | 6f908fd5 | — | .planning/quick/261109-cpo-p7-dc-04-when-a-load-refuses-a-newer-state-json-schema-versi |
+| 261109-cpj | Model-facing list tool (extensions/pi-claude-marketplace/edge/handlers/tools.ts): an installed-but-disabled plugin shows a new `[disabled]` | 2026-11-09 | bcd68aa6 | — | .planning/quick/261109-cpj-model-facing-list-tool-extensions-pi-claude-marketplace-edge |
+| 261109-cpk | CLOSEDLIST-01: accept `\|` and `,` matcher lists on SessionStart, SessionEnd, PreCompact, and PostCompact hooks, as StopFailure already does | 2026-11-09 | ae298e7b | — | .planning/quick/261109-cpk-closedlist-01-accept-and-matcher-lists-on-sessionstart-sessi |
 | 261108-og5 | Split the cloud environment setup from the per-session init | 2026-11-08 | 57e5b7d | — | [261108-og5-split-cloud-environment-setup-from-per-s](./quick/261108-og5-split-cloud-environment-setup-from-per-s/) |
 | 25 | Run the cloud setup script with no guard; one environment per repository | 2026-11-09 | d495d39 | — | — |
 | 261109-jm6 | Move the init scripts to scripts/init and state each one's purpose | 2026-11-09 | 4e964d6 | — | [261109-jm6-move-the-init-scripts-to-scripts-init-an](./quick/261109-jm6-move-the-init-scripts-to-scripts-init-an/) |
+| 34 | Run one cucumber worker per available CPU, at most 8 (CI timeouts on PR #310) | 2026-11-09 | 6be7cb0c | — | — |
+| 35 | Wait for the background save of a migrated state.json in the state-migration step (CI run 42842685676 flake) | 2026-11-10 | ecc72b9d | — | — |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
@@ -289,13 +300,11 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-
-- Squash-merge PR #303 (version 0.23.0) when the user says so, then record
-  the merge date and squash SHA in ROADMAP.md, MILESTONES.md, PROJECT.md and
-  RETROSPECTIVE.md, and tag `v0.23.0` to publish.
-- Decide BACKLOG GRANTFORMGAP-01 (an agent whose other grant form maps to
-  nothing keeps stale grants after a switch).
-- Then start the next milestone with the `new-gsd-milestone` skill.
+- Review the High entries of `.planning/DUBIOUS-CHOICES.md` and the pending D-BG decision rows in PROJECT.md
+- Run the CI timing check of the three behavioral legs against the 15-minute job timeouts (D-CF1-16)
+- Offer the version bump, then open the PR for `features/behavioral-gaps`
+- Remove the 15 phase worktrees `~/src/pi-claude-marketplace-behavioral-gaps-phase-N` and their branches
+- Start the next milestone with /gsd-new-milestone
 
 
 ## Performance Metrics
@@ -428,6 +437,14 @@ archived milestone artifacts.
 | Phase 11 P09 | 15min | 3 tasks | 7 files |
 | Phase 11 P13 | 47min | 3 tasks | 11 files |
 | Phase 4 P06 | 11min | 2 tasks | 1 files |
+| Phase 01 P01 | 6 min | 2 tasks | 6 files |
+| Phase 01 P02 | 28 min | 3 tasks | 11 files |
+| Phase 01 P03 | 27 min | 3 tasks | 7 files |
+| Phase 01 P04 | 41 min | 3 tasks | 8 files |
+| Phase 01 P05 | 29 min | 3 tasks | 7 files |
+| Phase 01 P06 | 38 min | 3 tasks | 7 files |
+| Phase 01 P07 | 40min | 3 tasks | 9 files |
+| Phase 01 P08 | 20 min | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -643,6 +660,24 @@ archived milestone artifacts.
 - [Phase 11]: Preserve the exact five-operation planning port and one-way imports, including type-only edges.
 - [Phase 11]: Give each extracted install-flow owner one compact direct-coverage suite with fixture-level doubles and no cross-test imports.
 - [Phase 4]: Phase 4 gate reused the orchestrator's 8e801f4 results for 8c95f25 (planning-only diff) and ran test:modules; only the P4-DC-23 verdict-markers row fails under builtin
+- [Phase 01]: layout.md Behavioral gaps section reserves each stream's new feature file and verb module by full path; Phase 1 seeds only the new feature files that hold a seed, so Phases 4 and 6 create hook/tool-failure.feature and hook/session-end.feature (D-BG-14)
+- [Phase 01]: D-BG-01 to D-BG-16 recorded in PROJECT.md Key Decisions as pending the user's review; D-BG-04 profile wording and D-BG-16 local-branch wording applied to REQUIREMENTS, ROADMAP, and PROJECT
+- [Phase 01]: claudePluginPayloads stays exported for 01-07 through a .fallowrc.json ignoreExports entry, which 01-07 removes once pi-json-mode.ts imports it
+- [Phase 01]: Only a profile with withoutGitHubBaseOverride carries its environment and extraExtensions to a later terminal session; other profiles keep today's terminal launch
+- [Phase 01]: [behavioral-gaps] The scripted model's context-tokens value rides on its call's own message and the stream wrapper strips it from every event (partials, error, done), so Pi never sees it and no module state holds it (D-BG-07)
+- [Phase 01]: [behavioral-gaps] Pi's tool-argument validation failure is projected to 'invalid arguments: <sorted paths>' by anchoring on the quoted tool name in a first line ending with a colon; projectToolResult applies it first to every failed result (TOOL-03)
+- [Phase 01]: [behavioral-gaps] The TOOL-01 seed installs demo so the list tool's installed-plugin count reads 1, not a 0 a broken counter would also print
+- [Phase 01]: 01-04: the deleted-config CFGMIG-01 seed pins today's MIG-01 output (a disabled plugin is declared {} and the load reports will enable), because buildConfigFromState writes every plugin entry as {}; Phase 8 owns the fix in persistence/migrate-config.ts and the seed rewrite (WINDOWS deviation)
+- [Phase 01]: 01-04: earlier-release state.json writers keep only each release's schema members (allow-lists from git show of v0.4.3, v0.6.0, v0.19.2 state-io.ts); the 0.4.3 rewrite leaves autoupdate absent when the base config declares none, as 0.4.3's marketplace add did; the legacy mcp.json is rebuilt from the plugin's .mcp.json with 0.19.2's stage logic
+- [Phase 01]: The ASYNC-04 crash seed installs in the user scope: the product's startup reap never reads the project-scope PID table (index.ts registers the hooks bridge with cwd homedir()), so a project-scope seed fails; Phase 2 must fix or license it
+- [Phase 01]: The /reload seed starts its waiting async hook on SessionStart startup in the terminal Pi, because a UserPromptSubmit hook would start again on the reload step's own prompt
+- [Phase 01]: Device Flow seeds reach github.com through an in-process redirect; D-BG-02 was not needed and the product is unchanged
+- [Phase 01]: The redirect's routing rule lives in features/lib/github-device-flow/routing.ts, because fallow's production run counts no test consumer
+- [Phase 01]: The terminal command When waits only for a quiet window; the terminal result Then waits for its anchor row, because Pi shows no sign that an extension command is running
+- [Phase 01]: After a picker choice that closes the picker, the driver waits for a screen row naming the plugin from the closing screen's title
+- [Phase 01]: terminalScreen keeps its test-only export through a fallow-ignore-next-line unused-export marker
+- [Phase 01]: Child phases number decisions in per-phase blocks D-BG-N01 to D-BG-N99 (Phase 2 from D-BG-201), departing from D-BG-15's single sequence
+- [Phase 01]: CI behavioral timeouts stay at 15 minutes: local legs 1 m 50 s, 3 m 08 s, 56 s at the Phase 1 head (D-CF1-16)
 
 ### mcp-4 decisions
 
@@ -818,6 +853,16 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Roadmap Evolution
 
+- behavioral-gaps roadmap created 2026-11-07 (phase numbers reset to 1), with
+  the phase structure the user fixed for maximum concurrency: Phase 1
+  (Foundation, serial in the parent session; builds every stand-in and shared
+  step, then freezes every shared file and writes the child-session brief),
+  then Phases 2-16 in parallel child sessions on
+  `features/behavioral-gaps-phase-N`, each depending on Phase 1 alone. No
+  closing phase: the parent applies parent lines at each merge. Phase 1 also
+  builds four stand-ins derived from the stream requirements (a scripted-model
+  error turn, an automatic compaction, a json-mode and terminal command run,
+  and a stale state lock), because the streams cannot edit the frozen harness.
 - mcp-builtin roadmap created 2026-11-04 (phase numbers reset to 1): Phase 1
   (Foundation and Pi 1.5.0, serial, freezes the shared files and the
   cross-phase interfaces), then Phases 2-5 in parallel child sessions
@@ -880,6 +925,18 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [behavioral-gaps] Phase 1 must settle how Pi reaches the Device Flow
+  stand-in: GHB-02 turns Device Flow off while
+  `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` points GitHub sources at the
+  loopback git host, which every cucumber Pi sets. A request redirect inside
+  the Pi process is preferred; a product seam needs a decision ID.
+- [behavioral-gaps] The requirements say every scenario passes under both
+  cucumber profiles, but the `builtin` profile selects only `@mcp` and
+  `@builtin-only` scenarios. Phase 1's discuss step decides what "both
+  profiles" means for a scenario with no MCP surface.
+- [behavioral-gaps] `hook/session.feature` and `hook/tool-use.feature` (no
+  owner) already pin part of PCOMP-01, SEND-01, and TFAIL-01; Phases 4-6 add
+  only what they do not pin.
 - [mcp-builtin] Resolved 2026-11-04: pi-mcp-adapter 7.0.0 writes
   `-builtin:mcp` into the user's Pi settings once per version, so after the
   adapter is removed the next start is usually `none`. Under D-MB-01 that is
@@ -920,9 +977,10 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
   last `@` (D-76-04), Claude Code at the first; a parity decision for later.
 - [Milestone] Phases 1-7 read stale verification (later phases touched files
   their reports cover); the milestone audit must re-verify them.
+- ASYNC-04 product gap: the next Pi start does not stop async rewake hooks a dead Pi left in the project scope; reapOrphans runs only at bridge registration with cwd homedir() (index.ts:153, event-router.ts:1077) and the project hydrate reaps nothing. Phase 2 must fix or license it (01-05-SUMMARY Issues)
 
 ## Session Continuity
 
-Last session: 2026-11-05T05:10:00Z
-Stopped at: milestone mcp-builtin archived; user review of the choices next
+Last session: 2026-11-08T05:46:41.533Z
+Stopped at: Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
 Resume file: None

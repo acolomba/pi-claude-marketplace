@@ -36,6 +36,7 @@ test("maps a failed built-in tool to the complete PostToolUseFailure envelope", 
     tool_name: "Bash",
     tool_input: { command: "false" },
     error: "exit code 1: command failed",
+    is_interrupt: false,
   };
 
   // act
@@ -81,6 +82,7 @@ test("preserves a failed custom tool name and nested values without mutation", (
       limit: 2,
     },
     error: "catalog lookup failed\nretryable: false",
+    is_interrupt: false,
   };
 
   // act

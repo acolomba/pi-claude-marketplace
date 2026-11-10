@@ -6,7 +6,7 @@
  */
 
 import { projectMcpResult } from "./mcp.ts";
-import { projectReadResult } from "./pi.ts";
+import { projectArgumentValidationFailure, projectReadResult } from "./pi.ts";
 import { projectChildTask, projectSubagentResult } from "./subagents.ts";
 
 const RESULT_PROJECTORS: ReadonlyMap<string, (text: string, failed: boolean) => string> = new Map([
@@ -15,8 +15,17 @@ const RESULT_PROJECTORS: ReadonlyMap<string, (text: string, failed: boolean) => 
   ["subagent", projectSubagentResult],
 ]);
 
-/** The text of one tool result as a scenario states it. */
+/**
+ * The text of one tool result as a scenario states it. A failed result that
+ * is Pi's refusal of the call's arguments reads as that refusal's projection,
+ * whatever the tool.
+ */
 export function projectToolResult(tool: string, failed: boolean, text: string): string {
+  const refused = failed ? projectArgumentValidationFailure(tool, text) : undefined;
+  if (refused !== undefined) {
+    return refused;
+  }
+
   const projector = RESULT_PROJECTORS.get(tool);
   return projector === undefined ? text : projector(text, failed);
 }

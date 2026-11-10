@@ -22,7 +22,16 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,6 +46,8 @@ import {
 
 import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { inLoadOrder, resolveCompanion } from "../lib/companions.ts";
+import { GITHUB_REDIRECT_EXTENSION } from "../lib/github-device-flow/extension.ts";
+import { stopHookScripts } from "../lib/hook-files.ts";
 import {
   classifyMcpImplementation,
   expectedMcpImplementation,
@@ -58,13 +69,14 @@ import { assertStandInsStopped, harnessDirectory } from "../lib/turn-records.ts"
 
 import { currentRun } from "./pi-process.ts";
 
+import type { RpcProfileEnvironment } from "../../test/e2e/_rpc.ts";
 import type { CompanionName } from "../lib/companions.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
 import type { McpImplementation, McpProfile } from "../lib/mcp-implementation.ts";
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
-import type { RpcGitEnvironment, RpcRecord, RpcRequest } from "../lib/pi-process.ts";
+import type { RpcGitEnvironment, RpcRecord, RpcRequest, RpcSandbox } from "../lib/pi-process.ts";
 import type { RegistrySnapshot } from "../lib/pi-registry-probe/snapshot.ts";
 import type { PiTuiOptions } from "../lib/pi-tui.ts";
 import type { PluginCompletion } from "../lib/plugin-completions.ts";
@@ -130,6 +142,22 @@ export interface PiProfile {
   readonly companions: readonly CompanionName[];
   readonly extraExtensions?: readonly string[];
   readonly trust?: "trusted" | "untrusted";
+  /**
+   * The profile Pi's spawn environment carries `PI_SUBAGENT_CHILD=1`, as
+   * pi-subagents' runner sets it before any extension of a background child
+   * loads, so the product's child gates and pi-subagents both see a real
+   * child (D-BG-10, D-MB-12).
+   */
+  readonly subagentChild?: true;
+  /**
+   * The profile Pi starts with the run's git environment minus
+   * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, and a terminal session the
+   * scenario starts afterwards gets the same environment and loads the same
+   * `extraExtensions` (D-BG-01). `usePiWithProfile()` refuses it when
+   * `extraExtensions` lacks the GitHub redirect, because such a Pi would reach
+   * GitHub's real address with nothing to keep its requests on this machine.
+   */
+  readonly withoutGitHubBaseOverride?: true;
 }
 
 /**
@@ -137,9 +165,18 @@ export interface PiProfile {
  * `without-adapter` removes pi-mcp-adapter from its companions, and
  * `with-adapter` adds it; `builtin-on` removes `-builtin:mcp` from the user's
  * Pi settings and keeps the companions; `no-mcp` removes pi-mcp-adapter and
- * starts Pi with `--no-mcp`.
+ * starts Pi with `--no-mcp`; `after-crash` starts the same launch again after
+ * `crashPi()` killed the profile Pi (ASYNC-04).
  */
-export type PiRestart = "without-adapter" | "with-adapter" | "builtin-on" | "no-mcp";
+export type PiRestart =
+  "without-adapter" | "with-adapter" | "builtin-on" | "no-mcp" | "after-crash";
+
+/** What a one-shot Pi in the run's sandbox starts with (D-BG-09). */
+export interface OneShotPiLaunch {
+  readonly sandbox: RpcSandbox;
+  readonly git: RpcGitEnvironment;
+  readonly environment: RpcProfileEnvironment;
+}
 
 // What a profile Pi starts with: its profile and whether it starts with `--no-mcp`.
 interface ProfileLaunch extends PiProfile {
@@ -196,6 +233,9 @@ export class ScenarioWorld extends World {
   npmRegistry: NpmRegistry | undefined = undefined;
   // The npm registry's log length when the last `When` step started; `support/npm-registry.ts` sets it.
   npmRequestWindow: number | undefined = undefined;
+  // The line count of each log in the profile Pi's harness directory when the
+  // last `When` step started; `support/github-device-flow.ts` sets it.
+  harnessLogWindow: ReadonlyMap<string, number> | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
   private readonly gitRepositories = new Map<string, GitPluginRepository>();
   private readonly errorMessages = new Map<string, string>();
@@ -221,6 +261,12 @@ export class ScenarioWorld extends World {
   private tuiSession: PiTuiSession | undefined = undefined;
   private tuiEnvironment: RpcGitEnvironment | undefined = undefined;
   private readonly tuiVariables: Record<string, string> = {};
+  // The extensions the TUI session loads before the scripted model's: the
+  // `extraExtensions` of a profile Pi that runs without the GitHub base
+  // override, so the terminal session keeps its requests local too (D-BG-01).
+  private tuiExtensions: readonly string[] = [];
+  // Whether `crashPi()` killed the profile Pi and no restart has replaced it.
+  private profilePiCrashed = false;
 
   /**
    * The Pi the steps talk to: the one this scenario started with
@@ -401,6 +447,19 @@ export class ScenarioWorld extends World {
     }
 
     return results;
+  }
+
+  /**
+   * Returns how many lines the harness log `log` held when the last `When`
+   * step started, so a step reads only the lines that `When` added.
+   */
+  harnessLogLinesBeforeLastWhen(log: string): number {
+    const window = this.harnessLogWindow;
+    if (window === undefined) {
+      throw new Error("no When step has run in this scenario");
+    }
+
+    return window.get(log) ?? 0;
   }
 
   /**
@@ -613,32 +672,56 @@ export class ScenarioWorld extends World {
    * scripted model, with auto retry off, so a call past the script fails at
    * once. The start fails when the Pi does not run the MCP implementation its
    * launch implies (DUAL-02). One scenario starts at most one profile Pi; only
-   * `restartPi()` replaces it.
+   * `restartPi()` replaces it. The harness directory may already exist, as
+   * when a stand-in step wrote its log there before the start.
    */
   async usePiWithProfile(profile: PiProfile): Promise<void> {
     if (this.profileHarnessDirectory !== undefined) {
       throw new Error("a profile Pi already started in this scenario");
     }
 
-    const { root, sandbox } = currentRun();
-    const harness = harnessDirectory(sandbox.home);
-    const temporary = path.join(sandbox.home, "tmp");
-    await mkdir(harness);
-    await mkdir(temporary);
-    // Pi compiles each TypeScript extension through jiti, which caches the
-    // output under `$TMPDIR/jiti`. A cold cache costs ten seconds or more per
-    // start, and `Before()` empties the sandbox home, so the cache directory
-    // links to one under the run's root, which lasts the whole run. It holds
-    // compiled copies of repository and peer sources only.
-    const compileCache = path.join(root, "jiti-cache");
-    await mkdir(compileCache, { recursive: true });
-    await symlink(compileCache, path.join(temporary, "jiti"));
+    if (profile.withoutGitHubBaseOverride === true) {
+      this.keepTerminalSessionLocal(profile);
+    }
+
+    const harness = harnessDirectory(currentRun().sandbox.home);
+    await mkdir(harness, { recursive: true });
+    await this.prepareTemporaryDirectory();
     if (profile.trust !== "untrusted") {
       await this.trustSandboxProject();
     }
 
     this.profileHarnessDirectory = harness;
     await this.startProfilePi(profile);
+  }
+
+  /**
+   * Prepares `{home}/tmp` with its compile-cache link and returns what a
+   * one-shot Pi in the run's sandbox starts with: the run's sandbox, the
+   * run's git environment, and that `TMPDIR` (D-BG-09). A step that starts a
+   * one-shot Pi, such as one in json mode, reads it here, so no step module
+   * reaches the run's state.
+   */
+  async oneShotPiLaunch(): Promise<OneShotPiLaunch> {
+    const { sandbox, piEnvironment } = currentRun();
+    const temporary = await this.prepareTemporaryDirectory();
+    return { sandbox, git: piEnvironment, environment: { TMPDIR: temporary } };
+  }
+
+  /**
+   * Kills this scenario's profile Pi as a Pi that dies does, leaving the rest
+   * of its process group and its hook processes running (ASYNC-04). The
+   * crashed Pi stays the Pi the
+   * steps talk to until `restartPi("after-crash")` replaces it. Fails when no
+   * profile Pi of this scenario is running.
+   */
+  async crashPi(): Promise<void> {
+    if (this.profileLaunch === undefined || this.profilePiCrashed) {
+      assert.fail("no profile Pi of this scenario is running");
+    }
+
+    await this.pi.crash();
+    this.profilePiCrashed = true;
   }
 
   /**
@@ -668,25 +751,23 @@ export class ScenarioWorld extends World {
    * between the two Pis, as a user does (P1-DC-08). Returns what the new Pi's
    * first session offers and reports. Fails when no profile Pi started, or
    * when the new Pi does not run the MCP implementation its launch implies
-   * (DUAL-02).
+   * (DUAL-02). An `after-crash` restart fails unless `crashPi()` ran, and it
+   * skips the onboarding wait and the stand-in check: the dead Pi's hook
+   * processes may outlive it until the new Pi's load stops them, and the
+   * first profile Pi's release still checks its stand-ins when the scenario
+   * ends (ASYNC-04).
    */
   async restartPi(restart: PiRestart): Promise<SessionReport> {
-    const harness = this.profileHarness();
     const launch = this.profileLaunch;
     if (launch === undefined) {
       assert.fail("no profile Pi of this scenario is running");
     }
 
-    const { agentDir } = currentRun().sandbox;
-    if (launch.companions.includes("pi-mcp-adapter")) {
-      const { version } = await resolveCompanion("pi-mcp-adapter");
-      await waitForAdapterOnboarding(agentDir, version, ADAPTER_ONBOARDING_TIMEOUT_MS);
-    }
-
-    await this.pi.stop();
-    await assertStandInsStopped(harness);
-    if (restart === "builtin-on") {
-      await turnOnBuiltinMcp(agentDir);
+    if (restart === "after-crash") {
+      assert.strictEqual(this.profilePiCrashed, true, "no step crashed the profile Pi");
+      this.profilePiCrashed = false;
+    } else {
+      await this.stopProfilePiForRestart(launch, restart);
     }
 
     await this.startProfilePi(restartedLaunch(launch, restart));
@@ -755,6 +836,21 @@ export class ScenarioWorld extends World {
     return script.slice(calls.filter((call) => !call.overflow).length);
   }
 
+  /**
+   * Returns the model calls past the end of the script, by number, or none
+   * when no profile Pi started. A turn's own check reads only its window, so
+   * this catches a call that came after the last turn settled.
+   */
+  async callsPastScript(): Promise<readonly string[]> {
+    const harness = this.profileHarnessDirectory;
+    if (harness === undefined) {
+      return [];
+    }
+
+    const calls = await readModelCalls(harness);
+    return calls.filter((call) => call.overflow).map((call) => `call ${call.index + 1}`);
+  }
+
   /** Adds a variable to the environment of the TUI session this scenario starts. */
   setTuiVariable(name: string, value: string): void {
     if (this.tuiSession !== undefined) {
@@ -778,11 +874,13 @@ export class ScenarioWorld extends World {
     }
 
     const run = currentRun();
+    const scripted = model === "scripted" ? this.scriptedModelTuiOptions() : {};
     const tui = await PiTuiSession.start({
       sandbox: run.sandbox,
       git: this.tuiEnvironment ?? run.piEnvironment,
       variables: this.tuiVariables,
-      ...(model === "scripted" ? this.scriptedModelTuiOptions() : {}),
+      ...scripted,
+      extensions: [...this.tuiExtensions, ...(scripted.extensions ?? [])],
     });
     this.onRelease(() => tui.stop());
     this.tuiSession = tui;
@@ -903,6 +1001,65 @@ export class ScenarioWorld extends World {
     };
   }
 
+  // Gives a later TUI session the environment and extensions of a profile Pi
+  // that runs without the GitHub base override, and refuses such a profile
+  // when it does not load the GitHub redirect, the extension that keeps its
+  // requests local (D-BG-01).
+  private keepTerminalSessionLocal(profile: PiProfile): void {
+    const extensions = profile.extraExtensions ?? [];
+    if (!extensions.includes(GITHUB_REDIRECT_EXTENSION)) {
+      throw new Error(
+        "a profile Pi without the GitHub base override must load the GitHub redirect",
+      );
+    }
+
+    this.tuiEnvironment = profileGitEnvironment(profile);
+    this.tuiExtensions = extensions;
+  }
+
+  // Creates `{home}/tmp` and its compile-cache link when they are absent, and
+  // returns the directory. Pi compiles each TypeScript extension through
+  // jiti, which caches the output under `$TMPDIR/jiti`. A cold cache costs ten
+  // seconds or more per start, and `Before()` empties the sandbox home, so the
+  // cache directory links to one under the run's root, which lasts the whole
+  // run. It holds compiled copies of repository and peer sources only.
+  private async prepareTemporaryDirectory(): Promise<string> {
+    const { root, sandbox } = currentRun();
+    const temporary = path.join(sandbox.home, "tmp");
+    const compileCache = path.join(root, "jiti-cache");
+    const link = path.join(temporary, "jiti");
+    await mkdir(temporary, { recursive: true });
+    await mkdir(compileCache, { recursive: true });
+    const linked = await lstat(link).then(
+      () => true,
+      () => false,
+    );
+    if (!linked) {
+      await symlink(compileCache, link);
+    }
+
+    return temporary;
+  }
+
+  // Waits for pi-mcp-adapter's onboarding write when the profile Pi loaded
+  // it, stops the profile Pi, asserts that its stand-ins stopped, and turns
+  // Pi's built-in MCP back on for a `builtin-on` restart (P1-DC-08).
+  private async stopProfilePiForRestart(launch: ProfileLaunch, restart: PiRestart): Promise<void> {
+    const harness = this.profileHarness();
+    const { agentDir } = currentRun().sandbox;
+    if (launch.companions.includes("pi-mcp-adapter")) {
+      const { version } = await resolveCompanion("pi-mcp-adapter");
+      await waitForAdapterOnboarding(agentDir, version, ADAPTER_ONBOARDING_TIMEOUT_MS);
+    }
+
+    await this.pi.stop();
+    await stopHookScripts(harness);
+    await assertStandInsStopped(harness);
+    if (restart === "builtin-on") {
+      await turnOnBuiltinMcp(agentDir);
+    }
+  }
+
   // Starts a Pi in the run's sandbox with `environment`, stops it with the
   // scenario, and makes it the Pi the steps talk to.
   private async usePiWith(environment: RpcGitEnvironment): Promise<void> {
@@ -915,7 +1072,7 @@ export class ScenarioWorld extends World {
   // prepared, makes it the Pi the steps talk to, selects the scripted model,
   // and fails unless the Pi runs the MCP implementation that `launch` implies.
   private async startProfilePi(launch: ProfileLaunch): Promise<void> {
-    const { sandbox, piEnvironment } = currentRun();
+    const { sandbox } = currentRun();
     const harness = harnessDirectory(sandbox.home);
     const adapterLoaded = launch.companions.includes("pi-mcp-adapter");
     if (adapterLoaded && this.ownImplementation) {
@@ -932,20 +1089,26 @@ export class ScenarioWorld extends World {
     const companions = await Promise.all(
       inLoadOrder(launch.companions).map((name) => resolveCompanion(name)),
     );
-    const pi = await PiProcess.start(sandbox, piEnvironment, {
+    const pi = await PiProcess.start(sandbox, profileGitEnvironment(launch), {
       extensions: [
         SCRIPTED_MODEL_EXTENSION,
         REGISTRY_PROBE_EXTENSION,
         ...companions.map((companion) => companion.entry),
         ...(launch.extraExtensions ?? []),
       ],
-      environment: { TMPDIR: path.join(sandbox.home, "tmp") },
+      environment: {
+        TMPDIR: path.join(sandbox.home, "tmp"),
+        ...(launch.subagentChild === true ? { PI_SUBAGENT_CHILD: "1" } : {}),
+      },
       ...(launch.noMcp === true ? { noMcp: true } : {}),
     });
     // HAR-05: the profile Pi stops first, so a stand-in that exits when its
-    // stdin closes has exited before its pid file is checked.
+    // stdin closes has exited before its pid file is checked. Pi starts each
+    // hook in a process group of its own, which stopping Pi leaves running,
+    // so the release stops the hook scripts apart.
     this.onRelease(async () => {
       await pi.stop();
+      await stopHookScripts(harness);
       await assertStandInsStopped(harness);
     });
     this.scenarioPi = pi;
@@ -963,6 +1126,18 @@ export class ScenarioWorld extends World {
   }
 }
 
+// The run's git environment for a profile Pi, without the GitHub base
+// override when the profile asks for that (D-BG-01).
+function profileGitEnvironment(profile: PiProfile): RpcGitEnvironment {
+  const { piEnvironment } = currentRun();
+  if (profile.withoutGitHubBaseOverride !== true) {
+    return piEnvironment;
+  }
+
+  const { PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: _override, ...environment } = piEnvironment;
+  return environment;
+}
+
 // The launch of a profile Pi after `restart` changes `launch`.
 function restartedLaunch(launch: ProfileLaunch, restart: PiRestart): ProfileLaunch {
   const withoutAdapter = launch.companions.filter((name) => name !== "pi-mcp-adapter");
@@ -972,6 +1147,7 @@ function restartedLaunch(launch: ProfileLaunch, restart: PiRestart): ProfileLaun
     case "with-adapter":
       return { ...launch, companions: [...withoutAdapter, "pi-mcp-adapter"] };
     case "builtin-on":
+    case "after-crash":
       return launch;
     case "no-mcp":
       return { ...launch, companions: withoutAdapter, noMcp: true };
@@ -990,8 +1166,10 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
   // Pi has no script and no turn. The releases run even when the read fails.
   const lastTurnUncompared = this.lastTurnUncompared;
   let unusedScriptSteps: readonly ScriptStep[];
+  let callsPastScript: readonly string[];
   try {
     unusedScriptSteps = await this.unusedScriptSteps();
+    callsPastScript = await this.callsPastScript();
   } finally {
     await this.release();
   }
@@ -1019,6 +1197,7 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
       [],
       "no model call used these steps of the model script",
     );
+    assert.deepStrictEqual(callsPastScript, [], "the model was called past its script");
     assert.strictEqual(lastTurnUncompared, false, "no step compared the last model turn");
   }
 });

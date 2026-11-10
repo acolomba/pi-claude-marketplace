@@ -49,21 +49,41 @@
  *   waits at most 3 seconds for `$HOME/hook-meetings/<meets>`, the file of
  *   another hook of the table. It records `met` if that file appeared and
  *   `alone` if not. The files stay for the rest of the scenario.
+ * - `sigterm`: `ignore` makes it ignore SIGTERM from its first line, and so
+ *   do the commands it runs, so only a SIGKILL ends it before its end.
+ * - `waits`: `true` makes it wait, before the lines above, until
+ *   `$HOME/hook-releases/<name>` exists, so the hook outlives its event until
+ *   a step releases it. It then removes the marker, so one release frees one
+ *   run and a later run of the same hook waits again. It gives up after 60
+ *   seconds, so a scenario that fails before the release leaves no process
+ *   for long (D-BG-12).
  *
  * These columns become fields of the handler: `timeout` (seconds, a number),
- * `if`, `on failure` (`block` or `continue`, the field `onFailure`), and `once`
- * (`true` or `false`).
+ * `if`, `on failure` (`block` or `continue`, the field `onFailure`), `once`
+ * (`true` or `false`), `async` and `async rewake` (`true` or `false`, the
+ * fields `async` and `asyncRewake`, as Claude Code declares them on a command
+ * hook), and `rewake message` and `rewake summary` (text, the fields
+ * `rewakeMessage` and `rewakeSummary`).
+ *
+ * A script hook that sets `async`, `async rewake`, or `waits` is a lifecycle
+ * hook (D-BG-12). Right after recording, its script writes its pid to
+ * `<harness dir>/hook-<name>-<pid>.pid`, which the release of the profile Pi
+ * reads to stop the script and then checks as a stand-in's, and runs the
+ * recorder in its lifecycle mode with
+ * `start`. When it exits, it runs the recorder with `end` and its exit code,
+ * then removes the pid file. Every other hook writes neither.
  *
  * A run names the hook that made it, so two hooks on one matcher are two
  * different commands. Publishing a table again replaces `hooks/hooks.json`
  * and the scripts it writes.
  */
 
-import { chmod, readFile } from "node:fs/promises";
+import { chmod, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { HOOK_RECORDER_PATH } from "./hook-recorder.ts";
 import { writePublishedPluginFiles } from "./published-marketplace.ts";
+import { harnessDirectory } from "./turn-records.ts";
 
 import type { PublishedMarketplace } from "./published-marketplace.ts";
 
@@ -92,6 +112,12 @@ export interface RecordingHook {
   readonly if?: string;
   readonly onFailure?: "block" | "continue";
   readonly once?: boolean;
+  readonly async?: boolean;
+  readonly asyncRewake?: boolean;
+  readonly rewakeMessage?: string;
+  readonly rewakeSummary?: string;
+  readonly waits?: true;
+  readonly sigterm?: "ignore";
 }
 
 const REQUIRED_COLUMNS = ["name", "event", "matcher"] as const;
@@ -113,6 +139,8 @@ const BEHAVIOR_FIELDS = {
   sleep: "sleep",
   meets: "meets",
   "on reentry": "onReentry",
+  waits: "waits",
+  sigterm: "sigterm",
 } as const satisfies Record<string, keyof RecordingHook>;
 
 // The directory, in the plugin, of every hook script.
@@ -120,6 +148,9 @@ const SCRIPT_DIRECTORY = "hooks";
 
 // How long `meets` waits for the other hook, in tenths of a second.
 const MEETING_TENTHS = 30;
+
+// How long `waits` waits for its release, in tenths of a second.
+const RELEASE_TENTHS = 600;
 
 function oneOf<T extends string>(cell: string, values: readonly T[], what: string): T {
   const value = values.find((candidate) => candidate === cell);
@@ -173,8 +204,8 @@ function parseSeconds(cell: string, what: string): number {
   return Number(cell);
 }
 
-function parseOnce(cell: string): boolean {
-  return oneOf(cell, ["true", "false"], "a hook's once") === "true";
+function parseBoolean(cell: string, what: string): boolean {
+  return oneOf(cell, ["true", "false"], `a hook's ${what}`) === "true";
 }
 
 // Each optional column, and the fields its cell sets.
@@ -194,7 +225,16 @@ const COLUMN_PARSERS: Readonly<Record<string, (cell: string) => Partial<Recordin
   "on failure": (cell) => ({
     onFailure: oneOf(cell, ["block", "continue"], "a hook's on failure"),
   }),
-  once: (cell) => ({ once: parseOnce(cell) }),
+  once: (cell) => ({ once: parseBoolean(cell, "once") }),
+  async: (cell) => ({ async: parseBoolean(cell, "async") }),
+  "async rewake": (cell) => ({ asyncRewake: parseBoolean(cell, "async rewake") }),
+  "rewake message": (cell) => ({ rewakeMessage: cell }),
+  "rewake summary": (cell) => ({ rewakeSummary: cell }),
+  waits: (cell) => {
+    oneOf(cell, ["true"], "a hook's waits");
+    return { waits: true };
+  },
+  sigterm: (cell) => ({ sigterm: oneOf(cell, ["ignore"], "a hook's sigterm") }),
 };
 
 // Checks the header and returns the parser of each optional column, in order.
@@ -316,6 +356,45 @@ function meetingLines(name: string, other: string): string[] {
   ];
 }
 
+// The pid file of a lifecycle hook's script: `hook-<name>-<pid>.pid`.
+const HOOK_PID_FILE = /^hook-[a-z0-9-]+-\d+\.pid$/u;
+
+// Whether `hook`'s script logs its lifecycle and keeps a pid file (D-BG-12).
+function isLifecycleHook(hook: RecordingHook): boolean {
+  return (
+    writesScript(hook) &&
+    (hook.async !== undefined || hook.asyncRewake !== undefined || hook.waits !== undefined)
+  );
+}
+
+// The lines that write the script's pid file, then log its start. The EXIT
+// trap logs its end with the code it exits with, then removes the pid file;
+// the code the script exits with stays the trap's `$?`.
+function lifecycleLines(name: string): string[] {
+  const recorder = `"${process.execPath}" "${HOOK_RECORDER_PATH}" --lifecycle`;
+  return [
+    `pidfile="${harnessDirectory("$HOME")}/hook-${name}-$$.pid"`,
+    String.raw`printf '%s\n' "$$" > "$pidfile.tmp"`,
+    'mv "$pidfile.tmp" "$pidfile"',
+    `trap '${recorder} end ${name} $$ $?; rm -f "$pidfile"' EXIT`,
+    `${recorder} start ${name} $$`,
+  ];
+}
+
+// The lines that wait for `$HOME/hook-releases/<name>`, or give up, and
+// then take the marker, so it frees this run alone.
+function releaseLines(name: string): string[] {
+  return [
+    `release="$HOME/hook-releases/${name}"`,
+    "waited=0",
+    `while [ ! -e "$release" ] && [ "$waited" -lt ${RELEASE_TENTHS} ]; do`,
+    "  sleep 0.1",
+    "  waited=$((waited + 1))",
+    "done",
+    'rm -f "$release"',
+  ];
+}
+
 // The lines a script runs after it records.
 function afterRecording(hook: RecordingHook): string[] {
   return [
@@ -344,9 +423,13 @@ function scriptText(hook: RecordingHook): string {
   const recorder = `"${process.execPath}" "${HOOK_RECORDER_PATH}" ${hook.name}${marker} "$@"`;
   return `${[
     "#!/bin/sh",
+    // An ignored signal stays ignored in every command the script runs.
+    ...(hook.sigterm === "ignore" ? ["trap '' TERM"] : []),
     "stdin=$(cat)",
     ...meeting,
     `printf '%s' "$stdin" | ${recorder}`,
+    ...(isLifecycleHook(hook) ? lifecycleLines(hook.name) : []),
+    ...(hook.waits === undefined ? [] : releaseLines(hook.name)),
     ...afterRecording(hook),
   ].join("\n")}\n`;
 }
@@ -382,6 +465,10 @@ function recordingHandler(hook: RecordingHook): Record<string, unknown> {
     ...(hook.if === undefined ? {} : { if: hook.if }),
     ...(hook.onFailure === undefined ? {} : { onFailure: hook.onFailure }),
     ...(hook.once === undefined ? {} : { once: hook.once }),
+    ...(hook.async === undefined ? {} : { async: hook.async }),
+    ...(hook.asyncRewake === undefined ? {} : { asyncRewake: hook.asyncRewake }),
+    ...(hook.rewakeMessage === undefined ? {} : { rewakeMessage: hook.rewakeMessage }),
+    ...(hook.rewakeSummary === undefined ? {} : { rewakeSummary: hook.rewakeSummary }),
   };
 }
 
@@ -432,4 +519,33 @@ export async function publishRecordingHooks(
     }),
   );
   return path.join(directory, "hooks", "hooks.json");
+}
+
+/**
+ * Returns the pid that each lifecycle hook's pid file in `harness` holds, in
+ * file name order. A script that exited removed its file, and one that was
+ * killed left it behind (D-BG-12).
+ */
+export async function readHookScriptPids(harness: string): Promise<readonly number[]> {
+  const names = (await readdir(harness)).filter((name) => HOOK_PID_FILE.test(name)).sort();
+  return Promise.all(
+    names.map(async (name) => Number((await readFile(path.join(harness, name), "utf8")).trim())),
+  );
+}
+
+/**
+ * SIGKILLs each lifecycle hook script that a pid file in `harness` names and
+ * that still runs. Pi starts each hook as the leader of a process group of its
+ * own, so stopping a Pi and its group leaves the hook running; a scenario's
+ * release stops what the scenario left, so that a waiting script cannot take
+ * the release marker of a later scenario.
+ */
+export async function stopHookScripts(harness: string): Promise<void> {
+  for (const pid of await readHookScriptPids(harness)) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // The script has already exited.
+    }
+  }
 }

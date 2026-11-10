@@ -488,3 +488,69 @@ test("reports the label and elapsed budget for each escalation", (t) => {
   assert.match(lines[1] ?? "", /SIGKILL after 7s \(acme\/SessionEnd\)/);
   assertTimerLifecycle(timers, [2_000, 7_000]);
 });
+
+// A spy child that leads a process group, whose member outlives the child
+// while `alive` says so.
+function makeGroupChild(alive: () => boolean): SpyChild {
+  return Object.assign(makeSpyChild(), { groupAlive: alive });
+}
+
+test("signals the group of a child its SIGTERM ended when a member ignored SIGTERM", (t) => {
+  // arrange
+  const child = makeGroupChild(() => true);
+  const { ladder, timers } = installObservedLadder(t, child, 1);
+
+  // act
+  t.mock.timers.tick(1_000);
+  child.signalCode = "SIGTERM";
+  ladder.cancel();
+  t.mock.timers.tick(5_000);
+
+  // assert
+  assert.deepStrictEqual(child.killCalls, ["SIGTERM", "SIGKILL"]);
+  assert.deepStrictEqual(timers.delays, [1_000, 6_000]);
+  assert.deepStrictEqual(timers.clearHandles, [timers.handles[0]]);
+  assert.equal(timers.pendingHandles.size, 0);
+});
+
+test("sends no SIGKILL when the group of a child its SIGTERM ended has no member left", (t) => {
+  // arrange
+  const child = makeGroupChild(() => false);
+  const { ladder } = installObservedLadder(t, child, 1);
+
+  // act
+  t.mock.timers.tick(1_000);
+  child.signalCode = "SIGTERM";
+  ladder.cancel();
+  t.mock.timers.tick(5_000);
+
+  // assert
+  assert.deepStrictEqual(child.killCalls, ["SIGTERM"]);
+});
+
+test("cancels both legs of a group child before the SIGTERM deadline", (t) => {
+  // arrange
+  const child = makeGroupChild(() => true);
+  const { ladder, timers } = installObservedLadder(t, child, 1);
+
+  // act
+  ladder.cancel();
+  t.mock.timers.tick(6_000);
+
+  // assert
+  assert.deepStrictEqual(child.killCalls, []);
+  assertTimerLifecycle(timers, [1_000, 6_000]);
+});
+
+test("sends no SIGKILL to the group of a child that exited before its SIGTERM deadline", (t) => {
+  // arrange
+  const child = makeGroupChild(() => true);
+  installObservedLadder(t, child, 1);
+
+  // act
+  child.exitCode = 0;
+  t.mock.timers.tick(6_000);
+
+  // assert
+  assert.deepStrictEqual(child.killCalls, []);
+});

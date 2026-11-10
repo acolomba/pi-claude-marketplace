@@ -393,6 +393,71 @@ test("applies settle registration, input, and bounded reentry transitions", () =
   assert.strictEqual(runtime.isStopHookActive(), false);
 });
 
+test("gives stop_hook_active only to a run that an async rewake started (D-BG-210)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+
+  // act
+  runtime.recordRunStart(true);
+  const activeInWokenRun = runtime.isStopHookActive();
+  runtime.recordUserInput();
+  const activeAfterJoiningInput = runtime.isStopHookActive();
+  runtime.recordRunStart(false);
+  const activeInNextRun = runtime.isStopHookActive();
+
+  // assert
+  assert.strictEqual(activeInWokenRun, true);
+  assert.strictEqual(activeAfterJoiningInput, true);
+  assert.strictEqual(activeInNextRun, false);
+});
+
+test("keeps the woken mark outside the STOP-07 re-entry cap (D-BG-210)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.recordRunStart(true);
+
+  // act
+  const allowedTransitions = Array.from({ length: 7 }, () => runtime.recordStopReentry());
+  const cappedTransition = runtime.recordStopReentry();
+  const repeatedCap = runtime.recordStopReentry();
+
+  // assert
+  assert.deepStrictEqual(
+    allowedTransitions,
+    Array.from({ length: 7 }, () => ({ reenter: true, notifyCap: false })),
+  );
+  assert.deepStrictEqual(cappedTransition, { reenter: false, notifyCap: true });
+  assert.deepStrictEqual(repeatedCap, { reenter: false, notifyCap: false });
+});
+
+test("keeps a Stop re-entry's flag across the start of a later run", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.recordRunStart(true);
+  runtime.recordStopReentry();
+
+  // act
+  runtime.recordRunStart(false);
+  const activeInReentryRun = runtime.isStopHookActive();
+  runtime.recordUserInput();
+
+  // assert
+  assert.strictEqual(activeInReentryRun, true);
+  assert.strictEqual(runtime.isStopHookActive(), false);
+});
+
+test("clears the woken mark at a bridge load", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.recordRunStart(true);
+
+  // act
+  runtime.prepareSettleForRegistration();
+
+  // assert
+  assert.strictEqual(runtime.isStopHookActive(), false);
+});
+
 test("owns child removal, PID snapshots, and shutdown per runtime", () => {
   // arrange
   const firstRuntime = createHooksRuntime();

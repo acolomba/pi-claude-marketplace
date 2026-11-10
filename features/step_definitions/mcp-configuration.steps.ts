@@ -1,24 +1,36 @@
 /**
  * @fileoverview Steps about MCP configuration: the MCP servers published
  * plugins declare, the `mcp-adapter.json` a user keeps in a scope, which a
- * step can also block with a directory of the same name, and the user's
- * approval of project MCP servers.
+ * step can also block with a directory of the same name, the user's approval
+ * of project MCP servers, and a legacy `mcp.json` that holds an installed
+ * plugin's servers beside the user's own, as release 0.19.2 wrote it. One
+ * step reads the whole text of a scope's `mcp.json` or `mcp-adapter.json`.
  */
 
 import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { Given } from "@cucumber/cucumber";
+import { Given, Then } from "@cucumber/cucumber";
 
+import { isPlainObject } from "../lib/field-rows.ts";
 import {
   declarePublishedMcpServer,
   PROJECT_SERVERS_ALLOWED_CONFIG,
   writeCommentedMcpConfig,
+  writeLegacyMcpConfig,
   writeProjectServersAllowedConfig,
 } from "../lib/mcp-configuration.ts";
+import { projectTokens } from "../lib/run-tokens.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
+
+// The MCP configuration files of a scope a scenario can read whole.
+const MCP_CONFIG_FILES: ReadonlySet<string> = new Set(["mcp.json", "mcp-adapter.json"]);
+
+// The command of the user's own server in a legacy `mcp.json`. No sandbox
+// provides it, so the server never starts.
+const USERS_OWN_COMMAND = "pi-features-users-own-mcp-server";
 
 function mcpAdapterFile(world: ScenarioWorld, scope: string): string {
   return path.join(world.scopeRoot(scope), "mcp-adapter.json");
@@ -98,5 +110,38 @@ Given(
     const file = mcpAdapterFile(this, scope);
     await rm(file, { recursive: true });
     await assert.rejects(stat(file), { code: "ENOENT" });
+  },
+);
+
+// D-BG-13: release 0.19.2 kept the user's own servers and the plugin's marked
+// ones in one `mcp.json`, which the load moves apart (AMIG-01, AMIG-02).
+Given(
+  "the mcp.json file of the {word} scope holds the servers of the plugin {string} as release 0.19.2 wrote them, beside the user's own server {string}",
+  async function (this: ScenarioWorld, scope: string, pluginId: string, name: string) {
+    const scopeRoot = this.scopeRoot(scope);
+    const written = await writeLegacyMcpConfig({
+      scopeRoot,
+      pluginId,
+      userServer: { name, command: USERS_OWN_COMMAND },
+    });
+    const file = path.join(scopeRoot, "mcp.json");
+    const servers: unknown = Reflect.get(JSON.parse(await readFile(file, "utf8")), "mcpServers");
+    assert.deepStrictEqual(servers, written.mcpServers);
+    assert.ok(isPlainObject(servers), `${file} holds no servers`);
+    const marked = Object.entries(servers).filter(
+      ([, entry]) => isPlainObject(entry) && Object.hasOwn(entry, "_piClaudeMarketplace"),
+    );
+    assert.deepStrictEqual(Reflect.get(servers, name), { command: USERS_OWN_COMMAND });
+    assert.notDeepStrictEqual(marked, [], `${file} holds no server of ${pluginId}`);
+  },
+);
+
+Then(
+  "the mcp configuration file {string} of the {word} scope holds this text:",
+  async function (this: ScenarioWorld, fileName: string, scope: string, text: string) {
+    assert.ok(MCP_CONFIG_FILES.has(fileName), `${fileName} is not an mcp configuration file`);
+    const file = path.join(this.scopeRoot(scope), fileName);
+    const content = await readFile(file, "utf8");
+    assert.strictEqual(projectTokens("text", content, this.tokens), text);
   },
 );

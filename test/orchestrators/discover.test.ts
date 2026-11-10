@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -46,6 +46,11 @@ async function stagePrompt(locations: ScopedLocations, name: string): Promise<vo
     `# ${name}
 `,
   );
+}
+
+async function writeRecord(locations: ScopedLocations, content: string): Promise<void> {
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await writeFile(locations.stateJsonPath, content);
 }
 
 function errorCode(cause: unknown): string | undefined {
@@ -108,6 +113,91 @@ test("T-02-17: aggregateDiscoveredResources leaves out an untrusted project's sk
     promptPaths: [path.join(user.promptsTargetDir, "alpha.md")],
   });
 });
+
+test("D-BG-705: aggregateDiscoveredResources leaves out a user scope whose record has a newer schema", async (t) => {
+  // arrange
+  const { user, project } = await makeTestLocations(t, "resources-discover-newer-user-");
+  const userRecord = '{"schemaVersion":4,"marketplaces":{}}';
+  await writeRecord(user, userRecord);
+  await writeRecord(project, '{"schemaVersion":3,"marketplaces":{}}');
+  await stageSkill(user, "alpha");
+  await stageSkill(project, "aardvark");
+  await stagePrompt(user, "alpha");
+  await stagePrompt(project, "aardvark");
+
+  // act
+  const discoveredResources = await aggregateDiscoveredResources(user, project);
+
+  // assert
+  assert.deepEqual(discoveredResources, {
+    skillPaths: [path.join(project.skillsTargetDir, "aardvark")],
+    promptPaths: [path.join(project.promptsTargetDir, "aardvark.md")],
+  });
+  assert.equal(await readFile(user.stateJsonPath, "utf8"), userRecord);
+  await access(path.join(user.skillsTargetDir, "alpha", "SKILL.md"));
+  await access(path.join(user.promptsTargetDir, "alpha.md"));
+});
+
+test("D-BG-705: aggregateDiscoveredResources leaves out a project scope whose record has a newer schema", async (t) => {
+  // arrange
+  const { user, project } = await makeTestLocations(t, "resources-discover-newer-project-");
+  await writeRecord(project, '{"schemaVersion":4,"marketplaces":{}}');
+  await stageSkill(user, "alpha");
+  await stageSkill(project, "aardvark");
+  await stagePrompt(user, "alpha");
+  await stagePrompt(project, "aardvark");
+
+  // act
+  const discoveredResources = await aggregateDiscoveredResources(user, project);
+
+  // assert
+  assert.deepEqual(discoveredResources, {
+    skillPaths: [path.join(user.skillsTargetDir, "alpha")],
+    promptPaths: [path.join(user.promptsTargetDir, "alpha.md")],
+  });
+});
+
+for (const { record, content } of [
+  { record: "is not valid JSON", content: "{not json" },
+  {
+    record: "fails schema validation",
+    content: JSON.stringify({
+      schemaVersion: 3,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "user",
+          source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+          addedFromCwd: "/work",
+          manifestPath: "/work/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/work/catalog",
+          plugins: {},
+          lastSuccessfulManifest: 42,
+        },
+      },
+    }),
+  },
+]) {
+  test(`D-BG-705: aggregateDiscoveredResources leaves out a user scope whose record ${record}`, async (t) => {
+    // arrange
+    const { user, project } = await makeTestLocations(t, "resources-discover-unreadable-user-");
+    await writeRecord(user, content);
+    await stageSkill(user, "alpha");
+    await stageSkill(project, "aardvark");
+    await stagePrompt(user, "alpha");
+    await stagePrompt(project, "aardvark");
+
+    // act
+    const discoveredResources = await aggregateDiscoveredResources(user, project);
+
+    // assert
+    assert.deepEqual(discoveredResources, {
+      skillPaths: [path.join(project.skillsTargetDir, "aardvark")],
+      promptPaths: [path.join(project.promptsTargetDir, "aardvark.md")],
+    });
+    assert.equal(await readFile(user.stateJsonPath, "utf8"), content);
+  });
+}
 
 test("aggregateDiscoveredResources excludes hidden, nonmatching, nondirectory, and symlink entries", async (t) => {
   // arrange

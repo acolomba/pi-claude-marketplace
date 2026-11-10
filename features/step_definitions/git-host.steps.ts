@@ -8,6 +8,13 @@
  * through the `git repository` parameter type, by the marketplace or the
  * plugin it serves; a hosted marketplace names the directory its catalog is
  * served under. Every arm is released with its scenario (HOST-03).
+ *
+ * A pi without the GitHub base override signs in through GitHub's Device
+ * Flow (GHB-02). Its steps start the Device Flow stand-in with a poll script,
+ * start that pi with the GitHub redirect, which sends its github.com requests
+ * to the stand-in and to the git host and refuses every other host, and state
+ * the requests the stand-in received and the requests the redirect routed or
+ * refused (D-BG-01, D-BG-03).
  */
 
 import assert from "node:assert/strict";
@@ -16,9 +23,24 @@ import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
+import {
+  GITHUB_REDIRECT_EXTENSION,
+  GITHUB_REDIRECT_LOG,
+  readRedirectLog,
+  writeRedirectConfig,
+} from "../lib/github-device-flow/extension.ts";
+import {
+  DEVICE_FLOW_LOG,
+  GitHubDeviceFlow,
+  readDeviceFlowRequests,
+  readPollScript,
+} from "../lib/github-device-flow/server.ts";
 import { armedStatus } from "../lib/https-git-host/server.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
+import { harnessDirectory } from "../lib/turn-records.ts";
+import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 
+import type { DeviceFlowRequest } from "../lib/github-device-flow/server.ts";
 import type { GitHostArm } from "../lib/https-git-host/server.ts";
 import type { GitRepositoryReference } from "../support/git-repository.ts";
 import type { ScenarioWorld } from "../support/world.ts";
@@ -48,6 +70,20 @@ function servedRepository(
   }
 
   assert.fail(`the marketplace ${reference.name} is not published on the git host`);
+}
+
+const CREDENTIAL_STORE_CONFIG = "[credential]\n\thelper = store\n";
+
+/**
+ * Writes the sandbox HOME's git config, which Pi's git reads through its
+ * global config (DRV-03), so git keeps credentials in its credential store,
+ * and registers its removal. Returns the path of the config.
+ */
+async function useCredentialStore(world: ScenarioWorld): Promise<string> {
+  const config = path.join(world.tokens.home, ".gitconfig");
+  await writeFile(config, CREDENTIAL_STORE_CONFIG, { flag: "wx" });
+  world.onRelease(() => rm(config, { force: true }));
+  return config;
 }
 
 /**
@@ -170,17 +206,61 @@ Given(
 Given(
   "the user has stored a credential for the git host with the user {string} and the password {string}",
   async function (this: ScenarioWorld, user: string, password: string): Promise<void> {
-    const config = path.join(this.tokens.home, ".gitconfig");
     const credentials = path.join(this.tokens.home, ".git-credentials");
-    const configText = "[credential]\n\thelper = store\n";
     const credentialsText = `https://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${this.gitHost.address}\n`;
-    await writeFile(config, configText, { flag: "wx" });
-    this.onRelease(() => rm(config, { force: true }));
+    const config = await useCredentialStore(this);
     await writeFile(credentials, credentialsText, { flag: "wx", mode: 0o600 });
     this.onRelease(() => rm(credentials, { force: true }));
     assert.deepStrictEqual(
       [await readFile(config, "utf8"), await readFile(credentials, "utf8")],
-      [configText, credentialsText],
+      [CREDENTIAL_STORE_CONFIG, credentialsText],
+    );
+  },
+);
+
+// The credential store lies in the sandbox HOME, so the token the product
+// stores after a sign-in never reaches the user's own store.
+Given(
+  "the user's git keeps credentials in its credential store",
+  async function (this: ScenarioWorld): Promise<void> {
+    const config = await useCredentialStore(this);
+    assert.strictEqual(await readFile(config, "utf8"), CREDENTIAL_STORE_CONFIG);
+  },
+);
+
+// D-BG-03: the stand-in serves with the git host's certificate, which Pi
+// trusts already, and the redirect config it writes is read when Pi starts.
+Given(
+  "github's sign-in answers its polls with these outcomes:",
+  async function (this: ScenarioWorld, table: DataTable): Promise<void> {
+    const harness = harnessDirectory(this.tokens.home);
+    const signIn = await GitHubDeviceFlow.start(this.gitHost, readPollScript(table), harness);
+    this.onRelease(() => signIn.close());
+    await writeRedirectConfig(this.tokens.home, {
+      gitHost: this.gitHost.address,
+      signIn: signIn.address,
+    });
+    assert.deepStrictEqual(await readDeviceFlowRequests(harness), []);
+  },
+);
+
+// D-BG-01: the pi runs without the GitHub base override, so GHB-02 runs
+// Device Flow, and the redirect keeps every request on this machine.
+Given(
+  "pi runs with github's requests routed to the stand-ins",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld): Promise<void> {
+    await this.usePiWithProfile({
+      companions: [],
+      extraExtensions: [GITHUB_REDIRECT_EXTENSION],
+      withoutGitHubBaseOverride: true,
+    });
+    const loads = (await readRedirectLog(this.profileHarness())).flatMap((line) =>
+      line.decision === "loaded" ? [line] : [],
+    );
+    assert.deepStrictEqual(
+      loads.map((line) => ({ configured: line.configured, ownProcess: line.pid === process.pid })),
+      [{ configured: true, ownProcess: false }],
     );
   },
 );
@@ -193,6 +273,50 @@ Then("the git host receives these requests:", function (this: ScenarioWorld, tab
   ]);
   assert.deepStrictEqual([["method", "path", "status"], ...rows], table.raw());
 });
+
+// The sign-in requests of the last `When`.
+async function signInRequestsOfLastWhen(world: ScenarioWorld): Promise<DeviceFlowRequest[]> {
+  const requests = await readDeviceFlowRequests(world.profileHarness());
+  return requests.slice(world.harnessLogLinesBeforeLastWhen(DEVICE_FLOW_LOG));
+}
+
+Then(
+  "github's sign-in receives these requests:",
+  async function (this: ScenarioWorld, table: DataTable): Promise<void> {
+    const rows = (await signInRequestsOfLastWhen(this)).map((request) => [
+      request.method,
+      request.path,
+      Object.entries(request.form)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(", "),
+    ]);
+    assert.deepStrictEqual([["method", "path", "form"], ...rows], table.raw());
+  },
+);
+
+Then("github's sign-in receives no request", async function (this: ScenarioWorld): Promise<void> {
+  assert.deepStrictEqual(await signInRequestsOfLastWhen(this), []);
+});
+
+// The `loaded` lines are not requests; every routed and refused one is a row.
+Then(
+  "pi routes these github requests:",
+  async function (this: ScenarioWorld, table: DataTable): Promise<void> {
+    const log = await readRedirectLog(this.profileHarness());
+    const lines = log.slice(this.harnessLogLinesBeforeLastWhen(GITHUB_REDIRECT_LOG));
+    const rows = lines.flatMap((line) => {
+      switch (line.decision) {
+        case "loaded":
+          return [];
+        case "routed":
+          return [[line.method, line.url, line.target]];
+        case "refused":
+          return [[line.method, line.url, "refused"]];
+      }
+    });
+    assert.deepStrictEqual([["method", "url", "routed to"], ...rows], table.raw());
+  },
+);
 
 // A request over a kept-alive socket shows only in the requests, and a non-TLS
 // attempt that never becomes a request shows only in the connection count, so

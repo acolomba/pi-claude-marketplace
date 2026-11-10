@@ -10,6 +10,7 @@ import ts from "typescript";
 import {
   type BatchedConfigPatch,
   deleteMarketplaceConfigEntryWithCascade,
+  deletePluginConfigEntries,
   deletePluginConfigEntry,
   writeAutoapplyConfig,
   writeBatchedConfigEntries,
@@ -453,6 +454,39 @@ describe("deletePluginConfigEntry", () => {
 
     // assert
     assert.strictEqual(configBytes, expectedBytes);
+  });
+});
+
+describe("deletePluginConfigEntries", () => {
+  test("deletes the listed plugin keys in one write and keeps every other member", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(os.tmpdir(), "config-write-back-delete-plugins-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.local.json");
+    const current = JSON.parse(
+      '{"schemaVersion":1,"plugins":{"a@mp":{"enabled":false},"b@mp":{"future":true},' +
+        '"c@mp":{"enabled":false},"d@mp":{}},"future":1}',
+    ) as ScopeConfig;
+    const expectedText = `{
+  "schemaVersion": 1,
+  "plugins": {
+    "b@mp": {
+      "future": true
+    },
+    "d@mp": {}
+  },
+  "future": 1
+}
+`;
+
+    // act
+    const written = await deletePluginConfigEntries(current, filePath, scopeRoot, ["a@mp", "c@mp"]);
+
+    // assert
+    assert.deepStrictEqual(
+      { written: written.toString("utf8"), file: await readFile(filePath, "utf8") },
+      { written: expectedText, file: expectedText },
+    );
   });
 });
 

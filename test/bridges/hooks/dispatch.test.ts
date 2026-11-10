@@ -503,17 +503,36 @@ describe("compositeHandlerFor", () => {
 });
 
 describe("matcherFiresOnClosedSetValue", () => {
-  for (const { rawMatcher, value, expected } of [
-    { rawMatcher: "", value: "startup", expected: true },
-    { rawMatcher: "*", value: "reload", expected: true },
-    { rawMatcher: "resume", value: "resume", expected: true },
-    { rawMatcher: "fork", value: "startup", expected: false },
+  for (const { claudeEvent, rawMatcher, value, expected } of [
+    { claudeEvent: "SessionStart", rawMatcher: "", value: "startup", expected: true },
+    { claudeEvent: "SessionStart", rawMatcher: "*", value: "reload", expected: true },
+    { claudeEvent: "SessionStart", rawMatcher: "resume", value: "resume", expected: true },
+    { claudeEvent: "SessionStart", rawMatcher: "fork", value: "startup", expected: false },
+    { claudeEvent: "SessionStart", rawMatcher: "reload, clear", value: "clear", expected: true },
+    { claudeEvent: "SessionStart", rawMatcher: "resume|fork", value: "clear", expected: false },
+    { claudeEvent: "SessionEnd", rawMatcher: "quit|clear", value: "clear", expected: true },
+    { claudeEvent: "SessionEnd", rawMatcher: "Clear, Resume", value: "clear", expected: false },
+    { claudeEvent: "PreCompact", rawMatcher: "auto, manual", value: "manual", expected: true },
+    { claudeEvent: "PostCompact", rawMatcher: " manual ", value: "manual", expected: true },
+    { claudeEvent: "PostCompact", rawMatcher: "manual.*", value: "manual", expected: false },
+    {
+      claudeEvent: "StopFailure",
+      rawMatcher: "rate_limit|overloaded",
+      value: "overloaded",
+      expected: true,
+    },
+    {
+      claudeEvent: "StopFailure",
+      rawMatcher: "rate_limit, overloaded",
+      value: "overloaded",
+      expected: false,
+    },
   ] as const) {
-    test(`reports ${String(expected)} for raw matcher ${JSON.stringify(rawMatcher)}`, () => {
+    test(`reports ${String(expected)} for the ${claudeEvent} raw matcher ${JSON.stringify(rawMatcher)} and value ${JSON.stringify(value)}`, () => {
       // arrange
       const entry = createRoutingEntry({
         pluginId: `closed-${rawMatcher || "empty"}`,
-        claudeEvent: "SessionStart",
+        claudeEvent,
         rawMatcher,
         declarationIndex: 0,
       });
@@ -529,7 +548,7 @@ describe("matcherFiresOnClosedSetValue", () => {
 });
 
 describe("collectBucketOutcomes", () => {
-  test("preserves matching observation order while degrading async rewake to noop", async () => {
+  test("preserves matching observation order and runs an async rewake entry through the executor", async () => {
     // arrange
     const runtime = createHooksRuntime();
     const cwd = "/workspace/dispatch-collection";
@@ -549,7 +568,7 @@ describe("collectBucketOutcomes", () => {
       ifPredicate: compileIfPredicate("Bash(npm test)", "PreToolUse", compileContext),
     });
     const asyncEntry = createRoutingEntry({
-      pluginId: "async-degraded",
+      pluginId: "async-background",
       claudeEvent: "PreToolUse",
       rawMatcher: "Bash",
       declarationIndex: 2,
@@ -592,6 +611,7 @@ describe("collectBucketOutcomes", () => {
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       {
+        "async-background": { kind: "noop" },
         "first-noop": { kind: "noop" },
         "second-noop": { kind: "noop" },
         "observed-block": { kind: "block", reason: "observe denial" },
@@ -602,7 +622,7 @@ describe("collectBucketOutcomes", () => {
     const expectedOutcomes = [
       {
         entry: createRoutingEntry({
-          pluginId: "async-degraded",
+          pluginId: "async-background",
           claudeEvent: "PreToolUse",
           rawMatcher: "Bash",
           declarationIndex: 2,
@@ -648,6 +668,7 @@ describe("collectBucketOutcomes", () => {
       },
     ];
     const expectedExecutorCalls: RecordedCall[] = [
+      { pluginId: "async-background", event: createToolCallEvent() },
       { pluginId: "first-noop", event: createToolCallEvent() },
       { pluginId: "second-noop", event: createToolCallEvent() },
       { pluginId: "observed-block", event: createToolCallEvent() },
@@ -1485,6 +1506,9 @@ describe("composite dispatch closure partitions", () => {
   }
 });
 
+// A plugin MCP tool under its Claude Code name, as the adapter cases call it.
+const ADAPTER_TOOL = "mcp__plugin_demo_stub__echo";
+
 describe("toolResultCompositeHandler", () => {
   test("returns undefined from a stale tool-result closure without dispatching", async () => {
     // arrange
@@ -1833,7 +1857,189 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(output, expectedOutput);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
+
+  test("starts no hook for a failed result under an aborted turn signal (D-BG-402)", async (t) => {
+    // arrange
+    const readDiagnostics = observeHookDebug(t);
+    const expectedCalls: RecordedCall[] = [];
+
+    // act
+    const { output, calls } = await runBashToolResult(true, AbortSignal.abort());
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(calls, expectedCalls);
+    assert.deepStrictEqual(readDiagnostics(), [
+      "[hooks] dispatch: no PostToolUseFailure hook on a cancelled tool call",
+    ]);
+  });
+
+  test("runs the PostToolUseFailure hook for a failed result under a live turn signal", async () => {
+    // arrange
+    const expectedCalls: RecordedCall[] = [
+      { pluginId: "failure", event: createToolResultEvent(true) },
+    ];
+
+    // act
+    const { calls } = await runBashToolResult(true, new AbortController().signal);
+
+    // assert
+    assert.deepStrictEqual(calls, expectedCalls);
+  });
+
+  test("runs the PostToolUse hook for a successful result under an aborted turn signal (D-BG-402)", async () => {
+    // arrange
+    const expectedCalls: RecordedCall[] = [
+      { pluginId: "after", event: createToolResultEvent(false) },
+    ];
+
+    // act
+    const { calls } = await runBashToolResult(false, AbortSignal.abort());
+
+    // assert
+    assert.deepStrictEqual(calls, expectedCalls);
+  });
+
+  for (const code of ["tool_error", "call_failed"]) {
+    test(`routes a pi-mcp-adapter ${code} result to the PostToolUseFailure hook (D-BG-404)`, async () => {
+      // arrange
+      const reads: string[] = [];
+      const expectedCalls: RecordedCall[] = [
+        {
+          pluginId: "failure-observer",
+          event: { ...adapterToolResult({ error: code }), isError: true },
+        },
+      ];
+
+      // act
+      const { calls } = await runAdapterToolResult({ error: code }, true, reads);
+
+      // assert
+      assert.deepStrictEqual(calls, expectedCalls);
+      assert.deepStrictEqual(reads, ["proxyRuleApplies", `identify ${ADAPTER_TOOL}`]);
+    });
+  }
+
+  test("keeps a tool_error result on PostToolUse while pi-mcp-adapter is not the active implementation (D-BG-404)", async () => {
+    // arrange
+    const reads: string[] = [];
+    const expectedCalls: RecordedCall[] = [
+      { pluginId: "success-observer", event: adapterToolResult({ error: "tool_error" }) },
+    ];
+
+    // act
+    const { calls } = await runAdapterToolResult({ error: "tool_error" }, false, reads);
+
+    // assert
+    assert.deepStrictEqual(calls, expectedCalls);
+    assert.deepStrictEqual(reads, ["proxyRuleApplies", `identify ${ADAPTER_TOOL}`]);
+  });
+
+  for (const { name, details } of [
+    { name: "undefined details", details: undefined },
+    { name: "null details", details: null },
+    { name: "details without an error", details: {} },
+    { name: "a non-string error", details: { error: 1 } },
+    { name: "another adapter code", details: { error: "input_required_needs_ui" } },
+  ]) {
+    test(`keeps a result with ${name} on PostToolUse without reading the proxy rule (D-BG-404)`, async () => {
+      // arrange
+      const reads: string[] = [];
+      const expectedCalls: RecordedCall[] = [
+        { pluginId: "success-observer", event: adapterToolResult(details) },
+      ];
+
+      // act
+      const { calls } = await runAdapterToolResult(details, true, reads);
+
+      // assert
+      assert.deepStrictEqual(calls, expectedCalls);
+      assert.deepStrictEqual(reads, [`identify ${ADAPTER_TOOL}`]);
+    });
+  }
+
+  test("labels a block on a pi-mcp-adapter failure as PostToolUseFailure (D-BG-404)", async () => {
+    // arrange
+    const reads: string[] = [];
+    const block: HookExecResult = { kind: "block", reason: "look again" };
+
+    // act
+    const { output } = await runAdapterToolResult({ error: "tool_error" }, true, reads, block);
+
+    // assert
+    assert.deepStrictEqual(output, {
+      content: [
+        { type: "text", text: "original output" },
+        {
+          type: "text",
+          text: `PostToolUseFailure:${ADAPTER_TOOL} hook blocking error from command: "printf failure-observer": look again`,
+        },
+      ],
+    });
+  });
+
+  test("starts no hook for a pi-mcp-adapter failure under an aborted turn signal (D-BG-402, D-BG-404)", async () => {
+    // arrange
+    const reads: string[] = [];
+    const expectedCalls: RecordedCall[] = [];
+
+    // act
+    const { calls } = await runAdapterToolResult(
+      { error: "tool_error" },
+      true,
+      reads,
+      { kind: "noop" },
+      AbortSignal.abort(),
+    );
+
+    // assert
+    assert.deepStrictEqual(calls, expectedCalls);
+  });
 });
+
+// Runs one bash tool result under `signal`, with a PostToolUse hook `after`
+// and a PostToolUseFailure hook `failure`, both matching Bash.
+async function runBashToolResult(
+  isError: boolean,
+  signal: AbortSignal,
+): Promise<{
+  readonly output: Awaited<ReturnType<ReturnType<typeof toolResultCompositeHandler>>>;
+  readonly calls: RecordedCall[];
+}> {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const context = createExtensionContext("/workspace/tool-result-signal");
+  context.signal = signal;
+  runtime.setRoutingBucket("PostToolUse", [
+    createRoutingEntry({
+      pluginId: "after",
+      claudeEvent: "PostToolUse",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
+    }),
+  ]);
+  runtime.setRoutingBucket("PostToolUseFailure", [
+    createRoutingEntry({
+      pluginId: "failure",
+      claudeEvent: "PostToolUseFailure",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
+    }),
+  ]);
+  const calls: RecordedCall[] = [];
+  const executor = createRecordingExecutor(
+    { after: { kind: "noop" }, failure: { kind: "noop" } },
+    calls,
+  );
+  const handler = toolResultCompositeHandler(
+    runtime,
+    runtime.currentGeneration(),
+    undefined,
+    executor,
+  );
+  const output = await handler(createToolResultEvent(isError), context);
+  return { output, calls };
+}
 
 describe("composite per-event adapters", () => {
   test("adapts a PreToolUse block without a reason to Claude Code's default hook error", async () => {
@@ -3795,13 +4001,6 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       notices: ["SessionEnd:clear hook error: [printf ender]: bye"],
     },
     {
-      name: "a hook error for a PostCompact block after the event and its trigger",
-      claudeEvent: "PostCompact",
-      event: POST_COMPACT,
-      results: { compactor: { kind: "block" } },
-      notices: ["PostCompact:auto hook error: Blocked by hook"],
-    },
-    {
       name: "one compaction-blocked notice for the PreCompact blocks in routing order",
       claudeEvent: "PreCompact",
       event: PRE_COMPACT,
@@ -3962,6 +4161,130 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       host.capture.assertValid();
     });
   }
+});
+
+describe("PostCompact notices (D-BG-501 / D-BG-502 / D-BG-504)", () => {
+  const MANUAL = { reason: "manual" } as SessionCompactEvent;
+
+  function postCompactHandler(
+    entries: readonly RoutingEntry[],
+    pi: ExtensionAPI,
+    executor: HookExecutor,
+  ): ReturnType<typeof compositeHandlerFor<"PostCompact">> {
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostCompact", entries);
+    return compositeHandlerFor(runtime, "PostCompact", runtime.currentGeneration(), pi, executor);
+  }
+
+  test("lists each hook's end after a manual compaction in routing order whatever order the hooks finish in", async () => {
+    // arrange
+    const host = createNoticeHost("/workspace/post-compact");
+    const held = createHeldExecutor([]);
+    const handler = postCompactHandler(
+      routedEntries("PostCompact", ["first", "second", "third"]),
+      host.pi,
+      held.executor,
+    );
+
+    // act
+    const pending = handler(MANUAL, host.context);
+    await settleStartedHooks();
+    held.finish("third", { kind: "noop", postCompactRun: { succeeded: true, output: "" } });
+    held.finish("first", { kind: "noop", postCompactRun: { succeeded: true, output: "saved" } });
+    held.finish("second", {
+      kind: "block",
+      reason: "not now",
+      fromStderr: true,
+      postCompactRun: { succeeded: false, output: "not now" },
+    });
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry(
+        "PostCompact [printf first] completed successfully: saved\n" +
+          "PostCompact [printf second] failed: not now\n" +
+          "PostCompact [printf third] completed successfully",
+      ),
+    ]);
+    host.capture.assertValid();
+  });
+
+  for (const reason of ["threshold", "overflow"] as const) {
+    test(`shows nothing and writes one debug line after a ${reason} compaction`, async (t) => {
+      // arrange
+      const debugLines = observeHookDebug(t);
+      const host = createNoticeHost("/workspace/post-compact-auto");
+      const handler = postCompactHandler(
+        routedEntries("PostCompact", ["first", "second"]),
+        host.pi,
+        createRecordingExecutor(
+          {
+            first: { kind: "noop", postCompactRun: { succeeded: true, output: "" } },
+            second: { kind: "noop", postCompactRun: { succeeded: false, output: "boom" } },
+          },
+          [],
+        ),
+      );
+
+      // act
+      await handler({ reason } as SessionCompactEvent, host.context);
+
+      // assert
+      assert.deepStrictEqual(host.capture.entries, []);
+      assert.deepStrictEqual(debugLines(), [
+        "[hooks] dispatch: 2 PostCompact line(s) not shown after an automatic compaction",
+      ]);
+    });
+  }
+
+  test("shows nothing and writes no debug line for results that carry no run", async (t) => {
+    // arrange
+    const debugLines = observeHookDebug(t);
+    const host = createNoticeHost("/workspace/post-compact-none");
+    const handler = postCompactHandler(
+      routedEntries("PostCompact", ["quiet"]),
+      host.pi,
+      createRecordingExecutor({ quiet: { kind: "noop" } }, []),
+    );
+
+    // act
+    await handler(MANUAL, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, []);
+    assert.deepStrictEqual(debugLines(), []);
+  });
+
+  test("names each hook by its command and exec-form arguments", async () => {
+    // arrange
+    const [tagged, plain, bare] = routedEntries("PostCompact", ["tagged", "plain", "bare"]);
+    assert.ok(tagged !== undefined && plain !== undefined && bare !== undefined);
+    const host = createNoticeHost("/workspace/post-compact-commands");
+    const ran = { kind: "noop", postCompactRun: { succeeded: true, output: "" } } as const;
+    const handler = postCompactHandler(
+      [
+        { ...tagged, handlerDecl: { ...tagged.handlerDecl, args: ["note", 7] } },
+        { ...plain, handlerDecl: { ...plain.handlerDecl, args: "ignored" } },
+        { ...bare, handlerDecl: { type: "command", timeout: 1 } },
+      ] as RoutingEntry[],
+      host.pi,
+      createRecordingExecutor({ tagged: ran, plain: ran, bare: ran }, []),
+    );
+
+    // act
+    await handler(MANUAL, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry(
+        "PostCompact [printf tagged note 7] completed successfully\n" +
+          "PostCompact [printf plain] completed successfully\n" +
+          "PostCompact [] completed successfully",
+      ),
+    ]);
+  });
 });
 
 // Entries of `claudeEvent` with a match-all matcher, in routing order.
@@ -4681,3 +5004,58 @@ describe("built-in MCP tool names in tool results and if fields (MHK-01)", () =>
     });
   }
 });
+
+// A successful-looking result of `ADAPTER_TOOL` with `details`, as
+// pi-mcp-adapter returns a failed MCP call before its own handler flags it.
+function adapterToolResult(details: unknown): ToolResultEvent {
+  return { ...createToolResultEvent(false, ADAPTER_TOOL), details };
+}
+
+// Runs `adapterToolResult(details)` with a PostToolUse hook `success-observer`
+// and a PostToolUseFailure hook `failure-observer` on `ADAPTER_TOOL`, through a
+// view whose proxy rule gives `applies` and records its reads in `reads`.
+async function runAdapterToolResult(
+  details: unknown,
+  applies: boolean,
+  reads: string[],
+  failureResult: HookExecResult = { kind: "noop" },
+  signal: AbortSignal = new AbortController().signal,
+): Promise<{
+  readonly output: Awaited<ReturnType<ReturnType<typeof toolResultCompositeHandler>>>;
+  readonly calls: RecordedCall[];
+}> {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const context = createExtensionContext("/workspace/tool-result-adapter");
+  context.signal = signal;
+  runtime.setRoutingBucket("PostToolUse", [
+    createRoutingEntry({
+      pluginId: "success-observer",
+      claudeEvent: "PostToolUse",
+      rawMatcher: ADAPTER_TOOL,
+      declarationIndex: 0,
+    }),
+  ]);
+  runtime.setRoutingBucket("PostToolUseFailure", [
+    createRoutingEntry({
+      pluginId: "failure-observer",
+      claudeEvent: "PostToolUseFailure",
+      rawMatcher: ADAPTER_TOOL,
+      declarationIndex: 0,
+    }),
+  ]);
+  const calls: RecordedCall[] = [];
+  const executor = createRecordingExecutor(
+    { "success-observer": { kind: "noop" }, "failure-observer": failureResult },
+    calls,
+  );
+  const handler = toolResultCompositeHandler(
+    runtime,
+    runtime.currentGeneration(),
+    undefined,
+    executor,
+    createProxyRuleView(applies, reads),
+  );
+  const output = await handler(adapterToolResult(details), context);
+  return { output, calls };
+}

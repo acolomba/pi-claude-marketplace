@@ -1,8 +1,9 @@
 Feature: Plugin bootstrap
 
   Bootstrap adds Claude Code's official marketplace to the user scope, where its
-  autoupdate is on by default. A loopback https git host stands in for GitHub and
-  serves the official marketplace through the GitHub base override.
+  autoupdate is on by default. A loopback https git host stands in for GitHub, a helper
+  process holds the state lock as a second Pi would, and one-shot json-mode and terminal
+  Pis run the same command.
 
   Scenario: Bootstrapping adds the official marketplace to the user scope with its autoupdate on by default
     Given the marketplace "claude-plugins-official" is published as the official marketplace
@@ -21,6 +22,36 @@ Feature: Plugin bootstrap
       | name                    | source                             |
       | claude-plugins-official | anthropics/claude-plugins-official |
     Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Bootstrapping in json mode reports the result it reports over rpc
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    When the user runs "/claude:plugin bootstrap" in pi's json mode
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | false        |
+    Then the results list these marketplaces and plugins:
+      | marketplace name        | marketplace scope | marketplace status |
+      | claude-plugins-official | user              | added              |
+    Then the git host receives these requests:
+      | method | path                                                                      | status |
+      | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name                    | source                             |
+      | claude-plugins-official | anthropics/claude-plugins-official |
+    Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Bootstrapping in the terminal shows the result it reports over rpc
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    When the user runs "/claude:plugin bootstrap" in pi's terminal
+    Then pi's terminal shows this result of the command:
+      """
+      ● claude-plugins-official [user] (added)
+      """
+    Then the git host receives these requests:
+      | method | path                                                                      | status |
+      | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
 
   Scenario: Bootstrapping a second time leaves the official marketplace as it is
     Given the marketplace "claude-plugins-official" is published as the official marketplace
@@ -95,7 +126,44 @@ Feature: Plugin bootstrap
     Then the "claude-plugins.json" file of the user scope does not exist
     Then the user scope holds no git clones
 
-  Scenario Outline: Bootstrap rejects <rejected> with its usage
+  Scenario: Bootstrapping while another process holds the user scope's state lock fails as lock held and records nothing
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    Given another process holds the state lock of the user scope
+    When the user runs "/claude:plugin bootstrap"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name                   | marketplace scope | marketplace status | id                                 | name                               | status | reasons   | scope | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | anthropics/claude-plugins-official | user              | failed             | anthropics/claude-plugins-official | anthropics/claude-plugins-official | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+    Then the "claude-plugins.json" file of the user scope does not exist
+    Then the user scope holds no marketplace record
+    Then the user scope holds no marketplace checkout
+    Then the user scope holds no git clones
+    Then the git host receives no request
+
+  Scenario: Bootstrapping in json mode while another process holds the user scope's state lock reports the failure it reports over rpc
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    Given another process holds the state lock of the user scope
+    When the user runs "/claude:plugin bootstrap" in pi's json mode
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name                   | marketplace scope | marketplace status | id                                 | name                               | status | reasons   | scope | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | anthropics/claude-plugins-official | user              | failed             | anthropics/claude-plugins-official | anthropics/claude-plugins-official | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+    Then the "claude-plugins.json" file of the user scope does not exist
+    Then the user scope holds no marketplace record
+    Then the user scope holds no marketplace checkout
+    Then the user scope holds no git clones
+    Then the git host receives no request
+
+  Scenario Outline: Bootstrap rejects <rejected> with its usage and changes nothing
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
     When the user runs "/claude:plugin bootstrap <arguments>"
     Then the result has these fields:
       | kind         | usage-error                     |
@@ -103,6 +171,10 @@ Feature: Plugin bootstrap
       | needs reload | false                           |
       | message      | <message>                       |
       | usage        | Usage: /claude:plugin bootstrap |
+    Then the "claude-plugins.json" file of the user scope does not exist
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the user scope holds no git clones
+    Then the git host receives no request
 
     Examples:
       | rejected                | arguments       | message                                                          |
@@ -113,3 +185,31 @@ Feature: Plugin bootstrap
       | the project scope       | --scope project | bootstrap does not accept --scope; it always targets user scope. |
       | a bad scope value       | --scope bad     | Invalid --scope value: "bad". Must be "user" or "project".       |
       | a scope with no value   | --scope         | --scope requires a value: "user" or "project".                   |
+
+  Scenario: Bootstrapping with a --scope flag in json mode reports the refusal it reports over rpc
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    When the user runs "/claude:plugin bootstrap --scope user" in pi's json mode
+    Then the result has these fields:
+      | kind         | usage-error                                                      |
+      | severity     | error                                                            |
+      | needs reload | false                                                            |
+      | message      | bootstrap does not accept --scope; it always targets user scope. |
+      | usage        | Usage: /claude:plugin bootstrap                                  |
+    Then the "claude-plugins.json" file of the user scope does not exist
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the user scope holds no git clones
+    Then the git host receives no request
+
+  Scenario: Bootstrapping with a --scope flag in the terminal shows the refusal it reports over rpc
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    When the user runs "/claude:plugin bootstrap --scope user" in pi's terminal
+    Then pi's terminal shows this result of the command:
+      """
+      Error: bootstrap does not accept --scope; it always targets user scope.
+
+      Usage: /claude:plugin bootstrap
+      """
+    Then the "claude-plugins.json" file of the user scope does not exist
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the user scope holds no git clones
+    Then the git host receives no request

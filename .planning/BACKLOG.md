@@ -1926,38 +1926,35 @@ invariant for the lazy-hydrate path: boot with a user-scope-only
 Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
 `ensureSharedDataDir`), `test/integration/hooks-dispatch-end-to-end.test.ts`.
 
-## HKDR-01: the blocking lane settles on `close`, so a surviving grandchild can pin a turn
+## HKDR-01: a hook process that the kill does not reach can still pin a turn
 
-Surfaced by review while landing PR #138 (2026-08-19), alongside the dead
-SIGKILL escalation that PR fixed.
+Narrowed 2026-11-10 by D-BG-211. Both hook lanes now spawn a hook as the
+leader of its own process group and send every signal to the group, and once
+the ladder's SIGTERM has fired, its SIGKILL follows after the grace whenever
+the group still has a member, also after the hook's shell exited. A grandchild
+that stays in the hook's group no longer pins a turn past the SIGKILL grace.
 
-`spawnAndCollect` (`bridges/hooks/dispatch-exec.ts`) resolves only from the
-child's `error` and `close` handlers. `close` fires when every stdio stream has
-closed, not when the child exits. Hook handlers spawn shell-form by default, so
-the ladder's signals reach `/bin/sh`; a grandchild that inherited the stdout
-pipe and outlives it keeps that pipe open, `close` never fires, and the promise
-never settles. `reduceBucket` awaits the executor with no deadline, so the turn
-does not complete.
+What remains:
 
-The async lane does not share the defect -- it listens on `exit`
-(`bridges/hooks/async-rewake/registry.ts`) -- and it has a `/reload` backstop
-in `shutdownInMemoryChildren`. The blocking lane has neither.
+- A descendant that leaves the hook's process group, such as one that calls
+  `setsid` or `setpgid`, gets no signal from the timeout, `/reload`, or the
+  orphan reap. Claude Code 2.1.319 also signals every descendant it finds with
+  `ps -A -o pid=,ppid=,pgid=` (its `mE` kill). If such a descendant keeps the
+  hook's stdout open, the blocking lane, which settles on `close`, waits until
+  it exits.
+- A group member that keeps the hook's stdout open after the hook's shell
+  exits on its own, before the timeout, also holds the blocking lane until it
+  exits: the SIGTERM leg finds the shell gone and sends nothing, so no SIGKILL
+  follows. Claude Code does not kill it either; it stops waiting after a
+  bounded drain of the streams (the `boundMs` wait that D-BG-605 defers).
 
-The comments that stated the ladder's cancel contract in terms of `exit`,
-while this lane wires `close`, were corrected when this item was filed. What
-remains here is the behavior alone, not the drift that hid it.
+Code seams: `bridges/hooks/process-group.ts` (the group signal),
+`bridges/hooks/exec-timer.ts` (the ladder), `bridges/hooks/dispatch-exec.ts`
+(`spawnAndCollect`, which settles on `close`).
 
-**Fix shape.** Settle on `exit` as well as `close`, with a short drain window
-after `exit` so a normally-behaved handler's tail output is not truncated --
-the reason `close` was chosen in the first place. A `detached: true` spawn plus
-a process-group kill would close the grandchild case properly but is a larger
-change with its own `/reload` implications.
+## ~~HKTO-01: `SessionEnd` hooks do not share a timeout budget~~ -- CLOSED
 
-Code seams: `bridges/hooks/dispatch-exec.ts` (`spawnAndCollect`),
-`bridges/hooks/spawn-helpers.ts` (the shell-form default),
-`bridges/hooks/exec-timer.ts` (the ladder's documented cancel contract).
-
-## HKTO-01: `SessionEnd` hooks do not share a timeout budget
+**CLOSED 2026-11-08** by behavioral-gaps Phase 6 (D-BG-604, commit `c5c5643b`). A turn-blocking SessionEnd hook's declared `timeout` is capped at the 1.5 s budget, because a plugin hook's `timeout` does not raise Claude Code's budget (hooks docs and the 2.1.319 budget function). The matching hooks of one event start together (D-CF5-09), so they share the 1.5 s. Still open (D-BG-605): no bounded wait like upstream's `boundMs`, so a hook that ignores SIGTERM holds the session for the 5 s SIGKILL grace, and a grandchild that keeps stdout open holds it until it exits (HKDR-01); and `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` is not read (SESSIONENDENV-01).
 
 Surfaced while landing PR #138 (2026-08-19). That change made the per-event
 `timeout` defaults match Claude Code -- 600 s for a `command` handler, lowered
@@ -4758,9 +4755,13 @@ Deferred by component-features Phase 5 (D-CF5-20). Merge a `plugin.json` `hooks`
 
 Deferred by component-features Phase 5 (D-CF5-28, 05-09 addendum). Add `tool_use_id` and `mcp_server` to the tool stdin payloads, and `tool_use_id`, `is_interrupt`, and `duration_ms` to the PostToolUseFailure payload, as Claude Code sends them.
 
+Update 2026-11-08 (behavioral-gaps Phase 4): `is_interrupt` shipped in the PostToolUseFailure payload, always `false` (D-BG-401); `tool_use_id`, `duration_ms`, and `mcp_server` stay deferred (D-BG-403).
+
 ## HOOKOUTPUT-01: other `updatedToolOutput` shapes
 
 Deferred by component-features Phase 5. A PostToolUse `updatedToolOutput` is read only in Pi's `content`-array form. Read it in the tool's own output shape too, and read `updatedMCPToolOutput`.
+
+Update 2026-11-08 (behavioral-gaps Phase 4): this entry now concerns PostToolUse only; a PostToolUseFailure hook's `updatedToolOutput` is ignored, as in Claude Code (D-BG-405).
 
 ## HOOKPOSTSTOP-01: PostToolUse `continue: false`
 
@@ -4769,6 +4770,8 @@ Deferred by component-features Phase 5 (D-CF5-11). A PostToolUse or PostToolUseF
 ## HOOKERRNOTE-01: Claude Code's non-blocking hook error notice
 
 Noted by component-features Phase 5. Claude Code shows `<hook name> hook error` and `Failed with non-blocking status code: ...` for a hook that exits with a code other than 0 and 2. The bridge shows nothing. No decision covers it yet.
+
+For SessionEnd, Claude Code 2.1.319 writes `SessionEnd hook [<command>] failed: <output>` to stderr for each failed hook with output after its bounded run. The bridge shows nothing for a non-blocking SessionEnd failure, and `features/hook/session-end.feature` states no notice for one (behavioral-gaps D-BG-603, P6-DC-04).
 
 ## HOOKPROMPTSTOP-01: a UserPromptSubmit `continue: false` stops silently
 
@@ -5059,3 +5062,117 @@ Noted 2026-11-07 (mcp-builtin, from 261106-u99, S2). No production code now read
 ## MIXEDREFUSAL-01: a refusal message names only the noted kind when another kind has no note
 
 Noted 2026-11-07 (mcp-builtin, from quick 261107-36g). When a plugin has a resolver note for one kind and also an unsupported kind with no note, such as an output style plus hooks declared in the manifest, the not-installable message names only the noted kind (`contains outputStyles`). The row's reason list already shows both. Candidate direction: in `refusalReasons` (`domain/plugin-resolver.ts`), add the token of each unsupported kind that no note covers.
+
+## LOCKFLIPSUBJECT-01: an unnamed autoupdate flip under a held lock reports `(unknown)`
+
+Noted 2026-11-08 (behavioral-gaps Phase 15, P15-DC-02). An unnamed `marketplace autoupdate` or `noautoupdate` under a held state lock reports the `(unknown)` aggregate subject, which unit tests pin. It could name the recorded marketplaces, as an unnamed `marketplace update` does. The flip without `--scope`, which writes the project scope and then fails on a held user lock, has no scenario. Candidate direction: name the recorded marketplaces in the failed row, and add a scenario for the cross-scope flip.
+
+## STATEREAD-01: some commands report a newer `state.json` without `{unreadable}`
+
+Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-03). A `state.json` from a newer schema gets `{unreadable}` from the load, `list`, `disable`, `pending`, and `apply`. `install` reports the plugin row failed with no reason, `update` reports `{unreadable manifest}`, and `uninstall` and `info` report an internal error whose cause is cut to `state.json at [path]`. All of them refuse and change nothing. Candidate direction: give those verbs' orchestrators the same `{unreadable}` row, and pin each with a scenario.
+
+## STATEVER-01: an old record with no plugins keeps its old schema version
+
+Noted 2026-11-08 (behavioral-gaps Phase 7, P7-DC-06). A schema 1 or 2 `state.json` with no plugin records keeps its old `schemaVersion` on disk, because `loadState` writes only when it fills a field. Candidate direction: write the current schema version whenever the migration ran, even with no field filled.
+
+## BROWSESCOPE-01: the picker's install-scope screen differs from Claude Code's
+
+Noted 2026-11-08 (behavioral-gaps Phase 12, D-BG-1202). Claude Code 2.1.319 asks `Install for you (user scope)`, `Install for all collaborators on this repository (project scope)`, and `Install for you, in this repo only (local scope)`, in that order, and marks none recommended. Pi's picker lists `Project local (Recommended)`, `Project`, and `User (global)`. Candidate direction: reorder the screen to user, project, project local, drop `(Recommended)`, and update the scope-screen rows that `features/plugin/browse.feature` pins (scenario C).
+
+Narrowed 2026-11-09 (quick 261109-cpm, D-BG-1203): at the user's request, the picker no longer marks `Project local` as `(Recommended)`. It still lists `Project local`, `Project`, and `User (global)`, in that order. Two differences stay open: Claude Code's order (user, project, local) and its option wording. Candidate direction: reorder the screen to user, project, project local, and update the scope-screen rows that the `Choosing User (global) in the terminal picker ...` scenario of `features/plugin/browse.feature` pins.
+
+## DFLOWGAPS-01: Device Flow paths with no scenario
+
+Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-04). Device Flow in print mode (`DeviceFlowUnavailableError`) has no scenario; a sign-in stand-in that fails its code request has no scenario; GitLab's Device Flow has no stand-in or scenario. Candidate direction: add a scenario for each, and a GitLab stand-in beside the GitHub one.
+
+## DFLOWREASON-01: a denied and an expired sign-in read the same
+
+Noted 2026-11-08 (behavioral-gaps Phase 11, P11-DC-02). A denied and an expired GitHub sign-in both show the bare `authentication required` row (GAUTH-05); the product's own reason texts reach only the debug log. Candidate direction: give each a user-facing reason, if the user wants to tell them apart.
+
+## ~~CLOSEDLIST-01: `|` and `,` lists in the SessionStart, SessionEnd, PreCompact, and PostCompact matchers~~ -- CLOSED
+
+**CLOSED 2026-11-09** by quick task 261109-cpk (fixed). A SessionStart, SessionEnd, PreCompact, or PostCompact matcher made only of letters, digits, `_`, `-`, spaces, `,`, and `|` is now a list of exact values separated by `|` or `,`, each value trimmed, as in Claude Code. The group is kept when one value is in the event's set, and it runs on any listed value. One reader, `closedSetMatcherValues` in `hook-events.ts`, serves these four events and StopFailure, whose narrow `|` grammar stays as D-BG-302 states. The scenarios "A list matcher selects the SessionStart and SessionEnd runs of a new session" and "A list matcher selects the PreCompact and PostCompact runs of a compaction", the Outline "Info on a plugin whose <event> matcher <matcher> lists no value Claude Code sends shows it partially available", and the `rate_limit, overloaded` row of the StopFailure drop Outline pin it.
+
+Noted 2026-11-08 (behavioral-gaps Phase 3, P3-DC-02). Claude Code reads a matcher of these events as a list of exact values separated by `|` or `,`. The bridge compares the whole matcher with the event's closed set, so a list drops as `closed-set` and the plugin installs only with `--partial`. StopFailure has its own list reading (D-BG-302). The fix for these four events changes the shared `nonToolMatcherCondition` and `matcherFiresOnClosedSetValue`, which a behavioral-gaps hook stream may not reshape (P3-DC-02).
+
+## HOOKPRECOMPACT-01: PreCompact output after /compact and as summary instructions
+
+Deferred by behavioral-gaps Phase 5 (D-BG-508). Claude Code 2.1.319 uses a PreCompact hook's exit-0 stdout as instructions for the compaction summary, at most 10,000 characters per hook, and after `/compact` shows `PreCompact [<command>] completed successfully: <stdout>` or `PreCompact [<command>] failed: <message>` lines before the PostCompact lines. The bridge does neither. No stream of the behavioral-gaps milestone owns the PreCompact arm.
+
+## SESSIONENDENV-01: `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` is not read
+
+Noted 2026-11-08 (behavioral-gaps Phase 6, D-BG-605, P6-DC-02). Claude Code reads the variable as the SessionEnd budget and as the timeout of each SessionEnd hook that declares none. Since D-BG-604 a plugin's SessionEnd hooks get at most 1.5 s, and the user cannot raise that. A scenario needs a hook that runs longer than 1.5 s and a timed release, which the frozen fixtures do not offer.
+
+## RPCENDNOTICE-01: a startup session's SessionEnd notice can miss the RPC stream
+
+Noted 2026-11-08 (behavioral-gaps Phase 6, P6-DC-23). A SessionEnd hook-error notice from the startup session of an RPC Pi can miss the RPC stream while Pi's double bind settles; related to the Pi 1.5.0 RPC double `session_start` item in Carried Forward.
+
+## ~~PRUNECFG-01: a pruned disabled dependency keeps its `enabled: false` declaration~~ -- CLOSED
+
+**CLOSED 2026-11-09** by quick task 261109-cpl (fixed, D-BG-1310). The sweep that `prune` and `uninstall --prune` share now deletes the `enabled: false` declaration of each dependency it removes, from both config files of the scope. An invalid config file refuses the command before any dependency is removed, and a failed write fails it. When a prune's state save fails, the prune rollback restores both files. The disabled-dependency scenario of `features/plugin/prune.feature` checks the config, and new scenarios cover the local config, `uninstall --prune`, and the invalid-file refusal. An enabled declaration of a pruned dependency still stays, and PRUNECFG-02 holds that question.
+
+Noted 2026-11-08 (behavioral-gaps Phase 13, D-BG-1309, P13-DC-04). When `prune` or `uninstall --prune` removes a dependency that the user disabled, the scope's `claude-plugins.json` keeps that plugin's `enabled: false` declaration; Claude Code 2.1.319's prune removal deletes `enabledPlugins[id]` for each plugin it removes. No command result shows the entry (`pending` is empty, and a later install enables the plugin). The shared sweep `removeDependencyMember` in `orchestrators/plugin/uninstall.ts` never touches the config layers. Candidate direction: drop the declaration in the shared sweep, let the prune rollback and the uninstall path restore the config files on a failure (NFR-3), and add the config Then to the disabled-dependency scenario of `features/plugin/prune.feature`.
+
+## PRUNECFG-02: a pruned dependency's enabled declaration stays, so the next load plans its install
+
+Noted 2026-11-09 (quick 261109-cpl, D-BG-1310). The sweep of `prune` and `uninstall --prune` deletes only a removed dependency's `enabled: false` declaration. An enabled declaration stays: a `{}` entry written by hand, or the `enabled: true` that `enable <dependency>` writes over the entry of an earlier `disable`. With no record left, `pending` lists the plugin's install, and `apply` installs it again. Claude Code 2.1.319's `pruneOrphanedAutoDeps` deletes the `enabledPlugins` entry of each removed plugin, whatever its value. Candidate direction: decide whether an enabled declaration of a dependency is the user's request to install it (keep it, D-04-02) or a leftover (delete it, as Claude Code does).
+
+## PLUGALIAS-01: the CLI's plugin aliases, `autoremove` among them
+
+Noted 2026-11-08 (behavioral-gaps Phase 13, P13-DC-02). Claude Code's CLI names `autoremove` as an alias of `claude plugin prune` (2.1.319) and has the plugin aliases `i`, `remove`, and `rm`; the plugin subcommands of `/claude:plugin` have none of them, so `/claude:plugin autoremove` is an unknown subcommand. Prune is a CLI-only command upstream: the in-session `/plugin` has no prune. Candidate direction: decide whether the router takes the CLI's aliases (a router arm, usage, completions, and a usage-errors row for each) or record the divergence with a decision ID.
+
+## PRUNEISLAND-01: prune keeps an island of dependencies that declare each other
+
+Noted 2026-11-08 (behavioral-gaps Phase 13, P13-DC-03). Claude Code's orphan scan walks the dependencies of the plugins installed by name, so dependency plugins that only declare each other are orphans and its prune removes them. `pruneOrphans` (`domain/dependency-orphans.ts`) removes only a record that no remaining record declares, so such an island holds itself, as its PRUNE-03 comment documents and `test/domain/dependency-orphans.test.ts` pins. Install refuses a dependency cycle, so an island forms only when installed manifests change. Candidate direction: walk from the plugins installed by name, as upstream does, with a decision that amends PRUNE-03, or record the divergence.
+
+## REDACTPOINTER-01: the path redaction cuts a multi-segment JSON pointer
+
+Noted 2026-11-08 (behavioral-gaps Phase 8, P8-DC-05). `shared/redact-absolute-paths.ts` reads a JSON pointer with more than one segment in a schema-error cause, such as `/plugins/demo@fixtures/enabled`, as an absolute path and cuts it to `demo@fixtures/enabled`. Owner: the shared redaction and the invalid-config step of the read pass. Candidate direction: leave a JSON pointer that follows a schema-error prefix unredacted.
+
+## AUTOAPPLYDEFAULTOFF-01: autoapply rewrites the config for a `defaultEnabled: false` plugin
+
+Noted 2026-11-08 (behavioral-gaps Phase 8, P8-DC-08). With autoapply on, a load stamps `enabled: false` into `claude-plugins.json` for a declared `defaultEnabled: false` plugin and writes the file again in its own format. It is the one load-time config write once the file exists (D-102-02, DFEN-04). Owner: the install path. Candidate direction: decide whether that stamp should wait for an explicit command.
+
+## ASYNCPRINT-01: Claude Code runs an `asyncRewake` hook synchronously in a non-interactive session without streaming input (`claude -p`)
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). Claude Code runs an `asyncRewake` hook synchronously in a non-interactive session without streaming input (`claude -p`); Pi's print and json modes still run it in the background, and no harness runs a prompt there.
+
+## ASYNCSUMJSON-01: Claude Code takes a `rewakeSummary` from a JSON line on stdout for a plugin of an official marketplace
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). Claude Code takes a `rewakeSummary` from a JSON line on stdout for a plugin of an official marketplace; the bridge reads only the declared field.
+
+## ASYNCMISSING-01: Claude Code reports an exit 2 from a hook whose script cannot be opened with its own message, once
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). Claude Code reports an exit 2 from a hook whose script cannot be opened with its own message, once; the bridge wakes the model with the interpreter's output.
+
+## ASYNCPIDS-01: two live Pi processes in one scope share its PID table
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). two live Pi processes in one scope share its PID table; one's start reaps the other's live hook processes, and the last writer's rows win (user scope before this phase; now the project scope too).
+
+## ASYNCMIDTURN-01: Claude Code may attach a finished plain async hook's answer at a tool boundary of a running turn
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). Claude Code may attach a finished plain async hook's answer at a tool boundary of a running turn; the bridge waits for the next prompt (Pi has no lane that does not continue the turn).
+
+## ASYNCSANITIZE-01: Claude Code collapses whitespace and caps the length of the summary, redacts some keys, and escapes a trailing `<` in the body
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). Claude Code collapses whitespace and caps the length of the summary, redacts some keys, and escapes a trailing `<` in the body; the bridge sends both as written.
+
+## ASYNCRUNTIME-01: the `{"async": true}` first stdout line that turns a synchronous hook asynchronous at run time is not supported
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). the `{"async": true}` first stdout line that turns a synchronous hook asynchronous at run time is not supported.
+
+## ASYNCNEWSESSION-01: a new session in a live Pi now stops the earlier session's project-scope async hooks, as the user-scope factory reap already did
+
+Noted 2026-11-08 (behavioral-gaps Phase 2). a new session in a live Pi now stops the earlier session's project-scope async hooks, as the user-scope factory reap already did; Claude Code leaves them running. Keep, or reap only at load?
+
+## AMIGTRUST-01: should the load's AMIG-01 MCP move skip a project Pi does not trust?
+
+Noted 2026-11-08 (behavioral-gaps, debug session `adapter-profile-parallel-flakes`). In a project Pi does not trust, the load's apply step covers the user scope only (D-LOC-01). But the read-only pass in `orchestrators/reconcile/load.ts` still covers the project scope, and its AMIG-01 MCP move (`migrateLegacyMcpEntries`, through `orchestrators/reconcile/read-pass.ts`) rewrites `<project>/.pi/mcp.json` and `<project>/.pi/mcp-adapter.json` with no trust check. `features/mcp-server/legacy-move.feature:206` depends on that. It runs in the run's shared Pi, which has no trust entry, so once the scenario writes `<project>/.pi/mcp.json` Pi decides the project is untrusted (RPC, `defaultProjectTrust: "ask"`, no UI), and the move still happens. That scenario was also the one that left the shared Pi distrusting the project for later scenarios, which `d04a5106` fixed in the harness. Claude Code loads no project-scope plugin before the workspace is trusted. Open question: should the move skip an untrusted project, as the apply step does? If it should, the scenario needs a trusted profile Pi, plus an untrusted twin that shows nothing moves.
+
+## WORKERHOMEDIR-01: should the harness guard `os.homedir()` in cucumber worker threads?
+
+Noted 2026-11-08 (behavioral-gaps, debug session `adapter-profile-parallel-flakes`). cucumber 13.3.0 runs `--parallel` workers as threads of one process (`lib/runtime/parallel/adapter.js`, `node:worker_threads`). `features/support/isolated-pi-home.ts` points a worker's `process.env.HOME` and `PI_CODING_AGENT_DIR` at the run's sandbox, and `os.tmpdir()` follows the worker's `TMPDIR`. But a probe showed that `os.homedir()` in a worker still returns the real home (`/home/acolomba`). So product code that a step runs in the worker, such as the plugin completion provider, would read or write the user's `~/.pi` if it read `os.homedir()` instead of `HOME` or `PI_CODING_AGENT_DIR`. No path in the scenarios that failed did. Open question: does any worker-side code path reach `os.homedir()`? If one does, should the harness fail a scenario that resolves the real home, or should `.agents/skills/cucumber/rules/world-and-stand-ins.md` say that only the variables are isolated?
+
+## UNREADABLECOMPANIONS-01: should a scope whose installation record a load cannot read stop serving its MCP servers, agents, and saved workflows?
+
+Noted 2026-11-09 (behavioral-gaps, P7-DC-04, D-BG-705). When a load cannot read a scope's `state.json`, it stops offering that scope's skills and prompts. Hooks, the plugin `bin/` PATH entries, and the built-in MCP registrations already stop. Three kinds are still served, because their companions read their own files: the pi-mcp-adapter servers in `<scopeRoot>/mcp-adapter.json` (and the legacy `mcp.json`), the agents in `<scopeRoot>/agents/`, read by pi-subagents, and the saved workflows, read by the workflow engine. Claude Code loads none of a plugin's components when its registries cannot be read. Withdrawing these kinds needs a write, which a load must not make (APL-D1), to files a newer release may own. It could also need a Pi or companion hook that hides them at load. The agent grants step (`orchestrators/mcp/agent-grants-step.ts`) also never reads `state.json`, so at `session_start` it can still rewrite the generated agent files of such a scope. Open question: is there a way to withdraw them that writes nothing, such as a companion-side filter, or should the grants step at least skip a scope whose record it cannot read?

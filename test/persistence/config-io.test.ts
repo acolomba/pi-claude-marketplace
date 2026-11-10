@@ -381,6 +381,33 @@ describe("saveConfig", () => {
     assert.strictEqual(configBytes, expectedBytes);
   });
 
+  test("returns the exact bytes it wrote", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-save-bytes-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    const config = {
+      schemaVersion: 1,
+      plugins: { "reviewer@tools": {} },
+    } satisfies ScopeConfig;
+    const expectedText = `{
+  "schemaVersion": 1,
+  "plugins": {
+    "reviewer@tools": {}
+  }
+}
+`;
+
+    // act
+    const written = await saveConfig(filePath, config, scopeRoot);
+
+    // assert
+    assert.deepStrictEqual(
+      { written: written.toString("utf8"), file: await readFile(filePath, "utf8") },
+      { written: expectedText, file: expectedText },
+    );
+  });
+
   test("rejects invalid data before containment and preserves existing bytes", async (t) => {
     // arrange
     const directory = await mkdtemp(path.join(tmpdir(), "config-io-invalid-save-"));

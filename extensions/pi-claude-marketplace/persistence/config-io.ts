@@ -181,12 +181,15 @@ export async function loadConfig(filePath: string): Promise<ConfigLoadResult> {
  *      catch it.
  *   3. `await atomicWriteJson(filePath, config)` -- the single sanctioned
  *      JSON-write seam per NFR-1.
+ *
+ * It returns the exact bytes it wrote, so a caller can tell its own write
+ * from a later edit (NFR-3).
  */
 export async function saveConfig(
   filePath: string,
   config: ScopeConfig,
   scopeRoot: string,
-): Promise<void> {
+): Promise<Buffer> {
   const [validationError] = CONFIG_VALIDATOR.Errors(config);
   if (validationError !== undefined) {
     throw new Error(
@@ -195,5 +198,5 @@ export async function saveConfig(
   }
 
   await assertPathInside(scopeRoot, filePath, "saveConfig");
-  await atomicWriteJson(filePath, config);
+  return atomicWriteJson(filePath, config);
 }

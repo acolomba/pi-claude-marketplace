@@ -14,8 +14,9 @@
 // update delay for a scenario's own Pi, and nothing else. A scenario's profile
 // Pi (D-CF1-15) also loads the scripted model and the companions after the
 // real extension, and gets a typed `TMPDIR` inside the sandbox home, so the
-// temporary files of Pi and its companions stay in the sandbox (HAR-05). The
-// shell's `TMPDIR` is never inherited.
+// temporary files of Pi and its companions stay in the sandbox (HAR-05), and
+// pi-subagents' background-child marker `PI_SUBAGENT_CHILD` when its profile
+// sets it (D-BG-10). The shell's `TMPDIR` and marker are never inherited.
 // `--no-extensions` is never passed, because it also removes `builtin:mcp`.
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
@@ -57,7 +58,12 @@ export interface RpcGitEnvironment {
   readonly NODE_EXTRA_CA_CERTS: string;
   readonly GIT_CONFIG_NOSYSTEM: "1";
   readonly GIT_CONFIG_GLOBAL: string;
-  readonly PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: string;
+  /**
+   * The GitHub base override, copied only when set. A scenario Pi that
+   * reaches GitHub's real address through an in-process redirect starts
+   * without it, so GHB-02 does not turn Device Flow off (D-BG-01).
+   */
+  readonly PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL?: string;
   /**
    * The maximum delay of the background update, set only for a scenario's own
    * Pi (D-PL8-09). The run's shared Pi never sets it, so its background update
@@ -66,9 +72,17 @@ export interface RpcGitEnvironment {
   readonly PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS?: string;
 }
 
-/** The one variable a profile Pi adds to the allowlist: its temporary directory (HAR-05). */
+/**
+ * The variables a profile Pi adds to the allowlist: its temporary directory
+ * (HAR-05), and the background-child marker when the profile sets it.
+ */
 export interface RpcProfileEnvironment {
   readonly TMPDIR: string;
+  /**
+   * The marker pi-subagents' runner sets before any extension of a background
+   * child loads, so the profile Pi starts as such a child (D-BG-10).
+   */
+  readonly PI_SUBAGENT_CHILD?: "1";
 }
 
 /**
@@ -216,7 +230,7 @@ export async function resolveRpcSandbox(sandbox: RpcSandbox): Promise<RpcSandbox
 
 /**
  * Returns the allowlist environment of every Pi child, plus `git` and the
- * profile's `TMPDIR` when given.
+ * profile's `TMPDIR` and background-child marker when given.
  */
 export function rpcChildEnvironment(
   sandbox: RpcSandbox,
@@ -233,7 +247,10 @@ export function rpcChildEnvironment(
     environment.NODE_EXTRA_CA_CERTS = git.NODE_EXTRA_CA_CERTS;
     environment.GIT_CONFIG_NOSYSTEM = git.GIT_CONFIG_NOSYSTEM;
     environment.GIT_CONFIG_GLOBAL = git.GIT_CONFIG_GLOBAL;
-    environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
+    if (git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL !== undefined) {
+      environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
+    }
+
     if (git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS !== undefined) {
       environment.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS =
         git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS;
@@ -242,6 +259,9 @@ export function rpcChildEnvironment(
 
   if (profileEnvironment !== undefined) {
     environment.TMPDIR = profileEnvironment.TMPDIR;
+    if (profileEnvironment.PI_SUBAGENT_CHILD !== undefined) {
+      environment.PI_SUBAGENT_CHILD = profileEnvironment.PI_SUBAGENT_CHILD;
+    }
   }
 
   return environment;
@@ -250,18 +270,19 @@ export function rpcChildEnvironment(
 /**
  * Returns the arguments that start the repository's Pi CLI in `mode` with the
  * real extension and `extraExtensions`, and with `--no-mcp` when `options`
- * asks for it. It never passes `--no-extensions`, which also removes
+ * asks for it. In `json` mode Pi prints each session event as one JSON line
+ * on stdout (D-BG-09). It never passes `--no-extensions`, which also removes
  * `builtin:mcp`.
  */
 export function piArguments(
-  mode: "rpc" | "tui",
+  mode: "rpc" | "tui" | "json",
   extraExtensions: readonly string[] = [],
   options: PiArgumentOptions = {},
 ): string[] {
   const extensions = [EXTENSION_ENTRY, ...extraExtensions];
   return [
     resolvePiRuntime(REPO_ROOT).cliPath,
-    ...(mode === "rpc" ? ["--mode", "rpc"] : []),
+    ...(mode === "tui" ? [] : ["--mode", mode]),
     "--offline",
     "--no-session",
     ...(options.noMcp === true ? ["--no-mcp"] : []),

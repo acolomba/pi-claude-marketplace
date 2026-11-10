@@ -8,6 +8,7 @@ import {
   hookEventLabel,
   hookMatchLabel,
   hookSaysText,
+  postCompactLineText,
   promptBlockedText,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts";
 
@@ -198,4 +199,53 @@ describe("compactionBlockedText", () => {
       `Compaction blocked by PreCompact hook: [${GUARD_COMMAND}]: not now\nkeep the history\n[quiet]: No stderr output`,
     );
   });
+});
+
+describe("postCompactLineText", () => {
+  for (const { name, succeeded, output, text } of [
+    {
+      name: "a hook that succeeded with its output",
+      succeeded: true,
+      output: "notes saved",
+      text: `PostCompact [${GUARD_COMMAND}] completed successfully: notes saved`,
+    },
+    {
+      name: "a hook that succeeded with no output",
+      succeeded: true,
+      output: "",
+      text: `PostCompact [${GUARD_COMMAND}] completed successfully`,
+    },
+    {
+      name: "a hook that failed with its output",
+      succeeded: false,
+      output: "disk full",
+      text: `PostCompact [${GUARD_COMMAND}] failed: disk full`,
+    },
+    {
+      name: "a hook that failed with no output",
+      succeeded: false,
+      output: "",
+      text: `PostCompact [${GUARD_COMMAND}] failed`,
+    },
+    {
+      name: "white space alone as no output",
+      succeeded: false,
+      output: " \n\t",
+      text: `PostCompact [${GUARD_COMMAND}] failed`,
+    },
+    {
+      name: "the output trimmed and its inner line breaks kept",
+      succeeded: true,
+      output: "\n first\nsecond \n",
+      text: `PostCompact [${GUARD_COMMAND}] completed successfully: first\nsecond`,
+    },
+  ]) {
+    test(`writes ${name} (D-BG-501)`, () => {
+      // act
+      const line = postCompactLineText(GUARD_COMMAND, succeeded, output);
+
+      // assert
+      assert.strictEqual(line, text);
+    });
+  }
 });

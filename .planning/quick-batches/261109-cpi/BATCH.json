@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "batch_id": "261109-cpi",
+  "created_at": "2026-11-09T14:09:01.095Z",
+  "options": {},
+  "base_revision": "9a3982262f7adfaf58e3e2b20176e3bb77b7bd6c",
+  "items": [
+    {
+      "quick_id": "261109-cpj",
+      "client_id": null,
+      "description": "Model-facing list tool (extensions/pi-claude-marketplace/edge/handlers/tools.ts): an installed-but-disabled plugin shows a new `[disabled]` tag with its own `disabled` boolean filter; `installed` means installed and enabled; `unavailable` means not installable on this system only; the marketplace line `<N> plugin(s)` becomes the picker's `{offered} available` plus ` • {installed} installed` when any is installed (D-BG-1201 wording); supersedes D-BG-1004, D-BG-1005, D-BG-1010 and D-54-01's tool projection; update parameter descriptions, scenarios, and docs.",
+      "status": "complete",
+      "depends_on": [
+        "261109-cpm"
+      ],
+      "planned_files": [
+        "features/plugin/model-tools.feature",
+        "extensions/pi-claude-marketplace/edge/marketplace-counts.ts",
+        "test/edge/marketplace-counts.test.ts",
+        "extensions/pi-claude-marketplace/edge/handlers/plugin/browse.ts",
+        "extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts",
+        "extensions/pi-claude-marketplace/edge/handlers/tools.ts",
+        "test/edge/handlers/tools.test.ts",
+        "docs/competitive-analysis/pi-plugins.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 1,
+      "commit": "bcd68aa6",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261109-cpk",
+      "client_id": null,
+      "description": "CLOSEDLIST-01: accept `|` and `,` matcher lists on SessionStart, SessionEnd, PreCompact, and PostCompact hooks, as StopFailure already does (D-BG-302); a list is admitted when at least one alternative is in the event's vocabulary; the change is in the shared nonToolMatcherCondition / matcherFiresOnClosedSetValue path.",
+      "status": "complete",
+      "depends_on": [
+        "261109-cpn"
+      ],
+      "planned_files": [
+        "extensions/pi-claude-marketplace/domain/components/hook-events.ts",
+        "test/domain/components/hook-events.test.ts",
+        "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts",
+        "test/domain/components/hooks/partition.test.ts",
+        "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts",
+        "test/bridges/hooks/dispatch.test.ts",
+        "extensions/pi-claude-marketplace/bridges/hooks/settle.ts",
+        "features/hook/session.feature",
+        "features/hook/stop-failure.feature",
+        "docs/hooks-compatibility.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 1,
+      "commit": "ae298e7b",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261109-cpl",
+      "client_id": null,
+      "description": "PRUNECFG-01: prune and `uninstall --prune` drop a removed dependency's `enabled: false` declaration from the scope's claude-plugins.json (shared sweep removeDependencyMember in orchestrators/plugin/uninstall.ts), with the rollback restoring the config files on failure (NFR-3); add the config Then to the disabled-dependency scenario in features/plugin/prune.feature; reverses D-BG-1309.",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": [
+        "features/plugin/prune.feature",
+        "features/plugin/uninstall.feature",
+        "extensions/pi-claude-marketplace/persistence/config-io.ts",
+        "test/persistence/config-io.test.ts",
+        "extensions/pi-claude-marketplace/persistence/config-write-back.ts",
+        "test/persistence/config-write-back.test.ts",
+        "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
+        "test/orchestrators/plugin/uninstall.test.ts",
+        "extensions/pi-claude-marketplace/orchestrators/plugin/prune.ts",
+        "test/orchestrators/plugin/prune.test.ts",
+        "extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts",
+        "test/orchestrators/plugin/prune-rollback.test.ts",
+        "docs/dependency-resolution.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": "/home/acolomba/pi-claude-marketplace/.claude/worktrees/agent-aa0ae2e5a2cfe439f",
+      "dispatched_branch": "worktree-agent-aa0ae2e5a2cfe439f",
+      "dispatched_base": "9a3982262f7adfaf58e3e2b20176e3bb77b7bd6c",
+      "wave": 0,
+      "commit": "65833926",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261109-cpm",
+      "client_id": null,
+      "description": "Browse picker install-scope screen: drop the `(Recommended)` marker from the `Project local` option and keep the option order (reverses D-BG-1202; the rest of BROWSESCOPE-01 stays open).",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": [
+        "features/plugin/browse.feature",
+        "test/edge/browser/plugin-browser.test.ts",
+        "extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts",
+        ".agents/skills/cucumber/rules/layout.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": "80eadf5f",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261109-cpn",
+      "client_id": null,
+      "description": "Async rewake: `stop_hook_active` is true only for the woken turn, as in Claude Code 2.1.319, not until the user's next input, and it is not left set when pi.sendMessage throws (recordRewake runs before the send today); amends D-BG-203, P2-DC-04, P2-DC-26.",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": [
+        "extensions/pi-claude-marketplace/bridges/hooks/runtime.ts",
+        "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+        "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+        "extensions/pi-claude-marketplace/bridges/hooks/settle.ts",
+        "test/bridges/hooks/runtime.test.ts",
+        "test/bridges/hooks/event-router.test.ts",
+        "test/bridges/hooks/async-rewake/registry.test.ts",
+        "features/hook/async.feature",
+        "docs/hooks-compatibility.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": "58d91f65",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261109-cpo",
+      "client_id": null,
+      "description": "P7-DC-04: when a load refuses a newer state.json (schema version above this release's), stop offering that scope's installed components (skills, prompts, hooks, MCP servers, agents as applicable) instead of serving the staged files; research Claude Code's behavior for a newer installed_plugins.json first; amends D-BG-703 and the STMIG-02 scenarios.",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": [
+        "extensions/pi-claude-marketplace/persistence/state-io.ts",
+        "extensions/pi-claude-marketplace/orchestrators/discover.ts",
+        "test/persistence/state-io.test.ts",
+        "test/orchestrators/discover.test.ts",
+        "test/index.test.ts",
+        "features/plugin/state-migration.feature"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": "6f908fd5",
+      "failure_reason": null
+    }
+  ]
+}

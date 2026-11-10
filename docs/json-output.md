@@ -482,9 +482,9 @@ A plugin author's asynchronous hook summary.
 
 <!-- use: common-fields -->
 
-| Field path | Type   | Presence | Meaning                                                                               |
-| ---------- | ------ | -------- | ------------------------------------------------------------------------------------- |
-| `text`     | string | required | Author's summary text, kept verbatim. This is distinct from the envelope's `summary`. |
+| Field path | Type   | Presence | Meaning                                                                                                                             |
+| ---------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `text`     | string | required | The hook's declared `rewakeSummary`, or Claude Code's default `Stop hook feedback`. This is distinct from the envelope's `summary`. |
 
 <!-- /fields -->
 

@@ -13,9 +13,10 @@
 // disable handlers.
 //
 // BLOCK C: imports only from shared/ (types), platform/ (Theme + DynamicBorder
-// chokepoint), and the `@earendil-works/pi-tui` peer dep, which the Pi peer
-// chokepoint does not restrict. No orchestrators/ or domain/ import -- this
-// file is pure UI.
+// chokepoint), the `@earendil-works/pi-tui` peer dep, which the Pi peer
+// chokepoint does not restrict, and `edge/marketplace-counts.ts`, the
+// D-BG-1201 row wording this picker shares with the list tool. No direct
+// orchestrators/ or domain/ import -- this file is pure UI.
 
 import {
   Container,
@@ -34,6 +35,7 @@ import {
   pluginVersion,
   type PluginNotificationMessage,
 } from "../../shared/notification-types.ts";
+import { marketplaceDescription } from "../marketplace-counts.ts";
 
 import type { Scope } from "../../shared/types.ts";
 
@@ -54,7 +56,13 @@ export interface PickerResult {
 export interface MarketplaceEntry {
   readonly name: string;
   readonly scope: Scope;
-  readonly pluginCount: number;
+  /**
+   * The plugin entries of the marketplace's catalog, installed or not, or
+   * undefined when the catalog cannot be read (D-BG-1201).
+   */
+  readonly pluginCount: number | undefined;
+  /** The plugins the marketplace's installation record holds in its scope (D-BG-1201). */
+  readonly installedCount: number;
   readonly source: string;
 }
 
@@ -293,7 +301,7 @@ export class PluginBrowser {
     const items: SelectItem[] = this.marketplaces.map((m) => ({
       value: `${m.scope}:${m.name}`,
       label: `${m.name} [${m.scope}]`,
-      description: `${m.pluginCount.toString()} plugin(s) -- ${m.source}`,
+      description: marketplaceDescription(m),
     }));
     const list = new SelectList(items, Math.min(items.length, MAX_VISIBLE), this.listTheme());
     list.onSelect = (item) => {
@@ -441,7 +449,7 @@ export class PluginBrowser {
     const items: SelectItem[] = [
       {
         value: "project-local",
-        label: "Project local (Recommended)",
+        label: "Project local",
         description:
           "Install in the local config (.pi/claude-plugins.local.json, gitignored, this repo only)",
       },

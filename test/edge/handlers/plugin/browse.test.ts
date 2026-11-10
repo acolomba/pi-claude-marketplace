@@ -273,6 +273,122 @@ test("TUI mode lists plugin rows as the run's MCP implementation sees them (MREC
   verify(ui);
 });
 
+async function renderFirstScreen(cwd: string): Promise<{
+  readonly rows: readonly string[];
+  readonly ctx: ExtensionCommandContext;
+  readonly ui: ExtensionCommandContext["ui"];
+}> {
+  const { handlers } = createMockActionHandlers();
+  const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  when(() => ctx.mode).thenReturn("tui");
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(2);
+  when(() => ctx.ui).thenReturn(ui);
+  const customFactory = It.willCapture<Parameters<ExtensionCommandContext["ui"]["custom"]>[0]>();
+  when(() => ui.custom(customFactory)).thenResolve(null);
+
+  await makeBrowseHandler(handlers)("", ctx, runWithNothingLoaded());
+
+  const factory = customFactory.value;
+  assert.ok(factory !== undefined);
+  const tui = { requestRender: () => {} } as unknown as Parameters<typeof factory>[0];
+  const theme = {
+    fg: (_c: string, s: string) => s,
+    bold: (s: string) => s,
+  } as unknown as Parameters<typeof factory>[1];
+  const keybindings = {} as unknown as Parameters<typeof factory>[2];
+  const comp = factory(tui, theme, keybindings, () => {});
+  assert.ok(comp !== null && typeof comp === "object" && !(comp instanceof Promise));
+  return { rows: comp.render(200), ctx, ui };
+}
+
+function firstScreen(description: string): readonly string[] {
+  return [
+    "─".repeat(200),
+    " Browse Claude Plugin Marketplaces".padEnd(200),
+    `→ ${"official [project]".padEnd(32)}${description}`,
+    " ↑↓ navigate • enter open • esc cancel".padEnd(200),
+    "─".repeat(200),
+  ];
+}
+
+async function writeCatalog(cwd: string, text: string): Promise<void> {
+  await writeFile(
+    path.join(cwd, "marketplaces", "official", ".claude-plugin", "marketplace.json"),
+    text,
+    "utf8",
+  );
+}
+
+function twoEntryCatalog(name: string): string {
+  return JSON.stringify({
+    name,
+    plugins: [
+      { name: "alpha", source: "./plugins/alpha", version: "1.0.0" },
+      { name: "beta", source: "./plugins/beta", version: "1.0.0" },
+    ],
+  });
+}
+
+function oneInstalledPlugin(): MarketplaceRecord["plugins"] {
+  return {
+    alpha: buildInstalledPluginRecord(
+      { version: "1.0.0" },
+      { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    ) as unknown as MarketplaceRecord["plugins"][string],
+  };
+}
+
+test("the marketplace row counts the plugins its catalog offers and its scope has installed (D-BG-1201)", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "offered-count");
+  await seedMarketplace(scope.cwd, "official", oneInstalledPlugin());
+  await writeCatalog(scope.cwd, twoEntryCatalog("official"));
+  const root = path.join(scope.cwd, "marketplaces", "official");
+
+  // act
+  const { rows, ctx, ui } = await renderFirstScreen(scope.cwd);
+
+  // assert
+  assert.deepStrictEqual(rows, firstScreen(`2 available • 1 installed -- ${root}`));
+  verify(ctx);
+  verify(ui);
+});
+
+test("the marketplace row shows only the installed count when its catalog cannot be read", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "unreadable-catalog");
+  await seedMarketplace(scope.cwd, "official", oneInstalledPlugin());
+  await writeCatalog(scope.cwd, "not json");
+  const root = path.join(scope.cwd, "marketplaces", "official");
+
+  // act
+  const { rows, ctx, ui } = await renderFirstScreen(scope.cwd);
+
+  // assert
+  assert.deepStrictEqual(rows, firstScreen(`1 installed -- ${root}`));
+  verify(ctx);
+  verify(ui);
+});
+
+test("the marketplace row shows no count for a catalog name Claude Code refuses (D-PL5-28)", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "refused-catalog");
+  await seedMarketplace(scope.cwd, "official");
+  await writeCatalog(scope.cwd, twoEntryCatalog("claude-plugins-v2"));
+  const root = path.join(scope.cwd, "marketplaces", "official");
+
+  // act
+  const { rows, ctx, ui } = await renderFirstScreen(scope.cwd);
+
+  // assert
+  assert.deepStrictEqual(rows, firstScreen(root));
+  verify(ctx);
+  verify(ui);
+});
+
 for (const mode of ["json", "rpc"] as const) {
   test(`refuses browse in ${mode} before list, state, or picker access`, async () => {
     // arrange

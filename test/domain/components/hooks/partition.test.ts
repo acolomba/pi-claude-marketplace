@@ -184,10 +184,7 @@ describe("partitionHooks", () => {
       ],
       StopFailure: [
         { matcher: "rate_limit", hooks: [{ type: "command", command: "rate" }] },
-        {
-          matcher: "rate_limit|server_error",
-          hooks: [{ type: "command", command: "compound" }],
-        },
+        { matcher: "network_error", hooks: [{ type: "command", command: "unknown" }] },
       ],
     };
 
@@ -202,15 +199,49 @@ describe("partitionHooks", () => {
       },
       dropped: [
         { kind: "group", event: "SessionStart", matcher: "bogus", cond: "closed-set" },
-        {
-          kind: "group",
-          event: "StopFailure",
-          matcher: "rate_limit|server_error",
-          cond: "closed-set",
-        },
+        { kind: "group", event: "StopFailure", matcher: "network_error", cond: "closed-set" },
       ],
     });
   });
+
+  for (const { event, matcher, kept } of [
+    { event: "StopFailure", matcher: "rate_limit|overloaded", kept: true },
+    { event: "StopFailure", matcher: "network_error|rate_limit", kept: true },
+    { event: "StopFailure", matcher: "|rate_limit|", kept: true },
+    { event: "StopFailure", matcher: "network_error|timeout", kept: false },
+    { event: "StopFailure", matcher: "rate_limit|server-error", kept: false },
+    { event: "StopFailure", matcher: "rate_limit,overloaded", kept: false },
+    { event: "StopFailure", matcher: "|", kept: false },
+    { event: "StopFailure", matcher: "Rate_Limit", kept: false },
+    { event: "SessionStart", matcher: "reload, clear", kept: true },
+    { event: "SessionEnd", matcher: "quit|clear", kept: true },
+    { event: "PreCompact", matcher: "auto, manual", kept: true },
+    { event: "PostCompact", matcher: " manual ", kept: true },
+    { event: "SessionStart", matcher: "reload|quit", kept: false },
+    { event: "SessionEnd", matcher: "Clear, Resume", kept: false },
+    { event: "PreCompact", matcher: "threshold, overflow", kept: false },
+    { event: "PostCompact", matcher: "manual.*", kept: false },
+    { event: "PostCompact", matcher: ", |", kept: false },
+  ] as const) {
+    const group = { matcher, hooks: [{ type: "command", command: "observe" }] };
+    const expected = kept
+      ? { supported: { [event]: [group] }, dropped: [] }
+      : {
+          supported: {},
+          dropped: [{ kind: "group", event, matcher, cond: "closed-set" }],
+        };
+
+    test(`partitions the ${event} list matcher ${JSON.stringify(matcher)} as ${kept ? "kept" : "dropped"} (D-BG-302, CLOSEDLIST-01)`, () => {
+      // arrange
+      const config = { [event]: [group] };
+
+      // act
+      const partition = partitionHooks(config);
+
+      // assert
+      assert.deepStrictEqual(partition, expected);
+    });
+  }
 
   test("drops a group when every handler is unsupported", () => {
     // arrange

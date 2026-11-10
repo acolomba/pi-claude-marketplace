@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   BUCKET_A_EVENTS,
+  closedSetMatcherValues,
   NON_TOOL_EVENT_CLOSED_SETS,
   NON_TOOL_EVENT_FIELDS,
   TOOL_EVENTS,
@@ -137,6 +138,9 @@ describe("NON_TOOL_EVENT_CLOSED_SETS", () => {
         "server_error",
         "max_output_tokens",
         "unknown",
+        "account_on_hold",
+        "verification_required",
+        "cloud_credential_error",
       ]),
     };
 
@@ -146,4 +150,56 @@ describe("NON_TOOL_EVENT_CLOSED_SETS", () => {
     // assert
     assert.deepStrictEqual(closedSets, expectedClosedSets);
   });
+});
+
+describe("closedSetMatcherValues", () => {
+  for (const { event, matcher, expectedValues } of [
+    { event: "StopFailure", matcher: "rate_limit", expectedValues: ["rate_limit"] },
+    {
+      event: "StopFailure",
+      matcher: "rate_limit|overloaded",
+      expectedValues: ["rate_limit", "overloaded"],
+    },
+    {
+      event: "StopFailure",
+      matcher: "|rate_limit||overloaded|",
+      expectedValues: ["rate_limit", "overloaded"],
+    },
+    {
+      event: "StopFailure",
+      matcher: "network_error|timeout",
+      expectedValues: ["network_error", "timeout"],
+    },
+    { event: "StopFailure", matcher: "|", expectedValues: [] },
+    { event: "StopFailure", matcher: "", expectedValues: [] },
+    { event: "StopFailure", matcher: "*", expectedValues: [] },
+    { event: "StopFailure", matcher: "rate_limit|server-error", expectedValues: [] },
+    { event: "StopFailure", matcher: "rate limit", expectedValues: [] },
+    { event: "StopFailure", matcher: "rate_limit,overloaded", expectedValues: [] },
+    { event: "SessionStart", matcher: "startup|clear", expectedValues: ["startup", "clear"] },
+    { event: "SessionStart", matcher: "reload, clear", expectedValues: ["reload", "clear"] },
+    {
+      event: "SessionEnd",
+      matcher: " clear , resume |other ",
+      expectedValues: ["clear", "resume", "other"],
+    },
+    { event: "SessionEnd", matcher: "clear||,resume", expectedValues: ["clear", "resume"] },
+    { event: "PreCompact", matcher: "manual-auto", expectedValues: ["manual-auto"] },
+    { event: "PreCompact", matcher: ", |", expectedValues: [] },
+    { event: "PostCompact", matcher: "manual.*", expectedValues: [] },
+    { event: "PostCompact", matcher: "manual\tauto", expectedValues: [] },
+    { event: "SessionStart", matcher: "", expectedValues: [] },
+    { event: "SessionStart", matcher: "*", expectedValues: [] },
+  ] as const) {
+    test(`reads the ${event} matcher ${JSON.stringify(matcher)} as the list ${JSON.stringify(expectedValues)} (D-BG-302, CLOSEDLIST-01)`, () => {
+      // arrange
+      const rawMatcher = matcher;
+
+      // act
+      const values = closedSetMatcherValues(event, rawMatcher);
+
+      // assert
+      assert.deepStrictEqual(values, expectedValues);
+    });
+  }
 });

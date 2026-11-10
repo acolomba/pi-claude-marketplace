@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import test from "node:test";
+import test, { describe } from "node:test";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { mock, verify } from "strong-mock";
@@ -503,6 +503,7 @@ function makeEntry(
     readonly shell?: string;
     readonly timeout?: number;
     readonly asyncRewake?: boolean;
+    readonly async?: unknown;
     readonly onFailure?: string;
   } = {},
 ): RoutingEntry {
@@ -513,6 +514,7 @@ function makeEntry(
     ...(input.shell === undefined ? {} : { shell: input.shell }),
     ...(input.timeout === undefined ? {} : { timeout: input.timeout }),
     ...(input.asyncRewake === undefined ? {} : { asyncRewake: input.asyncRewake }),
+    ...(input.async === undefined ? {} : { async: input.async }),
     ...(input.onFailure === undefined ? {} : { onFailure: input.onFailure }),
   } satisfies RoutingEntry["handlerDecl"];
 
@@ -620,6 +622,8 @@ interface TranslatorCase {
   readonly benignOmission: string;
   readonly createEvent: () => unknown;
   readonly eventFields: Readonly<Record<string, unknown>>;
+  /** What a quiet exit 0 settles with, when it is not a bare noop (D-BG-503). */
+  readonly expectedOutcome?: HookExecResult;
 }
 
 const TRANSLATOR_CASES: readonly TranslatorCase[] = [
@@ -697,6 +701,7 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
       tool_name: "Bash",
       tool_input: { command: "false" },
       error: "exit 1",
+      is_interrupt: false,
     },
   },
   {
@@ -753,6 +758,7 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
         willRetry: false,
       }) satisfies SessionCompactEvent,
     eventFields: { trigger: "auto", compact_summary: "summary" },
+    expectedOutcome: { kind: "noop", postCompactRun: { succeeded: true, output: "" } },
   },
   {
     claudeEvent: "SessionEnd",
@@ -828,7 +834,7 @@ for (const translatorCase of TRANSLATOR_CASES) {
       const stdin = Buffer.concat(processChild.stdinChunks).toString("utf8");
 
       // assert
-      assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+      assert.deepStrictEqual(hookOutcome, translatorCase.expectedOutcome ?? { kind: "noop" });
       assert.strictEqual(stdin, expectedStdin);
       assert.deepStrictEqual(JSON.parse(stdin), expectedPayload);
       assert.deepStrictEqual(processChild.stdinOrder, ["error-listener", "finish"]);
@@ -902,7 +908,7 @@ for (const translatorCase of TRANSLATOR_CASES) {
       // still runs after a miss and the child still receives an envelope.
       const expectedSurvival = Array.from(
         { length: translatorCase.diagnosedOmissions.length + 2 },
-        () => ({ outcome: { kind: "noop" }, spawnCount: 1 }),
+        () => ({ outcome: translatorCase.expectedOutcome ?? { kind: "noop" }, spawnCount: 1 }),
       );
 
       // act
@@ -1065,60 +1071,89 @@ test("contains a wrong-shape payload whose required property throws", async (t) 
   );
 });
 
-test("delegates only literal async true and preserves absent async stdin", async (t) => {
-  // arrange
-  const runtime = createHooksRuntime();
-  const caseRoot = await makeCaseRoot(t, "dispatch-async-");
-  const processChild = makeInjectedChild(t, { stdin: null, pid: 52_101 });
-  const processBoundary = observeSpawn(t, processChild);
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension api" });
-  const entry = makeEntry(caseRoot, {
-    claudeEvent: "UserPromptSubmit",
-    command: "async-hook",
-    args: ["--literal"],
-    timeout: 12,
-    asyncRewake: true,
-  });
-  const event = {
-    type: "input",
-    text: "async prompt",
-    source: "interactive",
-  } satisfies InputEvent;
-
-  // act
-  const hookOutcome = await dispatchHookExec(entry, event, makeContext(caseRoot), pi, runtime, {
-    spawnImpl: processBoundary.spawnImpl,
-    dispatchId: () => "dispatch-async-1",
-  });
-  processChild.emitError(new Error("async child cleanup"));
-  const call = await processBoundary.spawned;
-
-  // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
-  assert.deepStrictEqual(
-    {
-      args: call.args,
-      command: call.command,
-      cwd: call.options.cwd,
-      detached: call.options.detached,
-      marker: call.options.env?.PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH,
-      shell: call.options.shell,
-      stdio: call.options.stdio,
-    },
-    {
-      args: ["--literal"],
+for (const field of ["asyncRewake", "async"] as const) {
+  test(`delegates a literal ${field} true to the background and preserves absent stdin`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const caseRoot = await makeCaseRoot(t, "dispatch-async-");
+    const processChild = makeInjectedChild(t, { stdin: null, pid: 52_101 });
+    const processBoundary = observeSpawn(t, processChild);
+    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension api" });
+    const entry = makeEntry(caseRoot, {
+      claudeEvent: "UserPromptSubmit",
       command: "async-hook",
-      cwd: caseRoot,
-      detached: false,
-      marker: "dispatch-async-1",
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
-  assert.deepStrictEqual(processChild.stdinChunks, []);
-  assert.deepStrictEqual(processChild.stdinOrder, []);
-  verify(pi);
-});
+      args: ["--literal"],
+      timeout: 12,
+      [field]: true,
+    });
+    const event = {
+      type: "input",
+      text: "async prompt",
+      source: "interactive",
+    } satisfies InputEvent;
+
+    // act
+    const hookOutcome = await dispatchHookExec(entry, event, makeContext(caseRoot), pi, runtime, {
+      spawnImpl: processBoundary.spawnImpl,
+      dispatchId: () => "dispatch-async-1",
+    });
+    processChild.emitError(new Error("async child cleanup"));
+    const call = await processBoundary.spawned;
+
+    // assert
+    assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+    assert.deepStrictEqual(
+      {
+        args: call.args,
+        command: call.command,
+        cwd: call.options.cwd,
+        detached: call.options.detached,
+        marker: call.options.env?.PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH,
+        shell: call.options.shell,
+        stdio: call.options.stdio,
+      },
+      {
+        args: ["--literal"],
+        command: "async-hook",
+        cwd: caseRoot,
+        detached: process.platform !== "win32",
+        marker: "dispatch-async-1",
+        shell: false,
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+    assert.deepStrictEqual(processChild.stdinChunks, []);
+    assert.deepStrictEqual(processChild.stdinOrder, []);
+    verify(pi);
+  });
+}
+
+for (const value of ["yes", false]) {
+  test(`keeps an async value of ${JSON.stringify(value)} on the synchronous path`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const caseRoot = await makeCaseRoot(t, "dispatch-async-sync-");
+    const processChild = makeInjectedChild(t, { pid: 52_102 });
+    const processBoundary = observeSpawn(t, processChild);
+    const entry = makeEntry(caseRoot, { claudeEvent: "SessionStart", async: value });
+
+    // act
+    const outcome = dispatchHookExec(
+      entry,
+      { type: "session_start", reason: "startup" } satisfies SessionStartEvent,
+      makeContext(caseRoot),
+      undefined,
+      runtime,
+      { spawnImpl: processBoundary.spawnImpl },
+    );
+    const call = await processBoundary.spawned;
+    await processChild.close(0);
+
+    // assert
+    assert.deepStrictEqual(await outcome, { kind: "noop" });
+    assert.strictEqual(call.options.env?.PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH, undefined);
+  });
+}
 
 test("noops async dispatch without Pi before resolving locations or spawning", async (t) => {
   // arrange
@@ -1629,13 +1664,14 @@ async function dispatchDriven(
   t: import("node:test").TestContext,
   input: Parameters<typeof makeEntry>[1],
   drive: (child: InjectedChild) => Promise<void>,
+  event: unknown = { toolName: "bash", input: {} },
 ): Promise<HookExecResult> {
   const caseRoot = await makeCaseRoot(t, "dispatch-on-failure-");
   const processChild = makeInjectedChild(t);
   const processBoundary = observeSpawn(t, processChild);
   const pendingOutcome = dispatchHookExec(
     makeEntry(caseRoot, input),
-    { toolName: "bash", input: {} },
+    event,
     makeContext(caseRoot),
     undefined,
     createHooksRuntime(),
@@ -1764,6 +1800,235 @@ test("blocks a hook its timeout killed with the timed out message", async (t) =>
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: '[guard]: timed out; blocking because onFailure is "block"',
+  });
+});
+
+test("starts a blocking hook as a process group leader and signals the group at its timeout", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const caseRoot = await makeCaseRoot(t, "dispatch-group-");
+  const processChild = makeInjectedChild(t, { pid: 52_103 });
+  const processBoundary = observeSpawn(t, processChild);
+  const groupSignals: Array<readonly [number, NodeJS.Signals | 0 | undefined]> = [];
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    makeEntry(caseRoot, { command: "guard", timeout: 1 }),
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    createHooksRuntime(),
+    {
+      spawnImpl: processBoundary.spawnImpl,
+      signalGroup: (pid, signal) => {
+        groupSignals.push([pid, signal]);
+      },
+    },
+  );
+  const call = await processBoundary.spawned;
+  t.mock.timers.tick(1_000);
+  const signalsAtTimeout = [...groupSignals];
+  await processChild.close(null, "SIGTERM");
+  const hookOutcome = await pendingOutcome;
+
+  // assert
+  assert.strictEqual(call.options.detached, process.platform !== "win32");
+  assert.deepStrictEqual(signalsAtTimeout, [[52_103, "SIGTERM"]]);
+  assert.deepStrictEqual(processChild.killSignals, []);
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+});
+
+test("sends SIGKILL to the group of a blocking hook whose shell its SIGTERM ended while a member runs on", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const caseRoot = await makeCaseRoot(t, "dispatch-group-sigkill-");
+  const processChild = makeInjectedChild(t, { pid: 52_104 });
+  const processBoundary = observeSpawn(t, processChild);
+  const groupSignals: Array<readonly [number, NodeJS.Signals | 0 | undefined]> = [];
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    makeEntry(caseRoot, { command: "guard", timeout: 1 }),
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    createHooksRuntime(),
+    {
+      spawnImpl: processBoundary.spawnImpl,
+      signalGroup: (pid, signal) => {
+        groupSignals.push([pid, signal]);
+      },
+    },
+  );
+  await processBoundary.spawned;
+  t.mock.timers.tick(1_000);
+  processChild.emitExit(null, "SIGTERM");
+  t.mock.timers.tick(5_000);
+  const signalsAtGrace = [...groupSignals];
+  await processChild.close(null, "SIGTERM");
+  const hookOutcome = await pendingOutcome;
+
+  // assert
+  assert.deepStrictEqual(signalsAtGrace, [
+    [52_104, "SIGTERM"],
+    [52_104, 0],
+    [52_104, "SIGKILL"],
+  ]);
+  assert.deepStrictEqual(processChild.killSignals, []);
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+});
+
+const POST_COMPACT_EVENT = {
+  type: "session_compact",
+  compactionEntry: {
+    type: "compaction",
+    id: "compact-entry",
+    parentId: "message-entry",
+    timestamp: "2026-08-31T10:00:00.000Z",
+    summary: "summary",
+    firstKeptEntryId: "kept-entry",
+    tokensBefore: 2_048,
+  },
+  fromExtension: false,
+  reason: "manual",
+  willRetry: false,
+} satisfies SessionCompactEvent;
+
+const ON_FAILURE_RUN = 'failed; blocking because onFailure is "block"';
+
+describe("PostCompact runs (D-BG-503)", () => {
+  const cases: readonly {
+    name: string;
+    input: Parameters<typeof makeEntry>[1];
+    drive: (child: InjectedChild, t: import("node:test").TestContext) => Promise<void>;
+    outcome: HookExecResult;
+  }[] = [
+    {
+      name: "the stdout of a hook that exits 0",
+      input: { command: "guard" },
+      drive: async (child) => {
+        child.stdout?.write("notes saved\n");
+        await child.close(0);
+      },
+      outcome: { kind: "noop", postCompactRun: { succeeded: true, output: "notes saved\n" } },
+    },
+    {
+      name: "the stderr block of a hook that exits 2",
+      input: { command: "guard" },
+      drive: async (child) => {
+        child.stderr?.write("not now\n");
+        await child.close(2);
+      },
+      outcome: {
+        kind: "block",
+        reason: "not now",
+        fromStderr: true,
+        postCompactRun: { succeeded: false, output: "not now\n" },
+      },
+    },
+    {
+      name: "the onFailure block of a hook that exits 1",
+      input: { command: "guard", onFailure: "block" },
+      drive: async (child) => {
+        child.stderr?.write("boom\n");
+        await child.close(1);
+      },
+      outcome: {
+        kind: "block",
+        reason: `${ON_FAILURE_HEAD}\nboom`,
+        postCompactRun: { succeeded: false, output: `${ON_FAILURE_RUN}\nboom` },
+      },
+    },
+    {
+      name: "the start error of a hook that cannot start",
+      input: { command: "guard" },
+      drive: (child) => {
+        child.emitError(new Error("refusing /home/alice/.pi/agent/data/acme"));
+        return Promise.resolve();
+      },
+      outcome: { kind: "noop", postCompactRun: { succeeded: false, output: "refusing acme" } },
+    },
+    {
+      name: "the onFailure block of a hook that cannot start",
+      input: { command: "guard", onFailure: "block" },
+      drive: (child) => {
+        child.stderr?.write("no shell\n");
+        child.emitError(new Error("spawn guard ENOENT"));
+        return Promise.resolve();
+      },
+      outcome: {
+        kind: "block",
+        reason: `${ON_FAILURE_HEAD}\nno shell`,
+        postCompactRun: { succeeded: false, output: `${ON_FAILURE_RUN}\nspawn guard ENOENT` },
+      },
+    },
+    {
+      name: "Claude Code's text for a hook its timeout stopped",
+      input: { command: "guard", timeout: 1 },
+      drive: async (child, t) => {
+        t.mock.timers.tick(1_000);
+        await child.close(null, "SIGTERM");
+      },
+      outcome: { kind: "noop", postCompactRun: { succeeded: false, output: "Hook cancelled" } },
+    },
+    {
+      name: "the timed-out onFailure block without the stderr in the run",
+      input: { command: "guard", onFailure: "block", timeout: 1 },
+      drive: async (child, t) => {
+        child.stderr?.write("late\n");
+        t.mock.timers.tick(1_000);
+        await child.close(null, "SIGTERM");
+      },
+      outcome: {
+        kind: "block",
+        reason: '[guard]: timed out; blocking because onFailure is "block"\nlate',
+        postCompactRun: {
+          succeeded: false,
+          output: 'timed out; blocking because onFailure is "block"',
+        },
+      },
+    },
+  ];
+
+  for (const { name, input, drive, outcome } of cases) {
+    test(`carries ${name}`, async (t) => {
+      // arrange
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+
+      // act
+      const hookOutcome = await dispatchDriven(
+        t,
+        { ...input, claudeEvent: "PostCompact" },
+        (child) => drive(child, t),
+        POST_COMPACT_EVENT,
+      );
+
+      // assert
+      assert.deepStrictEqual(hookOutcome, outcome);
+    });
+  }
+
+  test("carries the redacted cause of a hook whose spawn throws", async (t) => {
+    // arrange
+    const caseRoot = await makeCaseRoot(t, "dispatch-start-throw-");
+    const spawnImpl = throwingSpawn(t, "refusing /home/alice/.pi/agent/data/acme");
+
+    // act
+    const hookOutcome = await dispatchHookExec(
+      makeEntry(caseRoot, { command: "guard", claudeEvent: "PostCompact", onFailure: "block" }),
+      POST_COMPACT_EVENT,
+      makeContext(caseRoot),
+      undefined,
+      createHooksRuntime(),
+      { spawnImpl },
+    );
+
+    // assert
+    assert.deepStrictEqual(hookOutcome, {
+      kind: "block",
+      reason: `${ON_FAILURE_HEAD}\nrefusing acme`,
+      postCompactRun: { succeeded: false, output: `${ON_FAILURE_RUN}\nrefusing acme` },
+    });
   });
 });
 

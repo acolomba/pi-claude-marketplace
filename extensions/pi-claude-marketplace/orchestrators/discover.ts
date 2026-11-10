@@ -1,6 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import { loadState } from "../persistence/state-io.ts";
 import { AggregateResourcesDiscoverError } from "../shared/errors.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
@@ -17,7 +18,9 @@ type ResourceKind = ResourcesDiscoverFailure["kind"];
 /**
  * The staged skill directories and prompt files of the user scope, then of
  * the project scope. T-02-17: `projectLocations` is `undefined` for a project
- * Pi does not trust, and its resources are then left out.
+ * Pi does not trust, and its resources are then left out. D-BG-705: a scope
+ * whose `state.json` this release cannot read is left out too, and its staged
+ * files stay on disk.
  */
 export async function aggregateDiscoveredResources(
   userLocations: ScopedLocations,
@@ -30,6 +33,11 @@ export async function aggregateDiscoveredResources(
     projectLocations === undefined ? [userLocations] : [userLocations, projectLocations];
 
   for (const locations of scopes) {
+    // eslint-disable-next-line no-await-in-loop -- two scopes, one state.json read each
+    if (!(await isRecordReadable(locations))) {
+      continue;
+    }
+
     // eslint-disable-next-line no-await-in-loop -- two scopes, one skills-dir read each
     await collectForKind(
       locations,
@@ -58,6 +66,18 @@ export async function aggregateDiscoveredResources(
     skillPaths: Object.freeze(skillPaths),
     promptPaths: Object.freeze(promptPaths),
   };
+}
+
+// D-BG-705: without its record, this release cannot tell which staged files
+// belong to a recorded install, so it fails closed. The snapshot writes
+// nothing (APL-D1), and the catch keeps the refusal inside discovery (NFR-2).
+async function isRecordReadable(locations: ScopedLocations): Promise<boolean> {
+  try {
+    await loadState(locations.extensionRoot, { persistMigration: false });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function collectForKind(

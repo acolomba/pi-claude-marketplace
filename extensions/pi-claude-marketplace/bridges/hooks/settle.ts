@@ -64,9 +64,11 @@ export function resetSettleState(runtime: HooksRuntime): void {
 
 /**
  * `input`-event reset closure (STOP-07). A genuine user `input` event clears
- * `stop_hook_active` and resets the consecutive-block counter + one-shot latch;
- * bridge-injected `sendMessage` re-entries do NOT pass through `input`, so the
- * flag survives a re-entry and clears only when the user actually types. Generation-
+ * the Stop re-entry flag and resets the consecutive-block counter + one-shot
+ * latch; bridge-injected `sendMessage` re-entries do NOT pass through `input`,
+ * so the flag survives a re-entry and clears only when the user actually
+ * types. A run that an async rewake woke keeps `stop_hook_active` true until
+ * that run settles (D-BG-210). Generation-
  * guarded like the other settle handlers so a stale closure from a prior
  * `/reload` cannot reset the live session's state. Registered as a dedicated
  * `pi.on("input", ...)` subscription in `registerHooksBridge` (Pi supports
@@ -294,9 +296,9 @@ function showStopNotices(
  * Re-entry uses `sendMessage({deliverAs:"followUp", triggerTurn:true})` (the
  * agent is idle at settle, so `triggerTurn` starts the new turn),
  * display-suppressed, and passes once through the STOP-07 cap. A Stop hook
- * declaring `asyncRewake:true` cannot yield a synchronous decision and is
- * degraded to `noop` inside `collectBucketOutcomes` with a `hookDebugLog` --
- * no silent block loss.
+ * declaring `async` or `asyncRewake` runs in the background and returns
+ * `noop`; on exit 2 an `asyncRewake` one wakes the model through the registry
+ * (D-BG-206).
  *
  * The generation is re-checked AFTER the bucket's hooks finish: hook subprocesses
  * can outlive a `/reload`, and the entry-time guard in `settleHandlerFor` only
@@ -375,9 +377,11 @@ async function runStopBucket(
  * Run the StopFailure bucket observation-only (SFAIL-01). Reached on `error` /
  * `length` settle endings. Builds the synthetic StopFailure event
  * (`error` = the classified error type; `last_assistant_message` = Pi's
- * rendered `errorMessage`, or "" when absent) and runs every hook whose
+ * rendered `errorMessage`, trimmed, and left out when empty, as Claude Code
+ * builds it, D-BG-303) and runs every hook whose
  * error-type matcher admits the classified error (SFAIL-03; match-all `""` /
- * `"*"` admits every type) with no short-circuit, then DISCARDS the collected
+ * `"*"` admits every type, and a `|` list admits each type it names,
+ * D-BG-302) with no short-circuit, then DISCARDS the collected
  * outcomes: StopFailure carries no decision control, so a blocking hook or an
  * exit-2 hook produces no re-entry and no loop-state mutation, and it cannot
  * suppress its peer observers. `stopHookActive`, the consecutive-block counter,
@@ -399,9 +403,10 @@ async function runStopFailure(
     return;
   }
 
+  const errorText = (last.errorMessage ?? "").trim();
   const event: StopFailureEvent = {
     error: classifiedError,
-    last_assistant_message: last.errorMessage ?? "",
+    ...(errorText === "" ? {} : { last_assistant_message: errorText }),
   };
 
   // SFAIL-01: observation-only -- run every matching hook for its side effects
@@ -410,10 +415,10 @@ async function runStopFailure(
   // later observers; StopFailure has no decision lane, so every matching hook
   // must get to observe the failure.
   //
-  // SFAIL-03: the parse-time gate admits only match-all (`""` / `"*"`) and
-  // exact members of the closed error-type vocabulary, so the dispatch filter
-  // is literal equality against the classified error (the shared
-  // `matcherFiresOnClosedSetValue` predicate).
+  // SFAIL-03: the parse-time gate admits match-all (`""` / `"*"`), an exact
+  // member of the closed error-type vocabulary, or a `|` list with at least
+  // one member (D-BG-302), and the shared closed-set predicate reads that `|`
+  // list, so a hook fires when the classified error is one of its types.
   const outcomes = await collectBucketOutcomes(
     runtime,
     bucket,

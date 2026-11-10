@@ -1,5 +1,6 @@
 import {
   BUCKET_A_EVENTS,
+  closedSetMatcherValues,
   NON_TOOL_EVENT_CLOSED_SETS,
   NON_TOOL_EVENT_FIELDS,
   TOOL_EVENTS,
@@ -52,8 +53,11 @@ function nonToolMatcherCondition(
     return "no-matcher-support";
   }
 
-  const closedSetEvent = event as keyof typeof NON_TOOL_EVENT_CLOSED_SETS;
-  return NON_TOOL_EVENT_CLOSED_SETS[closedSetEvent].has(rawMatcher) ? null : "closed-set";
+  // D-BG-302, CLOSEDLIST-01: a list is kept when one listed value is in the set.
+  const closedSet = NON_TOOL_EVENT_CLOSED_SETS[event as keyof typeof NON_TOOL_EVENT_CLOSED_SETS];
+  return closedSetMatcherValues(event, rawMatcher).some((value) => closedSet.has(value))
+    ? null
+    : "closed-set";
 }
 
 function matcherCondition(event: BucketAEvent, rawMatcher: string): MatcherCondition | null {

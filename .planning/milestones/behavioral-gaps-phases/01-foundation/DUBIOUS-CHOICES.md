@@ -1,0 +1,97 @@
+# Phase 1 (Foundation): Dubious Choices
+
+The choices Phase 1 made without the user. Entries are numbered in the
+milestone form `P{N}-DC-NN`, with N = 1.
+Only the parent session writes this file: it copies each item from the report
+of each step and from the `## Dubious Choices` section of each plan
+SUMMARY.md. A subagent never edits this file.
+
+- **Severity.** High: changes what a user sees or diverges from upstream.
+  Medium: a judgment call a reviewer may reverse at low cost. Low: process,
+  naming, or tooling.
+- **Status.** `open` until the user reviews it.
+- **IDs.** `P{N}-DC-NN` is a choice of phase N; this log holds Phase 1's.
+
+## Discuss step
+
+The autonomous run took the recommended option at every discuss question; those answers are the decisions D-BG-01 to D-BG-16 in 01-CONTEXT.md and PROJECT.md, so they are not repeated here.
+
+## Research step
+
+- **P1-DC-01 (Low, open). D-BG-10 premise.** CONTEXT says nothing else reacts to `PI_SUBAGENT_CHILD`, but pi-subagents does (it registers nothing). The decision still holds, because a real child's pi-subagents is inert too; only its rationale text is wrong.
+- **P1-DC-02 (Medium, open). D-BG-03 certificate.** "The same certificate approach as https-git-host" was read as reusing the git host's key and certificate, because Pi trusts only one CA file.
+- **P1-DC-03 (Low, open). Plan split.** The launch plumbing moved from the roadmap's Wave 2 "Terminal and process" plan to Wave 1.
+- **P1-DC-04 (Medium, open). D-BG-13 and CFGMIG-01.** A true pre-config state (v0.4.3) cannot carry `enabled: false`. Covering the enabled state needs a current-schema state with its config deleted, which is not an earlier-release shape.
+- **P1-DC-05 (Medium, open). Additions beyond the Builds list.** `PiProcess.crash()` (ASYNC-04), the tool-validation upstream projector (TOOL-03), and terminal launch options for the redirect (DFLOW-04) were added to Phase 1, because the streams that need them cannot edit frozen files.
+- **P1-DC-06 (Low, open). D-BG-07 mechanism.** The usage option wraps `streamSimple`, because the faux provider overwrites usage; the compaction seed also uses the `keepRecentTokens: 1` Given.
+
+## Planning step
+
+- **P1-DC-07 (Low, open). Plan count and grouping.** Eight plans. The picker, json run, and terminal run share 01-07 (about 95k tokens) because all three edit `pi-tui.ts`; the stale-lock seed sits in 01-02.
+- **P1-DC-08 (Medium, open). World API fixed before its users.** `withoutGitHubBaseOverride`, `subagentChild`, `crashPi`, `restartPi("after-crash")`, and `oneShotPiLaunch()` are fixed in Wave 1; a Wave 2 plan that finds them short must edit `world.ts` as a recorded deviation.
+- **P1-DC-09 (Medium, open). Async hook lifecycle design.** Only hooks with `async`, `async rewake`, or `waits` write start and end lines and a pid file; the release wait is capped at 60 s; the shared release step needs a declared rewake summary, so a plain-`async` hook (ASYNC-05) needs its own step in Phase 2.
+- **P1-DC-10 (Medium, open). ASYNC-04 pinned early.** The crash and reload seeds pin ASYNC-04's reap inside Phase 1, so a product reap bug would surface in Phase 1 in files Phase 2 owns.
+- **P1-DC-11 (Medium, open). TOOL-03 projector form.** Phase 1 chose `invalid arguments: <paths>`, and its seed pins TOOL-03-shaped behavior early.
+- **P1-DC-12 (Low, open). Device Flow additions.** A terminal-routing seed, the credential-store Given, and the canonical `verification_uri` that nothing fetches were added beyond the Builds list.
+- **P1-DC-13 (Medium, open). Per-phase D-BG ID blocks.** Phase N numbers its decisions D-BG-N01 to D-BG-N99 instead of continuing one sequence (D-BG-15 says "continue"), so fifteen parallel children cannot collide.
+- **P1-DC-14 (Low, open). PROJECT.md goal wording.** The milestone goal in PROJECT.md is also corrected under D-BG-04, and D-BG-01 to D-BG-16 get Key Decisions rows marked Pending.
+- **P1-DC-15 (Low, open). CI time measured locally.** Nothing is pushed (D-BG-16), so the CI legs are timed locally against run 42421611502; a local machine faster than CI understates the margin.
+- **P1-DC-16 (Medium, open). Branch timing.** 01-08 creates the fifteen branches at its own head, before the parent's review and close-out commits; each child merges the local `features/behavioral-gaps` first to pick those up.
+- **P1-DC-17 (Low, open). Structure choices.** A new topic module `plugin/picker.steps.ts`; the screen model lives in `pi-tui.ts` with tests in `test/architecture/`; the json driver keeps its own path to the scripted model; two background-child mechanisms coexist.
+- **P1-DC-18 (Low, open). Legacy-move seed.** It may split into an `@adapter-only`/`@builtin-only` pair, because Pi's built-in MCP reads the same user-scope `mcp.json`.
+- **P1-DC-19 (Low, open). `platform/pi-api.ts` verify-only.** Every event type the streams read is already re-exported, so 01-08 rewords the roadmap's "Phase 1 widens" line instead of editing the file.
+- **P1-DC-20 (Medium, open). Plan-checker fixes applied by the parent.** The parent, not the planner, marked the research questions resolved, added a `/reload` seed for ASYNC-04 to 01-05, made 01-08 check that it is on `features/behavioral-gaps` before creating branches, and listed `ci.yml` in 01-08's files.
+
+## Execution
+
+- **P1-DC-21 (Low, open). Seeded-file wording.** layout.md says Phases 4 and 6 create `hook/tool-failure.feature` and `hook/session-end.feature`, because no Phase 1 plan seeds them (01-01).
+- **P1-DC-22 (Low, open). Phase log ID wording.** The log names its IDs `P{N}-DC-NN` with N = 1, so 01-01's grep criterion holds (01-01).
+- **P1-DC-23 (Medium, open). Key Decisions rationale cells.** CONTEXT gives no explicit rationale for D-BG-02, 03, 05 to 08, and 10 to 15; the executor wrote those cells from the decision text and the roadmap. The user may want to reword them (01-01).
+- **P1-DC-24 (Low, open). D-BG-09 row.** The row records that Pi 1.5.0 has a json mode, so BOOT-01 keeps its json clause; this comes from the plan's must-haves, not CONTEXT (01-01).
+- **P1-DC-25 (Low, open). Layout section extras.** The REQUIREMENTS footer was replaced, the layout section repeats the roadmap's path-root sentences, and reserved names are one full path per line (01-01).
+- **P1-DC-26 (Medium, open). Frozen export exemption.** `.fallowrc.json` gained an `ignoreExports` entry for `claudePluginPayloads` in `features/lib/pi-commands.ts`, which has no consumer until 01-07; 01-07 must remove it, since fallow never reports a stale entry (01-02).
+- **P1-DC-27 (Low, open). Child step location.** The background-child step lives in `companion.steps.ts`, while its no-companion twin is in `model.steps.ts` (01-02).
+- **P1-DC-28 (Low, open). Terminal carry-over.** Only a `withoutGitHubBaseOverride` profile passes its environment and extensions to the terminal session; a normal restart after `crashPi()` is not refused (01-02).
+- **P1-DC-29 (Low, open). Seed details.** The child Given follows the config setup, the MLOCK-02 seed installs no plugin, the stale-lock second red proof also removed the fixture check, and `oneShotPiLaunch()` returns a named `OneShotPiLaunch` type (01-02).
+- **P1-DC-30 (Low, open). Context tokens stripped from every event.** The scripted model's `context tokens` field is removed from partial and error events too, not only `done`, because Pi's loop keeps partial messages in context (01-03).
+- **P1-DC-31 (Medium, open). TOOL-01 installs a plugin.** The TOOL-01 seed installs `demo@fixtures`, beyond the plan's marketplace add, so the plugin count is not trivially 0 (01-03).
+- **P1-DC-32 (Medium, open). PCOMP-01 pins Pi's summary frame.** The `compact summary` cell includes Pi's own frame text around `Summary A.`, as the manual-compaction scenario does; a Pi rewording breaks both, and Phase 5 may want a projection (01-03).
+- **P1-DC-33 (Low, open). Projector recognition and parser wording.** The argument-validation projector matches a first line naming the tool in quotes and ending with `:`, sorts the paths, and leaves Pi's other refusals unprojected; the script parser's refusal messages were reworded and `context tokens` takes only a positive integer (01-03).
+- **P1-DC-34 (High, open). Deleted-config seed pins a product gap.** Rebuilding a deleted config writes every plugin as `{}`, so a disabled plugin loses `enabled: false` and the next load reports `will enable`. The seed states today's output; the parent accepted the route and added the fix to Phase 8's criterion 1 (CFGMIG-01), which owns `migrate-config.ts` (01-04).
+- **P1-DC-35 (Medium, open). CFGMIG-01 enabled state from a current-schema record.** Per DC-D, the enabled state is covered by a current-schema record whose config the user deleted, because no release before the config files wrote `enabled` (01-04).
+- **P1-DC-36 (Low, open). 0.4.3 autoupdate left absent.** The 0.4.3 marketplace record omits `autoupdate` when the base config declares none, because 0.4.3's `marketplace add` never wrote it (01-04).
+- **P1-DC-37 (Low, open). Writer scope.** The earlier-release writers reproduce only path sources and throw on other kinds; 0.19.2 `hookEntries` are kept as is; legacy `mcp.json` entries are rebuilt from the plugin's `.mcp.json` as 0.19.2 did, importing nothing from the product (01-04).
+- **P1-DC-38 (Low, open). 0.4.3 red proof.** The planned red proof did not fail (bytes identical); a product-side proof with the config save turned off was used instead, and the seed's Given asserts both configs are absent (01-04).
+- **P1-DC-39 (Low, open). Fifth writing config step.** The new deletion step breaks the steps.md rule of four writing config steps; the parent added it to `steps.md` as a fifth exception (01-04).
+- **P1-DC-40 (High, open). Crash seed in the user scope.** The next start after a Pi crash does not stop a project-scope install's orphaned async hooks (the bridge registers with `cwd: homedir()`, and the project hydrate never reaps). The seed installs in the user scope so the gate stays green; the parent carried the fix and the project-scope scenario to Phase 2's ASYNC-04 criterion (01-05).
+- **P1-DC-41 (Medium, open). Reload seed starts its hook on SessionStart.** The `/reload` seed starts the waiting hook on SessionStart `startup`, not on a terminal prompt, because the reload step's own prompt would start a new waiting hook (01-05).
+- **P1-DC-42 (Low, open). Release step limits.** The shared release steps wait for a rewake summary and read the profile Pi's records, so Phase 2 must add its own steps for a plain-async or terminal-started hook (01-05).
+- **P1-DC-43 (Low, open). Lifecycle details.** The end line comes from an EXIT trap (a signal-killed script logs none); `no hook process is running` fails when no pid file exists; the rewake-summaries step compares whole payloads; `once` now shares a `parseBoolean` (01-05).
+- **P1-DC-44 (Medium, open). Routing rule in its own module.** The redirect's routing rule lives in a new `features/lib/github-device-flow/routing.ts`, which the plan did not list, so the frozen extension needs no extra fallow marker or exemption (01-06).
+- **P1-DC-45 (Medium, open). Red proof in a network namespace.** The terminal-routing red proof ran under `unshare -rn`, because without the redirect it would reach the real github.com (01-06).
+- **P1-DC-46 (Low, open). One rule for request, get and fetch.** `/login/...` through `https.request` also reaches the sign-in stand-in, and plain-http requests to github.com are refused rather than routed (01-06).
+- **P1-DC-47 (Low, open). Fixed values and logging.** User code `WDJB-MJHT` and token `stand-in-access-token` stay module constants; the redirect ignores its own log write errors; the routed-Pi Given cannot compare Pi's pid; the stored-credential Given now shares a writer (01-06).
+- **P1-DC-48 (Medium, open). BROWSE-01 pins `0 plugin(s)`.** The picker's marketplace row counts installed plugins, not offered ones; the seed pins today's value and the parent carried the check to Phase 12's BROWSE-01 criterion (01-07).
+- **P1-DC-49 (Medium, open). Terminal command completion.** The terminal `When` waits only for a 1-second quiet window, and the `Then` waits for the doc string's first row; a disk-reading step placed between them could run before a slow command ends, and a notice with a blank row is cut there (01-07).
+- **P1-DC-50 (Medium, open). Picker close detection.** After the picker closes, the driver waits for a row naming `<plugin> @ <marketplace>` from the last title, so it depends on the extension's title format; the picker is found as the last two all-`─` rows, and rows split at the first run of two spaces (01-07).
+- **P1-DC-51 (Low, open). Test-only export marker.** `terminalScreen` carries a `fallow-ignore-next-line unused-export` marker because only its unit test calls it; the parent updated the CONVENTIONS count to 49 (01-07).
+- **P1-DC-52 (Low, open). Screen model and json limits.** The screen model ignores tabs, backspace, cursor save/restore and wide characters; the cursor-up handling is proven only by its unit case; the json deadline is 25 s; the cancel seed adds a project-scope marketplace (01-07).
+- **P1-DC-53 (Medium, open). Write to the real `~/.pi` during the gate.** At 05:39:05Z, during the builtin leg, some process wrote `~/.pi/agent/pi-claude-marketplace/cache/plugins/valid-marketplace.json` (a completion cache naming the unit-test fixture `valid-marketplace`, plugin `hello`, builtin implementation). The writer was not found; the file was left in place and the brief tells children to report it if it changes again (01-08).
+- **P1-DC-54 (Low, open). Seeds list scope.** layout.md's Seeds list names only the steps the seeds alone use; for Phases 3, 5 and 10 it names script columns or the projection instead (01-08).
+- **P1-DC-55 (Low, open). Brief details.** The worktree path is `/home/acolomba/src/pi-claude-marketplace-behavioral-gaps-phase-{N}`; the config-set warning was reworded to the current effect; the init.sh restore step comes from reading the script, not a run (01-08).
+- **P1-DC-56 (Low, open). Branches at the CI-records commit.** The fifteen branches point at `6c04eb67`, one Markdown-only commit after the gate SHA `f01507cd`, which the gates.md reuse rule allows (01-08).
+- **P1-DC-57 (Low, open). Local CI timing margin.** Legs were timed on a 28-core machine; at the baseline's worst 3.3x slowdown the components leg would take about 10 m 21 s, under the 15-minute timeout but over the 1.5x rule's 10 minutes (01-08).
+- **P1-DC-58 (Low, open). Review fixes made in place.** The fixer edited and committed in the milestone worktree without a nested review-fix worktree, because a nested one has no `node_modules` for the checks; CR-02 with WR-07, WR-04 with WR-05, and WR-02 with IN-04 share commits (review fix).
+- **P1-DC-59 (Low, open). Two steps still mark the turn compared.** The lifecycle step and the rewake-summary step keep the compared marker because each compares one log or payload kind in full, like `the hooks record these runs:` (WR-08).
+- **P1-DC-60 (Medium, open). Stricter terminal notice read.** The notice check now reads down to Pi's editor border, so a row a future Pi draws there fails the scenario; the order rule (terminal `Then` before disk or log `Then`) is documented, not enforced (WR-06).
+- **P1-DC-61 (Medium, open). Notice row heuristic.** A notice row counts when its trimmed text appears in the output after the mark, its second word is the plugin, and it has a `(status)`; a full redraw that rewrites an old notice still matches (WR-05, needs human check).
+- **P1-DC-62 (Low, open). Argument refusal wording pinned.** The projection anchors on Pi 1.5.0's `Validation failed for tool "<tool>":`; a reworded Pi fails the scenario loudly (WR-10).
+- **P1-DC-63 (Medium, open). Redirect containment narrowed in docs.** No network namespace or `NODE_OPTIONS=--import` was added; the docs now claim less instead (WR-02).
+- **P1-DC-64 (Low, open). Body read whole.** The redirect reads the request body with `arrayBuffer()` instead of `duplex: "half"`, which TypeScript's `RequestInit` lacks (IN-04).
+- **P1-DC-65 (Low, open). Cold-cache screen change skipped.** IN-06 made `browse.feature` take 24 s instead of 14 s near the 15 s TUI ready limit; it was reverted and needs a design choice (longer limit or a warm shared cache).
+- **P1-DC-66 (Low, open). Pid check kept.** IN-05 stays because only the pid shows the profile Pi, not the cucumber worker, loaded the redirect.
+- **P1-DC-67 (Low, open). New Device Flow support file.** `features/support/github-device-flow.ts` records harness log lengths at each `When`; `world.ts` gained `harnessLogWindow` and `harnessLogLinesBeforeLastWhen()` (WR-09).
+- **P1-DC-68 (Medium, open). Stray `~/.pi` writer still unknown.** The two suspected tests both run inside `createHermeticEnvironment`, so the reviewer's lead is refuted; `update.test.ts` and `update-flow.test.ts` were not read, and the file is untouched (review fix).
+- **P1-DC-69 (Low, open). Human-check fixes accepted on local runs.** The verifier accepted CR-02, WR-05 and WR-07 from the diffs, their red proofs and one fresh run, not a CI flake-rate measurement; watch the first CI run of `hook/async.feature` and `plugin/browse.feature` (verification).
+- **P1-DC-70 (Medium, open). Stray `~/.pi` write recurs every gate.** The cache file was rewritten at 07:15:22Z during the post-fix gate; four suspect unit-test files run under a scratch HOME did not write it, so the writer is still unknown and needs the user (verification).
+- **P1-DC-71 (Low, open). Branches re-pointed to the verified head.** The fifteen phase branches were moved from `6c04eb67` to the verified head after the review fixes, before any child session started; they were never pushed (verification).

@@ -16,7 +16,11 @@
 //   - toolResultCompositeHandler(capturedEpoch) returns the closure
 //     registered on `tool_result`. ONE handler, TWO buckets: the body
 //     reads `event.isError` once and routes to PostToolUseFailure or
-//     PostToolUse (D-59-01 / DISP-01) before any hook runs.
+//     PostToolUse (D-59-01 / DISP-01) before any hook runs. A failed
+//     result under the turn's aborted signal is a call the user cancelled,
+//     and it runs no PostToolUseFailure hook, sync or async (D-BG-402).
+//     While pi-mcp-adapter is the active implementation, a result it marks
+//     with its MCP call failure codes counts as failed too (D-BG-404).
 //
 // Running a bucket, as Claude Code 2.1.316 runs an event's hooks:
 //   - filter: the per-event matcher, then the entry's `if` (MATCH-03).
@@ -48,6 +52,7 @@
 // tables (DISP-03 zombie-defense belt-and-suspenders), and a run whose
 // generation changed while its hooks ran folds to noop.
 
+import { closedSetMatcherValues } from "../../domain/components/hook-events.ts";
 import {
   claudeFormToolName,
   MCP_TOOL_PREFIX,
@@ -73,6 +78,7 @@ import {
   hookEventLabel,
   hookMatchLabel,
   hookSaysText,
+  postCompactLineText,
   promptBlockedText,
 } from "./hook-labels.ts";
 import { ifFires } from "./if-field/index.ts";
@@ -162,16 +168,19 @@ function matcherFiresOnToolEvent(matcher: ParsedMatcher, tool: McpToolIdentity):
 
 /**
  * Closed-set matcher-fires predicate shared by the session and compaction
- * composite paths and the settle-time StopFailure path. The parser admits
- * only match-all (`""` / `"*"`) and exact members of the per-event closed
- * set at parse time, so dispatch-time filtering is literal equality against
- * the event's Claude-side value (the mapped SessionStart `source` and
- * SessionEnd `reason`, D-CF5-01 / D-CF5-02; the PreCompact and PostCompact
- * `trigger`, D-CF5-04; the classified StopFailure error type).
+ * composite paths and the settle-time StopFailure path. The parser keeps only
+ * match-all (`""` / `"*"`) and lists with a member of the event's closed set
+ * (D-BG-302, CLOSEDLIST-01), so a hook fires when the event's Claude-side
+ * value is one of its listed values, exactly and case-sensitively (the mapped
+ * SessionStart `source` and SessionEnd `reason`, D-CF5-01 / D-CF5-02; the
+ * PreCompact and PostCompact `trigger`, D-CF5-04; the classified StopFailure
+ * error type).
  */
 export function matcherFiresOnClosedSetValue(entry: RoutingEntry, value: string): boolean {
   const raw = entry.rawMatcher;
-  return raw === "" || raw === "*" || raw === value;
+  return (
+    raw === "" || raw === "*" || closedSetMatcherValues(entry.claudeEvent, raw).includes(value)
+  );
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -261,12 +270,10 @@ async function runHooks(
  * (stop) among the group suppresses re-entry regardless of another hook's
  * block. A generation change during the run returns no outcome.
  *
- * A hook declaring `asyncRewake:true` cannot yield a SYNCHRONOUS decision --
- * `dispatchHookExec` routes it to the fire-and-forget spawn and returns `noop`
- * before a decision exists -- so running it here would silently drop its
- * block/stop desire. Such an entry is degraded to `noop` with a `hookDebugLog`
- * (rather than a pointless detached spawn) so the dropped decision is
- * observable.
+ * A hook declaring `async` or `asyncRewake` reaches the executor too, whose
+ * background branch spawns it and returns `noop`, so it never decides the
+ * settle; an `asyncRewake` one that exits 2 wakes the model through the
+ * registry, as Claude Code runs it (D-BG-206).
  *
  * Takes the same injected executor as the composite handlers, so one spy
  * drives both paths.
@@ -281,16 +288,9 @@ export async function collectBucketOutcomes(
   executor: HookExecutor = dispatchHookExec,
 ): Promise<BucketOutcome[]> {
   const hooks = matchingHooks(bucket, event, ctx, matcherFires);
-  const outcomes = await runHooks(runtime, hooks, async (entry) => {
-    if (entry.handlerDecl.asyncRewake !== true) {
-      return executor(entry, event, ctx, pi, runtime);
-    }
-
-    hookDebugLog(
-      `collectBucketOutcomes: asyncRewake entry cannot yield a synchronous decision (${entry.pluginId}/${entry.claudeEvent}); degrading to noop`,
-    );
-    return { kind: "noop" };
-  });
+  const outcomes = await runHooks(runtime, hooks, (entry) =>
+    executor(entry, event, ctx, pi, runtime),
+  );
   return outcomes ?? [];
 }
 
@@ -488,8 +488,9 @@ function systemMessageNotices(
 /**
  * D-CF5-11 / D-CF5-18 / D-CF5-24: the notices a block shows the user. A
  * blocked prompt shows why once, with the first block in routing order. A
- * SessionStart, SessionEnd, or PostCompact block changes nothing, so each one
- * shows as the event's hook error, as Claude Code shows exit-2 stderr there.
+ * SessionStart or SessionEnd block changes nothing, so each one shows as the
+ * event's hook error, as Claude Code shows exit-2 stderr there. A PostCompact
+ * block shows in its hook's line after a manual compaction (D-BG-501).
  * A PreCompact block cancels the compaction and shows one notice that names
  * every blocking hook, as Claude Code reports a blocked compaction. A tool
  * block goes to the model instead.
@@ -506,7 +507,6 @@ function blockNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBuc
         : [];
     case "SessionStart":
     case "SessionEnd":
-    case "PostCompact":
       return blocks(folded.outcomes).map(({ reason, command, fromStderr }) =>
         hookErrorText(label, reason, command, fromStderr),
       );
@@ -516,11 +516,64 @@ function blockNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBuc
       return blocked.length > 0 ? [compactionBlockedText(blocked)] : [];
     }
 
+    // D-BG-501: the PostCompact notice lists every hook's end instead.
+    case "PostCompact":
+      return [];
+
     case "PreToolUse":
     case "PostToolUse":
     case "PostToolUseFailure":
       return [];
   }
+}
+
+/**
+ * D-BG-504: the command a PostCompact line names, as Claude Code shows a
+ * command hook: the declared `command` with its placeholders, then an
+ * exec-form hook's `args` joined by single spaces, each one as `planSpawn`
+ * passes it.
+ */
+function displayCommand(entry: RoutingEntry): string {
+  const { command, args } = entry.handlerDecl;
+  const words = Array.isArray(args)
+    ? args.map((arg: unknown) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
+    : [];
+  return [command ?? "", ...words].join(" ");
+}
+
+/**
+ * D-BG-501 / D-BG-502: the notice that lists how each PostCompact hook ended,
+ * one line per hook that carries its run, in routing order. Claude Code shows
+ * the lines after `/compact` only; after an automatic compaction they are
+ * dropped with a debug line.
+ */
+function postCompactNotices(
+  trigger: "manual" | "auto",
+  outcomes: readonly BucketOutcome[],
+): string[] {
+  const lines = outcomes.flatMap(({ entry, result }) =>
+    result.postCompactRun === undefined
+      ? []
+      : [
+          postCompactLineText(
+            displayCommand(entry),
+            result.postCompactRun.succeeded,
+            result.postCompactRun.output,
+          ),
+        ],
+  );
+  if (lines.length === 0) {
+    return [];
+  }
+
+  if (trigger === "auto") {
+    hookDebugLog(
+      `dispatch: ${lines.length} PostCompact line(s) not shown after an automatic compaction`,
+    );
+    return [];
+  }
+
+  return [lines.join("\n")];
 }
 
 // Each blocking outcome, in routing order, with the hook's declared command,
@@ -758,9 +811,48 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       sendToolContext(pi, label, folded.result);
     }
 
+    if (claudeEvent === "PostCompact") {
+      const trigger = compactTrigger((view.event as SessionCompactEvent).reason);
+      showHookNotices(ctx, pi, postCompactNotices(trigger, folded.outcomes));
+    }
+
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
     return (await adaptForEvent(claudeEvent, folded, view.event, context)) as CompositeReturnFor<E>;
   };
+}
+
+// D-BG-402: Claude Code fires no PostToolUseFailure hook on a running tool
+// that the user cancels, and Pi still reports such a call as a failed result,
+// under the turn's aborted signal.
+function isCancelledFailure(failed: boolean, ctx: ExtensionContext): boolean {
+  return failed && ctx.signal?.aborted === true;
+}
+
+// D-BG-404: pi-mcp-adapter returns a failed MCP tool call with no result-level
+// `isError` and sets the flag in its own `tool_result` handler, which Pi runs
+// after this extension's. Only its two MCP call failure codes count, and only
+// while it is the active implementation.
+const ADAPTER_FAILURE_CODES: ReadonlySet<string> = new Set(["tool_error", "call_failed"]);
+
+// D-BG-404: reads the result's details first, so the proxy rule is read only
+// for a result that carries one of the adapter's failure codes.
+function adapterReportsFailure(event: ToolResultEvent, tools: HookToolView): boolean {
+  const details: unknown = event.details;
+  const code =
+    typeof details === "object" && details !== null && "error" in details
+      ? details.error
+      : undefined;
+  return typeof code === "string" && ADAPTER_FAILURE_CODES.has(code) && tools.proxyRuleApplies();
+}
+
+// D-BG-404: the result as the hooks see it, marked failed when the adapter
+// reported a failure; Pi's own fields are shared, not copied.
+function routedToolResult(event: ToolResultEvent, tools: HookToolView): ToolResultEvent {
+  if (event.isError || !adapterReportsFailure(event, tools)) {
+    return event;
+  }
+
+  return { ...event, isError: true };
 }
 
 /**
@@ -769,7 +861,13 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
  * PostToolUse on falsy/undefined, then runs and folds the bucket's matching
  * hooks. DISP-01 (event.isError split) happens before any hook runs; DISP-03
  * epoch check at entry; while pi-mcp-adapter is the active implementation,
- * the call-mode `mcp` proxy runs no hook (D-CF5-12, MHK-02).
+ * the call-mode `mcp` proxy runs no hook (D-CF5-12, MHK-02). When the
+ * PostToolUseFailure bucket has hooks and the turn's signal is aborted, the
+ * call was cancelled and no hook of the bucket starts (D-BG-402); the signal
+ * is read only then. While pi-mcp-adapter is the active implementation, a
+ * result it marks with an MCP call failure code takes the PostToolUseFailure
+ * bucket, and every later step sees it failed (D-BG-404); the handler's
+ * return value never sets `isError` itself.
  *
  * Returns `ToolResultEventResult | undefined` via
  * `adaptToolResultResult` (D-60-03).
@@ -785,14 +883,20 @@ export function toolResultCompositeHandler(
   executor: HookExecutor = dispatchHookExec,
   tools: HookToolView = createHookToolView(pi),
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
-  return async (event, ctx) => {
+  return async (piEvent, ctx) => {
     if (capturedGeneration !== runtime.currentGeneration()) {
       return undefined;
     }
 
+    const event = routedToolResult(piEvent, tools);
     const claudeEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
     const bucket = runtime.getRoutingBucket(claudeEvent);
     if (bucket.length === 0) {
+      return undefined;
+    }
+
+    if (isCancelledFailure(event.isError, ctx)) {
+      hookDebugLog("dispatch: no PostToolUseFailure hook on a cancelled tool call");
       return undefined;
     }
 

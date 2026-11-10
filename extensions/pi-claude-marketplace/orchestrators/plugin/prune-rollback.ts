@@ -24,6 +24,7 @@ import { pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
 import type { IndexedRecord } from "./dependency-index.ts";
+import type { ConfigLayerWrite } from "./uninstall.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { McpWrittenFile } from "../../shared/errors-bridges.ts";
 import type { Stats } from "node:fs";
@@ -68,6 +69,11 @@ export interface PruneRollback {
    * The last write to a path wins.
    */
   readonly recordMcpWrites: (files: readonly McpWrittenFile[]) => void;
+  /**
+   * NFR-3: records the bytes the `--prune` sweep wrote to a config layer
+   * (PRUNECFG-01). The last write to a path wins.
+   */
+  readonly recordConfigWrites: (writes: readonly ConfigLayerWrite[]) => void;
   readonly rollback: () => Promise<readonly PruneRestoreFailure[]>;
   readonly discard: () => Promise<void>;
 }
@@ -370,6 +376,8 @@ export async function preparePruneRollback(
   let mcp: SavedPath;
   let mcpAdapter: SavedPath;
   let state: SavedPath;
+  let config: SavedPath;
+  let localConfig: SavedPath;
   try {
     for (const [index, { root, target, phase }] of targets.entries()) {
       // eslint-disable-next-line no-await-in-loop -- a failed snapshot deletes the backup dir
@@ -406,8 +414,23 @@ export async function preparePruneRollback(
       backupRoot,
       targets.length + 3,
     );
-    const entries = [...artifacts, agentsIndex, mcp, mcpAdapter, state].map((saved) =>
-      recoveryEntry(locations, saved),
+    // PRUNECFG-01: the sweep deletes disabled declarations from both layers.
+    config = await snapshotPath(
+      locations.scopeRoot,
+      locations.baseConfigJsonPath,
+      "config",
+      backupRoot,
+      targets.length + 4,
+    );
+    localConfig = await snapshotPath(
+      locations.scopeRoot,
+      locations.localConfigJsonPath,
+      "local config",
+      backupRoot,
+      targets.length + 5,
+    );
+    const entries = [...artifacts, agentsIndex, mcp, mcpAdapter, state, config, localConfig].map(
+      (saved) => recoveryEntry(locations, saved),
     );
     await writeFileAtomic(
       path.join(backupRoot, "manifest.json"),
@@ -418,14 +441,18 @@ export async function preparePruneRollback(
     throw error;
   }
 
-  const ownMcpWrites = new Map<string, Buffer>();
+  // NFR-3: the bytes this prune last wrote to each metadata file, by path.
+  const ownWrites = new Map<string, Buffer>();
+  const recordOwnWrites = (writes: readonly McpWrittenFile[]): void => {
+    for (const write of writes) {
+      ownWrites.set(write.path, write.bytes);
+    }
+  };
+
   return {
     backupName: path.basename(backupRoot),
-    recordMcpWrites: (files): void => {
-      for (const file of files) {
-        ownMcpWrites.set(file.path, file.bytes);
-      }
-    },
+    recordMcpWrites: recordOwnWrites,
+    recordConfigWrites: recordOwnWrites,
     rollback: async (): Promise<readonly PruneRestoreFailure[]> => {
       const failures: PruneRestoreFailure[] = [];
       for (const saved of artifacts) {
@@ -437,10 +464,10 @@ export async function preparePruneRollback(
         }
       }
 
-      for (const saved of [agentsIndex, mcp, mcpAdapter]) {
+      for (const saved of [agentsIndex, mcp, mcpAdapter, config, localConfig]) {
         try {
           // eslint-disable-next-line no-await-in-loop -- restores run in order; each failure kept
-          await restoreMetadata(saved, ops, ownMcpWrites.get(saved.target));
+          await restoreMetadata(saved, ops, ownWrites.get(saved.target));
         } catch (error: unknown) {
           failures.push({ phase: saved.phase, cause: asError(error) });
         }

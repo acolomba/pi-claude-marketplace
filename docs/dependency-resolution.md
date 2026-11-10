@@ -235,6 +235,8 @@ The sweep never removes a plugin you installed by name, whatever declares it. A 
 
 Each removed dependency shows its own `(uninstalled) {dependency pruned}` row under its marketplace. `--keep-data` covers every plugin the command removes, and the rows then read `{dependency pruned, data kept}`. When nothing qualifies, the command prints the plain uninstall row and nothing more. If one removed dependency fails to remove, the others stay removed and its row shows the failure (D-05-13). The failed plugin is still installed, so the dependencies only it declares stay too.
 
+When the sweep removes a dependency that you disabled, it also deletes that dependency's `enabled: false` entry from each config file of the scope that has one, `claude-plugins.json` and `claude-plugins.local.json` (D-BG-1310). Claude Code deletes a pruned plugin's `enabledPlugins` entry whatever its value. Here an entry that turns the dependency on stays, so `pending` then lists the dependency's install, and `apply` installs it again. If a config file of the scope is invalid, the command refuses with `{unreadable}` before it removes a dependency. If a config file cannot be written, the command fails. Fix the file and run the command again.
+
 A reload never prunes. An orphaned dependency stays installed until you run `--prune`, because its install record says that it arrived through another plugin (see [Where a dependency lands](#where-a-dependency-lands)). This matches Claude Code, which keeps orphaned dependencies on disk in case you reinstall a plugin that needs them.
 
 ## Pruning without uninstalling a named plugin
@@ -247,6 +249,8 @@ Run `prune` to remove orphaned dependency installs without uninstalling a named 
 ```
 
 Only records installed as dependencies qualify. A record stays if any installed plugin in the same scope declares it, even when that plugin is disabled. A plugin installed by name also stays. The sweep repeats until no more records qualify. Each removed dependency has an `(uninstalled) {dependency pruned}` row under its marketplace.
+
+Like `uninstall --prune`, `prune` deletes the `enabled: false` entry of each dependency that it removes from the config files of the scope. If its state save then fails, `prune` puts both config files back. A file that another program changed in the meantime keeps that change, the failure row names it, and the recovery backup keeps the original.
 
 Run `prune --dry-run` to see the current candidates. The preview writes nothing to files or state. Each candidate has a `(will uninstall) {dependency pruned}` row. The preview reports candidates in the same order as a successful actual sweep of that snapshot. It does not reserve those candidates. A later actual command checks the current state again, so concurrent changes or a failed removal can change its rows.
 

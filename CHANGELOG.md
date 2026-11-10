@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+- More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
+
+  - A plugin's `async` hooks, Stop hooks included, now run in the background and give their JSON answer to the model's next call.
+  - An `asyncRewake` hook that exits 2 now wakes the model with Claude Code's text and shows its summary, by default `Stop hook feedback`.
+  - A `Stop` hook now gets `stop_hook_active: true` at the end of a turn that an `asyncRewake` hook woke, and not in later turns.
+  - A project plugin's async hook processes now stop on `/reload` and after a crash.
+  - A hook's timeout, `/reload`, and the start after a crash now stop every process of the hook, such as the script in `script.sh || true`.
+  - `StopFailure` hook matchers now accept Claude Code's newer error types and `|` lists, and `SessionStart`, `SessionEnd`, `PreCompact`, and `PostCompact` matchers accept `|` and `,` lists. Reinstall a plugin installed with `--partial` to run these hooks.
+  - A `StopFailure` hook now gets no `last_assistant_message` when Pi reports no error text.
+  - A tool call you cancel now runs no `PostToolUseFailure` hook, and the hook input now carries `is_interrupt`.
+  - A failed MCP tool call through pi-mcp-adapter now runs `PostToolUseFailure` hooks instead of `PostToolUse` hooks.
+  - A `PostToolUseFailure` hook's `updatedToolOutput` no longer replaces the failed result.
+  - After `/compact`, `PostCompact` hooks now show one notice of how each hook ended, and an automatic compaction shows none.
+  - A `PostCompact` block no longer shows as a hook error.
+  - A `SessionEnd` hook now gets at most 1.5 seconds, so it no longer holds a new session, a resume, or a quit open.
+  - A config that a load writes from the installation records now keeps your disabled plugins disabled and leaves out plugins installed only as dependencies.
+  - A start or `/reload` that cannot read a scope's installation record, such as a newer release's, no longer offers that scope's plugin skills and commands.
+  - `prune` and `uninstall --prune` now also delete a removed dependency's `enabled: false` entry from the scope's config files, and refuse while one is invalid.
+  - `pi_claude_marketplace_list` now takes an optional `scope`, and its lines count the available and the installed plugins as the browse picker does.
+  - `pi_claude_marketplace_plugin_list` now reports an unknown marketplace as a failed tool result.
+  - `pi_claude_marketplace_plugin_list` now tags a disabled plugin `[disabled]`, and a new `disabled` filter returns it.
+  - The browse picker's marketplace rows now count the available and the installed plugins, such as `3 available • 1 installed`.
+  - The browse picker no longer marks `Project local` as `(Recommended)` when it asks where to install a plugin.
+  - Internal: behavioral tests now cover the state and config migrations, the legacy MCP move, Device Flow sign-in, `prune`, `bootstrap`, the marketplace state lock, and background-child loads.
+
 - Internal: cloud sessions now install the npm dependencies and the codegraph index at every start, and the environment setup installs only the tools. (#309)
 
 ## [0.23.0] - 2026-11-07

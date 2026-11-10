@@ -3,7 +3,6 @@
     "import": ["features/support/**/*.ts", "features/step_definitions/**/*.steps.ts"],
     "format": ["summary"],
     "order": "random",
-    "parallel": 8,
     "tags": "not @builtin-only",
     "worldParameters": { "mcpImplementation": "adapter" }
   },
@@ -11,7 +10,6 @@
     "import": ["features/support/**/*.ts", "features/step_definitions/**/*.steps.ts"],
     "format": ["summary"],
     "order": "random",
-    "parallel": 8,
     "tags": "not @builtin-only",
     "worldParameters": { "mcpImplementation": "adapter" }
   },
@@ -19,7 +17,6 @@
     "import": ["features/support/**/*.ts", "features/step_definitions/**/*.steps.ts"],
     "format": ["summary"],
     "order": "random",
-    "parallel": 8,
     "tags": "(@mcp or @builtin-only) and not @adapter-only",
     "worldParameters": { "mcpImplementation": "builtin" }
   }

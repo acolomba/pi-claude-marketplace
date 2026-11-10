@@ -15,7 +15,12 @@ import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 import { finalizePrunedMembers, sweepOrphans } from "./uninstall.ts";
 
 import type { PruneRestoreFailure, PruneRestoreOps, PruneRollback } from "./prune-rollback.ts";
-import type { PrunedMember, UninstallHooksRouting, UninstallTransaction } from "./uninstall.ts";
+import type {
+  ConfigLayerWrite,
+  PrunedMember,
+  UninstallHooksRouting,
+  UninstallTransaction,
+} from "./uninstall.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -301,6 +306,7 @@ export function createPrunePlugin(
               ? await preparePruneRollback(locations, candidates, restoreOps)
               : undefined;
           let members: Awaited<ReturnType<typeof sweepOrphans>>;
+          const configWrites: ConfigLayerWrite[] = [];
           try {
             members = await sweepOrphans({
               snapshot,
@@ -312,6 +318,9 @@ export function createPrunePlugin(
                   ? transaction.cascadeUnstagePlugin
                   : recordingCascade(transaction.cascadeUnstagePlugin, backup),
               transaction,
+              recordConfigWrite: (write) => {
+                configWrites.push(write);
+              },
             });
             if (members.length > 0) {
               await tx.save();
@@ -319,6 +328,7 @@ export function createPrunePlugin(
             }
           } catch (error: unknown) {
             if (backup !== undefined) {
+              backup.recordConfigWrites(configWrites);
               const failures = await backup.rollback();
               if (failures.length > 0) {
                 throw new PruneRollbackError(error, failures, backup.backupName);
