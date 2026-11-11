@@ -21,6 +21,60 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
+## Current Milestone: parity-gaps -- Claude Code Parity Gaps and Defects
+
+**Goal:** Close every P0 and P1 gap that
+[docs/prd/parity-gaps-prd.md](../docs/prd/parity-gaps-prd.md) lists between
+Claude Code 2.1.322 and this project, so that the official plugins in its
+sample (`security-guidance`, `hookify`, `ralph-loop`, `code-modernization`,
+`claude-security`, and the five plugins of the `anthropics/skills`
+marketplace) work end to end on Pi.
+
+**Target features:**
+
+- Parity defects, the 13 P0 rows: a plugin starts its own workflow by name;
+  hooks on file tools get and return Claude-shaped tool input; hook matchers
+  accept lists and regular expressions, and `UserPromptSubmit` and `Stop`
+  ignore the matcher; the `Stop` loop limit is eight and resets on a tool
+  call; bridged agents run in the launch mode pi-subagents chooses, and a
+  subagent child runs no main-session hooks; the pi-subagents floor rises to
+  0.87.0 and the pi-mcp-adapter floor to 7.0.1; a plugin MCP server with no
+  `timeout` gets Claude Code's idle window; tool names over 64 characters
+  work under the adapter; a root-source marketplace entry installs only its
+  listed skills; relative links between sibling skills resolve; and an
+  install notes that a workflow does not keep an agent's tool restriction.
+- Hook fidelity: `Stop` on `agent_before_settle`, the missing stdin fields,
+  `UserPromptExpansion`, `resume` on a continued session, failure notices,
+  `stopReason`, the 10,000-character context limit, no timeout for a plain
+  `async` hook, and a missing script that does not block.
+- Agents and workflows: agent frontmatter read as YAML, `Agent` and `Task`
+  grants, `model: inherit`, `excludeTools` beside `tools`, the `agentType`
+  binding and its install note, the `Workflow` tool grant, the workflow
+  compatibility page, and scenarios for the uncovered run paths.
+- Plugin options, content, and trust: `userConfig` defaults and export,
+  `${CLAUDE_PROJECT_DIR}` for user-scope skills and commands, the plugin
+  `bin` on `PATH` only when it exists and the project is trusted, the project
+  trust gap and the adapter's sampling and UI windows decided, `@file`
+  references, Claude Code command names as aliases, alias descriptions, a
+  skills and commands compatibility page, stdio servers kept alive under the
+  adapter, user-written adapter fields kept across updates, and MCP
+  resources, prompts, and elicitation documented.
+- The documentation and record corrections of the PRD's section 10 that no
+  requirement owns.
+
+**Key context:**
+
+- Requirement IDs are the PRD's IDs with a `PG-` prefix (`PG-HOOK-01`),
+  because earlier milestones own several of the bare IDs.
+- No GSD research ran: the six reports under `docs/research/parity-gaps/`
+  are the evidence. Planning re-reads each requirement against its report.
+- Decisions 5, 9, 10, 13, 17, 20, 23, and 25 of the PRD are open. Each is
+  answered in the discuss step of the phase that needs it, and recorded with
+  its premise and the version it was checked against. A "no" moves the
+  requirement to Out of Scope.
+- Spikes S5, S7, and S8 have not run. Each runs in the phase it gates.
+- P2 and P3 rows of the PRD are not scheduled.
+
 ## Previous Milestone: behavioral-gaps -- Behavioral Coverage Gaps (branch: features/behavioral-gaps, started 2026-11-07, completed 2026-11-08, not yet pushed, no PR or npm release yet)
 
 **Goal:** The cucumber suite covers the user-visible behavior that the
@@ -1041,7 +1095,12 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-No milestone is active. The 34 behavioral-gaps requirements are validated and
+Milestone parity-gaps (started 2026-11-11) is active. Its 42 requirements,
+`PG-*`, are in [REQUIREMENTS.md](REQUIREMENTS.md): the 13 P0 and 28 P1 rows of
+[docs/prd/parity-gaps-prd.md](../docs/prd/parity-gaps-prd.md), and one
+requirement for the documentation corrections that no row owns.
+
+The 34 behavioral-gaps requirements are validated and
 archived in
 [milestones/behavioral-gaps-REQUIREMENTS.md](milestones/behavioral-gaps-REQUIREMENTS.md).
 The 31 mcp-builtin requirements are validated and archived in
@@ -2582,3 +2641,5 @@ _Last updated: 2026-11-04 after starting the mcp-builtin milestone._
 _Last updated: 2026-11-05 after the mcp-builtin milestone closed. 31/31 requirements validated and archived; Phase 2 closed with a verification override (two manual checks wait for the user)._
 
 _Last updated: 2026-11-07 after starting the behavioral-gaps milestone._
+
+_Last updated: 2026-11-11 after starting the parity-gaps milestone._

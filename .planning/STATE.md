@@ -1,21 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: behavioral-gaps
-status: Awaiting next milestone
-stopped_at: Milestone behavioral-gaps completed and archived (override_closeout)
-last_updated: "2026-11-10T19:57:18.434Z"
-last_activity: 2026-11-09
-last_activity_desc: Quick batch 261109-cpi fixed the reviewed dubious choices
-state_head: ecc72b9de832ab19c2cc72212b0e2684c136dc52
+milestone: parity-gaps
+milestone_name: Claude Code Parity Gaps and Defects
+status: planning
+last_updated: "2026-11-11T15:36:47.558Z"
+last_activity: 2026-11-11
 progress:
-  total_phases: 16
-  completed_phases: 16
-  total_plans: 36
-  completed_plans: 36
-  percent: 100
-milestone_name: Behavioral Coverage Gaps
-current_phase: null
-current_phase_name: null
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -31,10 +26,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: Milestone behavioral-gaps complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-09 -- Quick batch 261109-cpi fixed the six reviewed dubious choices
+Status: Defining requirements
+Last activity: 2026-11-11 — Milestone parity-gaps started
 
 
 ### mcp-4 closeout
