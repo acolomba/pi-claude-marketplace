@@ -168,16 +168,58 @@ The P2 rows of the PRD's section 6.3. None is scheduled. Promote one when a plug
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-| Requirement | Phase | Status |
-| ----------- | ----- | ------ |
+| Requirement  | Phase    | Status  |
+| ------------ | -------- | ------- |
+| PG-HOOK-01   | Phase 2  | Pending |
+| PG-HOOK-03   | Phase 2  | Pending |
+| PG-HOOK-13   | Phase 2  | Pending |
+| PG-HOOK-07a  | Phase 3  | Pending |
+| PG-HOOK-02   | Phase 5  | Pending |
+| PG-HOOK-04   | Phase 6  | Pending |
+| PG-HOOK-06   | Phase 6  | Pending |
+| PG-HOOK-23   | Phase 5  | Pending |
+| PG-HOOK-14   | Phase 5  | Pending |
+| PG-HOOK-21   | Phase 5  | Pending |
+| PG-HOOK-11   | Phase 6  | Pending |
+| PG-AGENT-01  | Phase 3  | Pending |
+| PG-AGENT-02  | Phase 1  | Pending |
+| PG-AGENT-07b | Phase 1  | Pending |
+| PG-AGENT-07a | Phase 7  | Pending |
+| PG-AGENT-05  | Phase 7  | Pending |
+| PG-AGENT-03  | Phase 7  | Pending |
+| PG-AGENT-09  | Phase 7  | Pending |
+| PG-WF-01     | Phase 4  | Pending |
+| PG-WF-02     | Phase 8  | Pending |
+| PG-WF-04     | Phase 8  | Pending |
+| PG-WF-05     | Phase 8  | Pending |
+| PG-WF-07     | Phase 8  | Pending |
+| PG-MCP-01    | Phase 1  | Pending |
+| PG-MCP-02    | Phase 1  | Pending |
+| PG-MCP-06    | Phase 9  | Pending |
+| PG-MCP-08    | Phase 9  | Pending |
+| PG-MCP-09    | Phase 9  | Pending |
+| PG-CORE-01   | Phase 4  | Pending |
+| PG-CORE-03   | Phase 10 | Pending |
+| PG-CORE-05   | Phase 10 | Pending |
+| PG-CORE-06   | Phase 10 | Pending |
+| PG-CORE-07   | Phase 10 | Pending |
+| PG-SKILL-04  | Phase 4  | Pending |
+| PG-SKILL-01  | Phase 11 | Pending |
+| PG-CMD-09    | Phase 11 | Pending |
+| PG-SKILL-11  | Phase 11 | Pending |
+| PG-SEC-01    | Phase 4  | Pending |
+| PG-SEC-02    | Phase 10 | Pending |
+| PG-SEC-03    | Phase 9  | Pending |
+| PG-DOC-01    | Phase 11 | Pending |
+| PG-DOC-02    | Phase 11 | Pending |
 
 **Coverage:**
 
 - v1 requirements: 42 total
-- Mapped to phases: 0
-- Unmapped: 42
+- Mapped to phases: 42
+- Unmapped: 0
 
 ______________________________________________________________________
 
 *Requirements defined: 2026-11-11*
-*Last updated: 2026-11-11 after initial definition*
+*Last updated: 2026-11-11 after roadmap creation (traceability filled)*

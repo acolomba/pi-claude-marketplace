@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-11-11T15:36:47.558Z"
 last_activity: 2026-11-11
 progress:
-  total_phases: 0
+  total_phases: 11
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -22,14 +22,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-08 when the behavioral-gaps milesto
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone; behavioral-gaps awaits the user's review of its dubious choices and a PR
+**Current focus:** parity-gaps Phase 1, Companion Floors and MCP Defaults (ready to plan); behavioral-gaps awaits the user's review of its dubious choices and a PR
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-11-11 — Milestone parity-gaps started
+Phase: 1 of 11 (Companion Floors and MCP Defaults)
+Plan: --
+Status: Ready to plan
+Last activity: 2026-11-11 -- Roadmap created for parity-gaps (11 phases, 42 requirements)
+
+Progress: [░░░░░░░░░░] 0%
 
 
 ### mcp-4 closeout
