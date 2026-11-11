@@ -24,22 +24,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 <details>
 <summary>✅ behavioral-gaps — Behavioral Coverage Gaps — SHIPPED 2026-11-08</summary>
 
-- [x] Phase 1: Foundation (8/8 plans) — completed 2026-11-08
-- [x] Phase 2: Async Hooks (3/3 plans) — completed 2026-11-08
-- [x] Phase 3: StopFailure Hooks (3/3 plans) — completed 2026-11-08
-- [x] Phase 4: PostToolUseFailure Hooks (3/3 plans) — completed 2026-11-08
-- [x] Phase 5: PostCompact Hooks (2/2 plans) — completed 2026-11-08
-- [x] Phase 6: SessionEnd Hooks (3/3 plans) — completed 2026-11-08
-- [x] Phase 7: State Schema Migration (1/1 plans) — completed 2026-11-08
-- [x] Phase 8: First-Run Config Migration (2/2 plans) — completed 2026-11-08
-- [x] Phase 9: Legacy MCP Entry Move (1/1 plans) — completed 2026-11-08
-- [x] Phase 10: Model-Facing Tools (2/2 plans) — completed 2026-11-08
-- [x] Phase 11: Device Flow Sign-In (2/2 plans) — completed 2026-11-08
-- [x] Phase 12: Browse Picker (2/2 plans) — completed 2026-11-08
-- [x] Phase 13: Prune (1/1 plans) — completed 2026-11-08
-- [x] Phase 14: Bootstrap (1/1 plans) — completed 2026-11-08
-- [x] Phase 15: Marketplace State Lock (1/1 plans) — completed 2026-11-08
-- [x] Phase 16: Background-Child Load (1/1 plans) — completed 2026-11-08
+16 phases, 36 plans. The phase list is in the [archive](milestones/behavioral-gaps-ROADMAP.md).
 
 **Outcome:** 34/34 requirements, 16/16 phases, 11/11 integration checks, and 16/16 phase flows pass; 1779 adapter-profile and 153 builtin-profile cucumber scenarios. The audit reads `tech_debt` with no blockers. Phases 1, 4, and 6 closed with a stale-verification override: later merges changed files they verified, and the combined tree passes `npm run check`. The adapter-profile order flakes were fixed by `d04a5106`.
 
