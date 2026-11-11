@@ -20,3 +20,5 @@ Limits:
 - No Pi session, no Claude Code session, and no `npm` script was run. Statements about run-time behavior come from source and documentation.
 - The reports are a snapshot. Line numbers in them are for the versions above.
 - The reports are kept as the agents wrote them, except that machine-local paths were replaced with package names. Where a report and the PRD disagree, the PRD is right.
+
+The folder [`review/`](review/) holds the five reports of the document review that the PRD went through on 2026-11-11. The PRD from version 1.1 on applies their findings; start with `review/consolidated_review_report.md`.
