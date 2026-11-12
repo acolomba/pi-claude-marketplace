@@ -13,8 +13,8 @@
 // pi-subagents' anchored `^([\w-]+):` key regex over indented content).
 //
 // pi-subagents is an optional peer. The test imports its compiled
-// `src/agents/frontmatter.js` in place from the declared floor in the optional
-// peer cache, through pi-subagents-peer.ts. A missing or wrong-version package
+// `src/agents/frontmatter.js` in place from the version the suites run in the optional
+// peer cache, through pi-subagents-peer.ts (D-PG1-02). A missing or wrong-version package
 // fails the test, and so does a module that is missing or fails to import. A
 // run reports the proven version as a diagnostic.
 
