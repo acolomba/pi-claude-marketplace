@@ -224,7 +224,36 @@ Plans:
 
   6. Hooks receive per-tool Claude-shaped result fields that Pi supplies; a Claude-shaped replacement changes the model-visible result without stale structured content. Missing fields are documented. An unsupported input rewrite leaves the original call intact and emits a notice; explicit denials still block (PG-HOOK-01, D-PG2-05..09).
 
-**Plans**: TBD
+**Plans**: 10 plans
+
+Plans:
+**Wave 1**
+- [ ] 02-01-PLAN.md — Wave 1: real file/shell input translation, reverse rewrites and safe fallback
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-02-PLAN.md — Wave 2: precise search inputs and shared success/failure payload input
+- [ ] 02-08-PLAN.md — Wave 2: exact-list and whole-regex matcher admission and execution
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 02-09-PLAN.md — Wave 3: eight Stop continuations, native-tool resets and reload isolation
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 02-03-PLAN.md — Wave 4: atomic per-pair edit preflight, denial, rewrites and target conflicts
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 02-04-PLAN.md — Wave 5: actual shared edit results and failure delivery across all hook lanes
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 02-05-PLAN.md — Wave 6: file result translation and reverse replacement with real redaction checks
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 02-06-PLAN.md — Wave 7: search/shell result translation and reverse replacement
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 02-07-PLAN.md — Wave 8: MCP alias, custom schemas and replacement invariants in both profiles
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 02-10-PLAN.md — Wave 9: precise compatibility records and final combined-tree evidence
 
 ### Phase 3: Background Subagents
 

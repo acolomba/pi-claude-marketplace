@@ -602,16 +602,16 @@ Split E/F if behavioral fixture growth exceeds 15 files. Establish shared fixtur
 
 | ID | Assumption | Section | Risk / disposition |
 |---|---|---|---|
-| A1 | Retain LS native input/result until a current authoritative Claude LS schema is found | Input/results | Historical parity may be incomplete. Do a targeted official/binary lookup in planning; explicitly document unresolved LS passthrough rather than invent a schema. |
+| A1 | Retain LS native input/result until a current authoritative Claude LS schema is found | Input/results | RESOLVED for Phase 2 planning: 02-02-01, 02-06-01/02 and 02-10-01 retain and document native-shaped passthrough. The current upstream schema remains an explicit evidence limitation; this disposition does not claim complete LS parity. |
 
 All other recommendations are implementation choices under the locked context; observed facts carry source provenance. An unavailable fact stays omitted rather than becoming an assumption.
 
 ## Open Questions
 
-1. **Current LS schema:** no authoritative current schema located. Keep the locked name mapping; targeted follow-up should either establish fields or explicitly record passthrough as an unresolved compatibility limitation. Do not assert upstream removed LS merely because a search did not find it.
-2. **Legacy MCP precedence:** inspected selector prefers modern output while a legacy generator yields both; the recommended modern-first selection is source-grounded but not an isolated runtime probe. Pin expected behavior in tests and note this evidence conflict in the implementation record.
-3. **Ambiguous display-derived facts:** read/search text can contain strings identical to display notices. Prefer conservative omission of counts/original metadata. If a stronger reconstruction is proposed, require a counterexample test before claiming exactness.
-4. **PowerShell integration execution:** executable unavailable locally. Pure codec tests are available; do not report a real PowerShell execution that was not run.
+1. **Current LS schema — RESOLVED for planning:** no authoritative current schema was located. 02-02-01 and 02-06-01/02 keep the locked name mapping and native input/result passthrough; 02-10-01 and COVERAGE.md disclose the remaining schema uncertainty. The chosen implementation is settled, while full LS schema parity remains unverified. Do not infer that upstream removed LS.
+2. **Legacy MCP precedence — RESOLVED for planning:** 02-07-01 uses modern-field presence, including null/false/zero/empty values, before the MCP-only legacy alias; 02-07-02/03 test the result through both supported implementations. 02-10-01 records that the inspected selector supports this choice while a legacy generator/falsy path differs. This pins the selected contract without claiming an isolated upstream runtime probe or uniform historical behavior.
+3. **Ambiguous display-derived facts — RESOLVED for planning:** 02-05-01 and 02-06-01/03 preserve ambiguous actual display text and omit counts, paths or original metadata that cannot be established from supplied facts. Exact trailer removal/count derivation requires unambiguous evidence and counterexample tests. No post-execution reread substitutes for original observations; 02-10-01 documents the omissions.
+4. **PowerShell integration execution — RESOLVED for planning:** 02-01-02/03 and 02-06-01..03 exercise the verified PowerShell codec contract using pure fixtures. The local executable is absent, so 02-10-01 and execution summaries must state that no live PowerShell run was performed. This evidence limit does not defer input or available-field output translation.
 
 No question reopens the user's accepted batch policy, result-translation scope, unsupported fallback, regex support, or Stop cap.
 
