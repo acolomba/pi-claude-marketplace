@@ -50,7 +50,8 @@ export interface McpToolIdentity {
   readonly claudeName?: string;
 }
 
-function hasAdapterCutShape(name: string): boolean {
+/** D-PG1-08: the cut shape pi-mcp-adapter 7.0.1 tests in its resolver. */
+export function looksLikeCutAdapterToolName(name: string): boolean {
   return (
     name.length === PI_NAME_LIMIT &&
     name.startsWith(MCP_TOOL_PREFIX) &&
@@ -67,7 +68,7 @@ export function recoverAdapterToolName(
   tool: McpToolIdentity,
   candidates: () => readonly string[],
 ): McpToolIdentity {
-  if (tool.builtinServer !== undefined || !hasAdapterCutShape(tool.piName)) {
+  if (tool.builtinServer !== undefined || !looksLikeCutAdapterToolName(tool.piName)) {
     return tool;
   }
 
@@ -143,7 +144,7 @@ export function serverPrefixNames(prefix: string, tool: McpToolIdentity): boolea
   }
 
   return (
-    (!hasAdapterCutShape(tool.piName) || prefix.length <= PI_KEPT_NAME_LENGTH) &&
+    (!looksLikeCutAdapterToolName(tool.piName) || prefix.length <= PI_KEPT_NAME_LENGTH) &&
     tool.piName.startsWith(prefix)
   );
 }

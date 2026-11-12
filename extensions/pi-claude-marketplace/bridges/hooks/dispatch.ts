@@ -55,6 +55,7 @@
 import { closedSetMatcherValues } from "../../domain/components/hook-events.ts";
 import {
   claudeFormToolName,
+  looksLikeCutAdapterToolName,
   MCP_TOOL_PREFIX,
   recoverAdapterToolName,
   serverPrefixNames,
@@ -699,9 +700,19 @@ const MCP_PROXY_TOOL = "mcp";
  * MHK-02, D-P5-06: the shape counts only while the adapter is the active MCP
  * implementation (`HookToolView.proxyRuleApplies`). Pi's built-in MCP has no
  * proxy, and a tool name it cut inside the namespace has the same shape.
+ * D-PG1-08: an adapter cut is a direct tool even when its input names a `tool`;
+ * the adapter's proxy is `mcp`, and this extension registers direct tools.
+ * Namespace proxies serve proxy-only servers; a long namespace has `_mcpns_`
+ * and a 16-digit hash, so it cannot have the cut shape. A third-party proxy
+ * namespace could coincide with a 64-character cut shape by chance; its outer
+ * call would then run hooks alongside its nested call.
  */
 function isMcpProxyCall(event: { readonly toolName: string; readonly input: object }): boolean {
   const { toolName } = event;
+  if (looksLikeCutAdapterToolName(toolName)) {
+    return false;
+  }
+
   const proxy =
     toolName === MCP_PROXY_TOOL ||
     (toolName.startsWith(MCP_TOOL_PREFIX) &&

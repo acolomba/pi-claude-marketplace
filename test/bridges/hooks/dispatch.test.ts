@@ -3507,6 +3507,14 @@ describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
       runs: true,
       reads: ["identify mcp__plugin_demo_stub__echo"],
     },
+    {
+      name: "a shortened adapter tool whose input names a tool (D-PG1-08)",
+      toolName: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      input: { text: "ping", tool: "echo" },
+      applies: true,
+      runs: true,
+      reads: ["identify mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3"],
+    },
   ];
 
   for (const row of PROXY_ROWS) {
@@ -3543,8 +3551,8 @@ describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
       // assert
       assert.strictEqual(output, undefined);
       assert.deepStrictEqual(
-        calls.map(({ pluginId }) => pluginId),
-        runs ? ["any"] : [],
+        calls,
+        runs ? [{ pluginId: "any", event: createToolCallEvent(toolName, { ...input }) }] : [],
       );
       assert.deepStrictEqual(reads, expectedReads);
     });
@@ -3580,8 +3588,15 @@ describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
       // assert
       assert.strictEqual(output, undefined);
       assert.deepStrictEqual(
-        calls.map(({ pluginId }) => pluginId),
-        runs ? ["after"] : [],
+        calls,
+        runs
+          ? [
+              {
+                pluginId: "after",
+                event: { ...createToolResultEvent(false, toolName), input: { ...input } },
+              },
+            ]
+          : [],
       );
       assert.deepStrictEqual(reads, expectedReads);
     });
