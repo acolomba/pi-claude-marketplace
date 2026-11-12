@@ -147,7 +147,7 @@ describe("partitionHooks", () => {
     });
   });
 
-  test("drops a matcher from an event without matcher support", () => {
+  test("ignores a matcher on an event without matcher support", () => {
     // arrange
     const config = {
       UserPromptSubmit: [{ matcher: "prompt", hooks: [{ type: "command", command: "prompt" }] }],
@@ -158,16 +158,32 @@ describe("partitionHooks", () => {
 
     // assert
     assert.deepStrictEqual(partition, {
-      supported: {},
-      dropped: [
-        {
-          kind: "group",
-          event: "UserPromptSubmit",
-          matcher: "prompt",
-          cond: "no-matcher-support",
-        },
-      ],
+      supported: {
+        UserPromptSubmit: [{ matcher: "prompt", hooks: [{ type: "command", command: "prompt" }] }],
+      },
+      dropped: [],
     });
+  });
+
+  test("keeps invalid, empty, and absent matchers on prompt and Stop groups", () => {
+    // arrange
+    const config = {
+      UserPromptSubmit: [
+        { matcher: "[", hooks: [{ type: "command", command: "invalid" }] },
+        { matcher: "", hooks: [{ type: "command", command: "empty" }] },
+        { hooks: [{ type: "command", command: "absent" }] },
+      ],
+      Stop: [
+        { matcher: "[", hooks: [{ type: "command", command: "invalid" }] },
+        { matcher: "", hooks: [{ type: "command", command: "empty" }] },
+      ],
+    };
+
+    // act
+    const partition = partitionHooks(config);
+
+    // assert
+    assert.deepStrictEqual(partition, { supported: config, dropped: [] });
   });
 
   test("keeps absent and star matchers on events without matcher support", () => {

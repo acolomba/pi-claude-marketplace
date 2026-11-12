@@ -50,7 +50,7 @@ function nonToolMatcherCondition(
   rawMatcher: string,
 ): MatcherCondition | null {
   if (NON_TOOL_EVENT_FIELDS[event] === null) {
-    return "no-matcher-support";
+    return null;
   }
 
   // D-BG-302, CLOSEDLIST-01: a list is kept when one listed value is in the set.
