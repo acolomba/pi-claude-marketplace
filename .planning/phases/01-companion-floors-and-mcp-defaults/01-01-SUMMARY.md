@@ -10,7 +10,7 @@ provides:
   - Passing conformance and behavioral suites on pi-subagents 0.88.0 and pi-mcp-adapter 7.0.1
 affects: [companion compatibility docs, later parity-gaps plans]
 actuals:
-  tokens: 13650
+  tokens: 258630
   tasks: 3
   commits: 3
 plan_head_before: b6f418f1dd93471d4906533eda9c4e6c5dfd3ce8
@@ -201,6 +201,18 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 ## Self-Check: PASSED
 
 All three task commits exist on this branch, the suite-version file exists, both foreground scenarios pass under their own profiles, and the required full check exited 0.
+
+## Post-merge gate
+
+The orchestrator ran `npm run check` on the combined tree at
+`60b187de30c14e0008259e9a0835ab7a0bdebdf2`, with Node v26.13.0. It exited 0:
+all static checks, unpaired tests, integration tests, 1,799 adapter scenarios,
+153 built-in scenarios, and 354 direct coverage records passed. Only planning
+Markdown differed from that commit during the gate; no untracked build inputs
+were present. The schema-drift gate passed. The codebase-map drift gate reported
+an advisory about older map references, with no automatic remap requested.
+
+The executor CLI reported 258,630 tokens; `actuals.tokens` records that total.
 
 ## Next Phase Readiness
 

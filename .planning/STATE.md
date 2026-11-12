@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 01
 current_phase_name: Companion Floors and MCP Defaults
 status: executing
-stopped_at: Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
-last_updated: "2026-11-12T01:28:41.944Z"
+stopped_at: parity-gaps Phase 01 wave 1 merged and verified; wave 2 ready to execute
+last_updated: "2026-11-12T02:51:53.334Z"
 last_activity: 2026-11-11
-last_activity_desc: Roadmap created for parity-gaps (11 phases, 42 requirements)
-state_head: 466f5708a2e046a80a5fea64153631c6f31880d1
+last_activity_desc: Phase 01 wave 1 merged; combined-tree npm run check passed
+state_head: 60b187de30c14e0008259e9a0835ab7a0bdebdf2
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 11
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-11-08 when the behavioral-gaps milesto
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** parity-gaps Phase 1, Companion Floors and MCP Defaults (ready to plan); behavioral-gaps awaits the user's review of its dubious choices and a PR
+**Current focus:** Phase 01 — Companion Floors and MCP Defaults
 
 ## Current Position
 
-Phase: 01 (Companion Floors and MCP Defaults) — READY TO EXECUTE
-Plan: --
-Status: Ready to execute
-Last activity: 2026-11-11 -- Roadmap created for parity-gaps (11 phases, 42 requirements)
+Phase: 01 (Companion Floors and MCP Defaults) — EXECUTING
+Plan: 2 of 11
+Status: Executing Phase 01
+Last activity: 2026-11-11 — Phase 01 wave 1 merged; combined-tree npm run check passed
 
 Progress: [░░░░░░░░░░] 0%
 

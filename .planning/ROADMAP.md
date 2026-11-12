@@ -182,11 +182,11 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
   3. Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works wherever the project names it: the server listing shows it, a hook whose matcher is the full Claude Code name runs and receives that name, and an agent whose `disallowedTools` names the tool is not offered it (PG-MCP-02).
   4. Under both profiles, the registered configuration of a stdio plugin server with no declared `timeout` shows 30 minutes, and that of a remote server shows 5 minutes. Under the adapter, a timeout the user wrote on the entry is still there after an update (PG-MCP-01).
 
-**Plans**: 11 plans
+**Plans**: 1/11 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 01-01-PLAN.md -- Wave 1: raise the floors to pi-subagents 0.87.0 and pi-mcp-adapter 7.0.1, run the suites on pi-subagents 0.88.0, write bare mapped model IDs, and re-pin what the new versions change
+- [x] 01-01-PLAN.md -- Wave 1: raise the floors to pi-subagents 0.87.0 and pi-mcp-adapter 7.0.1, run the suites on pi-subagents 0.88.0, write bare mapped model IDs, and re-pin what the new versions change
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md -- Wave 2: pin the developer launcher, the live canary, and the contributor records to the versions the suites run
@@ -375,7 +375,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Companion Floors and MCP Defaults | 0/0 | Not started | - |
+| 1. Companion Floors and MCP Defaults | 1/11 | In Progress | - |
 | 2. Hook Payloads, Matchers, and Stop Limit | 0/0 | Not started | - |
 | 3. Background Subagents | 0/0 | Not started | - |
 | 4. Skill and Workflow Install Defects | 0/0 | Not started | - |
