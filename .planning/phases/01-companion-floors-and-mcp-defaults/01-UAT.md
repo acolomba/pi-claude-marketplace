@@ -3,7 +3,7 @@ status: partial
 phase: 01-companion-floors-and-mcp-defaults
 source: [01-VERIFICATION.md]
 started: 2026-11-12T07:36:00Z
-updated: 2026-11-12T12:10:19.609Z
+updated: 2026-11-12T13:57:20Z
 ---
 
 ## Current Test
@@ -69,6 +69,32 @@ both blocked controls completed while their requested tool call failed.
 No product code changed. These are recorded one-off automation runs, not new
 permanent cucumber scenarios. All test processes were stopped. No phase-completion
 waiver or acceptance of the remaining blocker was inferred.
+
+## Local Companion Fix — All Controls Passed
+
+The user authorized a companion regression, fix, and automated reruns. Local
+pi-subagents commit `1e79b864159430cc124783a7d7c9e4e5daa2a7bf`, based on upstream
+`7e2794efba0b727af51d08c36614ea939f1a827b`, restores adapter configuration for
+children without a tool allowlist or capability ceiling. Explicit restrictions
+remain enforced. The regression failed before the fix and after reverting it,
+and passed after reapplying it.
+
+All three actual detached children passed with the local build: the short-grant
+child called short; the unrestricted child offered and called long; the restricted
+child omitted long in every provider request and offered and called short.
+A fresh-fixture replay of the saved runner also passed. The runnable fixture,
+patch, provenance, and retained logs are in
+`../../debug/artifacts/real-child-mcp-automation/README.md`.
+
+Companion typecheck, package build, 25 owner tests, and three focused MCP
+integration cases passed. The full unit suite had three failures, all reproduced
+with the patch reverted. The full adjacent integration module timed out; the
+focused MCP cases passed separately. See the artifact for exact commands.
+
+These results validate the local fix. This project's pinned 0.88.0 dependency
+has not changed, and the fix has not been pushed or published. Test 2 remains
+blocked for that dependency until the fix is adopted and the same runner passes
+against the adopted build. No manual rerun is requested.
 
 ## Original Manual Setup (Superseded by Automation)
 

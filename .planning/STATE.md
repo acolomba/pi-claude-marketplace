@@ -5,11 +5,11 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 01
 current_phase_name: Companion Floors and MCP Defaults
 status: executing
-stopped_at: parity-gaps Phase 01 automation complete; granted call passed, long-tool exclusion blocked by companions
-last_updated: "2026-11-12T12:07:09Z"
+stopped_at: parity-gaps Phase 01 local companion fix verified; pinned dependency adoption pending
+last_updated: "2026-11-12T13:57:20Z"
 last_activity: 2026-11-12
-last_activity_desc: Automated real-child checks recorded; no manual rerun requested
-state_head: 3781048a
+last_activity_desc: Companion regression and fix committed locally; all real-child controls passed
+state_head: 9c3a5d22
 progress:
   total_phases: 11
   completed_phases: 0
@@ -33,8 +33,8 @@ component as a working Pi artifact.
 
 Phase: 01 (Companion Floors and MCP Defaults) — EXECUTING
 Plan: 11 of 11
-Status: Companion blocker — long-tool exclusion lacks a working unrestricted control
-Last activity: 2026-11-12 — Real detached granted call passed automatically; exclusion control blocked by MCP_DIRECT_TOOLS=__none__
+Status: Local companion fix verified — adoption into the pinned dependency remains pending
+Last activity: 2026-11-12 — Companion fix 1e79b864 passed the regression and all real-child controls; runnable patch and evidence saved under .planning/debug/artifacts/real-child-mcp-automation/
 
 Progress: [░░░░░░░░░░] 0%
 
