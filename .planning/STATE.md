@@ -6,10 +6,10 @@ current_phase: 01
 current_phase_name: Companion Floors and MCP Defaults
 status: executing
 stopped_at: parity-gaps Phase 01 local companion fix verified; pinned dependency adoption pending
-last_updated: "2026-11-12T13:57:20Z"
+last_updated: "2026-11-12T19:42:35.564Z"
 last_activity: 2026-11-12
-last_activity_desc: Companion regression and fix committed locally; all real-child controls passed
-state_head: 9c3a5d22
+last_activity_desc: Added installed-companion characterization tests; upstream PR 3259 review addressed and CI passed
+state_head: 92bace26f6438a09f01c92148673695d7d7fb655
 progress:
   total_phases: 11
   completed_phases: 0
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: 01 (Companion Floors and MCP Defaults) — EXECUTING
 Plan: 11 of 11
 Status: Local companion fix verified — adoption into the pinned dependency remains pending
-Last activity: 2026-11-12 — Companion fix 1e79b864 passed the regression and all real-child controls; runnable patch and evidence saved under .planning/debug/artifacts/real-child-mcp-automation/
+Last activity: 2026-11-12 — Quick task 261112-jzs added installed-companion characterization tests. Upstream PR #3259 is open, its review is addressed, and CI passed. Dependency adoption remains pending.
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -220,6 +220,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261109-jm6 | Move the init scripts to scripts/init and state each one's purpose | 2026-11-09 | 4e964d6 | — | [261109-jm6-move-the-init-scripts-to-scripts-init-an](./quick/261109-jm6-move-the-init-scripts-to-scripts-init-an/) |
 | 34 | Run one cucumber worker per available CPU, at most 8 (CI timeouts on PR #310) | 2026-11-09 | 6be7cb0c | — | — |
 | 35 | Wait for the background save of a migrated state.json in the state-migration step (CI run 42842685676 flake) | 2026-11-10 | ecc72b9d | — | — |
+| 261112-jzs | Add installed-companion MCP gap tests and upstream PR 3259 | 2026-11-12 | 92bace26 | — | [261112-jzs-add-installed-companion-characterization](./quick/261112-jzs-add-installed-companion-characterization/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 

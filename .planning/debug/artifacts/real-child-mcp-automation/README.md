@@ -13,7 +13,27 @@ This artifact records the locally patched `pi-subagents` companion result. It do
 - `run.mjs` SHA-256: `2ce89d7a3d8ff5400001ea12e2ca5c68a9872fa9acf496c9bee1768c72b2822c`
 - Node: `v26.13.0`; adapter: installed `pi-mcp-adapter` 7.0.1
 
-The patch changes one child environment branch and adds one regression test. No branch was pushed or package published.
+The patch changes one child environment branch and adds one regression test. The branch was pushed for [upstream PR #3259](https://github.com/nicobailon/pi-subagents/pull/3259). No package was published.
+
+## Installed companion check in CI
+
+The integration suite runs `test/integration/pi-subagents-child-launch-conformance.test.ts` against the installed companion. Run it alone from this repository's root:
+
+```sh
+node --import ./test/platform/isolated-pi-home.ts --test test/integration/pi-subagents-child-launch-conformance.test.ts
+```
+
+Installed 0.88.0 passes all six cases. Its two known-gap cases assert that an unrestricted or exclusion-only child writes `MCP_DIRECT_TOOLS=__none__`. The actual compiled fix from PR #3259 makes those two cases fail because the environment value becomes `undefined`. All four explicit grant and restriction controls still pass. Restoring the installed module byte for byte returns the focused suite to green.
+
+If an upgrade makes either known-gap case fail, first run the positive detached-child check against the installed upgraded companion:
+
+```sh
+node .planning/debug/artifacts/real-child-mcp-automation/run.mjs
+```
+
+To test a candidate build before adoption, set `PG_COMPANION_INDEX` to that build's `index.js`. Do not use an older local fixed build to accept a different upgraded version.
+
+Make sure that all three children complete and call the expected tools before changing the known-gap assertions to the corrected expectation. A passing known-gap case on installed 0.88.0 does not prove selective exclusion and does not close PG-MCP-02.
 
 ## Reproduce with a fresh companion checkout
 
