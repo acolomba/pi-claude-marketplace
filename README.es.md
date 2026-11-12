@@ -375,7 +375,7 @@ Actualiza un complemento instalado, todos los complementos instalados de un merc
 ```
 
 > [!NOTE]
-> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`. Mapea `sonnet`, `opus`, `haiku`, `fable`, `best` y `opusplan`, con o sin `[1m]`, a los modelos actuales de Claude, por ejemplo `anthropic/claude-sonnet-5-5`. Conserva los ID de modelo completos que empiezan por `claude-`.
+> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`. Mapea `sonnet`, `opus`, `haiku`, `fable`, `best` y `opusplan`, con o sin `[1m]`, a los modelos actuales de Claude, por ejemplo `claude-sonnet-5-5`. Conserva los ID de modelo completos que empiezan por `claude-`.
 
 Reinstala un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 
