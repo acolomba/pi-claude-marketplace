@@ -468,6 +468,35 @@ Feature: Hook tool use
       | 2    | assistant   | tool call bash {"command":"echo from-model"} |
       | 2    | tool result | bash failed: please confirm                  |
 
+  Scenario: A Read hook receives and rewrites a Claude file input
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event      | matcher | form   | output                                                                                                                        |
+      | rewrite | PreToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"file_path":"replacement.txt","offset":2,"limit":1}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "original.txt" with the text "original" for a tool hook
+    Given the project holds the file "replacement.txt" with the text "first\nsecond" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                |
+      |       | read | {"path":"original.txt","offset":1} |
+      | Done. |      |                                          |
+    When the user prompts "read the original file"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                                                | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Read      | {"file_path":"{project dir}/original.txt","offset":1} | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                                        |
+      | 1    | user        | read the original file                                      |
+      | 2    | user        | read the original file                                      |
+      | 2    | assistant   | tool call read {"path":"original.txt","offset":1}           |
+      | 2    | tool result | read returned: second                                       |
+
   Scenario: A PreToolUse hook's updatedInput replaces the tool's whole input
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

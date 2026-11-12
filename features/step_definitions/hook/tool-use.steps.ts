@@ -49,6 +49,17 @@ const MCP_FILE = ".mcp.json";
 // trust check.
 const PI_MCP_FILE = "mcp.json";
 
+Given(
+  "the project holds the file {string} with the text {string} for a tool hook",
+  async function (this: ScenarioWorld, name: string, text: string) {
+    await writeScenarioFile(
+      this,
+      path.join(this.tokens.projectDir, name),
+      text.replaceAll("\\n", "\n"),
+    );
+  },
+);
+
 // Pi's `mcp.json` with the one server `server`, which runs the hooks' stub MCP
 // tool server with this process's Node and offers the tool `tool`.
 function piMcpText(server: string, tool: string): string {

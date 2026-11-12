@@ -385,11 +385,11 @@ describe("compositeHandlerFor", () => {
     } satisfies ToolCallEvent;
     const firstMutation = {
       kind: "mutate",
-      updatedInput: { firstMutation: "visible", shared: "first" },
+      updatedInput: { command: "first" },
     } satisfies HookExecResult;
     const secondMutation = {
       kind: "mutate",
-      updatedInput: { secondMutation: "composed", shared: "second" },
+      updatedInput: { command: "second" },
     } satisfies HookExecResult;
     const executorCalls: ExecutorCall[] = [];
     const executorEntries: RoutingEntry[] = [];
@@ -447,7 +447,7 @@ describe("compositeHandlerFor", () => {
         pi: undefined,
         returned: {
           kind: "mutate",
-          updatedInput: { firstMutation: "visible", shared: "first" },
+          updatedInput: { command: "first" },
         },
       },
       {
@@ -479,7 +479,7 @@ describe("compositeHandlerFor", () => {
         pi: undefined,
         returned: {
           kind: "mutate",
-          updatedInput: { secondMutation: "composed", shared: "second" },
+          updatedInput: { command: "second" },
         },
       },
     ];
@@ -487,7 +487,7 @@ describe("compositeHandlerFor", () => {
       type: "tool_call",
       toolCallId: "dispatch-call",
       toolName: "bash",
-      input: { secondMutation: "composed", shared: "second" },
+      input: { command: "second" },
     } satisfies ToolCallEvent;
     const expectedAdaptedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
 
@@ -955,8 +955,8 @@ describe("composite dispatch reduction", () => {
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       {
-        "mutation-a": { kind: "mutate", updatedInput: { first: 1, shared: "first" } },
-        "mutation-b": { kind: "mutate", updatedInput: { second: 2, shared: "second" } },
+        "mutation-a": { kind: "mutate", updatedInput: { command: "first" } },
+        "mutation-b": { kind: "mutate", updatedInput: { command: "second" } },
       },
       executorCalls,
     );
@@ -968,7 +968,7 @@ describe("composite dispatch reduction", () => {
       undefined,
       executor,
     );
-    const expectedEvent = createToolCallEvent("bash", { second: 2, shared: "second" });
+    const expectedEvent = createToolCallEvent("bash", { command: "second" });
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
     const expectedCalls: RecordedCall[] = [
       {
@@ -3853,6 +3853,49 @@ function promptEntries(pluginIds: readonly string[]): RoutingEntry[] {
 const PROMPT_EVENT = { type: "input", text: "hello", source: "interactive" } as InputEvent;
 
 describe("hook notices (HOOK-05 / D-CF5-14)", () => {
+  test("reports an unsupported Read rewrite without revealing its fields or values", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "rewrite",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Read",
+        declarationIndex: 0,
+      }),
+    ]);
+    const host = createNoticeHost("/workspace/notices");
+    const event = createToolCallEvent("read", { path: "original.txt", offset: 1 });
+    const executor = createRecordingExecutor(
+      {
+        rewrite: {
+          kind: "mutate",
+          updatedInput: { file_path: "replacement.txt", pages: "secret-value" },
+        },
+      },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      host.pi,
+      executor,
+    );
+
+    // act
+    const output = await handler(event, host.context);
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event, createToolCallEvent("read", { path: "original.txt", offset: 1 }));
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("PreToolUse:Read ignored input rewrite (field)"),
+    ]);
+    host.capture.assertValid();
+  });
+
   test("shows each prompt hook's non-empty system message in routing order whatever order the hooks finish in", async () => {
     // arrange
     const runtime = createHooksRuntime();

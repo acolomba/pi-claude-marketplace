@@ -11,7 +11,10 @@
 // payload `event.input` is propagated verbatim into Claude's
 // `tool_input` field (claude-hook-config-syntax.md § 3).
 
+import { homedir } from "node:os";
+
 import { mapPiToClaudeToolName } from "../../../domain/components/hook-tool-names.ts";
+import { toHookToolInput } from "../tool-input.ts";
 
 import type { ToolCallEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
@@ -35,6 +38,6 @@ export function translatePreToolUse(
     cwd: ctx.cwd,
     hook_event_name: "PreToolUse",
     tool_name: mapPiToClaudeToolName(event.toolName),
-    tool_input: event.input,
+    tool_input: toHookToolInput(event.toolName, event.input, ctx.cwd, homedir()),
   };
 }

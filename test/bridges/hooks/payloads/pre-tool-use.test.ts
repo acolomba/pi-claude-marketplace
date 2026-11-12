@@ -33,7 +33,7 @@ test("maps a built-in tool to the complete PreToolUse envelope", () => {
     tool_name: "Bash",
     tool_input: {
       command: "printf 'ready\\n'",
-      timeout: 15,
+      timeout: 15000,
     },
   };
 
@@ -42,7 +42,7 @@ test("maps a built-in tool to the complete PreToolUse envelope", () => {
 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
-  assert.strictEqual(payload.tool_input, toolInput);
+  assert.deepStrictEqual(toolInput, { command: "printf 'ready\\n'", timeout: 15 });
 });
 
 test("preserves a custom tool name and input without mutation", () => {

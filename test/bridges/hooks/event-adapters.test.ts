@@ -13,6 +13,7 @@ import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 
 import type {
   FollowUpTurnEnd,
@@ -100,6 +101,49 @@ function createMessagePi(sent: SentMessage[], failure?: Error): ExtensionAPI {
 }
 
 describe("adaptToolCallResult", () => {
+  test("shows one sanitized notice when a Read rewrite asks for an unavailable field", async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const input = { path: "original.txt", offset: 1 };
+    const event = {
+      type: "tool_call",
+      toolCallId: "call-read",
+      toolName: "read",
+      input,
+    } satisfies ToolCallEvent;
+    const context: HookAdapterContext = {
+      ...adapterContext(guardEntry()),
+      ctx: { mode: "json", cwd: "/workspace" } as ExtensionContext,
+      pi: { appendEntry: capture.entrySink.appendEntry } as ExtensionAPI,
+    };
+
+    // act
+    const adaptation = await adaptToolCallResult(
+      { kind: "mutate", updatedInput: { file_path: "replacement.txt", pages: "secret" } },
+      event,
+      context,
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.strictEqual(event.input, input);
+    assert.deepStrictEqual(input, { path: "original.txt", offset: 1 });
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "hook" },
+          kind: "hook-notice",
+          severity: "info",
+          needsReload: false,
+          text: "PreToolUse:Read ignored input rewrite (field)",
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+
   function bashCall(input: Record<string, unknown>): ToolCallEvent {
     return { type: "tool_call", toolCallId: "call-bash", toolName: "bash", input };
   }
@@ -212,7 +256,7 @@ describe("adaptToolCallResult", () => {
     assert.deepStrictEqual(hookOutcome.updatedInput, { command: "echo rewritten" });
   });
 
-  test("drops a __proto__ key from the rewrite without polluting the input's prototype", async () => {
+  test("rejects a __proto__ rewrite without polluting the input's prototype", async () => {
     // arrange
     const input = { command: "inspect", keep: "original" };
     const event = bashCall(input);
@@ -229,7 +273,7 @@ describe("adaptToolCallResult", () => {
 
     // assert
     assert.strictEqual(adaptation, undefined);
-    assert.deepStrictEqual(event, bashCall({ command: "replacement" }));
+    assert.deepStrictEqual(event, bashCall({ command: "inspect", keep: "original" }));
     assert.strictEqual(event.input, input);
     assert.strictEqual(Object.getPrototypeOf(event.input), Object.prototype);
     assert.strictEqual(Object.hasOwn(event.input, "__proto__"), false);

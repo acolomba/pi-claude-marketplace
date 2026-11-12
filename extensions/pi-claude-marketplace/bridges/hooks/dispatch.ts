@@ -1105,7 +1105,7 @@ function toolEventView<T extends ToolCallEvent | ToolResultEvent>(
   }
 
   const tool = recoverAdapterToolName(tools.identify(event.toolName), candidates, verifiedName);
-  const toolName = claudeFormToolName(tool);
+  const toolName = event.toolName.startsWith("mcp__") ? claudeFormToolName(tool) : event.toolName;
   return { event: toolName === event.toolName ? event : { ...event, toolName }, tool };
 }
 
