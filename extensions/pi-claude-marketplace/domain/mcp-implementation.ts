@@ -57,7 +57,7 @@ const KEPT_TOOL_NAME_LENGTH = MAX_TOOL_NAME_LENGTH - TOOL_NAME_HASH_LENGTH - 1;
  * hook matcher sees.
  */
 function adapterJoinedToolNamePrefix(plugin: string, server: string): string {
-  return `mcp__${generatedMcpServerKey(plugin, server)}_`;
+  return joinedAdapterToolName(generatedMcpServerKey(plugin, server), "");
 }
 
 function adapterToolNamePrefix(plugin: string, server: string): string | undefined {
@@ -76,18 +76,22 @@ export function fittedAdapterToolName(name: string): string {
 }
 
 /**
- * pi-mcp-adapter 7.0.1 `formatToolName` with `toolPrefix: "mcp"`: it turns
+ * pi-mcp-adapter 7.0.1 `joinToolName` with `toolPrefix: "mcp"`: it turns
  * each `.` in the tool name into `_`, and it does not add the prefix again to
  * a tool name that already starts with it.
  */
-function adapterToolName(plugin: string, server: string, tool: string): string {
-  const prefix = adapterJoinedToolNamePrefix(plugin, server);
+export function joinedAdapterToolName(serverKey: string, tool: string): string {
+  const prefix = `mcp__${serverKey}_`;
   const sanitized = tool.replaceAll(".", "_");
   if (sanitized.startsWith(prefix) && sanitized.length > prefix.length) {
-    return fittedAdapterToolName(sanitized);
+    return sanitized;
   }
 
-  return fittedAdapterToolName(`${prefix}${sanitized}`);
+  return `${prefix}${sanitized}`;
+}
+
+function adapterToolName(plugin: string, server: string, tool: string): string {
+  return fittedAdapterToolName(joinedAdapterToolName(generatedMcpServerKey(plugin, server), tool));
 }
 
 const ADAPTER_PROFILE: McpImplementationProfile = Object.freeze({

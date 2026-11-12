@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   claudeFormToolName,
+  looksLikeCutAdapterToolName,
   recoverAdapterToolName,
   serverPrefixNames,
   toolLiteralNames,
@@ -18,6 +19,47 @@ const EDGE_NAMESPACE = `mcp__edge_server_${"a".repeat(37)}`;
 function hookDemoTool(piName = "mcp__plugin_hook_demo_stub_server__echo"): McpToolIdentity {
   return { piName, builtinServer: "plugin_hook-demo_stub-server" };
 }
+
+describe("looksLikeCutAdapterToolName", () => {
+  for (const { title, name, cut } of [
+    {
+      title: "a 64-character name with a lowercase hash tail",
+      name: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      cut: true,
+    },
+    {
+      title: "a shorter name",
+      name: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc",
+      cut: false,
+    },
+    {
+      title: "a 64-character name without a hash tail",
+      name: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bcx",
+      cut: false,
+    },
+    {
+      title: "a 64-character name with uppercase hash digits",
+      name: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_Aa6b8bc3",
+      cut: false,
+    },
+    {
+      title: "a 64-character name without the mcp prefix",
+      name: "xxx__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      cut: false,
+    },
+  ]) {
+    test(`recognizes ${title} as cut: ${cut} (D-PG1-08)`, () => {
+      // arrange
+      const toolName = name;
+
+      // act
+      const looksCut = looksLikeCutAdapterToolName(toolName);
+
+      // assert
+      assert.strictEqual(looksCut, cut);
+    });
+  }
+});
 
 describe("toolLiteralNames", () => {
   for (const { literal, fires } of [

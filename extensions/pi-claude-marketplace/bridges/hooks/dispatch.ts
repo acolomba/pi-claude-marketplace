@@ -55,11 +55,13 @@
 import { closedSetMatcherValues } from "../../domain/components/hook-events.ts";
 import {
   claudeFormToolName,
+  looksLikeCutAdapterToolName,
   MCP_TOOL_PREFIX,
   recoverAdapterToolName,
   serverPrefixNames,
   toolLiteralNames,
 } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
+import { joinedAdapterToolName } from "../../domain/mcp-implementation.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyHookNotice } from "../../shared/notification-dispatch.ts";
@@ -698,9 +700,19 @@ const MCP_PROXY_TOOL = "mcp";
  * MHK-02, D-P5-06: the shape counts only while the adapter is the active MCP
  * implementation (`HookToolView.proxyRuleApplies`). Pi's built-in MCP has no
  * proxy, and a tool name it cut inside the namespace has the same shape.
+ * D-PG1-08: an adapter cut is a direct tool even when its input names a `tool`;
+ * the adapter's proxy is `mcp`, and this extension registers direct tools.
+ * Namespace proxies serve proxy-only servers; a long namespace has `_mcpns_`
+ * and a 16-digit hash, so it cannot have the cut shape. A third-party proxy
+ * namespace could coincide with a 64-character cut shape by chance; its outer
+ * call would then run hooks alongside its nested call.
  */
 function isMcpProxyCall(event: { readonly toolName: string; readonly input: object }): boolean {
   const { toolName } = event;
+  if (looksLikeCutAdapterToolName(toolName)) {
+    return false;
+  }
+
   const proxy =
     toolName === MCP_PROXY_TOOL ||
     (toolName.startsWith(MCP_TOOL_PREFIX) &&
@@ -902,7 +914,10 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const view = toolEventView(event, tools, () => toolEventMcpLiterals(runtime));
+    const view = toolEventView(event, tools, () => {
+      const candidate = event.isError ? undefined : adapterResultToolName(event.details);
+      return [...(candidate === undefined ? [] : [candidate]), ...toolEventMcpLiterals(runtime)];
+    });
     if (view === undefined) {
       return undefined;
     }
@@ -1045,6 +1060,26 @@ function toolEventMcpLiterals(runtime: HooksRuntime): string[] {
         ...(entry.ifPredicate.kind === "mcp-literal" ? [entry.ifPredicate.toolName] : []),
       ]),
   );
+}
+
+/**
+ * D-PG1-08: successful pi-mcp-adapter results name the server key and tool;
+ * failed results name only the server. A successful PostToolUse event can
+ * recover the full name; PostToolUseFailure needs a hook literal to do so.
+ */
+function adapterResultToolName(details: unknown): string | undefined {
+  if (
+    typeof details !== "object" ||
+    details === null ||
+    !("server" in details) ||
+    !("tool" in details) ||
+    typeof details.server !== "string" ||
+    typeof details.tool !== "string"
+  ) {
+    return undefined;
+  }
+
+  return joinedAdapterToolName(details.server, details.tool);
 }
 
 /**

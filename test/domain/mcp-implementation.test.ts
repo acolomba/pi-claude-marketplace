@@ -5,6 +5,7 @@ import { classifyBuiltinMcpServer } from "../../extensions/pi-claude-marketplace
 import {
   effectiveMcpCompatibility,
   fittedAdapterToolName,
+  joinedAdapterToolName,
   profileFor,
 } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import { classifyMcpServer } from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
@@ -40,6 +41,29 @@ describe("fittedAdapterToolName", () => {
     // assert
     assert.strictEqual(fittedName, `mcp__plugin_demo_stub__${"x".repeat(32)}_d4fc4a25`);
   });
+});
+
+describe("joinedAdapterToolName", () => {
+  for (const { tool, name } of [
+    { tool: "get.the.thing", name: "mcp__plugin_demo_stub__get_the_thing" },
+    { tool: "mcp__plugin_demo_stub__echo", name: "mcp__plugin_demo_stub__echo" },
+    { tool: "echo", name: "mcp__plugin_demo_stub__echo" },
+    {
+      tool: "mcp__plugin_demo_stub__",
+      name: "mcp__plugin_demo_stub__mcp__plugin_demo_stub__",
+    },
+  ]) {
+    test(`joins ${tool} under the adapter server key (D-PG1-07)`, () => {
+      // arrange
+      const serverKey = "plugin_demo_stub_";
+
+      // act
+      const joinedName = joinedAdapterToolName(serverKey, tool);
+
+      // assert
+      assert.strictEqual(joinedName, name);
+    });
+  }
 });
 
 // @ts-expect-error the built-in profile can promise no prefix for a long namespace
