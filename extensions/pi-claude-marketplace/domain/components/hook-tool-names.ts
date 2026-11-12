@@ -21,12 +21,8 @@
 // peer-dep `@earendil-works/pi-coding-agent` `ToolCallEvent` union
 // without adding a matching entry here red-fails `npm run typecheck`.
 //
-// D-58-05: the `find <-> Glob` mapping is locked even though the two
-// semantics diverge (Pi `find` is Unix-find-style; Claude `Glob` is a
-// glob-pattern file-finder). LOW-confidence semantic mismatch is
-// accepted for v1.13 because Glob is the closest Claude-form analogue
-// to Pi `find` and leaving the entry out would silently drop Glob
-// matchers at parse time.
+// D-58-05: the `find <-> Glob` mapping is locked. Installed Pi `find`
+// searches with glob patterns, so both tools name a glob-pattern file-finder.
 //
 // The reverse map `CLAUDE_TO_PI_TOOL_NAMES` is hand-written rather than
 // computed from `PI_TO_CLAUDE_TOOL_NAMES`. A computed reverse would
@@ -62,17 +58,12 @@ export type PiToolName = ToolCallEvent extends infer Event
  * uppercase spellings used in `hooks/hooks.json` matcher tokens and
  * Claude tool_call payloads.
  *
- * D-58-05: `find -> Glob` is the LOW-confidence mapping. Pi `find` is
- * Unix-find-style (path predicates, name globs, size/mtime filters);
- * Claude `Glob` is a glob-pattern file-finder. Glob is the closest
- * Claude-form analogue and the v1.13 mapping accepts the semantic
- * mismatch so Glob matchers translate into a Pi event the dispatcher
- * can fire on.
+ * D-58-05: installed Pi `find` matches glob patterns, as Claude `Glob`
+ * does. The table maps the two names so Glob matchers reach Pi events.
  *
  * `powershell -> PowerShell` is an exact match: Claude Code's own
  * permission-rule prefix vocabulary already names `PowerShell`
- * alongside `Bash` (see 61-DISCUSSION-LOG.md), so this is not a
- * semantic-mismatch mapping the way `find -> Glob` is.
+ * alongside `Bash` (see 61-DISCUSSION-LOG.md).
  *
  * The `satisfies Record<PiToolName, string>` annotation is the
  * load-bearing compile-time exhaustiveness gate -- removing any of the
@@ -85,9 +76,7 @@ const PI_TO_CLAUDE_TOOL_NAMES = {
   edit: "Edit",
   write: "Write",
   grep: "Grep",
-  // D-58-05: LOW-confidence semantic mismatch -- Pi `find` is
-  // Unix-find-style, Claude `Glob` is a glob-pattern file-finder.
-  // Accepted for v1.13.
+  // D-58-05: Pi `find` matches glob patterns.
   find: "Glob",
   ls: "LS",
 } as const satisfies Record<PiToolName, string>;
@@ -110,8 +99,7 @@ export const CLAUDE_TO_PI_TOOL_NAMES = {
   Edit: "edit",
   Write: "write",
   Grep: "grep",
-  // D-58-05: see `PI_TO_CLAUDE_TOOL_NAMES.find` -- accepted LOW-
-  // confidence semantic mismatch in both directions.
+  // D-58-05: Pi `find` matches glob patterns.
   Glob: "find",
   LS: "ls",
 } as const satisfies Record<string, PiToolName>;

@@ -37,7 +37,7 @@ test("maps a successful built-in tool to the complete PostToolUse envelope", () 
     tool_name: "Bash",
     tool_input: {
       command: "printf 'completed\\n'",
-      timeout: 12,
+      timeout: 12000,
     },
     tool_response: [{ type: "text", text: "completed\n" }],
   };
@@ -47,9 +47,70 @@ test("maps a successful built-in tool to the complete PostToolUse envelope", () 
 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
-  assert.strictEqual(payload.tool_input, toolInput);
+  assert.notStrictEqual(payload.tool_input, toolInput);
   assert.strictEqual(payload.tool_response, toolResponse);
 });
+
+for (const { name, toolName, input, expected, expectedName } of [
+  {
+    name: "Read path and lines",
+    toolName: "read",
+    expectedName: "Read",
+    input: { path: "notes.txt", offset: 2 },
+    expected: { file_path: "/workspace/result/notes.txt", offset: 2 },
+  },
+  {
+    name: "Write path and content",
+    toolName: "write",
+    expectedName: "Write",
+    input: { path: "output.txt", content: "written" },
+    expected: { file_path: "/workspace/result/output.txt", content: "written" },
+  },
+  {
+    name: "Glob pattern without native cap",
+    toolName: "find",
+    expectedName: "Glob",
+    input: { pattern: "*.md", limit: 2 },
+    expected: { pattern: "*.md" },
+  },
+  {
+    name: "Grep content options",
+    toolName: "grep",
+    expectedName: "Grep",
+    input: { pattern: "needle", ignoreCase: true, limit: 2 },
+    expected: { pattern: "needle", output_mode: "content", "-n": true, "-i": true, head_limit: 2 },
+  },
+  {
+    name: "LS native-shaped input",
+    toolName: "ls",
+    expectedName: "LS",
+    input: { path: "notes", limit: 2 },
+    expected: { path: "notes", limit: 2 },
+  },
+]) {
+  test(`translates successful ${name} input`, () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "successful-result",
+      toolName,
+      input,
+      content: [{ type: "text", text: "result" }],
+      isError: false,
+      details: undefined,
+    } satisfies ToolResultEvent;
+    const context = {
+      sessionId: "result-session",
+      transcriptPath: "/sessions/result.jsonl",
+      cwd: "/workspace/result",
+    } satisfies TranslationContext;
+
+    const payload = translatePostToolUse(event, context);
+
+    assert.deepStrictEqual(payload.tool_input, expected);
+    assert.strictEqual(payload.tool_name, expectedName);
+    assert.strictEqual(payload.tool_response, event.content);
+  });
+}
 
 test("preserves a successful custom tool name and nested values without mutation", () => {
   // arrange

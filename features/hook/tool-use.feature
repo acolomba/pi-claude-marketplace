@@ -918,3 +918,36 @@ Feature: Hook tool use
       | 2    | user        | search the original word                                    |
       | 2    | assistant   | tool call grep {"pattern":"original","path":"search.txt"} |
       | 2    | tool result | grep returned: search.txt:1: original                      |
+
+  Scenario Outline: Successful tool hooks receive the translated input that executed for <name>
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event       | matcher |
+      | before | PreToolUse  | *       |
+      | after  | PostToolUse | *       |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
+    Given the project holds the file "found.md" with the text "found" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool   | arguments   |
+      |       | <tool> | <arguments> |
+      | Done. |        |             |
+    When the user prompts "run <name>"
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response |
+      | PreToolUse  | first   | <name>    | <hook input> | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |               |
+      | PostToolUse | first   | <name>    | <hook input> | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | <response>    |
+
+    Examples:
+      | name  | tool  | arguments                                               | hook input                                                                          | response                                                                 |
+      | Read  | read  | {"path":"search.txt"}                                  | {"file_path":"{project dir}/search.txt"}                                         | [{"type":"text","text":"needle\\nother"}]                                 |
+      | Write | write | {"path":"output.txt","content":"written"}            | {"file_path":"{project dir}/output.txt","content":"written"}                  | [{"type":"text","text":"Successfully wrote to output.txt"}]             |
+      | Bash  | bash  | {"command":"echo ready","timeout":0.5}                | {"command":"echo ready","timeout":500}                                         | [{"type":"text","text":"ready\\n"}]                                       |
+      | Glob  | find  | {"pattern":"found*.md","limit":2}                      | {"pattern":"found*.md"}                                                           | [{"type":"text","text":"found.md"}]                                      |
+      | Grep  | grep  | {"pattern":"needle","path":"search.txt","limit":2} | {"pattern":"needle","path":"search.txt","output_mode":"content","-n":true,"head_limit":2} | [{"type":"text","text":"search.txt:1: needle"}]                          |

@@ -10,11 +10,14 @@
 // the translator itself is shape-only. Pi's lowercase `event.toolName`
 // is capitalized to Claude's `tool_name` form via the shared
 // `mapPiToClaudeToolName` helper (TOOL-01 reuse); the Pi tool argument
-// payload `event.input` flows into `tool_input`, and the tool's result
+// input is translated into `tool_input`, and the tool's result
 // content `event.content` flows into Claude's `tool_response` field
 // (claude-hook-config-syntax.md § 3).
 
+import { homedir } from "node:os";
+
 import { mapPiToClaudeToolName } from "../../../domain/components/hook-tool-names.ts";
+import { toHookToolInput } from "../tool-input.ts";
 
 import type { ToolResultEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
@@ -39,7 +42,7 @@ export function translatePostToolUse(
     cwd: ctx.cwd,
     hook_event_name: "PostToolUse",
     tool_name: mapPiToClaudeToolName(event.toolName),
-    tool_input: event.input,
+    tool_input: toHookToolInput(event.toolName, event.input, ctx.cwd, homedir()),
     tool_response: event.content,
   };
 }
