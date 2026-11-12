@@ -4583,6 +4583,90 @@ describe("built-in MCP tool names (MHK-01)", () => {
     ]);
   });
 
+  test("names a shortened adapter tool in a block reason and notice by its full name (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "guard", rawMatcher: fullName }]),
+    );
+    const host = createNoticeHost("/workspace/adapter-labels");
+    const sent: SentMessage[] = [];
+    const pi = Object.assign(host.pi, {
+      sendMessage: (message: unknown, options: unknown): void => {
+        sent.push({ message, options });
+      },
+    });
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      pi,
+      createEventKeepingExecutor(
+        {
+          guard: {
+            kind: "block",
+            reason: "no",
+            systemMessage: "checked",
+            additionalContext: "why",
+          },
+        },
+        [],
+      ),
+      createBuiltinToolView([]),
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(piName, { text: "ping" }), host.context);
+
+    // assert
+    assert.deepStrictEqual(output, {
+      block: true,
+      reason: `PreToolUse:${fullName} hook error: no`,
+    });
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry(`PreToolUse:${fullName} says: checked`),
+    ]);
+    assert.deepStrictEqual(sent, [
+      toolContextMessage(`PreToolUse:${fullName} hook additional context: why`),
+    ]);
+    host.capture.assertValid();
+  });
+
+  test("lands a full-name adapter hook's input rewrite on Pi's own input (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "rewriter", rawMatcher: fullName }]),
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor(
+        { rewriter: { kind: "mutate", updatedInput: { text: "pong" } } },
+        [],
+      ),
+      createBuiltinToolView([]),
+    );
+    const event = createToolCallEvent(piName, { text: "ping" });
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/adapter-rewrite"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event, createToolCallEvent(piName, { text: "pong" }));
+  });
+
   test("recovers the adapter's full name from an if literal for all PreToolUse hooks (D-PG1-08)", async () => {
     // arrange
     const runtime = createHooksRuntime();
