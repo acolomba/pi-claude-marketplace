@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { classifyBuiltinMcpServer } from "../../extensions/pi-claude-marketplace/domain/mcp-builtin-features.ts";
 import {
   effectiveMcpCompatibility,
+  fittedAdapterToolName,
   profileFor,
 } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import { classifyMcpServer } from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
@@ -16,6 +17,30 @@ import type {
   RecordedMcpServers,
   StoredMcpCompatibility,
 } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
+
+describe("fittedAdapterToolName", () => {
+  test("keeps a 64-character adapter name whole (D-PG1-07)", () => {
+    // arrange
+    const name = `mcp__plugin_demo_stub__${"x".repeat(41)}`;
+
+    // act
+    const fittedName = fittedAdapterToolName(name);
+
+    // assert
+    assert.strictEqual(fittedName, name);
+  });
+
+  test("cuts a 65-character adapter name to 55 characters and a hash (D-PG1-07)", () => {
+    // arrange
+    const name = `mcp__plugin_demo_stub__${"x".repeat(42)}`;
+
+    // act
+    const fittedName = fittedAdapterToolName(name);
+
+    // assert
+    assert.strictEqual(fittedName, `mcp__plugin_demo_stub__${"x".repeat(32)}_d4fc4a25`);
+  });
+});
 
 // @ts-expect-error the built-in profile can promise no prefix for a long namespace
 void (profileFor("builtin").toolNamePrefix satisfies (plugin: string, server: string) => string);
