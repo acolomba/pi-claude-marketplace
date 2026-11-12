@@ -101,7 +101,12 @@ test("AVAR-03: --partial installs the plugin without the server whose args start
           },
           directTools: "search",
           toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+          requestTimeoutMs: 1800000,
+          _piClaudeMarketplace: {
+            plugin: "hello",
+            marketplace: "mp",
+            defaultFields: { requestTimeoutMs: 1800000 },
+          },
         },
       },
     });

@@ -201,7 +201,12 @@ for (const orchestrated of [false, true]) {
                 CLAUDE_PLUGIN_DATA: path.join(locations.extensionRoot, "data", "mp", "zzz"),
                 CLAUDE_PLUGIN_ROOT: path.join(marketplaceRoot, "plugins", "zzz"),
               },
-              _piClaudeMarketplace: { marketplace: "mp", plugin: "zzz" },
+              requestTimeoutMs: 1800000,
+              _piClaudeMarketplace: {
+                marketplace: "mp",
+                plugin: "zzz",
+                defaultFields: { requestTimeoutMs: 1800000 },
+              },
             },
           },
         });
@@ -3387,9 +3392,13 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
       },
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000
+        }
       }
     }
   }
@@ -3456,9 +3465,13 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       },
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
       "_piClaudeMarketplace": {
         "plugin": "my.plugin",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000
+        }
       }
     },
     "plugin_my_plugin_live_": {
@@ -3469,9 +3482,13 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       },
       "directTools": true,
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
       "_piClaudeMarketplace": {
         "plugin": "my.plugin",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000
+        }
       }
     }
   }
@@ -3579,9 +3596,13 @@ test("ANAME-07 / D-08-04: install writes Claude servers through the closed adapt
       },
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000
+        }
       }
     }
   }
@@ -3696,9 +3717,13 @@ test("ANAME-07: --partial installs every server except the blocked one", async (
       },
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000
+        }
       }
     }
   }
@@ -3890,9 +3915,13 @@ for (const { title, descriptions, description } of [
       "description": "${description}",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     },
     "plugin_hello_docs_": {
@@ -3900,9 +3929,13 @@ for (const { title, descriptions, description } of [
       "description": "${description}",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   }

@@ -8456,7 +8456,12 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
             },
             directTools: "search",
             toolPrefix: "mcp",
-            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            requestTimeoutMs: 1800000,
+            _piClaudeMarketplace: {
+              plugin: "hello",
+              marketplace: "mp",
+              defaultFields: { requestTimeoutMs: 1800000 },
+            },
           },
         },
       });
@@ -9995,7 +10000,12 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", 
             directTools: "search",
             toolPrefix: "mcp",
             disabled: true,
-            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            requestTimeoutMs: 1800000,
+            _piClaudeMarketplace: {
+              plugin: "hello",
+              marketplace: "mp",
+              defaultFields: { requestTimeoutMs: 1800000 },
+            },
           },
         },
       });

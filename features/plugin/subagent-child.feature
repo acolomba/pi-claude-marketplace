@@ -133,9 +133,13 @@ Feature: Plugin subagent child
             },
             "directTools": "search",
             "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
             "_piClaudeMarketplace": {
               "plugin": "demo",
-              "marketplace": "fixtures"
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000
+              }
             }
           }
         }

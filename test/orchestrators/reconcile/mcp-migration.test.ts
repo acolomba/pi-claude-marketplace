@@ -436,7 +436,12 @@ function freshAdapterText(
       },
       directTools: "search",
       toolPrefix: "mcp",
-      _piClaudeMarketplace: { plugin, marketplace: "mp" },
+      requestTimeoutMs: 1800000,
+      _piClaudeMarketplace: {
+        plugin,
+        marketplace: "mp",
+        defaultFields: { requestTimeoutMs: 1800000 },
+      },
     };
   }
 

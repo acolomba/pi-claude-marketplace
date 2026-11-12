@@ -179,9 +179,13 @@ const ACME_ONLY_BYTES = `{
       "url": "https://acme.example/mcp",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   }
@@ -193,7 +197,12 @@ const ACME_ENTRY = {
   url: "https://acme.example/mcp",
   directTools: "search",
   toolPrefix: "mcp",
-  _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+  requestTimeoutMs: 300000,
+  _piClaudeMarketplace: {
+    plugin: "acme",
+    marketplace: "catalog",
+    defaultFields: { requestTimeoutMs: 300000 },
+  },
 };
 
 /** A commented legacy mcp.json holding acme's marked `srv` and `tool` and a foreign entry. */
@@ -294,7 +303,12 @@ describe("prepareStageMcpServers", () => {
           },
           directTools: "search",
           toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          requestTimeoutMs: 1800000,
+          _piClaudeMarketplace: {
+            plugin: "acme",
+            marketplace: "catalog",
+            defaultFields: { requestTimeoutMs: 1800000 },
+          },
         },
       },
     };
@@ -551,9 +565,13 @@ describe("prepareStageMcpServers", () => {
         '      "url": "https://mcp.example.test",',
         '      "directTools": "search",',
         '      "toolPrefix": "mcp",',
+        '      "requestTimeoutMs": 300000,',
         '      "_piClaudeMarketplace": {',
         '        "plugin": "acme",',
-        '        "marketplace": "catalog"',
+        '        "marketplace": "catalog",',
+        '        "defaultFields": {',
+        '          "requestTimeoutMs": 300000',
+        "        }",
         "      }",
         "    }",
         "  },",
@@ -705,7 +723,12 @@ describe("prepareStageMcpServers", () => {
           url: "https://mcp.example.test",
           directTools: "search",
           toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          requestTimeoutMs: 300000,
+          _piClaudeMarketplace: {
+            plugin: "acme",
+            marketplace: "catalog",
+            defaultFields: { requestTimeoutMs: 300000 },
+          },
         },
       },
     });
@@ -755,7 +778,12 @@ describe("prepareStageMcpServers", () => {
           url: "https://mcp.example.test",
           directTools: "search",
           toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          requestTimeoutMs: 300000,
+          _piClaudeMarketplace: {
+            plugin: "acme",
+            marketplace: "catalog",
+            defaultFields: { requestTimeoutMs: 300000 },
+          },
         },
       },
     });
@@ -1140,9 +1168,13 @@ describe("prepareStageMcpServers", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "disabled": true,
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        },
         "keptOverride": {
           "disabled": true
         }
@@ -1190,9 +1222,13 @@ describe("prepareStageMcpServers", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "disabled": true,
+      "requestTimeoutMs": 1800000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000
+        },
         "keptOverride": {
           "disabled": true,
           "env": {
@@ -1242,9 +1278,13 @@ describe("prepareStageMcpServers", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "disabled": true,
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        },
         "keptOverride": {
           "disabled": true
         }
@@ -1279,9 +1319,13 @@ describe("prepareStageMcpServers", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "disabled": true,
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        },
         "keptOverride": {
           "disabled": true,
           "env": {
@@ -1332,7 +1376,12 @@ describe("prepareStageMcpServers", () => {
           toolPrefix: "mcp",
           disabled: true,
           openUi: true,
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          requestTimeoutMs: 300000,
+          _piClaudeMarketplace: {
+            plugin: "acme",
+            marketplace: "catalog",
+            defaultFields: { requestTimeoutMs: 300000 },
+          },
         },
       },
     };
@@ -1380,9 +1429,11 @@ describe("prepareStageMcpServers", () => {
           toolPrefix: "mcp",
           disabled: false,
           trace: true,
+          requestTimeoutMs: 300000,
           _piClaudeMarketplace: {
             plugin: "acme",
             marketplace: "catalog",
+            defaultFields: { requestTimeoutMs: 300000 },
             keptOverride: { disabled: false },
           },
         },
@@ -1427,7 +1478,12 @@ describe("prepareStageMcpServers", () => {
           directTools: "search",
           toolPrefix: "mcp",
           approveTools: ["read"],
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          requestTimeoutMs: 300000,
+          _piClaudeMarketplace: {
+            plugin: "acme",
+            marketplace: "catalog",
+            defaultFields: { requestTimeoutMs: 300000 },
+          },
         },
       },
     });
@@ -1464,7 +1520,12 @@ describe("prepareStageMcpServers", () => {
             url: "https://acme.example/mcp",
             directTools: "search",
             toolPrefix: "mcp",
-            _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+            requestTimeoutMs: 300000,
+            _piClaudeMarketplace: {
+              plugin: "acme",
+              marketplace: "catalog",
+              defaultFields: { requestTimeoutMs: 300000 },
+            },
           },
         },
       });
@@ -1523,9 +1584,13 @@ describe("prepareStageMcpServers", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "disabled": true,
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        },
         "keptOverride": {
           "disabled": true,
           "env": {
@@ -1576,9 +1641,13 @@ describe("prepareStageMcpServers", () => {
       "url": "https://acme.example/mcp",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   }
@@ -1775,9 +1844,13 @@ describe("prepareStageMcpServers", () => {
       "url": "https://acme.example/mcp",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   }
@@ -1809,9 +1882,13 @@ describe("prepareStageMcpServers", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "disabled": true,
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   },
@@ -1845,9 +1922,13 @@ describe("prepareStageMcpServers", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "disabled": true,
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        },
         "keptOverride": {
           "disabled": true
         }
@@ -1922,7 +2003,12 @@ describe("prepareStageMcpServers", () => {
           },
           directTools: "search",
           toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          requestTimeoutMs: 1800000,
+          _piClaudeMarketplace: {
+            plugin: "acme",
+            marketplace: "catalog",
+            defaultFields: { requestTimeoutMs: 1800000 },
+          },
         },
       },
     });
@@ -1985,7 +2071,12 @@ describe("prepareStageMcpServers", () => {
           },
           directTools: "search",
           toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "hello", marketplace: "catalog" },
+          requestTimeoutMs: 1800000,
+          _piClaudeMarketplace: {
+            plugin: "hello",
+            marketplace: "catalog",
+            defaultFields: { requestTimeoutMs: 1800000 },
+          },
         },
       },
     });
@@ -2450,7 +2541,12 @@ describe("prepareStageMcpServers", () => {
           url: "https://s.example/mcp",
           directTools: "search",
           toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "hello", marketplace: "catalog" },
+          requestTimeoutMs: 300000,
+          _piClaudeMarketplace: {
+            plugin: "hello",
+            marketplace: "catalog",
+            defaultFields: { requestTimeoutMs: 300000 },
+          },
         },
       },
     });
@@ -2488,18 +2584,26 @@ describe("prepareStageMcpServers", () => {
       "url": "https://db.example/mcp",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     },
     "plugin_acme_my_api_": {
       "url": "https://api.example/mcp",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   }
@@ -2603,9 +2707,13 @@ describe("prepareStageMcpServers", () => {
       "url": "https://db.example/mcp",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   }
@@ -2756,9 +2864,13 @@ describe("prepareStageMcpServers", () => {
       "url": "https://x.example/mcp",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   }
@@ -2817,9 +2929,13 @@ describe("prepareStageMcpServers", () => {
       "url": "https://x.example/mcp",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   }
@@ -2848,9 +2964,13 @@ describe("prepareStageMcpServers", () => {
       "url": "https://x.example/mcp",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   }
@@ -3153,9 +3273,13 @@ describe("commitPreparedMcp", () => {
       },
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000
+        }
       }
     }
   }
@@ -3331,9 +3455,13 @@ describe("replacePreparedMcp", () => {
       },
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000
+        }
       }
     }
   }
