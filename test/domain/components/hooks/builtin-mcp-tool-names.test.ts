@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   claudeFormToolName,
+  recoverAdapterToolName,
   serverPrefixNames,
   toolLiteralNames,
 } from "../../../../extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts";
@@ -181,6 +182,58 @@ describe("toolLiteralNames", () => {
 });
 
 describe("serverPrefixNames", () => {
+  for (const { prefix, tool, fires } of [
+    {
+      prefix: "mcp__plugin_atlassian-confluence-tools_confluence-apis__",
+      tool: {
+        piName: "mcp__plugin_atlassian-confluence-tools_confluence-apis__d3b058ae",
+        builtinServer: undefined,
+      },
+      fires: false,
+    },
+    {
+      prefix: "mcp__plugin_atlassian-confluence-tools_confluence-api__",
+      tool: {
+        piName: "mcp__plugin_atlassian-confluence-tools_confluence-api___7c3d5b4c",
+        builtinServer: undefined,
+      },
+      fires: true,
+    },
+  ]) {
+    test(`guards the adapter's cut name from wrong server prefix ${prefix}: ${fires} (D-PG1-08)`, () => {
+      // arrange
+      const identity = tool;
+
+      // act
+      const named = serverPrefixNames(prefix, identity);
+
+      // assert
+      assert.strictEqual(named, fires);
+    });
+  }
+
+  test("compares a recovered full name against its server prefix (D-PG1-08)", () => {
+    // arrange
+    const tool = {
+      piName: "mcp__plugin_atlassian-confluence-tools_confluence-apis__d3b058ae",
+      builtinServer: undefined,
+      claudeName: "mcp__plugin_atlassian-confluence-tools_confluence-apis_v2__search_pages",
+    };
+
+    // act
+    const named = serverPrefixNames(
+      "mcp__plugin_atlassian-confluence-tools_confluence-apis_v2__",
+      tool,
+    );
+
+    // assert
+    assert.strictEqual(named, true);
+    assert.strictEqual(
+      serverPrefixNames("mcp__plugin_atlassian-confluence-tools_confluence-apis__", tool),
+      false,
+    );
+  });
+
   for (const { prefix, fires } of [
     { prefix: "mcp__plugin_demo_stub__", fires: true },
     { prefix: "mcp__plugin_demo_other__", fires: false },
@@ -216,6 +269,21 @@ describe("serverPrefixNames", () => {
 });
 
 describe("claudeFormToolName", () => {
+  test("gives every hook the recovered adapter name (D-PG1-08)", () => {
+    // arrange
+    const tool = {
+      piName: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      builtinServer: undefined,
+      claudeName: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo",
+    };
+
+    // act
+    const hookToolName = claudeFormToolName(tool);
+
+    // assert
+    assert.strictEqual(hookToolName, tool.claudeName);
+  });
+
   test("puts the registered server name in place of Pi's namespace (D-P5-02)", () => {
     // arrange
     const tool = hookDemoTool();
@@ -259,4 +327,73 @@ describe("claudeFormToolName", () => {
     // assert
     assert.strictEqual(hookToolName, "mcp__plugin_hook_demo_stub_server__echo");
   });
+});
+
+describe("recoverAdapterToolName", () => {
+  test("recovers the first full name whose adapter cut equals Pi's name (D-PG1-08)", () => {
+    // arrange
+    const tool = {
+      piName: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      builtinServer: undefined,
+    };
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const candidates = () => [fullName.replace("__echo", "__other"), fullName];
+
+    // act
+    const recovered = recoverAdapterToolName(tool, candidates);
+
+    // assert
+    assert.deepStrictEqual(recovered, { ...tool, claudeName: fullName });
+  });
+
+  for (const { piName, builtinServer } of [
+    { piName: "bash", builtinServer: undefined },
+    { piName: "mcp__plugin_demo_stub__echo", builtinServer: undefined },
+    {
+      piName: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      builtinServer: "demo",
+    },
+    {
+      piName: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bcX",
+      builtinServer: undefined,
+    },
+    {
+      piName: "notmc_plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      builtinServer: undefined,
+    },
+  ]) {
+    test(`keeps ${piName} without reading candidates (D-PG1-08)`, () => {
+      // arrange
+      const tool = { piName, builtinServer };
+      const candidates = (): string[] => {
+        throw new Error("unexpected candidate read");
+      };
+
+      // act
+      const recovered = recoverAdapterToolName(tool, candidates);
+
+      // assert
+      assert.strictEqual(recovered, tool);
+    });
+  }
+
+  for (const candidates of [
+    [],
+    ["mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__other"],
+    ["short"],
+  ]) {
+    test(`keeps Pi's cut name when ${candidates.length === 0 ? "no" : candidates[0]} candidate fits (D-PG1-08)`, () => {
+      // arrange
+      const tool = {
+        piName: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+        builtinServer: undefined,
+      };
+
+      // act
+      const recovered = recoverAdapterToolName(tool, () => candidates);
+
+      // assert
+      assert.strictEqual(recovered, tool);
+    });
+  }
 });

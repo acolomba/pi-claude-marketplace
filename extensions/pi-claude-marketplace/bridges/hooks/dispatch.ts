@@ -56,6 +56,7 @@ import { closedSetMatcherValues } from "../../domain/components/hook-events.ts";
 import {
   claudeFormToolName,
   MCP_TOOL_PREFIX,
+  recoverAdapterToolName,
   serverPrefixNames,
   toolLiteralNames,
 } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
@@ -146,7 +147,8 @@ export type HookExecutor = (
  * server `toolPrefixes` names the tool's server (ANAME-02). For a tool of
  * Pi's built-in MCP an MCP literal or prefix names the server as it
  * registered, with `-` kept (D-P5-04); for every other tool the literal is
- * Pi's name and the prefix starts it (D-P5-05). The comparison is exact and
+ * adapter's full name can be recovered once per event from tool-event hook
+ * literals (D-PG1-08). The comparison is exact and
  * case-sensitive. The parser already filters regex/unmapped matchers at
  * parse time so those arms are unreachable at dispatch; defensive `false`
  * keeps the switch exhaustive.
@@ -797,7 +799,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       return undefined as CompositeReturnFor<E>;
     }
 
-    const view = hookEventView(claudeEvent, event, tools);
+    const view = hookEventView(claudeEvent, event, tools, () => toolEventMcpLiterals(runtime));
     if (view === undefined) {
       return undefined as CompositeReturnFor<E>;
     }
@@ -900,7 +902,7 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const view = toolEventView(event, tools);
+    const view = toolEventView(event, tools, () => toolEventMcpLiterals(runtime));
     if (view === undefined) {
       return undefined;
     }
@@ -1033,9 +1035,22 @@ interface HookEventView {
   readonly tool: McpToolIdentity | undefined;
 }
 
+function toolEventMcpLiterals(runtime: HooksRuntime): string[] {
+  const events = ["PreToolUse", "PostToolUse", "PostToolUseFailure"] as const;
+  return events.flatMap((event) =>
+    runtime
+      .getRoutingBucket(event)
+      .flatMap((entry) => [
+        ...(entry.matcher.kind === "tool-set" ? entry.matcher.toolNames : []),
+        ...(entry.ifPredicate.kind === "mcp-literal" ? [entry.ifPredicate.toolName] : []),
+      ]),
+  );
+}
+
 /**
- * D-P5-03: a tool event with the name `claudeFormToolName` derives for its
- * tool, once per event. Pi's event itself when the names agree, else a shallow copy that
+ * D-P5-03 / D-PG1-08: a tool event recovers a shortened adapter name once
+ * from tool-event hook literals, then derives the name every hook sees.
+ * Pi's event itself when the names agree, else a shallow copy that
  * shares Pi's `input` and `content`, so an input rewrite still reaches Pi.
  * Only an `mcp__` name changes, and Pi types such an event as its open-ended
  * custom tool event, whose `toolName` is any string, so the copy keeps the
@@ -1049,12 +1064,13 @@ interface HookEventView {
 function toolEventView<T extends ToolCallEvent | ToolResultEvent>(
   event: T,
   tools: HookToolView,
+  candidates: () => readonly string[],
 ): { readonly event: T; readonly tool: McpToolIdentity } | undefined {
   if (isMcpProxyCall(event) && tools.proxyRuleApplies()) {
     return undefined;
   }
 
-  const tool = tools.identify(event.toolName);
+  const tool = recoverAdapterToolName(tools.identify(event.toolName), candidates);
   const toolName = claudeFormToolName(tool);
   return { event: toolName === event.toolName ? event : { ...event, toolName }, tool };
 }
@@ -1063,9 +1079,10 @@ function hookEventView(
   claudeEvent: CompositeDispatchEvent,
   event: unknown,
   tools: HookToolView,
+  candidates: () => readonly string[],
 ): HookEventView | undefined {
   return claudeEvent === "PreToolUse"
-    ? toolEventView(event as ToolCallEvent, tools)
+    ? toolEventView(event as ToolCallEvent, tools, candidates)
     : { event, tool: undefined };
 }
 

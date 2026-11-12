@@ -3,6 +3,8 @@ Feature: Hook MCP tool names
   A hook of a bridged plugin sees a plugin MCP tool under Claude Code's name,
   whichever MCP implementation serves it. A scripted model, the hooks' stub MCP
   servers, and hooks that record each run stand in for real ones.
+  pi-mcp-adapter shortens a tool name over 64 characters. A hook that names
+  the full name still runs and receives it.
 
   @mcp
   Scenario: Hooks on a plugin MCP tool match it and see it under Claude Code's name
@@ -33,15 +35,18 @@ Feature: Hook MCP tool names
       | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | [{"type":"text","text":"echo:ping"}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
 
   @adapter-only
-  Scenario: A hook that names the full Claude Code name of a plugin MCP tool runs for the tool pi-mcp-adapter shortened (PG-MCP-02, D-PG1-08)
+  Scenario: Hooks on a plugin MCP tool that pi-mcp-adapter shortened run by its full Claude Code name and receive that name (PG-MCP-02, D-PG1-08)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name                                          | version |
       | hook-proxy-shaped-tool-names-of-a-long-plugin | 1.0.0   |
     Given the published plugin "hook-proxy-shaped-tool-names-of-a-long-plugin" of the marketplace "fixtures" has these hooks, each recording its runs:
-      | name    | event       | matcher                                                                     |
-      | literal | PreToolUse  | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo |
-      | after   | PostToolUse | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo |
+      | name    | event       | matcher                                                                       | if                                                                           |
+      | literal | PreToolUse  | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo   |                                                                              |
+      | any     | PreToolUse  | *                                                                             |                                                                              |
+      | iffed   | PreToolUse  | *                                                                             | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo  |
+      | prefix  | PreToolUse  | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__.*     |                                                                              |
+      | after   | PostToolUse | *                                                                             |                                                                              |
     Given the published plugin "hook-proxy-shaped-tool-names-of-a-long-plugin" of the marketplace "fixtures" has the stub mcp server "stub-server" for its hooks
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install hook-proxy-shaped-tool-names-of-a-long-plugin@fixtures --scope user", which did not fail
@@ -51,8 +56,11 @@ Feature: Hook MCP tool names
     When the user prompts "call the stub"
     Then the hooks record these runs in any order:
       | event       | session | tool name                                                        | tool input      | tool response                        | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                                                                 | CLAUDE_PLUGIN_DATA                                                                            | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PreToolUse  | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3 | {"text":"ping"} |                                      | {project dir} |                 | literal   | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
-      | PostToolUse | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3 | {"text":"ping"} | [{"type":"text","text":"echo:ping"}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
+      | PreToolUse  | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo | {"text":"ping"} |                                      | {project dir} |                 | literal   | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
+      | PreToolUse  | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo | {"text":"ping"} |                                      | {project dir} |                 | any       | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
+      | PreToolUse  | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo | {"text":"ping"} |                                      | {project dir} |                 | iffed     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
+      | PreToolUse  | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo | {"text":"ping"} |                                      | {project dir} |                 | prefix    | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
+      | PostToolUse | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo | {"text":"ping"} | [{"type":"text","text":"echo:ping"}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
 
   @builtin-only
   Scenario: A hook on a built-in tool matches the server as Pi registered it and sees the tool segment folded (MHK-01, D-MB-08)

@@ -4549,6 +4549,151 @@ function builtinToolEntries(
 }
 
 describe("built-in MCP tool names (MHK-01)", () => {
+  test("gives the adapter's full name to every PreToolUse hook when one spells it (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [
+        { pluginId: "literal", rawMatcher: fullName },
+        { pluginId: "any", rawMatcher: "*" },
+      ]),
+    );
+    const received: ReceivedEvent[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createBuiltinToolView([]),
+    );
+    const event = createToolCallEvent(piName, { text: "ping" });
+
+    // act
+    await handler(event, createExtensionContext("/workspace/adapter"));
+
+    // assert
+    assert.deepStrictEqual(received, [
+      { pluginId: "literal", event: createToolCallEvent(fullName, { text: "ping" }) },
+      { pluginId: "any", event: createToolCallEvent(fullName, { text: "ping" }) },
+    ]);
+  });
+
+  test("recovers the adapter's full name from an if literal for all PreToolUse hooks (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "iffed",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "*",
+        declarationIndex: 0,
+        ifPredicate: { kind: "mcp-literal", toolName: fullName },
+      }),
+      createRoutingEntry({
+        pluginId: "any",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "*",
+        declarationIndex: 1,
+      }),
+    ]);
+    const received: ReceivedEvent[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createBuiltinToolView([]),
+    );
+
+    // act
+    await handler(
+      createToolCallEvent(piName, { text: "ping" }),
+      createExtensionContext("/workspace/adapter"),
+    );
+
+    // assert
+    assert.deepStrictEqual(received, [
+      { pluginId: "iffed", event: createToolCallEvent(fullName, { text: "ping" }) },
+      { pluginId: "any", event: createToolCallEvent(fullName, { text: "ping" }) },
+    ]);
+  });
+
+  test("recovers the adapter's full name from another tool event's hook (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "any", rawMatcher: "*" }]),
+    );
+    runtime.setRoutingBucket(
+      "PostToolUseFailure",
+      builtinToolEntries("PostToolUseFailure", [{ pluginId: "literal", rawMatcher: fullName }]),
+    );
+    const received: ReceivedEvent[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createBuiltinToolView([]),
+    );
+
+    // act
+    await handler(
+      createToolCallEvent(piName, { text: "ping" }),
+      createExtensionContext("/workspace/adapter"),
+    );
+
+    // assert
+    assert.deepStrictEqual(received, [
+      { pluginId: "any", event: createToolCallEvent(fullName, { text: "ping" }) },
+    ]);
+  });
+
+  test("reads no other tool-event bucket for a name without an adapter cut (D-PG1-08)", async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "any", rawMatcher: "*" }]),
+    );
+    const getRoutingBucketSpy = t.mock.method(runtime, "getRoutingBucket");
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, []),
+      createBuiltinToolView([]),
+    );
+
+    // act
+    await handler(
+      createToolCallEvent("mcp__plugin_demo_stub__echo", { text: "ping" }),
+      createExtensionContext("/workspace/adapter"),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      getRoutingBucketSpy.mock.calls.map((call) => call.arguments[0]),
+      ["PreToolUse"],
+    );
+  });
+
   test("runs the Claude-form literal, server prefix, and match-all hooks and not the folded-server ones (D-P5-04)", async () => {
     // arrange
     const runtime = createHooksRuntime();
@@ -4815,6 +4960,46 @@ function builtinToolResultEvent(isError: boolean, toolName = BUILTIN_PI_NAME): T
 }
 
 describe("built-in MCP tool names in tool results and if fields (MHK-01)", () => {
+  for (const claudeEvent of ["PostToolUse", "PostToolUseFailure"] as const) {
+    test(`gives every ${claudeEvent} hook the recovered adapter name (D-PG1-08)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const fullName =
+        "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+      const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+      runtime.setRoutingBucket(
+        claudeEvent,
+        builtinToolEntries(claudeEvent, [
+          { pluginId: "literal", rawMatcher: fullName },
+          { pluginId: "any", rawMatcher: "*" },
+        ]),
+      );
+      const received: ReceivedEvent[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        undefined,
+        createEventKeepingExecutor({}, received),
+        createBuiltinToolView([]),
+      );
+      const isError = claudeEvent === "PostToolUseFailure";
+
+      // act
+      const output = await handler(
+        builtinToolResultEvent(isError, piName),
+        createExtensionContext("/workspace/adapter"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(received, [
+        { pluginId: "literal", event: builtinToolResultEvent(isError, fullName) },
+        { pluginId: "any", event: builtinToolResultEvent(isError, fullName) },
+      ]);
+    });
+  }
+
   for (const claudeEvent of ["PostToolUse", "PostToolUseFailure"] as const) {
     test(`runs the Claude-form ${claudeEvent} literal and server prefix and not the folded-server literal (D-P5-04)`, async () => {
       // arrange
