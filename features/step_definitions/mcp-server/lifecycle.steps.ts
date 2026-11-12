@@ -10,7 +10,10 @@ import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
-import { writeMcpAdapterOverride } from "../../lib/mcp-server-files.ts";
+import {
+  writeMcpAdapterEntryWithoutRequestTimeout,
+  writeMcpAdapterOverride,
+} from "../../lib/mcp-server-files.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -31,6 +34,15 @@ Given(
   async function (this: ScenarioWorld, key: string, timeoutMs: number, scope: string) {
     const file = path.join(this.scopeRoot(scope), "mcp-adapter.json");
     const written = await writeMcpAdapterOverride(file, key, { requestTimeoutMs: timeoutMs });
+    assert.strictEqual(await readFile(file, "utf8"), written);
+  },
+);
+
+Given(
+  "the mcp-adapter.json file of the {word} scope holds the entry {string} with no request timeout, as an earlier release wrote it",
+  async function (this: ScenarioWorld, scope: string, key: string) {
+    const file = path.join(this.scopeRoot(scope), "mcp-adapter.json");
+    const written = await writeMcpAdapterEntryWithoutRequestTimeout(file, key);
     assert.strictEqual(await readFile(file, "utf8"), written);
   },
 );

@@ -452,6 +452,113 @@ Feature: MCP server lifecycle
 
       """
 
+  @adapter-only
+  Scenario: A plugin server that changes from stdio to remote in an update gets the remote idle window (PG-MCP-01, D-PG1-13)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"srv":{"type":"http","url":"https://example.invalid/mcp"}}}
+      """
+    When the user has run "/claude:plugin update demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "url": "https://example.invalid/mcp",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: A disable and an enable write the default timeout again as the extension's own (PG-MCP-01, D-PG1-13)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user"
+    When the user has run "/claude:plugin enable demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: An entry that an earlier release wrote gets the default timeout at the plugin's next reinstall (PG-MCP-01, D-PG1-12)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the mcp-adapter.json file of the user scope holds the entry "plugin_demo_srv_" with no request timeout, as an earlier release wrote it
+    When the user has run "/claude:plugin reinstall demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
   @mcp
   Scenario: A new session offers the plugin's tool again (BLT-01)
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
