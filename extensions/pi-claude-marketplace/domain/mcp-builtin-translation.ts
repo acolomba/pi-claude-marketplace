@@ -10,7 +10,8 @@
 //
 // - `timeout` is Pi's per-request timeout in seconds, any positive number
 //   (Pi 1.5.0 `dist/core/mcp-servers.js` `validateMcpServerConfig`), so the
-//   milliseconds are divided by 1000 with no rounding (P2-DC-05).
+//   milliseconds are divided by 1000 with no rounding (P2-DC-05). A server
+//   with no usable declared timeout gets the idle default (D-PG1-11).
 // - `oauth.redirectUri` becomes Pi's `callbackUrl` in place. `clientName` and
 //   `clientRegistration` are never written, so Pi keeps its Client ID Metadata
 //   Document (D-MB-11).
@@ -20,7 +21,7 @@
 //   `enabled`, or `clientSecret`, and none of the adapter's own fields
 //   (`directTools`, `toolPrefix`, `httpTransport`).
 
-import { translateMcpServer } from "./mcp-server-features.ts";
+import { defaultRequestTimeoutMs, translateMcpServer } from "./mcp-server-features.ts";
 
 const TRANSPORT_FIELDS = ["command", "args", "env", "url", "headers"] as const;
 
@@ -81,7 +82,7 @@ export function translateBuiltinMcpServer(
     ...typeField(server),
     ...transportFields(adapter),
     ...oauthField(adapter.oauth),
-    ...timeoutField(adapter.requestTimeoutMs),
+    ...timeoutField(adapter.requestTimeoutMs ?? defaultRequestTimeoutMs(server)),
     exposure: server.alwaysLoad === true ? "direct" : "deferred",
     ...(description === undefined ? {} : { description }),
   };

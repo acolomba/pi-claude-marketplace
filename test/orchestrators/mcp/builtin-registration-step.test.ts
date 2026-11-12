@@ -179,6 +179,7 @@ function stubConfig(fixture: Session, scope: ScopeName, pluginRoot: string): Mcp
       CLAUDE_PLUGIN_DATA: dataDir(fixture, scope),
       TOKEN: "t$$1",
     },
+    timeout: 1800,
     exposure: "deferred",
   };
 }
@@ -329,6 +330,7 @@ describe("builtinRegistrationStep", () => {
             CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
             CLAUDE_PLUGIN_DATA: dataDir(fixture, "project"),
           },
+          timeout: 1800,
           exposure: "deferred",
         },
       ],
@@ -340,6 +342,7 @@ describe("builtinRegistrationStep", () => {
             CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
             CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
           },
+          timeout: 1800,
           exposure: "deferred",
         },
       ],
@@ -402,6 +405,7 @@ describe("builtinRegistrationStep", () => {
           CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
           CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
         },
+        timeout: 1800,
         exposure: "deferred",
       });
     }).thenReturn(undefined);
@@ -446,6 +450,7 @@ describe("builtinRegistrationStep", () => {
           CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
           CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
         },
+        timeout: 1800,
         exposure: "deferred",
       });
     }).thenReturn(undefined);
@@ -494,6 +499,7 @@ describe("builtinRegistrationStep", () => {
           CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
           CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
         },
+        timeout: 1800,
         exposure: "deferred",
       });
     }).thenReturn(undefined);
@@ -921,6 +927,7 @@ describe("builtinRegistrationStep", () => {
           CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
           CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
         },
+        timeout: 1800,
         exposure: "deferred",
       });
     }).thenReturn(undefined);
@@ -951,6 +958,7 @@ describe("builtinRegistrationStep", () => {
           CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
           CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
         },
+        timeout: 1800,
         exposure: "deferred",
       });
     }).thenReturn(undefined);

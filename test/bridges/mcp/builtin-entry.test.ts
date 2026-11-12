@@ -28,6 +28,7 @@ test("BLT-02: a stdio server gets the plugin variables in its env and deferred e
     command: "/plugins/a$b/server",
     args: ["--project", "/work/project"],
     env: { CLAUDE_PLUGIN_ROOT: "/plugins/a$$b", CLAUDE_PLUGIN_DATA: "/data/mp/a", TOKEN: "t$$1" },
+    timeout: 1800,
     exposure: "deferred",
   });
 });
@@ -49,6 +50,7 @@ test("BLT-02: an http server resolves its url and headers and carries the descri
     type: "http",
     url: "https://mcp.example.test/mcp",
     headers: { Authorization: "Bearer t$$1" },
+    timeout: 300,
     exposure: "direct",
     description: "Demo plugin",
   });
@@ -110,6 +112,7 @@ test("BLT-02: a ~ that is not leading, or that names a user, is kept as Pi keeps
     command: "node",
     args: ["a~/b", "~user"],
     env: { CLAUDE_PLUGIN_ROOT: "/plugins/a$$b", CLAUDE_PLUGIN_DATA: "/data/mp/a" },
+    timeout: 1800,
     exposure: "deferred",
   });
 });
