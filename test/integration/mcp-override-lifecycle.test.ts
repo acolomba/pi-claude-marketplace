@@ -97,9 +97,11 @@ test("AFILE-06: a project install keeps the user's override in its entry and uni
           directTools: "search",
           toolPrefix: "mcp",
           disabled: true,
+          requestTimeoutMs: 1800000,
           _piClaudeMarketplace: {
             plugin: "hello",
             marketplace: "mp",
+            defaultFields: { requestTimeoutMs: 1800000 },
             keptOverride: { disabled: true, env: { STUB_TOKEN: "stub-secret" } },
           },
         },
@@ -203,6 +205,7 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
     const keptMarker = {
       plugin: "hello",
       marketplace: "mp",
+      defaultFields: { requestTimeoutMs: 1800000 },
       keptOverride: { disabled: true, env: { STUB_TOKEN: "stub-secret" } },
     };
     const installedRow = (scope: Scope, version: string): NotifyRecord => ({
@@ -261,6 +264,7 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
           directTools: "search",
           toolPrefix: "mcp",
           disabled: true,
+          requestTimeoutMs: 1800000,
           _piClaudeMarketplace: keptMarker,
         },
       },
@@ -274,6 +278,7 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
           directTools: "search",
           toolPrefix: "mcp",
           disabled: true,
+          requestTimeoutMs: 1800000,
           _piClaudeMarketplace: keptMarker,
         },
       },
@@ -304,7 +309,12 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
           env: userEnv,
           directTools: "search",
           toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+          requestTimeoutMs: 1800000,
+          _piClaudeMarketplace: {
+            plugin: "hello",
+            marketplace: "mp",
+            defaultFields: { requestTimeoutMs: 1800000 },
+          },
         },
       },
     });
@@ -378,9 +388,11 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
               },
               directTools: "search",
               toolPrefix: "mcp",
+              requestTimeoutMs: 1800000,
               _piClaudeMarketplace: {
                 plugin: "hello",
                 marketplace: "mp",
+                defaultFields: { requestTimeoutMs: 1800000 },
                 keptOverride: { env: { STUB_TOKEN: "stub-secret" } },
               },
             },
@@ -588,7 +600,12 @@ test("D-08-02: a project user's disabled and openUi choices survive uninstall th
               toolPrefix: "mcp",
               disabled: true,
               openUi: true,
-              _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+              requestTimeoutMs: 1800000,
+              _piClaudeMarketplace: {
+                plugin: "hello",
+                marketplace: "mp",
+                defaultFields: { requestTimeoutMs: 1800000 },
+              },
             },
           },
         },
@@ -635,7 +652,12 @@ function helloEntry(
     directTools: "search",
     toolPrefix: "mcp",
     ...carried,
-    _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+    requestTimeoutMs: 1800000,
+    _piClaudeMarketplace: {
+      plugin: "hello",
+      marketplace: "mp",
+      defaultFields: { requestTimeoutMs: 1800000 },
+    },
   };
 }
 

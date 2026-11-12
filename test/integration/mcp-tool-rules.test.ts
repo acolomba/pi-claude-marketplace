@@ -48,7 +48,12 @@ test("ANAME-07: a plugin whose http server declares tool permission rules instal
           url: "https://example.test/mcp",
           directTools: "search",
           toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+          requestTimeoutMs: 300000,
+          _piClaudeMarketplace: {
+            plugin: "hello",
+            marketplace: "mp",
+            defaultFields: { requestTimeoutMs: 300000 },
+          },
         },
       },
     });
