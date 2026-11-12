@@ -5,7 +5,9 @@ Feature: MCP server lifecycle
   D-MB-10). The two implementations show it through different tools, so each
   verb has a scenario for each. The three scenarios about a user's disabled
   choice in mcp-adapter.json exist only for pi-mcp-adapter, whose file keeps
-  that choice (D-08-01, D-08-02). A stdio stub server stands in for a real one,
+  that choice (D-08-01, D-08-02). Four request-timeout scenarios also use the
+  adapter's file; Pi's built-in MCP sets its timeout at session start and reads
+  no user value from that file (D-PG1-11 to D-PG1-13). A stdio stub server stands in for a real one,
   a scripted model for a real model, and a local marketplace for a published one.
 
   Background:
@@ -387,6 +389,68 @@ Feature: MCP server lifecycle
       | 3    | assistant   | tool call mcp {}                                                            |
       | 3    | tool result | mcp returned: server plugin_demo_stub_ disabled                             |
     Then no stub mcp server receives a message
+
+  @adapter-only
+  Scenario: A request timeout the user wrote for a plugin server survives an update (PG-MCP-01, D-PG1-11)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"kept":{"command":"pi-features-absent-mcp-server","args":["v1"]},"plain":{"command":"pi-features-absent-mcp-server","args":["v1"]}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has set the request timeout of the mcp server "plugin_demo_kept_" to 45000 ms in the mcp-adapter.json file of the user scope
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"kept":{"command":"pi-features-absent-mcp-server","args":["v2"]},"plain":{"command":"pi-features-absent-mcp-server","args":["v2"]}}}
+      """
+    When the user has run "/claude:plugin update demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_kept_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "v2"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 45000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          },
+          "plugin_demo_plain_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "v2"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000
+              }
+            }
+          }
+        }
+      }
+
+      """
 
   @mcp
   Scenario: A new session offers the plugin's tool again (BLT-01)
