@@ -7,6 +7,29 @@ Feature: Hook tool failure
   that record each run stand in for the plugin's hooks. The payload leaves out
   `tool_use_id`, `duration_ms`, and `mcp_server` (D-CF5-28, D-BG-403).
 
+  Scenario: A failed Read hook receives a Claude file input
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event              | matcher |
+      | before  | PreToolUse         | Read    |
+      | failure | PostToolUseFailure | Read    |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                   |
+      |       | read | {"path":"missing.txt"}     |
+      | Done. |      |                             |
+    When the user prompts "read a missing file"
+    Then the hooks record these runs:
+      | event              | session | tool name | tool input                                    | error                                                                           | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse         | first   | Read      | {"file_path":"{project dir}/missing.txt"}   |                                                                                 |              | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{project dir}/missing.txt"}   | ENOENT: no such file or directory, access '{project dir}/missing.txt'           | false        | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
   Scenario: Interrupting a running command runs no PostToolUseFailure hook (D-BG-402)
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
@@ -51,7 +74,7 @@ Feature: Hook tool failure
     When the user prompts "read past the end of the notes"
     Then the hooks record these runs:
       | event              | session | tool name | tool input                                                                | error                                          | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUseFailure | first   | Read      | {"path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role        | text                                                                                     |
       | 1    | user        | read past the end of the notes                                                           |
@@ -87,8 +110,8 @@ Feature: Hook tool failure
     When the user prompts "read past the end of the notes"
     Then the hooks record these runs in any order:
       | event              | session | tool name | tool input                                                                | error                                          | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUseFailure | first   | Read      | {"path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | literal   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-      | PostToolUseFailure | first   | Read      | {"path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | either    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | literal   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | either    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
 
   Scenario: A successful call runs its PostToolUse hook and no PostToolUseFailure hook
     Given pi runs with the scripted model
@@ -137,7 +160,7 @@ Feature: Hook tool failure
     When the user prompts "read past the end of the notes"
     Then the hooks record these runs:
       | event              | session | tool name | tool input                                                                | error                                          | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUseFailure | first   | Read      | {"path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | context   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | context   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role        | text                                                                                     |
       | 1    | user        | read past the end of the notes                                                           |
@@ -171,7 +194,7 @@ Feature: Hook tool failure
     When the user prompts "read past the end of the notes"
     Then the hooks record these runs:
       | event              | session | tool name | tool input                                                                | error                                          | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUseFailure | first   | Read      | {"path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | notice    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | notice    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the hooks show the user these messages:
       | severity | text                                                  |
       | info     | PostToolUseFailure:Read says: checked the failed read |
@@ -207,7 +230,7 @@ Feature: Hook tool failure
     When the user prompts "read past the end of the notes"
     Then the hooks record these runs:
       | event              | session | tool name | tool input                                                                | error                                          | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUseFailure | first   | Read      | {"path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | exit      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | exit      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role        | text                                                                                                                                                                                                                 |
       | 1    | user        | read past the end of the notes                                                                                                                                                                                       |
@@ -240,7 +263,7 @@ Feature: Hook tool failure
     When the user prompts "read past the end of the notes"
     Then the hooks record these runs:
       | event              | session | tool name | tool input                                                                | error                                          | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUseFailure | first   | Read      | {"path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | block     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{home}/marketplaces/fixtures/plugins/demo/notes.txt","offset":9} | Offset 9 is beyond end of file (3 lines total) | false        | {project dir} |                 | block     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role        | text                                                                                                                                                                              |
       | 1    | user        | read past the end of the notes                                                                                                                                                    |

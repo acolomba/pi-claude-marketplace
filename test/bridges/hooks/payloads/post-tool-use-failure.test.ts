@@ -44,7 +44,7 @@ test("maps a failed built-in tool to the complete PostToolUseFailure envelope", 
 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
-  assert.strictEqual(payload.tool_input, toolInput);
+  assert.notStrictEqual(payload.tool_input, toolInput);
 });
 
 test("preserves a failed custom tool name and nested values without mutation", () => {
@@ -132,4 +132,37 @@ test("sends only the text parts of a failure that also carries an image", () => 
 
   // assert
   assert.strictEqual(payload.error, "image decode failed\ntruncated at byte 8");
+  assert.deepStrictEqual(payload.tool_input, { file_path: "/workspace/broken.png" });
+  assert.strictEqual("tool_response" in payload, false);
+});
+
+test("translates a failed Read path without inventing a successful response", () => {
+  const event = {
+    type: "tool_result",
+    toolCallId: "missing-read",
+    toolName: "read",
+    input: { path: "missing.txt" },
+    content: [{ type: "text", text: "Path not found: missing.txt" }],
+    isError: true,
+    details: undefined,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "failed-read",
+    transcriptPath: "/sessions/failed-read.jsonl",
+    cwd: "/workspace/failed-read",
+  } satisfies TranslationContext;
+
+  const payload = translatePostToolUseFailure(event, context);
+
+  assert.deepStrictEqual(payload, {
+    session_id: "failed-read",
+    transcript_path: "/sessions/failed-read.jsonl",
+    cwd: "/workspace/failed-read",
+    hook_event_name: "PostToolUseFailure",
+    tool_name: "Read",
+    tool_input: { file_path: "/workspace/failed-read/missing.txt" },
+    error: "Path not found: missing.txt",
+    is_interrupt: false,
+  });
+  assert.strictEqual("tool_response" in payload, false);
 });

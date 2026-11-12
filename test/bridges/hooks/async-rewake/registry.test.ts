@@ -42,6 +42,60 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 const PLAIN_ANSWER =
   '{"systemMessage":"remember","hookSpecificOutput":{"additionalContext":"context"}}';
 
+for (const eventName of ["PostToolUse", "PostToolUseFailure"] as const) {
+  test(`serializes translated Read input for ${eventName} rewake`, async (t) => {
+    const root = await mkdtemp(path.join(tmpdir(), "async-read-input-"));
+    const runtime = createHooksRuntime();
+    const locations = locationsFor("project", root);
+    const child = createChild(31_090);
+    const chunks: Buffer[] = [];
+    child.stdin?.on("data", (chunk: Buffer) => {
+      chunks.push(Buffer.from(chunk));
+    });
+    const stdinEnd = child.stdin === null ? Promise.resolve([]) : once(child.stdin, "end");
+    t.after(async () => {
+      shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+
+    await spawnAndRegister(
+      runtime,
+      createEntry(root, { claudeEvent: eventName }),
+      {
+        type: "tool_result",
+        toolCallId: "read-rewake",
+        toolName: "read",
+        input: { path: "missing.txt" },
+        content: [{ type: "text", text: "missing file" }],
+        isError: eventName === "PostToolUseFailure",
+        details: undefined,
+      },
+      createContext(root, "read-rewake-session", true).context,
+      createPi().pi,
+      locations,
+      { spawnImpl: createSpawn(child.child, []), dispatchId: () => "read-rewake-dispatch" },
+    );
+    await stdinEnd;
+
+    const payload: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const common = {
+      session_id: "read-rewake-session",
+      transcript_path: "",
+      cwd: root,
+      hook_event_name: eventName,
+      tool_name: "Read",
+      tool_input: { file_path: path.join(root, "missing.txt") },
+    };
+    assert.deepStrictEqual(
+      payload,
+      eventName === "PostToolUse"
+        ? { ...common, tool_response: [{ type: "text", text: "missing file" }] }
+        : { ...common, error: "missing file", is_interrupt: false },
+    );
+  });
+}
+
 interface SpawnCall {
   readonly command: string;
   readonly args: readonly string[];
