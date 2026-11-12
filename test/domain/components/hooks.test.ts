@@ -177,6 +177,22 @@ test("parseHooksConfig rejects invalid JSON", () => {
   }
 });
 
+test("parseHooksConfig rejects a null matcher through schema validation", () => {
+  // arrange
+  const raw = JSON.stringify({
+    PreToolUse: [{ matcher: null, hooks: [{ type: "command", command: "echo x" }] }],
+  });
+
+  // act
+  const result = parseHooksConfig(raw, TEST_IF_CTX, () => null);
+
+  // assert
+  assert.deepStrictEqual(result, {
+    ok: false,
+    reason: "hooks.json failed schema validation: /PreToolUse/0/matcher: must be string",
+  });
+});
+
 for (const { description, raw, reason } of [
   {
     description: "a non-array handler group",

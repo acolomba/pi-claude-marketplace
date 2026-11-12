@@ -65,6 +65,32 @@ describe("parseMatcher", () => {
     });
   });
 
+  test("splits comma and pipe lists while trimming surrounding ASCII spaces", () => {
+    // arrange
+    const raw = " Edit, Write | Read , Bash | Edit ";
+
+    // act
+    const matcher = parseMatcher(raw);
+
+    // assert
+    assert.deepStrictEqual(matcher, {
+      kind: "tool-set",
+      toolNames: new Set(["edit", "write", "read", "bash"]),
+    });
+  });
+
+  test("keeps spaces inside one literal and discards empty list members", () => {
+    // arrange
+
+    // act
+    const spaced = parseMatcher("Read Write, Bash");
+    const empty = parseMatcher(" , | , ");
+
+    // assert
+    assert.deepStrictEqual(spaced, { kind: "tool-set", toolNames: new Set(["bash"]) });
+    assert.deepStrictEqual(empty, { kind: "tool-set", toolNames: new Set() });
+  });
+
   for (const literal of [
     "mcp__github__create_issue",
     "mcp__server__tool",
@@ -260,10 +286,6 @@ describe("parseMatcher", () => {
     ".*",
     "Edit$",
     "(Edit)",
-    "|",
-    "Edit|",
-    "|Edit",
-    "Edit||Write",
     "mcp__bad!__tool",
     "mcp__server__bad!",
   ]) {

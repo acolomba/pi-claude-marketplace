@@ -1,7 +1,7 @@
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "../hook-tool-names.ts";
 
-const SAFE_MATCHER_CHARS = /^[A-Za-z0-9_|-]+$/;
+const SAFE_MATCHER_CHARS = /^[A-Za-z0-9_ ,|-]+$/;
 const MCP_SEGMENT = /^[A-Za-z0-9_-]+$/;
 const CLAUDE_TO_PI_TOOL_NAME_LOOKUP: ReadonlyMap<string, PiToolName> = new Map(
   Object.entries(CLAUDE_TO_PI_TOOL_NAMES),
@@ -57,10 +57,8 @@ function isMcpLiteral(raw: string): boolean {
 }
 
 /**
- * MATCH-02: the server-prefix form is the one regex-shaped alternative
- * accepted. Any other alternative that is empty or holds a character
- * outside `SAFE_MATCHER_CHARS` is one a plugin author could use to smuggle
- * a regex, and it makes the whole matcher `regex`.
+ * Classifies an exact-list member after separators and surrounding spaces
+ * have been removed.
  */
 function classifyAlternative(token: string): Alternative {
   const prefix = mcpServerPrefix(token);
@@ -97,11 +95,17 @@ export function parseMatcher(raw: string): ParsedMatcher {
 
   const toolNames = new Set<string>();
   const toolPrefixes: string[] = [];
-  // The empty-string sentinel for "no alternative discarded yet" is safe:
-  // an empty alternative classifies as `regex` and returns before reaching
-  // the discard arm, so no real discarded alternative is ever `""`.
+  if (!SAFE_MATCHER_CHARS.test(raw) && !raw.startsWith("mcp__")) {
+    return { kind: "regex" };
+  }
+
   let firstDiscarded = "";
-  for (const token of raw.split("|")) {
+  for (const rawToken of raw.split(/[|,]/)) {
+    const token = rawToken.trim();
+    if (token === "") {
+      continue;
+    }
+
     const alternative = classifyAlternative(token);
     switch (alternative.kind) {
       case "regex":
@@ -124,7 +128,7 @@ export function parseMatcher(raw: string): ParsedMatcher {
     }
   }
 
-  if (toolNames.size === 0 && toolPrefixes.length === 0) {
+  if (toolNames.size === 0 && toolPrefixes.length === 0 && firstDiscarded !== "") {
     return { kind: "unmapped", token: firstDiscarded };
   }
 

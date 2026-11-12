@@ -59,6 +59,20 @@ describe("partitionHooks", () => {
     });
   });
 
+  test("keeps exact lists with spaces and separators without widening an empty list", () => {
+    // arrange
+    const groups = [
+      { matcher: "Read Write, Bash | Bash", hooks: [{ type: "command", command: "bash" }] },
+      { matcher: " , | , ", hooks: [{ type: "command", command: "never" }] },
+    ];
+
+    // act
+    const partition = partitionHooks({ PreToolUse: groups });
+
+    // assert
+    assert.deepStrictEqual(partition, { supported: { PreToolUse: groups }, dropped: [] });
+  });
+
   test("drops regex and unmapped tool groups but keeps their supported sibling", () => {
     // arrange
     const config = {
