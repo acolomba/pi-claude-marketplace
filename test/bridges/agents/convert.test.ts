@@ -2828,10 +2828,10 @@ describe("MGRT-01 grant form per MCP implementation", () => {
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
-  test("MGRT-01: an adapter per-tool exclude keeps a dotted Claude token verbatim", () => {
+  test("D-PG1-10: an adapter per-tool exclude takes pi-mcp-adapter's tool name, with each dot an underscore", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: "excludeTools: mcp__plugin_acme_db__a.b",
+      toolsField: "excludeTools: mcp__plugin_acme_db__a_b",
       inheritSkills: true,
       async: true,
       droppedTools: [],
@@ -2841,6 +2841,28 @@ describe("MGRT-01 grant form per MCP implementation", () => {
     // act
     const agent = convertMcpAgent(
       { description: "d", disallowedTools: "mcp__plugin_acme_db__a.b" },
+      ["db"],
+      "adapter",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("D-PG1-10: an adapter per-tool exclude longer than 64 characters is cut and hashed as pi-mcp-adapter 7.0.1 does", () => {
+    // arrange
+    const tool = "list_every_table_in_the_warehouse_with_its_row_counts";
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "excludeTools: mcp__plugin_acme_db__list_every_table_in_the_warehouse__05ea19f1",
+      inheritSkills: true,
+      async: true,
+      droppedTools: [],
+      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING, MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", disallowedTools: `mcp__plugin_acme_db__${tool}` },
       ["db"],
       "adapter",
     );
