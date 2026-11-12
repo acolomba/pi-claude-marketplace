@@ -101,6 +101,102 @@ function createMessagePi(sent: SentMessage[], failure?: Error): ExtensionAPI {
 }
 
 describe("adaptToolCallResult", () => {
+  for (const mode of ["tui", "print", "json", "rpc"] as const) {
+    test(`sends one private ignored-rewrite notice through ${mode}`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+      const notifications: Array<[string, string | undefined]> = [];
+      const input = { path: "original.txt", offset: 1 };
+      const event = {
+        type: "tool_call",
+        toolCallId: "call-read",
+        toolName: "read",
+        input,
+      } satisfies ToolCallEvent;
+      const ctx = {
+        mode,
+        cwd: "/workspace",
+        ui: {
+          notify(message: string, severity?: string): void {
+            notifications.push([message, severity]);
+          },
+        },
+      } as ExtensionContext;
+      const context: HookAdapterContext = {
+        ...adapterContext(guardEntry()),
+        ctx,
+        pi: { appendEntry: capture.entrySink.appendEntry } as ExtensionAPI,
+      };
+
+      // act
+      const adaptation = await adaptToolCallResult(
+        { kind: "mutate", updatedInput: { file_path: "replacement.txt", pages: "secret-value" } },
+        event,
+        context,
+      );
+
+      // assert
+      assert.strictEqual(adaptation, undefined);
+      assert.strictEqual(event.input, input);
+      assert.deepStrictEqual(input, { path: "original.txt", offset: 1 });
+      if (mode === "tui" || mode === "print") {
+        assert.deepStrictEqual(notifications, [
+          ["PreToolUse:Read ignored input rewrite (field)", "info"],
+        ]);
+        assert.deepStrictEqual(capture.entries, []);
+      } else {
+        assert.deepStrictEqual(notifications, []);
+        assert.deepStrictEqual(capture.entries, [
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              origin: { kind: "hook" },
+              kind: "hook-notice",
+              severity: "info",
+              needsReload: false,
+              text: "PreToolUse:Read ignored input rewrite (field)",
+            },
+          },
+        ]);
+      }
+
+      capture.assertValid();
+    });
+  }
+
+  test("keeps an ignored rewrite from failing the tool call when its notice transport throws", async () => {
+    // arrange
+    const input = { path: "original.txt" };
+    const event = {
+      type: "tool_call",
+      toolCallId: "call-read",
+      toolName: "read",
+      input,
+    } satisfies ToolCallEvent;
+    const context: HookAdapterContext = {
+      ...adapterContext(guardEntry()),
+      ctx: { mode: "json", cwd: "/workspace" } as ExtensionContext,
+      pi: {
+        appendEntry(): never {
+          throw new Error("notice transport failed");
+        },
+      } as unknown as ExtensionAPI,
+    };
+
+    // act
+    const adaptation = await adaptToolCallResult(
+      { kind: "mutate", updatedInput: { file_path: "replacement.txt", pages: "secret-value" } },
+      event,
+      context,
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.strictEqual(event.input, input);
+    assert.deepStrictEqual(input, { path: "original.txt" });
+  });
+
   test("shows one sanitized notice when a Read rewrite asks for an unavailable field", async () => {
     // arrange
     const capture = createJsonCapture();

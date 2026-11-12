@@ -241,12 +241,16 @@ async function adaptToolCallMutation(
         replaceToolCallInput(event, decoded.input);
       }
     } else if (context.pi !== undefined) {
-      const run = openNotificationRun(context.pi, { kind: "hook" });
-      notifyHookNotice(
-        context.ctx,
-        run,
-        `PreToolUse:${mapPiToClaudeToolName(event.toolName)} ignored input rewrite (${decoded.category})`,
-      );
+      try {
+        const run = openNotificationRun(context.pi, { kind: "hook" });
+        notifyHookNotice(
+          context.ctx,
+          run,
+          `PreToolUse:${mapPiToClaudeToolName(event.toolName)} ignored input rewrite (${decoded.category})`,
+        );
+      } catch (error: unknown) {
+        hookDebugLog(`adaptToolCall: ignored rewrite notice failed: ${errorMessage(error)}`);
+      }
     }
   }
 

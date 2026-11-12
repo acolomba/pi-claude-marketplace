@@ -4606,6 +4606,45 @@ function builtinToolEntries(
   );
 }
 
+test("native Read path condition selects a hook before its input is translated", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const cwd = "/workspace/if";
+  runtime.setRoutingBucket("PreToolUse", [
+    createRoutingEntry({
+      pluginId: "path-match",
+      claudeEvent: "PreToolUse",
+      rawMatcher: "Read",
+      declarationIndex: 0,
+      ifPredicate: compileIfPredicate("Read(original.txt)", "PreToolUse", {
+        homedir: "/home/tester",
+        cwd,
+        projectRoot: cwd,
+      }),
+    }),
+  ]);
+  const calls: RecordedCall[] = [];
+  const event = createToolCallEvent("read", { path: "original.txt" });
+  const handler = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    createRecordingExecutor({ "path-match": { kind: "noop" } }, calls),
+  );
+
+  // act
+  const result = await handler(event, createExtensionContext(cwd));
+
+  // assert
+  assert.strictEqual(result, undefined);
+  assert.deepStrictEqual(calls, [
+    { pluginId: "path-match", event: createToolCallEvent("read", { path: "original.txt" }) },
+  ]);
+  assert.deepStrictEqual(event, createToolCallEvent("read", { path: "original.txt" }));
+});
+
 describe("built-in MCP tool names (MHK-01)", () => {
   test("gives the adapter's full name to every PreToolUse hook when one spells it (D-PG1-08)", async () => {
     // arrange

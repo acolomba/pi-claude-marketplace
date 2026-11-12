@@ -141,6 +141,13 @@ describe("decodeHookToolInput", () => {
       expected: { path: `${CWD}/after.txt`, limit: 2 },
     },
     {
+      name: "read replacement ignores empty pages",
+      tool: "read",
+      original: { path: "before.txt" },
+      candidate: { file_path: "after.txt", pages: "" },
+      expected: { path: `${CWD}/after.txt` },
+    },
+    {
       name: "write replacement keeps empty bytes",
       tool: "write",
       original: { path: "before.txt", content: "old" },
@@ -203,6 +210,12 @@ describe("decodeHookToolInput", () => {
       category: "field",
     },
     {
+      name: "prototype key",
+      tool: "read",
+      candidate: { prototype: "x", file_path: "after.txt" },
+      category: "field",
+    },
+    {
       name: "unknown read field",
       tool: "read",
       candidate: { file_path: "x", max_bytes: "secret" },
@@ -212,6 +225,12 @@ describe("decodeHookToolInput", () => {
       name: "nonempty pages",
       tool: "read",
       candidate: { file_path: "x", pages: "1" },
+      category: "field",
+    },
+    {
+      name: "mixed supported and unrepresentable read fields",
+      tool: "read",
+      candidate: { file_path: "after.txt", offset: 2, pages: "1" },
       category: "field",
     },
     { name: "missing read path", tool: "read", candidate: { offset: 1 }, category: "value" },

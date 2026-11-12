@@ -128,13 +128,19 @@ function decodeFileInput(
   home: string,
 ): DecodedToolInput {
   const allowed =
-    tool === "read" ? new Set(["file_path", "offset", "limit"]) : new Set(["file_path", "content"]);
+    tool === "read"
+      ? new Set(["file_path", "offset", "limit", "pages"])
+      : new Set(["file_path", "content"]);
   if (Object.keys(candidate).some((key) => !allowed.has(key))) {
     return { kind: "ignored", category: "field" };
   }
 
   if (typeof candidate.file_path !== "string" || candidate.file_path.length === 0) {
     return { kind: "ignored", category: "value" };
+  }
+
+  if (tool === "read" && candidate.pages !== undefined && candidate.pages !== "") {
+    return { kind: "ignored", category: "field" };
   }
 
   const native: Input = { path: requestedPath(candidate.file_path, cwd, home) };
