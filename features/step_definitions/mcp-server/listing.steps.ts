@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
+import { profileFor } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import { registryAfterListing, waitForStubListing } from "../../lib/mcp-implementation.ts";
 import {
   LATE_TAG_ENVIRONMENT,
@@ -232,6 +233,24 @@ Then("pi offers these plugin mcp tools:", function (this: ScenarioWorld, table: 
     .map((name) => [name, active.has(name) ? "yes" : "no"]);
   assert.deepStrictEqual([["tool", "active"], ...rows], table.raw());
 });
+
+Then(
+  "pi offers the tool {string} of the plugin {string} server {string} under its adapter name {string}",
+  function (this: ScenarioWorld, tool: string, plugin: string, server: string, name: string) {
+    const snapshot = this.registrySnapshot;
+    if (snapshot === undefined) {
+      assert.fail("no step listed the mcp tools pi offers");
+    }
+
+    assert.deepStrictEqual(
+      {
+        predicted: profileFor("adapter").toolName(plugin, server, tool),
+        offered: snapshot.allTools.some((entry) => entry.name === name),
+      },
+      { predicted: name, offered: true },
+    );
+  },
+);
 
 // The stub's whole log for the scenario is empty: no server was started.
 Then("no stub mcp server receives a message", async function (this: ScenarioWorld) {

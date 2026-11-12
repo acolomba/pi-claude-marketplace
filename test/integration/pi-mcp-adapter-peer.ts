@@ -70,10 +70,11 @@ export interface PiMcpAdapterConfig {
   ) => { readonly mcpServers: Readonly<Record<string, unknown>> };
 }
 
-/** The `dist/types.js` constants the status conformance test reads. */
+/** The `dist/types.js` status constants and tool-name formatter the conformance tests read. */
 export interface PiMcpAdapterTypes {
   readonly MCP_STATUS_EVENT: string;
   readonly MCP_STATUS_SNAPSHOT_VERSION: number;
+  readonly formatToolName: (toolName: string, serverName: string, prefix: "mcp") => string;
 }
 
 /**
