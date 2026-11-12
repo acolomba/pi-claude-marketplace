@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
-current_phase: 01
-current_phase_name: Companion Floors and MCP Defaults
-status: executing
-stopped_at: parity-gaps Phase 01 local companion fix verified; pinned dependency adoption pending
-last_updated: "2026-11-12T19:42:35.564Z"
+current_phase: 2
+current_phase_name: Hook Payloads, Matchers, and Stop Limit
+status: ready_to_plan
+stopped_at: parity-gaps Phase 1 closed with companion adoption deferred; Phase 2 ready for discussion
+last_updated: "2026-11-12T20:03:13.100Z"
 last_activity: 2026-11-12
-last_activity_desc: Added installed-companion characterization tests; upstream PR 3259 review addressed and CI passed
-state_head: 92bace26f6438a09f01c92148673695d7d7fb655
+last_activity_desc: Captured AGTAMBIENT-01 release trigger; closed Phase 1 with accepted deferral and advanced to Phase 2
+state_head: de13d0a0c1820d82749bcbc3b4abafd44db638e4
 progress:
   total_phases: 11
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 11
   completed_plans: 11
-  percent: 0
+  percent: 9
 ---
 
 # Project State
@@ -27,17 +27,37 @@ See: `.planning/PROJECT.md` (updated 2026-11-08 when the behavioral-gaps milesto
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 01 — Companion Floors and MCP Defaults
+**Current focus:** Phase 02 — Hook Payloads, Matchers, and Stop Limit
 
 ## Current Position
 
-Phase: 01 (Companion Floors and MCP Defaults) — EXECUTING
-Plan: 11 of 11
-Status: Local companion fix verified — adoption into the pinned dependency remains pending
-Last activity: 2026-11-12 — Quick task 261112-jzs added installed-companion characterization tests. Upstream PR #3259 is open, its review is addressed, and CI passed. Dependency adoption remains pending.
+Phase: 2 — Hook Payloads, Matchers, and Stop Limit
+Plan: Not started
+Status: Ready for discussion and planning
+Last activity: 2026-11-12 — Phase 1 closed with accepted companion-adoption deferral; release-triggered follow-up captured as SEED-261112-81c / AGTAMBIENT-01.
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 9%
 
+
+### parity-gaps Phase 1 closeout
+
+All 11 plans are complete. Verification passes with 19 verified truths and one
+explicit user-approved deferral, accepted 2026-11-12. The installed companion
+remains pi-subagents 0.88.0; its real-child direct-MCP limitation is not fixed here.
+[SEED-261112-81c](seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md)
+and BACKLOG AGTAMBIENT-01 carry adoption when a published release includes
+upstream PR #3259. PG-MCP-02 stays partial until the positive controls pass on
+the adopted release; the two characterization tests alert us when behavior changes.
+AGTLONGNAME-01 is a separate explicit-grant defect. PG1-TIMING-01 carries
+validation timing bookkeeping; `nyquist_compliant` remains false.
+
+The final full gate passed at `92bace26` on Node v26.13.0: 1,812 adapter scenarios,
+155 built-in scenarios and 354 direct-coverage pairs. Only planning Markdown
+changed for this closeout, with no new untracked executable inputs. Canonical
+completion advanced to Phase 2. Its state was corrected from the CLI's misleading
+"ready for verification" to "ready for discussion and planning"; no Phase 2 plan
+has been executed. The requirement parser rejected the mixed-case PG-AGENT-07b
+ID, so traceability was reconciled directly: three complete, PG-MCP-02 partial.
 
 ### mcp-4 closeout
 
@@ -984,6 +1004,6 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-08T05:46:41.533Z
-Stopped at: Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
+Last session: 2026-11-12T20:03:13Z
+Stopped at: parity-gaps Phase 1 complete with accepted deferral; Phase 2 ready for discussion
 Resume file: None

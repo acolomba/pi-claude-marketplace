@@ -1,9 +1,10 @@
 ---
-status: partial
+status: complete
+acceptance: completed-with-accepted-deferral
 phase: 01-companion-floors-and-mcp-defaults
 source: [01-VERIFICATION.md]
 started: 2026-11-12T07:36:00Z
-updated: 2026-11-12T13:57:20Z
+updated: 2026-11-12T20:00:07Z
 ---
 
 ## Current Test
@@ -24,6 +25,8 @@ evidence: Real detached PID 3263124; run 7e8c4b83-e5b8-4e47-b231-179d48b6ddda. B
 expected: The parent and unrestricted demo:control child offer and can call mcp__plugin_demo_a-server-whose-name-runs-well-past-the_a4df039c. A real demo:restricted child does not have that tool in its actual tool inventory, while mcp__plugin_demo_stub__echo remains available and callable. Preserve inventory or provider tool-schema evidence; a model's unsupported assertion is insufficient.
 result: blocked
 blocked_by: third-party
+disposition: accepted-deferral
+tracking: AGTAMBIENT-01 / SEED-261112-81c
 reason: pi-subagents 0.88.0 sets MCP_DIRECT_TOOLS=__none__ for children without explicit MCP selectors, so adapter 7.0.1 registers no direct tools. The unrestricted long-tool control and the restricted child's permitted short control both failed with tool-not-found. Long-tool absence cannot establish that disallowedTools caused the exclusion.
 source: automated
 evidence: Unrestricted PID 3263943, run 3b85d617-7578-4cd6-b216-1f86820cde8f; restricted PID 3264825, run 08ca46f2-df42-473b-900a-6ab9b547f479. Actual child provider schemas omit both direct tools before and after mcp connect. Parent schemas include both tools.
@@ -36,6 +39,7 @@ issues: 0
 pending: 0
 skipped: 0
 blocked: 1
+deferred_accepted: 1
 
 ## Automated Run
 
@@ -92,7 +96,7 @@ with the patch reverted. The full adjacent integration module timed out; the
 focused MCP cases passed separately. See the artifact for exact commands.
 
 These results validate the local fix. This project's pinned 0.88.0 dependency
-has not changed, and the fix has not been pushed or published. Test 2 remains
+has not changed. The fix was subsequently pushed as PR #3259; its reviewed head is `7629470d1d86f62e4fd4b6ccb1ee4b2c28953db4`, with CI passing in the recorded review. No fixed package release is claimed. Test 2 remains
 blocked for that dependency until the fix is adopted and the same runner passes
 against the adopted build. No manual rerun is requested.
 
@@ -149,3 +153,11 @@ contract in `01-VERIFICATION.md` before continuing.
 No local implementation failure is established. Test 1 passed automatically;
 test 2 is blocked by the source-confirmed companion behavior described above.
 Focused-feedback timing sign-off remains a separate validation-record item.
+
+## Accepted External-Dependency Deferral — 2026-11-12
+
+The user explicitly instructed: "let's add this pending work to a gsd trigger ... to upgrade to the version of pi-subagents that fixes this problem, and move on from phase 1". Phase 1 acceptance is complete with that specific deferral. **Test 2 remains recorded as blocked on installed 0.88.0; it is not a passed test.** No manual test remains pending.
+
+[SEED-261112-81c](../../seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md) and BACKLOG AGTAMBIENT-01 carry the release trigger, dependency upgrade, replacement of the two known-bug assertions, three real-child controls on the adopted build, full gate, and acceptance-record updates. The seed surfaces during companion upgrades and milestone planning; it does not monitor releases in the background. PR review/CI success does not establish publication.
+
+The six installed-launch characterization cases pass on 0.88.0. Substituting the actual fixed module makes exactly the two known-bug cases fail while the four restriction controls pass; the original peer module was restored. All three positive real-child controls pass on the local fixed build. These results preserve the defect and fix evidence until adoption. Focused-feedback timing bookkeeping remains advisory debt in `01-VALIDATION.md`.

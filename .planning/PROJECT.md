@@ -2660,3 +2660,5 @@ _Last updated: 2026-11-07 after starting the behavioral-gaps milestone._
 _Last updated: 2026-11-11 after starting the parity-gaps milestone._
 
 _Last updated: 2026-11-12 during parity-gaps Phase 1; Key Decisions gains D-PG1-01 to D-PG1-14, with D-PG1-02 amending PIFL-02 and D-PG1-11 amending ANAME-07._
+
+_Last updated: 2026-11-12 after parity-gaps Phase 1 closed: three requirements verified; PG-MCP-02 partially verified with user-approved companion-adoption deferral AGTAMBIENT-01 / SEED-261112-81c. Phase 2 is next. No workaround or dependency upgrade was introduced._

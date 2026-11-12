@@ -63,7 +63,7 @@ A task ID is `<phase>-<plan>-<task>`: `01-03-02` is Task 2 of `01-03-PLAN.md`. T
 | 01-03-01 | 03 | 2 | PG-MCP-02 | -- | N/A | cucumber | `npm run test:cucumber:profile -- --profile adapter features/mcp-server/listing.feature` | yes | passed (automated scope) |
 | 01-07-01, 01-07-02, 01-07-03 | 07 | 3 | PG-MCP-02 | T-01-18, T-01-19, T-01-20 | a hook that names the full name runs; no hook runs for another server; no hook gets a name the tool does not have | unit and cucumber | `npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts`; `npm run test:cucumber:profile -- --profile adapter features/hook/mcp-tool-names.feature` | yes | passed (automated scope) |
 | 01-08-01, 01-08-02 | 08 | 4 | PG-MCP-02 | T-01-22, T-01-23 | a rebuilt name is accepted only when it fits; a cut name is never taken for a proxy call | unit and cucumber | `npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts`; `npm run test:cucumber:profile -- --profile adapter features/hook/mcp-tool-names.feature features/hook/tool-use.feature` | yes | passed (automated scope) |
-| 01-05-01 | 05 | 3 | PG-MCP-02 | T-01-11 | the staged exclusion uses the registered name; real-child enforcement remains manual | unit and cucumber | `npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/agents/convert.ts`; `npx cucumber-js --profile adapter --name "excludes it under the name pi-mcp-adapter gives it" features/mcp-server/agent-grants.feature` | yes | passed (automated scope) |
+| 01-05-01 | 05 | 3 | PG-MCP-02 | T-01-11 | the staged exclusion uses the registered name; real-child enforcement on the adopted dependency is deferred by user override | unit and cucumber | `npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/agents/convert.ts`; `npx cucumber-js --profile adapter --name "excludes it under the name pi-mcp-adapter gives it" features/mcp-server/agent-grants.feature` | yes | passed (automated scope) |
 | 01-05-02 | 05 | 3 | PG-MCP-02 | T-01-13 | the pi-subagents long-name grant gap is measured or read, and recorded as such | integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test "test/integration/agents-*-grant-conformance.test.ts"` | yes, adapter twin measured the upstream gap | passed (automated scope) |
 | 01-04-01, 01-06-01 | 04, 06 | 2, 3 | PG-MCP-01 | T-01-10, T-01-14, T-01-15 | the default never replaces a value the user wrote | unit | direct coverage of `mcp-server-features.ts` and `mcp-builtin-translation.ts` (01-04-01), `adapter-entry.ts` and `marker.ts` (01-06-01) | yes, new cases | passed (automated scope) |
 | 01-04-01, 01-04-02 | 04 | 2 | PG-MCP-01 | -- | N/A | cucumber | `npm run test:cucumber:profile -- --profile builtin features/mcp-server/builtin-values.feature features/mcp-server/configuration.feature` | files yes, one new scenario and changed rows | passed (automated scope) |
@@ -95,10 +95,10 @@ Each item names the task that creates it. No plan runs before plan 01-01, so the
 
 ## Checks Beyond the Permanent Suite
 
-| Behavior | Requirement | Why Manual | Test Instructions |
+| Behavior | Requirement | Evidence boundary | Test Instructions |
 |----------|-------------|------------|-------------------|
 | VERIFIED: A real background child calls a granted plugin MCP tool | PG-AGENT-02 | The permanent harness uses a stand-in; a separate local API provider can drive the real detached child | Automated 2026-11-12 on pi-subagents 0.88.0 and pi-mcp-adapter 7.0.1: PID 3263124 called the short echo tool and received echo:pg1-live-short. Actual child provider schemas, transcript and MCP request log agree; see 01-UAT.md and the debug record. |
-| BLOCKED: A real background child is not offered a disallowed plugin tool with a name over 64 characters | PG-MCP-02 | Companion behavior prevents a valid positive control, independently of human involvement | Real unrestricted and restricted children without explicit MCP selectors both receive MCP_DIRECT_TOOLS=__none__. Neither receives direct MCP tools, even after connect. The unrestricted long control and permitted short control fail, so exclusion is unverified. See 01-UAT.md. |
+| ACCEPTED DEFERRAL (blocked on installed 0.88.0): A real background child is not offered a disallowed plugin tool with a name over 64 characters | PG-MCP-02 | Companion behavior prevents a valid positive control, independently of human involvement | Real unrestricted and restricted children without explicit MCP selectors both receive MCP_DIRECT_TOOLS=__none__. Neither receives direct MCP tools, even after connect. The installed unrestricted long control and permitted short control fail. All three controls pass on the local fix. User accepted deferral to AGTAMBIENT-01 / SEED-261112-81c until a fixed release can be adopted; see 01-UAT.md. |
 | VERIFIED: A call silent for more than 60 seconds succeeds under each implementation | PG-MCP-01 | Slow, and kept out of the suite by D-PG1-14 | Completed 2026-11-12: both temporary profiles passed with 65-second calls and declared 5-second controls. Evidence is recorded in `01-09-SUMMARY.md` under `## Slow call (D-PG1-14)` |
 
 ---
@@ -114,8 +114,10 @@ Each item names the task that creates it. No plan runs before plan 01-01, so the
 
 **Audit outcome (2026-11-12):** automated task coverage passed; the real-child
 granted call also passed in a separate automated run. The long exclusion check is
-blocked by installed companion behavior. `nyquist_compliant` stays false until that check and the
-focused timing sign-off are resolved. No additional test implementation gap was
+blocked by installed companion behavior and explicitly deferred by the user to
+AGTAMBIENT-01 / SEED-261112-81c. That accepted scope deferral permits Phase 1
+completion; it does not pass the installed-peer exclusion test. `nyquist_compliant`
+stays false because focused-feedback timing sign-off is incomplete. No additional test implementation gap was
 found: all 28 tasks have automated verification, all eleven summaries record passing
 task checks, and the conformance tests and four lifecycle scenarios exist.
 
@@ -123,7 +125,7 @@ task checks, and the conformance tests and four lifecycle scenarios exist.
 |-------------|-----------------|---------------------------------|
 | PG-AGENT-02 | COVERED | Peer-floor architecture checks, installed-companion conformance, foreground scenarios, and documentation checks passed. A real detached child's explicit short grant passed in the recorded automated run. |
 | PG-AGENT-07b | COVERED | Agent conversion direct coverage and mapped-model behavioral scenarios passed. |
-| PG-MCP-02 | PARTIAL | Naming conformance, hook recovery, proxy-shaped calls, and staged exclusion checks passed. Real detached-child exclusion is blocked because the installed companions suppress direct tools in both controls without explicit MCP selectors. |
+| PG-MCP-02 | VERIFIED SCOPE + ACCEPTED DEFERRAL | Naming conformance, hook recovery, proxy-shaped calls, and staged exclusion checks passed. Real detached-child exclusion remains blocked on installed 0.88.0, passes on the local fix, and is accepted as deferred to AGTAMBIENT-01 / SEED-261112-81c. No adopted-version pass is claimed. |
 | PG-MCP-01 | COVERED | Both implementations' defaults, user precedence, marker lifecycle, and recorded slow/control calls passed. |
 
 Automated evidence: `01-01-SUMMARY.md` through `01-11-SUMMARY.md`; combined
@@ -135,7 +137,7 @@ with the same counts and Node version (`/tmp/gsd-parity-wave5-check.log`).
 The two live checks were initially designated manual-only. The user requested
 automation before interruption; the separate real-child runs now supply one pass
 and one companion blocker. Stand-in-child scenarios supply neither result.
-No acceptance or waiver is inferred.
+No acceptance was inferred from those runs. The later explicit user instruction authorizes only the external-adoption deferral recorded below.
 
 After the review fix `1e762749`, the final combined-tree `npm run check` passed
 with exit 0 on Node v26.13.0: 1,812 adapter scenarios, 155 built-in scenarios,
@@ -152,4 +154,34 @@ the newer live-child evidence.
 |---|---|
 | Gaps found | 2 |
 | Resolved | 1 |
-| Escalated | 1 |
+| Escalated | 0 |
+| Accepted external deferral | 1 |
+
+## Phase-Closure Deferral and Nonblocking Timing Debt
+
+On 2026-11-12 the user explicitly authorized moving beyond Phase 1 and tracking
+adoption of a published pi-subagents fix. AGTAMBIENT-01 and
+[SEED-261112-81c](../../seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md)
+own that release-triggered work. Verification counts 19 verified outcomes plus
+one PASSED (override), not 20 empirical passes. UAT preserves the blocked
+installed-peer result; no manual rerun is requested.
+
+The six installed-launch characterization cases and their patch sensitivity are
+recorded in quick task 261112-jzs: six pass on 0.88.0, exactly two known-bug cases
+fail against the actual fixed module, four restriction controls stay green, and
+the installed peer is restored. The positive runner passes all three real-child
+controls on the local fixed build.
+
+The complete combined-tree `npm run check` passed with exit 0 at
+`92bace26f6438a09f01c92148673695d7d7fb655`, Node v26.13.0: 1,812 adapter scenarios,
+155 built-in scenarios, and 354 direct-coverage pairs. Log:
+`/tmp/gsd-mcp-characterization-full-check.log`. The comparison excluding planning
+Markdown is empty and no untracked build input exists; that gate is reused.
+
+**Carried advisory debt (PG1-TIMING-01):** focused-feedback timing records have not
+been reconciled against the 30-second target and the explicit slow-gate exception.
+At the next validation audit, review the retained command durations, record any
+missing measurements honestly, and update the unchecked timing sign-off only
+when supported. Keep `nyquist_compliant: false` until that review supports a change.
+This is incomplete validation bookkeeping, not an unrun required product test,
+a new human acceptance item, or a claim that the recorded slow/control runs failed.

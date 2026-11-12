@@ -97,7 +97,7 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 - **Not scheduled.** The P2 rows of the PRD (the v2 list in `REQUIREMENTS.md`)
   and its P3 rows get no phase.
 
-- [ ] **Phase 1: Companion Floors and MCP Defaults** - The pi-subagents floor is 0.87.0 and the pi-mcp-adapter floor is 7.0.1, mapped model IDs carry no provider, long tool names work under the adapter, and a server with no `timeout` gets Claude Code's idle window
+- [x] **Phase 1: Companion Floors and MCP Defaults** - The pi-subagents floor is 0.87.0 and the pi-mcp-adapter floor is 7.0.1, mapped model IDs carry no provider, long tool names work under the adapter, and a server with no `timeout` gets Claude Code's idle window (completed 2026-11-12)
 - [ ] **Phase 2: Hook Payloads, Matchers, and Stop Limit** - Hooks on file tools get and return Claude-shaped tool input, matchers follow Claude Code's rules, and a `Stop` hook can block eight times in a row
 - [ ] **Phase 3: Background Subagents** - A bridged agent runs in the launch mode pi-subagents chooses, and a subagent child runs none of the plugin's main-session hooks
 - [ ] **Phase 4: Skill and Workflow Install Defects** - A root-source entry installs only its listed skills, sibling skill links resolve, a plugin starts its own workflow by name, and an install notes that a workflow does not keep an agent's tool restriction
@@ -182,7 +182,9 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
   3. Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works wherever the project names it: the server listing shows it, a hook whose matcher is the full Claude Code name runs and receives that name, and an agent whose `disallowedTools` names the tool is not offered it (PG-MCP-02).
   4. Under both profiles, the registered configuration of a stdio plugin server with no declared `timeout` shows 30 minutes, and that of a remote server shows 5 minutes. Under the adapter, a timeout the user wrote on the entry is still there after an update (PG-MCP-01).
 
-**Plans**: 11/11 plans executed
+**Closeout (2026-11-12):** 19 truths verified and one accepted override. The remaining real-child exclusion acceptance in criterion 3 is deferred by the user to [AGTAMBIENT-01](BACKLOG.md#agtambient-01-adopt-the-pi-subagents-fix-for-ambient-direct-mcp-tools-in-children) / [SEED-261112-81c](seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md), triggered by a published companion fix. PG-MCP-02 remains partial. Focused-feedback timing bookkeeping (PG1-TIMING-01) remains advisory debt in the validation report; no claim of Nyquist compliance.
+
+**Plans**: 11/11 plans complete
 
 Plans:
 **Wave 1**
@@ -375,7 +377,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Companion Floors and MCP Defaults | 11/11 | In Progress | - |
+| 1. Companion Floors and MCP Defaults | 11/11 | Complete    | 2026-11-12 |
 | 2. Hook Payloads, Matchers, and Stop Limit | 0/0 | Not started | - |
 | 3. Background Subagents | 0/0 | Not started | - |
 | 4. Skill and Workflow Install Defects | 0/0 | Not started | - |

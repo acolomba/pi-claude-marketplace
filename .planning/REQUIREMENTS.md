@@ -35,8 +35,8 @@
 ### Subagents
 
 - [ ] **PG-AGENT-01**: A bridged agent runs in the launch mode that pi-subagents chooses, unless the source sets `background: true` or the agent has plugin MCP tools; those two run in the background. The warning for agents with MCP tools no longer says that Claude Code runs them in the foreground. Lands with PG-HOOK-07a. (P0; decision 1 answered)
-- [ ] **PG-AGENT-02**: The declared pi-subagents floor is 0.87.0 in `package.json`, the README, and `scripts/install-test-peers.mjs`, and the documentation no longer describes the two fixed pi-subagents bugs as open. Lands with PG-AGENT-07b. (P0; decision 2 answered)
-- [ ] **PG-AGENT-07b**: A model ID that `--map-model` writes has no provider prefix, so the agent runs on the session's provider when that provider has the model. (P0)
+- [x] **PG-AGENT-02**: The declared pi-subagents floor is 0.87.0 in `package.json`, the README, and `scripts/install-test-peers.mjs`, and the documentation no longer describes the two fixed pi-subagents bugs as open. Lands with PG-AGENT-07b. (P0; decision 2 answered)
+- [x] **PG-AGENT-07b**: A model ID that `--map-model` writes has no provider prefix, so the agent runs on the session's provider when that provider has the model. (P0)
 - [ ] **PG-AGENT-07a**: A source agent with `model: inherit` runs on the parent's model, with or without `--map-model`. (P1)
 - [ ] **PG-AGENT-05**: Agent frontmatter is read as YAML with the leniency that skill frontmatter has: a quoted value loses its quotes, a comment is not a value, a multi-line description keeps its lines, and an unquoted description with a colon still loads. (P1)
 - [ ] **PG-AGENT-03**: A bridged agent whose source grants `Agent` or `Task`, with or without a type list, can start subagents. So can an agent with no `tools` field, unless `disallowedTools` names `Agent` or `Task`. (P1)
@@ -52,8 +52,9 @@
 
 ### MCP Servers
 
-- [ ] **PG-MCP-01**: A tool call of a plugin MCP server that declares no `timeout` may be silent for 30 minutes on a stdio server and 5 minutes on a remote server, under both implementations. Under the adapter, a timeout the user wrote on the entry still wins. (P0; decision 4 answered)
+- [x] **PG-MCP-01**: A tool call of a plugin MCP server that declares no `timeout` may be silent for 30 minutes on a stdio server and 5 minutes on a remote server, under both implementations. Under the adapter, a timeout the user wrote on the entry still wins. (P0; decision 4 answered)
 - [ ] **PG-MCP-02**: The declared pi-mcp-adapter floor is 7.0.1. Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works everywhere the project names it: a hook matcher written with the Claude Code name matches it, the hook receives the Claude Code name, and an agent's disallowed-tool entry removes it. (P0; decision 3 answered)
+  - Phase 1 closed with an explicit user-approved deferral on 2026-11-12: installed-companion real-child exclusion acceptance waits for AGTAMBIENT-01 / SEED-261112-81c. Naming, listing, hooks and staged exclusions are verified; the requirement remains partial until the upgraded companion passes the recorded controls.
 - [ ] **PG-MCP-06**: Under the adapter, a stdio plugin server that has started stays running for the session (`lifecycle: "lazy-keep-alive"`), unless the user set a lifecycle on the entry. Remote servers stay `lazy`. (P1; decision 5)
 - [ ] **PG-MCP-08**: The MCP compatibility page states, for each implementation, whether a plugin server can use resources, prompts, elicitation, sampling, roots, and output limits, and that `@server:uri` mentions do not exist on Pi. One scenario for each implementation reads a resource of a plugin server. (P1)
 - [ ] **PG-MCP-09**: Under the adapter, a value the user wrote in `protocolVersion`, `tasks`, `exposeResources`, or `caFile` on a plugin entry survives an update or reinstall. (P1)
@@ -182,8 +183,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-HOOK-21   | Phase 5  | Pending |
 | PG-HOOK-11   | Phase 6  | Pending |
 | PG-AGENT-01  | Phase 3  | Pending |
-| PG-AGENT-02  | Phase 1  | Pending |
-| PG-AGENT-07b | Phase 1  | Pending |
+| PG-AGENT-02  | Phase 1  | Complete |
+| PG-AGENT-07b | Phase 1  | Complete |
 | PG-AGENT-07a | Phase 7  | Pending |
 | PG-AGENT-05  | Phase 7  | Pending |
 | PG-AGENT-03  | Phase 7  | Pending |
@@ -193,8 +194,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-WF-04     | Phase 8  | Pending |
 | PG-WF-05     | Phase 8  | Pending |
 | PG-WF-07     | Phase 8  | Pending |
-| PG-MCP-01    | Phase 1  | Pending |
-| PG-MCP-02    | Phase 1  | Pending |
+| PG-MCP-01    | Phase 1  | Complete |
+| PG-MCP-02    | Phase 1  | Partial — accepted deferral (AGTAMBIENT-01) |
 | PG-MCP-06    | Phase 9  | Pending |
 | PG-MCP-08    | Phase 9  | Pending |
 | PG-MCP-09    | Phase 9  | Pending |
