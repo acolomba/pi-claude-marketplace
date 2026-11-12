@@ -5,11 +5,11 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 01
 current_phase_name: Companion Floors and MCP Defaults
 status: executing
-stopped_at: parity-gaps Phase 01 human_needed; two live-child tests pending in 01-UAT.md
-last_updated: "2026-11-12T07:36:00Z"
+stopped_at: parity-gaps Phase 01 automation complete; granted call passed, long-tool exclusion blocked by companions
+last_updated: "2026-11-12T12:07:09Z"
 last_activity: 2026-11-12
-last_activity_desc: Phase 01 verified 18/20; two live-child checks await user results
-state_head: bf755be6
+last_activity_desc: Automated real-child checks recorded; no manual rerun requested
+state_head: 3781048a
 progress:
   total_phases: 11
   completed_phases: 0
@@ -33,8 +33,8 @@ component as a working Pi artifact.
 
 Phase: 01 (Companion Floors and MCP Defaults) — EXECUTING
 Plan: 11 of 11
-Status: Human verification needed — resume with $gsd-verify-work 01
-Last activity: 2026-11-12 — 18/20 truths verified; two live-child tests saved in 01-UAT.md
+Status: Companion blocker — long-tool exclusion lacks a working unrestricted control
+Last activity: 2026-11-12 — Real detached granted call passed automatically; exclusion control blocked by MCP_DIRECT_TOOLS=__none__
 
 Progress: [░░░░░░░░░░] 0%
 

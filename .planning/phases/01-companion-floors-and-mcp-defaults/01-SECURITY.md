@@ -118,7 +118,12 @@ wording. All 41 entries are now closed, with no unregistered flags. The initial
 blocking count described a recording gap, not a missing code mitigation.
 
 All eleven summaries have Threat Flags sections, with no unmapped flag found.
-The detached-child granted-tool call and exclusion checks remain unperformed.
+At this audit's close, the detached-child granted-tool call and exclusion checks
+were unperformed. Subsequent automation on 2026-11-12 proved the explicit short
+grant. The exclusion check is blocked: both real children without explicit MCP
+selectors lack direct tools because pi-subagents sets MCP_DIRECT_TOOLS=__none__.
+This does not establish an exclusion bypass or close that acceptance check. See
+01-UAT.md and ../../debug/real-child-mcp-automation.md for the runtime evidence.
 
 The post-fix audit reviewed all seven files in `1e762749` and reconfirmed
 T-01-18, T-01-19, T-01-20, T-01-22, and T-01-23. Successful result metadata
@@ -135,4 +140,4 @@ boundary. No new threat flag or accepted risk was introduced.
 - [x] `threats_open: 0` confirmed.
 - [x] `status: verified` set after confirmation.
 
-**Approval:** verified 2026-11-12; live-child checks remain pending outside this mitigation audit.
+**Approval:** verified 2026-11-12; the remaining live-child exclusion blocker is tracked outside this mitigation audit.

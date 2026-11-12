@@ -93,12 +93,12 @@ Each item names the task that creates it. No plan runs before plan 01-01, so the
 
 ---
 
-## Manual-Only Verifications
+## Checks Beyond the Permanent Suite
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| A real background child calls a granted plugin MCP tool | PG-AGENT-02 | The harness cannot start a real detached pi-subagents child (BACKLOG AGTASYNC-01) | The human check of task 01-10-01: with `scripts/pi.sh` and a real model, run an agent granted a plugin MCP tool and let the background child call it; then put the date, the versions, and the result into the live-check sentence of `docs/mcp-compatibility.md` |
-| A real background child is not offered a disallowed plugin tool with a name over 64 characters | PG-MCP-02 | The same reason; a foreground child loads no adapter tool at all | The human check of task 01-05-02: run such an agent in the background and ask it to list its tools |
+| VERIFIED: A real background child calls a granted plugin MCP tool | PG-AGENT-02 | The permanent harness uses a stand-in; a separate local API provider can drive the real detached child | Automated 2026-11-12 on pi-subagents 0.88.0 and pi-mcp-adapter 7.0.1: PID 3263124 called the short echo tool and received echo:pg1-live-short. Actual child provider schemas, transcript and MCP request log agree; see 01-UAT.md and the debug record. |
+| BLOCKED: A real background child is not offered a disallowed plugin tool with a name over 64 characters | PG-MCP-02 | Companion behavior prevents a valid positive control, independently of human involvement | Real unrestricted and restricted children without explicit MCP selectors both receive MCP_DIRECT_TOOLS=__none__. Neither receives direct MCP tools, even after connect. The unrestricted long control and permitted short control fail, so exclusion is unverified. See 01-UAT.md. |
 | VERIFIED: A call silent for more than 60 seconds succeeds under each implementation | PG-MCP-01 | Slow, and kept out of the suite by D-PG1-14 | Completed 2026-11-12: both temporary profiles passed with 65-second calls and declared 5-second controls. Evidence is recorded in `01-09-SUMMARY.md` under `## Slow call (D-PG1-14)` |
 
 ---
@@ -112,17 +112,18 @@ Each item names the task that creates it. No plan runs before plan 01-01, so the
 - [ ] Focused-feedback timings recorded against the 30-second target; required slow completion gates recorded under the explicit exception
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Audit outcome (2026-11-12):** automated task coverage passed; two planned live-child
-checks remain pending. `nyquist_compliant` stays false until those checks and the
+**Audit outcome (2026-11-12):** automated task coverage passed; the real-child
+granted call also passed in a separate automated run. The long exclusion check is
+blocked by installed companion behavior. `nyquist_compliant` stays false until that check and the
 focused timing sign-off are resolved. No additional test implementation gap was
 found: all 28 tasks have automated verification, all eleven summaries record passing
 task checks, and the conformance tests and four lifecycle scenarios exist.
 
 | Requirement | Coverage status | Evidence and remaining boundary |
 |-------------|-----------------|---------------------------------|
-| PG-AGENT-02 | PARTIAL | Peer-floor architecture checks, installed-companion conformance, foreground scenarios, and documentation checks passed. A real detached child's granted call is unverified. |
+| PG-AGENT-02 | COVERED | Peer-floor architecture checks, installed-companion conformance, foreground scenarios, and documentation checks passed. A real detached child's explicit short grant passed in the recorded automated run. |
 | PG-AGENT-07b | COVERED | Agent conversion direct coverage and mapped-model behavioral scenarios passed. |
-| PG-MCP-02 | PARTIAL | Naming conformance, hook recovery, proxy-shaped calls, and staged exclusion checks passed. Real detached-child exclusion remains unverified. |
+| PG-MCP-02 | PARTIAL | Naming conformance, hook recovery, proxy-shaped calls, and staged exclusion checks passed. Real detached-child exclusion is blocked because the installed companions suppress direct tools in both controls without explicit MCP selectors. |
 | PG-MCP-01 | COVERED | Both implementations' defaults, user precedence, marker lifecycle, and recorded slow/control calls passed. |
 
 Automated evidence: `01-01-SUMMARY.md` through `01-11-SUMMARY.md`; combined
@@ -131,8 +132,10 @@ adapter scenarios, 155 built-in scenarios, and 354 direct-coverage pairs on
 `fed3e0b549b200bc85aa116cd7008db84eacce7a` with Node v26.13.0. The final merged
 wave passed `npm run check` on `c2317aee173ea34a2f9096f1cbb714a964b2468d`
 with the same counts and Node version (`/tmp/gsd-parity-wave5-check.log`).
-The two live checks were already manual-only in this validation contract and are
-not replaced by stand-in-child scenarios. No acceptance or waiver is inferred.
+The two live checks were initially designated manual-only. The user requested
+automation before interruption; the separate real-child runs now supply one pass
+and one companion blocker. Stand-in-child scenarios supply neither result.
+No acceptance or waiver is inferred.
 
 After the review fix `1e762749`, the final combined-tree `npm run check` passed
 with exit 0 on Node v26.13.0: 1,812 adapter scenarios, 155 built-in scenarios,
@@ -140,13 +143,13 @@ and 354 direct-coverage pairs (`/tmp/gsd-parity-phase1-final-check.log`). The
 clean reference is `ec14242df04a53d91fd8bfdcbe4c3f31977719f0`. Its difference
 from the tested source commit contains only planning Markdown; no untracked
 build input was present. The independent re-review is clean, and the security
-follow-up confirms all 41 threats closed. Neither result replaces the two live
-checks above.
+follow-up confirms all 41 threats closed. The separate automation above supplies
+the newer live-child evidence.
 
 ## Validation Audit 2026-11-12
 
 | Metric | Count |
 |---|---|
 | Gaps found | 2 |
-| Resolved | 0 |
-| Escalated | 2 |
+| Resolved | 1 |
+| Escalated | 1 |

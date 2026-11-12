@@ -401,7 +401,9 @@ Under Pi's built-in MCP the install warning ends `a launch before Pi's built-in 
 Agent 'demo:runner' selects MCP tools from servers that extensions registered (plugin_demo_stub). Only background children (async: true) load those extensions; run the agent in the background or add the server to the global mcp.json or a trusted project's .pi/mcp.json.
 ```
 
-No scenario starts a real background child, because the harness cannot start a detached pi-subagents child (BACKLOG AGTASYNC-01). No live run of a background child that calls a granted plugin MCP tool is recorded for pi-subagents 0.88.0.
+The cucumber suite uses a stand-in for a detached child (BACKLOG AGTASYNC-01). A separate automated run on 2026-11-12 used a real detached child, pi-subagents 0.88.0, and pi-mcp-adapter 7.0.1. A local scripted API server supplied the model responses without an account. The child called its explicitly granted `mcp__plugin_demo_stub__echo` tool and received `echo:pg1-live-short`; its transcript and the MCP request log recorded the call.
+
+That run also tested agents without `tools:`, with and without a long-name `disallowedTools` entry. Both children lacked direct MCP tools, including the permitted short control tool. pi-subagents 0.88.0 sets `MCP_DIRECT_TOOLS=__none__` when a child has no explicit MCP selectors, and the adapter then registers no direct tools. Connecting through `mcp` listed server tools but did not expose them as direct tools. The long-name exclusion remains unverified because the unrestricted child also lacked that tool. This separate run is recorded in the [automation investigation](../.planning/debug/real-child-mcp-automation.md); it is not part of the cucumber suite.
 
 In Claude Code, a subagent granted a plugin MCP tool calls it in the foreground. Running it in the background instead is a deliberate divergence for a companion gap (D-CF6-10, which amends D-CF4-05). See [Divergences and documented absences](#divergences-and-documented-absences). A launch before pi-mcp-adapter has cached the server's tools, or before Pi's built-in MCP has listed them, fails too.
 
