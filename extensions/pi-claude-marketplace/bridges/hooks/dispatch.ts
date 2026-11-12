@@ -60,6 +60,7 @@ import {
   serverPrefixNames,
   toolLiteralNames,
 } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
+import { joinedAdapterToolName } from "../../domain/mcp-implementation.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyHookNotice } from "../../shared/notification-dispatch.ts";
@@ -902,7 +903,10 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const view = toolEventView(event, tools, () => toolEventMcpLiterals(runtime));
+    const view = toolEventView(event, tools, () => {
+      const candidate = event.isError ? undefined : adapterResultToolName(event.details);
+      return [...(candidate === undefined ? [] : [candidate]), ...toolEventMcpLiterals(runtime)];
+    });
     if (view === undefined) {
       return undefined;
     }
@@ -1045,6 +1049,26 @@ function toolEventMcpLiterals(runtime: HooksRuntime): string[] {
         ...(entry.ifPredicate.kind === "mcp-literal" ? [entry.ifPredicate.toolName] : []),
       ]),
   );
+}
+
+/**
+ * D-PG1-08: successful pi-mcp-adapter results name the server key and tool;
+ * failed results name only the server. A successful PostToolUse event can
+ * recover the full name; PostToolUseFailure needs a hook literal to do so.
+ */
+function adapterResultToolName(details: unknown): string | undefined {
+  if (
+    typeof details !== "object" ||
+    details === null ||
+    !("server" in details) ||
+    !("tool" in details) ||
+    typeof details.server !== "string" ||
+    typeof details.tool !== "string"
+  ) {
+    return undefined;
+  }
+
+  return joinedAdapterToolName(details.server, details.tool);
 }
 
 /**

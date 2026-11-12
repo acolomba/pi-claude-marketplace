@@ -5044,6 +5044,153 @@ function builtinToolResultEvent(isError: boolean, toolName = BUILTIN_PI_NAME): T
 }
 
 describe("built-in MCP tool names in tool results and if fields (MHK-01)", () => {
+  test("recovers a shortened adapter result name from its details for every PostToolUse hook (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket(
+      "PostToolUse",
+      builtinToolEntries("PostToolUse", [
+        { pluginId: "any", rawMatcher: "*" },
+        {
+          pluginId: "prefixed",
+          rawMatcher: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__.*",
+        },
+      ]),
+    );
+    const received: ReceivedEvent[] = [];
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createBuiltinToolView([]),
+    );
+    const event = {
+      ...builtinToolResultEvent(false, piName),
+      details: {
+        server: "plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server_",
+        tool: "echo",
+      },
+    };
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/adapter"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(received, [
+      { pluginId: "any", event: { ...event, toolName: fullName } },
+      { pluginId: "prefixed", event: { ...event, toolName: fullName } },
+    ]);
+  });
+
+  for (const { title, details } of [
+    { title: "missing details", details: undefined },
+    { title: "null details", details: null },
+    { title: "non-object details", details: "server" },
+    { title: "missing server", details: { tool: "echo" } },
+    { title: "missing tool", details: { server: "plugin_demo_stub_" } },
+    { title: "non-string server", details: { server: 1, tool: "echo" } },
+    { title: "non-string tool", details: { server: "plugin_demo_stub_", tool: 1 } },
+    { title: "another server", details: { server: "plugin_other_stub_", tool: "echo" } },
+    {
+      title: "another tool",
+      details: {
+        server: "plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server_",
+        tool: "other",
+      },
+    },
+  ]) {
+    test(`keeps Pi's cut name for adapter result ${title} (D-PG1-08)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+      runtime.setRoutingBucket(
+        "PostToolUse",
+        builtinToolEntries("PostToolUse", [{ pluginId: "any", rawMatcher: "*" }]),
+      );
+      const received: ReceivedEvent[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        undefined,
+        createEventKeepingExecutor({}, received),
+        createBuiltinToolView([]),
+      );
+      const event = { ...builtinToolResultEvent(false, piName), details };
+
+      // act
+      const output = await handler(event, createExtensionContext("/workspace/adapter"));
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(received, [{ pluginId: "any", event }]);
+    });
+  }
+
+  for (const { title, matcher, name, tool } of [
+    {
+      title: "without a full-name literal",
+      matcher: "*",
+      name: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      tool: undefined,
+    },
+    {
+      title: "with a full-name literal",
+      matcher: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo",
+      name: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo",
+      tool: undefined,
+    },
+    {
+      title: "with a tool detail but no full-name literal",
+      matcher: "*",
+      name: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      tool: "echo",
+    },
+  ]) {
+    test(`names an adapter PostToolUseFailure ${title} (D-PG1-08)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+      runtime.setRoutingBucket(
+        "PostToolUseFailure",
+        builtinToolEntries("PostToolUseFailure", [{ pluginId: "failure", rawMatcher: matcher }]),
+      );
+      const received: ReceivedEvent[] = [];
+      const reads: string[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        undefined,
+        createEventKeepingExecutor({}, received),
+        createProxyRuleView(true, reads),
+      );
+      const event = {
+        ...builtinToolResultEvent(false, piName),
+        details: {
+          error: "tool_error",
+          server: "plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server_",
+          ...(tool === undefined ? {} : { tool }),
+        },
+      };
+
+      // act
+      const output = await handler(event, createExtensionContext("/workspace/adapter"));
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(received, [
+        { pluginId: "failure", event: { ...event, isError: true, toolName: name } },
+      ]);
+      assert.deepStrictEqual(reads, ["proxyRuleApplies", `identify ${piName}`]);
+    });
+  }
+
   for (const claudeEvent of ["PostToolUse", "PostToolUseFailure"] as const) {
     test(`gives every ${claudeEvent} hook the recovered adapter name (D-PG1-08)`, async () => {
       // arrange
