@@ -92,12 +92,12 @@ const TOOL_MAP: ReadonlyMap<string, string> = new Map([
  * implementation; `claudePrefix` is the Claude Code tool-name prefix of the
  * same server, `mcp__` plus the adapter key without its trailing `_`, which is
  * the same under both implementations. `excludeName` gives the `excludeTools`
- * name of one tool of the server from its Claude token and its tool part.
+ * registered name of one tool of the server from its tool part (D-PG1-10).
  */
 interface McpGrant {
   readonly selector: string;
   readonly claudePrefix: string;
-  readonly excludeName: (token: string, tool: string) => string;
+  readonly excludeName: (tool: string) => string;
 }
 
 /** ANAME-02: a Claude-form MCP name matched to a written server. */
@@ -106,28 +106,23 @@ interface McpGrantMatch {
   readonly server: string;
   /** The raw MCP tool name; absent when the name covers the whole server. */
   readonly tool?: string;
-  /** The `excludeTools` name of the matched tool (see `McpGrant`). */
-  readonly excludeName: (token: string, tool: string) => string;
+  /** The registered `excludeTools` name of the matched tool (MGRT-01, D-PG1-10). */
+  readonly excludeName: (tool: string) => string;
 }
 
 /**
- * MGRT-01: the `excludeTools` name of one per-tool MCP disallow. The adapter
- * form keeps the Claude token verbatim (a `.` in the tool part included),
- * because the Claude name is the delivered tool name there (ANAME-02). The
- * built-in form takes Pi's own tool name, which differs from the Claude name
- * whenever the server name holds a `-` or the name passes 64 characters.
+ * MGRT-01 / D-PG1-10: the `excludeTools` name of one per-tool MCP disallow is
+ * the name under which the form's MCP implementation registers the tool.
+ * pi-mcp-adapter 7.0.1 replaces each `.` with `_` and cuts names over 64
+ * characters; Pi's built-in MCP uses its own registered name.
  */
 function excludeNameFor(
   id: McpImplementationId,
   pluginName: string,
   server: string,
-): (token: string, tool: string) => string {
-  if (id === "adapter") {
-    return (token) => token;
-  }
-
+): (tool: string) => string {
   const profile = profileFor(id);
-  return (_token, tool) => profile.toolName(pluginName, server, tool);
+  return (tool) => profile.toolName(pluginName, server, tool);
 }
 
 /**
@@ -179,8 +174,8 @@ interface OmittedToolMapping extends ToolMappingBase {
   /**
    * Names for `excludeTools:`: source disallowedTools via TOOL_MAP, plus each
    * per-tool MCP name of a written server as the form's implementation names
-   * the delivered tool: the Claude name for the adapter (ANAME-02), Pi's
-   * built-in tool name for the built-in MCP (MGRT-01).
+   * the registered tool (MGRT-01, D-PG1-10). pi-mcp-adapter 7.0.1 replaces
+   * each `.` with `_` and cuts a name over 64 characters.
    */
   readonly excludeTools: string[];
   /**
@@ -548,13 +543,14 @@ function explicitMcpWarnings(kept: readonly string[], disallow: ExplicitDisallow
 }
 
 /**
- * ANAME-02 / MGRT-01: the `excludeTools` name of a per-tool MCP name of a
- * written server, in the form's spelling (`excludeNameFor`). A whole-server
- * name has no `excludeTools` form.
+ * ANAME-02 / MGRT-01 / D-PG1-10: the `excludeTools` name of a per-tool MCP
+ * disallow is the name its form's MCP implementation registers. pi-mcp-adapter
+ * 7.0.1 replaces each `.` with `_` and cuts names over 64 characters. A
+ * whole-server name has no `excludeTools` form.
  */
 function perToolMcpName(token: string, grants: readonly McpGrant[]): string | undefined {
   const match = matchMcpGrant(token, grants);
-  return match?.tool === undefined ? undefined : match.excludeName(token, match.tool);
+  return match?.tool === undefined ? undefined : match.excludeName(match.tool);
 }
 
 /**
