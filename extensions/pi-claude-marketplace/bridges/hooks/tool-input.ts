@@ -165,6 +165,7 @@ function decodeShellInput(candidate: Input): DecodedToolInput {
       (typeof candidate.timeout !== "number" ||
         !Number.isFinite(candidate.timeout) ||
         candidate.timeout <= 0 ||
+        candidate.timeout / 1000 === 0 ||
         candidate.timeout / 1000 > MAX_TIMEOUT_SECONDS))
   ) {
     return { kind: "ignored", category: "value" };

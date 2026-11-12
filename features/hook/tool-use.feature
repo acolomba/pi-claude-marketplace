@@ -497,6 +497,95 @@ Feature: Hook tool use
       | 2    | assistant   | tool call read {"path":"original.txt","offset":1}           |
       | 2    | tool result | read returned: second                                       |
 
+  Scenario: A Write hook changes the bytes written to disk
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event      | matcher | form   | output                                                                                                                         |
+      | rewrite | PreToolUse | Write   | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"file_path":"written.txt","content":"after"}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool  | arguments                                    |
+      |       | write | {"path":"before.txt","content":"before"} |
+      | Done. |       |                                              |
+    When the user prompts "write the original file"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                                                     | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Write     | {"file_path":"{project dir}/before.txt","content":"before"} | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the project directory holds the file "written.txt" with the text "after"
+    Then the project has no file "before.txt" after a tool hook
+    Then the model receives these calls:
+      | call | role        | text                                                          |
+      | 1    | user        | write the original file                                       |
+      | 2    | user        | write the original file                                       |
+      | 2    | assistant   | tool call write {"path":"before.txt","content":"before"}   |
+      | 2    | tool result | write returned: Successfully wrote to {project dir}/written.txt |
+
+  Scenario: A Bash hook receives milliseconds and changes the command
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event      | matcher | form   | output                                                                                                                                        |
+      | rewrite | PreToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"command":"printf replacement > replacement.txt; echo rewritten","timeout":2000}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                  |
+      |       | bash | {"command":"echo original","timeout":1.5}              |
+      | Done. |      |                                                            |
+    When the user prompts "run the original command"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                                      | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo original","timeout":1500}   | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the project directory holds the file "replacement.txt" with the text "replacement"
+    Then the model receives these calls:
+      | call | role        | text                                                     |
+      | 1    | user        | run the original command                                 |
+      | 2    | user        | run the original command                                 |
+      | 2    | assistant   | tool call bash {"command":"echo original","timeout":1.5} |
+      | 2    | tool result | bash returned: rewritten\n                                |
+
+  Scenario: An unsupported rewrite runs the original whole call and shows a notice
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event      | matcher | form   | output                                                                                                                                                          |
+      | rewrite | PreToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"command":"printf replacement > replacement.txt","timeout":2000,"run_in_background":true}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                         |
+      |       | bash | {"command":"printf original > original.txt; echo original","timeout":1} |
+      | Done. |      |                                                                   |
+    When the user prompts "run the original command"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                                                                                  | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"printf original > original.txt; echo original","timeout":1000}               | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the project directory holds the file "original.txt" with the text "original"
+    Then the project has no file "replacement.txt" after a tool hook
+    Then the hooks show the user these messages:
+      | severity | text                                                   |
+      | info     | PreToolUse:Bash ignored input rewrite (value)          |
+    Then the model receives these calls:
+      | call | role        | text                                                                                       |
+      | 1    | user        | run the original command                                                                   |
+      | 2    | user        | run the original command                                                                   |
+      | 2    | assistant   | tool call bash {"command":"printf original > original.txt; echo original","timeout":1} |
+      | 2    | tool result | bash returned: original\n                                                                  |
+
   Scenario: A PreToolUse hook's updatedInput replaces the tool's whole input
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
@@ -517,7 +606,7 @@ Feature: Hook tool use
     When the user prompts "run the echo"
     Then the hooks record these runs:
       | event       | session | tool name | tool input                                 | tool response                           | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PreToolUse  | first   | Bash      | {"command":"echo from-model","timeout":30} |                                         | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse  | first   | Bash      | {"command":"echo from-model","timeout":30000} |                                         | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
       | PostToolUse | first   | Bash      | {"command":"echo rewritten"}               | [{"type":"text","text":"rewritten\\n"}] | {project dir} |                 | observer  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role        | text                                                      |

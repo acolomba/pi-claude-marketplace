@@ -27,7 +27,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 
-import { Given } from "@cucumber/cucumber";
+import { Given, Then } from "@cucumber/cucumber";
 
 import { hookMcpCallScript } from "../../lib/hook-mcp-calls.ts";
 import { HOOK_MCP_TOOL_SERVER } from "../../lib/hook-mcp-tool-server.ts";
@@ -57,6 +57,13 @@ Given(
       path.join(this.tokens.projectDir, name),
       text.replaceAll("\\n", "\n"),
     );
+  },
+);
+
+Then(
+  "the project has no file {string} after a tool hook",
+  async function (this: ScenarioWorld, name: string) {
+    await assert.rejects(readFile(path.join(this.tokens.projectDir, name)), { code: "ENOENT" });
   },
 );
 

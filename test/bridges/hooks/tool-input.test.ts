@@ -272,6 +272,12 @@ describe("decodeHookToolInput", () => {
       category: "value",
     },
     {
+      name: "timeout below native resolution",
+      tool: "bash",
+      candidate: { command: "true", timeout: Number.MIN_VALUE },
+      category: "value",
+    },
+    {
       name: "infinite timeout",
       tool: "powershell",
       candidate: { command: "true", timeout: Infinity },
