@@ -177,12 +177,34 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 **Evidence**: PRD sections 7.3 (MCP-01, MCP-02) and 7.5 (AGENT-02, AGENT-07); reports `mcp.md` and `subagents.md`. Decisions 2, 3, and 4 are answered. Spike S3 ran on the adapter's naming code.
 **Notes**: The floor raises are the first work, because they change `package.json`, the README, and `scripts/install-test-peers.mjs`, which every later test runs against. PG-AGENT-02 and PG-AGENT-07b land in one change: from pi-subagents 0.87.0, a model ID with the `anthropic/` prefix always runs on that provider. The adapter's rule for a shortened name (64 characters, ending in the first 8 hexadecimal digits of the SHA-256 of the full name) is in its source and not in a published contract, so a test against the installed adapter holds the rule. PG-MCP-01 changes the configuration of an installed plugin's server at its next `update` or `reinstall`, and the design says how. A scenario with a tool that stays silent for more than 60 seconds is the full proof of PG-MCP-01 and is slow; the design decides whether to keep it. The corrections to `docs/mcp-compatibility.md` (lines 126, 277, 381, and 592), BACKLOG MCPBG-01, and `.planning/upstream/pi-subagents-mcp-direct-tools.md` land here.
 **Success Criteria** (what must be TRUE):
-  1. `package.json`, the README, and `scripts/install-test-peers.mjs` name pi-subagents 0.87.0 and pi-mcp-adapter 7.0.1, and the test suites install and run against those versions. The documentation no longer describes the two fixed pi-subagents bugs as open, and the scenario in `features/mcp-server/agent-grants.feature` pins the changed refusal text (PG-AGENT-02, PG-MCP-02).
+  1. `package.json` and the README name pi-subagents 0.87.0 and pi-mcp-adapter 7.0.1 as the floors, and the test suites install and run pi-subagents 0.88.0 and pi-mcp-adapter 7.0.1 (D-PG1-02 amends this criterion: `scripts/install-test-peers.mjs` installs the suite version of pi-subagents, one release above its floor). The documentation no longer describes the two fixed pi-subagents bugs as open, and the scenarios in `features/mcp-server/agent-grants.feature` pin what pi-subagents 0.88.0 does with a foreground run (D-PG1-03) (PG-AGENT-02, PG-MCP-02).
   2. An agent installed with `--map-model` lists its model with no provider prefix, such as `model claude-sonnet-5-5`, so it runs on the session's provider when that provider has the model (PG-AGENT-07b).
   3. Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works wherever the project names it: the server listing shows it, a hook whose matcher is the full Claude Code name runs and receives that name, and an agent whose `disallowedTools` names the tool is not offered it (PG-MCP-02).
   4. Under both profiles, the registered configuration of a stdio plugin server with no declared `timeout` shows 30 minutes, and that of a remote server shows 5 minutes. Under the adapter, a timeout the user wrote on the entry is still there after an update (PG-MCP-01).
 
-**Plans**: TBD
+**Plans**: 11 plans
+
+Plans:
+**Wave 1**
+- [ ] 01-01-PLAN.md -- Wave 1: raise the floors to pi-subagents 0.87.0 and pi-mcp-adapter 7.0.1, run the suites on pi-subagents 0.88.0, write bare mapped model IDs, and re-pin what the new versions change
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-02-PLAN.md -- Wave 2: pin the developer launcher, the live canary, and the contributor records to the versions the suites run
+- [ ] 01-03-PLAN.md -- Wave 2: model pi-mcp-adapter 7.0.1's 64-character tool-name rule in the adapter profile and hold it against the installed adapter
+- [ ] 01-04-PLAN.md -- Wave 2: register Claude Code's idle window (30 minutes stdio, 5 minutes remote) under Pi's built-in MCP for a server with no timeout
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-05-PLAN.md -- Wave 3: stage an agent's disallowed long tool under the name the adapter registers, and record the pi-subagents long-name grant gap
+- [ ] 01-06-PLAN.md -- Wave 3: write the default timeout into adapter entries, record it in the marker, and keep a timeout the user wrote
+- [ ] 01-07-PLAN.md -- Wave 3: run hooks that name a long tool by its full Claude Code name and give every hook of the event that name
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 01-08-PLAN.md -- Wave 4: give PostToolUse hooks the full name from the adapter's result details, keep a cut name from counting as a proxy call, and pin the cells that stay shortened
+- [ ] 01-09-PLAN.md -- Wave 4: prove the default timeout across update, reinstall, and disable and enable, and run the slow call once per MCP implementation
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 01-10-PLAN.md -- Wave 5: correct the two compatibility pages for the floors, the fixed pi-subagents bugs, the default timeouts, and long tool names
+- [ ] 01-11-PLAN.md -- Wave 5: record the D-PG1 decisions, the overtaken BACKLOG entries, the upstream report's status, and the CHANGELOG entry
 
 ### Phase 2: Hook Payloads, Matchers, and Stop Limit
 

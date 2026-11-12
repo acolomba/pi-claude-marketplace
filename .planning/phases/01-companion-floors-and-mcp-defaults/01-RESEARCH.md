@@ -853,30 +853,38 @@ The built-in key order comes from `mcp-builtin-translation.ts:79-87`. The place 
 | A7 | The conformance twin against pi-subagents' resolver can run with a fixture cache and a `configOverride` argument | Agents bridge | The gap stays unmeasured and is recorded from source only |
 | A8 | D-PG1-01 and D-PG1-02 count as the human check the legitimacy protocol asks for | Package Legitimacy Audit | The planner adds a checkpoint task |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+Each question below is resolved by the orchestrator's resolutions and the plans. A question that only a run can answer is resolved as "measured by" a named task.
 
 1. **What does pi-subagents 0.88.0 print for the adapter foreground run?**
    - What we know: the old text needs an unresolved selector, and 0.87.0 fixed the cause. The new candidate text is quoted under question 3.
    - What's unclear: whether the selector resolves in the scenario, and whether the run is refused before or after the child starts.
    - Recommendation: the first plan ends with the run; the plan that edits the scenario comes after it.
+   - RESOLVED: measured by task 01-01-03, which runs the whole check on the new peers, captures the text verbatim, and re-pins both scenarios in the same plan (resolution 1, D-PG1-03). Task 01-10-01 copies the measured text into `docs/mcp-compatibility.md`.
 
 2. **Does an agent with an `mcp:` grant over a long tool name launch?**
    - What we know: by source it does not.
    - What's unclear: nothing ran.
    - Recommendation: the conformance twin, then a companion-gap record. Ask the user whether to draft an upstream report under `.planning/upstream/`.
+   - RESOLVED: task 01-05-02 measures it with a conformance twin, or records it from source and says so. It adds BACKLOG AGTLONGNAME-01, a PRD section 8.3 row, and a drafted upstream report that is not filed (resolution 5). It does not block success criterion 3.
 
 3. **`PreToolUse` with a server-prefix matcher longer than 55 characters on a cut name: match or not?**
    - What we know: the name alone cannot prove the server.
    - Recommendation: the planner picks one and records it; I lean to no match, because a hook that runs for the wrong server is worse than one that does not run.
+   - RESOLVED: no match (resolution 4). Task 01-07-02 implements it and pins the wrong-server case; the prefix does match the full name once the bridge recovered it. Task 01-08-01 pins the cell in a scenario that names the gap.
 
 4. **Does a restage make the adapter ask for project-server approval again?**
    - Recommendation: read it from `features/mcp-server/project-scope.feature` after the change.
+   - RESOLVED: measured by task 01-06-03, from that feature and the adapter's `project-server-trust.ts`. Tasks 01-10-02 and 01-11-03 state the finding in the compatibility page and, when approval is asked again, in the CHANGELOG.
 
 5. **Should `scripts/pi.sh` and the live canary follow the suite versions?**
    - Recommendation: yes for both; they are small edits in the floor plan.
+   - RESOLVED: yes (resolution 2). Task 01-02-01, in the wave after the floor move.
 
 6. **Does "untrusted project" behavior in `world-and-stand-ins.md:62` still hold on 0.88.0?**
    - Recommendation: the agent trust scenarios answer it at the first run.
+   - RESOLVED: answered by the run of `features/agent/project-trust.feature` in task 01-01-03; task 01-02-02 rewords the skill's sentence to the version the suites run.
 
 ## Environment Availability
 
