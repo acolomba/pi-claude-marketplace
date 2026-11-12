@@ -6,9 +6,10 @@
 // modules in place. The generic identity, floor and loader pieces live in
 // optional-peer.ts.
 //
-// pi-subagents is an optional peer. The tests prove the declared floor,
-// `semver.minVersion` of package.json `peerDependencies["pi-subagents"]`
-// (PIFL-02), which `scripts/install-test-peers.mjs` installs into the cache.
+// pi-subagents is an optional peer. The tests prove the version the suites run,
+// named by test/integration/optional-peer-suite-versions.json and installed by
+// scripts/install-test-peers.mjs. It is above the declared floor, so no suite
+// proves the floor itself (D-PG1-02, which amends PIFL-02 for pi-subagents).
 //
 // The package's `exports` map does not expose `src/agents/frontmatter` or
 // `src/agents/skills`, so the loader imports the compiled
@@ -22,7 +23,7 @@ import type { OptionalPeer } from "./optional-peer.ts";
 export type PiSubagentsPeer = OptionalPeer;
 
 /**
- * Returns pi-subagents at the declared floor from the optional peer cache.
+ * Returns pi-subagents at the version the suites run from the optional peer cache.
  * Throws, naming the repair command, when the cache does not hold it.
  */
 export async function findPiSubagentsPackage(): Promise<PiSubagentsPeer> {
