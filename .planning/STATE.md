@@ -4,12 +4,12 @@ milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 2
 current_phase_name: Hook Payloads, Matchers, and Stop Limit
-status: ready_to_plan
-stopped_at: parity-gaps Phase 1 closed with companion adoption deferred; Phase 2 ready for discussion
-last_updated: "2026-11-12T20:03:13.100Z"
+status: planning
+stopped_at: parity-gaps Phase 2 context accepted; researching hook input and result translation
+last_updated: "2026-11-12T20:20:04.767Z"
 last_activity: 2026-11-12
-last_activity_desc: Captured AGTAMBIENT-01 release trigger; closed Phase 1 with accepted deferral and advanced to Phase 2
-state_head: de13d0a0c1820d82749bcbc3b4abafd44db638e4
+last_activity_desc: Phase 2 decisions accepted; result translators included and wrappers tracked as HOOKRESULT-01
+state_head: e92c2bdebb4b0b2c1353733fce7919a6280341ae
 progress:
   total_phases: 11
   completed_phases: 1
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-11-08 when the behavioral-gaps milesto
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Hook Payloads, Matchers, and Stop Limit
+**Current focus:** Phase 2 — Hook Payloads, Matchers, and Stop Limit
 
 ## Current Position
 
-Phase: 2 — Hook Payloads, Matchers, and Stop Limit
+Phase: 2 (Hook Payloads, Matchers, and Stop Limit) — PLANNING
 Plan: Not started
-Status: Ready for discussion and planning
-Last activity: 2026-11-12 — Phase 1 closed with accepted companion-adoption deferral; release-triggered follow-up captured as SEED-261112-81c / AGTAMBIENT-01.
+Status: Context accepted — researching implementation
+Last activity: 2026-11-12 — Accepted per-pair edits, available-field result translation and original-call fallback with notice for unsupported rewrites.
 
 Progress: [█░░░░░░░░░] 9%
 
@@ -1005,5 +1005,5 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-12T20:03:13Z
-Stopped at: parity-gaps Phase 1 complete with accepted deferral; Phase 2 ready for discussion
+Stopped at: parity-gaps Phase 2 context accepted; research and planning next
 Resume file: None

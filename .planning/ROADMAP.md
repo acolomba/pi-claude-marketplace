@@ -214,13 +214,15 @@ Plans:
 **Depends on**: Phase 1
 **Requirements**: PG-HOOK-01, PG-HOOK-03, PG-HOOK-13
 **Evidence**: PRD section 7.2; report `hooks.md`. Decisions 6 and 24 are answered.
-**Notes**: Open for the design of PG-HOOK-01: how a multi-pair `edit` is presented (one hook run for each pair, or one run with all pairs), how `updatedInput` maps back for it, how far `tool_response` is translated, and the `Glob` and `Grep` options that differ from Pi's `find` and `grep`. The `if` condition evaluator reads Pi's fields today and must keep working. PG-HOOK-01 changes test text that asserts today's behavior: the `tool input` cell at `features/hook/tool-failure.feature:54` and the header comment of `features/hook/tool-use.feature`. PG-HOOK-13 lands on today's `agent_settled` path. It does not wait for PG-HOOK-02 in Phase 5, which moves the same count to another event. The corrections to `docs/hooks-compatibility.md` (lines 14, 78, 131, and 161) land here.
+**Notes**: Design choices are settled in `02-hook-payloads-matchers-and-stop-limit/02-CONTEXT.md` (D-PG2-01..12): one invocation per edit pair, available-field result translation in both directions, and original-call fallback with a notice for unsupported input rewrites. Full result capture wrappers are BACKLOG HOOKRESULT-01. Preserve the native-input `if` evaluator. PG-HOOK-13 lands on the existing `agent_settled` path; Phase 5 moves continuation to another event. Update the affected hook compatibility notes and existing payload expectations.
 **Success Criteria** (what must be TRUE):
   1. A recording hook on a scripted `edit` call with one pair receives `{"file_path":"{project dir}/a.txt","old_string":"x","new_string":"y"}` as its `tool_input`, and hooks on `Read` and `Write` receive an absolute `file_path` (PG-HOOK-01).
   2. A hook that blocks on the text of the second pair of a two-pair `edit` blocks the call. A hook that returns a Claude-shaped `updatedInput` for `Write` changes the content that lands on disk. A hook's `updatedMCPToolOutput` changes the result of an MCP tool as `updatedToolOutput` does (PG-HOOK-01).
   3. A hook with the matcher `Edit, Write` runs on a scripted `write` call. A `PreToolUse` hook with the matcher `^Ba.*` runs on `bash` and not on `read`, and `info` reports its group as supported. A pattern that does not compile drops its group (PG-HOOK-03).
   4. A plugin whose `Stop` or `UserPromptSubmit` hook has a matcher installs without `--partial`, and the hook runs (PG-HOOK-03).
   5. A `Stop` hook that always blocks makes eight re-entries before the limit notice appears. A `Stop` hook that blocks ten times, with a tool call in each iteration, is never overridden (PG-HOOK-13).
+
+  6. Hooks receive per-tool Claude-shaped result fields that Pi supplies; a Claude-shaped replacement changes the model-visible result without stale structured content. Missing fields are documented. An unsupported input rewrite leaves the original call intact and emits a notice; explicit denials still block (PG-HOOK-01, D-PG2-05..09).
 
 **Plans**: TBD
 
