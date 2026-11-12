@@ -13765,7 +13765,12 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through update", asy
             directTools: "search",
             toolPrefix: "mcp",
             disabled: true,
-            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            requestTimeoutMs: 1800000,
+            _piClaudeMarketplace: {
+              plugin: "hello",
+              marketplace: "mp",
+              defaultFields: { requestTimeoutMs: 1800000 },
+            },
           },
         },
       });
@@ -13955,7 +13960,12 @@ test("ANAME-07: a plugin-set timeout wins over a carried override and a dropped 
             directTools: "search",
             toolPrefix: "mcp",
             disabled: true,
-            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            requestTimeoutMs: 300000,
+            _piClaudeMarketplace: {
+              plugin: "hello",
+              marketplace: "mp",
+              defaultFields: { requestTimeoutMs: 300000 },
+            },
           },
         },
       });
