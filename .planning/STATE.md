@@ -5,11 +5,11 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 01
 current_phase_name: Companion Floors and MCP Defaults
 status: executing
-stopped_at: parity-gaps Phase 01 all 11 plans merged; final full check passed; goal verification pending
-last_updated: "2026-11-12T07:19:08Z"
+stopped_at: parity-gaps Phase 01 human_needed; two live-child tests pending in 01-UAT.md
+last_updated: "2026-11-12T07:36:00Z"
 last_activity: 2026-11-12
-last_activity_desc: Phase 01 final npm run check passed; code review clean and security verified
-state_head: ec14242df04a53d91fd8bfdcbe4c3f31977719f0
+last_activity_desc: Phase 01 verified 18/20; two live-child checks await user results
+state_head: bf755be6
 progress:
   total_phases: 11
   completed_phases: 0
@@ -33,8 +33,8 @@ component as a working Pi artifact.
 
 Phase: 01 (Companion Floors and MCP Defaults) — EXECUTING
 Plan: 11 of 11
-Status: Verifying Phase 01
-Last activity: 2026-11-12 — All plans merged; final npm run check passed; goal verification pending
+Status: Human verification needed — resume with $gsd-verify-work 01
+Last activity: 2026-11-12 — 18/20 truths verified; two live-child tests saved in 01-UAT.md
 
 Progress: [░░░░░░░░░░] 0%
 
