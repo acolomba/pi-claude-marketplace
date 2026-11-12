@@ -134,6 +134,15 @@ with the same counts and Node version (`/tmp/gsd-parity-wave5-check.log`).
 The two live checks were already manual-only in this validation contract and are
 not replaced by stand-in-child scenarios. No acceptance or waiver is inferred.
 
+After the review fix `1e762749`, the final combined-tree `npm run check` passed
+with exit 0 on Node v26.13.0: 1,812 adapter scenarios, 155 built-in scenarios,
+and 354 direct-coverage pairs (`/tmp/gsd-parity-phase1-final-check.log`). The
+clean reference is `ec14242df04a53d91fd8bfdcbe4c3f31977719f0`. Its difference
+from the tested source commit contains only planning Markdown; no untracked
+build input was present. The independent re-review is clean, and the security
+follow-up confirms all 41 threats closed. Neither result replaces the two live
+checks above.
+
 ## Validation Audit 2026-11-12
 
 | Metric | Count |
