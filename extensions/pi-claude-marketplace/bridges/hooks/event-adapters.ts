@@ -59,10 +59,16 @@
 // Pi-side (TextContent | ImageContent)[] array) and `isError`. The fold in `dispatch.ts` runs every
 // hook on one snapshot, so a mutation applies once, after every hook ran.
 
+import { homedir } from "node:os";
+
+import { mapPiToClaudeToolName } from "../../domain/components/hook-tool-names.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { notifyHookNotice } from "../../shared/notification-dispatch.ts";
+import { openNotificationRun } from "../../shared/notification-run.ts";
 
 import { hookBlockingErrorText, hookErrorText, hookEventLabel } from "./hook-labels.ts";
+import { decodeHookToolInput } from "./tool-input.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
 import type { PendingPromptContext, RoutingEntry } from "./routing-state.ts";
@@ -129,30 +135,23 @@ function attributedCommand(context: HookAdapterContext): string {
  * rewrite omits is gone. The input object keeps its identity, since Pi runs
  * the tool with it.
  *
- * CR-01: a non-object rewrite (null, array, primitive) changes nothing, so a
- * hook returning `updatedInput: null` cannot pollute via array index keys.
- * Keys are copied one at a time via `Object.entries` rather than
- * `Object.assign`, skipping an own `"__proto__"` key: `JSON.parse` creates
- * `__proto__` as an ordinary own data property (not the prototype link), so
- * a hook-supplied rewrite carrying that key would otherwise let
- * `Object.assign` reassign `event.input`'s prototype.
+ * The caller validates the complete rewrite first. Define each own key as a
+ * data property so even a prototype-looking key cannot change the target's
+ * prototype.
  */
-function replaceToolCallInput(event: ToolCallEvent, updatedInput: unknown): void {
-  if (updatedInput === null || typeof updatedInput !== "object" || Array.isArray(updatedInput)) {
-    return;
-  }
-
+function replaceToolCallInput(event: ToolCallEvent, updatedInput: Record<string, unknown>): void {
   const target = event.input as Record<string, unknown>;
   for (const key of Object.keys(target)) {
     Reflect.deleteProperty(target, key);
   }
 
-  for (const [key, value] of Object.entries(updatedInput as Record<string, unknown>)) {
-    if (key === "__proto__") {
-      continue;
-    }
-
-    target[key] = value;
+  for (const [key, value] of Object.entries(updatedInput)) {
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
   }
 }
 
@@ -230,7 +229,29 @@ async function adaptToolCallMutation(
   }
 
   if (result.updatedInput !== undefined) {
-    replaceToolCallInput(event, result.updatedInput);
+    const decoded = decodeHookToolInput(
+      event.toolName,
+      event.input,
+      result.updatedInput,
+      context.ctx.cwd,
+      homedir(),
+    );
+    if (decoded.kind === "accepted") {
+      if (decoded.input !== event.input) {
+        replaceToolCallInput(event, decoded.input);
+      }
+    } else if (context.pi !== undefined) {
+      try {
+        const run = openNotificationRun(context.pi, { kind: "hook" });
+        notifyHookNotice(
+          context.ctx,
+          run,
+          `PreToolUse:${mapPiToClaudeToolName(event.toolName)} ignored input rewrite (${decoded.category})`,
+        );
+      } catch (error: unknown) {
+        hookDebugLog(`adaptToolCall: ignored rewrite notice failed: ${errorMessage(error)}`);
+      }
+    }
   }
 
   return undefined;

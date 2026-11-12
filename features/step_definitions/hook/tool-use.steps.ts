@@ -27,7 +27,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 
-import { Given } from "@cucumber/cucumber";
+import { Given, Then } from "@cucumber/cucumber";
 
 import { hookMcpCallScript } from "../../lib/hook-mcp-calls.ts";
 import { HOOK_MCP_TOOL_SERVER } from "../../lib/hook-mcp-tool-server.ts";
@@ -48,6 +48,24 @@ const MCP_FILE = ".mcp.json";
 // Pi's global MCP config, in the agent directory, which Pi reads with no
 // trust check.
 const PI_MCP_FILE = "mcp.json";
+
+Given(
+  "the project holds the file {string} with the text {string} for a tool hook",
+  async function (this: ScenarioWorld, name: string, text: string) {
+    await writeScenarioFile(
+      this,
+      path.join(this.tokens.projectDir, name),
+      text.replaceAll("\\n", "\n"),
+    );
+  },
+);
+
+Then(
+  "the project has no file {string} after a tool hook",
+  async function (this: ScenarioWorld, name: string) {
+    await assert.rejects(readFile(path.join(this.tokens.projectDir, name)), { code: "ENOENT" });
+  },
+);
 
 // Pi's `mcp.json` with the one server `server`, which runs the hooks' stub MCP
 // tool server with this process's Node and offers the tool `tool`.

@@ -8,10 +8,13 @@
 // the shared `mapPiToClaudeToolName` helper -- the `CustomToolCallEvent`
 // arm (`mcp__server__tool` and other plugin-defined names) flows through
 // the helper's passthrough fallback unchanged. The Pi tool argument
-// payload `event.input` is propagated verbatim into Claude's
-// `tool_input` field (claude-hook-config-syntax.md § 3).
+// payload `event.input` is translated into Claude's `tool_input` field;
+// a malformed runtime input passes through for required-field diagnostics.
+
+import { homedir } from "node:os";
 
 import { mapPiToClaudeToolName } from "../../../domain/components/hook-tool-names.ts";
+import { toHookToolInput } from "../tool-input.ts";
 
 import type { ToolCallEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
@@ -35,6 +38,6 @@ export function translatePreToolUse(
     cwd: ctx.cwd,
     hook_event_name: "PreToolUse",
     tool_name: mapPiToClaudeToolName(event.toolName),
-    tool_input: event.input,
+    tool_input: toHookToolInput(event.toolName, event.input, ctx.cwd, homedir()),
   };
 }
