@@ -90,6 +90,10 @@ const CARRIED_KEYS: readonly string[] = [
 ];
 
 const MARKER = { plugin: "acme", marketplace: "catalog" };
+const STDIO_DEFAULT = { requestTimeoutMs: 1800000 };
+const REMOTE_DEFAULT = { requestTimeoutMs: 300000 };
+const STDIO_MARKER = { ...MARKER, defaultFields: STDIO_DEFAULT };
+const REMOTE_MARKER = { ...MARKER, defaultFields: REMOTE_DEFAULT };
 
 const PROJECT_CONTEXT: McpSubstitutionContext = {
   pluginRoot: "/plugin/root",
@@ -271,7 +275,8 @@ describe("stampServers", () => {
           args: ["/project/root"],
           env: INJECTED_ENV,
           ...OWNED,
-          _piClaudeMarketplace: MARKER,
+          ...STDIO_DEFAULT,
+          _piClaudeMarketplace: STDIO_MARKER,
         },
       }),
     );
@@ -317,14 +322,16 @@ describe("stampServers", () => {
       remote: {
         url: "https://mcp.example.test/${PI_CM_SITE}",
         ...OWNED,
-        _piClaudeMarketplace: MARKER,
+        ...REMOTE_DEFAULT,
+        _piClaudeMarketplace: REMOTE_MARKER,
       },
       local: {
         command: "server",
         args: ["${PI_CM_LEVEL}", "${PI_CM_TOKEN}"],
         env: INJECTED_ENV,
         ...OWNED,
-        _piClaudeMarketplace: MARKER,
+        ...STDIO_DEFAULT,
+        _piClaudeMarketplace: STDIO_MARKER,
       },
       scalar: { ...OWNED, _piClaudeMarketplace: MARKER },
     });
@@ -346,7 +353,12 @@ describe("stampServers", () => {
 
     // assert
     assert.deepStrictEqual(stamping.stamped, {
-      server: { url: "https://new.example/mcp", ...OWNED, _piClaudeMarketplace: MARKER },
+      server: {
+        url: "https://new.example/mcp",
+        ...OWNED,
+        ...REMOTE_DEFAULT,
+        _piClaudeMarketplace: REMOTE_MARKER,
+      },
     });
   });
 
@@ -373,7 +385,8 @@ describe("stampServers", () => {
         ...OWNED,
         disabled: true,
         lifecycle: "eager",
-        _piClaudeMarketplace: MARKER,
+        ...REMOTE_DEFAULT,
+        _piClaudeMarketplace: REMOTE_MARKER,
       },
     });
   });
@@ -398,7 +411,8 @@ describe("stampServers", () => {
         url: "https://new.example/mcp",
         disabled: false,
         ...OWNED,
-        _piClaudeMarketplace: MARKER,
+        ...REMOTE_DEFAULT,
+        _piClaudeMarketplace: REMOTE_MARKER,
       },
     });
   });
@@ -422,7 +436,12 @@ describe("stampServers", () => {
 
     // assert
     assert.deepStrictEqual(stamping.stamped, {
-      server: { url: "https://new.example/mcp", ...OWNED, _piClaudeMarketplace: MARKER },
+      server: {
+        url: "https://new.example/mcp",
+        ...OWNED,
+        ...REMOTE_DEFAULT,
+        _piClaudeMarketplace: REMOTE_MARKER,
+      },
     });
   });
 
@@ -525,7 +544,8 @@ describe("stampServers", () => {
           url: "https://new.example/mcp",
           ...OWNED,
           disabled: true,
-          _piClaudeMarketplace: MARKER,
+          ...REMOTE_DEFAULT,
+          _piClaudeMarketplace: REMOTE_MARKER,
         },
       }),
     );
@@ -606,6 +626,163 @@ describe("stampServers", () => {
     );
   });
 
+  test("D-PG1-13: recomputes a recorded stdio default when the server becomes remote", () => {
+    // arrange
+    const previous = {
+      server: {
+        command: "old-command",
+        ...STDIO_DEFAULT,
+        _piClaudeMarketplace: STDIO_MARKER,
+      },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://new.example/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous,
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        url: "https://new.example/mcp",
+        ...OWNED,
+        ...REMOTE_DEFAULT,
+        _piClaudeMarketplace: REMOTE_MARKER,
+      },
+    });
+  });
+
+  test("D-PG1-13: carries a user value that differs from the recorded default", () => {
+    // arrange
+    const previous = {
+      server: {
+        command: "old-command",
+        requestTimeoutMs: 7000,
+        _piClaudeMarketplace: STDIO_MARKER,
+      },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://new.example/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous,
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        url: "https://new.example/mcp",
+        ...OWNED,
+        requestTimeoutMs: 7000,
+        _piClaudeMarketplace: MARKER,
+      },
+    });
+  });
+
+  test("D-PG1-13: restores a default when the previous entry lacks its recorded field", () => {
+    // arrange
+    const previous = {
+      server: { command: "old-command", _piClaudeMarketplace: STDIO_MARKER },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "new-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous,
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        command: "new-command",
+        env: INJECTED_ENV,
+        ...OWNED,
+        ...STDIO_DEFAULT,
+        _piClaudeMarketplace: STDIO_MARKER,
+      },
+    });
+  });
+
+  test("D-PG1-13: a plugin timeout replaces a recorded default without retaining it", () => {
+    // arrange
+    const previous = {
+      server: { command: "old-command", ...STDIO_DEFAULT, _piClaudeMarketplace: STDIO_MARKER },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "new-command", timeout: 2500 } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous,
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        command: "new-command",
+        env: INJECTED_ENV,
+        requestTimeoutMs: 2500,
+        ...OWNED,
+        _piClaudeMarketplace: { ...MARKER, pluginSetFields: ["requestTimeoutMs"] },
+      },
+    });
+  });
+
+  test("D-PG1-11: an unknown server type receives no adapter timeout default", () => {
+    // arrange
+    const servers = { server: { type: "unknown", url: "https://new.example/mcp" } };
+
+    // act
+    const stamping = stampServers({
+      servers,
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: {},
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: { ...OWNED, _piClaudeMarketplace: MARKER },
+    });
+  });
+
+  test("D-PG1-13: restaging an unchanged server writes the same entry bytes", () => {
+    // arrange
+    const input = {
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: {},
+      keptOverrides: {},
+    };
+    const first = stampServers(input);
+
+    // act
+    const second = stampServers({ ...input, previous: first.stamped });
+
+    // assert
+    assert.strictEqual(JSON.stringify(second.stamped), JSON.stringify(first.stamped));
+  });
+
   test("reports a non-object entry and a malformed stdio env as ordered warnings", () => {
     // arrange
     const servers = {
@@ -636,12 +813,14 @@ describe("stampServers", () => {
         command: "node",
         env: INJECTED_ENV,
         ...OWNED,
-        _piClaudeMarketplace: MARKER,
+        ...STDIO_DEFAULT,
+        _piClaudeMarketplace: STDIO_MARKER,
       },
       urlWithScalarEnv: {
         url: "https://mcp.example.test",
         ...OWNED,
-        _piClaudeMarketplace: MARKER,
+        ...REMOTE_DEFAULT,
+        _piClaudeMarketplace: REMOTE_MARKER,
       },
       scalar: { ...OWNED, _piClaudeMarketplace: MARKER },
       nil: { ...OWNED, _piClaudeMarketplace: MARKER },
@@ -673,7 +852,8 @@ describe("stampServers", () => {
         command: "${CLAUDE_PROJECT_DIR}/server",
         env: { CLAUDE_PLUGIN_ROOT: "/plugin/root", CLAUDE_PLUGIN_DATA: "/plugin/data" },
         ...OWNED,
-        _piClaudeMarketplace: MARKER,
+        ...STDIO_DEFAULT,
+        _piClaudeMarketplace: STDIO_MARKER,
       },
     });
   });
@@ -727,7 +907,7 @@ describe("stampServers", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
-      '{"server":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","disabled":true,"openUi":true,"trace":false,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}',
+      '{"server":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","disabled":true,"openUi":true,"trace":false,"requestTimeoutMs":1800000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000}}}}',
     );
   });
 
@@ -799,7 +979,8 @@ describe("stampServers", () => {
         ...OWNED,
         appendStructuredContent: true,
         roots: false,
-        _piClaudeMarketplace: MARKER,
+        ...STDIO_DEFAULT,
+        _piClaudeMarketplace: STDIO_MARKER,
       },
     });
   });
@@ -821,7 +1002,7 @@ describe("stampServers", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
-      '{"server":{"url":"https://acme.example/mcp","directTools":"search","toolPrefix":"mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}}',
+      '{"server":{"url":"https://acme.example/mcp","directTools":"search","toolPrefix":"mcp","requestTimeoutMs":300000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000},"keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}}',
     );
   });
 
@@ -857,9 +1038,11 @@ describe("stampServers", () => {
         env: INJECTED_ENV,
         ...OWNED,
         disabled: true,
+        ...STDIO_DEFAULT,
         _piClaudeMarketplace: {
           plugin: "acme",
           marketplace: "catalog",
+          defaultFields: STDIO_DEFAULT,
           keptOverride: {
             disabled: true,
             env: { STUB_TOKEN: "stub-secret" },
@@ -902,7 +1085,7 @@ describe("stampServers", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
-      '{"__proto__":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}',
+      '{"__proto__":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","requestTimeoutMs":1800000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000}}}}',
     );
   });
 
@@ -922,7 +1105,12 @@ describe("stampServers", () => {
 
     // assert
     assert.deepStrictEqual(stamping.stamped, {
-      server: { url: "https://acme.example/mcp", ...OWNED, _piClaudeMarketplace: MARKER },
+      server: {
+        url: "https://acme.example/mcp",
+        ...OWNED,
+        ...REMOTE_DEFAULT,
+        _piClaudeMarketplace: REMOTE_MARKER,
+      },
     });
   });
 
@@ -957,7 +1145,8 @@ describe("stampServers", () => {
           directTools: true,
           toolPrefix: "mcp",
           disabled: true,
-          _piClaudeMarketplace: MARKER,
+          ...STDIO_DEFAULT,
+          _piClaudeMarketplace: STDIO_MARKER,
         },
       }),
     );
@@ -986,7 +1175,8 @@ describe("stampServers", () => {
           env: INJECTED_ENV,
           directTools: "search",
           toolPrefix: "mcp",
-          _piClaudeMarketplace: MARKER,
+          ...STDIO_DEFAULT,
+          _piClaudeMarketplace: STDIO_MARKER,
         },
       }),
     );
@@ -1045,7 +1235,8 @@ describe("stampServers", () => {
           },
           description: "Acme tools",
           ...OWNED,
-          _piClaudeMarketplace: MARKER,
+          ...REMOTE_DEFAULT,
+          _piClaudeMarketplace: REMOTE_MARKER,
         },
       }),
     );
@@ -1069,7 +1260,14 @@ describe("stampServers", () => {
       // assert
       assert.strictEqual(
         JSON.stringify(stamping.stamped),
-        JSON.stringify({ server: { ...expectedEntry, ...OWNED, _piClaudeMarketplace: MARKER } }),
+        JSON.stringify({
+          server: {
+            ...expectedEntry,
+            ...OWNED,
+            ...REMOTE_DEFAULT,
+            _piClaudeMarketplace: REMOTE_MARKER,
+          },
+        }),
       );
     });
   }
@@ -1156,6 +1354,22 @@ describe("inactiveOverrideFields", () => {
 });
 
 describe("restoredOverride", () => {
+  test("D-PG1-13: a recorded default is never copied into the restored override", () => {
+    // arrange
+    const kept = { requestTimeoutMs: 5000, disabled: true };
+    const live = {
+      command: "plugin-command",
+      ...STDIO_DEFAULT,
+      _piClaudeMarketplace: STDIO_MARKER,
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.deepStrictEqual(restored, {});
+  });
+
   test("ANAME-07: a carried field the live marker lists as plugin-set comes back with the kept value", () => {
     // arrange
     const kept = { requestTimeoutMs: 5000, disabled: true };
@@ -1268,6 +1482,37 @@ describe("restoredOverride", () => {
 });
 
 describe("userCarriedFields", () => {
+  test("D-PG1-13: excludes a recorded default from the user's saved choices", () => {
+    // arrange
+    const entry = {
+      command: "plugin-command",
+      disabled: true,
+      ...STDIO_DEFAULT,
+      _piClaudeMarketplace: STDIO_MARKER,
+    };
+
+    // act
+    const fields = userCarriedFields(entry);
+
+    // assert
+    assert.deepStrictEqual(fields, { disabled: true });
+  });
+
+  test("D-PG1-13: keeps a user timeout that differs from the recorded default", () => {
+    // arrange
+    const entry = {
+      command: "plugin-command",
+      requestTimeoutMs: 7000,
+      _piClaudeMarketplace: STDIO_MARKER,
+    };
+
+    // act
+    const fields = userCarriedFields(entry);
+
+    // assert
+    assert.deepStrictEqual(fields, { requestTimeoutMs: 7000 });
+  });
+
   test("D-08-02: returns the entry's carried fields in carried-set order and nothing else", () => {
     // arrange
     const entry = {

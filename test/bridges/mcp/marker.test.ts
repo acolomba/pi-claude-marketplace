@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
   buildMarker,
+  defaultFieldsOf,
   isOwnedBy,
   keptOverrideOf,
   markerOwnerOf,
@@ -93,6 +94,105 @@ describe("buildMarker", () => {
       '{"plugin":"deploy-tools","marketplace":"team-marketplace"}',
     );
   });
+
+  test("D-PG1-13: writes default fields after plugin-set fields and before the kept override", () => {
+    // arrange
+    const keptOverride = { disabled: true };
+
+    // act
+    const marker = buildMarker("deploy-tools", "team-marketplace", {
+      pluginSetFields: ["disabled"],
+      defaultFields: { requestTimeoutMs: 1800000 },
+      keptOverride,
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(marker),
+      '{"plugin":"deploy-tools","marketplace":"team-marketplace","pluginSetFields":["disabled"],"defaultFields":{"requestTimeoutMs":1800000},"keptOverride":{"disabled":true}}',
+    );
+  });
+
+  test("D-PG1-13: omits default fields when the record is empty", () => {
+    // act
+    const marker = buildMarker("deploy-tools", "team-marketplace", { defaultFields: {} });
+
+    // assert
+    assert.deepStrictEqual(marker, { plugin: "deploy-tools", marketplace: "team-marketplace" });
+  });
+});
+
+describe("defaultFieldsOf", () => {
+  test("D-PG1-13: reads the default values of a well-formed marker", () => {
+    // arrange
+    const fields = { requestTimeoutMs: 1800000 };
+    const entry = {
+      _piClaudeMarketplace: {
+        plugin: "search-tools",
+        marketplace: "official",
+        defaultFields: fields,
+      },
+    };
+
+    // act
+    const defaults = defaultFieldsOf(entry);
+
+    // assert
+    assert.strictEqual(defaults, fields);
+  });
+
+  for (const { description, marker } of [
+    {
+      description: "an absent member",
+      marker: { plugin: "search-tools", marketplace: "official" },
+    },
+    {
+      description: "a null member",
+      marker: { plugin: "search-tools", marketplace: "official", defaultFields: null },
+    },
+    {
+      description: "an array member",
+      marker: { plugin: "search-tools", marketplace: "official", defaultFields: [1800000] },
+    },
+    {
+      description: "a string member",
+      marker: {
+        plugin: "search-tools",
+        marketplace: "official",
+        defaultFields: "requestTimeoutMs",
+      },
+    },
+    {
+      description: "a member containing a string",
+      marker: {
+        plugin: "search-tools",
+        marketplace: "official",
+        defaultFields: { requestTimeoutMs: "1800000" },
+      },
+    },
+    {
+      description: "an inherited member",
+      marker: Object.assign(Object.create({ defaultFields: { requestTimeoutMs: 1800000 } }), {
+        plugin: "search-tools",
+        marketplace: "official",
+      }) as unknown,
+    },
+    {
+      description: "a malformed marker",
+      marker: { marketplace: "official", defaultFields: { requestTimeoutMs: 1800000 } },
+    },
+  ] satisfies ReadonlyArray<{ description: string; marker: unknown }>) {
+    test(`D-PG1-13: returns no defaults for ${description}`, () => {
+      // arrange
+      const entry = { _piClaudeMarketplace: marker };
+
+      // act
+      const defaults = defaultFieldsOf(entry);
+
+      // assert
+      assert.deepStrictEqual(defaults, {});
+    });
+  }
 });
 
 describe("pluginSetFieldsOf", () => {

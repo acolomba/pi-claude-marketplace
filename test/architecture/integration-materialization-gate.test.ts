@@ -93,9 +93,13 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
       "description": "case-local isolation source",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
       "_piClaudeMarketplace": {
         "plugin": "acme",
-        "marketplace": "catalog"
+        "marketplace": "catalog",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000
+        }
       }
     }
   }

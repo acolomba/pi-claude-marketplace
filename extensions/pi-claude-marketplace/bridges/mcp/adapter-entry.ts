@@ -10,17 +10,19 @@
 // `mcp__plugin_<plugin>_<server>__<tool>` whatever the user's global
 // `settings.toolPrefix` says (ANAME-01). The user's own fields carry over from
 // the entry it replaces (AFILE-06), except a carried field the plugin's entry
-// sets, which belongs to the plugin (ANAME-07). The MC-5 marker goes last. It
-// names the carried fields the plugin set and may keep the user override the
-// entry replaced, verbatim and inert (AFILE-06). Every change to entry content
-// belongs in this module or the table.
+// sets, which belongs to the plugin (ANAME-07). A default follows the user's
+// value (D-PG1-11); the MC-5 marker goes last. It names the fields the plugin
+// set and the defaults this extension wrote, and may keep the user override
+// the entry replaced, verbatim and inert (AFILE-06). Every change to entry
+// content belongs in this module or the table.
 
-import { translateMcpServer } from "../../domain/mcp-server-features.ts";
+import { defaultRequestTimeoutMs, translateMcpServer } from "../../domain/mcp-server-features.ts";
 import { ADAPTER_EMPTY_ENV } from "../../shared/session-env.ts";
 
 import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
   buildMarker,
+  defaultFieldsOf,
   isPlainObject,
   keptOverrideOf,
   pluginSetFieldsOf,
@@ -206,7 +208,18 @@ function pluginSetFieldsIn(translated: Readonly<Record<string, unknown>>): reado
  * (ANAME-07). A field the previous entry's marker lists as plugin-set holds
  * the plugin's old value, so it comes from the override that marker keeps,
  * if any, and a timeout a later version drops leaves no stale value behind.
+ * A value matching the previous marker's recorded default is recomputed, not
+ * carried as the user's (D-PG1-13).
  */
+function isRecordedDefault(
+  previous: Record<string, unknown>,
+  source: Record<string, unknown>,
+  field: string,
+  defaults: Readonly<Record<string, number>>,
+): boolean {
+  return source === previous && Object.hasOwn(defaults, field) && source[field] === defaults[field];
+}
+
 function carriedFields(previous: unknown, pluginSet: readonly string[]): Record<string, unknown> {
   const carried: Record<string, unknown> = {};
   if (!isPlainObject(previous)) {
@@ -214,10 +227,15 @@ function carriedFields(previous: unknown, pluginSet: readonly string[]): Record<
   }
 
   const previousPluginSet = pluginSetFieldsOf(previous);
+  const defaults = defaultFieldsOf(previous);
   const kept = keptOverrideOf(previous) ?? {};
   for (const field of CARRIED_FIELDS) {
     const source = previousPluginSet.includes(field) ? kept : previous;
-    if (!pluginSet.includes(field) && Object.hasOwn(source, field)) {
+    if (
+      !pluginSet.includes(field) &&
+      Object.hasOwn(source, field) &&
+      !isRecordedDefault(previous, source, field, defaults)
+    ) {
       carried[field] = source[field];
     }
   }
@@ -297,16 +315,35 @@ function keptOverrideFor(
   return isPlainObject(override) ? override : undefined;
 }
 
+/** D-PG1-11: fill only a timeout neither the plugin nor the user supplied. */
+function defaultFieldsFor(
+  entry: unknown,
+  translated: Readonly<Record<string, unknown>>,
+  carried: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, number>> {
+  if (
+    !isPlainObject(entry) ||
+    Object.hasOwn(translated, "requestTimeoutMs") ||
+    Object.hasOwn(carried, "requestTimeoutMs")
+  ) {
+    return {};
+  }
+
+  const timeout = defaultRequestTimeoutMs(entry);
+  return timeout === undefined ? {} : { requestTimeoutMs: timeout };
+}
+
 /**
  * Builds the entry for each plugin server: the translated and expanded plugin
  * entry with its owned fields (ANAME-04, ANAME-06, ANAME-07), then the fields
- * carried from the entry it replaces in carried-set order, then the MC-5
- * marker. The marker names the carried fields the plugin's entry sets and
- * keeps the server's user override when there is one. A carried field the
- * plugin sets takes the plugin's value, so a timeout change in a later version
- * applies (ANAME-07). Carried fields come from `previous` and the override its
- * marker keeps, so a credential-bearing field of an override stays inside the
- * marker (AFILE-06). `variableReports` holds each server's variable report,
+ * carried from the entry it replaces in carried-set order, then defaults the
+ * extension owns, then the MC-5 marker (D-PG1-11). The marker names the fields
+ * the plugin sets and the defaults to recompute (D-PG1-13), and keeps the
+ * server's user override when there is one. A carried field the plugin sets
+ * takes the plugin's value, so a timeout change in a later version applies
+ * (ANAME-07). Carried fields come from `previous` and the override its marker
+ * keeps, so a credential-bearing field of an override stays inside the marker
+ * (AFILE-06). `variableReports` holds each server's variable report,
  * keyed by server key in declared order (AVAR-02).
  */
 export function stampServers(input: StampServersInput): {
@@ -327,14 +364,18 @@ export function stampServers(input: StampServersInput): {
     );
     variableReports.set(name, report);
     const pluginSetFields = pluginSetFieldsIn(translated);
+    const carried = carriedFields(input.previous[name], pluginSetFields);
+    const defaultFields = defaultFieldsFor(entry, translated, carried);
     // safeSet copies a server literally named `__proto__` as an own key, so
     // it is stamped and written rather than dropped through the inherited
     // setter (WR-01).
     safeSet(stamped, name, {
       ...translated,
-      ...carriedFields(input.previous[name], pluginSetFields),
+      ...carried,
+      ...defaultFields,
       [CLAUDE_MARKETPLACE_MARKER_KEY]: buildMarker(input.pluginName, input.marketplaceName, {
         pluginSetFields,
+        defaultFields,
         keptOverride: keptOverrideFor(input.keptOverrides, name),
       }),
     });

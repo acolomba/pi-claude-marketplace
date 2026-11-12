@@ -6,8 +6,9 @@
 // subobject. `unstage` and the `prepare` partition step read the marker
 // to identify which entries belong to a given (marketplace, plugin) tuple.
 // The marker may also carry `pluginSetFields`, the names of the carried fields
-// the plugin's entry sets (ANAME-07), and `keptOverride`: the user override
-// the entry replaced, which an unstage writes back (AFILE-06, AFILE-01).
+// the plugin's entry sets (ANAME-07), `defaultFields`: the default values this
+// extension wrote (D-PG1-13), and `keptOverride`: the user override the entry
+// replaced, which an unstage writes back (AFILE-06, AFILE-01).
 // The load-time move reads only the owner a legacy `mcp.json` entry's marker
 // names (AMIG-01).
 //
@@ -27,6 +28,8 @@ export interface ClaudeMarketplaceMarker {
    * kept override's own value for each of them (AFILE-06).
    */
   readonly pluginSetFields?: readonly string[];
+  /** D-PG1-13: default values this extension wrote, so a restage can recompute them. */
+  readonly defaultFields?: Readonly<Record<string, number>>;
   /**
    * The marker-less override this entry replaced under the same server name,
    * kept verbatim (AFILE-06). pi-mcp-adapter never reads inside the marker, so
@@ -46,13 +49,18 @@ function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((element: unknown) => typeof element === "string");
 }
 
+function isNumberRecord(value: unknown): value is Readonly<Record<string, number>> {
+  return isPlainObject(value) && Object.values(value).every((member) => typeof member === "number");
+}
+
 /**
  * Returns the parsed marker subobject if `value` is an object with a
  * well-formed `_piClaudeMarketplace: { plugin: string; marketplace: string }`
  * entry; otherwise null. Arrays, primitives, and partial shapes yield null; it
  * never throws. `pluginSetFields` is returned only when it is an
- * own array of strings, and `keptOverride` only when it is an own plain-object
- * member; any other value parses as a marker without that member.
+ * own array of strings, `defaultFields` only when it is an own plain object
+ * of numbers, and `keptOverride` only when it is an own plain-object member;
+ * any other value parses as a marker without that member.
  */
 function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
   if (!isPlainObject(value) || !Object.hasOwn(value, CLAUDE_MARKETPLACE_MARKER_KEY)) {
@@ -74,11 +82,13 @@ function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
   }
 
   const pluginSetFields = Object.hasOwn(obj, "pluginSetFields") ? obj.pluginSetFields : undefined;
+  const defaultFields = Object.hasOwn(obj, "defaultFields") ? obj.defaultFields : undefined;
   const keptOverride = Object.hasOwn(obj, "keptOverride") ? obj.keptOverride : undefined;
   return {
     plugin: obj.plugin,
     marketplace: obj.marketplace,
     ...(isStringArray(pluginSetFields) ? { pluginSetFields } : {}),
+    ...(isNumberRecord(defaultFields) ? { defaultFields } : {}),
     ...(isPlainObject(keptOverride) ? { keptOverride } : {}),
   };
 }
@@ -90,22 +100,25 @@ function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
  * This helper does NOT re-validate; the bridge
  * stage path enters this function with names that have already passed
  * the resolver's name checks. `pluginSetFields` follows the identity only
- * when non-empty (ANAME-07), and `keptOverride` goes last, only when given
- * (AFILE-06), so a restage of the same entry writes the same bytes.
+ * when non-empty (ANAME-07). `defaultFields` follows it when non-empty
+ * (D-PG1-13), and `keptOverride` goes last, only when given (AFILE-06), so a
+ * restage of the same entry writes the same bytes.
  */
 export function buildMarker(
   plugin: string,
   marketplace: string,
   parts: {
     readonly pluginSetFields?: readonly string[];
+    readonly defaultFields?: Readonly<Record<string, number>>;
     readonly keptOverride?: Readonly<Record<string, unknown>> | undefined;
   } = {},
 ): ClaudeMarketplaceMarker {
-  const { pluginSetFields = [], keptOverride } = parts;
+  const { pluginSetFields = [], defaultFields = {}, keptOverride } = parts;
   return {
     plugin,
     marketplace,
     ...(pluginSetFields.length > 0 ? { pluginSetFields } : {}),
+    ...(Object.keys(defaultFields).length > 0 ? { defaultFields } : {}),
     ...(keptOverride === undefined ? {} : { keptOverride }),
   };
 }
@@ -136,4 +149,9 @@ export function keptOverrideOf(value: unknown): Readonly<Record<string, unknown>
 /** The carried fields an entry's marker lists as plugin-set, or none (ANAME-07). */
 export function pluginSetFieldsOf(value: unknown): readonly string[] {
   return readMarker(value)?.pluginSetFields ?? [];
+}
+
+/** The default values an entry's marker records, or none (D-PG1-13). */
+export function defaultFieldsOf(value: unknown): Readonly<Record<string, number>> {
+  return readMarker(value)?.defaultFields ?? {};
 }

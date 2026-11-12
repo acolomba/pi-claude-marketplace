@@ -7,6 +7,57 @@ Feature: MCP server configuration
   servers, a scripted model for a real model, a local marketplace for a published one, and a
   registry probe for the configuration Pi holds.
 
+  @mcp
+  Scenario: A server that declares no timeout is written to mcp-adapter.json with the idle window of Claude Code, 30 minutes for stdio and 5 minutes for a remote server (PG-MCP-01, D-PG1-11)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"stub": {"command": "pi-features-absent-mcp-server"}, "remote": {"type": "http", "url": "http://127.0.0.1:9/mcp"}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_stub_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000
+              }
+            }
+          },
+          "plugin_demo_remote_": {
+            "url": "http://127.0.0.1:9/mcp",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
   @builtin-only
   Scenario: A server that declares no timeout is registered with the idle window of Claude Code, 30 minutes for stdio and 5 minutes for a remote server (PG-MCP-01, D-PG1-11)
     Given the marketplace "fixtures" is published as a dir source
