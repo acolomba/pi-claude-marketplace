@@ -11,7 +11,7 @@ import {
 
 import type { McpSubstitutionContext } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 
-// pi-mcp-adapter@7.0.0 types.ts:438-531 (ServerEntry), dist.shasum d5b65ef01d3e5fcb62dac6fa26997a9d7ce0c7a0
+// pi-mcp-adapter@7.0.1 types.ts:438-531 (ServerEntry), dist.shasum f4805933bce4c6d2bd732b146a320780e91ed9b8
 // The members in declaration order. Refresh this list from the new floor's
 // types.ts whenever package.json moves the pi-mcp-adapter floor.
 const SERVER_ENTRY_KEYS = [
@@ -54,7 +54,7 @@ const SERVER_ENTRY_KEYS = [
   "disabled",
 ] as const;
 
-// pi-mcp-adapter@7.0.0 types.ts:397-422 (OAuthConfig), dist.shasum d5b65ef01d3e5fcb62dac6fa26997a9d7ce0c7a0
+// pi-mcp-adapter@7.0.1 types.ts:397-422 (OAuthConfig), dist.shasum f4805933bce4c6d2bd732b146a320780e91ed9b8
 // The members in declaration order. Refresh this list with SERVER_ENTRY_KEYS.
 const OAUTH_CONFIG_KEYS = [
   "grantType",
@@ -1329,7 +1329,7 @@ describe("userCarriedFields", () => {
   });
 });
 
-// pi-mcp-adapter@7.0.0 (dist.shasum d5b65ef01d3e5fcb62dac6fa26997a9d7ce0c7a0)
+// pi-mcp-adapter@7.0.1 (dist.shasum f4805933bce4c6d2bd732b146a320780e91ed9b8)
 // applies nothing under `_piClaudeMarketplace`; re-check each fact when the
 // floor moves:
 //   - config.ts:1550-1577 `toServerEntries` keeps each entry object verbatim
@@ -1339,7 +1339,7 @@ describe("userCarriedFields", () => {
 //   - Every field consumer names its field (`definition.env`,
 //     `definition.bearerToken`, `definition.headers`, `definition.oauth`;
 //     metadata-cache.ts:143 `computeServerHash` lists named fields).
-//   - config.ts:2028 `writeProjectServerDisabledOverride` and config.ts:2320
+//   - config.ts:2005 `writeProjectServerDisabledOverride` and config.ts:2292
 //     `writeDirectToolsConfig` spread the entry, so the marker survives.
 //   - project-server-trust.ts:101-103 `hashProjectServerDefinition` hashes the
 //     whole entry, marker included: an identity read only.
@@ -1355,7 +1355,7 @@ test("AFILE-06: the vendored ServerEntry keys match the pi-mcp-adapter floor", a
   // assert
   assert.strictEqual(
     packageJson.peerDependencies["pi-mcp-adapter"],
-    ">=7.0.0 <8",
+    ">=7.0.1 <8",
     "the pi-mcp-adapter range moved: refresh SERVER_ENTRY_KEYS and OAUTH_CONFIG_KEYS from the " +
       "new floor's types.ts (ServerEntry, OAuthConfig), revisit the carried set in adapter-entry.ts, " +
       "re-prove that the adapter applies nothing under _piClaudeMarketplace (keptOverride), " +

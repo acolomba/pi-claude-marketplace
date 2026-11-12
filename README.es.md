@@ -36,8 +36,8 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 ## Requisitos previos
 
 - [Pi Coding Agent](https://pi.dev) 1.5.0 o posterior
-- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 o una versión 7.x posterior (opcional, `pi install npm:pi-mcp-adapter`). Admite más funciones de MCP que el MCP integrado de Pi.
+- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.87.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.1 o una versión 7.x posterior (opcional, `pi install npm:pi-mcp-adapter`). Admite más funciones de MCP que el MCP integrado de Pi.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 o posterior (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Uso
@@ -375,7 +375,7 @@ Actualiza un complemento instalado, todos los complementos instalados de un merc
 ```
 
 > [!NOTE]
-> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`. Mapea `sonnet`, `opus`, `haiku`, `fable`, `best` y `opusplan`, con o sin `[1m]`, a los modelos actuales de Claude, por ejemplo `anthropic/claude-sonnet-5-5`. Conserva los ID de modelo completos que empiezan por `claude-`.
+> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`. Mapea `sonnet`, `opus`, `haiku`, `fable`, `best` y `opusplan`, con o sin `[1m]`, a los modelos actuales de Claude, por ejemplo `claude-sonnet-5-5`. Conserva los ID de modelo completos que empiezan por `claude-`.
 
 Reinstala un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 

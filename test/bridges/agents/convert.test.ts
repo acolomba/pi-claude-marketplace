@@ -162,7 +162,7 @@ describe("convertAgent", () => {
       sourceFields: {
         model: "sonnet",
       },
-      expectedMapping: "model: anthropic/claude-sonnet-5-5\ntools: read\n",
+      expectedMapping: "model: claude-sonnet-5-5\ntools: read\n",
       expectedModelProvenance: "  originalModel: sonnet\n",
       expectedOriginalModel: {
         originalModel: "sonnet",
@@ -173,7 +173,7 @@ describe("convertAgent", () => {
       sourceFields: {
         model: "opus",
       },
-      expectedMapping: "model: anthropic/claude-opus-5-5\ntools: read\n",
+      expectedMapping: "model: claude-opus-5-5\ntools: read\n",
       expectedModelProvenance: "  originalModel: opus\n",
       expectedOriginalModel: {
         originalModel: "opus",
@@ -184,7 +184,7 @@ describe("convertAgent", () => {
       sourceFields: {
         model: "haiku",
       },
-      expectedMapping: "model: anthropic/claude-haiku-5-5\ntools: read\n",
+      expectedMapping: "model: claude-haiku-5-5\ntools: read\n",
       expectedModelProvenance: "  originalModel: haiku\n",
       expectedOriginalModel: {
         originalModel: "haiku",
@@ -373,7 +373,7 @@ Review files.
 name: spec-tree:changes-reviewer
 description: Reviews changes
 aliases: pi-claude-marketplace-spec-tree-changes-reviewer
-model: anthropic/claude-sonnet-5-5
+model: claude-sonnet-5-5
 tools: bash,read
 thinking: high
 skills: spec-tree-review-changes
@@ -542,79 +542,79 @@ Review files.
     },
     {
       sourceModel: "sonnet",
-      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedModelLine: "model: claude-sonnet-5-5",
       expectedOriginalModel: "sonnet",
       expectedWarnings: [],
     },
     {
       sourceModel: "SONNET",
-      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedModelLine: "model: claude-sonnet-5-5",
       expectedOriginalModel: "SONNET",
       expectedWarnings: [],
     },
     {
       sourceModel: "opusplan",
-      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedModelLine: "model: claude-sonnet-5-5",
       expectedOriginalModel: "opusplan",
       expectedWarnings: [],
     },
     {
       sourceModel: "sonnet[1m]",
-      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedModelLine: "model: claude-sonnet-5-5",
       expectedOriginalModel: "sonnet[1m]",
       expectedWarnings: [],
     },
     {
       sourceModel: "Sonnet[1M]",
-      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedModelLine: "model: claude-sonnet-5-5",
       expectedOriginalModel: "Sonnet[1M]",
       expectedWarnings: [],
     },
     {
       sourceModel: "opus",
-      expectedModelLine: "model: anthropic/claude-opus-5-5",
+      expectedModelLine: "model: claude-opus-5-5",
       expectedOriginalModel: "opus",
       expectedWarnings: [],
     },
     {
       sourceModel: "opus[1m]",
-      expectedModelLine: "model: anthropic/claude-opus-5-5",
+      expectedModelLine: "model: claude-opus-5-5",
       expectedOriginalModel: "opus[1m]",
       expectedWarnings: [],
     },
     {
       sourceModel: "haiku",
-      expectedModelLine: "model: anthropic/claude-haiku-5-5",
+      expectedModelLine: "model: claude-haiku-5-5",
       expectedOriginalModel: "haiku",
       expectedWarnings: [],
     },
     {
       sourceModel: "fable",
-      expectedModelLine: "model: anthropic/claude-fable-5-1",
+      expectedModelLine: "model: claude-fable-5-1",
       expectedOriginalModel: "fable",
       expectedWarnings: [],
     },
     {
       sourceModel: "fable[1m]",
-      expectedModelLine: "model: anthropic/claude-fable-5-1",
+      expectedModelLine: "model: claude-fable-5-1",
       expectedOriginalModel: "fable[1m]",
       expectedWarnings: [],
     },
     {
       sourceModel: "best",
-      expectedModelLine: "model: anthropic/claude-fable-5-1",
+      expectedModelLine: "model: claude-fable-5-1",
       expectedOriginalModel: "best",
       expectedWarnings: [],
     },
     {
       sourceModel: "claude-opus-4-7",
-      expectedModelLine: "model: anthropic/claude-opus-4-7",
+      expectedModelLine: "model: claude-opus-4-7",
       expectedOriginalModel: "claude-opus-4-7",
       expectedWarnings: [],
     },
     {
       sourceModel: " claude-haiku-5-5 ",
-      expectedModelLine: "model: anthropic/claude-haiku-5-5",
+      expectedModelLine: "model: claude-haiku-5-5",
       expectedOriginalModel: " claude-haiku-5-5 ",
       expectedWarnings: [],
     },

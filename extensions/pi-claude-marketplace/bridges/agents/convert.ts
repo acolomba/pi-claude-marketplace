@@ -55,15 +55,17 @@ const SUPPORTED_SOURCE_FIELDS = new Set([
  * AG-7 / D-CF4-07 as amended: Claude Code's model aliases, keyed lower-case,
  * mapped to the first-party models of Claude Code's model catalog.
  * `opusplan` runs a subagent on sonnet, because its plan-mode upgrade to opus
- * applies only to a session that inherits it; `best` selects fable.
+ * applies only to a session that inherits it; `best` selects fable. D-PG1-04:
+ * pi-subagents 0.87.0+ keeps a provider-qualified ID on that provider, while
+ * a bare ID resolves in the session registry with its provider preferred.
  */
 const MODEL_MAP: ReadonlyMap<string, string> = new Map([
-  ["sonnet", "anthropic/claude-sonnet-5-5"],
-  ["opusplan", "anthropic/claude-sonnet-5-5"],
-  ["opus", "anthropic/claude-opus-5-5"],
-  ["haiku", "anthropic/claude-haiku-5-5"],
-  ["fable", "anthropic/claude-fable-5-1"],
-  ["best", "anthropic/claude-fable-5-1"],
+  ["sonnet", "claude-sonnet-5-5"],
+  ["opusplan", "claude-sonnet-5-5"],
+  ["opus", "claude-opus-5-5"],
+  ["haiku", "claude-haiku-5-5"],
+  ["fable", "claude-fable-5-1"],
+  ["best", "claude-fable-5-1"],
 ]);
 
 /** The suffix of Claude Code's one-million-token context aliases. */
@@ -340,10 +342,12 @@ function aliasModel(value: string): string | undefined {
 /**
  * D-CF4-07 as amended: Claude Code sends any other value as a model ID. Only
  * a `claude-` ID with no whitespace and no `:` passes through, because
- * pi-subagents reads a `:` suffix as a thinking level (T-04-06).
+ * pi-subagents reads a `:` suffix as a thinking level (T-04-06). D-PG1-04:
+ * pi-subagents 0.87.0+ resolves bare IDs in the session's model registry,
+ * preferring the session's provider.
  */
 function fullModelId(value: string): string | undefined {
-  return value.startsWith("claude-") && !/[\s:]/.test(value) ? `anthropic/${value}` : undefined;
+  return value.startsWith("claude-") && !/[\s:]/.test(value) ? value : undefined;
 }
 
 /**

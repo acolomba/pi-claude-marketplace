@@ -21,8 +21,9 @@
  * - a run: the child's final text alone;
  * - an error: `error`, or `error naming <value>, <value>` with each value
  *   that this extension wrote and the error names: a model id, an adapter
- *   selector `plugin_<plugin>_<server>_/<tool>`, or a built-in server or
- *   selector `plugin_<plugin>_<server>[/<tool>]`.
+ *   selector `plugin_<plugin>_<server>_/<tool>`, an adapter direct tool
+ *   `mcp__plugin_<plugin>_<server>__<tool>`, or a built-in server or selector
+ *   `plugin_<plugin>_<server>[/<tool>]`.
  *
  * Headings, counts, hints, the run's budget and mission lines, and every
  * field pi-subagents fills in itself are dropped. Each reader anchors on the
@@ -50,18 +51,19 @@ const FIELD_PATTERN = /^([A-Za-z][A-Za-z -]*):\s*(.*)$/u;
 // `default/ambient` tools or a model that `inherits current session`.
 const UNSET_PATTERN = /\b(?:default|ambient|inherits?)\b/iu;
 
+// pi-subagents marks models absent from the session registry when listing
+// capabilities; the marker is its wording, not a value the bridge writes.
+const UNAVAILABLE_MODEL_MARKER = " (unavailable in the active model registry)";
+
 // The values an error can name that this extension wrote into an agent: a
-// model id its model mapping produced, an MCP tool selector of a server key it
-// wrote for pi-mcp-adapter (`plugin_<plugin>_<server>_/<tool>`), and a server
-// name or selector it wrote for Pi's built-in MCP
-// (`plugin_<plugin>_<server>[/<tool>]`, MGRT-01). The built-in alternative
-// comes after the adapter one, so an adapter selector keeps its trailing `_`.
-// It matches only a whole name that starts the text or follows a space, `(`,
-// `:`, or `,`, and that no name character or `/` continues. So an adapter
-// whole-server key `plugin_<plugin>_<server>_` and a path piece such as
-// `/x/plugin_cache/y` project nothing.
+// model ID its mapping produced (bare or provider-qualified), a direct MCP
+// tool name, an adapter selector `plugin_<plugin>_<server>_/<tool>`, or a
+// built-in server or selector `plugin_<plugin>_<server>[/<tool>]` (MGRT-01).
+// The direct-tool and adapter alternatives precede the built-in form so no
+// shorter piece is returned. A whole value starts the text or follows space,
+// `(`, `:`, `,`, or a quote; path pieces and whole-server adapter keys do not match.
 const OWNED_ERROR_VALUE_PATTERN =
-  /\b(?:[a-z0-9-]+\/claude-[A-Za-z0-9.[\]-]*[A-Za-z0-9\]]|plugin_[A-Za-z0-9_-]*_\/[A-Za-z0-9_-]+|(?<=^|[\s(:,])plugin_[A-Za-z0-9_-]*[A-Za-z0-9-](?:\/[A-Za-z0-9_-]+)?(?![A-Za-z0-9_/-]))/gu;
+  /(?<=^|[\s(:,"'])(?:(?:[a-z0-9-]+\/)?claude-[A-Za-z0-9.[\]-]*[A-Za-z0-9\]]|mcp__plugin_[A-Za-z0-9_-]+__[A-Za-z0-9_-]+|plugin_[A-Za-z0-9_-]*_\/[A-Za-z0-9_-]+|plugin_[A-Za-z0-9_-]*[A-Za-z0-9-](?:\/[A-Za-z0-9_-]+)?)(?![A-Za-z0-9_/-])/gu;
 
 // The sources an agent of this extension is listed under: the scopes the
 // agents bridge stages into.
@@ -107,6 +109,12 @@ function normalizedLabel(label: string): string {
     .trim();
 }
 
+function projectedModelValue(value: string): string {
+  return value.endsWith(UNAVAILABLE_MODEL_MARKER)
+    ? value.slice(0, -UNAVAILABLE_MODEL_MARKER.length)
+    : value;
+}
+
 // The value after `aliases:` in a list line's metadata, up to the next
 // `<label>:` item.
 function listAliases(metadata: string): string | undefined {
@@ -130,7 +138,7 @@ function capabilityValues(items: readonly string[]): string {
       const value = match?.[2]?.trim() ?? "";
       return word === undefined || value === "" || UNSET_PATTERN.test(value)
         ? []
-        : [`; ${word} ${value}`];
+        : [`; ${word} ${word === "model" ? projectedModelValue(value) : value}`];
     })
     .join("");
 }
@@ -216,7 +224,13 @@ function projectDetail(text: string): string | undefined {
   const projected = DETAIL_FIELDS.flatMap(([label, word]) => {
     const value = fields.get(label);
     // The agent field ends with the source pi-subagents found it under.
-    const shown = label === "agent" ? value?.replace(/\s*\([^)]*\)$/u, "") : value;
+    let shown = value;
+    if (label === "agent") {
+      shown = value?.replace(/\s*\([^)]*\)$/u, "");
+    } else if (label === "model" && value !== undefined) {
+      shown = projectedModelValue(value);
+    }
+
     return shown === undefined ? [] : [`${word} ${shown}`];
   });
   if (blank === -1) {
