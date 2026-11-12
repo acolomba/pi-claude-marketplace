@@ -2,6 +2,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
+import { decodeSearchInput, toHookSearchInput } from "./tool-input-search.ts";
+
 type Input = Record<string, unknown>;
 
 /** The outcome of validating a hook's proposed replacement input. */
@@ -83,6 +85,10 @@ export function toHookToolInput(
 
   if (nativeToolName === "bash" || nativeToolName === "powershell") {
     return toHookShellInput(input);
+  }
+
+  if (nativeToolName === "find" || nativeToolName === "grep") {
+    return toHookSearchInput(nativeToolName, input);
   }
 
   return input;
@@ -189,6 +195,21 @@ function decodeShellInput(candidate: Input): DecodedToolInput {
   return accepted(native);
 }
 
+function decodeLsInput(candidate: Input): DecodedToolInput {
+  if (Object.keys(candidate).some((key) => key !== "path" && key !== "limit")) {
+    return { kind: "ignored", category: "field" };
+  }
+
+  if (
+    (candidate.path !== undefined && typeof candidate.path !== "string") ||
+    (candidate.limit !== undefined && !validLine(candidate.limit))
+  ) {
+    return { kind: "ignored", category: "value" };
+  }
+
+  return accepted(candidate);
+}
+
 /** Validates a complete hook rewrite before any native input is replaced. */
 export function decodeHookToolInput(
   nativeToolName: string,
@@ -215,6 +236,14 @@ export function decodeHookToolInput(
 
   if (nativeToolName === "bash" || nativeToolName === "powershell") {
     return decodeShellInput(candidate);
+  }
+
+  if (nativeToolName === "find" || nativeToolName === "grep") {
+    return decodeSearchInput(nativeToolName, originalInput, candidate);
+  }
+
+  if (nativeToolName === "ls") {
+    return decodeLsInput(candidate);
   }
 
   return accepted(candidate);
