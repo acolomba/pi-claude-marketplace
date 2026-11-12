@@ -5,8 +5,13 @@ Repository: https://github.com/nicobailon/pi-subagents
 Base commit: `e9a31b3` (`main` on 2026-11-02, package version 0.84.0). Local branch:
 `fix/mcp-direct-tools-adapter-7` in `/home/user/nicobailon/pi-subagents`.
 
-`main` still has both bugs. The code is the same as in the published 0.84.0 (which ships
-compiled `.js`; the repository has the `.ts` source).
+Status on 2026-11-12: both fixes shipped in pi-subagents 0.87.0. The installed
+pi-subagents 0.88.0 `CHANGELOG.md`, under `0.87.0`, says:
+
+> - `mcp:` selectors now resolve for pi-mcp-adapter servers that set `directTools: "search"` or use `${NAME:-default}` in their configuration. Before, pi-subagents dropped a `"search"` server from the configuration, and a `${NAME:-default}` value gave a server a different cache hash than the adapter computed. In both cases, every selector for the server was unresolved. A server URL that used a default also failed the launch. Thanks to [@acolomba](https://github.com/acolomba) for #3201.
+
+This project's pi-subagents floor is 0.87.0 (D-PG1-01). The patch file beside
+this report is kept for the record and is no longer needed.
 
 ## Problem 1: `directTools: "search"` drops the server
 
