@@ -10,7 +10,7 @@ provides:
   - Passing conformance and behavioral suites on pi-subagents 0.88.0 and pi-mcp-adapter 7.0.1
 affects: [companion compatibility docs, later parity-gaps plans]
 actuals:
-  tokens: 258630
+  tokens: 13650
   tasks: 3
   commits: 3
 plan_head_before: b6f418f1dd93471d4906533eda9c4e6c5dfd3ce8
@@ -212,7 +212,9 @@ Markdown differed from that commit during the gate; no untracked build inputs
 were present. The schema-drift gate passed. The codebase-map drift gate reported
 an advisory about older map references, with no automatic remap requested.
 
-The executor CLI reported 258,630 tokens; `actuals.tokens` records that total.
+The executor CLI reported 258,630 tokens. GSD's `actuals.tokens` records its
+required diff-based estimate (changed characters divided by four), which is a
+separate metric from the CLI total.
 
 ## Next Phase Readiness
 

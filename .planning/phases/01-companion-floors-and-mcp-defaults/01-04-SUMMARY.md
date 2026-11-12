@@ -76,7 +76,7 @@ coverage:
         ref: "npm run test:cucumber:profile -- --profile adapter features/mcp-server"
         status: pass
     human_judgment: false
-duration: 82 min
+duration: 29 min
 completed: 2026-11-12
 status: complete
 ---
@@ -87,8 +87,8 @@ status: complete
 
 ## Performance
 
-- **Duration:** 82 min
-- **Started:** 2026-11-12T02:02:33Z
+- **Duration:** 29 min, including worktree setup
+- **Started:** 2026-11-12T02:55:51Z (recorded executor launch)
 - **Completed:** 2026-11-12T03:24:27Z
 - **Tasks:** 2
 - **Production and test files changed:** 8
@@ -141,3 +141,13 @@ All eight changed files exist, both task commits are ancestors of this branch, e
 ## Next Phase Readiness
 
 Ready for the adapter default and carried user-value work in 01-06. STATE.md and ROADMAP.md remain with the orchestrator.
+
+## Post-merge gate
+
+After merging plans 01-02, 01-03, and 01-04, the orchestrator ran `npm run check`
+at `3d3872f3451905866fc976bbe153fe300d300dcc`, with Node v26.13.0. It exited 0:
+all static checks, unpaired tests, integration tests, 1,800 adapter scenarios,
+154 built-in scenarios, and 354 direct coverage records passed. Only planning
+Markdown differed from that commit during the gate; no untracked build inputs
+were present. The schema-drift gate passed. The older codebase-map drift remains
+an advisory, with no automatic remap requested.

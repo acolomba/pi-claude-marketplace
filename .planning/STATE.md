@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 01
 current_phase_name: Companion Floors and MCP Defaults
 status: executing
-stopped_at: parity-gaps Phase 01 wave 1 merged and verified; wave 2 ready to execute
-last_updated: "2026-11-12T02:51:53.334Z"
+stopped_at: parity-gaps Phase 01 waves 1-2 merged and verified; wave 3 ready to execute
+last_updated: "2026-11-12T03:46:59.092Z"
 last_activity: 2026-11-11
-last_activity_desc: Phase 01 wave 1 merged; combined-tree npm run check passed
-state_head: 60b187de30c14e0008259e9a0835ab7a0bdebdf2
+last_activity_desc: Phase 01 wave 2 merged; combined-tree npm run check passed
+state_head: 3d3872f3451905866fc976bbe153fe300d300dcc
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 11
-  completed_plans: 1
+  completed_plans: 4
   percent: 0
 ---
 
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 01 (Companion Floors and MCP Defaults) — EXECUTING
-Plan: 2 of 11
+Plan: 5 of 11
 Status: Executing Phase 01
-Last activity: 2026-11-11 — Phase 01 wave 1 merged; combined-tree npm run check passed
+Last activity: 2026-11-11 — Phase 01 wave 2 merged; combined-tree npm run check passed
 
 Progress: [░░░░░░░░░░] 0%
 
