@@ -10,8 +10,8 @@
 // because the resolver refuses that header (D-08-04).
 //
 // pi-mcp-adapter is an optional peer. The test imports its compiled
-// `dist/config.js`, `dist/mcp-auth-flow.js` and `dist/mcp-auth-fetch.js` in
-// place from the declared floor that `scripts/install-test-peers.mjs`
+// `dist/config.js`, `dist/utils.js` and `dist/mcp-auth-fetch.js` in
+// place from the suite version that `scripts/install-test-peers.mjs`
 // installs, through pi-mcp-adapter-peer.ts. A missing or wrong-version adapter
 // fails every case.
 
@@ -39,13 +39,13 @@ import { findPiMcpAdapterPackage, loadPiMcpAdapterModule } from "./pi-mcp-adapte
 
 import type {
   PiMcpAdapterAuthFetch,
-  PiMcpAdapterAuthFlow,
   PiMcpAdapterConfig,
+  PiMcpAdapterUtils,
 } from "./pi-mcp-adapter-peer.ts";
 
 interface AdapterModules {
   readonly config: PiMcpAdapterConfig;
-  readonly authFlow: PiMcpAdapterAuthFlow;
+  readonly utils: PiMcpAdapterUtils;
   readonly authFetch: PiMcpAdapterAuthFetch;
 }
 
@@ -53,7 +53,7 @@ async function loadAdapterModules(): Promise<AdapterModules> {
   const peer = await findPiMcpAdapterPackage();
   return {
     config: await loadPiMcpAdapterModule<PiMcpAdapterConfig>(peer, "config"),
-    authFlow: await loadPiMcpAdapterModule<PiMcpAdapterAuthFlow>(peer, "mcp-auth-flow"),
+    utils: await loadPiMcpAdapterModule<PiMcpAdapterUtils>(peer, "utils"),
     authFetch: await loadPiMcpAdapterModule<PiMcpAdapterAuthFetch>(peer, "mcp-auth-fetch"),
   };
 }
@@ -142,7 +142,7 @@ test("D-08-04: pi-mcp-adapter keeps OAuth for the entry written beside a clean n
   assert.ok(isStringRecord(headers));
 
   // act
-  const supportsOAuth = adapter.authFlow.supportsOAuth(entry);
+  const supportsOAuth = adapter.utils.supportsOAuth(entry);
   const resolvedHeaders = adapter.authFetch.resolveOAuthHeaders(headers);
 
   // assert
@@ -163,7 +163,7 @@ test("D-08-04: pi-mcp-adapter keeps OAuth off for the entry written beside a hea
   assert.ok(isStringRecord(headers));
 
   // act
-  const supportsOAuth = adapter.authFlow.supportsOAuth(entry);
+  const supportsOAuth = adapter.utils.supportsOAuth(entry);
 
   // assert
   assert.deepStrictEqual(
