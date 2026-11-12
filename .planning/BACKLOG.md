@@ -5196,3 +5196,40 @@ owns the upgrade, two known-bug test replacements, three positive real-child
 controls, full gate and acceptance-record updates. Review during companion
 upgrades and milestone planning; this is not an external-event watcher.
 AGTLONGNAME-01 remains a separate explicit-grant naming defect.
+
+## HOOKRESULT-01: investigate and implement execution wrappers for full Claude-shaped hook results
+
+Requested by the user on 2026-11-12 during parity-gaps Phase 2 discussion
+(PG-HOOK-01). Phase 2 includes per-tool result translation using the data Pi
+actually supplies, and the reverse mapping for hook result replacements. It must
+document missing fields rather than invent values. This item carries the further
+work to investigate and implement execution wrappers that capture the missing
+facts needed for complete Claude-shaped results.
+
+**Evidence:** Claude Code 2.1.322's output schemas and the official
+[hooks reference](https://code.claude.com/docs/en/hooks.md#posttooluse-input),
+read 2026-11-12; Pi 1.5.0's installed tool implementations and extension event
+types. Pi combines shell stdout/stderr. Its Write result has no create/update
+status or original content; Read and search events also omit some upstream
+metadata. Pi does expose `structuredContent` on result events, so use that where
+it contains the needed facts before adding instrumentation.
+
+**Scope:** inventory the fields Phase 2 cannot supply; investigate wrappers or an
+upstream Pi extension seam; then capture facts during the actual operation and
+complete both result mappings. Preserve Pi's execution, cancellation, truncation,
+file-mutation locking, and custom/remote tool behavior. Do not infer original
+content by rereading a file after the operation, label merged shell output as
+separate streams, or report unmeasured duration/count values. Check tool override
+compatibility before choosing a wrapper design.
+
+**Acceptance:** behavioral tests run real tools and real command hooks, covering
+new versus overwritten files, exact original content and edit patches, distinct
+stdout/stderr, and relevant truncation/image/search metadata. Hook replacements
+must change the model-visible result without leaving stale structured data.
+Run the complete `npm run check` gate. Update the documented limits only where
+the recorded result proves the corresponding field.
+
+**When to pick up:** the next hook-result fidelity task after Phase 2, or when Pi
+adds the required structured results or an execution-interception seam. This is
+implementation follow-up, not a decision to revisit whether translators belong
+in Phase 2; the user already required them there.
