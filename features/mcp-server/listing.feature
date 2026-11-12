@@ -235,6 +235,7 @@ Feature: MCP server listing
     Then pi offers these plugin mcp tools:
       | tool                                                              | active |
       | mcp__plugin_demo_a-server-whose-name-runs-well-past-the_a4df039c | no     |
+    Then pi offers the tool "echo" of the plugin "demo" server "a-server-whose-name-runs-well-past-the-limit" under its adapter name "mcp__plugin_demo_a-server-whose-name-runs-well-past-the_a4df039c"
 
   @adapter-only
   Scenario: A plugin without MCP servers adds no server to pi-mcp-adapter
