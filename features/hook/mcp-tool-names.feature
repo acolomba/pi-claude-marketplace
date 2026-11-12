@@ -35,6 +35,26 @@ Feature: Hook MCP tool names
       | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | [{"type":"text","text":"echo:ping"}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
 
   @adapter-only
+  Scenario: A successful adapter tool with a 64-character hash-tail name runs its server-prefix hook (D-PG1-08)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name     | event       | matcher                                                    |
+      | prefixed | PostToolUse | mcp__plugin_demo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx__.* |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" for its hooks with tool "deadbeef"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" of the plugin "demo"
+    Given the scripted model calls the tool "deadbeef" of the hooks' stub mcp server "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" of the plugin "demo" through the mcp implementation with '{"text": "ping"}', then replies "Done."
+    When the user prompts "call the stub"
+    Then the hooks record these runs in any order:
+      | event       | session | tool name                                                        | tool input      | tool response                            | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                   | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | mcp__plugin_demo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx__deadbeef | {"text":"ping"} | [{"type":"text","text":"deadbeef:ping"}] | {project dir} |                 | prefixed  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {agent dir}/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+  @adapter-only
   Scenario: Hooks on a plugin MCP tool that pi-mcp-adapter shortened run by its full Claude Code name and receive that name (PG-MCP-02, D-PG1-08)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:

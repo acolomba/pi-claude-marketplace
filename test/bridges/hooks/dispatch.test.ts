@@ -5059,6 +5059,40 @@ function builtinToolResultEvent(isError: boolean, toolName = BUILTIN_PI_NAME): T
 }
 
 describe("built-in MCP tool names in tool results and if fields (MHK-01)", () => {
+  test("runs the server-prefix hook for a verified 64-character adapter name", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const server = `plugin_demo_${"x".repeat(37)}_`;
+    const piName = `mcp__${server}_deadbeef`;
+    runtime.setRoutingBucket(
+      "PostToolUse",
+      builtinToolEntries("PostToolUse", [
+        { pluginId: "prefixed", rawMatcher: `mcp__${server}_.*` },
+      ]),
+    );
+    const received: ReceivedEvent[] = [];
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createBuiltinToolView([]),
+    );
+    const event = {
+      ...builtinToolResultEvent(false, piName),
+      details: { server, tool: "deadbeef" },
+    };
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/adapter"));
+
+    // assert
+    assert.strictEqual(piName.length, 64);
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(received, [{ pluginId: "prefixed", event }]);
+  });
+
   test("recovers a shortened adapter result name from its details for every PostToolUse hook (D-PG1-08)", async () => {
     // arrange
     const runtime = createHooksRuntime();

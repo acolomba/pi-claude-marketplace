@@ -62,9 +62,26 @@ function piMcpText(server: string, tool: string): string {
 
 // The `.mcp.json` of a plugin whose only server is the stub, started as the
 // server `server` of the plugin `plugin`.
-function hookStubMcpText(plugin: string, server: string): string {
-  const launch = { command: process.execPath, args: [MCP_STUB_SERVER, plugin, server] };
+function hookStubMcpText(plugin: string, server: string, tool?: string): string {
+  const launch = {
+    command: process.execPath,
+    args: [MCP_STUB_SERVER, plugin, server, ...(tool === undefined ? [] : [tool])],
+  };
   return `${JSON.stringify({ mcpServers: { [server]: launch } }, null, 2)}\n`;
+}
+
+async function writeHookStubMcpFile(
+  world: ScenarioWorld,
+  plugin: string,
+  name: string,
+  server: string,
+  tool?: string,
+): Promise<void> {
+  const published = world.requirePublished(name);
+  const text = hookStubMcpText(plugin, server, tool);
+  await writePublishedPluginFiles(published, plugin, { [MCP_FILE]: text });
+  const written = path.join(published.root, "plugins", plugin, MCP_FILE);
+  assert.strictEqual(await readFile(written, "utf8"), text);
 }
 
 // True once the stub logged the adapter's `tools/list` for that server and no
@@ -85,11 +102,14 @@ async function hookStubListingDone(
 Given(
   "the published plugin {string} of the marketplace {string} has the stub mcp server {string} for its hooks",
   async function (this: ScenarioWorld, plugin: string, name: string, server: string) {
-    const published = this.requirePublished(name);
-    const text = hookStubMcpText(plugin, server);
-    await writePublishedPluginFiles(published, plugin, { [MCP_FILE]: text });
-    const written = path.join(published.root, "plugins", plugin, MCP_FILE);
-    assert.strictEqual(await readFile(written, "utf8"), text);
+    await writeHookStubMcpFile(this, plugin, name, server);
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} has the stub mcp server {string} for its hooks with tool {string}",
+  async function (this: ScenarioWorld, plugin: string, name: string, server: string, tool: string) {
+    await writeHookStubMcpFile(this, plugin, name, server, tool);
   },
 );
 

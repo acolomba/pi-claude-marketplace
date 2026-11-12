@@ -914,10 +914,8 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const view = toolEventView(event, tools, () => {
-      const candidate = event.isError ? undefined : adapterResultToolName(event.details);
-      return [...(candidate === undefined ? [] : [candidate]), ...toolEventMcpLiterals(runtime)];
-    });
+    const verifiedName = event.isError ? undefined : adapterResultToolName(event.details);
+    const view = toolEventView(event, tools, () => toolEventMcpLiterals(runtime), verifiedName);
     if (view === undefined) {
       return undefined;
     }
@@ -1083,8 +1081,8 @@ function adapterResultToolName(details: unknown): string | undefined {
 }
 
 /**
- * D-P5-03 / D-PG1-08: a tool event recovers a shortened adapter name once
- * from tool-event hook literals, then derives the name every hook sees.
+ * D-P5-03 / D-PG1-08: a tool event recovers an adapter name once from
+ * verified result details or tool-event hook literals, then derives the name every hook sees.
  * Pi's event itself when the names agree, else a shallow copy that
  * shares Pi's `input` and `content`, so an input rewrite still reaches Pi.
  * Only an `mcp__` name changes, and Pi types such an event as its open-ended
@@ -1100,12 +1098,13 @@ function toolEventView<T extends ToolCallEvent | ToolResultEvent>(
   event: T,
   tools: HookToolView,
   candidates: () => readonly string[],
+  verifiedName?: string,
 ): { readonly event: T; readonly tool: McpToolIdentity } | undefined {
   if (isMcpProxyCall(event) && tools.proxyRuleApplies()) {
     return undefined;
   }
 
-  const tool = recoverAdapterToolName(tools.identify(event.toolName), candidates);
+  const tool = recoverAdapterToolName(tools.identify(event.toolName), candidates, verifiedName);
   const toolName = claudeFormToolName(tool);
   return { event: toolName === event.toolName ? event : { ...event, toolName }, tool };
 }

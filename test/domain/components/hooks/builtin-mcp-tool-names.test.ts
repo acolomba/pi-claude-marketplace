@@ -372,6 +372,34 @@ describe("claudeFormToolName", () => {
 });
 
 describe("recoverAdapterToolName", () => {
+  test("recovers a verified 64-character adapter name with a hash-shaped tail", () => {
+    // arrange
+    const piName = `mcp__plugin_demo_${"x".repeat(37)}__deadbeef`;
+    const tool = { piName, builtinServer: undefined };
+
+    // act
+    const recovered = recoverAdapterToolName(tool, () => [], piName);
+
+    // assert
+    assert.strictEqual(piName.length, 64);
+    assert.deepStrictEqual(recovered, { ...tool, claudeName: piName });
+    assert.strictEqual(serverPrefixNames(`mcp__plugin_demo_${"x".repeat(37)}__`, recovered), true);
+  });
+
+  test("keeps the long-prefix guard when details disagree with a hash-shaped literal", () => {
+    // arrange
+    const piName = `mcp__plugin_demo_${"x".repeat(37)}__deadbeef`;
+    const tool = { piName, builtinServer: undefined };
+    const otherName = `mcp__plugin_demo_${"x".repeat(37)}__deadbeea`;
+
+    // act
+    const recovered = recoverAdapterToolName(tool, () => [piName], otherName);
+
+    // assert
+    assert.strictEqual(recovered, tool);
+    assert.strictEqual(serverPrefixNames(`mcp__plugin_demo_${"x".repeat(37)}__`, recovered), false);
+  });
+
   test("recovers the first full name whose adapter cut equals Pi's name (D-PG1-08)", () => {
     // arrange
     const tool = {

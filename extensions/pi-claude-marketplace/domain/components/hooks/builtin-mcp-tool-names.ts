@@ -46,7 +46,7 @@ export interface McpToolIdentity {
    * serves the tool; `undefined` for every other tool.
    */
   readonly builtinServer: string | undefined;
-  /** D-PG1-08: the full name recovered for a tool pi-mcp-adapter shortened. */
+  /** D-PG1-08: the full adapter name recovered for this tool. */
   readonly claudeName?: string;
 }
 
@@ -60,16 +60,20 @@ export function looksLikeCutAdapterToolName(name: string): boolean {
 }
 
 /**
- * D-PG1-08: recover a shortened tool's full name from hook literals. The
- * adapter's cut name ends in a hash of the whole full name, so only an exact
- * fit can name the event's tool.
+ * D-PG1-08: recover a tool's full name from verified result details or hook
+ * literals. A literal must exceed the adapter's limit to identify a cut name.
  */
 export function recoverAdapterToolName(
   tool: McpToolIdentity,
   candidates: () => readonly string[],
+  verifiedName?: string,
 ): McpToolIdentity {
   if (tool.builtinServer !== undefined || !looksLikeCutAdapterToolName(tool.piName)) {
     return tool;
+  }
+
+  if (verifiedName !== undefined && fittedAdapterToolName(verifiedName) === tool.piName) {
+    return { ...tool, claudeName: verifiedName };
   }
 
   const claudeName = candidates().find(
