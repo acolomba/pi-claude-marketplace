@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   checkClaudeShape,
   classifyMcpServer,
+  defaultRequestTimeoutMs,
   leadingHomeFeature,
   remoteFieldFeature,
   translateMcpServer,
@@ -25,6 +26,36 @@ interface TranslationRow {
 }
 
 const SEARCH_OWNED = { directTools: "search", toolPrefix: "mcp" } as const;
+
+describe("defaultRequestTimeoutMs", () => {
+  for (const { title, server, milliseconds } of [
+    { title: "a server without a type gets 30 minutes", server: {}, milliseconds: 1_800_000 },
+    {
+      title: "a stdio server gets 30 minutes",
+      server: { type: "stdio" },
+      milliseconds: 1_800_000,
+    },
+    { title: "an sse server gets 5 minutes", server: { type: "sse" }, milliseconds: 300_000 },
+    { title: "an http server gets 5 minutes", server: { type: "http" }, milliseconds: 300_000 },
+    {
+      title: "a streamable-http server gets 5 minutes",
+      server: { type: "streamable-http" },
+      milliseconds: 300_000,
+    },
+    { title: "an unknown type gets no default", server: { type: "ws" }, milliseconds: undefined },
+  ]) {
+    test(`D-PG1-11: ${title}`, () => {
+      // arrange
+      const expectedMilliseconds = milliseconds;
+
+      // act
+      const requestTimeoutMs = defaultRequestTimeoutMs(server);
+
+      // assert
+      assert.strictEqual(requestTimeoutMs, expectedMilliseconds);
+    });
+  }
+});
 
 const ROWS: readonly TranslationRow[] = [
   {

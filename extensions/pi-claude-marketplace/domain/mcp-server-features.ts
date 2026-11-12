@@ -59,7 +59,31 @@ const MIN_TIMEOUT_MS = 1000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 // Claude caps `request_timeout_ms` before it stands in for `timeout`.
 const MAX_REQUEST_TIMEOUT_MS = 300_000;
+const STDIO_IDLE_TIMEOUT_MS = 1_800_000;
+const REMOTE_IDLE_TIMEOUT_MS = 300_000;
 const MAX_PORT = 65_535;
+
+/**
+ * D-PG1-11: Claude Code 2.1.322 stops a call that sends no response and no
+ * progress for 30 minutes on a stdio server and 5 minutes on a remote server.
+ * Pi and pi-mcp-adapter restart their timeouts on progress, so these values
+ * stand in for that idle window.
+ */
+export function defaultRequestTimeoutMs(
+  server: Readonly<Record<string, unknown>>,
+): number | undefined {
+  switch (server.type) {
+    case undefined:
+    case "stdio":
+      return STDIO_IDLE_TIMEOUT_MS;
+    case "sse":
+    case "http":
+    case "streamable-http":
+      return REMOTE_IDLE_TIMEOUT_MS;
+    default:
+      return undefined;
+  }
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

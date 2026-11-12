@@ -4,7 +4,27 @@ Feature: MCP server configuration
   implementation: pi-mcp-adapter, through its mcp tool and its own OAuth entry (D-CF6-05, D-08-04),
   and Pi's built-in MCP, through the servers the extension registers and Pi's tool search (BLT-02,
   AVAR-02, MENV-01, MENV-02). A stdio stub server and a loopback HTTP server stand in for real
-  servers, a scripted model for a real model, and a local marketplace for a published one.
+  servers, a scripted model for a real model, a local marketplace for a published one, and a
+  registry probe for the configuration Pi holds.
+
+  @builtin-only
+  Scenario: A server that declares no timeout is registered with the idle window of Claude Code, 30 minutes for stdio and 5 minutes for a remote server (PG-MCP-01, D-PG1-11)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"stub": {"stub": {}}, "remote": {"type": "http", "url": "http://127.0.0.1:9/mcp"}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and a probe of the mcp servers registered with pi's built-in mcp
+    When the user asks pi for the configs of the mcp servers registered with it
+    Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
+      | name               | config                                                                                                                                                                                     |
+      | plugin_demo_stub   | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"timeout":1800,"exposure":"deferred"} |
+      | plugin_demo_remote | {"type":"http","url":"http://127.0.0.1:9/mcp","timeout":300,"exposure":"deferred"}                                                                                                          |
 
   @adapter-only
   Scenario: A loopback remote server receives the plugin's headers, a variable among them expanded when it connects
