@@ -221,6 +221,22 @@ Feature: MCP server listing
       | mcp__plugin_demo_a_server_whose_name_runs_well_past_the_ca340f16 | no     |
 
   @adapter-only
+  Scenario: A server whose tool names pass 64 characters gets the cut tool names of pi-mcp-adapter, a Pi capability gap (PG-MCP-02, D-PG1-07)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "a-server-whose-name-runs-well-past-the-limit"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "a-server-whose-name-runs-well-past-the-limit" of the plugin "demo"
+    When the user lists the mcp tools pi offers
+    Then pi offers these plugin mcp tools:
+      | tool                                                              | active |
+      | mcp__plugin_demo_a-server-whose-name-runs-well-past-the_a4df039c | no     |
+
+  @adapter-only
   Scenario: A plugin without MCP servers adds no server to pi-mcp-adapter
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
