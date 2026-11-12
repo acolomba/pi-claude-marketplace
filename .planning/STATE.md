@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 02
 current_phase_name: Hook Payloads, Matchers, and Stop Limit
 status: executing
-stopped_at: parity-gaps Phase 2 plans verified; execution next
-last_updated: "2026-11-12T21:33:17.787Z"
+stopped_at: parity-gaps Phase 2 wave 1 verified; wave 2 next
+last_updated: "2026-11-12T23:16:01.351531+00:00"
 last_activity: 2026-11-12
-last_activity_desc: Phase 02 execution started
-state_head: 9d8e1a5d199228054c0c1a19dda45b23b2d6854e
+last_activity_desc: Phase 02 wave 1 verified; 1 of 10 plans complete
+state_head: 82dd28d85695769b46ac4454c0046206f94b8dc6
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 21
-  completed_plans: 11
+  completed_plans: 12
   percent: 9
 ---
 
@@ -32,12 +32,22 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 02 (Hook Payloads, Matchers, and Stop Limit) — EXECUTING
-Plan: 1 of 10
+Plan: 1 of 10 complete; 02-02 and 02-08 next
 Status: Executing Phase 02
-Last activity: 2026-11-12 — Phase 02 execution started
+Last activity: 2026-11-12 — Phase 02 wave 1 verified
 
 Progress: [█░░░░░░░░░] 9%
 
+
+### parity-gaps Phase 2 execution
+
+Wave 1 (02-01) is merged and verified. `npm run check` exited 0 on the
+combined clean tree at `82dd28d85695769b46ac4454c0046206f94b8dc6`, Node
+v26.13.0: 1,818 adapter scenarios, 155 built-in scenarios and 355 direct
+coverage pairs. Log: `/tmp/pg2-wave1-check.log`. Schema drift passed; stale
+codebase-map drift is advisory, with no remap requested. Wave 2 owns search
+input translation (02-02) and matcher support (02-08). PG-HOOK-01 remains
+in progress until all of its input and result contracts are implemented.
 
 ### parity-gaps Phase 1 closeout
 
