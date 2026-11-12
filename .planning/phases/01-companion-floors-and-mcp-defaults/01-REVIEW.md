@@ -1,8 +1,8 @@
 ---
 phase: 01-companion-floors-and-mcp-defaults
-reviewed: 2026-11-12T06:38:59Z
+reviewed: 2026-11-12T07:06:52Z
 depth: standard
-files_reviewed: 75
+files_reviewed: 77
 files_reviewed_list:
   - .agents/skills/cucumber/rules/world-and-stand-ins.md
   - .github/workflows/ci.yml
@@ -27,6 +27,7 @@ files_reviewed_list:
   - features/hook/tool-use.feature
   - features/lib/companions.ts
   - features/lib/mcp-server-files.ts
+  - features/lib/mcp-stub-server.ts
   - features/lib/upstream/subagents.ts
   - features/mcp-server/agent-grants.feature
   - features/mcp-server/builtin-values.feature
@@ -35,6 +36,7 @@ files_reviewed_list:
   - features/mcp-server/lifecycle.feature
   - features/mcp-server/listing.feature
   - features/plugin/subagent-child.feature
+  - features/step_definitions/hook/tool-use.steps.ts
   - features/step_definitions/mcp-server/lifecycle.steps.ts
   - features/step_definitions/mcp-server/listing.steps.ts
   - package.json
@@ -80,34 +82,34 @@ files_reviewed_list:
   - test/orchestrators/plugin/update-swap.test.ts
   - test/orchestrators/reconcile/mcp-migration.test.ts
 findings:
-  critical: 1
+  critical: 0
   warning: 0
   info: 0
-  total: 1
+  total: 0
   necessity: 0
-status: issues_found
+status: clean
 ---
 
 # Phase 01: Code Review Report
 
-**Reviewed:** 2026-11-12T06:38:59Z
+**Reviewed:** 2026-11-12T07:06:52Z
 **Depth:** standard
-**Files Reviewed:** 75
-**Status:** issues_found
+**Files Reviewed:** 77
+**Status:** clean
 
 ## Summary
 
-One confirmed blocker affects MCP hook dispatch: an ordinary 64-character tool name ending in eight hexadecimal characters is mistaken for a shortened name, suppressing a matching server-prefix hook even when a successful result supplies the original server and tool.
+Re-review iteration 2 confirms that CR-01 is fixed in `1e76274931b9536d9e0edb3f342c45748f8f7654`. No open narrative findings or newly introduced defects were established. The successful-result path now recovers an original 64-character adapter name from matching result metadata without relaxing the guard for unverified hook literals.
 
-Scope was the explicit phase file list, combining summary key files with the actual per-plan changes, against base `b6f418f1dd93471d4906533eda9c4e6c5dfd3ce8` through `49b1ba0e`. The lockfile was excluded. Production changes and relevant call paths were examined; large existing test modules and documents were assessed through changed sections and supporting context, rather than every unchanged line of the approximately 98,852-line submitted scope. Consequently this report does not claim a complete full-file reading of those large modules.
+Scope is the original phase file list against base `b6f418f1dd93471d4906533eda9c4e6c5dfd3ce8`, plus `features/lib/mcp-stub-server.ts` and `features/step_definitions/hook/tool-use.steps.ts`: 77 paths after excluding the lockfile. This iteration independently inspected all seven files changed by the fix and their relevant call paths, reusing the initial review of unchanged phase content. The original large test modules and documents were assessed through changed sections and supporting context, rather than every unchanged line of the approximately 98,852-line initial scope. This report does not claim a complete full-file reading of those large modules.
 
-The existing full check result was supplied by the orchestrator and was not rerun. Focused, read-only Node probes reproduced the blocker using both the domain helpers and the real dispatcher with the installed adapter's naming function. No source files were changed. No additional necessity finding was established.
+The reviewer reran the original failure through the real dispatcher and installed adapter naming function, then directly asserted genuine-cut recovery and sibling-server rejection. All assertions passed on Node v26.13.0 at the fix commit. The fixer's reported focused unit, direct-coverage, and behavioral checks provide additional evidence; the full combined-tree `npm run check` is pending with the parent workflow and was not duplicated here. No source files were changed. No necessity defect was established.
 
 ## Structural Findings (fallow)
 
 The supplied normalized report contains zero findings because the normalizer does not interpret the current raw report schema correctly. That zero is not a clean structural result.
 
-The authoritative raw `FALLOW.json` reports 32 complexity advisories, no dead-code issues, and no duplication clone groups. There is one introduced complexity advisory, 31 inherited advisories, and one worsened inherited advisory. All 32 use **estimated**, partial coverage and have effective severity **WARNING**. The table preserves these structural observations; they are not independently confirmed defects and are not added to the narrative finding counts in frontmatter.
+The original pre-fix authoritative raw `FALLOW.json` reports 32 complexity advisories, no dead-code issues, and no duplication clone groups. There is one introduced complexity advisory, 31 inherited advisories, and one worsened inherited advisory. All 32 use **estimated**, partial coverage and have effective severity **WARNING**. The table preserves these structural observations; they are not independently confirmed defects and are not added to the narrative finding counts in frontmatter.
 
 | File and line | Function | Cyclomatic | Cognitive | Attribution | Classification |
 | --- | --- | ---: | ---: | --- | --- |
@@ -134,7 +136,7 @@ The authoritative raw `FALLOW.json` reports 32 complexity advisories, no dead-co
 | `test/live-uat/mcp-adapter-canary.mjs:1108` | `assertMigratedFiles` | 6 | 3 | inherited | WARNING |
 | `test/live-uat/mcp-adapter-canary.mjs:1346` | `assertDeclaredAfterSearch` | 6 | 5 | inherited | WARNING |
 | `test/live-uat/mcp-adapter-canary.mjs:1365` | `assertToolResult` | 6 | 2 | inherited | WARNING |
-| `scripts/install-test-peers.mjs:42` | `<arrow>` | 5 | 4 | introduced (introduced) | WARNING |
+| `scripts/install-test-peers.mjs:42` | `<arrow>` | 5 | 4 | introduced | WARNING |
 | `scripts/install-test-peers.mjs:120` | `assertRegistryIntegrity` | 5 | 4 | inherited | WARNING |
 | `test/live-uat/mcp-adapter-canary.mjs:630` | `onLine` | 5 | 3 | inherited | WARNING |
 | `test/live-uat/mcp-adapter-canary.mjs:850` | `<arrow>` | 5 | 2 | inherited | WARNING |
@@ -146,54 +148,49 @@ The authoritative raw `FALLOW.json` reports 32 complexity advisories, no dead-co
 
 The inherited `readMarker` advisory worsened from cyclomatic/cognitive 12/9 to 14/11. Estimated-coverage CRAP scores do not establish that these functions lack direct coverage. If acting on these advisories, first compare their branches against measured coverage; simplify only where a concrete maintainability or correctness issue is established. No test-reliability defect is inferred merely from a test function's complexity.
 
-The supplemental `fallow review --base ... --brief` invocation could not create its temporary worktree in the sandbox. The supplied authoritative raw structural report remains the basis of this section.
+The supplemental `fallow review --base ... --brief` invocation could not create its temporary worktree in the sandbox. The supplied authoritative raw structural report remains the basis of this section. It has not been regenerated for the seven-file fix; the table preserves the original structural evidence and line locations. The fix report separately records a passing Fallow audit with zero introduced findings.
 
 ## Narrative Findings (AI reviewer)
 
-### Critical Issues
+No open findings. The prior BLOCKER CR-01 is resolved.
 
-#### CR-01: A valid 64-character adapter tool name suppresses its server-prefix hook
+### CR-01 Resolution Verification
 
-**Classification:** BLOCKER
-**File:** `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts:75-77`
-**Related lines:** `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts:54-58,137-148`; `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:917-920`
+The re-review traced `toolResultCompositeHandler` through `toolEventView` to `recoverAdapterToolName`. Successful result metadata is passed separately from hook literals and is accepted only when formatting the full name produces the registered event name. Literal-only recovery still requires a name longer than 64 characters. The existing 55-character server-prefix guard remains unchanged.
 
-**Issue:** Hash-shaped names are treated as proof that the adapter shortened the tool name. A valid original name can already be exactly 64 characters and end in `_[0-9a-f]{8}`. For such a tool, `looksLikeCutAdapterToolName` returns true, while `recoverAdapterToolName` rejects the genuine original name because the candidate is not longer than 64 characters. `serverPrefixNames` then rejects every matching server prefix longer than 55 characters.
+The original plugin `demo`, 37-character server, tool `deadbeef` reproduction now invokes the matching server-prefix hook exactly once. Additional direct assertions using a genuinely shortened name verified that:
 
-This silently skips a configured server-prefix hook. It also occurs for a successful `PostToolUse` event whose adapter result includes the original `details.server` and `details.tool`. Therefore it is outside the documented limitation for genuinely shortened tools whose original names are unavailable. Hooks used for auditing or guard behavior are affected.
+- Correct full-name metadata enables the actual server prefix.
+- A sibling server sharing the retained prefix is rejected, including when supplied as mismatched metadata.
+- Missing metadata and a literal consisting only of the 64-character registered name cannot bypass the long-prefix guard.
+- A matching original long literal still recovers the tool correctly.
 
-**Reproduction:** Use plugin `demo`, a server name consisting of 37 `x` characters, and tool `deadbeef`. The resulting server key is `plugin_demo_` followed by those 37 characters and `_`. The installed adapter's `formatToolName("deadbeef", serverKey, "mcp")` produces:
-
-```text
-mcp__plugin_demo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx__deadbeef
-```
-
-This name has length 64 and is unchanged by the adapter. Its server prefix has length 56. Register a `PostToolUse` matcher consisting of that full server prefix followed by `.*`, then dispatch a successful result with `details: { server: serverKey, tool: "deadbeef" }`. A read-only execution through `toolResultCompositeHandler` and the installed adapter naming function yielded:
+The probe returned:
 
 ```json
 {
-  "nameLength": 64,
-  "prefixLength": 56,
-  "unchangedByAdapter": true,
-  "successfulResultHasOriginalName": true,
-  "hooksCalled": []
+  "boundaryHooksCalled": ["guard"],
+  "genuineCutMetadataMatches": true,
+  "genuineCutSiblingRejected": true,
+  "unverifiedCutLiteralRejected": true,
+  "longLiteralRecoveryPreserved": true
 }
 ```
 
-The matching hook should run once. A focused helper probe also confirmed that adding the exact 64-character hook literal does not recover the name.
+The new domain and dispatcher regression cases assert the repaired boundary, and the adapter-only Cucumber scenario exercises the real adapter with a named stub tool. The shared stub retains `echo` as its default, preserving existing callers; the added step supplies the alternate tool through the existing process arguments.
 
-**Fix:** Treat the suffix pattern as a possible shortened name, not confirmation of shortening. Preserve a full name verified from successful adapter result metadata when its adapter-formatted value equals the event's registered name, including a full name of exactly 64 characters. Use that verified name for server-prefix matching. Keep the existing protection against assigning genuinely shortened names to sibling servers with a shared retained prefix; do not simply remove the 55-character guard. Add domain and dispatcher regressions for this unshortened hash-tail boundary, plus a behavioral scenario. Cover the ambiguity of pre-call/failure events separately without weakening the sibling-server protection.
+The fix report's “requires human verification” wording does not identify an actual human-only check for this deterministic defect. No manual verification is required to close CR-01. This disposition does not waive the parent workflow's pending combined-tree gate or the separate live-child checks already recorded for the phase.
 
 ## Review Boundaries and Accepted Limitations
 
 - The companion declaration floors and actual suite versions are distinct: pi-subagents declares 0.87.0 support while the suite exercises 0.88.0. This review does not treat the suite as a runtime measurement of the lower floor.
 - The documented long-name grant limitation in pi-subagents and pending detached-child/live tool checks remain acknowledged capability and validation gaps. They are not presented as newly working parity.
 - The previously reported whole-server measurement overstatement in `docs/mcp-compatibility.md` was corrected in `49b1ba0e` and is not an open finding.
-- The existing hash-shaped namespace proxy exception is a documented accepted tradeoff. CR-01 concerns a separate, reproducible hook suppression even when trustworthy adapter result metadata is available.
+- The existing hash-shaped namespace proxy exception is a documented accepted tradeoff. The separate metadata-backed hook suppression recorded as CR-01 is now fixed.
 - Timeout provenance, transport defaults, migration/restaging behavior, agent exclusions, hook-name recovery, peer installation changes, test changes, and the related documentation were examined for additional concrete defects. No further narrative defect was established within the review coverage stated above.
 
 ---
 
-_Reviewed: 2026-11-12T06:38:59Z_
+_Reviewed: 2026-11-12T07:06:52Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
