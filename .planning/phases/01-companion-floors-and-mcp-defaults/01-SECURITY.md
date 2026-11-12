@@ -108,6 +108,7 @@ controls verified for 01-01. Each accepted supply-chain entry retains that scope
 |---|---|---|---|---|
 | 2026-11-12 | 41 | 25 | 16 (10 blocking recording gaps, 6 below threshold) | gsd-security-auditor |
 | 2026-11-12 | 41 | 41 | 0 | gsd-security-auditor, narrow confirmation |
+| 2026-11-12 | 41 | 41 | 0 | gsd-security-auditor, post-review-fix confirmation |
 
 Audited commit: `c2317aee173ea34a2f9096f1cbb714a964b2468d`. No missing
 high-severity implementation mitigation was found. Fifteen accepted entries
@@ -118,6 +119,13 @@ blocking count described a recording gap, not a missing code mitigation.
 
 All eleven summaries have Threat Flags sections, with no unmapped flag found.
 The detached-child granted-tool call and exclusion checks remain unperformed.
+
+The post-fix audit reviewed all seven files in `1e762749` and reconfirmed
+T-01-18, T-01-19, T-01-20, T-01-22, and T-01-23. Successful result metadata
+must reproduce the registered adapter name; literal candidates still require
+more than 64 characters. The 55-character guard and proxy exemption remain.
+The exact-64 regression and disagreeing-metadata guard cover the corrected
+boundary. No new threat flag or accepted risk was introduced.
 
 ## Sign-Off
 
