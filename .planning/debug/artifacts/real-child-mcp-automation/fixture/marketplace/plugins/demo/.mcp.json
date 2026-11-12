@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "stub": {
+      "command": "/home/linuxbrew/.linuxbrew/bin/node",
+      "args": [
+        "/home/acolomba/src/pi-claude-marketplace-gaps/features/lib/mcp-stub-server.ts",
+        "demo",
+        "stub"
+      ],
+      "env": {
+        "HOME": "/tmp/pg1-live-fixed-local/server-home"
+      }
+    },
+    "a-server-whose-name-runs-well-past-the-limit": {
+      "command": "/home/linuxbrew/.linuxbrew/bin/node",
+      "args": [
+        "/home/acolomba/src/pi-claude-marketplace-gaps/features/lib/mcp-stub-server.ts",
+        "demo",
+        "a-server-whose-name-runs-well-past-the-limit"
+      ],
+      "env": {
+        "HOME": "/tmp/pg1-live-fixed-local/server-home"
+      }
+    }
+  }
+}
