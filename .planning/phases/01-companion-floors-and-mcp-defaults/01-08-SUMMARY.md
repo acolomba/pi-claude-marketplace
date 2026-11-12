@@ -118,6 +118,18 @@ status: complete
 - Task 2 direct coverage of `dispatch.ts` and `builtin-mcp-tool-names.ts` exited 0. The exact adapter hook suite exited 0 with **179 scenarios (179 passed), 2,332 steps (2,332 passed)** on its final run. The specified built-in feature pair exited 0 with **5 scenarios (5 passed), 73 steps (73 passed)**. All Task 2 acceptance counts passed; the recorded-runs table has no outer `mcp` row.
 - Both task commits passed their hooks, including `npm run check:commit`. `npx fallow audit --base 7ba310bc6a678799ce60253e731f95fbf3f0096a` exited 0. The orchestrator owns the combined-tree `npm run check` wave gate.
 
+## Combined-tree wave verification
+
+The orchestrator merged plans 01-08 and 01-09 and ran `npm run check` on
+commit `fed3e0b549b200bc85aa116cd7008db84eacce7a`, using Node v26.13.0.
+It exited 0: all static checks, unpaired tests, integration tests, 1,811 adapter
+scenarios, 155 built-in scenarios, and direct coverage of all 354 source/test
+pairs passed. Log: `/tmp/gsd-parity-wave4-check.log`. The async hook scenarios
+passed in this full combined-tree run.
+
+The schema drift gate passed. The codebase drift hook reported old map references
+with directive `warn` and `spawn_mapper: false`; that hook is advisory.
+
 ## Lines for later plans
 
 | Tool event | A hook spells the full name | No hook spells it |

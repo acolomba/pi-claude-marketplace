@@ -182,7 +182,7 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
   3. Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works wherever the project names it: the server listing shows it, a hook whose matcher is the full Claude Code name runs and receives that name, and an agent whose `disallowedTools` names the tool is not offered it (PG-MCP-02).
   4. Under both profiles, the registered configuration of a stdio plugin server with no declared `timeout` shows 30 minutes, and that of a remote server shows 5 minutes. Under the adapter, a timeout the user wrote on the entry is still there after an update (PG-MCP-01).
 
-**Plans**: 7/11 plans executed
+**Plans**: 9/11 plans executed
 
 Plans:
 **Wave 1**
@@ -199,8 +199,8 @@ Plans:
 - [x] 01-07-PLAN.md -- Wave 3: run hooks that name a long tool by its full Claude Code name and give every hook of the event that name
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 01-08-PLAN.md -- Wave 4: give PostToolUse hooks the full name from the adapter's result details, keep a cut name from counting as a proxy call, and pin the cells that stay shortened
-- [ ] 01-09-PLAN.md -- Wave 4: prove the default timeout across update, reinstall, and disable and enable, and run the slow call once per MCP implementation
+- [x] 01-08-PLAN.md -- Wave 4: give PostToolUse hooks the full name from the adapter's result details, keep a cut name from counting as a proxy call, and pin the cells that stay shortened
+- [x] 01-09-PLAN.md -- Wave 4: prove the default timeout across update, reinstall, and disable and enable, and run the slow call once per MCP implementation
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 01-10-PLAN.md -- Wave 5: correct the two compatibility pages for the floors, the fixed pi-subagents bugs, the default timeouts, and long tool names
@@ -375,7 +375,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Companion Floors and MCP Defaults | 7/11 | In Progress | - |
+| 1. Companion Floors and MCP Defaults | 9/11 | In Progress | - |
 | 2. Hook Payloads, Matchers, and Stop Limit | 0/0 | Not started | - |
 | 3. Background Subagents | 0/0 | Not started | - |
 | 4. Skill and Workflow Install Defects | 0/0 | Not started | - |
