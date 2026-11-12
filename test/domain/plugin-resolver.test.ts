@@ -916,10 +916,10 @@ describe("resolveStrict", () => {
   });
 
   // D-71-02 / PHOOK-02: an intra-event matcher mix keeps the clean group and
-  // drops only the unsupportable (regex) group. The event survives partially:
-  // `partially-available` with hooksConfigPath recorded and the regex group
+  // drops only the unsupportable (invalid regex) group. The event survives partially:
+  // `partially-available` with hooksConfigPath recorded and the invalid group
   // enumerated.
-  test("D-71-02: intra-event matcher mix keeps the clean group, drops the regex group -> unsupported", async () => {
+  test("D-71-02: intra-event matcher mix keeps the clean group, drops the invalid group -> unsupported", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -950,7 +950,7 @@ describe("resolveStrict", () => {
       );
       assert.strictEqual(resolvedPlugin.hooksConfigPath, path.join("hooks", "hooks.json"));
       assert.deepStrictEqual(resolvedPlugin.droppedHooks, [
-        { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+        { kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" },
       ]);
     }
   });
@@ -2611,7 +2611,7 @@ describe("resolveStrict", () => {
   // subset, so a DROPPED group's orphan-rewake field cannot raise a false marker
 
   // A hooks config with one KEPT supported group (matcher "Bash") and one DROPPED
-  // unsupportable group (regex matcher ".*") whose only handler declares
+  // unsupportable group (invalid matcher "[") whose only handler declares
   // `rewakeMessage` WITHOUT `asyncRewake:true`. The orphan lives in the dropped
   // group, so it never enters the filtered subset `detectOrphanRewake` scans ->
   // `orphanRewake` stays absent even though the plugin resolves
@@ -2626,7 +2626,7 @@ describe("resolveStrict", () => {
           PreToolUse: [
             { matcher: "Bash", hooks: [{ type: "command", command: "echo ok" }] },
             {
-              matcher: ".*",
+              matcher: "[",
               hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "later" }],
             },
           ],
@@ -2650,7 +2650,7 @@ describe("resolveStrict", () => {
         `supported: ${resolvedPlugin.supported.join(" / ")}`,
       );
       assert.deepStrictEqual(resolvedPlugin.droppedHooks, [
-        { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+        { kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" },
       ]);
     }
   });
@@ -2670,7 +2670,7 @@ describe("resolveStrict", () => {
               matcher: "Bash",
               hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "later" }],
             },
-            { matcher: ".*", hooks: [{ type: "command", command: "echo drop" }] },
+            { matcher: "[", hooks: [{ type: "command", command: "echo drop" }] },
           ],
         }),
       },
@@ -2688,7 +2688,7 @@ describe("resolveStrict", () => {
     if (resolvedPlugin.state === "partially-available") {
       assert.strictEqual(resolvedPlugin.orphanRewake, true);
       assert.deepStrictEqual(resolvedPlugin.droppedHooks, [
-        { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+        { kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" },
       ]);
     }
   });

@@ -34,7 +34,7 @@ const TOOL_EVENT_MEMBERS = new Set<string>(TOOL_EVENTS);
 
 function toolMatcherCondition(rawMatcher: string): MatcherCondition | null {
   const matcher = parseMatcher(rawMatcher);
-  if (matcher.kind === "regex") {
+  if (matcher.kind === "invalid-pattern") {
     return "regex";
   }
 

@@ -1108,7 +1108,7 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(output, expectedOutput);
   });
 
-  test("dispatches only match-all and exact MCP tool matchers", async () => {
+  test("dispatches match-all, exact MCP, and whole regex matchers in declaration order", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -1139,9 +1139,9 @@ describe("composite dispatch closure partitions", () => {
         declarationIndex: 3,
       }),
       createRoutingEntry({
-        pluginId: "regex-miss",
+        pluginId: "regex-match",
         claudeEvent: "PreToolUse",
-        rawMatcher: "Bash.*",
+        rawMatcher: ".*catalog__fetch",
         declarationIndex: 4,
       }),
       createRoutingEntry({
@@ -1157,6 +1157,7 @@ describe("composite dispatch closure partitions", () => {
       {
         "match-all": { kind: "noop" },
         "mcp-exact": { kind: "noop" },
+        "regex-match": { kind: "noop" },
       },
       executorCalls,
     );
@@ -1178,6 +1179,10 @@ describe("composite dispatch closure partitions", () => {
         pluginId: "mcp-exact",
         event: createToolCallEvent("mcp__catalog__fetch", { query: "hooks" }),
       },
+      {
+        pluginId: "regex-match",
+        event: createToolCallEvent("mcp__catalog__fetch", { query: "hooks" }),
+      },
     ];
 
     // act
@@ -1187,6 +1192,51 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(output, expectedOutput);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
+
+  for (const { pattern, toolName, fires } of [
+    { pattern: "^Ba.*", toolName: "bash", fires: true },
+    { pattern: "^ba.*", toolName: "bash", fires: false },
+    { pattern: "(Read|Write)", toolName: "read", fires: true },
+    { pattern: "(Read|Write)", toolName: "write", fires: true },
+    { pattern: "(Read|Write)", toolName: "bash", fires: false },
+    { pattern: "é", toolName: "bash", fires: false },
+    { pattern: "ash$", toolName: "bash", fires: true },
+    { pattern: "[", toolName: "bash", fires: false },
+  ]) {
+    test(`tests whole regex ${JSON.stringify(pattern)} against Claude-form ${toolName}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const entry = createRoutingEntry({
+        pluginId: "regex",
+        claudeEvent: "PreToolUse",
+        rawMatcher: pattern,
+        declarationIndex: 0,
+      });
+      const calls: RecordedCall[] = [];
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor({ regex: { kind: "noop" } }, calls),
+      );
+      runtime.setRoutingBucket("PreToolUse", [entry]);
+
+      // act
+      await handler(createToolCallEvent(toolName), createExtensionContext("/workspace/regex"));
+      await handler(createToolCallEvent(toolName), createExtensionContext("/workspace/regex"));
+
+      // assert
+      const expectedCalls: RecordedCall[] = fires
+        ? [
+            { pluginId: "regex", event: createToolCallEvent(toolName) },
+            { pluginId: "regex", event: createToolCallEvent(toolName) },
+          ]
+        : [];
+      assert.deepStrictEqual(calls, expectedCalls);
+    });
+  }
 
   for (const { toolName, fires } of [
     { toolName: "write", fires: true },

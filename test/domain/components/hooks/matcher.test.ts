@@ -161,54 +161,26 @@ describe("parseMatcher", () => {
     });
   });
 
-  for (const { matcherText, prefix } of [
-    { matcherText: "mcp__plugin_acme_db__.*", prefix: "mcp__plugin_acme_db__" },
-    {
-      matcherText: "mcp__plugin_my-plugin_database-tools__.*",
-      prefix: "mcp__plugin_my-plugin_database-tools__",
-    },
+  for (const expression of [
+    "mcp__plugin_acme_db__.*",
+    "mcp__plugin_my-plugin_database-tools__.*",
+    "mcp__plugin_acme_db__.*|Write",
+    "mcp__*",
+    "mcp__acme__get_.*",
+    "mcp__a.b__.*",
+    "mcp____.*",
+    "mcp__plugin_acme_db__.*|.*",
   ]) {
-    test(`ANAME-02: parses ${matcherText} as the server prefix ${prefix}`, () => {
+    test(`compiles ${expression} as one whole regex`, () => {
       // arrange
 
       // act
-      const matcher = parseMatcher(matcherText);
+      const matcher = parseMatcher(expression);
 
       // assert
-      assert.deepStrictEqual(matcher, {
-        kind: "tool-set",
-        toolNames: new Set(),
-        toolPrefixes: [prefix],
-      });
+      assert.deepStrictEqual(matcher, { kind: "regex", pattern: new RegExp(expression) });
     });
   }
-
-  test("ANAME-02: keeps a server-prefix alternative beside a mapped tool in a pipe matcher", () => {
-    // arrange
-
-    // act
-    const matcher = parseMatcher("mcp__plugin_acme_db__.*|Write");
-
-    // assert
-    assert.deepStrictEqual(matcher, {
-      kind: "tool-set",
-      toolNames: new Set(["write"]),
-      toolPrefixes: ["mcp__plugin_acme_db__"],
-    });
-  });
-
-  test("ANAME-02: omits toolPrefixes when no alternative is a server prefix", () => {
-    // arrange
-
-    // act
-    const matcher = parseMatcher("Write|Edit");
-
-    // assert
-    assert.deepStrictEqual(matcher, {
-      kind: "tool-set",
-      toolNames: new Set(["write", "edit"]),
-    });
-  });
 
   test("ANAME-02: reports mcp__acme__ without the .* wildcard as unmapped", () => {
     // arrange
@@ -219,24 +191,6 @@ describe("parseMatcher", () => {
     // assert
     assert.deepStrictEqual(matcher, { kind: "unmapped", token: "mcp__acme__" });
   });
-
-  for (const expression of [
-    "mcp__*",
-    "mcp__acme__get_.*",
-    "mcp__a.b__.*",
-    "mcp____.*",
-    "mcp__plugin_acme_db__.*|.*",
-  ]) {
-    test(`MATCH-02: rejects the MCP regex matcher ${expression}`, () => {
-      // arrange
-
-      // act
-      const matcher = parseMatcher(expression);
-
-      // assert
-      assert.deepStrictEqual(matcher, { kind: "regex" });
-    });
-  }
 
   test("reports the first discarded alternative when no alternative survives", () => {
     // arrange
@@ -282,25 +236,24 @@ describe("parseMatcher", () => {
     "Edit+",
     "Read?",
     "Write[0]",
-    "*bash",
     ".*",
     "Edit$",
     "(Edit)",
     "mcp__bad!__tool",
     "mcp__server__bad!",
   ]) {
-    test(`rejects the regex or malformed matcher ${expression}`, () => {
+    test(`compiles the regex matcher ${expression} without flags`, () => {
       // arrange
 
       // act
       const matcher = parseMatcher(expression);
 
       // assert
-      assert.deepStrictEqual(matcher, { kind: "regex" });
+      assert.deepStrictEqual(matcher, { kind: "regex", pattern: new RegExp(expression) });
     });
   }
 
-  test("rejects an MCP matcher that differs from a valid literal by one unsafe character", () => {
+  test("compiles an MCP matcher that differs from a literal by one regex character", () => {
     // arrange
     const validLiteral = "mcp__server__tool";
     const unsafeLiteral = "mcp__server__tool!";
@@ -314,6 +267,28 @@ describe("parseMatcher", () => {
       kind: "tool-set",
       toolNames: new Set([validLiteral]),
     });
-    assert.deepStrictEqual(unsafeMatcher, { kind: "regex" });
+    assert.deepStrictEqual(unsafeMatcher, { kind: "regex", pattern: /mcp__server__tool!/ });
+  });
+
+  for (const expression of ["[", "*bash", "(Read"] as const) {
+    test(`marks invalid regex ${expression} without throwing`, () => {
+      // arrange
+
+      // act
+      const matcher = parseMatcher(expression);
+
+      // assert
+      assert.deepStrictEqual(matcher, { kind: "invalid-pattern" });
+    });
+  }
+
+  test("compiles non-ASCII regex with JavaScript's default UTF-16 behavior", () => {
+    // arrange
+
+    // act
+    const matcher = parseMatcher("é");
+
+    // assert
+    assert.deepStrictEqual(matcher, { kind: "regex", pattern: /é/ });
   });
 });

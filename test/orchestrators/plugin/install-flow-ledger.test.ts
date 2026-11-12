@@ -8459,14 +8459,14 @@ test("PHOOK-04 / D-71-02: install --partial drops only the unsupportable matcher
         marketplaceName: "mp",
         pluginName: "hook-plugin",
         skills: [{ sourceName: "helper-skill" }],
-        // One supported event with a clean Edit group and an unsupportable
-        // regex group: the partition keeps the Edit group and drops only the
-        // `.*` regex group (intra-event matcher-group partition, D-71-02).
+        // One supported event with a clean Edit group and an invalid regex
+        // group: the partition keeps the Edit group and drops only the
+        // `[` group (intra-event matcher-group partition, D-71-02).
         hooksJson: {
           hooks: {
             PreToolUse: [
               { matcher: "Edit", hooks: [{ type: "command", command: "echo edit" }] },
-              { matcher: ".*", hooks: [{ type: "command", command: "echo regex" }] },
+              { matcher: "[", hooks: [{ type: "command", command: "echo invalid" }] },
             ],
           },
         },
@@ -8491,7 +8491,7 @@ test("PHOOK-04 / D-71-02: install --partial drops only the unsupportable matcher
         PreToolUse: { matcher?: string }[];
       };
       // The event survives with ONLY the supportable Edit group; the dropped
-      // `.*` regex group is absent (strict subset within the kept event).
+      // invalid `[` group is absent (strict subset within the kept event).
       assert.equal(staged.PreToolUse.length, 1);
       assert.equal(staged.PreToolUse[0]?.matcher, "Edit");
     } finally {

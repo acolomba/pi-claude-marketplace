@@ -7,37 +7,16 @@ const CLAUDE_TO_PI_TOOL_NAME_LOOKUP: ReadonlyMap<string, PiToolName> = new Map(
   Object.entries(CLAUDE_TO_PI_TOOL_NAMES),
 );
 
-/**
- * A tool-set matcher fires on a tool whose name is in `toolNames` or starts
- * with one of `toolPrefixes`. `toolPrefixes` is present only when at least
- * one alternative was an MCP server prefix (ANAME-02).
- */
+/** A parsed tool matcher ready for support checks and runtime dispatch. */
 export type ParsedMatcher =
   | { kind: "match-all" }
-  | { kind: "tool-set"; toolNames: ReadonlySet<string>; toolPrefixes?: readonly string[] }
-  | { kind: "regex" }
+  | { kind: "tool-set"; toolNames: ReadonlySet<string> }
+  | { kind: "regex"; pattern: RegExp }
+  | { kind: "invalid-pattern" }
   | { kind: "unmapped"; token: string };
 
 type Alternative =
-  | { readonly kind: "regex" }
-  | { readonly kind: "tool"; readonly toolName: string }
-  | { readonly kind: "prefix"; readonly prefix: string }
-  | { readonly kind: "discarded" };
-
-/**
- * ANAME-02: returns `mcp__<server>__` for the server-prefix form
- * `mcp__<server>__.*`, or undefined for any other token. Only string
- * operations read the token, so no regular expression is built from
- * plugin-supplied text.
- */
-function mcpServerPrefix(token: string): string | undefined {
-  if (!token.startsWith("mcp__") || !token.endsWith("__.*")) {
-    return undefined;
-  }
-
-  const server = token.slice("mcp__".length, -"__.*".length);
-  return MCP_SEGMENT.test(server) ? `mcp__${server}__` : undefined;
-}
+  { readonly kind: "tool"; readonly toolName: string } | { readonly kind: "discarded" };
 
 function isMcpLiteral(raw: string): boolean {
   if (!raw.startsWith("mcp__")) {
@@ -61,15 +40,6 @@ function isMcpLiteral(raw: string): boolean {
  * have been removed.
  */
 function classifyAlternative(token: string): Alternative {
-  const prefix = mcpServerPrefix(token);
-  if (prefix !== undefined) {
-    return { kind: "prefix", prefix };
-  }
-
-  if (!SAFE_MATCHER_CHARS.test(token)) {
-    return { kind: "regex" };
-  }
-
   const piTool = CLAUDE_TO_PI_TOOL_NAME_LOOKUP.get(token);
   if (piTool !== undefined) {
     return { kind: "tool", toolName: piTool };
@@ -79,26 +49,24 @@ function classifyAlternative(token: string): Alternative {
 }
 
 /**
- * Parses a Claude hook matcher into its dispatch-safe form. A pipe-OR
- * matcher degrades per alternative (TOOL-02, MATCH-02, #217): each
- * alternative is classified on its own, a mapped Claude tool or an MCP
- * literal joins `toolNames`, an MCP server prefix joins `toolPrefixes`
- * (ANAME-02), and any other alternative is discarded. The matcher itself
- * only degrades to `unmapped` when every alternative was discarded, so
- * `Write|Edit|apply_patch` keeps firing on `write` and `edit` while
- * `apply_patch` alone still drops.
+ * Parses a whole matcher before splitting exact-list alternatives. Other
+ * patterns use JavaScript RegExp without flags or anchors. An invalid regex
+ * has a distinct state so admission can drop only its group.
  */
 export function parseMatcher(raw: string): ParsedMatcher {
   if (raw === "" || raw === "*") {
     return { kind: "match-all" };
   }
 
-  const toolNames = new Set<string>();
-  const toolPrefixes: string[] = [];
-  if (!SAFE_MATCHER_CHARS.test(raw) && !raw.startsWith("mcp__")) {
-    return { kind: "regex" };
+  if (!SAFE_MATCHER_CHARS.test(raw)) {
+    try {
+      return { kind: "regex", pattern: new RegExp(raw) };
+    } catch {
+      return { kind: "invalid-pattern" };
+    }
   }
 
+  const toolNames = new Set<string>();
   let firstDiscarded = "";
   for (const rawToken of raw.split(/[|,]/)) {
     const token = rawToken.trim();
@@ -108,13 +76,8 @@ export function parseMatcher(raw: string): ParsedMatcher {
 
     const alternative = classifyAlternative(token);
     switch (alternative.kind) {
-      case "regex":
-        return { kind: "regex" };
       case "tool":
         toolNames.add(alternative.toolName);
-        break;
-      case "prefix":
-        toolPrefixes.push(alternative.prefix);
         break;
       case "discarded":
         hookDebugLog(
@@ -128,11 +91,9 @@ export function parseMatcher(raw: string): ParsedMatcher {
     }
   }
 
-  if (toolNames.size === 0 && toolPrefixes.length === 0 && firstDiscarded !== "") {
+  if (toolNames.size === 0 && firstDiscarded !== "") {
     return { kind: "unmapped", token: firstDiscarded };
   }
 
-  return toolPrefixes.length === 0
-    ? { kind: "tool-set", toolNames }
-    : { kind: "tool-set", toolNames, toolPrefixes };
+  return { kind: "tool-set", toolNames };
 }

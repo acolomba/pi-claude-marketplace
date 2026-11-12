@@ -73,11 +73,12 @@ describe("partitionHooks", () => {
     assert.deepStrictEqual(partition, { supported: { PreToolUse: groups }, dropped: [] });
   });
 
-  test("drops regex and unmapped tool groups but keeps their supported sibling", () => {
+  test("keeps valid regex and exact groups beside invalid and unmapped groups", () => {
     // arrange
     const config = {
       PostToolUse: [
         { matcher: "Edit.*", hooks: [{ type: "command", command: "regex" }] },
+        { matcher: "[", hooks: [{ type: "command", command: "invalid" }] },
         { matcher: "MultiEdit", hooks: [{ type: "command", command: "unmapped" }] },
         { matcher: "Write", hooks: [{ type: "command", command: "write" }] },
       ],
@@ -89,10 +90,13 @@ describe("partitionHooks", () => {
     // assert
     assert.deepStrictEqual(partition, {
       supported: {
-        PostToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: "write" }] }],
+        PostToolUse: [
+          { matcher: "Edit.*", hooks: [{ type: "command", command: "regex" }] },
+          { matcher: "Write", hooks: [{ type: "command", command: "write" }] },
+        ],
       },
       dropped: [
-        { kind: "group", event: "PostToolUse", matcher: "Edit.*", cond: "regex" },
+        { kind: "group", event: "PostToolUse", matcher: "[", cond: "regex" },
         {
           kind: "group",
           event: "PostToolUse",
@@ -103,7 +107,7 @@ describe("partitionHooks", () => {
     });
   });
 
-  test("ANAME-02: keeps a server-prefix MCP matcher group as supported", () => {
+  test("keeps MCP whole regex groups as supported", () => {
     // arrange
     const config = {
       PreToolUse: [
@@ -120,9 +124,10 @@ describe("partitionHooks", () => {
       supported: {
         PreToolUse: [
           { matcher: "mcp__plugin_acme_db__.*", hooks: [{ type: "command", command: "prefix" }] },
+          { matcher: "mcp__*", hooks: [{ type: "command", command: "wildcard" }] },
         ],
       },
-      dropped: [{ kind: "group", event: "PreToolUse", matcher: "mcp__*", cond: "regex" }],
+      dropped: [],
     });
   });
 
@@ -368,7 +373,7 @@ describe("partitionHooks", () => {
             { type: "prompt", command: "drop-second" },
           ],
         },
-        { matcher: "Edit.*", hooks: [{ type: "command", command: "regex" }] },
+        { matcher: "[", hooks: [{ type: "command", command: "invalid" }] },
       ],
       SessionStart: [{ matcher: "bogus", hooks: [{ type: "command", command: "bogus" }] }],
     };
@@ -390,7 +395,7 @@ describe("partitionHooks", () => {
         { kind: "event", event: "Notification" },
         { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "http" },
         { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "prompt" },
-        { kind: "group", event: "PreToolUse", matcher: "Edit.*", cond: "regex" },
+        { kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" },
         { kind: "group", event: "SessionStart", matcher: "bogus", cond: "closed-set" },
       ],
     });
