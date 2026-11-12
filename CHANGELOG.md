@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Plugin agents and MCP servers now behave more like Claude Code with pi-subagents 0.87.0 or later and pi-mcp-adapter 7.0.1 or later in 7.x.
+
+  - These versions fix plugin MCP grants and shorten long tool names for Pi's 64-character limit.
+  - `--map-model` now writes a bare model ID, so an agent prefers the session's provider. An installed agent keeps its old ID until the next `update --map-model`.
+  - A plugin MCP server without a `timeout` now allows a silent call for 30 minutes with stdio or 5 minutes with a remote server. Your `requestTimeoutMs` in `mcp-adapter.json` still wins.
+  - An installed plugin gets the default at its next update or reinstall under pi-mcp-adapter, or at the next session start under Pi's built-in MCP.
+  - Under pi-mcp-adapter, hooks now match plugin MCP tool names over 64 characters, and agents can exclude them with `disallowedTools`. Update or reinstall the plugin to refresh its agents.
+  - pi-mcp-adapter asks for project server approval again when the new timeout changes an approved server's stored definition.
+
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
 
   - A plugin's `async` hooks, Stop hooks included, now run in the background and give their JSON answer to the model's next call.
