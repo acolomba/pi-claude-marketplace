@@ -66,7 +66,7 @@ function adapterToolNamePrefix(plugin: string, server: string): string | undefin
 }
 
 /** D-PG1-07: follows pi-mcp-adapter 7.0.1 `formatToolName` after its join. */
-function fittedAdapterToolName(name: string): string {
+export function fittedAdapterToolName(name: string): string {
   if (name.length <= MAX_TOOL_NAME_LENGTH) {
     return name;
   }

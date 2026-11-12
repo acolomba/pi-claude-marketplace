@@ -20,6 +20,31 @@ function hookDemoTool(piName = "mcp__plugin_hook_demo_stub_server__echo"): McpTo
 
 describe("toolLiteralNames", () => {
   for (const { literal, fires } of [
+    {
+      literal: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo",
+      fires: true,
+    },
+    {
+      literal: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__other",
+      fires: false,
+    },
+  ]) {
+    test(`compares the adapter's cut name with ${literal}: ${fires} (D-PG1-08)`, () => {
+      // arrange
+      const tool = {
+        piName: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+        builtinServer: undefined,
+      };
+
+      // act
+      const named = toolLiteralNames(literal, tool);
+
+      // assert
+      assert.strictEqual(named, fires);
+    });
+  }
+
+  for (const { literal, fires } of [
     { literal: "mcp__plugin_demo_stub__echo", fires: true },
     { literal: "mcp__plugin_demo_stub__other", fires: false },
     { literal: "mcp__plugin_demo_stub__", fires: false },

@@ -10,11 +10,13 @@
 // registered name as the tool's namespace alias, but not the tool's own name
 // (D-MB-08), so only the server segment can be compared in Claude's form.
 //
-// The implementation profile in `domain/mcp-implementation.ts` has its own
-// copy of that computation, which takes a plugin and its server; it cannot name the tools of a server
-// that Pi's `mcp.json` configures, so this module does not reuse it.
+// The implementation profile supplies the adapter's fit rule. Its built-in
+// computation takes a plugin and its server, so this module keeps Pi's rule
+// for tools of a server that Pi's `mcp.json` configures.
 
 import { createHash } from "node:crypto";
+
+import { fittedAdapterToolName } from "../../mcp-implementation.ts";
 
 // Pi 1.5.0 `createMcpToolName`: the longest name, and the hex digits of the
 // hash a cut or taken name ends with.
@@ -75,12 +77,12 @@ function claudeServerPrefix(server: string): string {
  * Pi did not end the tool's name with a hash. Pi adds the hash to a name over
  * 64 characters and to a name that another tool of the server already holds,
  * such as `a-b` beside `a_b`. Pi hashes the tool's original name, which a
- * folded `<T>` no longer spells. Every other tool is named only by Pi's own
- * name, which is already Claude's form.
+ * folded `<T>` no longer spells. A tool pi-mcp-adapter shortened is also
+ * named by the full name the adapter cut (D-PG1-08).
  */
 export function toolLiteralNames(literal: string, tool: McpToolIdentity): boolean {
   if (tool.builtinServer === undefined) {
-    return literal === tool.piName;
+    return literal === tool.piName || fittedAdapterToolName(literal) === tool.piName;
   }
 
   const prefix = claudeServerPrefix(tool.builtinServer);
