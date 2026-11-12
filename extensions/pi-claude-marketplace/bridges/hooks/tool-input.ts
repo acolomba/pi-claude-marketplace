@@ -69,10 +69,14 @@ function toHookShellInput(input: Input): Input {
 /** Gives a built-in hook Claude's single-call input while leaving custom schemas alone. */
 export function toHookToolInput(
   nativeToolName: string,
-  input: Record<string, unknown>,
+  input: unknown,
   cwd: string,
   home: string,
-): Record<string, unknown> {
+): unknown {
+  if (!record(input)) {
+    return input;
+  }
+
   if (nativeToolName === "read" || nativeToolName === "write") {
     return toHookFileInput(nativeToolName, input, cwd, home);
   }

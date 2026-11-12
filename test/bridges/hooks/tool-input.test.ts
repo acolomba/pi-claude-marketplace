@@ -107,6 +107,16 @@ describe("toHookToolInput", () => {
     // assert
     assert.strictEqual(hookInput, input);
   });
+
+  for (const input of [undefined, null, []]) {
+    test(`preserves malformed native input ${String(input)}`, () => {
+      // act
+      const hookInput = toHookToolInput("bash", input, CWD, HOME);
+
+      // assert
+      assert.strictEqual(hookInput, input);
+    });
+  }
 });
 
 describe("decodeHookToolInput", () => {
