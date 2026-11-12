@@ -36,8 +36,8 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 ## Requisitos previos
 
 - [Pi Coding Agent](https://pi.dev) 1.5.0 o posterior
-- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 o una versión 7.x posterior (opcional, `pi install npm:pi-mcp-adapter`). Admite más funciones de MCP que el MCP integrado de Pi.
+- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.87.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.1 o una versión 7.x posterior (opcional, `pi install npm:pi-mcp-adapter`). Admite más funciones de MCP que el MCP integrado de Pi.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 o posterior (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Uso

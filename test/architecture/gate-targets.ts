@@ -32,6 +32,10 @@ export const PACKAGE_JSON_REL = "package.json";
 /** The lockfile, read alongside the manifest by the peer-floor gate. */
 export const PACKAGE_LOCK_REL = "package-lock.json";
 
+/** D-PG1-02: the suite-version overrides read by all optional-peer readers. */
+export const OPTIONAL_PEER_SUITE_VERSIONS_REL =
+  "test/integration/optional-peer-suite-versions.json";
+
 /**
  * D-v1.0-01-11: the four marketplace ledger entry points. BLOCK C in `eslint.config.js`
  * keeps the ledgers from importing each other; a plugin ledger reaches
