@@ -117,6 +117,17 @@ status: complete
 - The follow-up dispatch cases assert the full name in the notice, block reason, and model context, and verify that a hook input rewrite reaches Pi's original input. Dispatch direct coverage exited 0 again.
 - All four production and test commits passed their hooks. Fallow audit reported no issues. The orchestrator owns the combined-tree npm run check wave gate.
 
+## Combined-tree wave verification
+
+The orchestrator merged plans 01-05, 01-06, and 01-07 and ran `npm run check`
+on commit `f67bb7e92f83b1aedef19e926a98dba1b6593b18`, using Node v26.13.0.
+It exited 0: all static checks, unpaired tests, integration tests, 1,804 adapter
+scenarios, 155 built-in scenarios, and direct coverage of all 354 source/test
+pairs passed. Log: `/tmp/gsd-parity-wave3-check.log`.
+
+The schema drift gate passed. The codebase drift hook reported old map references
+with directive `warn` and `spawn_mapper: false`; that hook is advisory.
+
 ## Lines for later plans
 
 A hook may spell a shortened adapter tool's full Claude Code name in a matcher or if literal. When any tool-event hook spells a full name whose adapter cut exactly matches Pi's name, every hook of that event receives the full name. Without recovery, a server prefix longer than the 55 retained characters does not match a cut name because a sibling server can share the retained text.
