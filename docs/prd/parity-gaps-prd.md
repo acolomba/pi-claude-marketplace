@@ -916,15 +916,16 @@ The "Serves" column names the requirement or the sample evidence that makes a re
 
 ### 8.3 pi-subagents
 
-| Request                                        | Unlocks                                                       | Serves                                   |
-| ---------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------- |
-| Higher or configurable advertise limits        | Three official plugins together exceed the limit of 16 agents | 18 agents in 3 official plugins          |
-| A frontmatter `maxTurns`                       | `maxTurns`                                                    | 3 of 40 agents                           |
-| An `aliases` field in `agentOverrides`         | `Explore`, `Plan`, and `general-purpose` in plugin content    | 4 files name `general-purpose`; SKILL-10 |
-| A way to load extensions in a foreground child | Plugin MCP tools and hooks in a foreground child              | The alternative to AGENT-01              |
-| A frontmatter `worktree: true` default         | `isolation: worktree`                                         | --                                       |
-| Glob support in `excludeTools`                 | `disallowedTools: mcp__*`                                     | --                                       |
-| A `local` memory scope                         | `memory: local`                                               | AGENT-04                                 |
+| Request                                                         | Unlocks                                                                      | Serves                                   |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------- |
+| Higher or configurable advertise limits                         | Three official plugins together exceed the limit of 16 agents                | 18 agents in 3 official plugins          |
+| A frontmatter `maxTurns`                                        | `maxTurns`                                                                   | 3 of 40 agents                           |
+| An `aliases` field in `agentOverrides`                          | `Explore`, `Plan`, and `general-purpose` in plugin content                   | 4 files name `general-purpose`; SKILL-10 |
+| A way to load extensions in a foreground child                  | Plugin MCP tools and hooks in a foreground child                             | The alternative to AGENT-01              |
+| Shorten granted adapter tool names as pi-mcp-adapter 7.0.1 does | An agent whose grant covers a plugin tool name over 64 characters can launch | MCP-02, BACKLOG AGTLONGNAME-01           |
+| A frontmatter `worktree: true` default                          | `isolation: worktree`                                                        | --                                       |
+| Glob support in `excludeTools`                                  | `disallowedTools: mcp__*`                                                    | --                                       |
+| A `local` memory scope                                          | `memory: local`                                                              | AGENT-04                                 |
 
 ### 8.4 pi-dynamic-workflows
 

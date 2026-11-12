@@ -11,9 +11,9 @@
 // that every adapter selector of the same agent stays unresolved.
 //
 // pi-subagents is an optional peer. The test imports its compiled
-// `src/runs/shared/mcp-direct-tool-allowlist.js` in place from the declared
-// floor in the optional peer cache. A missing or wrong-version package fails
-// the test. A run reports the proven version as a diagnostic.
+// `src/runs/shared/mcp-direct-tool-allowlist.js` in place from the suite
+// version (D-PG1-02) in the optional peer cache. A missing or wrong-version
+// package fails the test. A run reports the proven version as a diagnostic.
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
