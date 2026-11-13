@@ -4,11 +4,11 @@ milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 03
 current_phase_name: Background Subagents
-status: executing
-stopped_at: Phase 03 wave 2 verified; wave 3 next
-last_updated: "2026-11-13T17:50:35.066160+00:00"
+status: paused
+stopped_at: Paused by user during Phase 03 plan 03-05 Task 1
+last_updated: "2026-11-13T18:07:15.576Z"
 last_activity: 2026-11-13
-last_activity_desc: Phase 03 wave 2 verified; wave 3 next
+last_activity_desc: Paused by user during Phase 03 plan 03-05 Task 1
 state_head: 27987110e4a670d2a20115ab81027eec41b98148
 progress:
   total_phases: 11
@@ -31,10 +31,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 03 (Background Subagents) — EXECUTING
+Phase: 03 (Background Subagents) — PAUSED
 Plan: 5 of 8
-Status: Executing Phase 03
-Last activity: 2026-11-13 — Phase 03 wave 2 verified; wave 3 next
+Status: Paused by user; see HANDOFF.json
+Last activity: 2026-11-13 — Paused by user during Phase 03 plan 03-05 Task 1
 
 Progress: [██░░░░░░░░] 18%
 
@@ -53,8 +53,10 @@ The full `npm run check` passed at
 scenarios, 168 builtin scenarios and all 361 direct coverage pairs.
 Log: `/tmp/pg3-wave2-check.log`; 03-VALIDATION.md records the exact evidence.
 The earlier wave-1 cleanup assertion race remains resolved by `5dfe0214`.
-Wave 3 next: 03-05 success/failure identity and installed lifecycle/process
-ownership acceptance. No manual verification is requested.
+Wave 3 is paused at the user’s request. Plan 03-05 Task 1 has five staged
+files in its preserved executor worktree; commit checks were interrupted.
+See HANDOFF.json and the phase .continue-here.md before resuming. No manual
+verification is requested.
 
 ### parity-gaps Phase 2 execution
 
