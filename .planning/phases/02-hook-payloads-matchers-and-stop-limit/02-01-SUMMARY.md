@@ -118,12 +118,10 @@ status: complete
 
 ## Task Commits
 
-| Task ID | Outcome | Commit |
-| --- | --- | --- |
-| 02-01-01 | Read tracer, codec consumers, real hook proof | `97b54f08166214d3ff452efb1eec08488d269292` |
-| 02-01-02 | Write and shell codec with live scenarios | `a3ee93a2cfd320f8116b593dbc5c8eef26fa7972` |
-| 02-01-03 | Native predicate, privacy, and hostile-input cases | `a937b4cb3595fd0930838edf81a34e896ea64b1b` |
-| 02-01-03 corrective | Preserve malformed input diagnostics found by the full gate | `9fba4472dc6dbcbc9906ce2254e0e23af80bfd5b` |
+- **Task 1: 02-01-01 Read tracer, codec consumers, real hook proof**: `97b54f08166214d3ff452efb1eec08488d269292`
+- **Task 2: 02-01-02 Write and shell codec with live scenarios**: `a3ee93a2cfd320f8116b593dbc5c8eef26fa7972`
+- **Task 3: 02-01-03 Native predicate, privacy, and hostile-input cases**: `a937b4cb3595fd0930838edf81a34e896ea64b1b`
+- **Task 3: 02-01-03 corrective Preserve malformed input diagnostics found by the full gate**: `9fba4472dc6dbcbc9906ce2254e0e23af80bfd5b`
 
 ## Verification
 

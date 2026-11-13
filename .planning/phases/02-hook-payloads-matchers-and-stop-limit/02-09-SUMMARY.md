@@ -102,11 +102,9 @@ status: complete
 
 ## Task Commits
 
-| Task ID | Result | Commit |
-| --- | --- | --- |
-| 02-09-01 | Eight-continuation boundary and real nine-run scenario | `4cad302c4103625045b03f7e592b043a82fe685c` |
-| 02-09-02 | Native tool reset and ten tool-separated blocks | `4b0ac9fdc69e1335a01be08130e8f6a75c20ec5b` |
-| 02-09-03 | Reload, stale-generation, and runtime-isolation evidence | `60dc0e9beb8238abb7cfca1a9ed96f0ccd69b0ec` |
+- **Task 1: 02-09-01 Eight-continuation boundary and real nine-run scenario**: `4cad302c4103625045b03f7e592b043a82fe685c`
+- **Task 2: 02-09-02 Native tool reset and ten tool-separated blocks**: `4b0ac9fdc69e1335a01be08130e8f6a75c20ec5b`
+- **Task 3: 02-09-03 Reload, stale-generation, and runtime-isolation evidence**: `60dc0e9beb8238abb7cfca1a9ed96f0ccd69b0ec`
 
 ## Verification
 

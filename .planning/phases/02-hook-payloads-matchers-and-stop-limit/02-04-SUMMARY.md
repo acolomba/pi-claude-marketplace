@@ -117,12 +117,10 @@ status: complete
 
 ## Task Commits
 
-| Task ID | Result | Commit |
-| --- | --- | --- |
-| 02-04-01 | Shared successful result dispatch, owner regression, two real hook scenarios | `4c2eff3ab29c8332239dcdbe66f2ffa53826e24b` |
-| 02-04-02 | Failure immutability, duplicate and image cases, two real failure scenarios | `68fe3a252e95732f25ae256caf4aca58d56a8667` |
-| 02-04-03 | Plain async and rewake recording with full lifecycle comparison | `51c5675dd3b511a66997bc785fe0467acb24e3a4` |
-| 02-04-01 correction | Stop stale later-pair launches after synchronous generation change | `db6c7af1b2d9b100d5379f9a89de864249405f8b` |
+- **Task 1: 02-04-01 Shared successful result dispatch, owner regression, two real hook scenarios**: `4c2eff3ab29c8332239dcdbe66f2ffa53826e24b`
+- **Task 2: 02-04-02 Failure immutability, duplicate and image cases, two real failure scenarios**: `68fe3a252e95732f25ae256caf4aca58d56a8667`
+- **Task 3: 02-04-03 Plain async and rewake recording with full lifecycle comparison**: `51c5675dd3b511a66997bc785fe0467acb24e3a4`
+- **Task 1: 02-04-01 correction Stop stale later-pair launches after synchronous generation change**: `db6c7af1b2d9b100d5379f9a89de864249405f8b`
 
 ## Verification
 

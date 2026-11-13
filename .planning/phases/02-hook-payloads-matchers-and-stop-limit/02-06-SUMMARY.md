@@ -105,17 +105,18 @@ status: complete
 
 ## Accomplishments
 
-- Glob projects a single unambiguous path or a known empty list and native truncation facts. Grep preserves actual content and counts only an unambiguous rendered line. Multiline path displays do not become invented filename lists or counts.
+- Glob projects a single unambiguous path and native truncation facts. Grep preserves actual content and counts only an unambiguous rendered line. Multiline path displays do not become invented filename lists or counts.
 - Bash exposes its actual text/image blocks in Claude's array-typed `structuredContent`, with `interrupted: false` and an actual persisted path when supplied. PowerShell exposes only known metadata through pure contract tests. LS retains its native result.
 - Valid Glob, Grep, Bash, and PowerShell replacements render supplied text/images or intentional empties. Accepted patches clear old details and structured content; malformed values and unchanged echoes preserve the event. Output paths and URLs are never followed.
 
 ## Task Commits
 
-| Task ID | Work | Exact commit |
-| --- | --- | --- |
-| 02-06-01 | Forward projections, exact dispatch expectations, real result hooks | `85cb3b065ee35d610e63e484f2d0379df42c6836` |
-| 02-06-02 | Reverse renderer, adapter integration, model and downstream evidence | `814fe7c64d70cbd3f7b39d1cee4407437e03d778` |
-| 02-06-03 | Ambiguous display, notice, path counterexamples and transitive fixtures | `730882c3d76157574973b5f352d1186626c293e5` |
+- **Task 1: 02-06-01 Forward projections, exact dispatch expectations, real result hooks**: `85cb3b065ee35d610e63e484f2d0379df42c6836`
+- **Task 2: 02-06-02 Reverse renderer, adapter integration, model and downstream evidence**: `814fe7c64d70cbd3f7b39d1cee4407437e03d778`
+- **Task 3: 02-06-03 Ambiguous display, notice, path counterexamples and transitive fixtures**: `730882c3d76157574973b5f352d1186626c293e5`
+
+- **Task 3: Parent correction: omit ambiguous empty search claims**: `9d0631ad3133369398ca313eb0df5295a77a61f9`
+- **Task 3: Parent correction: align shell result fixtures and empty-result spacing**: `ca9148d488c966d0f70f4e8fc28ef2dc661ae8be`
 
 ## Verification
 
@@ -154,6 +155,34 @@ status: complete
 - Initial normal commit hooks caught lint and type errors in new code and tests. Each was fixed before a fresh normal commit; no hook was bypassed.
 - The test sandbox denied local sockets. Real Cucumber and the full module suite passed with ordinary elevated local-process permissions. The pinned ignored optional-peer cache was copied from the parent checkout without dependency changes.
 - ASYNCLIFECYCLE-01 / WINDOWS #114 remains open. This plan neither changes its cleanup logic nor claims the earlier exit-code symptom is resolved.
+
+## Parent Combined-Tree Verification
+
+`npm run check` exited 0 at `ca9148d488c966d0f70f4e8fc28ef2dc661ae8be`, Node v26.13.0: 1860 adapter scenarios / 22658 steps and 155 built-in scenarios / 2091 steps. Merged LCOV: coverage/direct.lcov (361 records). Log: `/tmp/pg2-wave7-check-final.log`.
+
+The parent proved a sentinel collision in Pi's native find result: no matches
+and a file literally named `No files found matching pattern` have identical
+content and details. Commit `9d0631ad` omits filenames/numFiles for that display
+while retaining supplied truncation metadata. The owner regression and a real
+file scenario both failed on the false zero count before the correction. They
+pass after it, with complete hook, downstream-handler and model assertions.
+Direct owner coverage is 100%; six focused scenarios passed all 91 steps.
+The first focused rerun caught two JSON newline escapes lost while expanding
+small example tables. Both escapes were restored before the successful run.
+Five existing file/search/Bash examples now use concrete scenarios because the
+cucumber skill requires three or more variants in an Outline. No case was lost.
+Fallow audit and review passed, and the normal commit hook passed.
+
+The first full gate at `9d0631ad` passed 1,854/1,860 adapter scenarios, then
+failed on four stale Bash result assertions and two empty-result helper checks.
+The old Bash replacement fixture also needed the Claude stdout field. Commit
+`ca9148d4` migrates those exact fixtures and preserves the separator space in
+the empty-result helper. The full tool-use feature then passed 56 scenarios /
+840 steps (seed 891435, `/tmp/pg2-wave7-tool-use-fixed.log`). The normal commit
+hook and Fallow audit/review passed. The successful full gate above includes
+both parent corrections. Two additional empty-output examples became concrete
+scenarios without changing their cases. The first failed gate is retained in
+`/tmp/pg2-wave7-check.log` and the GSD failure ledger.
 
 ## Threat Flags
 

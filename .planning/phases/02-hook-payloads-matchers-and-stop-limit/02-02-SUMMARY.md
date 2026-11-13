@@ -95,13 +95,13 @@ status: complete
 
 ## Task Commits
 
-| Task ID | Task | Commit |
-| --- | --- | --- |
-| 02-02-01 | Translate equivalent Glob and Grep requests on the live hook path | `c69bf7affbaea9fb648777ce0247b65a8e294930` |
-| 02-02-02 | Send translated input to successful result hooks | `f5d604718b0cfd60e7c3e7cb2478e41cca9f0651` |
-| 02-02-03 | Carry the same input contract through failure and background payload construction | `45317714112907adbb3930cf06744deb509a4713` |
+- **Task 1: 02-02-01 Translate equivalent Glob and Grep requests on the live hook path**: `c69bf7affbaea9fb648777ce0247b65a8e294930`
+- **Task 2: 02-02-02 Send translated input to successful result hooks**: `f5d604718b0cfd60e7c3e7cb2478e41cca9f0651`
+- **Task 3: 02-02-03 Carry the same input contract through failure and background payload construction**: `45317714112907adbb3930cf06744deb509a4713`
 
 Each task was committed separately with normal commit hooks. The three commits are measured from `plan_head_before` through `plan_head_after`.
+
+- **Task 2: Parent correction: translate the skill Read input assertion**: `a7f869eba28b3432d27272ea89d59c6e724c4379`
 
 ## Verification
 

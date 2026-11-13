@@ -108,12 +108,10 @@ status: complete
 
 ## Task Commits
 
-| Task ID | Work | Commit |
-| --- | --- | --- |
-| 02-08-01 | Parse and execute exact lists | `723b07b4c2bf1f9741f2c1e4bf21406e564776df` |
-| 02-08-02 | Admit and execute whole-pattern regexes | `defaf7f8b6da0ab558f4f4cf1b0fb5a1af4785ed` |
-| 02-08-03 | Ignore prompt and Stop matchers before admission and after reload | `34d04ed5deda2845b298440e9ec924c3427656c3` |
-| 02-08-01 follow-up | Record Read, Write, Edit, and Bash stdin in the installed-hook scenario | `aea81984b158d00c9f4551220c7add6f27d3ecd9` |
+- **Task 1: 02-08-01 Parse and execute exact lists**: `723b07b4c2bf1f9741f2c1e4bf21406e564776df`
+- **Task 2: 02-08-02 Admit and execute whole-pattern regexes**: `defaf7f8b6da0ab558f4f4cf1b0fb5a1af4785ed`
+- **Task 3: 02-08-03 Ignore prompt and Stop matchers before admission and after reload**: `34d04ed5deda2845b298440e9ec924c3427656c3`
+- **Task 1: 02-08-01 follow-up Record Read, Write, Edit, and Bash stdin in the installed-hook scenario**: `aea81984b158d00c9f4551220c7add6f27d3ecd9`
 
 ## Files Created or Modified
 

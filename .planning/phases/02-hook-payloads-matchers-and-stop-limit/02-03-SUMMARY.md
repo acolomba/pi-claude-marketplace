@@ -130,11 +130,11 @@ status: complete
 
 ## Task Commits
 
-| Task ID | Result | Commit |
-| --- | --- | --- |
-| 02-03-01 | Per-pair transaction, pure batch decision, fixture, and first two real hook scenarios | `1e07d0645248cf08fcec54d5f7c697c6cb32358f` |
-| 02-03-02 | Three actual-hook later-pair decision scenarios | `e9cf74c5a520721c86c316cea144b536d0444ddb` |
-| 02-03-03 | Null-input guard, ordering and original-predicate tests, and three target-conflict scenarios | `8964fa708ba63a3172ace1b9c2e607d9713160d4` |
+- **Task 1: 02-03-01 Per-pair transaction, pure batch decision, fixture, and first two real hook scenarios**: `1e07d0645248cf08fcec54d5f7c697c6cb32358f`
+- **Task 2: 02-03-02 Three actual-hook later-pair decision scenarios**: `e9cf74c5a520721c86c316cea144b536d0444ddb`
+- **Task 3: 02-03-03 Null-input guard, ordering and original-predicate tests, and three target-conflict scenarios**: `8964fa708ba63a3172ace1b9c2e607d9713160d4`
+
+- **Task 3: Parent correction: translate the matcher Edit input assertion**: `f382b6bf61158cf020970c5cebbe95fa0140cdcc`
 
 ## Verification
 

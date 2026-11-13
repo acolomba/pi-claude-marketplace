@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 02
 current_phase_name: Hook Payloads, Matchers, and Stop Limit
 status: executing
-stopped_at: parity-gaps Phase 2 wave 6 verified; wave 7 next
-last_updated: "2026-11-13T06:45:44.587403+00:00"
+stopped_at: parity-gaps Phase 2 wave 7 verified; wave 8 next
+last_updated: "2026-11-13T08:04:29.440687+00:00"
 last_activity: 2026-11-13
-last_activity_desc: Phase 02 wave 6 verified; 7 of 10 plans complete
-state_head: a01d79d6026c543efe1f2abfe82d92f99ca38f19
+last_activity_desc: Phase 02 wave 7 verified; 8 of 10 plans complete
+state_head: ca9148d488c966d0f70f4e8fc28ef2dc661ae8be
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 21
-  completed_plans: 18
+  completed_plans: 19
   percent: 9
 ---
 
@@ -32,24 +32,40 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 02 (Hook Payloads, Matchers, and Stop Limit) — EXECUTING
-Plan: 7 of 10 complete; 02-06 next
+Plan: 8 of 10 complete; 02-07 next
 Status: Executing Phase 02
-Last activity: 2026-11-13 — Phase 02 wave 6 verified
+Last activity: 2026-11-13 — Phase 02 wave 7 verified
 
 Progress: [█░░░░░░░░░] 9%
 
 
 ### parity-gaps Phase 2 execution
 
-Waves 1–6 (02-01, 02-02, 02-08, 02-09, 02-03, 02-04, 02-05) are merged and verified.
-The latest `npm run check` exited 0 on the clean combined tree at
-`a01d79d6026c543efe1f2abfe82d92f99ca38f19`, Node v26.13.0: 1,854 adapter
-scenarios (22,567 steps), 155 built-in scenarios (2,091 steps), and 359
-direct-coverage pairs. Log: `/tmp/pg2-wave6-check-lifecycle-fixed.log`. Wave 7 is
-search/shell result translation and reverse replacement (02-06).
+Waves 1–7 (02-01, 02-02, 02-08, 02-09, 02-03, 02-04, 02-05, 02-06) are merged and verified.
+`npm run check` exited 0 at `ca9148d488c966d0f70f4e8fc28ef2dc661ae8be`, Node v26.13.0: 1860 adapter scenarios / 22658 steps and 155 built-in scenarios / 2091 steps. Merged LCOV: coverage/direct.lcov (361 records). Log: `/tmp/pg2-wave7-check-final.log`.
+Wave 8 is MCP/custom result translation and legacy output alias support (02-07).
 PG-HOOK-01 remains in progress; matcher and Stop plans cover PG-HOOK-03/13.
 The Stop checks observed eight continuations before ninth override, ten
 tool-separated blocks with no cap notice, and a fresh eight after reload.
+
+Wave 7 projects available search/shell result facts and renders validated
+replacements. Real model and downstream checks cover search text, shell images,
+intentional empties and notice-like source content. The parent proved that Pi
+returns the same display for no Glob matches and a real filename equal to its
+empty notice. Commit `9d0631ad` omits the uncertain filenames/count. The owner
+and real-file regressions failed before the correction and passed afterwards;
+all six focused scenarios (91 steps) and direct owner coverage passed. Five
+small example tables became concrete scenarios under the cucumber rules.
+The first full gate caught four stale Bash response assertions and two empty
+result helper spacing failures. Commit `ca9148d4` corrects these fixtures;
+all 56 tool-use scenarios (840 steps) and the subsequent full gate passed.
+Two additional empty-output examples became concrete scenarios too.
+Scope additions for the existing observer step and stale Bash dispatch fixtures
+were necessary. Schema drift is clear; codebase drift remains advisory.
+All eight task-commit sections now use the canonical list format. GSD resolves
+35 exact task/correction commits from them with no files outside their union.
+Its separate plan lookup still requires forbidden GSD IDs in commit subjects;
+recorded task SHA ancestry is checked directly under the project policy.
 
 Wave 6 projects available Read, Edit and Write facts and renders validated
 replacements. Real downstream-handler and model checks cover complete text/image
@@ -1065,6 +1081,6 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-12T20:03:13Z
-Stopped at: parity-gaps Phase 2 plans verified; execution next
+Last session: 2026-11-13T08:05:18.829651+00:00
+Stopped at: parity-gaps Phase 2 wave 7 verified; wave 8 next
 Resume file: None

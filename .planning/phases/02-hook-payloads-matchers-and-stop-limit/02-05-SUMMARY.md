@@ -109,14 +109,16 @@ status: complete
 
 ## Task Commits
 
-| Task ID | Work | Commit |
-| --- | --- | --- |
-| 02-05-01 | Project file result facts and owner tests | `aa0906b088f1d5cecda8c7b030ac868f8810a377` |
-| 02-05-02 | Render replacements and clear stale output | `c8e4433cebd61fac480ee9b20576ad579d4b4408` |
-| 02-05-03 | Observe real downstream results and update affected fixtures | `876dbfab8797fe3997340eecbf46bb89bb0c0545` |
-| 02-05-03 follow-up | Correct the remaining skill Read replacement fixture | `f8fce88299a00d9e4b8776b54ce8cb71631bf990` |
+- **Task 1: 02-05-01 Project file result facts and owner tests**: `aa0906b088f1d5cecda8c7b030ac868f8810a377`
+- **Task 2: 02-05-02 Render replacements and clear stale output**: `c8e4433cebd61fac480ee9b20576ad579d4b4408`
+- **Task 3: 02-05-03 Observe real downstream results and update affected fixtures**: `876dbfab8797fe3997340eecbf46bb89bb0c0545`
+- **Task 3: 02-05-03 follow-up Correct the remaining skill Read replacement fixture**: `f8fce88299a00d9e4b8776b54ce8cb71631bf990`
 
 The frontmatter commit count measures `plan_head_before..plan_head_after`: four task commits plus the first committed summary. This final evidence correction is committed separately without rewriting history.
+
+- **Task 3: Parent correction: preserve incomplete result envelopes**: `78a9502ca400019ef8964e2f5c3cbd2beaa921c1`
+- **Task 3: Parent correction: translate the background Read result assertion**: `963f3459aa810fe6a9d04cc04ed6b0bbe7f27a0e`
+- **Task 3: Parent correction: stop owned registered hook children before fixture reset**: `a01d79d6026c543efe1f2abfe82d92f99ca38f19`
 
 ## Verification
 
