@@ -18,7 +18,9 @@
  * key. Its environment is the harness allowlist, which holds no provider
  * credential and no base address, and Pi runs offline. The provider answers
  * a request with the next tool call of the script whose marker the request's
- * last user text holds, and with the text `Done.` past it. It keeps each
+ * last user text holds, and with the text `Done.` past it. A marker is a
+ * bracketed token looked up whole, so an agent whose name begins with
+ * another agent's name never gets that agent's script. It keeps each
  * request's last user text and tool names, never a system prompt or a
  * header.
  *
@@ -114,7 +116,10 @@ const MCP_SERVER = "stub";
 const MCP_TOOL = `mcp__plugin_${PLUGIN}_${MCP_SERVER}__echo`;
 
 /** The marker of the main Pi's prompt that runs a tool in the main session. */
-const MAIN_CONTROL_PROMPT = "pg3-main-control";
+const MAIN_CONTROL_PROMPT = "[pg3-main-control]";
+
+/** The first marker of a text: a bracketed token, read whole. */
+const MARKER_PATTERN = /\[pg3-[^\]]+\]/u;
 
 const DETACHED_STATES: ReadonlySet<string> = new Set([
   "complete",
@@ -211,7 +216,8 @@ export interface RealChildVersions {
 
 /** What pi-subagents reported about the child of one agent. */
 export interface DetachedChildObservation {
-  readonly agent: string;
+  /** The agent pi-subagents recorded that it ran, not the one the run asked for. */
+  readonly agent: string | undefined;
   /** How pi-subagents ran it: in its detached runner, or in the main Pi's turn. */
   readonly mode: "background" | "foreground";
   readonly state: string | undefined;
@@ -319,15 +325,15 @@ function messageText(content: unknown): string {
     : "";
 }
 
-// The step for `messages`: of the script whose marker the last user text
-// holds, the one at the number of tool results after that text.
+// The step for `messages`: of the script whose marker is the first marker of
+// the last user text, the one at the number of tool results after that text.
 function scriptedStep(
   script: ReadonlyMap<string, readonly ScriptedToolCall[]>,
   messages: readonly ProviderMessage[],
 ): ScriptedToolCall | undefined {
   const userAt = lastUserIndex(messages);
-  const text = messageText(messages[userAt]?.content);
-  const steps = [...script].find(([marker]) => text.includes(marker))?.[1];
+  const marker = MARKER_PATTERN.exec(messageText(messages[userAt]?.content))?.[0];
+  const steps = marker === undefined ? undefined : script.get(marker);
   const index = messages.slice(userAt + 1).filter((message) => message.role === "tool").length;
   return steps?.[index];
 }
@@ -416,12 +422,12 @@ async function startProvider(
 
 /** The marker of the main Pi's prompt that launches the agent `agent`. */
 function launchMarker(agent: string): string {
-  return `pg3-launch-${agent}`;
+  return `[pg3-launch-${agent}]`;
 }
 
 /** The marker of the task that the child of `agent` gets. */
 function taskMarker(agent: string): string {
-  return `pg3-task-${agent}`;
+  return `[pg3-task-${agent}]`;
 }
 
 function agentText(agent: RealChildAgent): string {
@@ -758,6 +764,16 @@ async function sessionIdOf(file: string): Promise<string | undefined> {
   return parsed.type === "session" && typeof parsed.id === "string" ? parsed.id : undefined;
 }
 
+// The agent a step of pi-subagents' status, or a result of its tool, names.
+function recordedAgent(step: unknown): string | undefined {
+  return typeof step === "object" &&
+    step !== null &&
+    "agent" in step &&
+    typeof step.agent === "string"
+    ? step.agent
+    : undefined;
+}
+
 // Reads a detached child's status until it ends, then waits for its runner
 // to exit, and returns what pi-subagents recorded of it.
 async function detachedChild(agent: string, asyncDir: string): Promise<DetachedChildObservation> {
@@ -782,7 +798,7 @@ async function detachedChild(agent: string, asyncDir: string): Promise<DetachedC
   const steps = Array.isArray(status.steps) ? (status.steps as Record<string, unknown>[]) : [];
   const sessionFile = steps[0]?.sessionFile;
   return {
-    agent,
+    agent: recordedAgent(steps[0]),
     mode: "background",
     state: String(status.state),
     pid,
@@ -791,7 +807,8 @@ async function detachedChild(agent: string, asyncDir: string): Promise<DetachedC
 }
 
 // Has the main Pi's model call `subagent` for `agent`, and returns what
-// pi-subagents reported of the child once the main Pi settled.
+// pi-subagents reported of the child once the main Pi settled. A foreground
+// child's agent is the one the tool result names.
 async function launchChild(run: MainRun, agent: string): Promise<DetachedChildObservation> {
   const from = await promptMain(run, launchMarker(agent), CHILD_TIMEOUT_MS);
   const launched = run.pi
@@ -799,11 +816,12 @@ async function launchChild(run: MainRun, agent: string): Promise<DetachedChildOb
     .find((record) => record.type === "tool_execution_end" && record.toolName === "subagent");
   const result = launched?.result as { readonly details?: Record<string, unknown> } | undefined;
   const asyncDir = result?.details?.asyncDir;
+  const results = result?.details?.results;
   const child =
     typeof asyncDir === "string"
       ? await detachedChild(agent, asyncDir)
       : {
-          agent,
+          agent: recordedAgent(Array.isArray(results) ? (results[0] as unknown) : undefined),
           mode: "foreground" as const,
           state: undefined,
           pid: undefined,

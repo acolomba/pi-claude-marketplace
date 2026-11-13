@@ -408,7 +408,7 @@ When(
     });
     const sessions = observed.children.map(({ agent, mode, state, sessionId, pid }) => ({
       generation: 1,
-      agent,
+      agent: agent ?? "",
       mode,
       state: state ?? "",
       sessionId,
@@ -526,6 +526,7 @@ Then(
 
 // The runner's pid differs on every run, so a row states whether pi-subagents
 // recorded one for the child, and its session by its launch-order ordinal.
+// The agent is the one pi-subagents recorded that it ran.
 Then(
   "pi-subagents ran the real children like this:",
   function (this: ScenarioWorld, table: DataTable) {

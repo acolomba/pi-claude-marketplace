@@ -85,27 +85,27 @@ Feature: Agent frontmatter
   @mcp
   Scenario: Explicit background and MCP grants keep a child in the background
     When pi-subagents, with its async-by-default setting false, launches from a main pi session a real child of each of these agents of a plugin with a stub mcp server, whose hooks record every event and whose stop hook would send a main session back:
-      | name    | background | tools                       | tool calls         |
-      | runner  | true       | Bash, Read                  | bash, failing read |
-      | granted |            | mcp__plugin_demo_stub__echo | stub mcp tool      |
-      | forced  | false      | mcp__plugin_demo_stub__echo | stub mcp tool      |
-      | plain   |            | Bash                        | bash               |
+      | name          | background | tools                       | tool calls         |
+      | runner        | true       | Bash, Read                  | bash, failing read |
+      | granted       |            | mcp__plugin_demo_stub__echo | stub mcp tool      |
+      | granted-false | false      | mcp__plugin_demo_stub__echo | stub mcp tool      |
+      | plain         |            | Bash                        | bash               |
     Then pi-subagents ran the real children like this:
-      | agent        | mode       | state    | runner process | session |
-      | demo:runner  | background | complete | recorded       | first   |
-      | demo:granted | background | complete | recorded       | second  |
-      | demo:forced  | background | complete | recorded       | third   |
-      | demo:plain   | foreground |          | none           |         |
+      | agent              | mode       | state    | runner process | session |
+      | demo:runner        | background | complete | recorded       | first   |
+      | demo:granted       | background | complete | recorded       | second  |
+      | demo:granted-false | background | complete | recorded       | third   |
+      | demo:plain         | foreground |          | none           |         |
     Then the real children's hooks record these runs in any order, and no main-session run names a child:
-      | session | event              | tool name                   | agent type   | agent id |
-      | first   | PreToolUse         | Bash                        | demo:runner  | first    |
-      | first   | PostToolUse        | Bash                        | demo:runner  | first    |
-      | first   | PreToolUse         | Read                        | demo:runner  | first    |
-      | first   | PostToolUseFailure | Read                        | demo:runner  | first    |
-      | second  | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted | second   |
-      | second  | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted | second   |
-      | third   | PreToolUse         | mcp__plugin_demo_stub__echo | demo:forced  | third    |
-      | third   | PostToolUse        | mcp__plugin_demo_stub__echo | demo:forced  | third    |
+      | session | event              | tool name                   | agent type         | agent id |
+      | first   | PreToolUse         | Bash                        | demo:runner        | first    |
+      | first   | PostToolUse        | Bash                        | demo:runner        | first    |
+      | first   | PreToolUse         | Read                        | demo:runner        | first    |
+      | first   | PostToolUseFailure | Read                        | demo:runner        | first    |
+      | second  | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted       | second   |
+      | second  | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted       | second   |
+      | third   | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted-false | third    |
+      | third   | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted-false | third    |
 
   Scenario: Effort levels are listed as the thinking levels pi-subagents runs
     Given pi runs with the scripted model and these companions:
