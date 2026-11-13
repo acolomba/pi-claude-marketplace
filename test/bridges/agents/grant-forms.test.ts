@@ -7,10 +7,10 @@ import type { GrantFormInput } from "../../../extensions/pi-claude-marketplace/b
 import type { RawAgentFrontmatter } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 const ADAPTER_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails";
+  "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails";
 
 const BUILTIN_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before Pi's built-in MCP has listed the server's tools still fails";
+  "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails";
 
 const BODY = "\nBody content.\n";
 

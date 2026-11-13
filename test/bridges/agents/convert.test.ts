@@ -18,10 +18,10 @@ import type {
 import type { McpImplementationId } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 
 const MCP_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails";
+  "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails";
 
 const BUILTIN_MCP_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before Pi's built-in MCP has listed the server's tools still fails";
+  "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails";
 
 const EXCLUDE_TOOLS_FLOOR_WARNING =
   "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set";
