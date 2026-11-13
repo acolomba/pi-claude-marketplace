@@ -28,6 +28,7 @@ import type { HookToolView } from "../../../extensions/pi-claude-marketplace/bri
 import type { ClaudeSessionEndEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { McpToolIdentity } from "../../../extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts";
 import type {
@@ -4842,6 +4843,313 @@ test("native Read path condition selects a hook before its input is translated",
   ]);
   assert.deepStrictEqual(event, createToolCallEvent("read", { path: "original.txt" }));
 });
+
+test("native edit runs a hook for each pair before replacing one batch", async () => {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket(
+    "PreToolUse",
+    builtinToolEntries("PreToolUse", [{ pluginId: "rewrite", rawMatcher: "Edit" }]),
+  );
+  const input = {
+    path: "document.txt",
+    edits: [
+      { oldText: "first", newText: "one" },
+      { oldText: "second", newText: "two" },
+    ],
+  };
+  const event = createToolCallEvent("edit", input);
+  const received: unknown[] = [];
+  const handler = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    (_entry, pairEvent) => {
+      received.push(structuredClone(pairEvent));
+      assert.deepStrictEqual(input.edits, [
+        { oldText: "first", newText: "one" },
+        { oldText: "second", newText: "two" },
+      ]);
+      const pair = editInput(pairEvent as ToolCallEvent);
+      return Promise.resolve(
+        pair.old_string === "first"
+          ? {
+              kind: "mutate",
+              updatedInput: {
+                file_path: "/workspace/edit/document.txt",
+                old_string: "first",
+                new_string: "ONE",
+              },
+            }
+          : { kind: "noop" },
+      );
+    },
+  );
+
+  assert.strictEqual(await handler(event, createExtensionContext("/workspace/edit")), undefined);
+  assert.deepStrictEqual(received, [
+    createToolCallEvent("edit", {
+      file_path: "/workspace/edit/document.txt",
+      old_string: "first",
+      new_string: "one",
+    }),
+    createToolCallEvent("edit", {
+      file_path: "/workspace/edit/document.txt",
+      old_string: "second",
+      new_string: "two",
+    }),
+  ]);
+  assert.deepStrictEqual(event.input, {
+    path: "/workspace/edit/document.txt",
+    edits: [
+      { oldText: "first", newText: "ONE" },
+      { oldText: "second", newText: "two" },
+    ],
+  });
+});
+
+function editPreflight(
+  decide: (
+    input: Record<string, unknown>,
+    runtime: HooksRuntime,
+  ) => HookExecResult | Promise<HookExecResult>,
+  input: Record<string, unknown> = {
+    path: "document.txt",
+    edits: [
+      { oldText: "first", newText: "one" },
+      { oldText: "second", newText: "two" },
+    ],
+  },
+  ctx = createExtensionContext("/workspace/edit"),
+) {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket(
+    "PreToolUse",
+    builtinToolEntries("PreToolUse", [{ pluginId: "guard", rawMatcher: "Edit" }]),
+  );
+  const received: string[] = [];
+  const event = createToolCallEvent("edit", input);
+  const handler = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    (_entry, pairEvent) => {
+      const pairInput = editInput(pairEvent as ToolCallEvent);
+      received.push(String(pairInput.old_string));
+      return Promise.resolve(decide(pairInput, runtime));
+    },
+  );
+  return { runtime, event, handler, received, ctx };
+}
+
+function editInput(event: ToolCallEvent): Record<string, unknown> {
+  return event.input;
+}
+
+function deferred<T>() {
+  let resolve: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  assert.ok(resolve);
+  return { promise, resolve };
+}
+
+test("zero and malformed edit pairs leave native validation and input intact", async () => {
+  for (const edits of [[], [null], [{ oldText: 1, newText: "two" }]]) {
+    const input = { path: "document.txt", edits };
+    const run = editPreflight(() => ({ kind: "noop" }), input);
+    assert.strictEqual(await run.handler(run.event, run.ctx), undefined);
+    assert.deepStrictEqual(run.received, []);
+    assert.deepStrictEqual(run.event.input, input);
+  }
+});
+
+test("a later edit stop dominates a prior rewrite without changing the native input", async () => {
+  const run = editPreflight((input) =>
+    input.old_string === "first"
+      ? {
+          kind: "mutate",
+          updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+        }
+      : { kind: "stop", stopReason: "stop edit" },
+  );
+  assert.deepStrictEqual(await run.handler(run.event, run.ctx), {
+    block: true,
+    reason: "stop edit",
+    terminate: true,
+  });
+  assert.deepStrictEqual(run.received, ["first", "second"]);
+  assert.deepStrictEqual(editInput(run.event).edits, [
+    { oldText: "first", newText: "one" },
+    { oldText: "second", newText: "two" },
+  ]);
+});
+
+test("a later edit block dominates a prior rewrite", async () => {
+  const run = editPreflight((input) =>
+    input.old_string === "first"
+      ? {
+          kind: "mutate",
+          updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+        }
+      : { kind: "block", reason: "deny edit" },
+  );
+  assert.deepStrictEqual(await run.handler(run.event, run.ctx), {
+    block: true,
+    reason: "PreToolUse:Edit hook error: deny edit",
+  });
+  assert.deepStrictEqual(run.received, ["first", "second"]);
+  assert.strictEqual((editInput(run.event).edits as { newText: string }[])[0]?.newText, "one");
+});
+
+test("an edit ask rejection blocks before any pair rewrite", async () => {
+  const run = editPreflight((input) =>
+    input.old_string === "first"
+      ? {
+          kind: "mutate",
+          updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+        }
+      : { kind: "mutate", permissionDecision: "ask", permissionDecisionReason: "approve edit?" },
+  );
+  assert.deepStrictEqual(await run.handler(run.event, run.ctx), {
+    block: true,
+    reason: "approve edit?",
+  });
+  assert.strictEqual((editInput(run.event).edits as { newText: string }[])[0]?.newText, "one");
+});
+
+test("conflicting edit targets block even when an unsupported proposal follows", async () => {
+  const run = editPreflight((input) =>
+    input.old_string === "first"
+      ? {
+          kind: "mutate",
+          updatedInput: { file_path: "other.txt", old_string: "first", new_string: "ONE" },
+        }
+      : {
+          kind: "mutate",
+          updatedInput: {
+            file_path: "document.txt",
+            old_string: "second",
+            new_string: "TWO",
+            replace_all: true,
+          },
+        },
+  );
+  assert.deepStrictEqual(await run.handler(run.event, run.ctx), {
+    block: true,
+    reason: "PreToolUse:Edit hook error: conflicting edit targets",
+  });
+  assert.strictEqual(editInput(run.event).path, "document.txt");
+});
+
+test("an unsupported later rewrite discards a supported earlier edit rewrite", async () => {
+  const run = editPreflight((input) =>
+    input.old_string === "first"
+      ? {
+          kind: "mutate",
+          updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+        }
+      : {
+          kind: "mutate",
+          updatedInput: {
+            file_path: "document.txt",
+            old_string: "second",
+            new_string: "TWO",
+            replace_all: true,
+          },
+        },
+  );
+  assert.strictEqual(await run.handler(run.event, run.ctx), undefined);
+  assert.strictEqual(editInput(run.event).path, "document.txt");
+  assert.strictEqual((editInput(run.event).edits as { newText: string }[])[0]?.newText, "one");
+});
+
+test("a batch with no edit rewrite keeps native input unchanged", async () => {
+  const run = editPreflight(() => ({ kind: "noop" }));
+  assert.strictEqual(await run.handler(run.event, run.ctx), undefined);
+  assert.strictEqual(editInput(run.event).path, "document.txt");
+});
+
+test("reload during an edit hook cannot commit a stale rewrite", async () => {
+  const pending = deferred<HookExecResult>();
+  const run = editPreflight(() => pending.promise);
+  const completion = run.handler(run.event, run.ctx);
+  run.runtime.advanceGeneration();
+  pending.resolve({
+    kind: "mutate",
+    updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+  });
+  assert.strictEqual(await completion, undefined);
+  assert.strictEqual(editInput(run.event).path, "document.txt");
+});
+
+test("cancellation during an edit hook cannot commit a rewrite", async () => {
+  const pending = deferred<HookExecResult>();
+  const controller = new AbortController();
+  const ctx = Object.defineProperty(createExtensionContext("/workspace/edit"), "signal", {
+    value: controller.signal,
+  });
+  const run = editPreflight(() => pending.promise, undefined, ctx);
+  const completion = run.handler(run.event, run.ctx);
+  controller.abort();
+  pending.resolve({
+    kind: "mutate",
+    updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+  });
+  assert.strictEqual(await completion, undefined);
+  assert.strictEqual(editInput(run.event).path, "document.txt");
+});
+
+for (const invalidation of ["reload", "cancellation"] as const) {
+  test(`${invalidation} while an edit ask awaits cannot commit a rewrite`, async () => {
+    const answer = deferred<boolean>();
+    const asked = deferred<undefined>();
+    const controller = new AbortController();
+    const ctx = Object.defineProperties(createExtensionContext("/workspace/edit"), {
+      mode: { value: "tui" },
+      signal: { value: controller.signal },
+      ui: {
+        get: () => ({
+          confirm: () => {
+            asked.resolve(undefined);
+            return answer.promise;
+          },
+        }),
+      },
+    });
+    const run = editPreflight(
+      (input) =>
+        input.old_string === "first"
+          ? {
+              kind: "mutate",
+              permissionDecision: "ask",
+              updatedInput: {
+                file_path: "document.txt",
+                old_string: "first",
+                new_string: "ONE",
+              },
+            }
+          : { kind: "noop" },
+      undefined,
+      ctx,
+    );
+    const completion = run.handler(run.event, run.ctx);
+    await asked.promise;
+    if (invalidation === "reload") {
+      run.runtime.advanceGeneration();
+    } else {
+      controller.abort();
+    }
+
+    answer.resolve(true);
+    assert.strictEqual(await completion, undefined);
+    assert.strictEqual(editInput(run.event).path, "document.txt");
+  });
+}
 
 describe("built-in MCP tool names (MHK-01)", () => {
   test("gives the adapter's full name to every PreToolUse hook when one spells it (D-PG1-08)", async () => {

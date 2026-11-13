@@ -101,6 +101,8 @@ export interface RecordingHook {
   readonly form?: RecordingHookForm;
   readonly arguments?: readonly string[];
   readonly output?: string;
+  readonly whenOldString?: string;
+  readonly matchedOutput?: string;
   readonly outputBytes?: number;
   readonly trailingOutput?: string;
   readonly stderr?: string;
@@ -132,6 +134,8 @@ const SCRIPT_FORMS: ReadonlySet<RecordingHookForm | undefined> = new Set<Recordi
 // The fields only a script can act on, by the column that sets each.
 const BEHAVIOR_FIELDS = {
   output: "output",
+  "when old string": "whenOldString",
+  "matched output": "matchedOutput",
   "output bytes": "outputBytes",
   "trailing output": "trailingOutput",
   stderr: "stderr",
@@ -213,6 +217,8 @@ const COLUMN_PARSERS: Readonly<Record<string, (cell: string) => Partial<Recordin
   form: (cell) => ({ form: oneOf(cell, FORMS, "a hook form") }),
   arguments: (cell) => ({ arguments: parseArguments(cell) }),
   output: (cell) => ({ output: cell }),
+  "when old string": (cell) => ({ whenOldString: cell }),
+  "matched output": (cell) => ({ matchedOutput: cell }),
   "output bytes": (cell) => ({ outputBytes: parseByteCount(cell) }),
   "trailing output": (cell) => ({ trailingOutput: cell }),
   stderr: (cell) => ({ stderr: cell }),
@@ -402,7 +408,9 @@ function afterRecording(hook: RecordingHook): string[] {
       ? [`case "$stdin" in *'"stop_hook_active":true'*) exit 0 ;; esac`]
       : []),
     ...(hook.stderr === undefined ? [] : [`printf '%s' ${shellQuoted(hook.stderr)} >&2`]),
-    ...(hook.output === undefined ? [] : [`printf '%s' ${shellQuoted(hook.output)}`]),
+    ...(hook.output === undefined || hook.whenOldString !== undefined
+      ? []
+      : [`printf '%s' ${shellQuoted(hook.output)}`]),
     ...(hook.outputBytes === undefined
       ? []
       : [String.raw`head -c ${hook.outputBytes} /dev/zero | tr '\0' x`]),
@@ -420,7 +428,11 @@ function afterRecording(hook: RecordingHook): string[] {
 function scriptText(hook: RecordingHook): string {
   const meeting = hook.meets === undefined ? [] : meetingLines(hook.name, hook.meets);
   const marker = hook.meets === undefined ? "" : ' "$meeting"';
-  const recorder = `"${process.execPath}" "${HOOK_RECORDER_PATH}" ${hook.name}${marker} "$@"`;
+  const conditional =
+    hook.whenOldString === undefined
+      ? ""
+      : `HOOK_WHEN_OLD_STRING=${shellQuoted(hook.whenOldString)} HOOK_MATCHED_OUTPUT=${shellQuoted(hook.matchedOutput ?? "")} HOOK_DEFAULT_OUTPUT=${shellQuoted(hook.output ?? "")} `;
+  const recorder = `${conditional}"${process.execPath}" "${HOOK_RECORDER_PATH}" ${hook.name}${marker} "$@"`;
   return `${[
     "#!/bin/sh",
     // An ignored signal stays ignored in every command the script runs.

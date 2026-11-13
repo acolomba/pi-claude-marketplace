@@ -81,6 +81,16 @@ Then(
   },
 );
 
+Then(
+  "the project file {string} has the text {string} after a tool hook",
+  async function (this: ScenarioWorld, name: string, text: string) {
+    assert.strictEqual(
+      await readFile(path.join(this.tokens.projectDir, name), "utf8"),
+      text.replaceAll("\\n", "\n"),
+    );
+  },
+);
+
 // Pi's `mcp.json` with the one server `server`, which runs the hooks' stub MCP
 // tool server with this process's Node and offers the tool `tool`.
 function piMcpText(server: string, tool: string): string {

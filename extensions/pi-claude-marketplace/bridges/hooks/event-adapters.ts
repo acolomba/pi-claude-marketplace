@@ -139,7 +139,10 @@ function attributedCommand(context: HookAdapterContext): string {
  * data property so even a prototype-looking key cannot change the target's
  * prototype.
  */
-function replaceToolCallInput(event: ToolCallEvent, updatedInput: Record<string, unknown>): void {
+export function replaceToolCallInput(
+  event: ToolCallEvent,
+  updatedInput: Record<string, unknown>,
+): void {
   const target = event.input as Record<string, unknown>;
   for (const key of Object.keys(target)) {
     Reflect.deleteProperty(target, key);
@@ -240,21 +243,34 @@ async function adaptToolCallMutation(
       if (decoded.input !== event.input) {
         replaceToolCallInput(event, decoded.input);
       }
-    } else if (context.pi !== undefined) {
-      try {
-        const run = openNotificationRun(context.pi, { kind: "hook" });
-        notifyHookNotice(
-          context.ctx,
-          run,
-          `PreToolUse:${mapPiToClaudeToolName(event.toolName)} ignored input rewrite (${decoded.category})`,
-        );
-      } catch (error: unknown) {
-        hookDebugLog(`adaptToolCall: ignored rewrite notice failed: ${errorMessage(error)}`);
-      }
+    } else {
+      notifyIgnoredToolInputRewrite(event, context, decoded.category);
     }
   }
 
   return undefined;
+}
+
+/** Reports a discarded rewrite without exposing its input values. */
+export function notifyIgnoredToolInputRewrite(
+  event: ToolCallEvent,
+  context: HookAdapterContext,
+  category: "shape" | "field" | "value",
+): void {
+  if (context.pi === undefined) {
+    return;
+  }
+
+  try {
+    const run = openNotificationRun(context.pi, { kind: "hook" });
+    notifyHookNotice(
+      context.ctx,
+      run,
+      `PreToolUse:${mapPiToClaudeToolName(event.toolName)} ignored input rewrite (${category})`,
+    );
+  } catch (error: unknown) {
+    hookDebugLog(`adaptToolCall: ignored rewrite notice failed: ${errorMessage(error)}`);
+  }
 }
 
 /**
