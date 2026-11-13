@@ -126,38 +126,61 @@ Feature: Hook tool use
       | 2    | assistant   | tool call bash {"command":"printf OLD_SECRET"} |
       | 2    | tool result | bash returned: image                             |
 
-  Scenario Outline: An empty search or shell replacement clears original output for <name>
+  Scenario: An empty search or shell replacement clears original output for Glob
     Given pi runs with the scripted model and search tools
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
-      | name    | event       | matcher | form   | output |
-      | replace | PostToolUse | <name>  | script | <replacement> |
+      | name    | event       | matcher | form   | output                                                                                      |
+      | replace | PostToolUse | Glob    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"filenames":[]}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has started a new pi session
     Given the project holds the file "secret.md" with the text "OLD_SECRET" for a tool hook
     Given the scripted model plays these steps:
-      | reply | tool   | arguments   |
-      |       | <tool> | <arguments> |
-      | Done. |        |             |
+      | reply | tool | arguments          |
+      |       | find | {"pattern":"*.md"} |
+      | Done. |      |                    |
     When the user prompts "clear output"
     Then another pi handler observes these complete file results:
-      | record |
-      | {"toolName":"<tool>","content":[{"type":"text","text":""}],"details":null,"structuredContent":null,"isError":false} |
+      | record                                                                                                            |
+      | {"toolName":"find","content":[{"type":"text","text":""}],"details":null,"structuredContent":null,"isError":false} |
     Then the model receives these calls, with an empty tool result:
-      | call | role        | text                          |
-      | 1    | user        | clear output                  |
-      | 2    | user        | clear output                  |
-      | 2    | assistant   | tool call <tool> <arguments>  |
-      | 2    | tool result | <tool> returned: <empty>      |
+      | call | role        | text                              |
+      | 1    | user        | clear output                      |
+      | 2    | user        | clear output                      |
+      | 2    | assistant   | tool call find {"pattern":"*.md"} |
+      | 2    | tool result | find returned: <empty>            |
 
-    Examples:
-      | name | tool | arguments                      | replacement |
-      | Glob | find | {"pattern":"*.md"}            | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"filenames":[]}}} |
-      | Bash | bash | {"command":"printf OLD_SECRET"} | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"stdout":""}}} |
+  Scenario: An empty search or shell replacement clears original output for Bash
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output                                                                                   |
+      | replace | PostToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"stdout":""}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "secret.md" with the text "OLD_SECRET" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                       |
+      |       | bash | {"command":"printf OLD_SECRET"} |
+      | Done. |      |                                 |
+    When the user prompts "clear output"
+    Then another pi handler observes these complete file results:
+      | record                                                                                                            |
+      | {"toolName":"bash","content":[{"type":"text","text":""}],"details":null,"structuredContent":null,"isError":false} |
+    Then the model receives these calls, with an empty tool result:
+      | call | role        | text                                           |
+      | 1    | user        | clear output                                   |
+      | 2    | user        | clear output                                   |
+      | 2    | assistant   | tool call bash {"command":"printf OLD_SECRET"} |
+      | 2    | tool result | bash returned: <empty>                         |
 
   Scenario: A file result replacement changes what the model reads
     Given pi runs with the scripted model
@@ -1155,9 +1178,9 @@ Feature: Hook tool use
       | Done. |      |                                               |
     When the user prompts "run the echo"
     Then the hooks record these runs:
-      | event       | session | tool name | tool input                                 | tool response                           | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PreToolUse  | first   | Bash      | {"command":"echo from-model","timeout":30000} |                                         | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-      | PostToolUse | first   | Bash      | {"command":"echo rewritten"}               | [{"type":"text","text":"rewritten\\n"}] | {project dir} |                 | observer  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event       | session | tool name | tool input                                    | tool response                                                                     | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse  | first   | Bash      | {"command":"echo from-model","timeout":30000} |                                                                                   | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Bash      | {"command":"echo rewritten"}                  | {"interrupted":false,"structuredContent":[{"type":"text","text":"rewritten\\n"}]} | {project dir} |                 | observer  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role        | text                                                      |
       | 1    | user        | run the echo                                              |
@@ -1206,8 +1229,8 @@ Feature: Hook tool use
       | Done. |      |                                |
     When the user prompts "run the echo"
     Then the hooks record these runs:
-      | event       | session | tool name | tool input                    | tool response                            | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUse | first   | Bash      | {"command":"echo from-model"} | [{"type":"text","text":"from-model\\n"}] | {project dir} |                 | post      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event       | session | tool name | tool input                    | tool response                                                                      | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | Bash      | {"command":"echo from-model"} | {"interrupted":false,"structuredContent":[{"type":"text","text":"from-model\\n"}]} | {project dir} |                 | post      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role        | text                                                                                                                                    |
       | 1    | user        | run the echo                                                                                                                            |
@@ -1222,8 +1245,8 @@ Feature: Hook tool use
       | name | version |
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
-      | name    | event       | matcher | form   | output                                                                                                                     |
-      | replace | PostToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"content":[{"type":"text","text":"replaced"}]}}} |
+      | name    | event       | matcher | form   | output                                                                                           |
+      | replace | PostToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"stdout":"replaced"}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has started a new pi session
@@ -1233,8 +1256,8 @@ Feature: Hook tool use
       | Done. |      |                                |
     When the user prompts "run the echo"
     Then the hooks record these runs:
-      | event       | session | tool name | tool input                    | tool response                            | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUse | first   | Bash      | {"command":"echo from-model"} | [{"type":"text","text":"from-model\\n"}] | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event       | session | tool name | tool input                    | tool response                                                                      | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | Bash      | {"command":"echo from-model"} | {"interrupted":false,"structuredContent":[{"type":"text","text":"from-model\\n"}]} | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role        | text                                         |
       | 1    | user        | run the echo                                 |
@@ -1260,8 +1283,8 @@ Feature: Hook tool use
       | Done. |      |                                |
     When the user prompts "run the echo"
     Then the hooks record these runs:
-      | event       | session | tool name | tool input                    | tool response                            | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUse | first   | Bash      | {"command":"echo from-model"} | [{"type":"text","text":"from-model\\n"}] | {project dir} |                 | ctx       | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event       | session | tool name | tool input                    | tool response                                                                      | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | Bash      | {"command":"echo from-model"} | {"interrupted":false,"structuredContent":[{"type":"text","text":"from-model\\n"}]} | {project dir} |                 | ctx       | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role        | text                                                      |
       | 1    | user        | run the echo                                              |

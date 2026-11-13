@@ -133,9 +133,7 @@ Then(
       ([call, role, text]) => [
         call,
         role,
-        text.endsWith(" returned: ")
-          ? `${text.slice(0, -1)}<empty>`
-          : projectTokens("text", text, this.tokens),
+        text.endsWith(" returned: ") ? `${text}<empty>` : projectTokens("text", text, this.tokens),
       ],
     );
     assert.deepStrictEqual([["call", "role", "text"], ...rows], table.raw());
