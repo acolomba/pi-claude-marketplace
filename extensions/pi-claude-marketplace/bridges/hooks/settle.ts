@@ -442,15 +442,14 @@ async function runStopFailure(
 /**
  * STOP-07 bounded re-entry bookkeeping shared by BOTH re-entry lanes -- a
  * `block` continuation and an `additionalContext`-without-block continuation
- * (D-88-08). Increments the shared consecutive re-entry counter BEFORE deciding
- * whether to re-enter: the `STOP_OVERRIDE_CAP`th consecutive re-entry (the 8th)
- * does NOT re-enter and instead fires the one-shot override-cap warning (guarded
+ * (D-88-08). The first `STOP_OVERRIDE_CAP` blocking outcomes re-enter;
+ * the next one does not and instead fires the one-shot override-cap warning (guarded
  * by `capNotifiedThisSession` so a subsequent re-entry does not re-notify). Any
  * re-entry below the cap sets `stopHookActive` -- the continuation is
  * bridge-driven regardless of lane (D-88-08) -- and re-enters (STOP-03; exit-2
  * already maps to `{kind:"block"}` in `parseHookStdout`, so STOP-04 rides this
  * arm). The cap is the T-88-02 livelock mitigation: an always-continuing hook,
- * whether via block or additionalContext, is bounded to 7 re-entries then
+ * whether via block or additionalContext, is bounded to 8 re-entries then
  * surfaced, never spun unbounded and never suppressed without notice
  * (transparency, D-88-01).
  */

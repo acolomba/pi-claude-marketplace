@@ -89,3 +89,40 @@ Feature: Hook prompt and stop
     Then the model receives these calls:
       | call | role | text      |
       | 1    | user | finish up |
+
+  Scenario: Eight consecutive Stop blocks continue before the ninth is overridden
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event | matcher | form   | output                                     |
+      | always | Stop  |         | script | {"decision":"block","reason":"keep going"} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Done 1 |
+      | Done 2 |
+      | Done 3 |
+      | Done 4 |
+      | Done 5 |
+      | Done 6 |
+      | Done 7 |
+      | Done 8 |
+      | Done 9 |
+    When the user prompts "finish up" through 9 stop settlements
+    Then the stop sequence has these exact replies and hook states:
+      | reply  | stop hook active |
+      | Done 1 | false            |
+      | Done 2 | true             |
+      | Done 3 | true             |
+      | Done 4 | true             |
+      | Done 5 | true             |
+      | Done 6 | true             |
+      | Done 7 | true             |
+      | Done 8 | true             |
+      | Done 9 | true             |
+    Then the stop override cap shows one notice

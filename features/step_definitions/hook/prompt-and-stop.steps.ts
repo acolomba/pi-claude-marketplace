@@ -25,15 +25,19 @@
 
 import assert from "node:assert/strict";
 
-import { Given, When } from "@cucumber/cucumber";
+import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
-import { HOOK_LIFECYCLE_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts";
+import {
+  HOOK_LIFECYCLE_LOG,
+  HOOK_RUNS_LOG,
+  waitForHookLifecycle,
+} from "../../lib/hook-recorder.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
-import { modelCallsOf } from "../../lib/scripted-model/script.ts";
+import { callMessageRows, modelCallsOf } from "../../lib/scripted-model/script.ts";
 import { readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 
-import type { HookLifecycleEvent } from "../../lib/hook-recorder.ts";
+import type { HookLifecycleEvent, HookRun } from "../../lib/hook-recorder.ts";
 import type { RpcRecord } from "../../lib/pi-process.ts";
 import type { ModelTurn, ScenarioWorld } from "../../support/world.ts";
 
@@ -169,6 +173,92 @@ When(
     await recordRun(this, prompt, lengths, from);
   },
 );
+
+When(
+  "the user prompts {string} through {int} stop settlements",
+  { timeout: 120_000 },
+  async function (this: ScenarioWorld, text: string, settlements: number) {
+    const deadline = Date.now() + 110_000;
+    const prompt = expandTokens(text, this.tokens);
+    const { lengths, from } = await startPrompt(this, prompt);
+    let next = from;
+
+    for (let index = 0; index < settlements; index += 1) {
+      next = await settledAfter(this, next, deadline);
+    }
+
+    await recordRun(this, prompt, lengths, from);
+  },
+);
+
+Then(
+  "the stop sequence has these exact replies and hook states:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const [header, ...rows] = table.raw();
+    assert.deepStrictEqual(header, ["reply", "stop hook active"]);
+    const turn = this.requireTurn();
+    const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
+    assert.deepStrictEqual(
+      runs.map((run) => [run.event, run.stdin.last_assistant_message, run.stdin.stop_hook_active]),
+      rows.map(([reply, active]) => ["Stop", reply, active === "true"]),
+    );
+    const calls = modelCallsOf(turn.logs);
+    assert.deepStrictEqual(
+      calls.map((call) => [call.index + 1, call.overflow]),
+      rows.map((_, index) => [index + 1, false]),
+    );
+    const expected: [string, string, string][] = [];
+
+    for (const [index, [reply]] of rows.entries()) {
+      const call = String(index + 1);
+      expected.push([call, "user", turn.prompt]);
+
+      for (const [prior] of rows.slice(0, index)) {
+        assert.ok(prior !== undefined);
+        expected.push([call, "assistant", prior]);
+        expected.push([call, "user", "Stop hook feedback:\nkeep going"]);
+      }
+
+      assert.ok(reply !== undefined);
+    }
+
+    assert.deepStrictEqual(callMessageRows(calls), expected);
+    this.markTurnCompared();
+  },
+);
+
+Then("the stop override cap shows one notice", function (this: ScenarioWorld) {
+  const notices = this.requireTurn().records.flatMap((record) => {
+    const entry: unknown = record.entry;
+    if (record.type !== "entry_appended" || typeof entry !== "object" || entry === null) {
+      return [];
+    }
+
+    if (!("customType" in entry) || entry.customType !== "claude-plugin") {
+      return [];
+    }
+
+    const payload: unknown = "data" in entry ? entry.data : undefined;
+    return typeof payload === "object" &&
+      payload !== null &&
+      "kind" in payload &&
+      payload.kind === "stop-override-cap"
+      ? [payload]
+      : [];
+  });
+  assert.deepStrictEqual(notices, [
+    {
+      schemaVersion: 1,
+      origin: { kind: "hook" },
+      kind: "stop-override-cap",
+      severity: "warning",
+      needsReload: false,
+      pluginId: "demo",
+      cap: 8,
+    },
+  ]);
+  this.markTurnCompared();
+});
 
 // Sends `prompt`, waits for its tool to start, and queues `queuedText` into
 // the running agent as `behavior`. Keeps the whole run as the last turn.
