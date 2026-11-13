@@ -25,6 +25,7 @@ import type {
   ExtensionContext,
   InputEvent,
   SessionBeforeCompactEvent,
+  BeforeAgentStartEvent,
   SessionCompactEvent,
   SessionShutdownEvent,
   SessionStartEvent,
@@ -51,6 +52,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
     "PORTABLE_HOOK_PROBE",
     "CLAUDE_CODE_REMOTE",
     "CLAUDE_ENV_FILE",
+    "PI_SUBAGENT_CHILD",
   ] as const;
   const previousEnvironment = ownedEnvironmentKeys.map((key) => ({
     key,
@@ -70,6 +72,14 @@ test("executes a blocking hook through the portable process boundary", async (t)
   process.env.PORTABLE_HOOK_PROBE = "case-owned";
   delete process.env.CLAUDE_CODE_REMOTE;
   delete process.env.CLAUDE_ENV_FILE;
+  process.env.PI_SUBAGENT_CHILD = "1";
+  runtime.captureChildIdentity(
+    {
+      type: "before_agent_start",
+      systemPromptOptions: { customPrompt: '<active_agent name="a&amp;b&quot;c"/>\n\n' },
+    } as BeforeAgentStartEvent,
+    "portable-session",
+  );
 
   const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
   const childOnceSpy = t.mock.method(ChildProcess.prototype, "once");
@@ -222,6 +232,8 @@ test("executes a blocking hook through the portable process boundary", async (t)
     hook_event_name: "PreToolUse",
     tool_name: "Bash",
     tool_input: { command: "printf portable" },
+    agent_type: 'a&b"c',
+    agent_id: "portable-session",
   });
   const expectedEnvironment = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -842,6 +854,62 @@ for (const translatorCase of TRANSLATOR_CASES) {
     },
   );
 }
+
+test("omits stale child identity from synchronous stdin", { concurrency: false }, async (t) => {
+  // arrange
+  const previousMarker = process.env.PI_SUBAGENT_CHILD;
+  process.env.PI_SUBAGENT_CHILD = "1";
+  t.after(() => {
+    if (previousMarker === undefined) {
+      delete process.env.PI_SUBAGENT_CHILD;
+    } else {
+      process.env.PI_SUBAGENT_CHILD = previousMarker;
+    }
+  });
+  const runtime = createHooksRuntime();
+  runtime.captureChildIdentity(
+    {
+      type: "before_agent_start",
+      systemPromptOptions: { customPrompt: '<active_agent name="other-runner"/>\n\n' },
+    } as BeforeAgentStartEvent,
+    "other-session",
+  );
+  const root = await makeCaseRoot(t, "dispatch-identity-stale-");
+  const child = makeInjectedChild(t);
+  const boundary = observeSpawn(t, child);
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    makeEntry(root),
+    {
+      type: "tool_call",
+      toolCallId: "stale-call",
+      toolName: "bash",
+      input: { command: "printf stale" },
+    } satisfies ToolCallEvent,
+    makeContext(root, "current-session"),
+    undefined,
+    runtime,
+    { spawnImpl: boundary.spawnImpl },
+  );
+  await boundary.spawned;
+  await child.close(0);
+  const outcome = await pendingOutcome;
+  const payload: unknown = JSON.parse(Buffer.concat(child.stdinChunks).toString("utf8"));
+
+  // assert
+  assert.deepStrictEqual(outcome, { kind: "noop" });
+  assert.deepStrictEqual(payload, {
+    session_id: "current-session",
+    transcript_path: "",
+    cwd: root,
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_input: { command: "printf stale" },
+  });
+  assert.strictEqual(Object.hasOwn(payload, "agent_type"), false);
+  assert.strictEqual(Object.hasOwn(payload, "agent_id"), false);
+});
 
 /**
  * One dispatch of `translatorCase`'s envelope with `omittedField` deleted (or

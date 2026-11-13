@@ -203,7 +203,13 @@ export async function dispatchHookExec(
   }
 
   try {
-    const transCtx = buildTranslationContext(ctx);
+    const identity = runtime.childIdentityFor(ctx.sessionManager.getSessionId());
+    const transCtx = buildTranslationContext(
+      ctx,
+      identity.kind === "known"
+        ? { agentType: identity.agentType, sessionId: identity.childId }
+        : undefined,
+    );
     const stdinPayload = buildPayload(entry.claudeEvent, event, transCtx);
     const stdinJson = serializeWithTruncation(stdinPayload);
     const loc = locationsFor(entry.scope, transCtx.cwd);

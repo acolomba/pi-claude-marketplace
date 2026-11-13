@@ -24,6 +24,12 @@
 
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 
+/** Child identity captured for one Pi session before hook translation. */
+export interface ChildHookIdentity {
+  readonly agentType: string;
+  readonly sessionId: string;
+}
+
 /**
  * Dispatch-time context every payload translator reads to populate the
  * common Claude-stdin envelope. Fields are readonly because the
@@ -35,6 +41,7 @@ export interface TranslationContext {
   readonly sessionId: string;
   readonly transcriptPath: string;
   readonly cwd: string;
+  readonly childIdentity?: ChildHookIdentity;
 }
 
 /**
@@ -55,10 +62,17 @@ export interface TranslationContext {
  * turn in the test harness comes from its `--no-session` launch, not from
  * the turn. `docs/hooks-compatibility.md` states this for plugin authors.
  */
-export function buildTranslationContext(ctx: ExtensionContext): TranslationContext {
+export function buildTranslationContext(
+  ctx: ExtensionContext,
+  childIdentity?: ChildHookIdentity,
+): TranslationContext {
+  const sessionId = ctx.sessionManager.getSessionId();
   return {
-    sessionId: ctx.sessionManager.getSessionId(),
+    sessionId,
     transcriptPath: ctx.sessionManager.getSessionFile() ?? "",
     cwd: ctx.cwd,
+    ...(childIdentity?.sessionId === sessionId
+      ? { childIdentity: { agentType: childIdentity.agentType, sessionId } }
+      : {}),
   };
 }
