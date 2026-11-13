@@ -64,14 +64,14 @@ function yamlList(items: readonly string[]): string {
   return items.length === 0 ? " []" : items.map((item) => `\n    - ${item}`).join("");
 }
 
-function asyncLine(launchAsync: boolean | undefined): string {
-  return launchAsync === undefined ? "" : "async: " + String(launchAsync) + "\n";
+function asyncLine(launchAsync: true | undefined): string {
+  return launchAsync === undefined ? "" : "async: true\n";
 }
 
 function expectedMcpAgentFile(expected: {
   readonly toolsField: string;
   readonly inheritSkills: boolean;
-  readonly async?: boolean;
+  readonly async?: true | undefined;
   readonly droppedTools: readonly string[];
   readonly warnings: readonly string[];
 }): string {
@@ -318,7 +318,6 @@ ${expectedMapping}systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -382,7 +381,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: spec-tree
@@ -468,7 +466,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1228,7 +1225,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1281,7 +1277,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1328,7 +1323,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1377,7 +1371,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1424,7 +1417,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1472,7 +1464,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1518,7 +1509,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1566,7 +1556,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1613,7 +1602,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1664,7 +1652,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1711,7 +1698,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1808,7 +1794,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1858,7 +1843,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1908,7 +1892,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1992,7 +1975,6 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: [
         "mcp__plugin_other_db__q",
         "mcp__github__search",
@@ -2021,7 +2003,6 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: ["mcp__plugin_acme_db__a/b"],
       warnings: [],
     });
@@ -2040,7 +2021,6 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: ["mcp__plugin_acme_db__q(a, b excludeTools: Bash)"],
       warnings: [],
     });
@@ -2084,7 +2064,6 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: [],
       warnings: [],
     });
@@ -2212,12 +2191,14 @@ Body.\r
     { label: "true", background: "true", expectedAsync: true },
     { label: "a double-quoted true", background: '"true"', expectedAsync: true },
     { label: "a single-quoted true", background: "'true'", expectedAsync: true },
-    { label: "false", background: "false", expectedAsync: false },
-    { label: "yes", background: "yes", expectedAsync: false },
-    { label: "an empty value", background: "", expectedAsync: false },
-    { label: "an absent field", background: undefined, expectedAsync: false },
-  ]) {
-    test(`D-CF4-05: a background of ${label} converts with async: ${expectedAsync} and no warning`, () => {
+    { label: "false", background: "false", expectedAsync: undefined },
+    { label: "yes", background: "yes", expectedAsync: undefined },
+    { label: "an upper-case TRUE", background: "TRUE", expectedAsync: undefined },
+    { label: "a true in mismatched quotes", background: "\"true'", expectedAsync: undefined },
+    { label: "an empty value", background: "", expectedAsync: undefined },
+    { label: "an absent field", background: undefined, expectedAsync: undefined },
+  ] as const) {
+    test(`D-PG3-01: a background of ${label} converts with async: ${String(expectedAsync ?? "absent")} and no warning`, () => {
       // arrange
       const raw = {
         description: "d",
@@ -2293,6 +2274,60 @@ Body content.
     // assert
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
+
+  test("D-PG3-01: an ordinary agent with an empty body leaves its launch mode to pi-subagents", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+`;
+
+    // act
+    const agent = convertAgent(mcpAgentInput({ description: "d" }, undefined, undefined, ""));
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  for (const { mcpImplementation, warning } of [
+    { mcpImplementation: "adapter", warning: MCP_ASYNC_WARNING },
+    { mcpImplementation: "builtin", warning: BUILTIN_MCP_ASYNC_WARNING },
+  ] as const) {
+    test(`D-PG3-02: either order of equivalent ${mcpImplementation} MCP grants runs in the background with one warning`, () => {
+      // arrange
+      const launch = ({ fileContent, warnings }: ConvertedAgent) => ({
+        launch: fileContent.split("\n").filter((line) => line.startsWith("async:")),
+        warnings,
+      });
+      const expected = { launch: ["async: true"], warnings: [warning] };
+
+      // act
+      const agents = [
+        "mcp__plugin_acme_db__query, mcp__plugin_acme_cache",
+        "mcp__plugin_acme_cache, mcp__plugin_acme_db__query",
+      ].map((tools) =>
+        convertMcpAgent({ description: "d", tools }, ["db", "cache"], mcpImplementation),
+      );
+
+      // assert
+      assert.deepStrictEqual(agents.map(launch), [expected, expected]);
+    });
+  }
 });
 
 describe("D-CF4-08 tool lists", () => {
@@ -2313,7 +2348,6 @@ describe("D-CF4-08 tool lists", () => {
       const expectedFileContent = expectedMcpAgentFile({
         toolsField: `tools: ${expectedTools}`,
         inheritSkills: false,
-        async: false,
         droppedTools: [],
         warnings: [],
       });
@@ -2331,7 +2365,6 @@ describe("D-CF4-08 tool lists", () => {
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: [],
       warnings: [],
     });
@@ -2351,7 +2384,6 @@ describe("D-CF4-08 tool lists", () => {
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: ["constructor", "toString", "hasOwnProperty"],
       warnings: [],
     });
@@ -2376,7 +2408,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -2444,7 +2475,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -2570,7 +2600,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -2926,7 +2955,6 @@ describe("MGRT-01 grant form per MCP implementation", () => {
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: ["mcp__plugin_acme_events__watch"],
       warnings: [],
     });
@@ -3038,7 +3066,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme

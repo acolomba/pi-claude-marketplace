@@ -1032,7 +1032,7 @@ function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
       ...optionalThinking(thinkingResult.emit),
       skills: skillsResult.emit,
       inheritSkills: toolsResult.inheritSkills,
-      async: backgroundForMcp || isTrueBackground(raw.background),
+      ...((backgroundForMcp || isTrueBackground(raw.background)) && { async: true }),
     },
     provenance: {
       pluginName,
@@ -1066,10 +1066,10 @@ function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
 }
 
 /**
- * D-CF4-05: whether the source asks for a background launch. Claude Code runs
- * a plugin agent in the foreground unless its source sets `background` to
- * `true` or `"true"`, so the agent gets `async: true` for that value and
- * `async: false` otherwise, which replaces pi-subagents' background default.
+ * D-CF4-05: whether the source asks for a background launch, through
+ * `background` set to `true` or `"true"`. Such an agent gets `async: true`.
+ * D-PG3-01 amends D-CF4-05: any other agent gets no `async` key, so
+ * pi-subagents and its user configuration choose the launch mode.
  * Residual: a pi-subagents call can still ask for either launch mode, where
  * Claude Code forces the background for `background: true`.
  *

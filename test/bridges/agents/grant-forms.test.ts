@@ -40,7 +40,7 @@ function yamlList(items: readonly string[]): string {
 function expectedFrontmatter(expected: {
   readonly toolsLine?: string;
   readonly inheritSkills: boolean;
-  readonly async: boolean;
+  readonly async?: true;
   readonly droppedTools: readonly string[];
   readonly warnings: readonly string[];
 }): string {
@@ -53,8 +53,7 @@ ${toolsLine}systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: ${expected.inheritSkills}
 advertise: true
-async: ${expected.async}
-provenance:
+${expected.async === true ? "async: true\n" : ""}provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
   sourceAgent: bot
@@ -155,7 +154,6 @@ test("MGRT-01: an agent that renders the same in both forms records neither fiel
     expectedFrontmatter({
       toolsLine: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: [],
       warnings: [],
     }) + BODY;
@@ -218,7 +216,6 @@ test("MGRT-01: an sse grant stays in the adapter form and is dropped from the bu
   const builtinFrontmatter = expectedFrontmatter({
     toolsLine: "tools: read",
     inheritSkills: false,
-    async: false,
     droppedTools: ["mcp__plugin_acme_web__get"],
     warnings: [],
   });
@@ -391,7 +388,6 @@ test("ANAME-02 / MGRT-01: without grant forms the agent maps no MCP server and t
     expectedFrontmatter({
       toolsLine: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: ["mcp__plugin_acme_db__query"],
       warnings: [],
     }) + BODY;
