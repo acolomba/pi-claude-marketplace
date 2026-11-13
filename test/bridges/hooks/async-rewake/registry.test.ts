@@ -1290,6 +1290,8 @@ test(
     // arrange
     const root = await mkdtemp(path.join(tmpdir(), "async-real-parent-child-"));
     const loc = locationsFor("project", root);
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    await mkdir(journalDir, { recursive: true });
     const parentRuntime = createHooksRuntime();
     const childRuntime = createHooksRuntime();
     const previousMarker = process.env.PI_SUBAGENT_CHILD;
@@ -1352,8 +1354,13 @@ test(
       await new Promise<void>((resolve) => setTimeout(resolve, 10));
     }
 
-    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
-    const names = await readdir(journalDir).catch(() => []);
+    const settlingNames = await readdir(journalDir);
+    await Promise.all(
+      settlingNames.map((name) =>
+        childRuntime.runPidTableOperation(path.join(journalDir, name), () => Promise.resolve()),
+      ),
+    );
+    const names = await readdir(journalDir);
     const parentBytesAfter = await readFile(pidTablePath(loc));
     process.kill(parentRow.pid, 0);
 
