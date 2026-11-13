@@ -2165,9 +2165,7 @@ describe("toolResultCompositeHandler", () => {
         "result-mutation": {
           kind: "mutate",
           updatedToolOutput: {
-            content: [{ type: "text", text: "patched output" }],
-            isError: true,
-            toolName: "must-not-change",
+            stdout: "patched output",
           },
         },
       },
@@ -2183,7 +2181,6 @@ describe("toolResultCompositeHandler", () => {
     const expectedOutput = {
       content: [{ type: "text", text: "patched output" }],
       details: null,
-      isError: true,
     };
     const expectedEvent: ToolResultEvent = createToolResultEvent(false);
     const expectedCalls: RecordedCall[] = [
@@ -4166,8 +4163,8 @@ describe("routing-order fold of mutations", () => {
     );
     const executor = createRecordingExecutor(
       {
-        first: { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "one" }] } },
-        second: { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "two" }] } },
+        first: { kind: "mutate", updatedToolOutput: { stdout: "one" } },
+        second: { kind: "mutate", updatedToolOutput: { stdout: "two" } },
       },
       [],
     );
@@ -4950,7 +4947,7 @@ describe("tool hook context (HOOK-04 / D-CF5-13)", () => {
           looker: {
             kind: "mutate",
             additionalContext: "seen",
-            updatedToolOutput: { content: [{ type: "text", text: "kept" }] },
+            updatedToolOutput: { stdout: "kept" },
           },
         },
         [],

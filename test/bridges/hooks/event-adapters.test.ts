@@ -524,6 +524,71 @@ describe("adaptToolCallResult", () => {
 });
 
 describe("adaptToolResultResult", () => {
+  test("a search replacement clears every stale output carrier", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "find-redaction",
+      toolName: "find",
+      input: { pattern: "*" },
+      content: [{ type: "text" as const, text: "OLD_SECRET" }],
+      details: { fullOutputPath: "OLD_SECRET" },
+      structuredContent: "OLD_SECRET",
+      isError: false,
+    } satisfies ToolResultEvent;
+    assert.deepStrictEqual(
+      adaptToolResultResult(
+        { kind: "mutate", updatedToolOutput: { filenames: [] } },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      { content: [{ type: "text", text: "" }], details: null },
+    );
+    assert.deepStrictEqual(event.content, [{ type: "text", text: "OLD_SECRET" }]);
+  });
+
+  test("a malformed shell replacement leaves the complete event untouched", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "shell-invalid",
+      toolName: "bash",
+      input: { command: "printf secret" },
+      content: [{ type: "text" as const, text: "OLD_SECRET" }],
+      details: { fullOutputPath: "OLD_SECRET" },
+      structuredContent: "OLD_SECRET",
+      isError: false,
+    } satisfies ToolResultEvent;
+    const original = structuredClone(event);
+    assert.strictEqual(
+      adaptToolResultResult(
+        { kind: "mutate", updatedToolOutput: { structuredContent: "bad" } },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      undefined,
+    );
+    assert.deepStrictEqual(event, original);
+  });
+
+  test("a result missing its tool name cannot select a built-in decoder", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "missing-name",
+      toolName: undefined as unknown as string,
+      input: {},
+      content: [{ type: "text" as const, text: "original" }],
+      isError: false,
+      details: undefined,
+    } satisfies ToolResultEvent;
+    assert.strictEqual(
+      adaptToolResultResult(
+        { kind: "mutate", updatedToolOutput: { filenames: ["forged"] } },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      undefined,
+    );
+  });
+
   test("a file replacement clears stale Pi details", () => {
     const event = {
       type: "tool_result",

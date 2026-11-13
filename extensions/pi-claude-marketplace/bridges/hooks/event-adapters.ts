@@ -71,6 +71,7 @@ import { openNotificationRun } from "../../shared/notification-run.ts";
 import { hookBlockingErrorText, hookErrorText, hookEventLabel } from "./hook-labels.ts";
 import { decodeHookToolInput } from "./tool-input.ts";
 import { renderFileToolOutput } from "./tool-output-files.ts";
+import { renderSearchShellToolOutput } from "./tool-output-search-shell.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
 import type { PendingPromptContext, RoutingEntry } from "./routing-state.ts";
@@ -181,8 +182,13 @@ function toolResultPatch(
     return undefined;
   }
 
-  if (["read", "edit", "write"].includes(event.toolName.toLowerCase())) {
+  const toolName = typeof event.toolName === "string" ? event.toolName.toLowerCase() : "";
+  if (["read", "edit", "write"].includes(toolName)) {
     return renderFileToolOutput(event, updatedToolOutput, cwd);
+  }
+
+  if (["find", "grep", "bash", "powershell"].includes(toolName)) {
+    return renderSearchShellToolOutput(event, updatedToolOutput, cwd);
   }
 
   const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;

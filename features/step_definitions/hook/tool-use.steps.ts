@@ -126,6 +126,23 @@ Then(
   },
 );
 
+Then(
+  "the model receives these calls, with an empty tool result:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const rows = callMessageRows(modelCallsOf(this.requireTurn().logs)).map(
+      ([call, role, text]) => [
+        call,
+        role,
+        text.endsWith(" returned: ")
+          ? `${text.slice(0, -1)}<empty>`
+          : projectTokens("text", text, this.tokens),
+      ],
+    );
+    assert.deepStrictEqual([["call", "role", "text"], ...rows], table.raw());
+    this.markTurnCompared();
+  },
+);
+
 Given(
   "pi runs with the scripted model and search tools",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
@@ -135,7 +152,10 @@ Given(
       path.join(this.tokens.agentDir, "settings.json"),
       `${JSON.stringify({ defaultTools: ["read", "bash", "edit", "write", "find", "grep"] })}\n`,
     );
-    await this.usePiWithProfile({ companions: [] });
+    await this.usePiWithProfile({
+      companions: [],
+      extraExtensions: [HOOK_RESULT_OBSERVER_EXTENSION],
+    });
   },
 );
 

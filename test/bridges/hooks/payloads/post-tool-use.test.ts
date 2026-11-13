@@ -39,7 +39,10 @@ test("maps a successful built-in tool to the complete PostToolUse envelope", () 
       command: "printf 'completed\\n'",
       timeout: 12000,
     },
-    tool_response: [{ type: "text", text: "completed\n" }],
+    tool_response: {
+      interrupted: false,
+      structuredContent: [{ type: "text", text: "completed\n" }],
+    },
   };
 
   // act
@@ -48,7 +51,7 @@ test("maps a successful built-in tool to the complete PostToolUse envelope", () 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
   assert.notStrictEqual(payload.tool_input, toolInput);
-  assert.strictEqual(payload.tool_response, toolResponse);
+  assert.deepStrictEqual(payload.tool_response, expectedPayload.tool_response);
 });
 
 for (const { name, toolName, input, expected, expectedName } of [
@@ -123,6 +126,13 @@ for (const { name, toolName, input, expected, expectedName } of [
         filePath: "/workspace/result/output.txt",
         content: "written",
       });
+    } else if (toolName === "find") {
+      assert.deepStrictEqual(payload.tool_response, {
+        filenames: ["/workspace/result/result"],
+        numFiles: 1,
+      });
+    } else if (toolName === "grep") {
+      assert.deepStrictEqual(payload.tool_response, { mode: "content", content: "result" });
     } else {
       assert.strictEqual(payload.tool_response, event.content);
     }

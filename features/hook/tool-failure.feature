@@ -193,7 +193,7 @@ Feature: Hook tool failure
     When the user prompts "run the echo"
     Then the hooks record these runs:
       | event       | session | tool name | tool input                    | tool response                            | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUse | first   | Bash      | {"command":"echo from-model"} | [{"type":"text","text":"from-model\\n"}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Bash      | {"command":"echo from-model"} | {"interrupted":false,"structuredContent":[{"type":"text","text":"from-model\\n"}]} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
 
   Scenario: A PostToolUseFailure hook's additional context reaches the model after the failed result
     Given pi runs with the scripted model
