@@ -21,7 +21,7 @@
 // `registerHooksBridge` (no child process spawned).
 
 import assert from "node:assert/strict";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -358,3 +358,111 @@ test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dis
     );
   });
 });
+
+test(
+  "a registered child records complete successful and failed tool result payloads",
+  { concurrency: false },
+  async () => {
+    await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
+      const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
+      const pluginId = "result-recording";
+      const sourceRoot = path.join(extensionRoot, "sources", "test-mp", "plugins", pluginId);
+      const recordPath = path.join(sourceRoot, "received.jsonl");
+      await mkdir(sourceRoot, { recursive: true });
+      await writeFile(
+        path.join(sourceRoot, "record.mjs"),
+        'import fs from "node:fs";\nconst input = fs.readFileSync(0, "utf8");\nfs.appendFileSync(new URL("./received.jsonl", import.meta.url), JSON.stringify(JSON.parse(input)) + "\\n");\n',
+      );
+      const state = buildStateWithHooksPlugin("user", pluginId);
+      state.marketplaces["claude-plugins-official"]!.plugins[pluginId]!.resolvedSource = sourceRoot;
+      await saveState(extensionRoot, state);
+      const hooksDir = path.join(extensionRoot, "hooks", pluginId);
+      await mkdir(hooksDir, { recursive: true });
+      const recorder = {
+        hooks: [{ type: "command", command: 'node "${CLAUDE_PLUGIN_ROOT}/record.mjs"' }],
+      };
+      await writeFile(
+        path.join(hooksDir, "hooks.json"),
+        JSON.stringify({ PostToolUse: [recorder], PostToolUseFailure: [recorder] }),
+      );
+      const runtime = createHooksRuntime();
+      const hydration = createHooksHydration(runtime, { loadState, readHooksJson });
+      const { pi, registrations } = makeMockPi();
+      const ctx = {
+        cwd: projectCwd,
+        mode: "print",
+        ui: { notify: () => {} },
+        sessionManager: {
+          getSessionId: () => "child-session",
+          getSessionFile: () => "/sessions/child-session.jsonl",
+        },
+      } as unknown as ExtensionContext;
+      const previousMarker = process.env.PI_SUBAGENT_CHILD;
+      process.env.PI_SUBAGENT_CHILD = "1";
+      try {
+        await hydration.registerHooksBridge(pi, { cwd: projectCwd });
+        const before = registrations.find((entry) => entry.event === "before_agent_start");
+        const result = registrations.find((entry) => entry.event === "tool_result");
+        assert.ok(before);
+        assert.ok(result);
+        await before.handler(
+          {
+            type: "before_agent_start",
+            systemPromptOptions: { customPrompt: '<active_agent name="reviewer"/>\n\n' },
+          },
+          ctx,
+        );
+        for (const isError of [false, true]) {
+          await result.handler(
+            {
+              type: "tool_result",
+              toolCallId: isError ? "failed-call" : "successful-call",
+              toolName: "catalog",
+              input: { query: "entry" },
+              content: [{ type: "text", text: isError ? "lookup failed" : "found" }],
+              isError,
+              details: undefined,
+            },
+            ctx,
+          );
+        }
+      } finally {
+        if (previousMarker === undefined) {
+          delete process.env.PI_SUBAGENT_CHILD;
+        } else {
+          process.env.PI_SUBAGENT_CHILD = previousMarker;
+        }
+      }
+
+      const payloads = (await readFile(recordPath, "utf8"))
+        .trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line) as unknown);
+      assert.deepStrictEqual(payloads, [
+        {
+          session_id: "child-session",
+          transcript_path: "/sessions/child-session.jsonl",
+          cwd: projectCwd,
+          hook_event_name: "PostToolUse",
+          tool_name: "catalog",
+          tool_input: { query: "entry" },
+          tool_response: [{ type: "text", text: "found" }],
+          agent_type: "reviewer",
+          agent_id: "child-session",
+        },
+        {
+          session_id: "child-session",
+          transcript_path: "/sessions/child-session.jsonl",
+          cwd: projectCwd,
+          hook_event_name: "PostToolUseFailure",
+          tool_name: "catalog",
+          tool_input: { query: "entry" },
+          error: "lookup failed",
+          is_interrupt: false,
+          agent_type: "reviewer",
+          agent_id: "child-session",
+        },
+      ]);
+    });
+  },
+);

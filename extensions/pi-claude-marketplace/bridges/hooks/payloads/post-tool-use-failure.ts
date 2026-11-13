@@ -32,6 +32,8 @@ export interface PostToolUseFailureStdin {
   readonly tool_input: unknown;
   readonly error: string;
   readonly is_interrupt: false;
+  readonly agent_type?: string;
+  readonly agent_id?: string;
 }
 
 // The text parts of a failed tool's content, one per line.
@@ -59,5 +61,8 @@ export function translatePostToolUseFailure(
     tool_input: toHookToolInput(event.toolName, event.input, ctx.cwd, homedir()),
     error: errorText(event.content),
     is_interrupt: false,
+    ...(ctx.childIdentity?.sessionId === ctx.sessionId
+      ? { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }
+      : {}),
   };
 }

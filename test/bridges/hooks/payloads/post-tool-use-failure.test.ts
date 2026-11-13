@@ -47,6 +47,49 @@ test("maps a failed built-in tool to the complete PostToolUseFailure envelope", 
   assert.notStrictEqual(payload.tool_input, toolInput);
 });
 
+for (const identity of [
+  { agentType: "reviewer", sessionId: "child-session" },
+  undefined,
+  { agentType: "reviewer", sessionId: "other-session" },
+]) {
+  test(`includes only matching child identity in a failed result: ${identity?.sessionId ?? "absent"}`, () => {
+    // arrange
+    const event = {
+      type: "tool_result",
+      toolCallId: "child-failure",
+      toolName: "catalog",
+      input: { query: "entry" },
+      content: [{ type: "text", text: "lookup failed" }],
+      details: undefined,
+      isError: true,
+    } satisfies ToolResultEvent;
+    const context = {
+      sessionId: "child-session",
+      transcriptPath: "/sessions/child.jsonl",
+      cwd: "/workspace",
+      ...(identity === undefined ? {} : { childIdentity: identity }),
+    } satisfies TranslationContext;
+
+    // act
+    const payload = translatePostToolUseFailure(event, context);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "child-session",
+      transcript_path: "/sessions/child.jsonl",
+      cwd: "/workspace",
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "catalog",
+      tool_input: { query: "entry" },
+      error: "lookup failed",
+      is_interrupt: false,
+      ...(identity?.sessionId === context.sessionId
+        ? { agent_type: "reviewer", agent_id: "child-session" }
+        : {}),
+    });
+  });
+}
+
 test("preserves a failed custom tool name and nested values without mutation", () => {
   // arrange
   const toolInput = {

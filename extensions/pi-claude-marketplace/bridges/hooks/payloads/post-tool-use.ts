@@ -32,6 +32,8 @@ export interface PostToolUseStdin {
   readonly tool_name: string;
   readonly tool_input: unknown;
   readonly tool_response: unknown;
+  readonly agent_type?: string;
+  readonly agent_id?: string;
 }
 
 function nativeToolResponse(event: ToolResultEvent): unknown {
@@ -62,5 +64,8 @@ export function translatePostToolUse(
       fileToolResponse(event, ctx.cwd) ??
       searchShellToolResponse(event, ctx.cwd) ??
       nativeToolResponse(event),
+    ...(ctx.childIdentity?.sessionId === ctx.sessionId
+      ? { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }
+      : {}),
   };
 }
