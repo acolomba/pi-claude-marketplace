@@ -5251,6 +5251,29 @@ The snapshot used the normal eight-worker adapter runner, seed 853766:
 `/tmp/pg2-wave4-async-baseline.log`, `/tmp/pg2-wave4-async-feature.log` and
 `/tmp/pg2-wave4-async-feature-isolated.log`.
 
+The wave 6 executor's broad hook/skill run reproduced reload cleanup failure
+at `features/hook/async.feature:342`: hook PID 2258111 was still present after
+the wait (seed 367329, `/tmp/pg205-broad-final.log`). That run passed 72/74;
+its other failure was a stale skill replacement fixture corrected separately.
+Subsequent full adapter suites passed all 1,854 scenarios, including the
+corrected combined-tree gate at `a01d79d6`.
+
+**Cleanup/rewake cause fixed:** GSD debug captured a previous scenario's live
+hook writing into the next scenario's reused harness. Cleanup read only script
+PID files, missing a registered detached child before its script wrote that
+file. Its old end record could satisfy a later name-only wait and consume the
+later release marker. Commit `a01d79d6` reads both scopes' persisted PID tables,
+checks ownership markers and kills registered groups before scanning script PIDs.
+The new architecture regression failed without the fix and passed with it.
+Historical seeds 793972, 853766 and 367329 each passed all 19 async scenarios;
+the full gate passed all 1,854 adapter and 155 built-in scenarios and 359 pairs.
+Evidence: `.planning/debug/resolved/async-hook-lifecycle.md` and
+`/tmp/pg2-wave6-check-lifecycle-fixed.log`.
+
+**Still open:** the earlier exit-code mismatch (0 instead of 1) lacks a process
+snapshot and is not attributed to this fix. The possible startup-generation
+window was not exercised in these failures; no product change was made for it.
+
 **Next investigation:** preserve failed process state and hook lifecycle logs;
 check scenario-order contamination and process identity/reaping before calling
 this a load-related timeout. Reproduce with a fixed order, fix the proven cause,

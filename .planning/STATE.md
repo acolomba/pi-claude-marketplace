@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 02
 current_phase_name: Hook Payloads, Matchers, and Stop Limit
 status: executing
-stopped_at: parity-gaps Phase 2 wave 5 verified; wave 6 next
-last_updated: "2026-11-13T03:47:24.967804+00:00"
+stopped_at: parity-gaps Phase 2 wave 6 verified; wave 7 next
+last_updated: "2026-11-13T06:45:44.587403+00:00"
 last_activity: 2026-11-13
-last_activity_desc: Phase 02 wave 5 verified; 6 of 10 plans complete
-state_head: 4df7decd2541b95f82060ed64025da90035fa010
+last_activity_desc: Phase 02 wave 6 verified; 7 of 10 plans complete
+state_head: a01d79d6026c543efe1f2abfe82d92f99ca38f19
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 21
-  completed_plans: 17
+  completed_plans: 18
   percent: 9
 ---
 
@@ -32,24 +32,42 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 02 (Hook Payloads, Matchers, and Stop Limit) — EXECUTING
-Plan: 6 of 10 complete; 02-05 next
+Plan: 7 of 10 complete; 02-06 next
 Status: Executing Phase 02
-Last activity: 2026-11-13 — Phase 02 wave 5 verified
+Last activity: 2026-11-13 — Phase 02 wave 6 verified
 
 Progress: [█░░░░░░░░░] 9%
 
 
 ### parity-gaps Phase 2 execution
 
-Waves 1–5 (02-01, 02-02, 02-08, 02-09, 02-03, 02-04) are merged and verified.
+Waves 1–6 (02-01, 02-02, 02-08, 02-09, 02-03, 02-04, 02-05) are merged and verified.
 The latest `npm run check` exited 0 on the clean combined tree at
-`4df7decd2541b95f82060ed64025da90035fa010`, Node v26.13.0: 1,850 adapter
-scenarios (22,506 steps), 155 built-in scenarios (2,091 steps), and 357
-direct-coverage pairs. Log: `/tmp/pg2-wave5-check.log`. Wave 6 is file-result
-translation and reverse replacement (02-05). PG-HOOK-01 remains in progress;
-matcher and Stop plans cover PG-HOOK-03/13. The Stop checks observed eight
-continuations before ninth override, ten tool-separated blocks with no cap
-notice, and a fresh eight after reload.
+`a01d79d6026c543efe1f2abfe82d92f99ca38f19`, Node v26.13.0: 1,854 adapter
+scenarios (22,567 steps), 155 built-in scenarios (2,091 steps), and 359
+direct-coverage pairs. Log: `/tmp/pg2-wave6-check-lifecycle-fixed.log`. Wave 7 is
+search/shell result translation and reverse replacement (02-06).
+PG-HOOK-01 remains in progress; matcher and Stop plans cover PG-HOOK-03/13.
+The Stop checks observed eight continuations before ninth override, ten
+tool-separated blocks with no cap notice, and a fresh eight after reload.
+
+Wave 6 projects available Read, Edit and Write facts and renders validated
+replacements. Real downstream-handler and model checks cover complete text/image
+redaction, including stale details and structured output. The Pi API result type
+and existing async/skill scenarios were necessary scope adjustments.
+Post-merge checks caught stale dispatch/background assertions and a real partial
+result-envelope regression: removing toolName made the file projector throw and
+left a spawn-waiting test hanging. Commit `78a9502c` adds the fallback guard and
+its failing-before/passing-after owner case; `963f3459` aligns the background Read
+expectation. The entire unit suite and corrected full gate pass. The first failed
+gate's hung coverage runner was terminated after diagnosis, not counted as a pass.
+A later gate reproduced the async rewake failure. GSD debug proved a fixture
+cleanup race: a registered child could survive before writing its script PID
+file and contaminate the next scenario. Commit `a01d79d6` stops owned registered
+groups before the script-PID scan. Its deterministic regression failed without
+the fix; three historical async orders and the full gate passed. The old exit-code
+mismatch remains unproven under ASYNCLIFECYCLE-01. Schema drift is clear;
+codebase drift remains advisory.
 
 Wave 5 gives every executed edit pair the same actual native result or error,
 then folds hook output once. Five real scenarios (82 steps), the full failure

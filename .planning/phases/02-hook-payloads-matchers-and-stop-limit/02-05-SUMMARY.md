@@ -167,6 +167,34 @@ The frontmatter commit count measures `plan_head_before..plan_head_after`: four 
 - The broad affected Cucumber run passed 72 of 74 scenarios after the first corrections. One failure was the remaining skill replacement fixture, now corrected and passing in its targeted real Pi run. The other was the existing ASYNCLIFECYCLE-01 / WINDOWS #114 reload cleanup issue; a passing async rerun does not resolve it.
 - Fallow audit initially identified reverse-renderer complexity. Extracting text and image validation brought the audit to zero issues without changing behavior.
 
+## Parent Combined-Tree Verification
+
+The final wave gate, `npm run check`, exited 0 at clean commit
+`a01d79d6026c543efe1f2abfe82d92f99ca38f19` on Node v26.13.0:
+1,854 adapter scenarios / 22,567 steps, 155 built-in scenarios / 2,091 steps,
+and 359 direct-coverage pairs. Log: `/tmp/pg2-wave6-check-lifecycle-fixed.log`.
+
+Two earlier combined gates exposed transitive expectations not covered by the
+executor's focused checks. Commit `78a9502c` migrates dispatch expectations and
+fixes a partial-event regression: a missing toolName made the file projector
+throw before the spawn awaited by the existing dispatch-exec envelope test.
+The added owner case failed without the guard and passed with it; all three
+affected direct-coverage pairs passed. Commit `963f3459` migrates the async
+registry's complete Read response expectation. `npm run test:modules` passed
+before the final gate. The first gate's stalled coverage runner was terminated
+after diagnosis; neither failed gate is treated as successful evidence.
+
+The extra `platform/pi-api.ts` result-patch type field was necessary to preserve
+structured content for feedback while permitting accepted redaction to clear it.
+A third gate failed on async rewake during a tool call. Debugging proved and
+fixed cross-scenario fixture contamination in `a01d79d6`: a registered child
+could survive teardown before writing its script PID file. The architecture
+regression fails without the cleanup fix and passes with it; three historical
+async scenario orders passed too. The full gate above includes this fix.
+ASYNCLIFECYCLE-01 / WINDOWS #114 retain the older, unproven exit-code mismatch.
+The Task 3 observer RED above establishes fixture loading; the Task 2 redaction
+RED and installed-runner integration cases establish production behavior.
+
 ## Threat Flags
 
 None -- no security-relevant surface outside the plan's `<threat_model>` was introduced.
