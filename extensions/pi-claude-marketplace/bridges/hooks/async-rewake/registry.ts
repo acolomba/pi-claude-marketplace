@@ -44,13 +44,17 @@
 // failure / completion path routes through `hookDebugLog` (OBS-01).
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { open, opendir, readFile, rm } from "node:fs/promises";
+import path from "node:path";
 
+import { isSubagentChild } from "../../../platform/subagent-child.ts";
+import { atomicWriteJson } from "../../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
 import { openNotificationRun, requireNotificationMode } from "../../../shared/notification-run.ts";
+import { assertPathInside } from "../../../shared/path-safety.ts";
 import { installTimerLadder } from "../exec-timer.ts";
 import { hookPathVars, prepareHookEnv } from "../hook-env.ts";
 import { translatePostCompact } from "../payloads/post-compact.ts";
@@ -83,7 +87,7 @@ import type { DispatchableEvent } from "../../../domain/components/hook-events.t
 import type { ScopedLocations } from "../../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../../platform/pi-api.ts";
 import type { RoutingEntry } from "../routing-state.ts";
-import type { HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
+import type { ChildJournalOwner, HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Constants
@@ -95,6 +99,10 @@ import type { HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
  * to SIGKILL a stranger process that may have inherited a recycled pid.
  */
 const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
+const MAX_CHILD_JOURNAL_BYTES = 1024 * 1024;
+const MAX_CHILD_JOURNAL_ROWS = 4096;
+const MAX_CHILD_JOURNALS_SCANNED = 1024;
+const MAX_OWNER_TEXT = 256;
 
 /**
  * HOOK-06: custom-message type for the exit-2 injection. The hooks bridge also
@@ -244,6 +252,9 @@ export async function spawnAndRegister(
     const dispatchId = makeDispatchId();
     const capturedGeneration = runtime.currentGeneration();
     const transCtx = buildTranslationContext(ctx);
+    const persistenceOwner = isSubagentChild(process.env)
+      ? runtime.persistenceOwner(loc, ctx.sessionManager.getSessionId(), dispatchId)
+      : undefined;
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
     const exit: RewakeExit = {
       ctx,
@@ -284,28 +295,7 @@ export async function spawnAndRegister(
 
     const pid = child.pid;
     if (pid === undefined) {
-      const onSpawnError = (err: Error): void => {
-        hookDebugLog(
-          `async-rewake: spawn failed (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
-        );
-      };
-
-      child.once("error", onSpawnError);
-      child.once("close", () => {
-        child.removeListener("error", onSpawnError);
-      });
-      hookDebugLog(`async-rewake: child has no pid (${entry.pluginId}/${entry.claudeEvent})`);
-      try {
-        const killed = child.kill("SIGKILL");
-        if (!killed) {
-          hookDebugLog(
-            `async-rewake: kill(SIGKILL) returned false for pid-less child (${entry.pluginId}/${entry.claudeEvent})`,
-          );
-        }
-      } catch {
-        // best-effort
-      }
-
+      stopPidlessChild(child, entry);
       return;
     }
 
@@ -353,6 +343,7 @@ export async function spawnAndRegister(
       stderr,
       capturedGeneration,
       loc,
+      ...(persistenceOwner === undefined ? {} : { persistenceOwner }),
     };
 
     runtime.registerChild(asyncEntry);
@@ -371,7 +362,7 @@ export async function spawnAndRegister(
       }
 
       finalized = true;
-      finalizeChild(runtime, dispatchId, outcome, exit, pidTableWriter);
+      finalizeChild(runtime, dispatchId, persistenceOwner, outcome, exit, pidTableWriter);
     };
 
     const finalizeAfterOwnedStreams = (): void => {
@@ -418,11 +409,54 @@ export async function spawnAndRegister(
     // a recoverable record. Fire-and-forget at the body's tail -- the
     // sync spawn + register has already completed; awaiting here only
     // bounds the resolve latency on the I/O.
-    await persistPidTableForLoc(runtime, loc, pidTableWriter);
+    try {
+      await persistPidTableForLoc(runtime, loc, persistenceOwner, pidTableWriter);
+    } catch (error: unknown) {
+      stopUnrecordedChild(runtime, dispatchId);
+      hookDebugLog(`async-rewake: child journal persistence failed: ${errorMessage(error)}`);
+    }
   } catch (err) {
     hookDebugLog(
       `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
     );
+  }
+}
+
+function stopPidlessChild(child: ChildProcess, entry: RoutingEntry): void {
+  const onSpawnError = (error: Error): void => {
+    hookDebugLog(
+      `async-rewake: spawn failed (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(error)}`,
+    );
+  };
+
+  child.once("error", onSpawnError);
+  child.once("close", () => {
+    child.removeListener("error", onSpawnError);
+  });
+  hookDebugLog(`async-rewake: child has no pid (${entry.pluginId}/${entry.claudeEvent})`);
+  try {
+    const killed = child.kill("SIGKILL");
+    if (!killed) {
+      hookDebugLog(
+        `async-rewake: kill(SIGKILL) returned false for pid-less child (${entry.pluginId}/${entry.claudeEvent})`,
+      );
+    }
+  } catch {
+    // Best effort: the child may already have exited.
+  }
+}
+
+function stopUnrecordedChild(runtime: HooksRuntime, dispatchId: string): void {
+  const unrecorded = runtime.takeChild(dispatchId);
+  if (unrecorded === undefined) {
+    return;
+  }
+
+  unrecorded.ladder.cancel();
+  try {
+    unrecorded.child.kill("SIGKILL");
+  } catch {
+    // The hook may already have exited.
   }
 }
 
@@ -459,6 +493,7 @@ const EXIT_HANDLERS: Record<
 function finalizeChild(
   runtime: HooksRuntime,
   dispatchId: string,
+  persistenceOwner: ChildJournalOwner | undefined,
   outcome: { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined,
   exit: RewakeExit,
   pidTableWriter: typeof writePidTable,
@@ -467,14 +502,22 @@ function finalizeChild(
   if (entry === undefined) {
     // Defensive guard for cleanup paths that removed the entry before a
     // terminal child event reached this closure.
+    if (persistenceOwner !== undefined) {
+      void removeCapturedChildRow(runtime, persistenceOwner, dispatchId).catch(() => {
+        hookDebugLog("async-rewake: retired child journal cleanup failed");
+      });
+    }
+
     return;
   }
 
-  void persistPidTableForLoc(runtime, entry.loc, pidTableWriter).catch((err: unknown) => {
-    hookDebugLog(
-      `async-rewake: terminal pid-table persistence failed dispatchId=${dispatchId}: ${errorMessage(err)}`,
-    );
-  });
+  void persistPidTableForLoc(runtime, entry.loc, entry.persistenceOwner, pidTableWriter).catch(
+    (err: unknown) => {
+      hookDebugLog(
+        `async-rewake: terminal pid-table persistence failed dispatchId=${dispatchId}: ${errorMessage(err)}`,
+      );
+    },
+  );
 
   if (outcome === undefined) {
     return;
@@ -500,6 +543,25 @@ function finalizeChild(
   }
 
   EXIT_HANDLERS[exit.lane](entry, exit, outcome);
+}
+
+async function removeCapturedChildRow(
+  runtime: HooksRuntime,
+  owner: ChildJournalOwner,
+  dispatchId: string,
+): Promise<void> {
+  const filePath = childJournalPath(owner);
+  await runtime.runPidTableOperation(filePath, async () => {
+    const journal = await readChildJournal(filePath, owner.loc);
+    if (journal === undefined) {
+      return;
+    }
+
+    const remaining = journal.entries.filter((row) => row.dispatchId !== dispatchId);
+    if (remaining.length !== journal.entries.length) {
+      await writeChildJournal(owner, remaining);
+    }
+  });
 }
 
 /**
@@ -579,8 +641,24 @@ function wakeOnExitTwo(entry: HooksRuntimeChildEntry, { ctx, pi, label }: Rewake
  * no-ops. The persisted PID table is NOT touched here -- the orphan
  * reap path is responsible for draining that surface.
  */
-export function shutdownInMemoryChildren(runtime: HooksRuntime): void {
+export async function shutdownInMemoryChildren(runtime: HooksRuntime): Promise<void> {
   runtime.shutdownChildren();
+  const owners = runtime.persistenceOwners();
+  try {
+    await Promise.all(
+      owners.map(async (owner) => {
+        const filePath = childJournalPath(owner);
+        await runtime.runPidTableOperation(filePath, async () => {
+          const journal = await readChildJournal(filePath, owner.loc);
+          if (journal?.entries.length === 0) {
+            await writeChildJournal(owner, []);
+          }
+        });
+      }),
+    );
+  } finally {
+    runtime.forgetPersistenceOwners();
+  }
 }
 
 /**
@@ -605,6 +683,10 @@ export async function reapOrphans(
   loc: ScopedLocations,
   probes: OrphanProbes = DEFAULT_ORPHAN_PROBES,
 ): Promise<void> {
+  if (isSubagentChild(process.env)) {
+    return;
+  }
+
   await runtime.runPidTableOperation(pidTablePath(loc), async () => {
     const owned = runtime.pidTableEntries(loc);
     const ownedIds = new Set(owned.map((entry) => entry.dispatchId));
@@ -623,6 +705,7 @@ export async function reapOrphans(
         )
       : unlinkPidTable(loc));
   });
+  await reapChildJournals(runtime, loc, probes);
 }
 
 /** D-62-05: SIGKILLs one table row's process group when it is alive and ours. */
@@ -714,12 +797,265 @@ async function prepareAsyncEnv(
 async function persistPidTableForLoc(
   runtime: HooksRuntime,
   loc: ScopedLocations,
+  owner?: ChildJournalOwner,
   pidTableWriter: typeof writePidTable = writePidTable,
 ): Promise<void> {
-  await runtime.runPidTableOperation(pidTablePath(loc), async () => {
-    const snapshot: PidTableEntry[] = runtime.pidTableEntries(loc).map((entry) => ({ ...entry }));
-    await pidTableWriter(loc, snapshot);
+  const journalPath = owner === undefined ? pidTablePath(loc) : childJournalPath(owner);
+  await runtime.runPidTableOperation(journalPath, async () => {
+    const snapshot: PidTableEntry[] = runtime
+      .pidTableEntries(loc, owner)
+      .map((entry) => ({ ...entry }));
+    if (owner === undefined) {
+      await pidTableWriter(loc, snapshot);
+    } else {
+      await writeChildJournal(owner, snapshot);
+    }
   });
+}
+
+interface ChildJournal {
+  readonly version: 1;
+  readonly ownerPid: number;
+  readonly sessionId: string;
+  readonly ownerToken: string;
+  readonly entries: readonly PidTableEntry[];
+}
+
+function validJournalText(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_OWNER_TEXT;
+}
+
+function childJournalPath(owner: ChildJournalOwner): string {
+  const key = createHash("sha256")
+    .update(JSON.stringify([owner.ownerPid, owner.sessionId, owner.ownerToken]))
+    .digest("hex");
+  return path.join(owner.loc.dataRoot, "_shared", "async-rewake-children", `${key}.json`);
+}
+
+function validPidRow(value: unknown): value is PidTableEntry {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const row = value as Record<string, unknown>;
+  return (
+    Number.isSafeInteger(row.pid) &&
+    typeof row.pid === "number" &&
+    row.pid > 0 &&
+    validJournalText(row.dispatchId) &&
+    (row.scope === "user" || row.scope === "project") &&
+    validJournalText(row.marketplace) &&
+    validJournalText(row.plugin) &&
+    typeof row.spawnedAt === "string" &&
+    /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(row.spawnedAt)
+  );
+}
+
+async function writeChildJournal(
+  owner: ChildJournalOwner,
+  entries: readonly PidTableEntry[],
+): Promise<void> {
+  if (
+    !validJournalText(owner.sessionId) ||
+    !validJournalText(owner.ownerToken) ||
+    entries.length > MAX_CHILD_JOURNAL_ROWS ||
+    entries.some((entry) => !validPidRow(entry))
+  ) {
+    throw new Error("child journal capacity or shape exceeded");
+  }
+
+  const filePath = childJournalPath(owner);
+  await assertPathInside(owner.loc.dataRoot, filePath, "child journal write");
+  if (entries.length === 0) {
+    await rm(filePath, { force: true });
+    return;
+  }
+
+  const envelope: ChildJournal = {
+    version: 1,
+    ownerPid: owner.ownerPid,
+    sessionId: owner.sessionId,
+    ownerToken: owner.ownerToken,
+    entries,
+  };
+  if (Buffer.byteLength(JSON.stringify(envelope, null, 2) + "\n") > MAX_CHILD_JOURNAL_BYTES) {
+    throw new Error("child journal capacity exceeded");
+  }
+
+  await atomicWriteJson(filePath, envelope);
+}
+
+async function readChildJournal(
+  filePath: string,
+  loc: ScopedLocations,
+): Promise<
+  { readonly owner: ChildJournalOwner; readonly entries: readonly PidTableEntry[] } | undefined
+> {
+  try {
+    await assertPathInside(loc.dataRoot, filePath, "child journal read");
+    const handle = await open(filePath, "r");
+    let raw: string;
+    try {
+      const info = await handle.stat();
+      if (!info.isFile()) {
+        hookDebugLog("async-rewake: child journal is not regular");
+        return undefined;
+      }
+
+      const bytes = Buffer.allocUnsafe(MAX_CHILD_JOURNAL_BYTES + 1);
+      const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+      if (bytesRead > MAX_CHILD_JOURNAL_BYTES) {
+        hookDebugLog("async-rewake: child journal oversized");
+        return undefined;
+      }
+
+      raw = bytes.toString("utf8", 0, bytesRead);
+    } finally {
+      await handle.close();
+    }
+
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== "object") {
+      hookDebugLog("async-rewake: child journal malformed");
+      return undefined;
+    }
+
+    const envelope = parsed as Record<string, unknown>;
+    if (
+      envelope.version !== 1 ||
+      !Number.isSafeInteger(envelope.ownerPid) ||
+      typeof envelope.ownerPid !== "number" ||
+      envelope.ownerPid <= 0 ||
+      !validJournalText(envelope.sessionId) ||
+      !validJournalText(envelope.ownerToken) ||
+      !Array.isArray(envelope.entries) ||
+      envelope.entries.length > MAX_CHILD_JOURNAL_ROWS ||
+      !envelope.entries.every(validPidRow)
+    ) {
+      hookDebugLog("async-rewake: child journal malformed");
+      return undefined;
+    }
+
+    const owner: ChildJournalOwner = {
+      ownerPid: envelope.ownerPid,
+      sessionId: envelope.sessionId,
+      ownerToken: envelope.ownerToken,
+      loc,
+    };
+    if (childJournalPath(owner) !== filePath) {
+      hookDebugLog("async-rewake: child journal filename mismatch");
+      return undefined;
+    }
+
+    return { owner, entries: envelope.entries };
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      hookDebugLog("async-rewake: child journal unreadable");
+    }
+
+    return undefined;
+  }
+}
+
+function ownerIsDead(ownerPid: number, probes: OrphanProbes): boolean {
+  try {
+    probes.killProbe(ownerPid, 0);
+    return false;
+  } catch (error: unknown) {
+    return (error as NodeJS.ErrnoException).code === "ESRCH";
+  }
+}
+
+async function reapChildJournal(
+  runtime: HooksRuntime,
+  loc: ScopedLocations,
+  filePath: string,
+  probes: OrphanProbes,
+): Promise<void> {
+  await runtime.runPidTableOperation(filePath, async () => {
+    const journal = await readChildJournal(filePath, loc);
+    if (journal === undefined || !ownerIsDead(journal.owner.ownerPid, probes)) {
+      return;
+    }
+
+    const unresolved: PidTableEntry[] = [];
+    for (const row of journal.entries) {
+      // eslint-disable-next-line no-await-in-loop -- bounded recovery checks each process in order
+      if (!(await recoverChildRow(journal.owner, row, probes))) {
+        unresolved.push(row);
+      }
+    }
+
+    if (
+      unresolved.length !== journal.entries.length &&
+      ownerIsDead(journal.owner.ownerPid, probes)
+    ) {
+      await writeChildJournal(journal.owner, unresolved);
+    }
+  });
+}
+
+async function recoverChildRow(
+  owner: ChildJournalOwner,
+  row: PidTableEntry,
+  probes: OrphanProbes,
+): Promise<boolean> {
+  if (!ownerIsDead(owner.ownerPid, probes)) {
+    return false;
+  }
+
+  try {
+    probes.killProbe(row.pid, 0);
+  } catch (error: unknown) {
+    return (error as NodeJS.ErrnoException).code === "ESRCH" && ownerIsDead(owner.ownerPid, probes);
+  }
+
+  if (process.platform !== "linux") {
+    return false;
+  }
+
+  const marker = await readProcEnvironMarker(row.pid, probes);
+  if (marker !== row.dispatchId || !ownerIsDead(owner.ownerPid, probes)) {
+    return false;
+  }
+
+  try {
+    killOrphanGroup(row.pid, probes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function reapChildJournals(
+  runtime: HooksRuntime,
+  loc: ScopedLocations,
+  probes: OrphanProbes,
+): Promise<void> {
+  const dirPath = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+  try {
+    await assertPathInside(loc.dataRoot, dirPath, "child journal scan");
+    const dir = await opendir(dirPath);
+    let scanned = 0;
+    for await (const entry of dir) {
+      if (!entry.isFile() || !/^[a-f0-9]{64}\.json$/.test(entry.name)) {
+        continue;
+      }
+
+      if (scanned === MAX_CHILD_JOURNALS_SCANNED) {
+        hookDebugLog("async-rewake: child journal scan limit reached; work remains");
+        break;
+      }
+
+      scanned += 1;
+
+      await reapChildJournal(runtime, loc, path.join(dirPath, entry.name), probes);
+    }
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      hookDebugLog("async-rewake: child journal scan unavailable");
+    }
+  }
 }
 
 /**

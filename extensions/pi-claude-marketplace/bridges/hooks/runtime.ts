@@ -1,3 +1,5 @@
+import { isSubagentChild } from "../../platform/subagent-child.ts";
+
 import type { ChildLike, TimerLadder } from "./exec-timer.ts";
 import type {
   CacheEntry,
@@ -9,13 +11,61 @@ import type {
 import type { StreamText } from "./stream-text.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { AssistantMessage } from "../../platform/pi-api.ts";
+import type { AssistantMessage, BeforeAgentStartEvent } from "../../platform/pi-api.ts";
 
 /**
  * STOP-07: the number of consecutive Stop continuations allowed. The next
  * blocking outcome is overridden; settle passes this value to the warning.
  */
 export const STOP_OVERRIDE_CAP = 8;
+
+/** One runtime's journal identity, fixed at its first child spawn in a session. */
+export interface ChildJournalOwner {
+  readonly ownerPid: number;
+  readonly sessionId: string;
+  readonly ownerToken: string;
+  readonly loc: ScopedLocations;
+}
+
+export interface MainChildIdentity {
+  readonly kind: "main";
+}
+
+export interface UnavailableChildIdentity {
+  readonly kind: "unavailable";
+}
+
+export interface KnownChildIdentity {
+  readonly kind: "known";
+  readonly agentType: string;
+  readonly childId: string;
+}
+
+export type ChildIdentity = MainChildIdentity | UnavailableChildIdentity | KnownChildIdentity;
+
+const ACTIVE_AGENT_PREFIX = /^<active_agent name="((?:[^"&<>]|&(?:amp|quot|lt|gt);)+)"\/>\n\n/;
+const XML_ENTITY_VALUES = {
+  "&amp;": "&",
+  "&quot;": '"',
+  "&lt;": "<",
+  "&gt;": ">",
+} as const;
+
+function parseIdentitySection(section: string | undefined): string | null | undefined {
+  if (!section?.startsWith("<active_agent")) {
+    return undefined;
+  }
+
+  const encoded = ACTIVE_AGENT_PREFIX.exec(section)?.[1];
+  if (encoded === undefined) {
+    return null;
+  }
+
+  return encoded.replace(
+    /&(?:amp|quot|lt|gt);/g,
+    (entity) => XML_ENTITY_VALUES[entity as keyof typeof XML_ENTITY_VALUES],
+  );
+}
 
 /** One live async-rewake child owned by a hooks runtime. */
 export interface HooksRuntimeChildEntry {
@@ -34,6 +84,7 @@ export interface HooksRuntimeChildEntry {
   readonly stderr: StreamText;
   readonly capturedGeneration: number;
   readonly loc: ScopedLocations;
+  readonly persistenceOwner?: ChildJournalOwner;
 }
 
 /** Persisted PID-table row derived from a runtime-owned child. */
@@ -109,10 +160,23 @@ export interface HooksRuntime {
    * leaves the Stop re-entry flag and the STOP-07 cap as they are.
    */
   readonly recordRunStart: (startedByRewake: boolean) => void;
+  readonly resetChildIdentity: () => void;
+  readonly captureChildIdentity: (event: BeforeAgentStartEvent, sessionId: string) => void;
+  readonly childIdentityFor: (sessionId: string) => ChildIdentity;
   readonly registerChild: (entry: HooksRuntimeChildEntry) => void;
   readonly takeChild: (dispatchId: string) => HooksRuntimeChildEntry | undefined;
-  readonly pidTableEntries: (loc: ScopedLocations) => readonly HooksRuntimePidEntry[];
-  readonly shutdownChildren: () => void;
+  readonly persistenceOwner: (
+    loc: ScopedLocations,
+    sessionId: string,
+    ownerToken: string,
+  ) => ChildJournalOwner;
+  readonly persistenceOwners: () => readonly ChildJournalOwner[];
+  readonly forgetPersistenceOwners: () => void;
+  readonly pidTableEntries: (
+    loc: ScopedLocations,
+    owner?: ChildJournalOwner,
+  ) => readonly HooksRuntimePidEntry[];
+  readonly shutdownChildren: () => readonly HooksRuntimeChildEntry[];
   readonly runPidTableOperation: (key: string, operation: () => Promise<void>) => Promise<void>;
 }
 
@@ -165,6 +229,7 @@ export function createHooksRuntime(): HooksRuntime {
   const parsedConfigCache = new Map<string, CacheEntry>();
   const routingTable = new Map<BucketAEvent, readonly RoutingEntry[]>();
   const children = new Map<string, HooksRuntimeChildEntry>();
+  const childOwners = new Map<string, ChildJournalOwner>();
   const pidTableOperations = new Map<string, Promise<void>>();
   let generation = 0;
   let trustedProject: string | undefined;
@@ -182,6 +247,8 @@ export function createHooksRuntime(): HooksRuntime {
   let runStartedByRewake = false;
   let consecutiveBlockCount = 0;
   let capNotifiedThisSession = false;
+  let childIdentity: ChildIdentity = { kind: "unavailable" };
+  let childIdentitySessionId: string | undefined;
 
   function finishStopSequence(): void {
     consecutiveBlockCount = 0;
@@ -298,6 +365,44 @@ export function createHooksRuntime(): HooksRuntime {
       runStartedByRewake = startedByRewake;
     },
 
+    resetChildIdentity(): void {
+      childIdentity = { kind: "unavailable" };
+      childIdentitySessionId = undefined;
+    },
+
+    captureChildIdentity(event: BeforeAgentStartEvent, sessionId: string): void {
+      childIdentitySessionId = sessionId;
+      if (!isSubagentChild(process.env)) {
+        childIdentity = { kind: "main" };
+        return;
+      }
+
+      const custom = parseIdentitySection(event.systemPromptOptions.customPrompt);
+      const appended = parseIdentitySection(event.systemPromptOptions.appendSystemPrompt);
+      if (
+        custom === null ||
+        appended === null ||
+        (custom !== undefined && appended !== undefined && custom !== appended)
+      ) {
+        childIdentity = { kind: "unavailable" };
+        return;
+      }
+
+      const agentType = custom ?? appended;
+      childIdentity =
+        agentType === undefined
+          ? { kind: "unavailable" }
+          : { kind: "known", agentType, childId: sessionId };
+    },
+
+    childIdentityFor(sessionId: string): ChildIdentity {
+      if (!isSubagentChild(process.env)) {
+        return { kind: "main" };
+      }
+
+      return childIdentitySessionId === sessionId ? childIdentity : { kind: "unavailable" };
+    },
+
     registerChild(entry: HooksRuntimeChildEntry): void {
       children.set(entry.dispatchId, entry);
     },
@@ -308,10 +413,40 @@ export function createHooksRuntime(): HooksRuntime {
       return entry;
     },
 
-    pidTableEntries(loc: ScopedLocations): readonly HooksRuntimePidEntry[] {
+    persistenceOwner(
+      loc: ScopedLocations,
+      sessionId: string,
+      ownerToken: string,
+    ): ChildJournalOwner {
+      const key = `${loc.dataRoot}\0${sessionId}`;
+      const existing = childOwners.get(key);
+      if (existing !== undefined) {
+        return existing;
+      }
+
+      const owner: ChildJournalOwner = { ownerPid: process.pid, sessionId, ownerToken, loc };
+      childOwners.set(key, owner);
+      return owner;
+    },
+
+    persistenceOwners(): readonly ChildJournalOwner[] {
+      return [...childOwners.values()];
+    },
+
+    forgetPersistenceOwners(): void {
+      childOwners.clear();
+    },
+
+    pidTableEntries(
+      loc: ScopedLocations,
+      owner?: ChildJournalOwner,
+    ): readonly HooksRuntimePidEntry[] {
       const entries: HooksRuntimePidEntry[] = [];
       for (const entry of children.values()) {
-        if (entry.loc === loc || entry.loc.extensionRoot === loc.extensionRoot) {
+        if (
+          (entry.loc === loc || entry.loc.extensionRoot === loc.extensionRoot) &&
+          entry.persistenceOwner === owner
+        ) {
           entries.push({
             pid: entry.pid,
             dispatchId: entry.dispatchId,
@@ -326,7 +461,8 @@ export function createHooksRuntime(): HooksRuntime {
       return entries;
     },
 
-    shutdownChildren(): void {
+    shutdownChildren(): readonly HooksRuntimeChildEntry[] {
+      const stopped = [...children.values()];
       for (const entry of children.values()) {
         entry.ladder.cancel();
         try {
@@ -337,6 +473,7 @@ export function createHooksRuntime(): HooksRuntime {
       }
 
       children.clear();
+      return stopped;
     },
 
     runPidTableOperation(key: string, operation: () => Promise<void>): Promise<void> {

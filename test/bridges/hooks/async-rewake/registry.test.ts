@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { EventEmitter, once } from "node:events";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -836,6 +837,1138 @@ function filesystemErrorCode(error: unknown): string | undefined {
 
   return undefined;
 }
+
+async function foreignJournal(
+  loc: ReturnType<typeof locationsFor>,
+  entries: readonly PidTableEntry[],
+  ownerPid = 42,
+): Promise<string> {
+  const sessionId = "foreign-session";
+  const ownerToken = "foreign-token";
+  const key = createHash("sha256")
+    .update(JSON.stringify([ownerPid, sessionId, ownerToken]))
+    .digest("hex");
+  const filePath = path.join(loc.dataRoot, "_shared", "async-rewake-children", `${key}.json`);
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(
+    filePath,
+    JSON.stringify({ version: 1, ownerPid, sessionId, ownerToken, entries }),
+  );
+  return filePath;
+}
+
+function foreignRow(): PidTableEntry {
+  return {
+    pid: 29_151,
+    dispatchId: "foreign-dispatch",
+    scope: "project",
+    marketplace: "catalog",
+    plugin: "plugin",
+    spawnedAt: "2026-11-13T00:00:00.000Z",
+  };
+}
+
+test(
+  "keeps a waiting parent hook and its table intact while a child hook runs",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-ownership-"));
+    const locations = locationsFor("project", root);
+    const parentRuntime = createHooksRuntime();
+    const childRuntime = createHooksRuntime();
+    const parent = createChild(29_101);
+    const child = createChild(29_102);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(parentRuntime);
+      await shutdownInMemoryChildren(childRuntime);
+      destroyChild(parent);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+    delete process.env.PI_SUBAGENT_CHILD;
+    await spawnAndRegister(
+      parentRuntime,
+      createEntry(root),
+      {},
+      createContext(root, "parent-session", true).context,
+      createPi().pi,
+      locations,
+      { spawnImpl: createSpawn(parent.child, []), dispatchId: () => "parent-dispatch" },
+    );
+    const parentBytes = await readFile(pidTablePath(locations));
+
+    // act
+    process.env.PI_SUBAGENT_CHILD = "1";
+    await spawnAndRegister(
+      childRuntime,
+      createEntry(root),
+      {},
+      createContext(root, "child-session", true).context,
+      createPi().pi,
+      locations,
+      { spawnImpl: createSpawn(child.child, []), dispatchId: () => "child-dispatch" },
+    );
+    await reapOrphans(childRuntime, locations, deadOrphanProbes());
+    const parentBytesAfterChild = await readFile(pidTablePath(locations));
+    child.stdout.end();
+    child.stderr.end();
+    await Promise.all([once(child.stdout, "end"), once(child.stderr, "end")]);
+    child.emitExit(0);
+    child.emitClose();
+    const parentBytesAfterExit = await readFile(pidTablePath(locations));
+
+    // assert
+    assert.deepStrictEqual(parentBytesAfterChild, parentBytes);
+    assert.deepStrictEqual(parentBytesAfterExit, parentBytes);
+    assert.deepStrictEqual(
+      parentRuntime.pidTableEntries(locations).map((row) => row.dispatchId),
+      ["parent-dispatch"],
+    );
+    assert.deepStrictEqual(parent.signals, []);
+  },
+);
+
+test(
+  "isolates two child runtime journals in one PID through plain and rewake exits",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-siblings-"));
+    const loc = locationsFor("project", root);
+    const firstRuntime = createHooksRuntime();
+    const secondRuntime = createHooksRuntime();
+    const first = createChild(29_111);
+    const second = createChild(29_112);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(firstRuntime);
+      await shutdownInMemoryChildren(secondRuntime);
+      destroyChild(first);
+      destroyChild(second);
+      await rm(root, { recursive: true, force: true });
+    });
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+
+    // act
+    await spawnAndRegister(
+      firstRuntime,
+      createEntry(root),
+      {},
+      createContext(root, "shared-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(first.child, []),
+        dispatchId: () => "first-child-dispatch",
+      },
+    );
+    await spawnAndRegister(
+      secondRuntime,
+      createEntry(root, {
+        handlerDecl: { type: "command", command: "/opt/hooks/plain", async: true },
+      }),
+      {},
+      createContext(root, "shared-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(second.child, []),
+        dispatchId: () => "second-child-dispatch",
+      },
+    );
+    const names = await readdir(journalDir);
+    const before = await Promise.all(names.map((name) => readFile(path.join(journalDir, name))));
+    const stdoutEnd = once(first.stdout, "end");
+    const stderrEnd = once(first.stderr, "end");
+    first.stdout.end();
+    first.stderr.end();
+    await Promise.all([stdoutEnd, stderrEnd]);
+    first.emitExit(0);
+    first.emitClose();
+    const firstName = names.find((_name, index) =>
+      before[index]?.toString("utf8").includes("first-child-dispatch"),
+    );
+    assert.ok(firstName);
+    await firstRuntime.runPidTableOperation(path.join(journalDir, firstName), () =>
+      Promise.resolve(),
+    );
+    const remainingNames = await readdir(journalDir);
+    const remaining = await readFile(path.join(journalDir, remainingNames[0] ?? ""));
+
+    // assert
+    assert.strictEqual(names.length, 2);
+    assert.ok(names.every((name) => /^[a-f0-9]{64}\.json$/.test(name)));
+    assert.notDeepStrictEqual(before[0], before[1]);
+    assert.strictEqual(remainingNames.length, 1);
+    assert.match(remaining.toString("utf8"), /second-child-dispatch/);
+    assert.deepStrictEqual(await stat(pidTablePath(loc)).catch(filesystemErrorCode), "ENOENT");
+    assert.deepStrictEqual(second.signals, []);
+  },
+);
+
+test(
+  "plain async and asyncRewake hooks share their captured runtime journal",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-shared-owner-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const rewake = createChild(29_118);
+    const plain = createChild(29_119);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(rewake);
+      destroyChild(plain);
+      await rm(root, { recursive: true, force: true });
+    });
+    const ctx = createContext(root, "shared-owner-session", true).context;
+    const pi = createPi().pi;
+
+    // act
+    await spawnAndRegister(runtime, createEntry(root), {}, ctx, pi, loc, {
+      spawnImpl: createSpawn(rewake.child, []),
+      dispatchId: () => "rewake-dispatch",
+    });
+    await spawnAndRegister(
+      runtime,
+      createEntry(root, {
+        handlerDecl: { type: "command", command: "/opt/hooks/plain", async: true },
+      }),
+      {},
+      ctx,
+      pi,
+      loc,
+      {
+        spawnImpl: createSpawn(plain.child, []),
+        dispatchId: () => "plain-dispatch",
+      },
+    );
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const names = await readdir(journalDir);
+    const journal: unknown = JSON.parse(
+      await readFile(path.join(journalDir, names[0] ?? ""), "utf8"),
+    );
+
+    // assert
+    assert.strictEqual(names.length, 1);
+    assert.deepStrictEqual(
+      (journal as { entries: PidTableEntry[] }).entries.map((row) => row.dispatchId),
+      ["rewake-dispatch", "plain-dispatch"],
+    );
+  },
+);
+
+test(
+  "a delayed exit after reload removes only its captured session row",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-delayed-exit-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const oldChild = createChild(29_114);
+    const newChild = createChild(29_115);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(oldChild);
+      destroyChild(newChild);
+      await rm(root, { recursive: true, force: true });
+    });
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "old-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(oldChild.child, []),
+        dispatchId: () => "old-dispatch",
+      },
+    );
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const [oldName] = await readdir(journalDir);
+    assert.ok(oldName);
+    await shutdownInMemoryChildren(runtime);
+    runtime.advanceGeneration();
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "new-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(newChild.child, []),
+        dispatchId: () => "new-dispatch",
+      },
+    );
+    const before = await readdir(journalDir);
+    const newName = before.find((name) => name !== oldName);
+    assert.ok(newName);
+    const newBytes = await readFile(path.join(journalDir, newName));
+    const stdoutEnd = once(oldChild.stdout, "end");
+    const stderrEnd = once(oldChild.stderr, "end");
+    oldChild.stdout.end();
+    oldChild.stderr.end();
+    await Promise.all([stdoutEnd, stderrEnd]);
+
+    // act
+    oldChild.emitExit(0);
+    oldChild.emitClose();
+    await runtime.runPidTableOperation(path.join(journalDir, oldName), () => Promise.resolve());
+
+    // assert
+    assert.deepStrictEqual(
+      await stat(path.join(journalDir, oldName)).catch(filesystemErrorCode),
+      "ENOENT",
+    );
+    assert.deepStrictEqual(await readFile(path.join(journalDir, newName)), newBytes);
+    assert.deepStrictEqual(
+      runtime.persistenceOwners().map((owner) => owner.sessionId),
+      ["new-session"],
+    );
+  },
+);
+
+test("contains a retired child journal cleanup error", { concurrency: false }, async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-retired-error-"));
+  const loc = locationsFor("project", root);
+  const innerRuntime = createHooksRuntime();
+  let rejectOperations = false;
+  const runtime = new Proxy(innerRuntime, {
+    get(target, property, receiver): unknown {
+      if (property === "runPidTableOperation" && rejectOperations) {
+        return (): Promise<void> => Promise.reject(new Error("journal unavailable"));
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const child = createChild(29_116);
+  const previousMarker = process.env.PI_SUBAGENT_CHILD;
+  process.env.PI_SUBAGENT_CHILD = "1";
+  t.after(async () => {
+    if (previousMarker === undefined) {
+      delete process.env.PI_SUBAGENT_CHILD;
+    } else {
+      process.env.PI_SUBAGENT_CHILD = previousMarker;
+    }
+
+    rejectOperations = false;
+    await shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true });
+  });
+  await spawnAndRegister(
+    runtime,
+    createEntry(root),
+    {},
+    createContext(root, "retired-session", true).context,
+    createPi().pi,
+    loc,
+    {
+      spawnImpl: createSpawn(child.child, []),
+      dispatchId: () => "retired-dispatch",
+    },
+  );
+  const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+  const [name] = await readdir(journalDir);
+  assert.ok(name);
+  await shutdownInMemoryChildren(runtime);
+  const stdoutEnd = once(child.stdout, "end");
+  const stderrEnd = once(child.stderr, "end");
+  child.stdout.end();
+  child.stderr.end();
+  await Promise.all([stdoutEnd, stderrEnd]);
+  rejectOperations = true;
+
+  // act
+  child.emitExit(0);
+  child.emitClose();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  // assert
+  assert.notStrictEqual(
+    await stat(path.join(journalDir, name)).catch(filesystemErrorCode),
+    "ENOENT",
+  );
+});
+
+test(
+  "a retired child's late exit tolerates an already removed journal",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-retired-absent-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_117);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "retired-absent-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "retired-absent-dispatch",
+      },
+    );
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const [name] = await readdir(journalDir);
+    assert.ok(name);
+    await shutdownInMemoryChildren(runtime);
+    await rm(path.join(journalDir, name));
+    const stdoutEnd = once(child.stdout, "end");
+    const stderrEnd = once(child.stderr, "end");
+    child.stdout.end();
+    child.stderr.end();
+    await Promise.all([stdoutEnd, stderrEnd]);
+
+    // act
+    child.emitExit(0);
+    child.emitClose();
+    await runtime.runPidTableOperation(path.join(journalDir, name), () => Promise.resolve());
+
+    // assert
+    assert.deepStrictEqual(await readdir(journalDir), []);
+  },
+);
+
+test(
+  "preserves a real waiting parent process through a real child spawn and exit",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-real-parent-child-"));
+    const loc = locationsFor("project", root);
+    const parentRuntime = createHooksRuntime();
+    const childRuntime = createHooksRuntime();
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(parentRuntime);
+      await shutdownInMemoryChildren(childRuntime);
+      await rm(root, { recursive: true, force: true });
+    });
+    delete process.env.PI_SUBAGENT_CHILD;
+    const parentEntry = createEntry(root, {
+      handlerDecl: {
+        type: "command",
+        command: process.execPath,
+        args: ["-e", "setInterval(() => undefined, 1000)"],
+        async: true,
+      },
+    });
+    await spawnAndRegister(
+      parentRuntime,
+      parentEntry,
+      {},
+      createContext(root, "real-parent", true).context,
+      createPi().pi,
+      loc,
+    );
+    const parentBytes = await readFile(pidTablePath(loc));
+    const [parentRow] = await readPidTable(loc);
+    assert.ok(parentRow);
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const childEntry = createEntry(root, {
+      handlerDecl: {
+        type: "command",
+        command: process.execPath,
+        args: ["-e", "process.exit(0)"],
+        async: true,
+      },
+    });
+
+    // act
+    await spawnAndRegister(
+      childRuntime,
+      childEntry,
+      {},
+      createContext(root, "real-child", true).context,
+      createPi().pi,
+      loc,
+    );
+    const [childOwner] = childRuntime.persistenceOwners();
+    assert.ok(childOwner);
+    const deadline = Date.now() + 3000;
+    while (childRuntime.pidTableEntries(loc, childOwner).length > 0) {
+      assert.ok(Date.now() < deadline, "real child did not exit and clear its journal");
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const names = await readdir(journalDir).catch(() => []);
+    const parentBytesAfter = await readFile(pidTablePath(loc));
+    process.kill(parentRow.pid, 0);
+
+    // assert
+    assert.deepStrictEqual(parentBytesAfter, parentBytes);
+    assert.deepStrictEqual(names, []);
+    assert.deepStrictEqual(
+      parentRuntime.pidTableEntries(loc).map((row) => row.pid),
+      [parentRow.pid],
+    );
+  },
+);
+
+for (const scenario of [
+  { name: "live owner", ownerSignal: "alive", marker: "matching", reaped: false },
+  { name: "permission-denied owner", ownerSignal: "EPERM", marker: "matching", reaped: false },
+  { name: "unknown owner probe", ownerSignal: "EIO", marker: "matching", reaped: false },
+  {
+    name: "dead owner with wrong hook marker",
+    ownerSignal: "ESRCH",
+    marker: "wrong",
+    reaped: false,
+  },
+  {
+    name: "dead owner with matched hook marker",
+    ownerSignal: "ESRCH",
+    marker: "matching",
+    reaped: process.platform === "linux",
+  },
+] as const) {
+  test(`recovers child journal only for ${scenario.name}`, { concurrency: false }, async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-recovery-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_121);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "owner-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "owned-dispatch",
+      },
+    );
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const [name] = await readdir(journalDir);
+    assert.ok(name);
+    const journalPath = path.join(journalDir, name);
+    const journalBytes = await readFile(journalPath);
+    delete process.env.PI_SUBAGENT_CHILD;
+    const probes: Array<{ pid: number; signal: number | NodeJS.Signals }> = [];
+
+    // act
+    await reapOrphans(createHooksRuntime(), loc, {
+      killProbe(pid, signal): void {
+        probes.push({ pid, signal });
+        if (pid === process.pid && signal === 0 && scenario.ownerSignal !== "alive") {
+          throw Object.assign(new Error("owner unavailable"), { code: scenario.ownerSignal });
+        }
+      },
+      environReader(): Promise<string> {
+        return Promise.resolve(
+          `PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=${scenario.marker === "matching" ? "owned-dispatch" : "other-dispatch"}\0`,
+        );
+      },
+    });
+    const journalState = await stat(journalPath).catch(filesystemErrorCode);
+
+    // assert
+    if (scenario.reaped) {
+      assert.strictEqual(journalState, "ENOENT");
+    } else {
+      assert.notStrictEqual(journalState, "ENOENT");
+    }
+
+    if (!scenario.reaped) {
+      assert.deepStrictEqual(await readFile(journalPath), journalBytes);
+    }
+
+    assert.strictEqual(
+      probes.some((call) => call.signal === "SIGKILL"),
+      scenario.reaped,
+    );
+  });
+}
+
+for (const scenario of [
+  { name: "invalid JSON", mutate: () => "{" },
+  { name: "null envelope", mutate: () => "null" },
+  {
+    name: "unknown version",
+    mutate: (value: Record<string, unknown>) => JSON.stringify({ ...value, version: 2 }),
+  },
+  {
+    name: "invalid owner PID",
+    mutate: (value: Record<string, unknown>) => JSON.stringify({ ...value, ownerPid: -1 }),
+  },
+  {
+    name: "mismatched filename digest",
+    mutate: (value: Record<string, unknown>) =>
+      JSON.stringify({ ...value, ownerToken: "changed-token" }),
+  },
+  {
+    name: "invalid row",
+    mutate: (value: Record<string, unknown>) => JSON.stringify({ ...value, entries: [{ pid: 0 }] }),
+  },
+  {
+    name: "null row",
+    mutate: (value: Record<string, unknown>) => JSON.stringify({ ...value, entries: [null] }),
+  },
+  { name: "oversized file", mutate: () => "x".repeat(1024 * 1024 + 1) },
+] as const) {
+  test(
+    `preserves a foreign child journal with ${scenario.name}`,
+    { concurrency: false },
+    async (t) => {
+      // arrange
+      const root = await mkdtemp(path.join(tmpdir(), "async-child-invalid-"));
+      const loc = locationsFor("project", root);
+      const runtime = createHooksRuntime();
+      const child = createChild(29_131);
+      const previousMarker = process.env.PI_SUBAGENT_CHILD;
+      process.env.PI_SUBAGENT_CHILD = "1";
+      t.after(async () => {
+        if (previousMarker === undefined) {
+          delete process.env.PI_SUBAGENT_CHILD;
+        } else {
+          process.env.PI_SUBAGENT_CHILD = previousMarker;
+        }
+
+        await shutdownInMemoryChildren(runtime);
+        destroyChild(child);
+        await rm(root, { recursive: true, force: true });
+      });
+      await spawnAndRegister(
+        runtime,
+        createEntry(root),
+        {},
+        createContext(root, "invalid-session", true).context,
+        createPi().pi,
+        loc,
+        {
+          spawnImpl: createSpawn(child.child, []),
+          dispatchId: () => "invalid-dispatch",
+        },
+      );
+      const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+      const [name] = await readdir(journalDir);
+      assert.ok(name);
+      const journalPath = path.join(journalDir, name);
+      const original: unknown = JSON.parse(await readFile(journalPath, "utf8"));
+      assert.ok(original !== null && typeof original === "object");
+      const altered = scenario.mutate(original as Record<string, unknown>);
+      await writeFile(journalPath, altered);
+      delete process.env.PI_SUBAGENT_CHILD;
+      const signals: Array<number | NodeJS.Signals> = [];
+
+      // act
+      await reapOrphans(createHooksRuntime(), loc, {
+        killProbe(_pid, signal): void {
+          signals.push(signal);
+          throw Object.assign(new Error("dead"), { code: "ESRCH" });
+        },
+        environReader(): Promise<string> {
+          return Promise.resolve("PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=invalid-dispatch\0");
+        },
+      });
+
+      // assert
+      assert.strictEqual(await readFile(journalPath, "utf8"), altered);
+      assert.deepStrictEqual(signals, []);
+    },
+  );
+}
+
+test("ignores unsafe journal names and symlinks", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-unsafe-"));
+  const loc = locationsFor("project", root);
+  const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+  await mkdir(journalDir, { recursive: true });
+  const unsafePath = path.join(journalDir, "not-a-digest.json");
+  const linkPath = path.join(journalDir, `${"a".repeat(64)}.json`);
+  await writeFile(unsafePath, "unsafe");
+  await symlink(unsafePath, linkPath);
+  t.after(async () => rm(root, { recursive: true, force: true }));
+  const signals: Array<number | NodeJS.Signals> = [];
+
+  // act
+  await reapOrphans(createHooksRuntime(), loc, {
+    killProbe(_pid, signal): void {
+      signals.push(signal);
+    },
+    environReader(): Promise<string> {
+      return Promise.resolve("");
+    },
+  });
+
+  // assert
+  assert.strictEqual(await readFile(unsafePath, "utf8"), "unsafe");
+  assert.deepStrictEqual(signals, []);
+});
+
+test("bounds startup journal scanning at 1024 regular JSON entries", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-scan-limit-"));
+  const loc = locationsFor("project", root);
+  const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+  await mkdir(journalDir, { recursive: true });
+  await Promise.all(
+    Array.from({ length: 1025 }, (_, index) =>
+      writeFile(path.join(journalDir, `${index.toString(16).padStart(64, "0")}.json`), "null"),
+    ),
+  );
+  t.after(async () => rm(root, { recursive: true, force: true }));
+
+  // act
+  await reapOrphans(createHooksRuntime(), loc);
+  const remaining = await readdir(journalDir);
+
+  // assert
+  assert.strictEqual(remaining.length, 1025);
+});
+
+test("preserves a journal namespace that cannot be opened as a directory", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-scan-error-"));
+  const loc = locationsFor("project", root);
+  const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+  await mkdir(path.dirname(journalDir), { recursive: true });
+  await writeFile(journalDir, "occupied");
+  t.after(async () => rm(root, { recursive: true, force: true }));
+
+  // act
+  await reapOrphans(createHooksRuntime(), loc);
+
+  // assert
+  assert.strictEqual(await readFile(journalDir, "utf8"), "occupied");
+});
+
+test(
+  "kills an unrecorded child when its journal cannot persist",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-capacity-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_141);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+
+    // act
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "capacity-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "x".repeat(257),
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(runtime.pidTableEntries(loc), []);
+    assert.deepStrictEqual(child.signals, ["SIGKILL"]);
+    assert.deepStrictEqual(await stat(pidTablePath(loc)).catch(filesystemErrorCode), "ENOENT");
+  },
+);
+
+test(
+  "contains a kill failure after child journal persistence rejects",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-kill-failed-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_142, { killError: new Error("already gone") });
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+
+    // act
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "kill-failure-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "x".repeat(257),
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(runtime.pidTableEntries(loc), []);
+    assert.deepStrictEqual(child.signals, ["SIGKILL"]);
+  },
+);
+
+test(
+  "rejects a journal over one MiB without losing its previously recorded hooks",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-byte-cap-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const owner = runtime.persistenceOwner(loc, "byte-cap-session", "byte-cap-dispatch");
+    const child = createChild(29_143);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+    for (let index = 0; index < 1300; index += 1) {
+      runtime.registerChild({
+        dispatchId: String(index).padStart(256, "x"),
+        pid: 30_000 + index,
+        scope: "project",
+        marketplace: "m".repeat(256),
+        pluginId: "p".repeat(256),
+        claudeEvent: "PreToolUse",
+        spawnedAt: "2026-11-13T00:00:00.000Z",
+        rewakeMessage: undefined,
+        rewakeSummary: undefined,
+        child: { kill: () => true },
+        ladder: { cancel: () => undefined, fired: () => false },
+        stdout: { text: () => "" },
+        stderr: { text: () => "" },
+        capturedGeneration: 0,
+        loc,
+        persistenceOwner: owner,
+      });
+    }
+
+    // act
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "byte-cap-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "byte-cap-dispatch",
+      },
+    );
+
+    // assert
+    assert.strictEqual(runtime.pidTableEntries(loc, owner).length, 1300);
+    assert.deepStrictEqual(child.signals, ["SIGKILL"]);
+    assert.deepStrictEqual(await stat(pidTablePath(loc)).catch(filesystemErrorCode), "ENOENT");
+  },
+);
+
+test("shutdown drains and removes a confirmed empty child journal", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-empty-shutdown-"));
+  const loc = locationsFor("project", root);
+  const runtime = createHooksRuntime();
+  const owner = runtime.persistenceOwner(loc, "foreign-session", "foreign-token");
+  const journalPath = await foreignJournal(loc, [], owner.ownerPid);
+  t.after(async () => rm(root, { recursive: true, force: true }));
+
+  // act
+  await shutdownInMemoryChildren(runtime);
+
+  // assert
+  assert.deepStrictEqual(await stat(journalPath).catch(filesystemErrorCode), "ENOENT");
+  assert.deepStrictEqual(runtime.persistenceOwners(), []);
+});
+
+test("shutdown preserves a nonregular child journal target", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-directory-"));
+  const loc = locationsFor("project", root);
+  const runtime = createHooksRuntime();
+  runtime.persistenceOwner(loc, "foreign-session", "foreign-token");
+  const journalPath = await foreignJournal(loc, [], process.pid);
+  await rm(journalPath);
+  await mkdir(journalPath);
+  t.after(async () => rm(root, { recursive: true, force: true }));
+
+  // act
+  await shutdownInMemoryChildren(runtime);
+
+  // assert
+  assert.strictEqual((await stat(journalPath)).isDirectory(), true);
+});
+
+for (const scenario of [
+  {
+    name: "missing hook PID",
+    hookSignal: "ESRCH",
+    ownerRevives: false,
+    killed: false,
+    remains: false,
+  },
+  {
+    name: "permission-denied hook PID",
+    hookSignal: "EPERM",
+    ownerRevives: false,
+    killed: false,
+    remains: true,
+  },
+  {
+    name: "unknown hook probe",
+    hookSignal: "EIO",
+    ownerRevives: false,
+    killed: false,
+    remains: true,
+  },
+  {
+    name: "reused owner PID",
+    hookSignal: "alive",
+    ownerRevives: true,
+    killed: false,
+    remains: true,
+  },
+  {
+    name: "failed hook group signal",
+    hookSignal: "failed-kill",
+    ownerRevives: false,
+    killed: false,
+    remains: true,
+  },
+] as const) {
+  test(
+    `preserves or removes the foreign row for ${scenario.name}`,
+    { concurrency: false },
+    async (t) => {
+      // arrange
+      const root = await mkdtemp(path.join(tmpdir(), "async-child-foreign-row-"));
+      const loc = locationsFor("project", root);
+      const journalPath = await foreignJournal(loc, [foreignRow()]);
+      const original = await readFile(journalPath);
+      t.after(async () => rm(root, { recursive: true, force: true }));
+      let ownerProbes = 0;
+      const signals: Array<number | NodeJS.Signals> = [];
+
+      // act
+      await reapOrphans(createHooksRuntime(), loc, {
+        killProbe(pid, signal): void {
+          signals.push(signal);
+          if (pid === 42 && signal === 0) {
+            ownerProbes += 1;
+            if (scenario.ownerRevives && ownerProbes > 1) {
+              return;
+            }
+
+            throw Object.assign(new Error("dead"), { code: "ESRCH" });
+          }
+
+          if (
+            signal === 0 &&
+            scenario.hookSignal !== "alive" &&
+            scenario.hookSignal !== "failed-kill"
+          ) {
+            throw Object.assign(new Error("hook probe"), { code: scenario.hookSignal });
+          }
+
+          if (signal === "SIGKILL" && scenario.hookSignal === "failed-kill") {
+            throw new Error("group signal denied");
+          }
+        },
+        environReader(): Promise<string> {
+          return Promise.resolve("PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=foreign-dispatch\0");
+        },
+      });
+
+      // assert
+      assert.strictEqual(
+        (await stat(journalPath).catch(filesystemErrorCode)) === "ENOENT",
+        !scenario.remains,
+      );
+      if (scenario.remains) {
+        assert.deepStrictEqual(await readFile(journalPath), original);
+      }
+
+      assert.strictEqual(
+        signals.includes("SIGKILL"),
+        scenario.hookSignal === "failed-kill" && process.platform === "linux",
+      );
+    },
+  );
+}
+
+test(
+  "skips a foreign hook when the owner revives after hook marker proof",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-owner-reuse-"));
+    const loc = locationsFor("project", root);
+    const journalPath = await foreignJournal(loc, [foreignRow()]);
+    const original = await readFile(journalPath);
+    t.after(async () => rm(root, { recursive: true, force: true }));
+    let ownerProbes = 0;
+    const signals: Array<number | NodeJS.Signals> = [];
+
+    // act
+    await reapOrphans(createHooksRuntime(), loc, {
+      killProbe(pid, signal): void {
+        signals.push(signal);
+        if (pid === 42 && signal === 0) {
+          ownerProbes += 1;
+          if (ownerProbes === 3) {
+            return;
+          }
+
+          throw Object.assign(new Error("dead"), { code: "ESRCH" });
+        }
+      },
+      environReader(): Promise<string> {
+        return Promise.resolve("PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=foreign-dispatch\0");
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(await readFile(journalPath), original);
+    assert.deepStrictEqual(
+      signals.filter((signal) => signal === "SIGKILL"),
+      [],
+    );
+  },
+);
+
+test(
+  "preserves a dead owner's live hook on a platform without a process marker",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-nonlinux-"));
+    const loc = locationsFor("project", root);
+    const journalPath = await foreignJournal(loc, [foreignRow()]);
+    const original = await readFile(journalPath);
+    t.mock.property(process, "platform", "darwin");
+    t.after(async () => rm(root, { recursive: true, force: true }));
+    const signals: Array<number | NodeJS.Signals> = [];
+
+    // act
+    await reapOrphans(createHooksRuntime(), loc, {
+      killProbe(pid, signal): void {
+        signals.push(signal);
+        if (pid === 42 && signal === 0) {
+          throw Object.assign(new Error("dead"), { code: "ESRCH" });
+        }
+      },
+      environReader(): Promise<string> {
+        throw new Error("non-Linux recovery must not read /proc");
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(await readFile(journalPath), original);
+    assert.deepStrictEqual(
+      signals.filter((signal) => signal === "SIGKILL"),
+      [],
+    );
+  },
+);
 
 test(
   "keeps same-shaped child persistence and stale completion isolated by runtime",

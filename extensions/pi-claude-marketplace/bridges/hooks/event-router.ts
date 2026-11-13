@@ -57,6 +57,7 @@ import {
   isRecordedButDisabled,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
+import { isSubagentChild } from "../../platform/subagent-child.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -131,6 +132,28 @@ type EventRouterRoutingState = Pick<
   | "setParsedConfig"
   | "setRoutingBucket"
 >;
+
+type ChildEventOutcome = "dispatch" | "suppress" | "SubagentStart" | "SubagentStop";
+
+const CHILD_EVENT_POLICY = {
+  SessionStart: "SubagentStart",
+  UserPromptSubmit: "suppress",
+  PreToolUse: "dispatch",
+  PostToolUse: "dispatch",
+  PostToolUseFailure: "dispatch",
+  PreCompact: "suppress",
+  PostCompact: "suppress",
+  SessionEnd: "suppress",
+  Stop: "SubagentStop",
+  StopFailure: "suppress",
+} as const satisfies Record<BucketAEvent, ChildEventOutcome>;
+
+const CHILD_IDENTITY_DIAGNOSTIC =
+  "Child hook identity unavailable: companion launch metadata is missing or malformed";
+
+function dispatchesInCurrentSession(event: BucketAEvent): boolean {
+  return !isSubagentChild(process.env) || CHILD_EVENT_POLICY[event] === "dispatch";
+}
 
 /**
  * Read `hooks.json` from disk, parse via `parseHooksConfig`, and
@@ -250,7 +273,13 @@ function createBeforeAgentStartHandler(
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
-  return (event) => {
+  return (event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    runtime.captureChildIdentity(event, sessionId);
+    if (runtime.childIdentityFor(sessionId).kind === "unavailable") {
+      hookDebugLog(CHILD_IDENTITY_DIAGNOSTIC);
+    }
+
     runtime.recordRunStart(
       event.messageType === "custom" && event.message.customType === REWAKE_CUSTOM_TYPE,
     );
@@ -892,31 +921,37 @@ async function prepareSessionStartDataDirs(
 /**
  * The `session_shutdown` callback: it maps Pi's reason once, with the live
  * session mode, and dispatches the Claude-side SessionEnd event (D-CF5-02).
- * Pi `reload` keeps the session, so it runs no SessionEnd and a cleanup hook
- * never tears down state of a session that continues (D-CF5-03). A context
- * whose mode is not a notification mode is skipped with a debug line before
- * the event is read.
+ * Pi `reload` keeps the session, so it runs no SessionEnd (D-CF5-03). Every
+ * shutdown drains this runtime's async children, including reload and child
+ * sessions. A context whose mode is not a notification mode skips dispatch
+ * with a debug line but still runs that cleanup.
  */
 function sessionShutdownCallback(
   sessionEndHandler: CompositeHandler<"SessionEnd">,
-): (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<undefined> | undefined {
-  return (event, ctx) => {
-    let mode: ExtensionMode;
+  runtime: HooksRuntime,
+): (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<undefined> {
+  return async (event, ctx) => {
     try {
-      // Without a notification mode the user-facing channel is unavailable, so
-      // the hook could not report its outcome. The callback is skipped and
-      // debug-logged instead; the same skip applies at the other mode checks.
-      mode = requireNotificationMode(ctx.mode);
-    } catch (error: unknown) {
-      hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
-      return undefined;
-    }
+      let mode: ExtensionMode;
+      try {
+        // Without a notification mode the user-facing channel is unavailable, so
+        // the hook could not report its outcome. The callback is skipped and
+        // debug-logged instead; the same skip applies at the other mode checks.
+        mode = requireNotificationMode(ctx.mode);
+      } catch (error: unknown) {
+        hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+        return undefined;
+      }
 
-    if (event.reason === "reload") {
-      return undefined;
-    }
+      if (event.reason === "reload" || !dispatchesInCurrentSession("SessionEnd")) {
+        return undefined;
+      }
 
-    return sessionEndHandler({ reason: claudeSessionEndReason(event.reason, mode) }, ctx);
+      await sessionEndHandler({ reason: claudeSessionEndReason(event.reason, mode) }, ctx);
+      return;
+    } finally {
+      await shutdownInMemoryChildren(runtime);
+    }
   };
 }
 
@@ -951,10 +986,11 @@ async function runCompactionSessionStart(
 /**
  * The `session_compact` callback (D-CF5-04, D-CF5-05): one compaction runs
  * SessionStart with `source: "compact"` to completion and then PostCompact,
- * as upstream. The compaction SessionStart never passes the SSDEDUP-01 guard
- * of `session_start`, so each compaction runs it again. A context whose mode
- * is not a notification mode is skipped with a debug line before the event
- * is read.
+ * as upstream in main sessions. Child sessions dispatch neither event. The
+ * compaction SessionStart never passes the SSDEDUP-01 guard of
+ * `session_start`, so each main-session compaction runs it again. A context
+ * whose mode is not a notification mode is skipped with a debug line before
+ * the event is read.
  */
 function sessionCompactCallback(
   handlers: {
@@ -969,6 +1005,10 @@ function sessionCompactCallback(
       requireNotificationMode(ctx.mode);
     } catch (error: unknown) {
       hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+      return undefined;
+    }
+
+    if (!dispatchesInCurrentSession("SessionStart")) {
       return undefined;
     }
 
@@ -1066,6 +1106,7 @@ async function registerHooksBridgeWith(
   // with both pending buffers empty, which only the SessionStart and
   // UserPromptSubmit adapters can subsequently populate (D-CF5-13).
   runtime.preparePendingContextForRegistration();
+  runtime.resetChildIdentity();
 
   // Same epoch hygiene for the settle dispatcher's cached last-assistant
   // message: clear it so a `/reload` cannot leak the prior session's message
@@ -1077,7 +1118,7 @@ async function registerHooksBridgeWith(
   // new runtime for every load, so in production this walk finds nothing:
   // the user-scope reap below and the project hydrate's reap stop an earlier
   // load's children, on /reload and after a crash alike (D-BG-207).
-  shutdownInMemoryChildren(runtime);
+  await shutdownInMemoryChildren(runtime);
 
   const hydrated = await hydrateCacheFromDisk(opts, reader, routingState, generationIsCurrent);
   for (const { loc } of hydrated) {
@@ -1168,7 +1209,10 @@ async function registerHooksBridgeWith(
           }
 
           requireNotificationMode(ctx.mode);
-          await sessionStartHandler({ source: claudeSessionStartSource(event.reason) }, ctx);
+          if (dispatchesInCurrentSession("SessionStart")) {
+            await sessionStartHandler({ source: claudeSessionStartSource(event.reason) }, ctx);
+          }
+
           if (!generationIsCurrent()) {
             return;
           }
@@ -1183,14 +1227,17 @@ async function registerHooksBridgeWith(
     bind((generation) =>
       sessionShutdownCallback(
         compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
+        runtime,
       ),
     ),
   );
   pi.on(
     "session_before_compact",
-    bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor),
-    ),
+    bindWithMode((generation) => {
+      const handler = compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor);
+      return (event, ctx) =>
+        dispatchesInCurrentSession("PreCompact") ? handler(event, ctx) : undefined;
+    }),
   );
   pi.on(
     "session_compact",
@@ -1207,9 +1254,17 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "input",
-    bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "UserPromptSubmit", generation, pi, opts.executor),
-    ),
+    bindWithMode((generation) => {
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptSubmit",
+        generation,
+        pi,
+        opts.executor,
+      );
+      return (event, ctx) =>
+        dispatchesInCurrentSession("UserPromptSubmit") ? handler(event, ctx) : undefined;
+    }),
   );
   // D-P5-07: both tool handlers of this generation share one view, so they
   // read the proxy rule's implementation at most once together. Creating the
@@ -1252,7 +1307,17 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "agent_settled",
-    bind((generation) => settleHandlerFor(runtime, generation, pi, opts.executor)),
+    bind((generation) => {
+      const handler = settleHandlerFor(runtime, generation, pi, opts.executor);
+      return (event, ctx) => {
+        if (!dispatchesInCurrentSession("Stop") && !dispatchesInCurrentSession("StopFailure")) {
+          runtime.takeLastAssistant();
+          return Promise.resolve();
+        }
+
+        return handler(event, ctx);
+      };
+    }),
   );
   // STOP-07 loop-protection reset: a dedicated second `input` subscription
   // (distinct from the UserPromptSubmit dispatch handler above) clears the

@@ -194,3 +194,30 @@ Feature: Plugin subagent child
       | 2    | user        | run the echo                                 |
       | 2    | assistant   | tool call bash {"command":"echo from-model"} |
       | 2    | tool result | bash returned: from-model\n                  |
+
+  Scenario: A background child runs tool hooks without parent lifecycle hooks
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name       | event            | matcher |
+      | start      | SessionStart     |         |
+      | prompt     | UserPromptSubmit |         |
+      | before     | PreToolUse       | Bash    |
+      | after      | PostToolUse      | Bash    |
+      | ending     | SessionEnd       |         |
+      | stop       | Stop             |         |
+      | stop-error | StopFailure      |         |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given pi runs with the scripted model as a pi-subagents background child
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event       | tool name | CLAUDECODE | CLAUDE_CODE_SESSION_ID | CLAUDE_PLUGIN_DATA                                         | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PROJECT_DIR | CLAUDE_SESSION_ID | arguments | cwd           | session | tool input                    | tool response                                                                                 | transcript path |
+      | PreToolUse  | Bash      | 1          | first                  | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {home}/marketplaces/fixtures/plugins/demo | {project dir}      | first             | before    | {project dir} | first   | {"command":"echo from-model"} |                                                                                               |                 |
+      | PostToolUse | Bash      | 1          | first                  | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {home}/marketplaces/fixtures/plugins/demo | {project dir}      | first             | after     | {project dir} | first   | {"command":"echo from-model"} | {"interrupted":false,"structuredContent":[{"type":"text","text":"from-model\\n"}]} |                 |
