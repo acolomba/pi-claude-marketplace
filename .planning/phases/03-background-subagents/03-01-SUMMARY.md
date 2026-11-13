@@ -98,9 +98,9 @@ plan_head_after: 62b5b3c496d56dae7e12f31fec8612392a160d35
 
 ## Task Commits
 
-1. **Task 03-01-01, child async ownership:** `dc8e90dce41a694cc59a183c65ad86e5188dd479`
-2. **Task 03-01-02, child event policy and cleanup:** `14518c7a35e9efe56e6346e1b6becd7373f2a368`
-3. **Task 03-01-03, before-run identity capture:** `62b5b3c496d56dae7e12f31fec8612392a160d35`
+1. **Task 1: Child async ownership** - dc8e90dce41a694cc59a183c65ad86e5188dd479
+2. **Task 2: Child event policy and cleanup** - 14518c7a35e9efe56e6346e1b6becd7373f2a368
+3. **Task 3: Before-run identity capture** - 62b5b3c496d56dae7e12f31fec8612392a160d35
 
 ## Validation
 
@@ -147,4 +147,18 @@ All three task SHAs are ancestors of the code head, the three required productio
 
 ## Next Phase Readiness
 
-Ready for plan 03-02. The parent should merge wave 1 and run its combined-tree `npm run check` gate. Permanent real detached companion identity integration remains assigned to the later phase plan.
+Ready for plan 03-03. The parent should merge wave 1 and run its combined-tree `npm run check` gate. Permanent real detached companion identity integration remains assigned to the later phase plan.
+
+## Parent Reconciliation
+
+The worktree merged with 03-02. The first combined gate reproduced the real-child
+journal assertion race: the in-memory row was gone before its queued file removal
+finished. Commit `5dfe02148494586a35c7f53ab38f1e09fca3a902` waits on that existing
+persistence queue and lets directory read errors fail. It retains the exact empty
+journal, parent table bytes, parent process liveness and parent row assertions.
+
+The full combined gate passed at that commit on Node v26.13.1 with normal
+concurrency: 1876 adapter scenarios, 168 builtin scenarios and all 361 direct
+coverage pairs. See 03-VALIDATION.md for command, timing and logs. The earlier
+serial-only result is superseded by this full passing result. The required child
+behavior feature is the accepted seventh-file scope adjustment.

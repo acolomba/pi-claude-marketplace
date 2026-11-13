@@ -1,7 +1,7 @@
 ---
 phase: "03"
 slug: background-subagents
-status: planned
+status: in_progress
 nyquist_compliant: false
 wave_0_complete: false
 created: "2026-11-13"
@@ -33,12 +33,12 @@ Every task has explicit automated commands immediately followed by failing-direc
 
 | Task ID | Plan | Wave | Requirements | Threat Ref | Contract | Test Type | Representative Automated Command | File Exists | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| 03-01-01 | 01 | 1 | PG-HOOK-07a | T-03-01, T-03-02, T-03-03 | Run one child async hook without touching its parent's process table | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/runtime.test.ts test/bridges/hooks/async-rewake/registry.test.ts` | Existing or created by declared predecessor; extend | pending |
-| 03-01-02 | 01 | 1 | PG-HOOK-07a | T-03-04, T-03-05 | Route the full child event vocabulary and always clean its own hooks | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/event-router.test.ts test/bridges/hooks/async-rewake/registry.test.ts` | Existing or created by declared predecessor; extend | pending |
-| 03-01-03 | 01 | 1 | PG-HOOK-07a | T-03-06, T-03-07, T-03-08 | Capture the companion identity on a real before-run callback | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/runtime.test.ts test/bridges/hooks/event-router.test.ts` | Existing or created by declared predecessor; extend | pending |
-| 03-02-01 | 02 | 1 | PG-AGENT-01 | T-03-14, T-03-16 | Translate exact historical and corrected warnings without changing stored generation | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/agents/mcp-async-warning.test.ts test/bridges/agents/legacy-grant-form.test.ts` | Existing or created by declared predecessor; extend | pending |
-| 03-02-02 | 02 | 1 | PG-AGENT-01 | T-03-14, T-03-15, T-03-16 | Discover implementation-less records and preserve user edits | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/agents/mcp-async-warning.test.ts test/bridges/agents/grant-rewrite.test.ts` | Existing or created by declared predecessor; extend | pending |
-| 03-02-03 | 02 | 1 | PG-AGENT-01 | T-03-14, T-03-15, T-03-16 | Prove warning migration and edited-file protection in both MCP profiles | behavior | `npm run test:cucumber:profile -- --profile adapter features/mcp-server/agent-grants.feature features/mcp-server/verdict-markers.feature` | Existing or created by declared predecessor; extend | pending |
+| 03-01-01 | 01 | 1 | PG-HOOK-07a | T-03-01, T-03-02, T-03-03 | Run one child async hook without touching its parent's process table | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/runtime.test.ts test/bridges/hooks/async-rewake/registry.test.ts` | Existing or created by declared predecessor; extend | passed |
+| 03-01-02 | 01 | 1 | PG-HOOK-07a | T-03-04, T-03-05 | Route the full child event vocabulary and always clean its own hooks | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/event-router.test.ts test/bridges/hooks/async-rewake/registry.test.ts` | Existing or created by declared predecessor; extend | passed |
+| 03-01-03 | 01 | 1 | PG-HOOK-07a | T-03-06, T-03-07, T-03-08 | Capture the companion identity on a real before-run callback | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/runtime.test.ts test/bridges/hooks/event-router.test.ts` | Existing or created by declared predecessor; extend | passed |
+| 03-02-01 | 02 | 1 | PG-AGENT-01 | T-03-14, T-03-16 | Translate exact historical and corrected warnings without changing stored generation | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/agents/mcp-async-warning.test.ts test/bridges/agents/legacy-grant-form.test.ts` | Existing or created by declared predecessor; extend | passed |
+| 03-02-02 | 02 | 1 | PG-AGENT-01 | T-03-14, T-03-15, T-03-16 | Discover implementation-less records and preserve user edits | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/agents/mcp-async-warning.test.ts test/bridges/agents/grant-rewrite.test.ts` | Existing or created by declared predecessor; extend | passed |
+| 03-02-03 | 02 | 1 | PG-AGENT-01 | T-03-14, T-03-15, T-03-16 | Prove warning migration and edited-file protection in both MCP profiles | behavior | `npm run test:cucumber:profile -- --profile adapter features/mcp-server/agent-grants.feature features/mcp-server/verdict-markers.feature` | Existing or created by declared predecessor; extend | passed |
 | 03-03-01 | 03 | 2 | PG-HOOK-07a | T-03-07, T-03-09 | Serialize session-checked identity on pre-tool payloads | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/translation-context.test.ts test/bridges/hooks/payloads/pre-tool-use.test.ts` | Existing or created by declared predecessor; extend | pending |
 | 03-03-02 | 03 | 2 | PG-HOOK-07a | T-03-07, T-03-09 | Carry one immutable identity through synchronous and background hook execution | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/dispatch-exec.test.ts test/bridges/hooks/async-rewake/registry.test.ts` | Existing or created by declared predecessor; extend | pending |
 | 03-04-01 | 04 | 2 | PG-AGENT-01 | T-03-20 | Emit the corrected warning through fresh conversion, staging and install | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/agents/mcp-async-warning.test.ts test/bridges/agents/convert.test.ts test/bridges/agents/stage.test.ts test/orchestrators/plugin/install-outcome.test.ts` | Existing or created by declared predecessor; extend | pending |
@@ -58,7 +58,7 @@ Normal commit hooks are mandatory. Each combined-tree gate uses the complete com
 
 | Gate | Command | Timeout | Required evidence | Status |
 |---|---|---|---|---|
-| Wave 1 combined tree | `npm run check` | 2400 seconds | Runtime/capture and legacy-recognition merges; exact commit/tree, Node version, exit and complete stages | pending |
+| Wave 1 combined tree | `npm run check` | 2400 seconds | Runtime/capture and legacy-recognition merges; exact commit/tree, Node version, exit and complete stages | passed |
 | Wave 2 combined tree | `npm run check` | 2400 seconds | Pre-tool dispatch and corrected current-warning merges; same evidence | pending |
 | Wave 3 combined tree | `npm run check` | 2400 seconds | Result identity and installed lifecycle/process acceptance; same evidence | pending |
 | Wave 4 combined tree | `npm run check` | 2400 seconds | Complete lanes and actual detached/concurrent companion acceptance; same evidence | pending |
@@ -108,3 +108,25 @@ Missing evidence must be automated before requesting user testing.
 - [ ] `nyquist_compliant: true` set after completed verification.
 
 **Approval:** pending execution and validation
+
+## Wave 1 Execution Evidence
+
+Plans 03-01 and 03-02 are merged. Six task commits and both summaries were
+verified by exact SHA ancestry and clean worktree status. No task hook was bypassed.
+The child behavior feature was a necessary seventh-file scope adjustment.
+
+- Initial combined gate: exit 1 at `ad9386f5823dfd9cdb671d5c960862b450530968`.
+  Both Cucumber profiles passed; direct coverage exposed a journal assertion
+  racing asynchronous cleanup. Log: `/tmp/pg3-wave1-check.log`.
+- Correction: `5dfe02148494586a35c7f53ab38f1e09fca3a902` awaits the existing
+  per-journal persistence queue and rejects directory read failures. Normal
+  commit hooks and the changed-file Fallow audit passed.
+- Passing gate: `node .codex/gsd-core/bin/gsd-tools.cjs run-with-timeout 2400 -- npm run check`,
+  exit 0 at `5dfe02148494586a35c7f53ab38f1e09fca3a902`, Node v26.13.1.
+  Started 2026-11-13T16:58:56.918293Z; finished 2026-11-13T17:08:13.055274Z.
+  Static checks, unpaired tests, integration tests, 1876 adapter scenarios /
+  22904 steps, 168 builtin scenarios / 2295 steps and all 361 direct pairs passed.
+  Log: `/tmp/pg3-wave1-check-fixed.log`; metadata: `/tmp/pg3-wave1-gate-fixed.json`.
+- Schema drift: clear. Codebase map drift: advisory only, no automatic remap.
+- Both upcoming wave-2 plans pass key-link checks. Final phase, security, review
+  and real-companion acceptance gates remain pending.
