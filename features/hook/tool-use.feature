@@ -8,6 +8,94 @@ Feature: Hook tool use
   proxy call (MHK-02).
   A tool whose cut name has a proxy's shape is still a tool under either implementation.
 
+  Scenario: A search result replacement changes what the model receives
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output |
+      | replace | PostToolUse | Glob    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"filenames":["SAFE_PATH"]}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "secret.md" with the text "OLD_SECRET" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments            |
+      |       | find | {"pattern":"*.md"}  |
+      | Done. |      |                      |
+    When the user prompts "find the secret"
+    Then another pi handler observes these complete file results:
+      | record |
+      | {"toolName":"find","content":[{"type":"text","text":"SAFE_PATH"}],"details":null,"structuredContent":null,"isError":false} |
+    Then the model receives these calls:
+      | call | role        | text                              |
+      | 1    | user        | find the secret                   |
+      | 2    | user        | find the secret                   |
+      | 2    | assistant   | tool call find {"pattern":"*.md"} |
+      | 2    | tool result | find returned: SAFE_PATH          |
+
+  Scenario: A shell result replacement preserves supplied images
+    Given pi runs with the scripted model and a downstream file result observer
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output |
+      | replace | PostToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"structuredContent":[{"type":"image","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYPj/HwADAgH/HXJk1AAAAABJRU5ErkJggg==","mimeType":"image/png"}],"persistedOutputPath":"/tmp/DO_NOT_READ"}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                        |
+      |       | bash | {"command":"printf OLD_SECRET"} |
+      | Done. |      |                                  |
+    When the user prompts "run the shell"
+    Then another pi handler observes these complete file results:
+      | record |
+      | {"toolName":"bash","content":[{"type":"image","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYPj/HwADAgH/HXJk1AAAAABJRU5ErkJggg==","mimeType":"image/png"}],"details":null,"structuredContent":null,"isError":false} |
+    Then the model receives these calls:
+      | call | role        | text                                             |
+      | 1    | user        | run the shell                                    |
+      | 2    | user        | run the shell                                    |
+      | 2    | assistant   | tool call bash {"command":"printf OLD_SECRET"} |
+      | 2    | tool result | bash returned: image                             |
+
+  Scenario Outline: An empty search or shell replacement clears original output for <name>
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output |
+      | replace | PostToolUse | <name>  | script | <replacement> |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "secret.md" with the text "OLD_SECRET" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool   | arguments   |
+      |       | <tool> | <arguments> |
+      | Done. |        |             |
+    When the user prompts "clear output"
+    Then another pi handler observes these complete file results:
+      | record |
+      | {"toolName":"<tool>","content":[{"type":"text","text":""}],"details":null,"structuredContent":null,"isError":false} |
+    Then the model receives these calls, with an empty tool result:
+      | call | role        | text                          |
+      | 1    | user        | clear output                  |
+      | 2    | user        | clear output                  |
+      | 2    | assistant   | tool call <tool> <arguments>  |
+      | 2    | tool result | <tool> returned: <empty>      |
+
+    Examples:
+      | name | tool | arguments                      | replacement |
+      | Glob | find | {"pattern":"*.md"}            | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"filenames":[]}}} |
+      | Bash | bash | {"command":"printf OLD_SECRET"} | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"stdout":""}}} |
+
   Scenario: A file result replacement changes what the model reads
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
