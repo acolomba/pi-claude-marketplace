@@ -78,7 +78,7 @@ function runnerInput(cwd: string): ChildLaunchInput {
   };
 }
 
-test("unrestricted runner suppresses ambient adapter tools, a known upstream gap", async (t) => {
+test("unrestricted runner keeps ambient adapter tools available", async (t) => {
   // arrange
   const { launch } = await loadLaunch(t);
   const { cwd } = await createHermeticEnvironment(t, "child-launch-unrestricted-");
@@ -87,7 +87,6 @@ test("unrestricted runner suppresses ambient adapter tools, a known upstream gap
   const child = launch.buildInProcessChildLaunch(runnerInput(cwd));
 
   // assert
-  // The installed launcher writes __none__ even though the runner loads ambient extensions.
   assert.deepStrictEqual(
     {
       tools: child.session.tools,
@@ -101,13 +100,12 @@ test("unrestricted runner suppresses ambient adapter tools, a known upstream gap
       excludeTools: undefined,
       ambientExtensions: true,
       ownsMcpDirectTools: true,
-      mcpDirectTools: "__none__",
+      mcpDirectTools: undefined,
     },
-    "Known upstream gap: https://github.com/nicobailon/pi-subagents/pull/3259. Run the positive acceptance instructions in the saved README before changing this expectation.",
   );
 });
 
-test("exclusion-only runner suppresses every adapter tool, a known upstream gap", async (t) => {
+test("exclusion-only runner keeps ambient adapter tools available", async (t) => {
   // arrange
   const { launch } = await loadLaunch(t);
   const excludedTool = "mcp__plugin_demo_a-server-whose-name-runs-well-past-the_a4df039c";
@@ -133,9 +131,8 @@ test("exclusion-only runner suppresses every adapter tool, a known upstream gap"
       excludeTools: [excludedTool],
       ambientExtensions: true,
       ownsMcpDirectTools: true,
-      mcpDirectTools: "__none__",
+      mcpDirectTools: undefined,
     },
-    "Known upstream gap: all adapter tools are suppressed, not selectively excluded. See https://github.com/nicobailon/pi-subagents/pull/3259 and run the positive acceptance instructions in the saved README before changing this expectation.",
   );
 });
 

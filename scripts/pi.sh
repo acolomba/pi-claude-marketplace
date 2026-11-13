@@ -116,7 +116,7 @@ try {
 # find the workflows the bridge installs.
 pi_cm_pins=(
   "pi-mcp-adapter@7.0.1"
-  "pi-subagents@0.88.0"
+  "pi-subagents@0.88.1"
   "@quintinshaw/pi-dynamic-workflows@3.15.0"
 )
 

@@ -153,7 +153,7 @@ test("package.json declares the optional pi-dynamic-workflows peer at >=3.15.0 <
   assert.deepStrictEqual(meta, { optional: true });
 });
 
-test("the suites run pi-subagents 0.88.0, a version the declared range admits, and no other companion names a suite version (D-PG1-02)", async () => {
+test("the suites run pi-subagents 0.88.1, a version the declared range admits, and no other companion names a suite version (D-PG1-02)", async () => {
   // arrange
   const pkg = await readPackageJson();
   const suiteVersions = JSON.parse(
@@ -164,7 +164,7 @@ test("the suites run pi-subagents 0.88.0, a version the declared range admits, a
   const range = pkg.peerDependencies?.[SUBAGENTS_PEER];
 
   // assert
-  assert.deepStrictEqual(suiteVersions, { "pi-subagents": "0.88.0" });
+  assert.deepStrictEqual(suiteVersions, { "pi-subagents": "0.88.1" });
   assert.ok(range);
   assert.ok(satisfies(suiteVersions[SUBAGENTS_PEER], range));
 });

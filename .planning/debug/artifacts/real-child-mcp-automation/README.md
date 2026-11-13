@@ -1,8 +1,18 @@
 # Detached-child MCP companion reproduction
 
-This artifact records the locally patched `pi-subagents` companion result. It does not change the installed or published `pi-subagents` 0.88.0 package.
+This artifact records the published pi-subagents 0.88.1 adoption on 2026-11-13 and retains the 2026-11-12 local-patch evidence below.
 
-## Provenance
+## Published-package adoption — 2026-11-13
+
+The registry reports `pi-subagents@0.88.1` from `nicobailon/pi-subagents`, published at `2026-11-13T07:21:28.163Z`, with integrity `sha512-Yrt0kBT+ChgnmcVzBu2004lwuwmRTHdr1jGUdLd9X7+TAdpLaCILCRFHQhnM9u4fnyOPDLE8wASnedp0nuXc9g==`. The existing optional-peer installer fetched it with registry integrity checks, `--ignore-scripts`, and its publication cutoff. The installed `src/runs/shared/child-launch.js` sets the owned `MCP_DIRECT_TOOLS` value to `undefined` when a runner has no explicit tools or capability ceiling.
+
+The final positive launch checks failed on installed 0.88.0 in exactly the unrestricted and exclusion-only cases, with four controls passing. They then passed six of six on restored 0.88.1. Logs: `/tmp/261113-8yn-positive-old-red.tap` and `/tmp/261113-8yn-positive-new-green.tap`. The unchanged characterization against 0.88.1 failed only those two old expectations; see `/tmp/261113-8yn-characterization-0881.tap`.
+
+The default installed-package replay, `env -u PG_COMPANION_INDEX -u PG_AGENT node .planning/debug/artifacts/real-child-mcp-automation/run.mjs`, passed all three actual detached children. Its fixture is `/tmp/pg1-live-companion-pHdbmd`, driver log is `/tmp/pg1-live-companion-pHdbmd/drive.out`, MCP request log is `/tmp/pg1-live-companion-pHdbmd/server-home/harness/mcp-stub-requests.jsonl`, and full run output is `/tmp/261113-8yn-real-child-0881.log`. The saved `summary.json` holds every provider inventory. The short-grant child called short; the unrestricted child offered and called long; the restricted child omitted long in every provider request while offering and calling short. Each child completed. This proves selective exclusion with the published package. It does not close AGTLONGNAME-01, which concerns explicit grants of shortened names.
+
+The integration suite now asserts the corrected ambient behavior and retains all four explicit grant and restriction controls. Its selected companion is 0.88.1. The general optional peer floor remains 0.87.0. The full combined-tree gate and final PG-MCP-02 acceptance remain with the parent after merge.
+
+## Historical local-patch provenance — 2026-11-12
 
 - Companion repository: `https://github.com/nicobailon/pi-subagents.git`
 - Installed 0.88.0 tag: `c84d4a817db9e6e49179ec202ba6c619322eb767`
@@ -13,7 +23,7 @@ This artifact records the locally patched `pi-subagents` companion result. It do
 - `run.mjs` SHA-256: `2ce89d7a3d8ff5400001ea12e2ca5c68a9872fa9acf496c9bee1768c72b2822c`
 - Node: `v26.13.0`; adapter: installed `pi-mcp-adapter` 7.0.1
 
-The patch changes one child environment branch and adds one regression test. The branch was pushed for [upstream PR #3259](https://github.com/nicobailon/pi-subagents/pull/3259). No package was published.
+The patch changed one child environment branch and added one regression test. The branch was pushed for [upstream PR #3259](https://github.com/nicobailon/pi-subagents/pull/3259). At the time of this local run, no fixed package had been published.
 
 ## Installed companion check in CI
 
@@ -23,19 +33,19 @@ The integration suite runs `test/integration/pi-subagents-child-launch-conforman
 node --import ./test/platform/isolated-pi-home.ts --test test/integration/pi-subagents-child-launch-conformance.test.ts
 ```
 
-Installed 0.88.0 passes all six cases. Its two known-gap cases assert that an unrestricted or exclusion-only child writes `MCP_DIRECT_TOOLS=__none__`. The actual compiled fix from PR #3259 makes those two cases fail because the environment value becomes `undefined`. All four explicit grant and restriction controls still pass. Restoring the installed module byte for byte returns the focused suite to green.
+Installed 0.88.1 passes all six cases. The unrestricted and exclusion-only checks require the owned `MCP_DIRECT_TOOLS` value to be `undefined`, with ambient extensions enabled and the exact tool and exclusion fields intact. Four explicit grant and restriction controls still pass. The detailed command `node --import ./test/platform/isolated-pi-home.ts --test --test-isolation=none --test-reporter=tap test/integration/pi-subagents-child-launch-conformance.test.ts` exposes each case and its pass count.
 
-If an upgrade makes either known-gap case fail, first run the positive detached-child check against the installed upgraded companion:
+To repeat the real-child check against the installed companion:
 
 ```sh
 node .planning/debug/artifacts/real-child-mcp-automation/run.mjs
 ```
 
-To test a candidate build before adoption, set `PG_COMPANION_INDEX` to that build's `index.js`. Do not use an older local fixed build to accept a different upgraded version.
+For an installed-release acceptance run, leave `PG_COMPANION_INDEX` and `PG_AGENT` unset. A local `PG_COMPANION_INDEX` override cannot accept the installed release. The historical candidate-build procedure below uses that override only to reproduce the 2026-11-12 patch result.
 
-Make sure that all three children complete and call the expected tools before changing the known-gap assertions to the corrected expectation. A passing known-gap case on installed 0.88.0 does not prove selective exclusion and does not close PG-MCP-02.
+The runner requires all three children to complete and call the expected tools. A missing long tool in both unrestricted and restricted children would not prove selective exclusion.
 
-## Reproduce with a fresh companion checkout
+## Historical local-build reproduction — 2026-11-12
 
 From this repository's root:
 
@@ -49,9 +59,9 @@ npm --prefix /tmp/pi-subagents-mcp-repro run build:pkg
 PG_COMPANION_INDEX=/tmp/pi-subagents-mcp-repro/dist-pkg/index.js node .planning/debug/artifacts/real-child-mcp-automation/run.mjs
 ```
 
-The last command creates a fresh isolated Pi home and local MCP/model stand-ins under `/tmp/pg1-live-companion-*`. It runs the actual detached `demo:runner`, `demo:control`, and `demo:restricted` children, checks every child provider request's tool inventory, checks each child's echo output, and checks the MCP server's `tools/call` record. It prints the fixture path, complete tool inventories, and the driver log path. It needs local loopback binding. `PG_AGENT=demo:restricted` selects one child for diagnosis. Without `PG_COMPANION_INDEX`, it uses this project's installed 0.88.0 package, whose unrestricted and restricted cases are expected to fail the assertions.
+The last command creates a fresh isolated Pi home and local MCP/model stand-ins under `/tmp/pg1-live-companion-*`. It runs the actual detached `demo:runner`, `demo:control`, and `demo:restricted` children, checks every child provider request's tool inventory, checks each child's echo output, and checks the MCP server's `tools/call` record. It prints the fixture path, complete tool inventories, and the driver log path. It needs local loopback binding. `PG_AGENT=demo:restricted` selects one child for diagnosis. Without `PG_COMPANION_INDEX`, it uses this project's installed 0.88.1 package.
 
-## Recorded checks
+## Historical recorded checks — 2026-11-12
 
 | Check | Command | Result |
 | --- | --- | --- |
@@ -78,4 +88,4 @@ The fixed child inventories were:
 | `demo:control` | short echo and `mcp__plugin_demo_a-server-whose-name-runs-well-past-the_a4df039c` | `echo:pg1-live-long-control` |
 | `demo:restricted` | short echo; long name absent | `echo:pg1-live-restricted` |
 
-Every fixed child completed. The restricted child received its allowed short tool while Pi's `excludeTools` removed the exact long name. Published 0.88.0 still has the suppressing fallback and has not passed this acceptance check.
+Every fixed local-build child completed. The restricted child received its allowed short tool while Pi's `excludeTools` removed the exact long name. Published 0.88.0 still has the suppressing fallback; the 2026-11-13 adoption proof above uses published 0.88.1.
