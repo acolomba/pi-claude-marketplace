@@ -185,7 +185,7 @@ for (const scenario of [
     const ctx = {
       get mode(): string {
         modeReads += 1;
-        if (scenario.failure === "mode" && modeReads === 9) {
+        if (scenario.failure === "mode" && modeReads === 10) {
           throw new Error("stale emission context");
         }
 
@@ -225,6 +225,7 @@ for (const scenario of [
         "continue",
         "more context",
         "continue",
+        "more context",
       ].map((text) => ({
         message: {
           customType: "claude-hook-stop-block",
@@ -754,12 +755,12 @@ test("counts a re-entry that carries several hooks' feedback once toward the cap
   const { ctx, notified } = makeContext();
 
   // act
-  for (let index = 0; index < 8; index += 1) {
+  for (let index = 0; index < 9; index += 1) {
     await runStop(runtime, pi, ctx, executor);
   }
 
   // assert
-  assert.strictEqual(sent.length, 7);
+  assert.strictEqual(sent.length, 8);
   assert.deepStrictEqual(notified, [
     {
       text: "Stop hook override cap reached.\n\n`alpha`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
@@ -1007,7 +1008,41 @@ test("a reload during awaited Stop work discards every stale effect", async () =
   );
 });
 
-test("the eighth consecutive block is suppressed and warns only once", async () => {
+test("a pending old-generation Stop completion cannot consume a reloaded budget", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+  let resolveOldHook: ((result: HookExecResult) => void) | undefined;
+  const executor: HookExecutor = () =>
+    new Promise((resolve) => {
+      resolveOldHook = resolve;
+    });
+  const { pi, sent } = makePi();
+  const { ctx, notified } = makeContext();
+  const oldGeneration = runtime.currentGeneration();
+  agentEndCacheHandler(runtime, oldGeneration)(agentEnd("stop"));
+  const pending = settleHandlerFor(runtime, oldGeneration, pi, executor)(settledEvent, ctx);
+
+  // act
+  runtime.advanceGeneration();
+  resetSettleState(runtime);
+  const freshEight = Array.from({ length: 8 }, () => runtime.recordStopReentry());
+  resolveOldHook?.({ kind: "block", reason: "stale" });
+  await pending;
+  const ninth = runtime.recordStopReentry();
+
+  // assert
+  assert.deepStrictEqual(
+    freshEight,
+    Array.from({ length: 8 }, () => ({ reenter: true, notifyCap: false })),
+  );
+  assert.deepStrictEqual(ninth, { reenter: false, notifyCap: true });
+  assert.deepStrictEqual(sent, []);
+  assert.deepStrictEqual(notified, []);
+});
+
+test("the ninth consecutive block is suppressed and warns only once", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -1028,7 +1063,7 @@ test("the eighth consecutive block is suppressed and warns only once", async () 
 
   // assert
   assert.deepStrictEqual(flags, [false, true, true, true, true, true, true, true, true]);
-  assert.strictEqual(sent.length, 7);
+  assert.strictEqual(sent.length, 8);
   assert.deepStrictEqual(notified, [
     {
       text: "Stop hook override cap reached.\n\n`alpha`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
@@ -1056,7 +1091,7 @@ test("block and additional-context re-entries share one cap", async () => {
   const { ctx, notified } = makeContext();
 
   // act
-  for (let index = 0; index < 8; index += 1) {
+  for (let index = 0; index < 9; index += 1) {
     await runStop(runtime, pi, ctx, executor);
   }
 
@@ -1071,6 +1106,7 @@ test("block and additional-context re-entries share one cap", async () => {
       "continue",
       "more context",
       "continue",
+      "more context",
     ].map((text) => feedbackContent(text)),
   );
   assert.strictEqual(notified.length, 1);
@@ -1095,12 +1131,12 @@ test("a noop resets the cap and rearms its notification", async () => {
   mode = "noop";
   await runStop(runtime, pi, ctx, executor);
   mode = "block";
-  for (let index = 0; index < 8; index += 1) {
+  for (let index = 0; index < 9; index += 1) {
     await runStop(runtime, pi, ctx, executor);
   }
 
   // assert
-  assert.strictEqual(sent.length, 14);
+  assert.strictEqual(sent.length, 15);
   assert.strictEqual(notified.length, 1);
 });
 
@@ -1126,13 +1162,13 @@ test("a stop resets the cap but leaves the next payload active", async () => {
   mode = "stop";
   await runStop(runtime, pi, ctx, executor);
   mode = "block";
-  for (let index = 0; index < 8; index += 1) {
+  for (let index = 0; index < 9; index += 1) {
     await runStop(runtime, pi, ctx, executor);
   }
 
   // assert
   assert.strictEqual(flags[2], true);
-  assert.strictEqual(sent.length, 8);
+  assert.strictEqual(sent.length, 9);
   assert.strictEqual(notified.length, 1);
 });
 
@@ -1155,13 +1191,13 @@ test("a live input clears active state and resets the cap", async () => {
   await runStop(runtime, pi, ctx, executor);
   await runStop(runtime, pi, ctx, executor);
   inputResetHandlerFor(runtime, epoch)();
-  for (let index = 0; index < 8; index += 1) {
+  for (let index = 0; index < 9; index += 1) {
     await runStop(runtime, pi, ctx, executor);
   }
 
   // assert
   assert.deepStrictEqual(flags.slice(0, 3), [false, true, false]);
-  assert.strictEqual(sent.length, 9);
+  assert.strictEqual(sent.length, 10);
   assert.strictEqual(notified.length, 1);
 });
 

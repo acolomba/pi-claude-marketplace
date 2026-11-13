@@ -25,16 +25,21 @@
 
 import assert from "node:assert/strict";
 
-import { Given, When } from "@cucumber/cucumber";
+import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
-import { HOOK_LIFECYCLE_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts";
+import {
+  HOOK_LIFECYCLE_LOG,
+  HOOK_RUNS_LOG,
+  waitForHookLifecycle,
+} from "../../lib/hook-recorder.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
-import { modelCallsOf } from "../../lib/scripted-model/script.ts";
+import { callMessageRows, modelCallsOf } from "../../lib/scripted-model/script.ts";
 import { readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 
-import type { HookLifecycleEvent } from "../../lib/hook-recorder.ts";
+import type { HookLifecycleEvent, HookRun } from "../../lib/hook-recorder.ts";
 import type { RpcRecord } from "../../lib/pi-process.ts";
+import type { ModelCall } from "../../lib/scripted-model/script.ts";
 import type { ModelTurn, ScenarioWorld } from "../../support/world.ts";
 
 // Two scripted turns settle in well under a second each; the margin covers a
@@ -122,6 +127,31 @@ async function recordRun(
   world.recordTurn(await checkedRun(world, prompt, lengths, from));
 }
 
+function stopRunRows(turn: ModelTurn): (readonly [string, unknown, unknown])[] {
+  const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
+  return runs.map((run) => [
+    run.event,
+    run.stdin.last_assistant_message,
+    run.stdin.stop_hook_active,
+  ]);
+}
+
+function assertStopRuns(turn: ModelTurn, expected: readonly (readonly [string, boolean])[]): void {
+  assert.deepStrictEqual(
+    stopRunRows(turn),
+    expected.map(([reply, active]) => ["Stop", reply, active]),
+  );
+}
+
+function modelCallsWithCount(turn: ModelTurn, count: number): ModelCall[] {
+  const calls = modelCallsOf(turn.logs);
+  assert.deepStrictEqual(
+    calls.map((call) => [call.index + 1, call.overflow]),
+    Array.from({ length: count }, (_, index) => [index + 1, false]),
+  );
+  return calls;
+}
+
 // Sends `text`, waits for its turn to settle and for `hook` to log its start,
 // in either order, and asserts that the hook has not ended. Returns the turn,
 // after the checks `recordRun` makes.
@@ -167,6 +197,185 @@ When(
     const { lengths, from } = await startPrompt(this, prompt);
     await settledAfter(this, await settledAfter(this, from, deadline), deadline);
     await recordRun(this, prompt, lengths, from);
+  },
+);
+
+When(
+  "the user prompts {string} through {int} agent settlements",
+  { timeout: 120_000 },
+  async function (this: ScenarioWorld, text: string, settlements: number) {
+    const deadline = Date.now() + 110_000;
+    const prompt = expandTokens(text, this.tokens);
+    const { lengths, from } = await startPrompt(this, prompt);
+    let next = from;
+
+    for (let index = 0; index < settlements; index += 1) {
+      next = await settledAfter(this, next, deadline);
+    }
+
+    await recordRun(this, prompt, lengths, from);
+  },
+);
+
+Then(
+  "the stop sequence has these exact replies and hook states:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const [header, ...rows] = table.raw();
+    assert.deepStrictEqual(header, ["reply", "stop hook active"]);
+    const turn = this.requireTurn();
+    assertStopRuns(
+      turn,
+      rows.map(([reply, active]) => [reply ?? "", active === "true"]),
+    );
+    const calls = modelCallsWithCount(turn, rows.length);
+    const expected: [string, string, string][] = [];
+
+    for (const [index, [reply]] of rows.entries()) {
+      const call = String(index + 1);
+      expected.push([call, "user", turn.prompt]);
+
+      for (const [prior] of rows.slice(0, index)) {
+        assert.ok(prior !== undefined);
+        expected.push([call, "assistant", prior]);
+        expected.push([call, "user", "Stop hook feedback:\nkeep going"]);
+      }
+
+      assert.ok(reply !== undefined);
+    }
+
+    assert.deepStrictEqual(callMessageRows(calls), expected);
+    this.markTurnCompared();
+  },
+);
+
+Then("the stop override cap notice count is {int}", function (this: ScenarioWorld, count: number) {
+  const notices = this.requireTurn().records.flatMap((record) => {
+    const entry: unknown = record.entry;
+    if (record.type !== "entry_appended" || typeof entry !== "object" || entry === null) {
+      return [];
+    }
+
+    if (!("customType" in entry) || entry.customType !== "claude-plugin") {
+      return [];
+    }
+
+    const payload: unknown = "data" in entry ? entry.data : undefined;
+    return typeof payload === "object" &&
+      payload !== null &&
+      "kind" in payload &&
+      payload.kind === "stop-override-cap"
+      ? [payload]
+      : [];
+  });
+  assert.deepStrictEqual(
+    notices,
+    Array.from({ length: count }, () => ({
+      schemaVersion: 1,
+      origin: { kind: "hook" },
+      kind: "stop-override-cap",
+      severity: "warning",
+      needsReload: false,
+      pluginId: "demo",
+      cap: 8,
+    })),
+  );
+  this.markTurnCompared();
+});
+
+Then("ten stop blocks separated by tool calls continue", function (this: ScenarioWorld) {
+  const turn = this.requireTurn();
+  const calls = modelCallsWithCount(turn, 21);
+
+  assertStopRuns(
+    turn,
+    Array.from({ length: 10 }, (_, index) => [`Done ${index + 1}`, index > 0]),
+  );
+  assert.strictEqual(turn.records.filter(isSettled).length, 11);
+  for (let index = 0; index < 10; index += 1) {
+    const reentryCall = calls[2 * index + 1];
+    const afterToolCall = calls[2 * index + 2];
+    assert.ok(reentryCall !== undefined);
+    assert.ok(afterToolCall !== undefined);
+    const reentry = callMessageRows([reentryCall]);
+    const afterTool = callMessageRows([afterToolCall]);
+    assert.deepStrictEqual(reentry.at(-1), [
+      String(2 * index + 2),
+      "user",
+      "Stop hook feedback:\nkeep going",
+    ]);
+    assert.deepStrictEqual(afterTool.slice(-2), [
+      [String(2 * index + 3), "assistant", 'tool call bash {"command":"echo from-model"}'],
+      [String(2 * index + 3), "tool result", "bash returned: from-model\n"],
+    ]);
+  }
+
+  this.markTurnCompared();
+});
+
+When(
+  "the user prompts {string} until {string}, reloads pi, and prompts {string} through the stop limit",
+  { timeout: 180_000 },
+  async function (this: ScenarioWorld, before: string, lastBefore: string, after: string) {
+    const tui = await this.startTuiSession("scripted");
+    const harness = this.profileHarness();
+    const lengths = await readLogLengths(harness);
+    const beforeMark = tui.markOutput();
+    tui.sendLine(before);
+    await tui.waitForTextAfter(lastBefore, beforeMark, 60_000);
+    assert.strictEqual(tui.text.includes("Stop hook override cap reached."), false);
+    await tui.reload(30_000);
+    const afterMark = tui.markOutput();
+    tui.sendLine(after);
+    await tui.waitForTextAfter("After 9", afterMark, 90_000);
+    await tui.waitForTextAfter("Stop hook override cap reached.", afterMark, 90_000);
+    const logs = await readLogLinesSince(harness, lengths);
+    assert.deepStrictEqual(callsPastScript(logs), []);
+    this.recordTurn({ prompt: after, disposition: "interactive", records: [], logs });
+  },
+);
+
+Then(
+  "the reloaded stop sequence has these exact replies and hook states:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const [header, ...rows] = table.raw();
+    assert.deepStrictEqual(header, ["run", "reply", "stop hook active"]);
+    const before = rows.filter(([run]) => run === "before");
+    const after = rows.filter(([run]) => run === "after");
+    assert.strictEqual(before.length, 3);
+    assert.strictEqual(after.length, 9);
+    const turn = this.requireTurn();
+    assertStopRuns(
+      turn,
+      rows.map(([, reply, active]) => [reply ?? "", active === "true"]),
+    );
+    const calls = modelCallsWithCount(turn, 13);
+    for (const [offset, replies] of [
+      [0, before],
+      [4, after],
+    ] as const) {
+      for (const [index, [, reply]] of replies.entries()) {
+        const call = calls[offset + index];
+        assert.ok(call !== undefined);
+        const messages = callMessageRows([call]);
+        if (index === 0) {
+          assert.deepStrictEqual(messages.at(-1), [
+            String(offset + 1),
+            "user",
+            offset === 0 ? "before reload" : "after reload",
+          ]);
+        } else {
+          assert.deepStrictEqual(messages.slice(-2), [
+            [String(offset + index + 1), "assistant", replies[index - 1]?.[1]],
+            [String(offset + index + 1), "user", "Stop hook feedback:\nkeep going"],
+          ]);
+        }
+
+        assert.ok(reply !== undefined);
+      }
+    }
+
+    assert.ok(this.requireTuiSession().text.includes("Stop hook override cap reached."));
+    this.markTurnCompared();
   },
 );
 

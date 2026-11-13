@@ -792,6 +792,10 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       return undefined as CompositeReturnFor<E>;
     }
 
+    if (claudeEvent === "PreToolUse") {
+      runtime.recordToolCall();
+    }
+
     if (claudeEvent === "UserPromptSubmit") {
       dropStalePromptContext(runtime, event as InputEvent);
     }

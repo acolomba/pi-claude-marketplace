@@ -361,7 +361,7 @@ test("applies settle registration, input, and bounded reentry transitions", () =
   runtime.recordLastAssistant(replacementMessage);
   const consumedMessage = runtime.takeLastAssistant();
   const consumedAgain = runtime.takeLastAssistant();
-  const allowedTransitions = Array.from({ length: 7 }, () => runtime.recordStopReentry());
+  const allowedTransitions = Array.from({ length: 8 }, () => runtime.recordStopReentry());
   const cappedTransition = runtime.recordStopReentry();
   const repeatedCap = runtime.recordStopReentry();
   const activeAtCap = runtime.isStopHookActive();
@@ -378,7 +378,7 @@ test("applies settle registration, input, and bounded reentry transitions", () =
   assert.strictEqual(consumedAgain, undefined);
   assert.deepStrictEqual(
     allowedTransitions,
-    Array.from({ length: 7 }, () => ({
+    Array.from({ length: 8 }, () => ({
       reenter: true,
       notifyCap: false,
     })),
@@ -417,17 +417,69 @@ test("keeps the woken mark outside the STOP-07 re-entry cap (D-BG-210)", () => {
   runtime.recordRunStart(true);
 
   // act
-  const allowedTransitions = Array.from({ length: 7 }, () => runtime.recordStopReentry());
+  const allowedTransitions = Array.from({ length: 8 }, () => runtime.recordStopReentry());
   const cappedTransition = runtime.recordStopReentry();
   const repeatedCap = runtime.recordStopReentry();
 
   // assert
   assert.deepStrictEqual(
     allowedTransitions,
-    Array.from({ length: 7 }, () => ({ reenter: true, notifyCap: false })),
+    Array.from({ length: 8 }, () => ({ reenter: true, notifyCap: false })),
   );
   assert.deepStrictEqual(cappedTransition, { reenter: false, notifyCap: true });
   assert.deepStrictEqual(repeatedCap, { reenter: false, notifyCap: false });
+});
+
+test("keeps terminal Stop callbacks bounded and notifies only once", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const firstEight = Array.from({ length: 8 }, () => runtime.recordStopReentry());
+
+  // act
+  const ninth = runtime.recordStopReentry();
+  const later = Array.from({ length: 100_000 }, () => runtime.recordStopReentry());
+
+  // assert
+  assert.deepStrictEqual(
+    firstEight,
+    Array.from({ length: 8 }, () => ({ reenter: true, notifyCap: false })),
+  );
+  assert.deepStrictEqual(ninth, { reenter: false, notifyCap: true });
+  assert.deepStrictEqual(
+    later,
+    Array.from({ length: 100_000 }, () => ({ reenter: false, notifyCap: false })),
+  );
+});
+
+test("tool calls reset the Stop budget and notice without clearing active or rewake flags", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.recordRunStart(true);
+  for (let index = 0; index < 8; index += 1) {
+    runtime.recordStopReentry();
+  }
+
+  const firstCap = runtime.recordStopReentry();
+
+  // act
+  runtime.recordToolCall();
+  runtime.recordToolCall();
+  const activeAfterTool = runtime.isStopHookActive();
+  const afterTool = runtime.recordStopReentry();
+  for (let index = 1; index < 8; index += 1) {
+    runtime.recordStopReentry();
+  }
+
+  const secondCap = runtime.recordStopReentry();
+  runtime.recordUserInput();
+  const rewakeAfterInput = runtime.isStopHookActive();
+
+  // assert
+  assert.deepStrictEqual(firstCap, { reenter: false, notifyCap: true });
+  assert.strictEqual(activeAfterTool, true);
+  assert.deepStrictEqual(afterTool, { reenter: true, notifyCap: false });
+  assert.deepStrictEqual(secondCap, { reenter: false, notifyCap: true });
+  assert.strictEqual(rewakeAfterInput, true);
 });
 
 test("keeps a Stop re-entry's flag across the start of a later run", () => {

@@ -12,8 +12,8 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { AssistantMessage } from "../../platform/pi-api.ts";
 
 /**
- * STOP-07: the consecutive Stop re-entry cap. The re-entry that reaches it does
- * not re-enter; settle passes this value to the override-cap warning.
+ * STOP-07: the number of consecutive Stop continuations allowed. The next
+ * blocking outcome is overridden; settle passes this value to the warning.
  */
 export const STOP_OVERRIDE_CAP = 8;
 
@@ -98,6 +98,7 @@ export interface HooksRuntime {
   readonly isStopHookActive: () => boolean;
   readonly recordStopReentry: () => StopReentryTransition;
   readonly recordStopNonReentry: () => void;
+  readonly recordToolCall: () => void;
   readonly recordUserInput: () => void;
   /**
    * D-BG-210: records whether the run that starts is one an async rewake
@@ -273,18 +274,20 @@ export function createHooksRuntime(): HooksRuntime {
     },
 
     recordStopReentry(): StopReentryTransition {
-      consecutiveBlockCount += 1;
-      if (consecutiveBlockCount >= STOP_OVERRIDE_CAP) {
+      if (consecutiveBlockCount === STOP_OVERRIDE_CAP) {
         const notifyCap = !capNotifiedThisSession;
         capNotifiedThisSession = true;
         return { reenter: false, notifyCap };
       }
 
+      consecutiveBlockCount += 1;
       stopHookActive = true;
       return { reenter: true, notifyCap: false };
     },
 
     recordStopNonReentry: finishStopSequence,
+
+    recordToolCall: finishStopSequence,
 
     recordUserInput(): void {
       stopHookActive = false;
