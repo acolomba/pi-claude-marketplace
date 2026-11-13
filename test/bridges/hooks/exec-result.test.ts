@@ -11,6 +11,7 @@ void ({
   kind: "mutate",
   updatedInput: { command: "check" },
   updatedToolOutput: { content: [{ type: "text", text: "checked" }] },
+  updatedMCPToolOutput: [{ type: "text", text: "legacy" }],
   additionalContext: "review completed",
   permissionDecision: "allow",
   permissionDecisionReason: "safe operation",

@@ -11,7 +11,7 @@
 // is capitalized to Claude's `tool_name` form via the shared
 // `mapPiToClaudeToolName` helper (TOOL-01 reuse); the Pi tool argument
 // input is translated into `tool_input`, and the tool's result
-// content `event.content` flows into Claude's `tool_response` field
+// MCP content and structured content flow into Claude's `tool_response` field
 // (claude-hook-config-syntax.md § 3).
 
 import { homedir } from "node:os";
@@ -34,6 +34,19 @@ export interface PostToolUseStdin {
   readonly tool_response: unknown;
 }
 
+function nativeToolResponse(event: ToolResultEvent): unknown {
+  if (typeof event.toolName === "string" && event.toolName.startsWith("mcp__")) {
+    return {
+      content: event.content,
+      ...(event.structuredContent === undefined
+        ? {}
+        : { structuredContent: event.structuredContent }),
+    };
+  }
+
+  return event.structuredContent === undefined ? event.content : event.structuredContent;
+}
+
 export function translatePostToolUse(
   event: ToolResultEvent,
   ctx: TranslationContext,
@@ -46,6 +59,8 @@ export function translatePostToolUse(
     tool_name: mapPiToClaudeToolName(event.toolName),
     tool_input: toHookToolInput(event.toolName, event.input, ctx.cwd, homedir()),
     tool_response:
-      fileToolResponse(event, ctx.cwd) ?? searchShellToolResponse(event, ctx.cwd) ?? event.content,
+      fileToolResponse(event, ctx.cwd) ??
+      searchShellToolResponse(event, ctx.cwd) ??
+      nativeToolResponse(event),
   };
 }

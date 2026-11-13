@@ -79,6 +79,7 @@ export type HookExecResult =
       kind: "mutate";
       updatedInput?: unknown;
       updatedToolOutput?: unknown;
+      updatedMCPToolOutput?: unknown;
       additionalContext?: string;
       permissionDecision?: "allow" | "deny" | "ask";
       permissionDecisionReason?: string;
