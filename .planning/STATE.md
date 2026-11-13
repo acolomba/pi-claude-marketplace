@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 02
 current_phase_name: Hook Payloads, Matchers, and Stop Limit
 status: executing
-stopped_at: parity-gaps Phase 2 wave 4 verified; wave 5 next
-last_updated: "2026-11-13T02:53:32.720598+00:00"
+stopped_at: parity-gaps Phase 2 wave 5 verified; wave 6 next
+last_updated: "2026-11-13T03:47:24.967804+00:00"
 last_activity: 2026-11-13
-last_activity_desc: Phase 02 wave 4 verified; 5 of 10 plans complete
-state_head: f382b6bf61158cf020970c5cebbe95fa0140cdcc
+last_activity_desc: Phase 02 wave 5 verified; 6 of 10 plans complete
+state_head: 4df7decd2541b95f82060ed64025da90035fa010
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 21
-  completed_plans: 16
+  completed_plans: 17
   percent: 9
 ---
 
@@ -32,24 +32,32 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 02 (Hook Payloads, Matchers, and Stop Limit) — EXECUTING
-Plan: 5 of 10 complete; 02-04 next
+Plan: 6 of 10 complete; 02-05 next
 Status: Executing Phase 02
-Last activity: 2026-11-13 — Phase 02 wave 4 verified
+Last activity: 2026-11-13 — Phase 02 wave 5 verified
 
 Progress: [█░░░░░░░░░] 9%
 
 
 ### parity-gaps Phase 2 execution
 
-Waves 1–4 (02-01, 02-02, 02-08, 02-09, 02-03) are merged and verified.
-The latest `npm run check` exited 0 on build inputs at clean commit
-`f382b6bf61158cf020970c5cebbe95fa0140cdcc`, Node v26.13.0: 1,845 adapter
-scenarios (22,424 steps), 155 built-in scenarios (2,091 steps), and 357
-direct-coverage pairs. Log: `/tmp/pg2-wave4-check-final.log`. Only planning
-Markdown changed during the gate. Wave 5 is shared batch-result and background
-delivery (02-04). PG-HOOK-01 remains in progress; matcher and Stop plans cover
-PG-HOOK-03/13. The Stop checks observed eight continuations before ninth
-override, ten tool-separated blocks with no cap notice, and a fresh eight after reload.
+Waves 1–5 (02-01, 02-02, 02-08, 02-09, 02-03, 02-04) are merged and verified.
+The latest `npm run check` exited 0 on the clean combined tree at
+`4df7decd2541b95f82060ed64025da90035fa010`, Node v26.13.0: 1,850 adapter
+scenarios (22,506 steps), 155 built-in scenarios (2,091 steps), and 357
+direct-coverage pairs. Log: `/tmp/pg2-wave5-check.log`. Wave 6 is file-result
+translation and reverse replacement (02-05). PG-HOOK-01 remains in progress;
+matcher and Stop plans cover PG-HOOK-03/13. The Stop checks observed eight
+continuations before ninth override, ten tool-separated blocks with no cap
+notice, and a fresh eight after reload.
+
+Wave 5 gives every executed edit pair the same actual native result or error,
+then folds hook output once. Five real scenarios (82 steps), the full failure
+feature (12 scenarios), and the full async feature (19 scenarios) passed.
+A final-review regression proved a generation change could still launch a later
+pair hook; `db6c7af1` prevents that launch. The async and runs step modules were
+necessary additions for complete event-driven background evidence. The existing
+async lifecycle issue did not reproduce in this wave and remains open.
 
 Wave 4 adds atomic per-pair preflight: every pair is checked before the one
 native edit; a later stop or denial blocks the batch, unsupported input restores

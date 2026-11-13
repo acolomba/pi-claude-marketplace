@@ -224,7 +224,7 @@ Plans:
 
   6. Hooks receive per-tool Claude-shaped result fields that Pi supplies; a Claude-shaped replacement changes the model-visible result without stale structured content. Missing fields are documented. An unsupported input rewrite leaves the original call intact and emits a notice; explicit denials still block (PG-HOOK-01, D-PG2-05..09).
 
-**Plans**: 5/10 plans executed
+**Plans**: 6/10 plans executed
 
 Plans:
 **Wave 1**
@@ -241,7 +241,7 @@ Plans:
 - [x] 02-03-PLAN.md — Wave 4: atomic per-pair edit preflight, denial, rewrites and target conflicts
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 02-04-PLAN.md — Wave 5: actual shared edit results and failure delivery across all hook lanes
+- [x] 02-04-PLAN.md — Wave 5: actual shared edit results and failure delivery across all hook lanes
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 02-05-PLAN.md — Wave 6: file result translation and reverse replacement with real redaction checks
@@ -409,7 +409,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Companion Floors and MCP Defaults | 11/11 | Complete    | 2026-11-12 |
-| 2. Hook Payloads, Matchers, and Stop Limit | 5/10 | In Progress | - |
+| 2. Hook Payloads, Matchers, and Stop Limit | 6/10 | In Progress | - |
 | 3. Background Subagents | 0/0 | Not started | - |
 | 4. Skill and Workflow Install Defects | 0/0 | Not started | - |
 | 5. Stop Continuation and Hook Failures | 0/0 | Not started | - |
