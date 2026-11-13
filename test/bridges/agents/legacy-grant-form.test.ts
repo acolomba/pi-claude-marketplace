@@ -24,6 +24,61 @@ const ADAPTER_NARROW =
 const BUILTIN_NARROW =
   "disallowedTools entry mcp__plugin_demo_my-db__drop cannot narrow the whole-server grant " +
   `mcp:plugin_demo_my-db${NARROW_TAIL}`;
+const CORRECTED_ADAPTER =
+  "tools include MCP tools, which require a pi-subagents background child -- " +
+  "the agent runs in the background (`async: true`); " +
+  "a launch before pi-mcp-adapter has cached the server's tools still fails";
+const CORRECTED_BUILTIN =
+  "tools include MCP tools, which require a pi-subagents background child -- " +
+  "the agent runs in the background (`async: true`); " +
+  "a launch before Pi's built-in MCP has listed the server's tools still fails";
+
+test("a stored corrected warning keeps its generation and unrelated provenance", () => {
+  // arrange
+  const warnings = [CORRECTED_ADAPTER, "a warning that stays"];
+  const adapter = agentBlock("tools: read,mcp:plugin_demo_stub_/echo", warnings);
+  const row = legacyRow(TARGET, warnings, ["WebFetch"]);
+
+  // act
+  const recorded = deriveLegacyGrantForms(adapter + PLAIN_BODY, row);
+
+  // assert
+  assert.deepStrictEqual(recorded, {
+    ...row,
+    mcpImplementation: "adapter",
+    mcpForms: {
+      adapter: { frontmatter: adapter, warnings, droppedTools: ["WebFetch"] },
+      builtin: {
+        frontmatter: agentBlock("tools: read,mcp:plugin_demo_stub/echo", [
+          CORRECTED_BUILTIN,
+          "a warning that stays",
+        ]),
+        warnings: [CORRECTED_BUILTIN, "a warning that stays"],
+        droppedTools: ["WebFetch"],
+      },
+    },
+  });
+});
+
+test("a stored warning near an exact MCP value stays byte identical", () => {
+  // arrange
+  const nearMatch = `${CORRECTED_ADAPTER}!`;
+  const adapter = agentBlock("tools: read,mcp:plugin_demo_stub_/echo", [nearMatch]);
+  const row = legacyRow(TARGET, [nearMatch]);
+
+  // act
+  const recorded = deriveLegacyGrantForms(adapter + PLAIN_BODY, row);
+
+  // assert
+  assert.deepStrictEqual(recorded?.mcpForms, {
+    adapter: { frontmatter: adapter, warnings: [nearMatch], droppedTools: [] },
+    builtin: {
+      frontmatter: agentBlock("tools: read,mcp:plugin_demo_stub/echo", [nearMatch]),
+      warnings: [nearMatch],
+      droppedTools: [],
+    },
+  });
+});
 
 test("MGRT-01: each mcp: entry of the plugin loses its key's last underscore; other entries stay", () => {
   // arrange

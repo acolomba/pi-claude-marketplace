@@ -580,3 +580,89 @@ Feature: MCP server agent grants
       | 2    | user        | show the runner                                                                                                                                                                                                                                                                                                                                                          |
       | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:runner"}                                                                                                                                                                                                                                                                                                                |
       | 2    | tool result | subagent returned: agent demo:runner\npath {agent dir}/agents/pi-claude-marketplace-demo-runner.md\ndescription Calls the tools the task names.\naliases pi-claude-marketplace-demo-runner\ntools mcp:plugin_demo_stub_/echo\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nasync true\nsystem prompt:\nCall the tools the task names. |
+
+  @mcp
+  Scenario: An old MCP warning still permits a grant implementation switch
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "runner" granted the mcp tool "mcp__plugin_demo_stub__echo"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model, pi-subagents, and the mcp implementation
+    Given the installed mcp agent holds the historical warning for the other implementation
+    When the user restarts pi twice with this profile's mcp implementation
+    Then the session reports no results
+    Then the installed mcp agent and index contain the complete switched grant and warnings
+
+  @mcp
+  Scenario: A current MCP warning permits the reverse implementation switch
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "runner" granted the mcp tool "mcp__plugin_demo_stub__echo"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model, pi-subagents, and the mcp implementation
+    Given the installed mcp agent holds the corrected warning for the other implementation
+    When the user restarts pi twice with this profile's mcp implementation
+    Then the session reports no results
+    Then the installed mcp agent and index contain the complete switched grant and warnings
+
+  @mcp
+  Scenario Outline: A legacy implementation-less agent switches its MCP grants
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "runner" granted the mcp tool "mcp__plugin_demo_stub__echo"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model, pi-subagents, and the mcp implementation
+    Given the installed mcp agent holds the <generation> warning without implementation metadata
+    When the user restarts pi twice with built-in mcp
+    Then the session reports no results
+    Then the implementation-less mcp agent and index contain the complete built-in grant and warnings
+
+    Examples:
+      | generation |
+      | historical |
+      | corrected  |
+
+  @mcp
+  Scenario: A user's agent edit survives an MCP implementation switch
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "runner" granted the mcp tool "mcp__plugin_demo_stub__echo"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model, pi-subagents, and the mcp implementation
+    Given the installed mcp agent holds the corrected warning for the other implementation
+    Given the user has edited one byte of the installed mcp agent
+    When the user restarts pi twice with this profile's mcp implementation
+    Then the session reports no results
+    Then the installed mcp agent file and index remain byte identical
+
+  @mcp
+  Scenario: A near-match MCP warning leaves an implementation-less agent untouched
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "runner" granted the mcp tool "mcp__plugin_demo_stub__echo"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model, pi-subagents, and the mcp implementation
+    Given the installed mcp agent holds the near warning without implementation metadata
+    When the user restarts pi twice with built-in mcp
+    Then the session reports no results
+    Then the installed mcp agent file and index remain byte identical

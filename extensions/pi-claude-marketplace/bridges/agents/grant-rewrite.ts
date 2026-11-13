@@ -66,7 +66,7 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 
 import { deriveLegacyGrantForms } from "./legacy-grant-form.ts";
 import { GENERATED_AGENT_MARKER } from "./marker.ts";
-import { mcpAsyncWarning } from "./mcp-async-warning.ts";
+import { isMcpAsyncWarning } from "./mcp-async-warning.ts";
 
 import type { McpImplementationId } from "../../domain/mcp-implementation.ts";
 import type { AgentGrantForm, AgentsIndexRow } from "../../persistence/agents-index-io.ts";
@@ -128,7 +128,7 @@ function isLegacyCandidate(row: AgentsIndexRow, active: McpImplementationId): bo
   return (
     active === "builtin" &&
     row.mcpImplementation === undefined &&
-    row.warnings.includes(mcpAsyncWarning("adapter"))
+    row.warnings.some((warning) => isMcpAsyncWarning(warning, "adapter"))
   );
 }
 

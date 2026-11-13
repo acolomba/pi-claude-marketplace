@@ -36,7 +36,7 @@ import { builtinMcpServerName } from "../../domain/name.ts";
 import { storedGrantForms } from "../../persistence/agents-index-io.ts";
 
 import { GENERATED_AGENT_MARKER } from "./marker.ts";
-import { mcpAsyncWarning } from "./mcp-async-warning.ts";
+import { rewriteMcpAsyncWarning } from "./mcp-async-warning.ts";
 
 import type { AgentGrantForm, AgentsIndexRow } from "../../persistence/agents-index-io.ts";
 
@@ -83,8 +83,9 @@ function translateExclude(name: string, toolPrefix: string): string | undefined 
 
 /** A warning in the built-in form: the async text, and the cannot-narrow selector. */
 function translateWarning(warning: string, serverPrefix: string): string {
-  if (warning === mcpAsyncWarning("adapter")) {
-    return mcpAsyncWarning("builtin");
+  const rewritten = rewriteMcpAsyncWarning(warning, "builtin");
+  if (rewritten !== warning) {
+    return rewritten;
   }
 
   const at = warning.indexOf(NARROW_GRANT_LEAD);
