@@ -35,6 +35,7 @@ import {
   HOOK_RESULT_OBSERVER_EXTENSION,
   HOOK_RESULT_OBSERVER_LOG,
 } from "../../lib/hook-result-observer.ts";
+import { mcpImplementationLaunch } from "../../lib/mcp-implementation.ts";
 import { MCP_STUB_SERVER, readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
 import { expandTokens, projectTokens } from "../../lib/run-tokens.ts";
@@ -94,15 +95,61 @@ Given(
   },
 );
 
+Given(
+  "pi runs with the scripted model, the mcp implementation and a downstream result observer",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    const launch = mcpImplementationLaunch(this.mcpProfile);
+    await this.usePiWithProfile({
+      ...launch,
+      extraExtensions: [...launch.extraExtensions, HOOK_RESULT_OBSERVER_EXTENSION],
+    });
+  },
+);
+
+function observedResultRows(world: ScenarioWorld): string[] {
+  return (world.requireTurn().logs.get(HOOK_RESULT_OBSERVER_LOG) ?? []).map((record) =>
+    projectTokens("text", JSON.stringify(record), world.tokens),
+  );
+}
+
 Then(
   "another pi handler observes these complete file results:",
   function (this: ScenarioWorld, table: DataTable) {
-    const actual = (this.requireTurn().logs.get(HOOK_RESULT_OBSERVER_LOG) ?? []).map((record) =>
-      projectTokens("text", JSON.stringify(record), this.tokens),
-    );
+    const actual = observedResultRows(this);
     const expected = table.hashes().map(({ record }) => {
       assert.ok(record !== undefined);
       return expandTokens(record, this.tokens);
+    });
+    assert.deepStrictEqual(actual, expected);
+    this.markTurnCompared();
+  },
+);
+
+Then(
+  "another pi handler observes these complete mcp results:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const actual = observedResultRows(this);
+    const expected = table.hashes().flatMap(({ profile, record }) => {
+      assert.ok(profile !== undefined && record !== undefined);
+      return profile === this.mcpProfile ? [record] : [];
+    });
+    assert.deepStrictEqual(actual, expected);
+    this.markTurnCompared();
+  },
+);
+
+Then(
+  "the model receives these complete mcp calls:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const actual = callMessageRows(modelCallsOf(this.requireTurn().logs)).map(
+      ([call, role, text]) => [call, role, projectTokens("text", text, this.tokens)],
+    );
+    const expected = table.hashes().flatMap(({ profile, call, role, text }) => {
+      assert.ok(
+        profile !== undefined && call !== undefined && role !== undefined && text !== undefined,
+      );
+      return profile === this.mcpProfile ? [[call, role, text]] : [];
     });
     assert.deepStrictEqual(actual, expected);
     this.markTurnCompared();

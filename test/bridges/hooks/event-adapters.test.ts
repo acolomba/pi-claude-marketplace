@@ -746,7 +746,6 @@ describe("adaptToolResultResult", () => {
     assert.deepStrictEqual(adaptation, {
       content: [{ type: "text", text: "replacement output" }],
       details: null,
-      isError: true,
     });
     assert.deepStrictEqual(event, {
       type: "tool_result",
@@ -821,12 +820,22 @@ describe("adaptToolResultResult", () => {
     assert.strictEqual(event.content, content);
   });
 
-  for (const { name, updatedToolOutput } of [
-    { name: "null", updatedToolOutput: null },
-    { name: "primitive", updatedToolOutput: "hostile" },
-    { name: "array", updatedToolOutput: ["hostile"] },
+  for (const { name, updatedToolOutput, text, structuredContent } of [
+    { name: "null", updatedToolOutput: null, text: "null", structuredContent: undefined },
+    {
+      name: "primitive",
+      updatedToolOutput: "hostile",
+      text: "hostile",
+      structuredContent: undefined,
+    },
+    {
+      name: "array",
+      updatedToolOutput: ["hostile"],
+      text: '["hostile"]',
+      structuredContent: ["hostile"],
+    },
   ] as const) {
-    test(`drops a ${name} updated output`, () => {
+    test(`renders a ${name} updated output as data`, () => {
       // arrange
       const content = [{ type: "text" as const, text: "original output" }];
       const event = {
@@ -844,7 +853,11 @@ describe("adaptToolResultResult", () => {
       const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
       // assert
-      assert.strictEqual(adaptation, undefined);
+      assert.deepStrictEqual(adaptation, {
+        content: [{ type: "text", text }],
+        details: null,
+        ...(structuredContent === undefined ? {} : { structuredContent }),
+      });
       assert.deepStrictEqual(event, {
         type: "tool_result",
         toolCallId: `result-mutate-${name}`,
@@ -962,6 +975,81 @@ describe("adaptToolResultResult", () => {
     );
   });
 
+  test("an MCP envelope replaces every old output carrier and keeps only routing details", () => {
+    // arrange
+    const event = {
+      type: "tool_result",
+      toolCallId: "mcp-redaction",
+      toolName: "mcp__catalog__lookup",
+      input: { text: "ping" },
+      content: [{ type: "text" as const, text: "secret-content" }],
+      structuredContent: { secret: "old-structured" },
+      details: {
+        server: "catalog",
+        tool: "lookup",
+        output: "secret-details",
+        fullOutputPath: "/secret",
+      },
+      isError: false,
+    } satisfies ToolResultEvent;
+
+    // act
+    const patch = adaptToolResultResult(
+      {
+        kind: "mutate",
+        updatedToolOutput: {
+          content: [{ type: "image", data: "bmV3", mimeType: "image/png" }],
+          structuredContent: { public: true },
+          toolName: "forged",
+          isError: true,
+        },
+      },
+      event,
+      adapterContext(guardEntry()),
+    );
+
+    // assert
+    assert.deepStrictEqual(patch, {
+      content: [{ type: "image", data: "bmV3", mimeType: "image/png" }],
+      details: { server: "catalog", tool: "lookup" },
+      structuredContent: { public: true },
+    });
+    assert.deepStrictEqual(event.structuredContent, { secret: "old-structured" });
+  });
+
+  for (const { name, value, text } of [
+    { name: "false", value: false, text: "false" },
+    { name: "zero", value: 0, text: "0" },
+    { name: "empty string", value: "", text: "" },
+    { name: "empty array", value: [], text: undefined },
+  ] as const) {
+    test(`accepts ${name} as a supplied output`, () => {
+      // arrange
+      const event = {
+        type: "tool_result",
+        toolCallId: name,
+        toolName: "mcp__catalog__lookup",
+        input: {},
+        content: [{ type: "text" as const, text: "original" }],
+        details: undefined,
+        isError: false,
+      } satisfies ToolResultEvent;
+
+      // act
+      const patch = adaptToolResultResult(
+        { kind: "mutate", updatedToolOutput: value },
+        event,
+        adapterContext(guardEntry()),
+      );
+
+      // assert
+      assert.deepStrictEqual(patch, {
+        content: text === undefined ? [] : [{ type: "text", text }],
+        details: null,
+      });
+    });
+  }
+
   test("feedback retains the original structured value and error status", () => {
     const event = {
       type: "tool_result",
@@ -1000,6 +1088,7 @@ describe("adaptToolResultResult", () => {
           kind: "mutate",
           updatedToolOutput: {
             content: [{ type: "text", text: "original" }],
+            structuredContent: "original",
             isError: false,
           },
         },
@@ -1012,7 +1101,7 @@ describe("adaptToolResultResult", () => {
     assert.deepStrictEqual(event.details, { secret: "original" });
   });
 
-  test("returns a boolean error patch without content when the patch has none", () => {
+  test("does not let output data change the tool failure flag", () => {
     // arrange
     const content = [{ type: "text" as const, text: "original output" }];
     const event = {
@@ -1033,7 +1122,11 @@ describe("adaptToolResultResult", () => {
     );
 
     // assert
-    assert.deepStrictEqual(adaptation, { isError: true });
+    assert.deepStrictEqual(adaptation, {
+      content: [{ type: "text", text: '{"isError":true}' }],
+      details: null,
+      structuredContent: { isError: true },
+    });
     assert.deepStrictEqual(event, {
       type: "tool_result",
       toolCallId: "result-error-only",

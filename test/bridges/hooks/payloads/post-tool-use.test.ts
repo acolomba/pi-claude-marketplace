@@ -173,10 +173,12 @@ test("preserves a successful custom tool name and nested values without mutation
       query: { phrase: "hook payloads", languages: ["typescript", "javascript"] },
       limit: 3,
     },
-    tool_response: [
-      { type: "text", text: "three matches" },
-      { type: "text", text: "catalog complete" },
-    ],
+    tool_response: {
+      content: [
+        { type: "text", text: "three matches" },
+        { type: "text", text: "catalog complete" },
+      ],
+    },
   };
 
   // act
@@ -185,7 +187,7 @@ test("preserves a successful custom tool name and nested values without mutation
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
   assert.strictEqual(payload.tool_input, toolInput);
-  assert.strictEqual(payload.tool_response, toolResponse);
+  assert.deepStrictEqual(payload.tool_response, { content: toolResponse });
   assert.deepStrictEqual(toolInput, {
     query: { phrase: "hook payloads", languages: ["typescript", "javascript"] },
     limit: 3,
@@ -199,6 +201,84 @@ test("preserves a successful custom tool name and nested values without mutation
     transcriptPath: "/sessions/session-custom.jsonl",
     cwd: "/workspace/custom",
   });
+});
+
+test("projects only actual MCP content and structured content", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "mcp-structured",
+    toolName: "mcp__catalog__lookup",
+    input: { text: "ping" },
+    content: [{ type: "text", text: "visible" }],
+    structuredContent: { secret: "structured" },
+    details: { server: "catalog", tool: "lookup", stale: "old" },
+    isError: false,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "session",
+    transcriptPath: "/sessions/session.jsonl",
+    cwd: "/workspace",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUse(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload.tool_response, {
+    content: [{ type: "text", text: "visible" }],
+    structuredContent: { secret: "structured" },
+  });
+});
+
+test("passes custom structured output without a built-in codec", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "custom-structured",
+    toolName: "catalog",
+    input: { file_path: "looks-like-read" },
+    content: [{ type: "text", text: "visible" }],
+    structuredContent: { rows: [{ value: 7 }] },
+    details: undefined,
+    isError: false,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "session",
+    transcriptPath: "/sessions/session.jsonl",
+    cwd: "/workspace",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUse(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload.tool_response, { rows: [{ value: 7 }] });
+});
+
+test("preserves an explicit null custom structured result", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "custom-null",
+    toolName: "catalog",
+    input: {},
+    content: [{ type: "text", text: "fallback" }],
+    structuredContent: null,
+    details: undefined,
+    isError: false,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "session",
+    transcriptPath: "/sessions/session.jsonl",
+    cwd: "/workspace",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUse(event, context);
+
+  // assert
+  assert.strictEqual(payload.tool_response, null);
 });
 
 test("projects a successful write from its executed input", () => {

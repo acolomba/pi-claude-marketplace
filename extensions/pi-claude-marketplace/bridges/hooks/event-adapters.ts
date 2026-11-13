@@ -18,14 +18,14 @@
 //     PostToolUseFailure). `block` keeps the tool's output and adds the
 //     hook's feedback, `<Event>:<Tool> hook blocking error from command:
 //     "<command>": <message>`, without marking the result an error;
-//     `mutate.updatedToolOutput` returns its `content` and/or `isError` as
-//     Pi's `tool_result` value, since Pi keeps only returned changes, on a
+//     `mutate.updatedToolOutput` returns rendered `content`, sanitized
+//     `details` and optional `structuredContent` as Pi's result value, on a
 //     PostToolUse result only: a PostToolUseFailure hook cannot replace the
 //     failed result (D-BG-405);
 //     `stop` debug-logs + returns `undefined` (Pi's
 //     `tool_result` cannot end the turn without aborting it); `noop` returns
 //     `undefined`. CR-01: the mutation surface is whitelisted to
-//     `{ content, isError }` -- a hook-supplied patch cannot rewrite
+//     `{ content, details, structuredContent }` -- a hook-supplied value cannot rewrite
 //     `event.type`, `event.toolName`, or any other field.
 //
 //   - adaptInputResult           -> Pi `input` (UserPromptSubmit).
@@ -56,7 +56,7 @@
 //
 // Mutation surface: tool_call replaces `event.input` (Record<string,
 // unknown>) key by key, tool_result returns the replacement `content` (the
-// Pi-side (TextContent | ImageContent)[] array) and `isError`. The fold in `dispatch.ts` runs every
+// Pi-side (TextContent | ImageContent)[] array) and safe structured content. The fold in `dispatch.ts` runs every
 // hook on one snapshot, so a mutation applies once, after every hook ran.
 
 import { homedir } from "node:os";
@@ -161,28 +161,87 @@ export function replaceToolCallInput(
   }
 }
 
-/**
- * CR-01: whitelist the documented mutation surface for `tool_result` -- only
- * `content` (the Pi-side `(TextContent | ImageContent)[]` array) and `isError`
- * (boolean) may be written. Everything else in the hook-supplied patch is
- * silently dropped, so a malicious or buggy hook cannot rewrite the event's
- * discriminator (`type`), its `toolName`, or any other routing-load-bearing
- * field. Non-object patches are rejected early.
- *
- * The patch is the handler's return value: Pi 1.4's `emitToolResult` keeps
- * only the changes a handler returns, so a change made to the event in place
- * would never reach the model. `undefined` when neither field is valid.
- */
+function contentBlocks(value: unknown): value is ToolResultEvent["content"] {
+  return (
+    Array.isArray(value) &&
+    value.every((candidate: unknown) => {
+      if (typeof candidate !== "object" || candidate === null) {
+        return false;
+      }
+
+      const block = candidate as Record<string, unknown>;
+      return (
+        (block.type === "text" && typeof block.text === "string") ||
+        (block.type === "image" &&
+          typeof block.data === "string" &&
+          typeof block.mimeType === "string")
+      );
+    })
+  );
+}
+
+function customOutput(value: unknown): ToolResultEventResult | undefined {
+  if (Array.isArray(value) && contentBlocks(value)) {
+    return { content: value };
+  }
+
+  if (value !== null && typeof value === "object" && "content" in value) {
+    if (!contentBlocks(value.content)) {
+      return undefined;
+    }
+
+    return {
+      content: value.content,
+      ...("structuredContent" in value && value.structuredContent !== undefined
+        ? {
+            structuredContent: value.structuredContent as Exclude<
+              ToolResultEvent["structuredContent"],
+              undefined
+            >,
+          }
+        : {}),
+    };
+  }
+
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return {
+    content: [{ type: "text", text }],
+    ...(value !== null && typeof value === "object"
+      ? {
+          structuredContent: value as Exclude<ToolResultEvent["structuredContent"], undefined>,
+        }
+      : {}),
+  };
+}
+
+function routingDetails(event: ToolResultEvent): unknown {
+  const details = event.details;
+  if (
+    event.toolName.startsWith("mcp__") &&
+    details !== null &&
+    typeof details === "object" &&
+    "server" in details &&
+    typeof details.server === "string" &&
+    "tool" in details &&
+    typeof details.tool === "string"
+  ) {
+    return { server: details.server, tool: details.tool };
+  }
+
+  return null;
+}
+
+/** Render hook output as data and replace all stale Pi output carriers. */
 function toolResultPatch(
   updatedToolOutput: unknown,
   event: ToolResultEvent,
   cwd: string,
 ): ToolResultEventResult | undefined {
-  if (updatedToolOutput === null || typeof updatedToolOutput !== "object") {
+  if (updatedToolOutput === undefined || typeof event.toolName !== "string") {
     return undefined;
   }
 
-  const toolName = typeof event.toolName === "string" ? event.toolName.toLowerCase() : "";
+  const toolName = event.toolName.toLowerCase();
   if (["read", "edit", "write"].includes(toolName)) {
     return renderFileToolOutput(event, updatedToolOutput, cwd);
   }
@@ -191,39 +250,26 @@ function toolResultPatch(
     return renderSearchShellToolOutput(event, updatedToolOutput, cwd);
   }
 
-  const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;
-  const validContent =
-    Array.isArray(patch.content) &&
-    patch.content.every(
-      (block) =>
-        typeof block === "object" &&
-        ((block.type === "text" && typeof block.text === "string") ||
-          (block.type === "image" &&
-            typeof block.data === "string" &&
-            typeof block.mimeType === "string")),
-    );
+  const decoded = customOutput(updatedToolOutput);
+  if (decoded?.content === undefined) {
+    return undefined;
+  }
+
   if (
-    (patch.content !== undefined && !validContent) ||
-    (patch.isError !== undefined && typeof patch.isError !== "boolean")
+    isDeepStrictEqual(decoded.content, event.content) &&
+    (decoded.structuredContent === undefined ||
+      isDeepStrictEqual(decoded.structuredContent, event.structuredContent))
   ) {
     return undefined;
   }
 
-  const toolResult: ToolResultEventResult = {};
-  if (
-    Array.isArray(patch.content) &&
-    validContent &&
-    !isDeepStrictEqual(patch.content, event.content)
-  ) {
-    toolResult.content = patch.content;
-    toolResult.details = null;
-  }
-
-  if (typeof patch.isError === "boolean" && patch.isError !== event.isError) {
-    toolResult.isError = patch.isError;
-  }
-
-  return Object.keys(toolResult).length === 0 ? undefined : toolResult;
+  return {
+    content: decoded.content,
+    details: routingDetails(event),
+    ...(decoded.structuredContent === undefined
+      ? {}
+      : { structuredContent: decoded.structuredContent }),
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────────

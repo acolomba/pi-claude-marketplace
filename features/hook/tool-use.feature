@@ -8,6 +8,121 @@ Feature: Hook tool use
   proxy call (MHK-02).
   A tool whose cut name has a proxy's shape is still a tool under either implementation.
 
+  @mcp
+  Scenario: An MCP result alias replaces the result
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name      | version |
+      | hook-demo | 1.0.0   |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event       | matcher                                 | form   | output |
+      | alias | PostToolUse | mcp__plugin_hook-demo_stub-server__echo | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedMCPToolOutput":[{"type":"text","text":"SAFE_ALIAS"}]}} |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has the stub mcp server "stub-server" for its hooks
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install hook-demo@fixtures --scope user", which did not fail
+    Given a stand-in registers the stub mcp server "stub-server" of the plugin "hook-demo" with pi's built-in mcp
+    Given pi runs with the scripted model, the mcp implementation and a downstream result observer
+    Given the mcp implementation has listed the tools of the stub mcp server "stub-server" of the plugin "hook-demo"
+    Given the scripted model calls the tool "echo" of the hooks' stub mcp server "stub-server" of the plugin "hook-demo" through the mcp implementation with '{"text":"ping"}', then replies "Done."
+    When the user prompts "call the stub"
+    Then the hooks record these runs in any order:
+      | event       | session | tool name                               | tool input      | tool response                                                                                                         | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                             | CLAUDE_PLUGIN_DATA                                        | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | {"content":[{"type":"text","text":"echo:ping"}],"structuredContent":{"content":[{"type":"text","text":"echo:ping"}]}} | {project dir} |                 | alias     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
+    Then another pi handler observes these complete mcp results:
+      | profile | record |
+      | adapter | {"toolName":"mcp__plugin_hook-demo_stub-server__echo","content":[{"type":"text","text":"SAFE_ALIAS"}],"details":{"server":"plugin_hook-demo_stub-server_","tool":"echo"},"structuredContent":null,"isError":false} |
+      | adapter | {"toolName":"mcp","content":[{"type":"text","text":"SAFE_ALIAS"}],"details":{"server":"plugin_hook-demo_stub-server_","tool":"echo"},"structuredContent":null,"isError":false} |
+      | builtin | {"toolName":"tool_search","content":[{"type":"text","text":"Loaded 1 tool. They are available from your next call:\\n- mcp__plugin_hook_demo_stub_server__echo: Echoes the text it is given."}],"details":{"loaded":["mcp__plugin_hook_demo_stub_server__echo"]},"structuredContent":null,"isError":false} |
+      | builtin | {"toolName":"mcp__plugin_hook_demo_stub_server__echo","content":[{"type":"text","text":"SAFE_ALIAS"}],"details":{"server":"plugin_hook-demo_stub-server","tool":"echo"},"structuredContent":null,"isError":false} |
+    Then the model receives these complete mcp calls:
+      | profile | call | role        | text |
+      | adapter | 1    | user        | call the stub |
+      | adapter | 2    | user        | call the stub |
+      | adapter | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_hook-demo_stub-server__echo","args":{"text":"ping"}} |
+      | adapter | 2    | tool result | mcp returned: SAFE_ALIAS |
+      | builtin | 1    | user        | call the stub |
+      | builtin | 2    | user        | call the stub |
+      | builtin | 2    | assistant   | tool call tool_search {"query":"mcp__plugin_hook_demo_stub_server__echo","limit":1} |
+      | builtin | 2    | tool result | tool_search returned: Loaded 1 tool. They are available from your next call:\n- mcp__plugin_hook_demo_stub_server__echo: Echoes the text it is given. |
+      | builtin | 3    | user        | call the stub |
+      | builtin | 3    | assistant   | tool call tool_search {"query":"mcp__plugin_hook_demo_stub_server__echo","limit":1} |
+      | builtin | 3    | tool result | tool_search returned: Loaded 1 tool. They are available from your next call:\n- mcp__plugin_hook_demo_stub_server__echo: Echoes the text it is given. |
+      | builtin | 3    | assistant   | tool call mcp__plugin_hook_demo_stub_server__echo {"text":"ping"} |
+      | builtin | 3    | tool result | mcp__plugin_hook_demo_stub_server__echo returned: SAFE_ALIAS |
+
+  @mcp
+  Scenario: The modern MCP output wins when both fields are supplied
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name      | version |
+      | hook-demo | 1.0.0   |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event       | matcher                                 | form   | output |
+      | modern | PostToolUse | mcp__plugin_hook-demo_stub-server__echo | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":[{"type":"text","text":"SAFE_MODERN"}],"updatedMCPToolOutput":[{"type":"text","text":"SAFE_LEGACY"}]}} |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has the stub mcp server "stub-server" for its hooks
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install hook-demo@fixtures --scope user", which did not fail
+    Given a stand-in registers the stub mcp server "stub-server" of the plugin "hook-demo" with pi's built-in mcp
+    Given pi runs with the scripted model, the mcp implementation and a downstream result observer
+    Given the mcp implementation has listed the tools of the stub mcp server "stub-server" of the plugin "hook-demo"
+    Given the scripted model calls the tool "echo" of the hooks' stub mcp server "stub-server" of the plugin "hook-demo" through the mcp implementation with '{"text":"ping"}', then replies "Done."
+    When the user prompts "call the stub"
+    Then the hooks record these runs in any order:
+      | event       | session | tool name                               | tool input      | tool response                                                                                                         | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                             | CLAUDE_PLUGIN_DATA                                        | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | {"content":[{"type":"text","text":"echo:ping"}],"structuredContent":{"content":[{"type":"text","text":"echo:ping"}]}} | {project dir} |                 | modern    | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
+    Then another pi handler observes these complete mcp results:
+      | profile | record |
+      | adapter | {"toolName":"mcp__plugin_hook-demo_stub-server__echo","content":[{"type":"text","text":"SAFE_MODERN"}],"details":{"server":"plugin_hook-demo_stub-server_","tool":"echo"},"structuredContent":null,"isError":false} |
+      | adapter | {"toolName":"mcp","content":[{"type":"text","text":"SAFE_MODERN"}],"details":{"server":"plugin_hook-demo_stub-server_","tool":"echo"},"structuredContent":null,"isError":false} |
+      | builtin | {"toolName":"tool_search","content":[{"type":"text","text":"Loaded 1 tool. They are available from your next call:\\n- mcp__plugin_hook_demo_stub_server__echo: Echoes the text it is given."}],"details":{"loaded":["mcp__plugin_hook_demo_stub_server__echo"]},"structuredContent":null,"isError":false} |
+      | builtin | {"toolName":"mcp__plugin_hook_demo_stub_server__echo","content":[{"type":"text","text":"SAFE_MODERN"}],"details":{"server":"plugin_hook-demo_stub-server","tool":"echo"},"structuredContent":null,"isError":false} |
+    Then the model receives these complete mcp calls:
+      | profile | call | role        | text |
+      | adapter | 1    | user        | call the stub |
+      | adapter | 2    | user        | call the stub |
+      | adapter | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_hook-demo_stub-server__echo","args":{"text":"ping"}} |
+      | adapter | 2    | tool result | mcp returned: SAFE_MODERN |
+      | builtin | 1    | user        | call the stub |
+      | builtin | 2    | user        | call the stub |
+      | builtin | 2    | assistant   | tool call tool_search {"query":"mcp__plugin_hook_demo_stub_server__echo","limit":1} |
+      | builtin | 2    | tool result | tool_search returned: Loaded 1 tool. They are available from your next call:\n- mcp__plugin_hook_demo_stub_server__echo: Echoes the text it is given. |
+      | builtin | 3    | user        | call the stub |
+      | builtin | 3    | assistant   | tool call tool_search {"query":"mcp__plugin_hook_demo_stub_server__echo","limit":1} |
+      | builtin | 3    | tool result | tool_search returned: Loaded 1 tool. They are available from your next call:\n- mcp__plugin_hook_demo_stub_server__echo: Echoes the text it is given. |
+      | builtin | 3    | assistant   | tool call mcp__plugin_hook_demo_stub_server__echo {"text":"ping"} |
+      | builtin | 3    | tool result | mcp__plugin_hook_demo_stub_server__echo returned: SAFE_MODERN |
+
+  Scenario: A legacy MCP output field does not replace a built-in result
+    Given pi runs with the scripted model and a downstream file result observer
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event       | matcher | form   | output |
+      | legacy | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedMCPToolOutput":[{"type":"text","text":"MALICIOUS"}]}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "visible.txt" with the text "ORIGINAL" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments              |
+      |       | read | {"path":"visible.txt"} |
+      | Done. |      |                        |
+    When the user prompts "read the file"
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input                                   | tool response                                                                 | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | Read      | {"file_path":"{project dir}/visible.txt"} | {"type":"text","file":{"filePath":"{project dir}/visible.txt","content":"ORIGINAL","startLine":1,"numLines":1,"totalLines":1}} | {project dir} |                 | legacy    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then another pi handler observes these complete file results:
+      | record |
+      | {"toolName":"read","content":[{"type":"text","text":"ORIGINAL"}],"details":null,"structuredContent":"ORIGINAL","isError":false} |
+    Then the model receives these calls:
+      | call | role        | text |
+      | 1    | user        | read the file |
+      | 2    | user        | read the file |
+      | 2    | assistant   | tool call read {"path":"visible.txt"} |
+      | 2    | tool result | read returned: ORIGINAL |
+
   Scenario: A search result replacement changes what the model receives
     Given pi runs with the scripted model and search tools
     Given the marketplace "fixtures" is published as a dir source
@@ -862,7 +977,7 @@ Feature: Hook tool use
       | event       | session | tool name                               | tool input      | tool response                        | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                             | CLAUDE_PLUGIN_DATA                                        | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PreToolUse  | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} |                                      | {project dir} |                 | literal   | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
       | PreToolUse  | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} |                                      | {project dir} |                 | any       | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
-      | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | [{"type":"text","text":"echo:ping"}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
+      | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | {"content":[{"type":"text","text":"echo:ping"}],"structuredContent":{"content":[{"type":"text","text":"echo:ping"}]}} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
 
   @builtin-only
   Scenario: A hook on a plugin MCP tool runs on every built-in call, the tool search included (MHK-01, MHK-02)
@@ -892,7 +1007,7 @@ Feature: Hook tool use
       | PreToolUse  | first   | tool_search                             | {"query":"mcp__plugin_hook_demo_stub_server__echo","limit":1} |                                      | {project dir} |                 | any       | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
       | PreToolUse  | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"}                                               |                                      | {project dir} |                 | literal   | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
       | PreToolUse  | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"}                                               |                                      | {project dir} |                 | any       | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
-      | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"}                                               | [{"type":"text","text":"echo:ping"}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
+      | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"}                                               | {"content":[{"type":"text","text":"echo:ping"}],"structuredContent":{"content":[{"type":"text","text":"echo:ping"}]}} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
 
   @builtin-only
   Scenario: A built-in MCP tool whose cut name looks like a proxy call still runs its hooks (MHK-02)
@@ -922,7 +1037,7 @@ Feature: Hook tool use
       | PreToolUse  | first   | tool_search                                                      | {"query":"mcp__plugin_hook_proxy_shaped_tool_names_of_a_long_plug_b152d32d","limit":1} |                                      | {project dir} |                 | any       | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
       | PreToolUse  | first   | mcp__plugin_hook_proxy_shaped_tool_names_of_a_long_plug_b152d32d | {"text":"ping","tool":"echo"}                                                          |                                      | {project dir} |                 | any       | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
       | PreToolUse  | first   | mcp__plugin_hook_proxy_shaped_tool_names_of_a_long_plug_b152d32d | {"text":"ping","tool":"echo"}                                                          |                                      | {project dir} |                 | literal   | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
-      | PostToolUse | first   | mcp__plugin_hook_proxy_shaped_tool_names_of_a_long_plug_b152d32d | {"text":"ping","tool":"echo"}                                                          | [{"type":"text","text":"echo:ping"}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
+      | PostToolUse | first   | mcp__plugin_hook_proxy_shaped_tool_names_of_a_long_plug_b152d32d | {"text":"ping","tool":"echo"}                                                          | {"content":[{"type":"text","text":"echo:ping"}],"structuredContent":{"content":[{"type":"text","text":"echo:ping"}]}} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
 
   @adapter-only
   Scenario: A pi-mcp-adapter tool whose cut name looks like a proxy call still runs its hooks (PG-MCP-02, D-PG1-08)
@@ -951,7 +1066,7 @@ Feature: Hook tool use
       | event       | session | tool name                                                                  | tool input                    | tool response                        | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                                                                 | CLAUDE_PLUGIN_DATA                                                                            | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PreToolUse  | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo | {"text":"ping","tool":"echo"} |                                      | {project dir} |                 | any       | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
       | PreToolUse  | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo | {"text":"ping","tool":"echo"} |                                      | {project dir} |                 | literal   | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
-      | PostToolUse | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo | {"text":"ping","tool":"echo"} | [{"type":"text","text":"echo:ping"}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
+      | PostToolUse | first   | mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo | {"text":"ping","tool":"echo"} | {"content":[{"type":"text","text":"echo:ping"}],"structuredContent":{"content":[{"type":"text","text":"echo:ping"}]}} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-proxy-shaped-tool-names-of-a-long-plugin | {agent dir}/pi-claude-marketplace/data/fixtures/hook-proxy-shaped-tool-names-of-a-long-plugin | first                  | first             | 1          |
 
   Scenario: A PreToolUse ask decision blocks the tool call when pi has no terminal
     Given pi runs with the scripted model
