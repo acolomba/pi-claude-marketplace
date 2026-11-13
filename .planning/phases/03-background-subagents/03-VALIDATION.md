@@ -49,8 +49,8 @@ Every task has explicit automated commands immediately followed by failing-direc
 | 03-06-02 | 06 | 4 | PG-HOOK-07a, PG-AGENT-01 | T-03-11, T-03-12, T-03-13 | Promote detached and concurrent companion probes into permanent acceptance | owner/integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/integration/pi-subagents-child-identity.test.ts` | New maintained driver and integration owner created with feature consumers here | passed |
 | 03-07-01 | 07 | 5 | PG-AGENT-01 | T-03-17 | Install one ordinary agent with delegated preference and preserve forced background cases | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/agents/convert.test.ts test/bridges/agents/grant-forms.test.ts test/bridges/agents/stage.test.ts test/orchestrators/plugin/install-flow-ledger.test.ts` | Existing or created by declared predecessor; extend | passed |
 | 03-07-02 | 07 | 5 | PG-AGENT-01 | T-03-17, T-03-18 | Keep all current-output owners green and prove companion-selected default mode | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/update-swap.test.ts test/orchestrators/plugin/reinstall-flow.test.ts` | Existing or created by declared predecessor; extend | passed |
-| 03-08-01 | 08 | 6 | PG-AGENT-01, PG-HOOK-07a | T-03-18 | Preserve installed bytes on load and migrate through update and reinstall | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/update-swap.test.ts test/orchestrators/plugin/reinstall-flow.test.ts` | Existing or created by declared predecessor; extend | pending |
-| 03-08-02 | 08 | 6 | PG-AGENT-01, PG-HOOK-07a | T-03-19 | Close ordinary real-child acceptance and publish the supported contract | owner/integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/integration/pi-subagents-child-identity.test.ts` | Existing or created by declared predecessor; extend | pending |
+| 03-08-01 | 08 | 6 | PG-AGENT-01, PG-HOOK-07a | T-03-18 | Preserve installed bytes on load and migrate through update and reinstall | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/update-swap.test.ts test/orchestrators/plugin/reinstall-flow.test.ts` | Existing or created by declared predecessor; extend | passed |
+| 03-08-02 | 08 | 6 | PG-AGENT-01, PG-HOOK-07a | T-03-19 | Close ordinary real-child acceptance and publish the supported contract | owner/integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/integration/pi-subagents-child-identity.test.ts` | Existing or created by declared predecessor; extend | passed |
 
 ## Full Gates
 
@@ -63,7 +63,7 @@ Normal commit hooks are mandatory. Each combined-tree gate uses the complete com
 | Wave 3 combined tree | `npm run check` | 2400 seconds | Result identity and installed lifecycle/process acceptance; same evidence | passed |
 | Wave 4 combined tree | `npm run check` | 2400 seconds | Complete lanes and actual detached/concurrent companion acceptance; same evidence | passed |
 | Wave 5 combined tree | `npm run check` | 2400 seconds | Atomic default producer/current-output expectations and both MCP profiles; same evidence | passed |
-| Wave 6 combined tree | `npm run check` | 2400 seconds | Installed migration, ordinary real-child cases and documentation; same evidence | pending |
+| Wave 6 combined tree | `npm run check` | 2400 seconds | Installed migration, ordinary real-child cases and documentation; same evidence | passed |
 | Phase gate | `npm run check` | 2400 seconds | Combined final tree after Parent lines; reuse only when build inputs are identical | pending |
 | Merge gate | `npm run check` | 2400 seconds | Merged combined tree or documented identical-input reuse | pending |
 | Final PR/release handoff | `npm run check` | 2400 seconds | Final build inputs or documented identical-input reuse | pending |
@@ -218,3 +218,31 @@ and `9ed5faf9` (companion-chosen launch mode acceptance); summary `ea2398e2`.
 - Full gate: `npm run check`, exit 0 at `ea2398e2`, Node v26.13.1; 1891 adapter
   scenarios / 23084 steps, 184 builtin scenarios / 2492 steps and all 361
   direct pairs passed. Log: `/tmp/pg3-wave5-check.log`.
+
+## Wave 6 Execution Evidence
+
+Plan 03-08 ran sequentially on `features/gaps` from `1a8aa893`. Commits:
+`6360de6a` (real-child driver launches by exact marker and reports what
+pi-subagents ran), `c0ff074c` (an earlier ordinary agent migrates on update and
+reinstall; a load keeps its bytes), `43b12475` (ordinary real children and the
+child hook documentation); summary `73358164`.
+
+- RED: substring matching launches `demo:granted-false` as `demo:granted`;
+  restoring `async: false` fails the 4 update/reinstall cases, both migration
+  scenarios and both ordinary default-mode integration cases (foreground, no
+  completion); neutralizing `needsAgentGrantRewrite` fails both load cases.
+  Logs: `/tmp/pg3-08-*red*.log`.
+- Plan scope deviations (recorded in 03-08-SUMMARY.md): the driver fix; a new
+  Given step and `replaceStagedAgentFile` for earlier agent text; the update case
+  asserts the intent mark and converging retry (the swap's `rollback partial`
+  design), the reinstall case asserts a byte-for-byte restore; the plan's
+  prettier check on `docs/hooks-compatibility.md` conflicts with mdformat on two
+  pre-existing lines (WINDOWS entry 115).
+- Measured: a foreground pi-subagents child loads no ambient extension, so no
+  plugin hook runs for its tool calls; documented as a Pi capability gap and
+  pinned by an integration control.
+- Still flagged: the PG-HOOK-07a unclassified probe row and research A1.
+- Parent lines applied: PROJECT.md D-CF4-05 and D-CF6-10, ROADMAP Phase 3 Notes.
+- Full gate: `npm run check`, exit 0 at `73358164`, Node v26.13.1; 1893 adapter
+  scenarios / 23130 steps, 184 builtin scenarios / 2492 steps and all 361
+  direct pairs passed. Log: `/tmp/pg3-wave6-check.log`.

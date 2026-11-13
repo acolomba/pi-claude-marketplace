@@ -263,14 +263,14 @@ Plans:
 **Depends on**: Phase 1, Phase 2
 **Requirements**: PG-AGENT-01, PG-HOOK-07a
 **Evidence**: PRD sections 7.5 (AGENT-01) and 7.2 (HOOK-07a); reports `subagents.md` and `hooks.md`. Decision 1 is answered. Spike S12 settled its premise, and spike S2 ran with the stand-in child.
-**Notes**: The two requirements are one item. Once agents run in the background, the hooks bridge runs in every child, and a `Stop` hook that blocks there would keep the child running. The design treats the child as a mapping from main-session events to subagent events, not as a list of events to skip, so that `SubagentStart` and `SubagentStop` (HOOK-07b, not scheduled) can run there later. The tool hook payloads are the ones Phase 2 reshapes. The stored text of the MCP warning is matched byte for byte when agent files are rewritten, so the old and the new text must both be recognized. Agent files of installed plugins keep `async: false` until `update` or `reinstall`, and the design says how they change. A full background run needs a real child, which the harness cannot start. The corrections to D-CF4-05 in `PROJECT.md` and to `bridges/agents/mcp-async-warning.ts` land here.
+**Notes**: The two requirements are one item. Once agents run in the background, the hooks bridge runs in every child, and a `Stop` hook that blocks there would keep the child running. The design treats the child as a mapping from main-session events to subagent events, not as a list of events to skip, so that `SubagentStart` and `SubagentStop` (HOOK-07b, not scheduled) can run there later. The tool hook payloads are the ones Phase 2 reshapes. The stored text of the MCP warning is matched byte for byte when agent files are rewritten, so the old and the new text must both be recognized. Agent files of installed plugins keep `async: false` until `update` or `reinstall`, and the design says how they change. The harness now starts real pi-subagents children: detached under the companion's default and under explicit background or MCP forcing, in the foreground under a configured foreground default, and several child sessions at once in one runner process (`features/agent/frontmatter.feature`, `features/plugin/subagent-child.feature`, `test/integration/pi-subagents-child-identity.test.ts`). The corrections to D-CF4-05 in `PROJECT.md` and to `bridges/agents/mcp-async-warning.ts` land here.
 **Success Criteria** (what must be TRUE):
   1. `subagent get` shows no `async false` line for a plain bridged agent. An agent whose source sets `background: true`, and an agent with plugin MCP tools, still show the background mode. The scenario "A call that leaves the launch mode open runs a bridged agent in the foreground" in `features/agent/frontmatter.feature` is replaced (PG-AGENT-01).
   2. The warning for an agent with plugin MCP tools no longer says that Claude Code runs agents in the foreground. An agent file that holds the earlier warning text still follows a switch of the MCP implementation at the next session start (PG-AGENT-01).
   3. In the stand-in child of `features/plugin/subagent-child.feature`, a plugin's recording `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd` hooks record no run, and its `PreToolUse` hook still runs (PG-HOOK-07a).
   4. A tool hook that runs in the child receives `agent_type`, and `agent_id` when the child can know it. The same hook in a main session receives neither field (PG-HOOK-07a).
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans executed
 - [x] 03-01-PLAN.md
 - [x] 03-02-PLAN.md
 - [x] 03-03-PLAN.md
@@ -278,7 +278,7 @@ Plans:
 - [x] 03-05-PLAN.md
 - [x] 03-06-PLAN.md
 - [x] 03-07-PLAN.md
-- [ ] 03-08-PLAN.md
+- [x] 03-08-PLAN.md
 
 ### Phase 4: Skill and Workflow Install Defects
 
