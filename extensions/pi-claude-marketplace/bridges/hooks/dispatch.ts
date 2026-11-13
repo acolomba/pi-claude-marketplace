@@ -336,7 +336,7 @@ function withContext(result: HookExecResult, context: string | undefined): HookE
 // The last value a mutation in routing order sets for `field`, or `undefined`.
 function lastSet(
   mutations: readonly MutateOutcome[],
-  field: "updatedInput" | "updatedToolOutput",
+  field: "updatedInput" | "updatedToolOutput" | "updatedMCPToolOutput",
 ): unknown {
   return mutations.reduce<unknown>(
     (last, { result }) => (result[field] === undefined ? last : result[field]),
@@ -385,6 +385,11 @@ function foldMutations(
     result.updatedToolOutput = updatedToolOutput;
   }
 
+  const updatedMCPToolOutput = lastSet(mutations, "updatedMCPToolOutput");
+  if (updatedMCPToolOutput !== undefined) {
+    result.updatedMCPToolOutput = updatedMCPToolOutput;
+  }
+
   const asking = mutations.find((mutation) => mutation.result.permissionDecision === "ask");
   return {
     result: withContext(result, context),
@@ -413,6 +418,43 @@ function foldOutcomes(outcomes: readonly BucketOutcome[]): FoldedBucket {
   }
 
   return foldMutations(outcomes, context);
+}
+
+// Choose from the original result so an invalid or unchanged later candidate
+// cannot erase a replacement accepted from an earlier hook.
+function acceptedToolOutput(
+  outcomes: readonly BucketOutcome[],
+  event: ToolResultEvent,
+  tool: McpToolIdentity,
+  context: HookAdapterContext,
+): ToolResultEventResult | undefined {
+  const mcpTool = tool.builtinServer !== undefined || tool.piName.startsWith(MCP_TOOL_PREFIX);
+  let accepted: ToolResultEventResult | undefined;
+  for (const { result } of outcomes) {
+    if (result.kind !== "mutate") {
+      continue;
+    }
+
+    let candidate = result.updatedToolOutput;
+    if (candidate === undefined && mcpTool) {
+      candidate = result.updatedMCPToolOutput;
+    }
+
+    if (candidate === undefined) {
+      continue;
+    }
+
+    const patch = adaptToolResultResult(
+      { kind: "mutate", updatedToolOutput: candidate },
+      event,
+      context,
+    );
+    if (patch !== undefined) {
+      accepted = patch;
+    }
+  }
+
+  return accepted;
 }
 
 // Run the matching hooks of `bucket` for the view's event and fold their
@@ -1075,12 +1117,17 @@ export function toolResultCompositeHandler(
     showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
     sendToolContext(pi, label, folded.result);
 
-    return adaptToolResultResult(folded.result, view.event, {
+    const adapterContext = {
       runtime,
       ctx,
       pi,
       attributedTo: folded.attributedTo,
-    });
+    };
+    if (folded.result.kind !== "mutate" || view.event.isError) {
+      return adaptToolResultResult(folded.result, view.event, adapterContext);
+    }
+
+    return acceptedToolOutput(folded.outcomes, view.event, view.tool, adapterContext);
   };
 }
 

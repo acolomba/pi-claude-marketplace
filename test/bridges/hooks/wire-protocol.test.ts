@@ -562,6 +562,26 @@ test("returns updated tool output as an exact mutation", () => {
   });
 });
 
+test("keeps modern and legacy MCP output fields without choosing between them", () => {
+  // arrange
+  const stdout = JSON.stringify({
+    hookSpecificOutput: {
+      updatedToolOutput: false,
+      updatedMCPToolOutput: [{ type: "text", text: "legacy" }],
+    },
+  });
+
+  // act
+  const hookOutcome = parseHookStdout(0, stdout, "", "PostToolUse");
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "mutate",
+    updatedToolOutput: false,
+    updatedMCPToolOutput: [{ type: "text", text: "legacy" }],
+  });
+});
+
 test("returns additional context as an exact mutation", () => {
   // arrange
   const exitCode = 0;

@@ -4182,6 +4182,113 @@ describe("routing-order fold of mutations", () => {
     // assert
     assert.deepStrictEqual(output, { content: [{ type: "text", text: "two" }], details: null });
   });
+
+  test("applies a legacy output only to a recovered MCP tool", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["legacy"]));
+    const executor = createRecordingExecutor(
+      {
+        legacy: {
+          kind: "mutate",
+          updatedMCPToolOutput: { content: [{ type: "text", text: "safe" }] },
+        },
+      },
+      [],
+    );
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      createBuiltinToolView([]),
+    );
+
+    // act
+    const mcpOutput = await handler(
+      builtinToolResultEvent(false),
+      createExtensionContext("/workspace"),
+    );
+    const customOutput = await handler(
+      createToolResultEvent(false, "owner-tool"),
+      createExtensionContext("/workspace"),
+    );
+
+    // assert
+    assert.deepStrictEqual(mcpOutput, { content: [{ type: "text", text: "safe" }], details: null });
+    assert.strictEqual(customOutput, undefined);
+  });
+
+  test("does not fall back to a legacy output when modern output is present but invalid", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["both"]));
+    const executor = createRecordingExecutor(
+      {
+        both: {
+          kind: "mutate",
+          updatedToolOutput: false,
+          updatedMCPToolOutput: { content: [{ type: "text", text: "legacy" }] },
+        },
+      },
+      [],
+    );
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      createBuiltinToolView([]),
+    );
+
+    // act
+    const output = await handler(
+      builtinToolResultEvent(false),
+      createExtensionContext("/workspace"),
+    );
+
+    // assert
+    assert.strictEqual(output, undefined);
+  });
+
+  test("keeps an accepted replacement when a later output is invalid or unchanged", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket(
+      "PostToolUse",
+      routedEntries("PostToolUse", ["first", "noop", "invalid", "echo"]),
+    );
+    const executor = createRecordingExecutor(
+      {
+        first: { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "safe" }] } },
+        noop: { kind: "noop" },
+        invalid: { kind: "mutate", updatedToolOutput: { content: "invalid" } },
+        echo: {
+          kind: "mutate",
+          updatedToolOutput: { content: [{ type: "text", text: "original output" }] },
+        },
+      },
+      [],
+    );
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(
+      createToolResultEvent(false, "owner-tool"),
+      createExtensionContext("/workspace"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "safe" }], details: null });
+  });
 });
 
 describe("PreToolUse decisions (D-CF5-11)", () => {

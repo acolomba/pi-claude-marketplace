@@ -274,6 +274,11 @@ function buildMutateFromHso(hso: Record<string, unknown>): HookExecResult | null
     hasMutate = true;
   }
 
+  if (hso.updatedMCPToolOutput !== undefined) {
+    mutate.updatedMCPToolOutput = hso.updatedMCPToolOutput;
+    hasMutate = true;
+  }
+
   if (typeof hso.additionalContext === "string") {
     mutate.additionalContext = hso.additionalContext;
     hasMutate = true;
