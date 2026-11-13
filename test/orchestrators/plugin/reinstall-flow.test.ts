@@ -9,6 +9,10 @@ import test from "node:test";
 import * as git from "isomorphic-git";
 
 import {
+  needsAgentGrantRewrite,
+  rewriteAgentGrantForms,
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/grant-rewrite.ts";
+import {
   createHooksRouting,
   createHooksRuntime,
   readHooksJson,
@@ -46,7 +50,10 @@ import {
   PluginUpdatePhase3Error,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import {
+  createRemovalOps,
+  pathExists,
+} from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
@@ -90,6 +97,7 @@ import type {
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { LockedStateTransactionDeps } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
+import type { TestContext } from "node:test";
 
 interface NotifyRecord {
   message: string;
@@ -910,6 +918,190 @@ test("AGENT-01: reinstall preserves legacy bytes and state when the post-migrati
       notes: ["save failure after migration\n\ncause: save failure after migration"],
     });
     await assert.rejects(readFile(newTarget), { code: "ENOENT" });
+  });
+});
+
+/**
+ * D-PG3-03: installs `hello` 1.0.0 with the ordinary agent `bot`, then puts
+ * back the file and index row an earlier release wrote for it, with the
+ * generated `async: false` line.
+ */
+async function seedEarlierOrdinaryAgentReinstall(t: TestContext) {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-delegated-"));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const locations = locationsFor("project", cwd);
+  const { pluginRoot } = await seedMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    resources: { agents: [{ sourceName: "bot", description: "Bot", body: "Body.\n" }] },
+    install: true,
+  });
+  const sourcePath = path.join(pluginRoot, "agents", "bot.md");
+  const target = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+  const earlierBytes = `---\nname: hello:bot\ndescription: Bot\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nBody.\n`;
+  await writeFile(target, earlierBytes);
+  const earlierIndex: AgentsIndex = {
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "hello",
+        marketplace: "mp",
+        sourceAgent: "bot",
+        generatedName: "pi-claude-marketplace-hello-bot",
+        sourcePath,
+        targetPath: target,
+        sourceHash: "a".repeat(64),
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    ],
+  };
+  const indexBytes = JSON.stringify(earlierIndex);
+  await writeFile(locations.agentsIndexPath, indexBytes);
+  const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
+  const options = {
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "hello",
+    render: "none",
+  } as const;
+  return { locations, sourcePath, target, earlierBytes, indexBytes, notifications, options };
+}
+
+/**
+ * D-PG3-01 / D-PG3-03: the file and index row a reinstall writes for the
+ * ordinary agent `bot`: no launch preference, so pi-subagents chooses.
+ */
+async function assertOrdinaryAgentReinstalled(
+  fixture: Awaited<ReturnType<typeof seedEarlierOrdinaryAgentReinstall>>,
+): Promise<void> {
+  const { locations, sourcePath, target } = fixture;
+  assert.strictEqual(
+    await readFile(target, "utf8"),
+    `---\nname: hello:bot\ndescription: Bot\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nBody.\n`,
+  );
+  assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "hello",
+        marketplace: "mp",
+        sourceAgent: "bot",
+        generatedName: "pi-claude-marketplace-hello-bot",
+        sourcePath,
+        targetPath: target,
+        sourceHash: createHash("sha256")
+          .update("---\nname: bot\ndescription: Bot\ntools: Read,Grep\n---\n\nBody.\n")
+          .digest("hex"),
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    ],
+  });
+}
+
+const ORDINARY_AGENT_REINSTALLED = {
+  partition: "reinstalled",
+  resourcesChanged: true,
+  name: "hello",
+  marketplace: "mp",
+  scope: "project",
+  version: "1.0.0",
+  fromVersion: "1.0.0",
+  stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
+  stagedMcpServerNames: [],
+  declaresAgents: true,
+  declaresMcp: false,
+  declaresWorkflows: false,
+} as const;
+
+test("D-PG3-03: a load keeps an earlier ordinary agent's async false bytes and a reinstall regenerates the agent without a launch preference, again on a repeat", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const fixture = await seedEarlierOrdinaryAgentReinstall(t);
+    const { locations, target, earlierBytes, indexBytes, notifications, options } = fixture;
+    const recordBefore = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+    assert.ok(recordBefore !== undefined);
+
+    // act: the agent grant pass is the only step of a load that rewrites an agent file
+    const rewriteNeeded = [
+      await needsAgentGrantRewrite(locations, "adapter"),
+      await needsAgentGrantRewrite(locations, "builtin"),
+    ];
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), () => undefined);
+
+    // assert
+    assert.deepStrictEqual(rewriteNeeded, [false, false]);
+    assert.strictEqual(await readFile(target, "utf8"), earlierBytes);
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBytes);
+
+    // act
+    const outcome = await reinstallPlugin(options);
+
+    // assert
+    assert.deepStrictEqual(outcome, ORDINARY_AGENT_REINSTALLED);
+    assert.deepStrictEqual(notifications, []);
+    await assertOrdinaryAgentReinstalled(fixture);
+    assert.deepStrictEqual(
+      (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello,
+      { ...recordBefore, updatedAt: "2026-01-02T00:00:00.002Z" },
+    );
+
+    // act
+    const repeated = await reinstallPlugin(options);
+
+    // assert
+    assert.deepStrictEqual(repeated, ORDINARY_AGENT_REINSTALLED);
+    await assertOrdinaryAgentReinstalled(fixture);
+    assert.deepStrictEqual(
+      (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello,
+      { ...recordBefore, updatedAt: "2026-01-02T00:00:00.004Z" },
+    );
+  });
+});
+
+test("D-PG3-03 / NFR-3: a reinstall whose state save fails restores an earlier ordinary agent's async false bytes, and its retry regenerates the agent", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const fixture = await seedEarlierOrdinaryAgentReinstall(t);
+    const { locations, target, earlierBytes, indexBytes, notifications, options } = fixture;
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+
+    // act
+    const failed = await reinstallPlugin({
+      ...options,
+      stateTransaction: {
+        saveState: () => Promise.reject(new Error("save failure after regeneration")),
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(failed, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      notes: ["save failure after regeneration\n\ncause: save failure after regeneration"],
+    });
+    assert.deepStrictEqual(notifications, []);
+    assert.strictEqual(await readFile(target, "utf8"), earlierBytes);
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBytes);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+
+    // act
+    const retried = await reinstallPlugin(options);
+
+    // assert
+    assert.deepStrictEqual(retried, ORDINARY_AGENT_REINSTALLED);
+    await assertOrdinaryAgentReinstalled(fixture);
   });
 });
 

@@ -16,6 +16,10 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  needsAgentGrantRewrite,
+  rewriteAgentGrantForms,
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/grant-rewrite.ts";
+import {
   createHooksRouting,
   createHooksRuntime,
   readHooksJson,
@@ -34,6 +38,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { PluginUpdateConcurrencyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import {
@@ -2638,4 +2643,212 @@ test("MGRT-01 / D-MB-03: a swap whose arguments name no MCP implementation resta
       },
     ],
   });
+});
+
+/**
+ * D-PG3-03: seeds `hello` 2.0.0 shipping the ordinary agent `bot`, and an
+ * install of 1.0.0 whose generated file and index row hold the bytes an
+ * earlier release wrote, with the generated `async: false` line.
+ */
+async function seedEarlierOrdinaryAgentUpdate(t: TestContext, prefix: string) {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, prefix);
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: {
+        version: "2.0.0",
+        hasSkill: false,
+        agents: [{ sourceName: "bot", description: "Bot", body: "Body.\n" }],
+      },
+    },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const args = cascadeSwapArgs(cwd);
+  const { locations } = args;
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  const sourcePath = path.join(pluginRoot, "agents", "bot.md");
+  const target = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+  const earlierBytes = `---\nname: hello:bot\ndescription: Bot\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nBody.\n`;
+  await mkdir(locations.agentsDir, { recursive: true });
+  await writeFile(target, earlierBytes);
+  const earlierRow = {
+    plugin: "hello",
+    marketplace: "mp",
+    sourceAgent: "bot",
+    generatedName: "pi-claude-marketplace-hello-bot",
+    sourcePath,
+    targetPath: target,
+    sourceHash: "a".repeat(64),
+    droppedFields: [],
+    droppedTools: [],
+    warnings: [],
+  };
+  const indexBytes = JSON.stringify({ schemaVersion: 1, agents: [earlierRow] });
+  await writeFile(locations.agentsIndexPath, indexBytes);
+  const state = await loadState(locations.extensionRoot);
+  const oldRecord = state.marketplaces.mp?.plugins.hello;
+  assert.ok(oldRecord !== undefined);
+  oldRecord.resources = {
+    skills: [],
+    prompts: [],
+    agents: ["pi-claude-marketplace-hello-bot"],
+    mcpServers: [],
+    hooks: [],
+    workflows: [],
+  };
+  await saveState(locations.extensionRoot, state);
+  return { args, pluginRoot, sourcePath, target, earlierBytes, indexBytes, oldRecord };
+}
+
+/**
+ * D-PG3-01 / D-PG3-03: the file and index row an update writes for the
+ * ordinary agent `bot`: no launch preference, so pi-subagents chooses.
+ */
+async function assertOrdinaryAgentRegenerated(
+  fixture: Awaited<ReturnType<typeof seedEarlierOrdinaryAgentUpdate>>,
+): Promise<void> {
+  const { args, sourcePath, target } = fixture;
+  assert.strictEqual(
+    await readFile(target, "utf8"),
+    `---\nname: hello:bot\ndescription: Bot\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nBody.\n`,
+  );
+  assert.deepStrictEqual(JSON.parse(await readFile(args.locations.agentsIndexPath, "utf8")), {
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "hello",
+        marketplace: "mp",
+        sourceAgent: "bot",
+        generatedName: "pi-claude-marketplace-hello-bot",
+        sourcePath,
+        targetPath: target,
+        sourceHash: createHash("sha256")
+          .update("---\nname: bot\ndescription: Bot\ntools: Read,Grep\n---\n\nBody.\n")
+          .digest("hex"),
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    ],
+  });
+}
+
+/** The record of `hello` 2.0.0 after an update finalized at `updatedAt`. */
+function ordinaryAgentRecord(
+  fixture: Awaited<ReturnType<typeof seedEarlierOrdinaryAgentUpdate>>,
+  updatedAt: string,
+) {
+  return {
+    ...fixture.oldRecord,
+    version: "2.0.0",
+    resolvedSource: fixture.pluginRoot,
+    compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [],
+    updatedAt,
+  };
+}
+
+const ORDINARY_AGENT_UPDATED = {
+  partition: "updated",
+  resourcesChanged: true,
+  name: "hello",
+  fromVersion: "1.0.0",
+  toVersion: "2.0.0",
+  stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
+  stagedMcpServerNames: [],
+  declaresAgents: true,
+  declaresMcp: false,
+  constraint: undefined,
+  declaresWorkflows: false,
+} as const;
+
+test("D-PG3-03: a load keeps an earlier ordinary agent's async false bytes and an update regenerates the agent without a launch preference", async (t) => {
+  // arrange
+  const fixture = await seedEarlierOrdinaryAgentUpdate(t, "update-swap-delegated-");
+  const { args, target, earlierBytes, indexBytes } = fixture;
+
+  // act: the agent grant pass is the only step of a load that rewrites an agent file
+  const rewriteNeeded = [
+    await needsAgentGrantRewrite(args.locations, "adapter"),
+    await needsAgentGrantRewrite(args.locations, "builtin"),
+  ];
+  await rewriteAgentGrantForms(args.locations, "builtin", createRemovalOps(), () => undefined);
+
+  // assert
+  assert.deepStrictEqual(rewriteNeeded, [false, false]);
+  assert.strictEqual(await readFile(target, "utf8"), earlierBytes);
+  assert.strictEqual(await readFile(args.locations.agentsIndexPath, "utf8"), indexBytes);
+
+  // act
+  const outcome = await swapPluginUpdate(args, await preflightOf(args), UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(outcome, ORDINARY_AGENT_UPDATED);
+  await assertOrdinaryAgentRegenerated(fixture);
+  assert.deepStrictEqual(
+    (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello,
+    ordinaryAgentRecord(fixture, "2026-01-02T00:00:00.001Z"),
+  );
+});
+
+test("D-PG3-03 / NFR-3: an update whose workflows commit fails keeps its intent mark, and its retry finalizes the agent without a launch preference", async (t) => {
+  // arrange
+  const fixture = await seedEarlierOrdinaryAgentUpdate(t, "update-swap-delegated-retry-");
+  const { args, pluginRoot, oldRecord } = fixture;
+  const foreignPath = await seedRefusedWorkflowTarget(args.locations, pluginRoot);
+  const refusal = `Cannot replace workflow target with non-previous content at ${foreignPath}`;
+
+  // act
+  const failed = await swapPluginUpdate(args, await preflightOf(args), UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(failed, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    notes: [
+      'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
+      `workflows: ${refusal}`,
+    ],
+    reasons: ["rollback partial"],
+    phaseFailures: [{ phase: "workflows", msg: refusal }],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+  await assertOrdinaryAgentRegenerated(fixture);
+  assert.deepStrictEqual(
+    (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello,
+    {
+      ...oldRecord,
+      compatibility: {
+        installable: false,
+        notes: ["update-in-progress"],
+        supported: [],
+        unsupported: [],
+      },
+      updatedAt: "2026-01-02T00:00:00.001Z",
+    },
+  );
+
+  // arrange: the foreign workflow and the source's workflow are gone
+  await rm(foreignPath);
+  await rm(path.join(pluginRoot, "workflows"), { recursive: true });
+
+  // act
+  const retried = await swapPluginUpdate(args, await preflightOf(args), UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(retried, ORDINARY_AGENT_UPDATED);
+  await assertOrdinaryAgentRegenerated(fixture);
+  assert.deepStrictEqual(
+    (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello,
+    ordinaryAgentRecord(fixture, "2026-01-02T00:00:00.003Z"),
+  );
 });
