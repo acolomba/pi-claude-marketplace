@@ -15,6 +15,12 @@ Every fact is marked `VERIFIED` (I read the primary source) or `INFERRED` (reaso
 
 ______________________________________________________________________
 
+## Implementation-status amendment (2026-11-13)
+
+The HOOK-01/03/13 observations below are the earlier gap assessment, not a fresh measurement. Phase 2 now maps Read, Edit, Write, Bash, PowerShell, Glob and Grep input and available result fields in both directions; LS remains native passthrough pending a resolved current upstream schema. Edit has one hook invocation per pair, repeated side effects, all-pair preflight, one native execution and a shared result. Conflicting targets block; an unsupported candidate otherwise keeps the whole original call with a sanitized notice. Missing original file/type, separated streams, timing and ambiguous counts remain omitted under [HOOKRESULT-01](../../../.planning/BACKLOG.md#hookresult-01-investigate-and-implement-execution-wrappers-for-full-claude-shaped-hook-results). The current [compatibility contract](../../hooks-compatibility.md#current-tool-contract-phase-2-2026-11-13) cites [input and batch owners](../../../test/bridges/hooks/tool-batch.test.ts), [result projection owners](../../../test/bridges/hooks/tool-result-search-shell.test.ts), [Pi boundary](../../../test/integration/hooks-result-boundary.test.ts), and [real tool scenarios](../../../features/hook/tool-use.feature) (D-PG2-01..09).
+
+Exact matcher lists now split on comma/pipe, trim surrounding spaces but preserve internal spaces. Other whole patterns use unanchored JavaScript regex; an invalid pattern drops only its group. Prompt and Stop ignore matcher text. Eight Stop blocks continue; the ninth is overridden. A native tool call and reload reset the budget (D-PG2-10/11; [matcher scenarios](../../../features/hook/matchers.feature), [Stop scenarios](../../../features/hook/prompt-and-stop.feature)). Stop still uses `agent_settled`; Phase 5 owns event migration and the cap environment variable. PowerShell has contract-only tests, not a live executable run. MCP output uses modern-field presence before legacy alias, with the latter limited to real MCP identity; the inspected upstream legacy path remains ambiguous ([both-profile scenarios](../../../features/hook/tool-use.feature)). Phase 1's ambient-child and long-name limits remain. No full result wrapper or companion upgrade shipped (D-PG2-06/07/12).
+
 ## Upstream contract
 
 ### Closed sets (VERIFIED against the binary)
