@@ -156,6 +156,16 @@ PG-HOOK-01 remains open because other plans in this phase own the rest of its ve
 - Fallow audit and review initially could not create their temporary Git worktree inside the sandbox. Both passed with ordinary escalated local Git access.
 - ASYNCLIFECYCLE-01 / WINDOWS #114 remains open. This plan did not change fixture teardown or claim that the separate historical exit-code mismatch is resolved.
 
+## Parent Combined-Tree Verification
+
+`npm run check` exited 0 at `27925ebbb935565a229833440efc9b7b51279813`, Node v26.13.0: 1867 adapter scenarios / 22776 steps and 161 built-in scenarios / 2193 steps. Merged LCOV: coverage/direct.lcov (361 records). Log: `/tmp/pg2-wave8-check.log`.
+
+The parent verified the three exact task SHAs in ancestry, a clean executor
+worktree and exactly the 15 declared files plus this summary. Fallow review
+passed with no new findings. GSD merged and removed only the recorded wave
+worktree. The phase scope query resolves all 38 task/correction commits with
+no missing, unreachable or out-of-union files.
+
 ## Threat Flags
 
 None -- no security-relevant surface outside the plan's `<threat_model>` was introduced.

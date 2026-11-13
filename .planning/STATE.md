@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 02
 current_phase_name: Hook Payloads, Matchers, and Stop Limit
 status: executing
-stopped_at: parity-gaps Phase 2 wave 7 verified; wave 8 next
-last_updated: "2026-11-13T08:04:29.440687+00:00"
+stopped_at: parity-gaps Phase 2 wave 8 verified; wave 9 next
+last_updated: "2026-11-13T09:48:52.480348+00:00"
 last_activity: 2026-11-13
-last_activity_desc: Phase 02 wave 7 verified; 8 of 10 plans complete
-state_head: ca9148d488c966d0f70f4e8fc28ef2dc661ae8be
+last_activity_desc: Phase 02 wave 8 verified; 9 of 10 plans complete
+state_head: 27925ebbb935565a229833440efc9b7b51279813
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 21
-  completed_plans: 19
+  completed_plans: 20
   percent: 9
 ---
 
@@ -32,21 +32,32 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 02 (Hook Payloads, Matchers, and Stop Limit) — EXECUTING
-Plan: 8 of 10 complete; 02-07 next
+Plan: 9 of 10 complete; 02-10 next
 Status: Executing Phase 02
-Last activity: 2026-11-13 — Phase 02 wave 7 verified
+Last activity: 2026-11-13 — Phase 02 wave 8 verified
 
 Progress: [█░░░░░░░░░] 9%
 
 
 ### parity-gaps Phase 2 execution
 
-Waves 1–7 (02-01, 02-02, 02-08, 02-09, 02-03, 02-04, 02-05, 02-06) are merged and verified.
-`npm run check` exited 0 at `ca9148d488c966d0f70f4e8fc28ef2dc661ae8be`, Node v26.13.0: 1860 adapter scenarios / 22658 steps and 155 built-in scenarios / 2091 steps. Merged LCOV: coverage/direct.lcov (361 records). Log: `/tmp/pg2-wave7-check-final.log`.
-Wave 8 is MCP/custom result translation and legacy output alias support (02-07).
+Waves 1–8 (02-01, 02-02, 02-08, 02-09, 02-03, 02-04, 02-05, 02-06, 02-07) are merged and verified.
+`npm run check` exited 0 at `27925ebbb935565a229833440efc9b7b51279813`, Node v26.13.0: 1867 adapter scenarios / 22776 steps and 161 built-in scenarios / 2193 steps. Merged LCOV: coverage/direct.lcov (361 records). Log: `/tmp/pg2-wave8-check.log`.
+Wave 9 records the supported contracts and final acceptance evidence (02-10).
 PG-HOOK-01 remains in progress; matcher and Stop plans cover PG-HOOK-03/13.
 The Stop checks observed eight continuations before ninth override, ten
 tool-separated blocks with no cap notice, and a fresh eight after reload.
+
+Wave 8 selects MCP output aliases after identity recovery, preserves native
+MCP/custom result schemas, and replaces all stale result carriers. Both MCP
+profiles prove redaction, images, empty modern precedence and immutable failures
+with complete hook, model and downstream records. All five direct pairs and the
+full module suite passed. The module run caught an omitted-name fallback and a
+stale modern-false assertion; both were corrected before handoff. The executor
+stayed within its 15 declared files. The parent verified exact task ancestry,
+a clean handoff and Fallow review. Phase scope resolves 38 task/correction
+commits with no files outside the declared union. Schema drift is clear;
+codebase drift remains advisory.
 
 Wave 7 projects available search/shell result facts and renders validated
 replacements. Real model and downstream checks cover search text, shell images,
