@@ -680,7 +680,7 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
     eventFields: {
       tool_name: "Bash",
       tool_input: { command: "printf post" },
-      tool_response: [{ type: "text", text: "post\n" }],
+      tool_response: { interrupted: false, structuredContent: [{ type: "text", text: "post\n" }] },
     },
   },
   {
