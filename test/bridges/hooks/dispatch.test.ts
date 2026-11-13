@@ -4968,6 +4968,130 @@ test("zero and malformed edit pairs leave native validation and input intact", a
   }
 });
 
+test("null native edit input reaches Pi validation without a bridge exception", async () => {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket(
+    "PreToolUse",
+    builtinToolEntries("PreToolUse", [{ pluginId: "guard", rawMatcher: "Edit" }]),
+  );
+  const event = { ...createToolCallEvent("edit"), input: null } as unknown as ToolCallEvent;
+  const calls: RecordedCall[] = [];
+  const handler = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    createRecordingExecutor({ guard: { kind: "noop" } }, calls),
+  );
+
+  assert.strictEqual(await handler(event, createExtensionContext("/workspace/edit")), undefined);
+  assert.strictEqual(event.input, null);
+});
+
+test("one native edit pair produces one hook invocation and one accepted rewrite", async () => {
+  const run = editPreflight(
+    () => ({
+      kind: "mutate",
+      updatedInput: {
+        file_path: "document.txt",
+        old_string: "first",
+        new_string: "ONE",
+      },
+    }),
+    { path: "document.txt", edits: [{ oldText: "first", newText: "one" }] },
+  );
+  assert.strictEqual(await run.handler(run.event, run.ctx), undefined);
+  assert.deepStrictEqual(run.received, ["first"]);
+  assert.deepStrictEqual(editInput(run.event), {
+    path: "/workspace/edit/document.txt",
+    edits: [{ oldText: "first", newText: "ONE" }],
+  });
+});
+
+test("equal edit pair values still produce two hook invocations", async () => {
+  const run = editPreflight(() => ({ kind: "noop" }), {
+    path: "document.txt",
+    edits: [
+      { oldText: "same", newText: "same" },
+      { oldText: "same", newText: "same" },
+    ],
+  });
+  assert.strictEqual(await run.handler(run.event, run.ctx), undefined);
+  assert.deepStrictEqual(run.received, ["same", "same"]);
+});
+
+test("edit if conditions compare the original native input", async () => {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const cwd = "/workspace/edit";
+  runtime.setRoutingBucket("PreToolUse", [
+    createRoutingEntry({
+      pluginId: "original-path",
+      claudeEvent: "PreToolUse",
+      rawMatcher: "Edit",
+      declarationIndex: 0,
+      ifPredicate: compileIfPredicate("Edit(document.txt)", "PreToolUse", {
+        homedir: "/home/tester",
+        cwd,
+        projectRoot: cwd,
+      }),
+    }),
+  ]);
+  const calls: RecordedCall[] = [];
+  const event = createToolCallEvent("edit", {
+    path: "document.txt",
+    edits: [{ oldText: "first", newText: "one" }],
+  });
+  const handler = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    createRecordingExecutor({ "original-path": { kind: "noop" } }, calls),
+  );
+  assert.strictEqual(await handler(event, createExtensionContext(cwd)), undefined);
+  assert.strictEqual(calls.length, 1);
+  assert.deepStrictEqual((calls[0]?.event as ToolCallEvent).input, {
+    file_path: `${cwd}/document.txt`,
+    old_string: "first",
+    new_string: "one",
+  });
+  assert.strictEqual(editInput(event).path, "document.txt");
+});
+
+test("reversed hook completion still commits pair rewrites in native order", async () => {
+  const first = deferred<HookExecResult>();
+  const second = deferred<HookExecResult>();
+  const run = editPreflight((input) =>
+    input.old_string === "first" ? first.promise : second.promise,
+  );
+  const completion = run.handler(run.event, run.ctx);
+  assert.deepStrictEqual(run.received, ["first", "second"]);
+  second.resolve({
+    kind: "mutate",
+    updatedInput: {
+      file_path: "document.txt",
+      old_string: "second",
+      new_string: "TWO",
+    },
+  });
+  await Promise.resolve();
+  first.resolve({
+    kind: "mutate",
+    updatedInput: {
+      file_path: "document.txt",
+      old_string: "first",
+      new_string: "ONE",
+    },
+  });
+  assert.strictEqual(await completion, undefined);
+  assert.deepStrictEqual(editInput(run.event).edits, [
+    { oldText: "first", newText: "ONE" },
+    { oldText: "second", newText: "TWO" },
+  ]);
+});
+
 test("a later edit stop dominates a prior rewrite without changing the native input", async () => {
   const run = editPreflight((input) =>
     input.old_string === "first"

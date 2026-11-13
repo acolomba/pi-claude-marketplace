@@ -136,6 +136,44 @@ Feature: Hook tool use
       | info     | PreToolUse:Edit ignored input rewrite (value)       |
     Then the project file "document.txt" has the text "one\nmiddle\ntwo\n" after a tool hook
 
+  Scenario Outline: Edit preflight handles <case>
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event      | matcher | form   | when old string | output         | matched output |
+      | guard | PreToolUse | Edit    | script | second          | <first output> | <second output> |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
+    Given the project holds the file "other.txt" with the text "other\n" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                                                                        |
+      |       | edit | {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | Done. |      |                                                                                                                  |
+    When the user prompts "try conflicting edits"
+    Then the hooks record these runs in any order:
+      | event      | session | tool name | tool input                                                                              | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the project file "document.txt" has the text "first\nmiddle\nsecond\n" after a tool hook
+    Then the project file "other.txt" has the text "other\n" after a tool hook
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                     |
+      | 1    | user        | try conflicting edits                                                                                                    |
+      | 2    | user        | try conflicting edits                                                                                                    |
+      | 2    | assistant   | tool call edit {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | 2    | tool result | edit failed: PreToolUse:Edit hook error: conflicting edit targets                                                         |
+
+    Examples:
+      | case                                                     | first output                                                                                                                              | second output                                                                                                                                       |
+      | Conflicting accepted edit targets block the whole batch | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"other.txt","old_string":"first","new_string":"ONE"}}} | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"second","new_string":"TWO"}}} |
+      | An unchanged edit pair prevents a conflicting redirect  | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"other.txt","old_string":"first","new_string":"ONE"}}} |                                                                                                                                                     |
+      | An unsupported option does not hide conflicting edit targets | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"other.txt","old_string":"first","new_string":"ONE"}}} | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"second","new_string":"TWO","replace_all":true}}} |
+
   Scenario: A PreToolUse hook runs once for a scripted bash call with Claude's tool name and input
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

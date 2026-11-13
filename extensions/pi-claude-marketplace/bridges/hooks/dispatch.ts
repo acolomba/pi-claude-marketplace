@@ -818,7 +818,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     if (
       claudeEvent === "PreToolUse" &&
       (event as ToolCallEvent).toolName === "edit" &&
-      Array.isArray(((event as ToolCallEvent).input as Record<string, unknown>).edits)
+      Array.isArray(((event as ToolCallEvent).input as Record<string, unknown> | null)?.edits)
     ) {
       return (await runEditPreflight(
         runtime,
