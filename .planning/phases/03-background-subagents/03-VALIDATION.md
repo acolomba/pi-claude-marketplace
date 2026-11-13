@@ -1,9 +1,9 @@
 ---
 phase: "03"
 slug: background-subagents
-status: in_progress
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-11-13"
 ---
 
@@ -64,7 +64,7 @@ Normal commit hooks are mandatory. Each combined-tree gate uses the complete com
 | Wave 4 combined tree | `npm run check` | 2400 seconds | Complete lanes and actual detached/concurrent companion acceptance; same evidence | passed |
 | Wave 5 combined tree | `npm run check` | 2400 seconds | Atomic default producer/current-output expectations and both MCP profiles; same evidence | passed |
 | Wave 6 combined tree | `npm run check` | 2400 seconds | Installed migration, ordinary real-child cases and documentation; same evidence | passed |
-| Phase gate | `npm run check` | 2400 seconds | Combined final tree after Parent lines; reuse only when build inputs are identical | pending |
+| Phase gate | `npm run check` | 2400 seconds | Combined final tree after Parent lines; reuse only when build inputs are identical | passed (reuses wave 6 at `73358164`; later commits change only `.planning/`) |
 | Merge gate | `npm run check` | 2400 seconds | Merged combined tree or documented identical-input reuse | pending |
 | Final PR/release handoff | `npm run check` | 2400 seconds | Final build inputs or documented identical-input reuse | pending |
 
@@ -74,7 +74,7 @@ Normal commit hooks are mandatory. Each combined-tree gate uses the complete com
 - [x] 03-01-03 and 03-03-01/02 provide runtime capture and translated identity with production consumers in their plans.
 - [x] 03-06-01 supplies structured stand-in metadata, complete recording assertions and all nine execution-lane combinations.
 - [x] 03-06-02 creates the one maintained features/lib/real-subagent-child.ts and test/integration/pi-subagents-child-identity.test.ts with Node and Cucumber consumers; no temporary-script dependency.
-- [ ] Existing source owners receive their paired tests; no new production module or unconsumed export is planned.
+- [x] Existing source owners receive their paired tests; no new production module or unconsumed export is planned.
 - [x] All provisional verification rows have concrete task IDs, waves, threat references, paths and commands.
 
 There is no standalone Wave 0 or generic test-only scaffolding commit. Each
@@ -99,15 +99,15 @@ Missing evidence must be automated before requesting user testing.
 ## Validation Sign-Off
 
 - [x] All 18 tasks have concrete automated verification with stated failure direction.
-- [ ] No three consecutive tasks lack automated verification.
+- [x] No three consecutive tasks lack automated verification.
 - [x] Every new path has a consuming creation task before later verification references.
-- [ ] No watch-mode flags.
-- [ ] Process waits, child launches and full gates are bounded.
-- [ ] Both MCP implementation profiles pass.
-- [ ] Real child and concurrency assertions pass; temporary research probes alone do not qualify.
-- [ ] `nyquist_compliant: true` set after completed verification.
+- [x] No watch-mode flags.
+- [x] Process waits, child launches and full gates are bounded.
+- [x] Both MCP implementation profiles pass.
+- [x] Real child and concurrency assertions pass; temporary research probes alone do not qualify.
+- [x] `nyquist_compliant: true` set after completed verification.
 
-**Approval:** pending execution and validation
+**Approval:** validated 2026-11-13; all 18 tasks passed and every wave gate passed
 
 ## Wave 1 Execution Evidence
 
@@ -246,3 +246,11 @@ child hook documentation); summary `73358164`.
 - Full gate: `npm run check`, exit 0 at `73358164`, Node v26.13.1; 1893 adapter
   scenarios / 23130 steps, 184 builtin scenarios / 2492 steps and all 361
   direct pairs passed. Log: `/tmp/pg3-wave6-check.log`.
+
+## Validation Audit 2026-11-13
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
