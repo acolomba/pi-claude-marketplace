@@ -100,7 +100,7 @@ test("grep uses native truncation content and avoids ambiguous displayed counts"
   );
 });
 
-test("glob excludes byte-cut partial records and preserves known empty results", () => {
+test("glob excludes byte-cut partial records and ambiguous names", () => {
   assert.deepStrictEqual(
     searchShellToolResponse(
       result(
@@ -112,13 +112,6 @@ test("glob excludes byte-cut partial records and preserves known empty results",
       "/work",
     ),
     { truncated: true },
-  );
-  assert.deepStrictEqual(
-    searchShellToolResponse(
-      result("find", [{ type: "text", text: "No files found matching pattern" }]),
-      "/work",
-    ),
-    { filenames: [], numFiles: 0 },
   );
   assert.deepStrictEqual(
     searchShellToolResponse(
@@ -207,4 +200,20 @@ test("newline-bearing glob display does not invent two filenames", () => {
     ),
     {},
   );
+});
+
+test("glob omits filenames when an empty notice can be a real filename", () => {
+  // arrange
+  const toolEvent = result(
+    "find",
+    [{ type: "text", text: "No files found matching pattern" }],
+    undefined,
+    { pattern: "*" },
+  );
+
+  // act
+  const hookResponse = searchShellToolResponse(toolEvent, "/work");
+
+  // assert
+  assert.deepStrictEqual(hookResponse, {});
 });

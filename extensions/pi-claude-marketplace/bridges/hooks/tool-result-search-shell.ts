@@ -70,7 +70,7 @@ function globResponse(event: ToolResultEvent, cwd: string): unknown {
   }
 
   if (raw === "No files found matching pattern") {
-    return { ...response, filenames: [], numFiles: 0 };
+    return response;
   }
 
   const byteTruncated =

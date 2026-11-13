@@ -67,6 +67,38 @@ Feature: Hook tool use
       | 2    | assistant   | tool call grep {"pattern":"matches","path":"notice.txt"} |
       | 2    | tool result | grep returned: notice.txt:1: [2 matches limit reached] |
 
+  Scenario: A filename matching the empty search notice does not claim zero files
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event       | matcher |
+      | after | PostToolUse | Glob    |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "No files found matching pattern" with the text "present" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                     |
+      |       | find | {"pattern":"No files found matching pattern"} |
+      | Done. |      |                                               |
+    When the user prompts "search the notice"
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input                                    | tool response | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | Glob      | {"pattern":"No files found matching pattern"} | {}            | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then another pi handler observes these complete file results:
+      | record                                                                                                                                           |
+      | {"toolName":"find","content":[{"type":"text","text":"No files found matching pattern"}],"details":null,"structuredContent":null,"isError":false} |
+    Then the model receives these calls:
+      | call | role        | text                                                         |
+      | 1    | user        | search the notice                                            |
+      | 2    | user        | search the notice                                            |
+      | 2    | assistant   | tool call find {"pattern":"No files found matching pattern"} |
+      | 2    | tool result | find returned: No files found matching pattern               |
+
+
   Scenario: A shell result replacement preserves supplied images
     Given pi runs with the scripted model and a downstream file result observer
     Given the marketplace "fixtures" is published as a dir source
@@ -1376,7 +1408,7 @@ Feature: Hook tool use
       | 2    | assistant   | tool call grep {"pattern":"original","path":"search.txt"} |
       | 2    | tool result | grep returned: search.txt:1: original                      |
 
-  Scenario Outline: File result hooks receive the facts Pi supplies for <name>
+  Scenario: File result hooks receive the facts Pi supplies for Read
     Given pi runs with the scripted model and search tools
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -1392,21 +1424,16 @@ Feature: Hook tool use
     Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
     Given the project holds the file "found.md" with the text "found" for a tool hook
     Given the scripted model plays these steps:
-      | reply | tool   | arguments   |
-      |       | <tool> | <arguments> |
-      | Done. |        |             |
-    When the user prompts "run <name>"
+      | reply | tool | arguments             |
+      |       | read | {"path":"search.txt"} |
+      | Done. |      |                       |
+    When the user prompts "run Read"
     Then the hooks record these runs:
-      | event       | session | tool name | tool input   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response |
-      | PreToolUse  | first   | <name>    | <hook input> | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |               |
-      | PostToolUse | first   | <name>    | <hook input> | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | <response>    |
+      | event       | session | tool name | tool input                               | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response                                                                                                                       |
+      | PreToolUse  | first   | Read      | {"file_path":"{project dir}/search.txt"} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |                                                                                                                                     |
+      | PostToolUse | first   | Read      | {"file_path":"{project dir}/search.txt"} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | {"type":"text","file":{"filePath":"{project dir}/search.txt","content":"needle\\nother","startLine":1,"numLines":2,"totalLines":2}} |
 
-    Examples:
-      | name  | tool  | arguments                                               | hook input                                                                          | response                                                                 |
-      | Read  | read  | {"path":"search.txt"}                                  | {"file_path":"{project dir}/search.txt"}                                         | {"type":"text","file":{"filePath":"{project dir}/search.txt","content":"needle\\nother","startLine":1,"numLines":2,"totalLines":2}} |
-      | Write | write | {"path":"output.txt","content":"written"}            | {"file_path":"{project dir}/output.txt","content":"written"}                  | {"filePath":"{project dir}/output.txt","content":"written"} |
-
-  Scenario Outline: Search result hooks receive emitted facts and truncation for <name>
+  Scenario: File result hooks receive the facts Pi supplies for Write
     Given pi runs with the scripted model and search tools
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -1422,21 +1449,16 @@ Feature: Hook tool use
     Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
     Given the project holds the file "found.md" with the text "found" for a tool hook
     Given the scripted model plays these steps:
-      | reply | tool   | arguments   |
-      |       | <tool> | <arguments> |
-      | Done. |        |             |
-    When the user prompts "run <name>"
+      | reply | tool  | arguments                                 |
+      |       | write | {"path":"output.txt","content":"written"} |
+      | Done. |       |                                           |
+    When the user prompts "run Write"
     Then the hooks record these runs:
-      | event       | session | tool name | tool input   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response |
-      | PreToolUse  | first   | <name>    | <hook input> | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |               |
-      | PostToolUse | first   | <name>    | <hook input> | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | <response>    |
+      | event       | session | tool name | tool input                                                   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response                                               |
+      | PreToolUse  | first   | Write     | {"file_path":"{project dir}/output.txt","content":"written"} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |                                                             |
+      | PostToolUse | first   | Write     | {"file_path":"{project dir}/output.txt","content":"written"} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | {"filePath":"{project dir}/output.txt","content":"written"} |
 
-    Examples:
-      | name  | tool  | arguments                                               | hook input                                                                          | response                                                                 |
-      | Glob  | find  | {"pattern":"found*.md","limit":2}                      | {"pattern":"found*.md"}                                                           | {"filenames":["{project dir}/found.md"],"numFiles":1} |
-      | Grep  | grep  | {"pattern":"needle","path":"search.txt","limit":2} | {"pattern":"needle","path":"search.txt","output_mode":"content","-n":true,"head_limit":2} | {"mode":"content","content":"search.txt:1: needle","numLines":1} |
-
-  Scenario Outline: A Bash result hook receives combined output without invented streams for <name>
+  Scenario: Search result hooks receive emitted facts and truncation for Glob
     Given pi runs with the scripted model and search tools
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -1452,15 +1474,61 @@ Feature: Hook tool use
     Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
     Given the project holds the file "found.md" with the text "found" for a tool hook
     Given the scripted model plays these steps:
-      | reply | tool   | arguments   |
-      |       | <tool> | <arguments> |
-      | Done. |        |             |
-    When the user prompts "run <name>"
+      | reply | tool | arguments                         |
+      |       | find | {"pattern":"found*.md","limit":2} |
+      | Done. |      |                                   |
+    When the user prompts "run Glob"
     Then the hooks record these runs:
-      | event       | session | tool name | tool input   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response |
-      | PreToolUse  | first   | <name>    | <hook input> | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |               |
-      | PostToolUse | first   | <name>    | <hook input> | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | <response>    |
+      | event       | session | tool name | tool input              | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response                                         |
+      | PreToolUse  | first   | Glob      | {"pattern":"found*.md"} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |                                                       |
+      | PostToolUse | first   | Glob      | {"pattern":"found*.md"} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | {"filenames":["{project dir}/found.md"],"numFiles":1} |
 
-    Examples:
-      | name  | tool  | arguments                                               | hook input                                                                          | response                                                                 |
-      | Bash  | bash  | {"command":"echo ready","timeout":0.5}                | {"command":"echo ready","timeout":500}                                         | {"interrupted":false,"structuredContent":[{"type":"text","text":"ready\\n"}]} |
+  Scenario: Search result hooks receive emitted facts and truncation for Grep
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event       | matcher |
+      | before | PreToolUse  | *       |
+      | after  | PostToolUse | *       |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
+    Given the project holds the file "found.md" with the text "found" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                          |
+      |       | grep | {"pattern":"needle","path":"search.txt","limit":2} |
+      | Done. |      |                                                    |
+    When the user prompts "run Grep"
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input                                                                                | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response                                                    |
+      | PreToolUse  | first   | Grep      | {"pattern":"needle","path":"search.txt","output_mode":"content","-n":true,"head_limit":2} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |                                                                  |
+      | PostToolUse | first   | Grep      | {"pattern":"needle","path":"search.txt","output_mode":"content","-n":true,"head_limit":2} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | {"mode":"content","content":"search.txt:1: needle","numLines":1} |
+
+  Scenario: A Bash result hook receives combined output without invented streams for Bash
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event       | matcher |
+      | before | PreToolUse  | *       |
+      | after  | PostToolUse | *       |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
+    Given the project holds the file "found.md" with the text "found" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                              |
+      |       | bash | {"command":"echo ready","timeout":0.5} |
+      | Done. |      |                                        |
+    When the user prompts "run Bash"
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input                             | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response                                                                 |
+      | PreToolUse  | first   | Bash      | {"command":"echo ready","timeout":500} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |                                                                               |
+      | PostToolUse | first   | Bash      | {"command":"echo ready","timeout":500} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | {"interrupted":false,"structuredContent":[{"type":"text","text":"ready\\n"}]} |
