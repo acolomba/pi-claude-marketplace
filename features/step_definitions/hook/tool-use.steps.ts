@@ -27,14 +27,20 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 
-import { Given, Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { hookMcpCallScript } from "../../lib/hook-mcp-calls.ts";
 import { HOOK_MCP_TOOL_SERVER } from "../../lib/hook-mcp-tool-server.ts";
 import { MCP_STUB_SERVER, readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
+import { projectTokens } from "../../lib/run-tokens.ts";
 import { writeScenarioFile } from "../../lib/scenario-file.ts";
-import { readModelScript, writeModelScript } from "../../lib/scripted-model/script.ts";
+import {
+  callMessageRows,
+  modelCallsOf,
+  readModelScript,
+  writeModelScript,
+} from "../../lib/scripted-model/script.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -49,6 +55,23 @@ const MCP_FILE = ".mcp.json";
 // Pi's global MCP config, in the agent directory, which Pi reads with no
 // trust check.
 const PI_MCP_FILE = "mcp.json";
+
+Then(
+  "the model receives these calls, with an empty file result:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const rows = callMessageRows(modelCallsOf(this.requireTurn().logs)).map(
+      ([call, role, text]) => [
+        call,
+        role,
+        text === "read returned: "
+          ? "read returned: <empty>"
+          : projectTokens("text", text, this.tokens),
+      ],
+    );
+    assert.deepStrictEqual([["call", "role", "text"], ...rows], table.raw());
+    this.markTurnCompared();
+  },
+);
 
 Given(
   "pi runs with the scripted model and search tools",

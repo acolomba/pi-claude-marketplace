@@ -139,6 +139,7 @@ export interface PiTextContentBlock {
 export interface ToolResultEventResult {
   content?: ToolResultEvent["content"];
   details?: unknown;
+  structuredContent?: Exclude<ToolResultEvent["structuredContent"], undefined>;
   isError?: boolean;
 }
 

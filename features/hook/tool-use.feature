@@ -8,6 +8,58 @@ Feature: Hook tool use
   proxy call (MHK-02).
   A tool whose cut name has a proxy's shape is still a tool under either implementation.
 
+  Scenario: A file result replacement changes what the model reads
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output                                                                                         |
+      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":"safe"}}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "secret.txt" with the text "OLD_SECRET" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments             |
+      |       | read | {"path":"secret.txt"} |
+      | Done. |      |                       |
+    When the user prompts "read the secret"
+    Then the project file "secret.txt" has the text "OLD_SECRET" after a tool hook
+    Then the model receives these calls:
+      | call | role        | text                                  |
+      | 1    | user        | read the secret                       |
+      | 2    | user        | read the secret                       |
+      | 2    | assistant   | tool call read {"path":"secret.txt"} |
+      | 2    | tool result | read returned: safe                   |
+
+  Scenario: An empty replacement removes the original file result
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output                                                                                     |
+      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":""}}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "secret.txt" with the text "OLD_SECRET" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments             |
+      |       | read | {"path":"secret.txt"} |
+      | Done. |      |                       |
+    When the user prompts "read the secret"
+    Then the project file "secret.txt" has the text "OLD_SECRET" after a tool hook
+    Then the model receives these calls, with an empty file result:
+      | call | role        | text                                  |
+      | 1    | user        | read the secret                       |
+      | 2    | user        | read the secret                       |
+      | 2    | assistant   | tool call read {"path":"secret.txt"} |
+      | 2    | tool result | read returned: <empty>                |
+
   Scenario: Every edit result hook receives the same actual batch result
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

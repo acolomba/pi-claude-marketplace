@@ -54,6 +54,7 @@ function guardEntry(): RoutingEntry {
 function headlessContext(mode: "rpc" | "json" | "print"): ExtensionContext {
   return {
     mode,
+    cwd: "/work",
     get ui(): ExtensionContext["ui"] {
       throw new Error("no dialog opens without a terminal");
     },
@@ -523,6 +524,33 @@ describe("adaptToolCallResult", () => {
 });
 
 describe("adaptToolResultResult", () => {
+  test("a file replacement clears stale Pi details", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "read-redaction",
+      toolName: "read",
+      input: { path: "secret.txt" },
+      content: [{ type: "text" as const, text: "OLD_SECRET" }],
+      structuredContent: "OLD_SECRET",
+      details: { fullOutputPath: "OLD_SECRET" },
+      isError: false,
+    } satisfies ToolResultEvent;
+
+    assert.deepStrictEqual(
+      adaptToolResultResult(
+        {
+          kind: "mutate",
+          updatedToolOutput: { type: "text", file: { content: "safe" } },
+        },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      {
+        content: [{ type: "text", text: "safe" }],
+        details: null,
+      },
+    );
+  });
   test("returns undefined for noop without changing the complete event", () => {
     // arrange
     const input = { command: "inspect" };
@@ -598,6 +626,7 @@ describe("adaptToolResultResult", () => {
           { type: "text", text: "from-model\n" },
           { type: "text", text: feedback },
         ],
+        isError,
       });
       assert.deepStrictEqual(event.content, [{ type: "text", text: "from-model\n" }]);
       assert.strictEqual(event.isError, isError);
@@ -651,6 +680,7 @@ describe("adaptToolResultResult", () => {
     // assert
     assert.deepStrictEqual(adaptation, {
       content: [{ type: "text", text: "replacement output" }],
+      details: null,
       isError: true,
     });
     assert.deepStrictEqual(event, {
@@ -827,6 +857,7 @@ describe("adaptToolResultResult", () => {
     // assert
     assert.deepStrictEqual(adaptation, {
       content: [{ type: "text", text: "replacement output" }],
+      details: null,
     });
     assert.deepStrictEqual(event, {
       type: "tool_result",
@@ -838,6 +869,82 @@ describe("adaptToolResultResult", () => {
       details: { exitCode: 0 },
     });
     assert.strictEqual(event.content, content);
+  });
+
+  test("a generic image replacement drops stale output details", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "image",
+      toolName: "owner-tool",
+      input: {},
+      content: [{ type: "text" as const, text: "old" }],
+      details: { secret: "old" },
+      isError: false,
+    } satisfies ToolResultEvent;
+    assert.deepStrictEqual(
+      adaptToolResultResult(
+        {
+          kind: "mutate",
+          updatedToolOutput: { content: [{ type: "image", data: "bmV3", mimeType: "image/png" }] },
+        },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      {
+        content: [{ type: "image", data: "bmV3", mimeType: "image/png" }],
+        details: null,
+      },
+    );
+  });
+
+  test("feedback retains the original structured value and error status", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "feedback",
+      toolName: "owner-tool",
+      input: {},
+      content: [{ type: "text" as const, text: "original" }],
+      structuredContent: { secret: "structured" },
+      details: { route: "safe" },
+      isError: true,
+    } satisfies ToolResultEvent;
+    const patch = adaptToolResultResult(
+      { kind: "block", reason: "check" },
+      event,
+      adapterContext(guardEntry()),
+    );
+    assert.deepStrictEqual(patch?.structuredContent, event.structuredContent);
+    assert.strictEqual(patch?.isError, true);
+    assert.deepStrictEqual(patch?.content?.[0], event.content[0]);
+  });
+
+  test("a byte-identical generic replacement leaves every carrier untouched", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "same",
+      toolName: "owner-tool",
+      input: {},
+      content: [{ type: "text" as const, text: "original" }],
+      structuredContent: "original",
+      details: { secret: "original" },
+      isError: false,
+    } satisfies ToolResultEvent;
+    assert.strictEqual(
+      adaptToolResultResult(
+        {
+          kind: "mutate",
+          updatedToolOutput: {
+            content: [{ type: "text", text: "original" }],
+            isError: false,
+          },
+        },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      undefined,
+    );
+    assert.deepStrictEqual(event.structuredContent, "original");
+    assert.deepStrictEqual(event.details, { secret: "original" });
   });
 
   test("returns a boolean error patch without content when the patch has none", () => {
