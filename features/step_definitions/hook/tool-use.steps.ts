@@ -23,7 +23,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 
@@ -31,9 +31,13 @@ import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { hookMcpCallScript } from "../../lib/hook-mcp-calls.ts";
 import { HOOK_MCP_TOOL_SERVER } from "../../lib/hook-mcp-tool-server.ts";
+import {
+  HOOK_RESULT_OBSERVER_EXTENSION,
+  HOOK_RESULT_OBSERVER_LOG,
+} from "../../lib/hook-result-observer.ts";
 import { MCP_STUB_SERVER, readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
-import { projectTokens } from "../../lib/run-tokens.ts";
+import { expandTokens, projectTokens } from "../../lib/run-tokens.ts";
 import { writeScenarioFile } from "../../lib/scenario-file.ts";
 import {
   callMessageRows,
@@ -55,6 +59,55 @@ const MCP_FILE = ".mcp.json";
 // Pi's global MCP config, in the agent directory, which Pi reads with no
 // trust check.
 const PI_MCP_FILE = "mcp.json";
+const TINY_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12P4z8DwHwAFAAH/cpxSZwAAAABJRU5ErkJggg==";
+
+Given(
+  "the project holds the tiny red image {string} for a tool hook",
+  async function (this: ScenarioWorld, name: string) {
+    const file = path.join(this.tokens.projectDir, name);
+    const bytes = Buffer.from(TINY_PNG, "base64");
+    await writeFile(file, bytes, { flag: "wx" });
+    this.onRelease(() => rm(file, { force: true }));
+    assert.deepStrictEqual(await readFile(file), bytes);
+  },
+);
+
+Then(
+  "the tiny red image {string} is unchanged after a tool hook",
+  async function (this: ScenarioWorld, name: string) {
+    assert.deepStrictEqual(
+      await readFile(path.join(this.tokens.projectDir, name)),
+      Buffer.from(TINY_PNG, "base64"),
+    );
+  },
+);
+
+Given(
+  "pi runs with the scripted model and a downstream file result observer",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({
+      companions: [],
+      extraExtensions: [HOOK_RESULT_OBSERVER_EXTENSION],
+    });
+  },
+);
+
+Then(
+  "another pi handler observes these complete file results:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const actual = (this.requireTurn().logs.get(HOOK_RESULT_OBSERVER_LOG) ?? []).map((record) =>
+      projectTokens("text", JSON.stringify(record), this.tokens),
+    );
+    const expected = table.hashes().map(({ record }) => {
+      assert.ok(record !== undefined);
+      return expandTokens(record, this.tokens);
+    });
+    assert.deepStrictEqual(actual, expected);
+    this.markTurnCompared();
+  },
+);
 
 Then(
   "the model receives these calls, with an empty file result:",

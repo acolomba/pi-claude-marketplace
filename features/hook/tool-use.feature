@@ -34,6 +34,63 @@ Feature: Hook tool use
       | 2    | assistant   | tool call read {"path":"secret.txt"} |
       | 2    | tool result | read returned: safe                   |
 
+  Scenario: A redacted result leaves no original data for another Pi handler
+    Given pi runs with the scripted model and a downstream file result observer
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output                                                                                         |
+      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":"safe"}}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "secret.txt" with the text "OLD_TEXT_SECRET" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments             |
+      |       | read | {"path":"secret.txt"} |
+      | Done. |      |                       |
+    When the user prompts "read the secret"
+    Then another pi handler observes these complete file results:
+      | record                                                                                       |
+      | {"toolName":"read","content":[{"type":"text","text":"safe"}],"details":null,"structuredContent":null,"isError":false} |
+    Then the model receives these calls:
+      | call | role        | text                                  |
+      | 1    | user        | read the secret                       |
+      | 2    | user        | read the secret                       |
+      | 2    | assistant   | tool call read {"path":"secret.txt"} |
+      | 2    | tool result | read returned: safe                   |
+
+  Scenario: An image result replacement preserves only the supplied image
+    Given pi runs with the scripted model and a downstream file result observer
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output |
+      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"image","file":{"base64":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYPj/HwADAgH/HXJk1AAAAABJRU5ErkJggg==","type":"image/png"}}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the tiny red image "original.png" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments               |
+      |       | read | {"path":"original.png"} |
+      | Done. |      |                         |
+    When the user prompts "read the image"
+    Then the tiny red image "original.png" is unchanged after a tool hook
+    Then another pi handler observes these complete file results:
+      | record |
+      | {"toolName":"read","content":[{"type":"image","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYPj/HwADAgH/HXJk1AAAAABJRU5ErkJggg==","mimeType":"image/png"}],"details":null,"structuredContent":null,"isError":false} |
+    Then the model receives these calls:
+      | call | role        | text                                    |
+      | 1    | user        | read the image                          |
+      | 2    | user        | read the image                          |
+      | 2    | assistant   | tool call read {"path":"original.png"} |
+      | 2    | tool result | read returned: image                    |
+
   Scenario: An empty replacement removes the original file result
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
@@ -98,7 +155,7 @@ Feature: Hook tool use
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
       | name    | event       | matcher | form   | output                                                                                                                     |
-      | replace | PostToolUse | Edit    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"content":[{"type":"text","text":"replaced"}]}}} |
+      | replace | PostToolUse | Edit    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"filePath":"{project dir}/document.txt","newString":"replaced"}}} |
       | observe | PostToolUse | Edit    |        |                                                                                                                            |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -121,7 +178,7 @@ Feature: Hook tool use
       | 1    | user        | edit both blocks                                                                                                         |
       | 2    | user        | edit both blocks                                                                                                         |
       | 2    | assistant   | tool call edit {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
-      | 2    | tool result | edit returned: replaced                                                                                                 |
+      | 2    | tool result | edit returned: {project dir}/document.txt: replaced                                                                     |
 
   Scenario: A hook sees each edit pair before the batch runs
     Given pi runs with the scripted model

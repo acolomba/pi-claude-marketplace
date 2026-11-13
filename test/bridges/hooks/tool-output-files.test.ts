@@ -107,7 +107,96 @@ test("edit renders supplied replacement and validated hunk lines", () => {
       "/work",
     ),
     {
-      content: [{ type: "text", text: "/work/file\nsafe\n@@ -1,1 +1,1 @@\n-old\n+safe" }],
+      content: [{ type: "text", text: "/work/file: safe\n@@ -1,1 +1,1 @@\n-old\n+safe" }],
+      details: null,
+    },
+  );
+});
+
+test("projected edit and write echoes do not replace the original result", () => {
+  const edit = {
+    ...result("edit", [{ type: "text", text: "original edit result" }], {
+      path: "file",
+      edits: [{ oldText: "old", newText: "new" }],
+    }),
+    details: { patch: "--- a/file\n+++ b/file\n@@ -1 +1 @@\n-old\n+new\n" },
+  };
+  assert.strictEqual(
+    renderFileToolOutput(
+      edit,
+      {
+        filePath: "/work/file",
+        oldString: "old",
+        newString: "new",
+        replaceAll: false,
+        structuredPatch: [
+          { oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-old", "+new"] },
+        ],
+      },
+      "/work",
+    ),
+    undefined,
+  );
+
+  const write = result("write", [{ type: "text", text: "original write result" }], {
+    path: "file",
+    content: "original content",
+  });
+  assert.strictEqual(
+    renderFileToolOutput(write, { filePath: "/work/file", content: "original content" }, "/work"),
+    undefined,
+  );
+
+  const pair = { ...edit, input: { path: "file", oldText: "old", newText: "new" } };
+  assert.strictEqual(
+    renderFileToolOutput(
+      pair,
+      {
+        filePath: "/work/file",
+        oldString: "old",
+        newString: "new",
+        replaceAll: false,
+        structuredPatch: [
+          { oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-old", "+new"] },
+        ],
+      },
+      "/work",
+    ),
+    undefined,
+  );
+});
+
+test("edit accepts a complete no-newline hunk and a replacement without patch", () => {
+  const event = result("edit", [{ type: "text", text: "original" }]);
+  assert.deepStrictEqual(
+    renderFileToolOutput(event, { filePath: "/work/file", newString: "safe" }, "/work"),
+    { content: [{ type: "text", text: "/work/file: safe" }], details: null },
+  );
+  assert.deepStrictEqual(
+    renderFileToolOutput(
+      event,
+      {
+        filePath: "/work/file",
+        newString: "safe",
+        structuredPatch: [
+          {
+            oldStart: 1,
+            oldLines: 1,
+            newStart: 1,
+            newLines: 1,
+            lines: ["-old", "\\ No newline at end of file", "+safe"],
+          },
+        ],
+      },
+      "/work",
+    ),
+    {
+      content: [
+        {
+          type: "text",
+          text: "/work/file: safe\n@@ -1,1 +1,1 @@\n-old\n\\ No newline at end of file\n+safe",
+        },
+      ],
       details: null,
     },
   );
@@ -148,6 +237,7 @@ test("invalid file replacements preserve the original result", () => {
     { type: "text", file: { content: "x", filePath: 8 } },
     { type: "text", file: { content: "x", truncatedByTokenCap: "yes" } },
     { type: "image", file: { base64: "**", type: "image/png" } },
+    { type: "image", file: { base64: "", type: "image/png" } },
     { type: "image", file: { base64: "bmV3", type: "text/plain" } },
     { type: "image", file: { base64: "bmV3", type: 2 } },
   ]) {
@@ -161,6 +251,52 @@ test("invalid file replacements preserve the original result", () => {
     { filePath: "file", newString: "safe", oldString: 2 },
     { filePath: "file", newString: "safe", replaceAll: true },
     { filePath: "file", newString: "safe", structuredPatch: [{}] },
+    {
+      filePath: "file",
+      newString: "safe",
+      structuredPatch: [
+        { oldStart: 1, oldLines: 2, newStart: 1, newLines: 1, lines: ["-old", "+safe"] },
+      ],
+    },
+    {
+      filePath: "file",
+      newString: "safe",
+      structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["unknown"] }],
+    },
+    {
+      filePath: "file",
+      newString: "safe",
+      structuredPatch: [
+        { oldStart: -1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-old", "+safe"] },
+      ],
+    },
+    {
+      filePath: "file",
+      newString: "safe",
+      structuredPatch: [
+        { oldStart: 0, oldLines: 1, newStart: 1, newLines: 1, lines: ["-old", "+safe"] },
+      ],
+    },
+    {
+      filePath: "file",
+      newString: "safe",
+      structuredPatch: [
+        { oldStart: 1, oldLines: 1, newStart: 0, newLines: 1, lines: ["-old", "+safe"] },
+      ],
+    },
+    {
+      filePath: "file",
+      newString: "safe",
+      structuredPatch: [
+        {
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          lines: ["\\ No newline at end of file", "-old", "+safe"],
+        },
+      ],
+    },
     { filePath: "file", newString: "safe", structuredPatch: "bad" },
     { filePath: "file", newString: "safe", extra: true },
   ]) {
