@@ -391,16 +391,20 @@ When(
 
 // D-PG3-09: the installed pi-subagents launches each child; the main Pi's
 // model names no launch mode, so the agent and pi-subagents' asyncByDefault
-// decide it.
+// decide it. A setting of `unset` writes no pi-subagents configuration, so
+// pi-subagents' own default applies (D-PG3-01).
 When(
   "pi-subagents, with its async-by-default setting {word}, launches from a main pi session a real child of each of these agents of a plugin with a stub mcp server, whose hooks record every event and whose stop hook would send a main session back:",
   { timeout: FIXTURE_TIMEOUT_MS },
   async function (this: ScenarioWorld, asyncByDefault: string, table: DataTable) {
-    assert.ok(["true", "false"].includes(asyncByDefault), `asyncByDefault is ${asyncByDefault}`);
+    assert.ok(
+      ["true", "false", "unset"].includes(asyncByDefault),
+      `asyncByDefault is ${asyncByDefault}`,
+    );
     const observed = await runRealSubagentChild({
       ...(await realChildFixture(this)),
       agents: parseRealChildAgents(table.raw()),
-      asyncByDefault: asyncByDefault === "true",
+      ...(asyncByDefault !== "unset" && { asyncByDefault: asyncByDefault === "true" }),
     });
     const sessions = observed.children.map(({ agent, mode, state, sessionId, pid }) => ({
       generation: 1,

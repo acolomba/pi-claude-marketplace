@@ -4,7 +4,7 @@ Feature: Agent frontmatter
   Claude Code reads it. pi-subagents' own list and get results show them; a
   scripted model and a local marketplace stand in for real ones.
 
-  Scenario: An agent runs in the foreground unless its source asks for the background
+  Scenario: An ordinary bridged agent leaves its launch mode to pi-subagents
     Given pi runs with the scripted model and these companions:
       | companion    |
       | pi-subagents |
@@ -33,48 +33,79 @@ Feature: Agent frontmatter
       | 1    | user        | Show the agents.                                                                                                                                                                                                                                                                                                             |
       | 2    | user        | Show the agents.                                                                                                                                                                                                                                                                                                             |
       | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:plain"}                                                                                                                                                                                                                                                                     |
-      | 2    | tool result | subagent returned: agent demo:plain\npath {agent dir}/agents/pi-claude-marketplace-demo-plain.md\ndescription Runs when it is asked.\naliases pi-claude-marketplace-demo-plain\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nasync false\nsystem prompt:\nAnswer the task.                 |
+      | 2    | tool result | subagent returned: agent demo:plain\npath {agent dir}/agents/pi-claude-marketplace-demo-plain.md\ndescription Runs when it is asked.\naliases pi-claude-marketplace-demo-plain\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task.                              |
       | 3    | user        | Show the agents.                                                                                                                                                                                                                                                                                                             |
       | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:plain"}                                                                                                                                                                                                                                                                     |
-      | 3    | tool result | subagent returned: agent demo:plain\npath {agent dir}/agents/pi-claude-marketplace-demo-plain.md\ndescription Runs when it is asked.\naliases pi-claude-marketplace-demo-plain\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nasync false\nsystem prompt:\nAnswer the task.                 |
+      | 3    | tool result | subagent returned: agent demo:plain\npath {agent dir}/agents/pi-claude-marketplace-demo-plain.md\ndescription Runs when it is asked.\naliases pi-claude-marketplace-demo-plain\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task.                              |
       | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:background"}                                                                                                                                                                                                                                                                |
       | 3    | tool result | subagent returned: agent demo:background\npath {agent dir}/agents/pi-claude-marketplace-demo-background.md\ndescription Runs in the background.\naliases pi-claude-marketplace-demo-background\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nasync true\nsystem prompt:\nWork in the back. |
       | 4    | user        | Show the agents.                                                                                                                                                                                                                                                                                                             |
       | 4    | assistant   | tool call subagent {"action":"get","agent":"demo:plain"}                                                                                                                                                                                                                                                                     |
-      | 4    | tool result | subagent returned: agent demo:plain\npath {agent dir}/agents/pi-claude-marketplace-demo-plain.md\ndescription Runs when it is asked.\naliases pi-claude-marketplace-demo-plain\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nasync false\nsystem prompt:\nAnswer the task.                 |
+      | 4    | tool result | subagent returned: agent demo:plain\npath {agent dir}/agents/pi-claude-marketplace-demo-plain.md\ndescription Runs when it is asked.\naliases pi-claude-marketplace-demo-plain\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task.                              |
       | 4    | assistant   | tool call subagent {"action":"get","agent":"demo:background"}                                                                                                                                                                                                                                                                |
       | 4    | tool result | subagent returned: agent demo:background\npath {agent dir}/agents/pi-claude-marketplace-demo-background.md\ndescription Runs in the background.\naliases pi-claude-marketplace-demo-background\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nasync true\nsystem prompt:\nWork in the back. |
       | 4    | assistant   | tool call subagent {"action":"get","agent":"demo:quoted"}                                                                                                                                                                                                                                                                    |
       | 4    | tool result | subagent returned: agent demo:quoted\npath {agent dir}/agents/pi-claude-marketplace-demo-quoted.md\ndescription Runs behind quoted words.\naliases pi-claude-marketplace-demo-quoted\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nasync true\nsystem prompt:\nWork behind quote.          |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-plain.md" with this text:
+      """
+      ---
+      name: demo:plain
+      description: Runs when it is asked.
+      aliases: pi-claude-marketplace-demo-plain
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: true
+      advertise: true
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: plain
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/plain.md
+        droppedFields: []
+        droppedTools: []
+        warnings: []
+      ---
 
-  Scenario: A call that leaves the launch mode open runs a bridged agent in the foreground
-    Given pi runs with the scripted model and these companions:
-      | companion    |
-      | pi-subagents |
-    Given the marketplace "fixtures" is published as a dir source
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
-    Given the published plugin "demo" of the marketplace "fixtures" has the agent "reviewer" described as "Reviews the files it is given." with this body:
+      Answer the task.
       """
-      Review the files named in the task and report every problem you find.
-      """
-    Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
-    Given the scripted model plays these steps:
-      | reply                           | tool     | arguments                                             |
-      |                                 | subagent | {"agent":"demo:reviewer","task":"Review the README."} |
-      | The README has no problems.     |          |                                                       |
-      | The reviewer found no problems. |          |                                                       |
-    When the user prompts "Ask the reviewer to check the README."
-    Then the model receives these calls:
-      | call | role        | text                                                                     |
-      | 1    | user        | Ask the reviewer to check the README.                                    |
-      | 2    | user        | task Review the README.                                                  |
-      | 3    | user        | Ask the reviewer to check the README.                                    |
-      | 3    | assistant   | tool call subagent {"agent":"demo:reviewer","task":"Review the README."} |
-      | 3    | tool result | subagent returned: The README has no problems.                           |
+
+  @mcp
+  Scenario: A call with no launch override runs the ordinary agent in the companion's default mode
+    When pi-subagents, with its async-by-default setting unset, launches from a main pi session a real child of each of these agents of a plugin with a stub mcp server, whose hooks record every event and whose stop hook would send a main session back:
+      | name  | background | tools | tool calls |
+      | plain |            | Bash  | bash       |
+    Then pi-subagents ran the real children like this:
+      | agent      | mode       | state    | runner process | session |
+      | demo:plain | background | complete | recorded       | first   |
+    Then the real children's hooks record these runs in any order, and no main-session run names a child:
+      | session | event       | tool name | agent type | agent id |
+      | first   | PreToolUse  | Bash      | demo:plain | first    |
+      | first   | PostToolUse | Bash      | demo:plain | first    |
+
+  @mcp
+  Scenario: Explicit background and MCP grants keep a child in the background
+    When pi-subagents, with its async-by-default setting false, launches from a main pi session a real child of each of these agents of a plugin with a stub mcp server, whose hooks record every event and whose stop hook would send a main session back:
+      | name    | background | tools                       | tool calls         |
+      | runner  | true       | Bash, Read                  | bash, failing read |
+      | granted |            | mcp__plugin_demo_stub__echo | stub mcp tool      |
+      | forced  | false      | mcp__plugin_demo_stub__echo | stub mcp tool      |
+      | plain   |            | Bash                        | bash               |
+    Then pi-subagents ran the real children like this:
+      | agent        | mode       | state    | runner process | session |
+      | demo:runner  | background | complete | recorded       | first   |
+      | demo:granted | background | complete | recorded       | second  |
+      | demo:forced  | background | complete | recorded       | third   |
+      | demo:plain   | foreground |          | none           |         |
+    Then the real children's hooks record these runs in any order, and no main-session run names a child:
+      | session | event              | tool name                   | agent type   | agent id |
+      | first   | PreToolUse         | Bash                        | demo:runner  | first    |
+      | first   | PostToolUse        | Bash                        | demo:runner  | first    |
+      | first   | PreToolUse         | Read                        | demo:runner  | first    |
+      | first   | PostToolUseFailure | Read                        | demo:runner  | first    |
+      | second  | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted | second   |
+      | second  | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted | second   |
+      | third   | PreToolUse         | mcp__plugin_demo_stub__echo | demo:forced  | third    |
+      | third   | PostToolUse        | mcp__plugin_demo_stub__echo | demo:forced  | third    |
 
   Scenario: Effort levels are listed as the thinking levels pi-subagents runs
     Given pi runs with the scripted model and these companions:
@@ -252,16 +283,16 @@ Feature: Agent frontmatter
       | The agents are shown. |          |                                         |
     When the user prompts "Show the agents."
     Then the model receives these calls:
-      | call | role        | text                                                                                                                                                                                                                                                                                                                            |
-      | 1    | user        | Show the agents.                                                                                                                                                                                                                                                                                                                |
-      | 2    | user        | Show the agents.                                                                                                                                                                                                                                                                                                                |
-      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:granted"}                                                                                                                                                                                                                                                                      |
-      | 2    | tool result | subagent returned: agent demo:granted\npath {agent dir}/agents/pi-claude-marketplace-demo-granted.md\ndescription Uses the granted skill.\naliases pi-claude-marketplace-demo-granted\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nasync false\nsystem prompt:\nAnswer the task. |
-      | 3    | user        | Show the agents.                                                                                                                                                                                                                                                                                                                |
-      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:granted"}                                                                                                                                                                                                                                                                      |
-      | 3    | tool result | subagent returned: agent demo:granted\npath {agent dir}/agents/pi-claude-marketplace-demo-granted.md\ndescription Uses the granted skill.\naliases pi-claude-marketplace-demo-granted\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nasync false\nsystem prompt:\nAnswer the task. |
-      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:denied"}                                                                                                                                                                                                                                                                       |
-      | 3    | tool result | subagent returned: agent demo:denied\npath {agent dir}/agents/pi-claude-marketplace-demo-denied.md\ndescription Has no skills.\naliases pi-claude-marketplace-demo-denied\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nasync false\nsystem prompt:\nAnswer the task.                        |
+      | call | role        | text                                                                                                                                                                                                                                                                                                               |
+      | 1    | user        | Show the agents.                                                                                                                                                                                                                                                                                                   |
+      | 2    | user        | Show the agents.                                                                                                                                                                                                                                                                                                   |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:granted"}                                                                                                                                                                                                                                                         |
+      | 2    | tool result | subagent returned: agent demo:granted\npath {agent dir}/agents/pi-claude-marketplace-demo-granted.md\ndescription Uses the granted skill.\naliases pi-claude-marketplace-demo-granted\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task. |
+      | 3    | user        | Show the agents.                                                                                                                                                                                                                                                                                                   |
+      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:granted"}                                                                                                                                                                                                                                                         |
+      | 3    | tool result | subagent returned: agent demo:granted\npath {agent dir}/agents/pi-claude-marketplace-demo-granted.md\ndescription Uses the granted skill.\naliases pi-claude-marketplace-demo-granted\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task. |
+      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:denied"}                                                                                                                                                                                                                                                          |
+      | 3    | tool result | subagent returned: agent demo:denied\npath {agent dir}/agents/pi-claude-marketplace-demo-denied.md\ndescription Has no skills.\naliases pi-claude-marketplace-demo-denied\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nsystem prompt:\nAnswer the task.                        |
 
   Scenario: Apply reports each plugin agent field Claude Code also ignores
     Given the marketplace "fixtures" is published as a dir source
