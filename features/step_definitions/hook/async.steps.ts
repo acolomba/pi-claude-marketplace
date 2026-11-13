@@ -24,7 +24,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import { Given, Then, When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
-import { HOOK_LIFECYCLE_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts";
+import {
+  HOOK_LIFECYCLE_LOG,
+  HOOK_RUNS_LOG,
+  waitForHookLifecycle,
+} from "../../lib/hook-recorder.ts";
 import { claudePluginPayloads } from "../../lib/pi-commands.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
@@ -116,6 +120,29 @@ async function promptToSettle(
   await waitForSettleAt(world, from);
   return { message, lengths, from };
 }
+
+When(
+  "the user prompts {string} and {int} background hook runs finish",
+  async function (this: ScenarioWorld, text: string, count: number) {
+    const { message, lengths, from } = await promptToSettle(this, text);
+    const deadline = Date.now() + ASYNC_STEP_DEADLINE_MS;
+    let complete = false;
+    while (!complete) {
+      const logs = await readLogLinesSince(this.profileHarness(), lengths);
+      const runs = logs.get(HOOK_RUNS_LOG) ?? [];
+      const lifecycle = (logs.get(HOOK_LIFECYCLE_LOG) ?? []) as readonly HookLifecycleEvent[];
+      complete =
+        runs.length >= count && lifecycle.filter((event) => event.phase === "end").length >= count;
+
+      if (!complete) {
+        assert.ok(Date.now() < deadline, `${count} background hook runs did not finish`);
+        await delay(ASYNC_POLL_MS);
+      }
+    }
+
+    await keepTurn(this, message, lengths, from);
+  },
+);
 
 // Creates the release marker of `hook`, waits until a run of the hook takes
 // it, then for the end line the hook logs since `lengths`, and returns the
