@@ -35,6 +35,7 @@ import { MCP_STUB_SERVER, readStubRequests, stubPidFiles } from "../../lib/mcp-s
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
 import { writeScenarioFile } from "../../lib/scenario-file.ts";
 import { readModelScript, writeModelScript } from "../../lib/scripted-model/script.ts";
+import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -48,6 +49,19 @@ const MCP_FILE = ".mcp.json";
 // Pi's global MCP config, in the agent directory, which Pi reads with no
 // trust check.
 const PI_MCP_FILE = "mcp.json";
+
+Given(
+  "pi runs with the scripted model and search tools",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await writeScenarioFile(
+      this,
+      path.join(this.tokens.agentDir, "settings.json"),
+      `${JSON.stringify({ defaultTools: ["read", "bash", "edit", "write", "find", "grep"] })}\n`,
+    );
+    await this.usePiWithProfile({ companions: [] });
+  },
+);
 
 Given(
   "the project holds the file {string} with the text {string} for a tool hook",

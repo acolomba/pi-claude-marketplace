@@ -157,3 +157,44 @@ test("keeps shared built-in and custom tool-name mapping across all tool transla
   // assert
   assert.deepStrictEqual(mappings, expectedMappings);
 });
+
+test("gives all three plain tool translators the same translated Read input", async () => {
+  const context = {
+    sessionId: "input-session",
+    transcriptPath: "/sessions/input.jsonl",
+    cwd: "/workspace/plain",
+  } satisfies TranslationContext;
+  const payloads: Array<{ event: ToolEvent; name: unknown; input: unknown }> = [];
+
+  for (const event of TOOL_EVENTS) {
+    const translate = (await loadTranslator(event)) as Translator;
+    const source =
+      event === "PreToolUse"
+        ? {
+            type: "tool_call",
+            toolCallId: "read-input",
+            toolName: "read",
+            input: { path: "note.txt" },
+          }
+        : {
+            type: "tool_result",
+            toolCallId: "read-input",
+            toolName: "read",
+            input: { path: "note.txt" },
+            content: [{ type: "text", text: "content" }],
+            isError: event === "PostToolUseFailure",
+            details: undefined,
+          };
+    const payload = translate(source, context) as Record<string, unknown>;
+    payloads.push({ event, name: payload.tool_name, input: payload.tool_input });
+  }
+
+  assert.deepStrictEqual(
+    payloads,
+    TOOL_EVENTS.map((event) => ({
+      event,
+      name: "Read",
+      input: { file_path: "/workspace/plain/note.txt" },
+    })),
+  );
+});

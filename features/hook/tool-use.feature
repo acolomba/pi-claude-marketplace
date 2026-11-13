@@ -830,3 +830,124 @@ Feature: Hook tool use
     Then the hooks record these runs:
       | event              | session | tool name | tool input           | error                                     | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PostToolUseFailure | first   | Bash      | {"command":"exit 3"} | (no output)\n\nCommand exited with code 3 | false        | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+  Scenario: A Glob hook rewrites the search pattern
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event      | matcher | form   | output                                                                                         |
+      | rewrite | PreToolUse | Glob    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"pattern":"found*.md"}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "found.ts" with the text "source" for a tool hook
+    Given the project holds the file "found.md" with the text "notes" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                        |
+      |       | find | {"pattern":"found*.ts","limit":2}   |
+      | Done. |      |                                  |
+    When the user prompts "find source files"
+    Then the model receives these calls:
+      | call | role        | text                                        |
+      | 1    | user        | find source files                           |
+      | 2    | user        | find source files                           |
+      | 2    | assistant   | tool call find {"pattern":"found*.ts","limit":2} |
+      | 2    | tool result | find returned: found.md                     |
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input         | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Glob      | {"pattern":"found*.ts"} | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+  Scenario: A Grep hook rewrites equivalent content options
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event      | matcher | form   | output                                                                                                                                        |
+      | rewrite | PreToolUse | Grep    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"pattern":"NEEDLE","output_mode":"content","-n":true,"-i":true,"head_limit":2}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                   |
+      |       | grep | {"pattern":"other","path":"search.txt"}  |
+      | Done. |      |                                             |
+    When the user prompts "search the file"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                                                                                                  | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Grep      | {"pattern":"other","path":"search.txt","output_mode":"content","-n":true,"head_limit":100} | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                                     |
+      | 1    | user        | search the file                                          |
+      | 2    | user        | search the file                                          |
+      | 2    | assistant   | tool call grep {"pattern":"other","path":"search.txt"} |
+      | 2    | tool result | grep returned: search.txt:1: needle                     |
+
+  Scenario: An unsupported Grep rewrite runs the unchanged search
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event      | matcher | form   | output                                                                                                                                                        |
+      | rewrite | PreToolUse | Grep    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"pattern":"replacement","output_mode":"content","-n":true,"context":1,"head_limit":1}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "search.txt" with the text "original\nreplacement" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                   |
+      |       | grep | {"pattern":"original","path":"search.txt"} |
+      | Done. |      |                                             |
+    When the user prompts "search the original word"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                                                                                                     | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Grep      | {"pattern":"original","path":"search.txt","output_mode":"content","-n":true,"head_limit":100} | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hooks show the user these messages:
+      | severity | text                                      |
+      | info     | PreToolUse:Grep ignored input rewrite (value) |
+    Then the model receives these calls:
+      | call | role        | text                                                        |
+      | 1    | user        | search the original word                                    |
+      | 2    | user        | search the original word                                    |
+      | 2    | assistant   | tool call grep {"pattern":"original","path":"search.txt"} |
+      | 2    | tool result | grep returned: search.txt:1: original                      |
+
+  Scenario Outline: Successful tool hooks receive the translated input that executed for <name>
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event       | matcher |
+      | before | PreToolUse  | *       |
+      | after  | PostToolUse | *       |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
+    Given the project holds the file "found.md" with the text "found" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool   | arguments   |
+      |       | <tool> | <arguments> |
+      | Done. |        |             |
+    When the user prompts "run <name>"
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response |
+      | PreToolUse  | first   | <name>    | <hook input> | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |               |
+      | PostToolUse | first   | <name>    | <hook input> | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | <response>    |
+
+    Examples:
+      | name  | tool  | arguments                                               | hook input                                                                          | response                                                                 |
+      | Read  | read  | {"path":"search.txt"}                                  | {"file_path":"{project dir}/search.txt"}                                         | [{"type":"text","text":"needle\\nother"}]                                 |
+      | Write | write | {"path":"output.txt","content":"written"}            | {"file_path":"{project dir}/output.txt","content":"written"}                  | [{"type":"text","text":"Successfully wrote to output.txt"}]             |
+      | Bash  | bash  | {"command":"echo ready","timeout":0.5}                | {"command":"echo ready","timeout":500}                                         | [{"type":"text","text":"ready\\n"}]                                       |
+      | Glob  | find  | {"pattern":"found*.md","limit":2}                      | {"pattern":"found*.md"}                                                           | [{"type":"text","text":"found.md"}]                                      |
+      | Grep  | grep  | {"pattern":"needle","path":"search.txt","limit":2} | {"pattern":"needle","path":"search.txt","output_mode":"content","-n":true,"head_limit":2} | [{"type":"text","text":"search.txt:1: needle"}]                          |

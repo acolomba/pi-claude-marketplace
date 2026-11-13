@@ -47,6 +47,18 @@ describe("toHookToolInput", () => {
       input: { path: "notes.txt" },
       expected: { path: "notes.txt" },
     },
+    {
+      name: "glob search without native cap",
+      tool: "find",
+      input: { pattern: "*.ts", path: "src", limit: 2 },
+      expected: { pattern: "*.ts", path: "src" },
+    },
+    {
+      name: "grep content with escaped literal",
+      tool: "grep",
+      input: { pattern: "a.b", literal: true, limit: 2 },
+      expected: { pattern: "a\\.b", output_mode: "content", "-n": true, head_limit: 2 },
+    },
   ]) {
     test(`forwards ${name}`, () => {
       // arrange
@@ -190,6 +202,27 @@ describe("decodeHookToolInput", () => {
       candidate: { file_path: "after" },
       expected: { file_path: "after" },
     },
+    {
+      name: "glob search with native cap",
+      tool: "find",
+      original: { pattern: "*.ts", limit: 2 },
+      candidate: { pattern: "*.md" },
+      expected: { pattern: "*.md", limit: 2 },
+    },
+    {
+      name: "grep equivalent content options",
+      tool: "grep",
+      original: { pattern: "old", limit: 3 },
+      candidate: { pattern: "new", output_mode: "content", "-n": true, "-i": true, head_limit: 2 },
+      expected: { pattern: "new", ignoreCase: true, limit: 2 },
+    },
+    {
+      name: "native-shaped ls path and limit",
+      tool: "ls",
+      original: { path: "before", limit: 2 },
+      candidate: { path: "after", limit: 3 },
+      expected: { path: "after", limit: 3 },
+    },
   ]) {
     test(`accepts ${name}`, () => {
       // arrange
@@ -318,6 +351,14 @@ describe("decodeHookToolInput", () => {
       candidate: { command: "true", timeout: 2_147_483_648_000 },
       category: "value",
     },
+    {
+      name: "ls unknown field",
+      tool: "ls",
+      candidate: { path: "x", sort: "time" },
+      category: "field",
+    },
+    { name: "ls nonstring path", tool: "ls", candidate: { path: 2 }, category: "value" },
+    { name: "ls invalid limit", tool: "ls", candidate: { path: "x", limit: 0 }, category: "value" },
   ]) {
     test(`rejects ${name} without changing the original`, () => {
       // arrange

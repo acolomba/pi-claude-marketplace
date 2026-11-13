@@ -6,7 +6,7 @@
 // (the router's bucket-A split between PostToolUse and
 // PostToolUseFailure happens upstream of this translator). Pi's
 // lowercase `event.toolName` is capitalized via `mapPiToClaudeToolName`
-// (TOOL-01 reuse); `event.input` flows into `tool_input`. Claude Code
+// (TOOL-01 reuse); the shared input codec builds `tool_input`. Claude Code
 // sends a failed tool's error as the string `error` and sends no
 // `tool_response`, so the text parts of the errored tool's
 // `event.content`, joined with newlines, become `error`; an image part
@@ -15,7 +15,10 @@
 // every run is a failure the tool reported (D-BG-401, D-BG-402).
 // `tool_use_id` and `duration_ms` are not sent (D-CF5-28, D-BG-403).
 
+import { homedir } from "node:os";
+
 import { mapPiToClaudeToolName } from "../../../domain/components/hook-tool-names.ts";
+import { toHookToolInput } from "../tool-input.ts";
 
 import type { ToolResultEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
@@ -53,7 +56,7 @@ export function translatePostToolUseFailure(
     cwd: ctx.cwd,
     hook_event_name: "PostToolUseFailure",
     tool_name: mapPiToClaudeToolName(event.toolName),
-    tool_input: event.input,
+    tool_input: toHookToolInput(event.toolName, event.input, ctx.cwd, homedir()),
     error: errorText(event.content),
     is_interrupt: false,
   };
