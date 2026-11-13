@@ -47,8 +47,8 @@ Every task has explicit automated commands immediately followed by failing-direc
 | 03-05-02 | 05 | 3 | PG-HOOK-07a | T-03-01, T-03-02, T-03-03, T-03-05, T-03-21 | Prove lifecycle suppression and process ownership through installed plugins | owner/integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/integration/subagent-hook-ownership.test.ts` | New fixture/step/integration files created with consumers here | passed |
 | 03-06-01 | 06 | 4 | PG-HOOK-07a, PG-AGENT-01 | T-03-07, T-03-10, T-03-11 | Exercise child identity, every execution lane and parent controls | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/dispatch-exec.test.ts test/bridges/hooks/async-rewake/registry.test.ts` | Existing or created by declared predecessor; extend | passed |
 | 03-06-02 | 06 | 4 | PG-HOOK-07a, PG-AGENT-01 | T-03-11, T-03-12, T-03-13 | Promote detached and concurrent companion probes into permanent acceptance | owner/integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/integration/pi-subagents-child-identity.test.ts` | New maintained driver and integration owner created with feature consumers here | passed |
-| 03-07-01 | 07 | 5 | PG-AGENT-01 | T-03-17 | Install one ordinary agent with delegated preference and preserve forced background cases | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/agents/convert.test.ts test/bridges/agents/grant-forms.test.ts test/bridges/agents/stage.test.ts test/orchestrators/plugin/install-flow-ledger.test.ts` | Existing or created by declared predecessor; extend | pending |
-| 03-07-02 | 07 | 5 | PG-AGENT-01 | T-03-17, T-03-18 | Keep all current-output owners green and prove companion-selected default mode | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/update-swap.test.ts test/orchestrators/plugin/reinstall-flow.test.ts` | Existing or created by declared predecessor; extend | pending |
+| 03-07-01 | 07 | 5 | PG-AGENT-01 | T-03-17 | Install one ordinary agent with delegated preference and preserve forced background cases | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/agents/convert.test.ts test/bridges/agents/grant-forms.test.ts test/bridges/agents/stage.test.ts test/orchestrators/plugin/install-flow-ledger.test.ts` | Existing or created by declared predecessor; extend | passed |
+| 03-07-02 | 07 | 5 | PG-AGENT-01 | T-03-17, T-03-18 | Keep all current-output owners green and prove companion-selected default mode | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/update-swap.test.ts test/orchestrators/plugin/reinstall-flow.test.ts` | Existing or created by declared predecessor; extend | passed |
 | 03-08-01 | 08 | 6 | PG-AGENT-01, PG-HOOK-07a | T-03-18 | Preserve installed bytes on load and migrate through update and reinstall | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/update-swap.test.ts test/orchestrators/plugin/reinstall-flow.test.ts` | Existing or created by declared predecessor; extend | pending |
 | 03-08-02 | 08 | 6 | PG-AGENT-01, PG-HOOK-07a | T-03-19 | Close ordinary real-child acceptance and publish the supported contract | owner/integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/integration/pi-subagents-child-identity.test.ts` | Existing or created by declared predecessor; extend | pending |
 
@@ -62,7 +62,7 @@ Normal commit hooks are mandatory. Each combined-tree gate uses the complete com
 | Wave 2 combined tree | `npm run check` | 2400 seconds | Pre-tool dispatch and corrected current-warning merges; same evidence | passed |
 | Wave 3 combined tree | `npm run check` | 2400 seconds | Result identity and installed lifecycle/process acceptance; same evidence | passed |
 | Wave 4 combined tree | `npm run check` | 2400 seconds | Complete lanes and actual detached/concurrent companion acceptance; same evidence | passed |
-| Wave 5 combined tree | `npm run check` | 2400 seconds | Atomic default producer/current-output expectations and both MCP profiles; same evidence | pending |
+| Wave 5 combined tree | `npm run check` | 2400 seconds | Atomic default producer/current-output expectations and both MCP profiles; same evidence | passed |
 | Wave 6 combined tree | `npm run check` | 2400 seconds | Installed migration, ordinary real-child cases and documentation; same evidence | pending |
 | Phase gate | `npm run check` | 2400 seconds | Combined final tree after Parent lines; reuse only when build inputs are identical | pending |
 | Merge gate | `npm run check` | 2400 seconds | Merged combined tree or documented identical-input reuse | pending |
@@ -197,3 +197,24 @@ pi-subagents children as hook evidence), plus two verification fixes,
   scenarios / 23084 steps, 182 builtin
   scenarios / 2480 steps and all 361 direct pairs passed. Log:
   `/tmp/pg3-wave4-check.log`.
+
+## Wave 5 Execution Evidence
+
+Plan 03-07 ran sequentially on `features/gaps` from `81b7995d`. Task SHAs:
+`b9e82f91` (the converter writes `async: true` only for an accepted
+`background: true` or an effective MCP grant, and no `async` key otherwise)
+and `9ed5faf9` (companion-chosen launch mode acceptance); summary `ea2398e2`.
+
+- RED with the old converter: 76 of 536 Task 1 owner cases and 6 of 497 Task 2
+  owner cases fail on the generated `async: false` line; 6 of 39 adapter
+  scenarios fail, including the default-mode scenario, whose real child ran in
+  the foreground. Dropping the MCP rule runs `demo:granted` in the foreground.
+  Logs: `/tmp/pg3-07-*red*.log`.
+- Plan scope deviations (recorded in 03-07-SUMMARY.md): a comment-only fix in
+  `bridges/agents/frontmatter.ts`; the real-child step accepts `unset`; the
+  configured-foreground proof is the fourth agent of the explicit-background
+  scenario. The 03-06 driver matches launch markers by substring; 03-08 fixes
+  it.
+- Full gate: `npm run check`, exit 0 at `ea2398e2`, Node v26.13.1; 1891 adapter
+  scenarios / 23084 steps, 184 builtin scenarios / 2492 steps and all 361
+  direct pairs passed. Log: `/tmp/pg3-wave5-check.log`.
