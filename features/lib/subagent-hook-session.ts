@@ -177,8 +177,11 @@ function isFault(record: RpcRecord): boolean {
   );
 }
 
-// Rejects with `what` when `promise` does not settle within `timeoutMs`.
-async function within<T>(promise: Promise<T>, timeoutMs: number, what: string): Promise<T> {
+/**
+ * Settles as `promise` does, or rejects naming `what` when it does not settle
+ * within `timeoutMs`. The timer stops once `promise` settles.
+ */
+export async function within<T>(promise: Promise<T>, timeoutMs: number, what: string): Promise<T> {
   const controller = new AbortController();
   const timeout = delay(timeoutMs, undefined, { signal: controller.signal }).then(() => {
     throw new Error(`${what} did not finish within ${timeoutMs} ms`);

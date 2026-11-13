@@ -74,6 +74,7 @@ import { publishStubMcpServer } from "./mcp-server-files.ts";
 import { writeMarketplace } from "./path-marketplace.ts";
 import { runCommandPayloads, startSession } from "./pi-commands.ts";
 import { PiProcess } from "./pi-process.ts";
+import { within } from "./subagent-hook-session.ts";
 import { harnessDirectory, isRunning } from "./turn-records.ts";
 
 import type { Companion } from "./companions.ts";
@@ -396,12 +397,7 @@ async function startProvider(
     });
   });
   server.listen(0, "127.0.0.1");
-  await Promise.race([
-    once(server, "listening"),
-    delay(READY_TIMEOUT_MS).then(() => {
-      throw new Error(`the provider did not listen within ${READY_TIMEOUT_MS} ms`);
-    }),
-  ]);
+  await within(once(server, "listening"), READY_TIMEOUT_MS, "the provider's listen");
   const address = server.address();
   assert.ok(address !== null && typeof address === "object", "the provider bound no port");
   return {
@@ -935,12 +931,13 @@ async function runConcurrentRunner(
   runner.stdout.setEncoding("utf8").on("data", (text: string) => (stdout += text));
   runner.stderr.setEncoding("utf8").on("data", (text: string) => (stderr += text));
   const exit = once(runner, "exit") as Promise<[number | null, NodeJS.Signals | null]>;
-  const timeout = delay(CHILD_TIMEOUT_MS, "timeout" as const);
-  const ended = await Promise.race([exit, timeout]);
-  if (ended === "timeout") {
+  let ended: [number | null, NodeJS.Signals | null];
+  try {
+    ended = await within(exit, CHILD_TIMEOUT_MS, "the concurrent runner");
+  } catch (error: unknown) {
     kill(-(runner.pid ?? 0));
     await exit;
-    assert.fail(`the concurrent runner did not end within ${CHILD_TIMEOUT_MS} ms: ${stderr}`);
+    throw new Error(`the concurrent runner did not end: ${stderr}`, { cause: error });
   }
 
   assert.deepStrictEqual(ended, [0, null], `the concurrent runner failed: ${stderr}`);
