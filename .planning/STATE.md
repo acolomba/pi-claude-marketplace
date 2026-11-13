@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 02
 current_phase_name: Hook Payloads, Matchers, and Stop Limit
 status: executing
-stopped_at: parity-gaps Phase 2 wave 8 verified; wave 9 next
-last_updated: "2026-11-13T09:48:52.480348+00:00"
+stopped_at: parity-gaps Phase 2 all waves verified; phase audits next
+last_updated: "2026-11-13T10:36:16.244870+00:00"
 last_activity: 2026-11-13
-last_activity_desc: Phase 02 wave 8 verified; 9 of 10 plans complete
-state_head: 27925ebbb935565a229833440efc9b7b51279813
+last_activity_desc: Phase 02 all 10 plans executed; phase audits pending
+state_head: fae378d2b58ea520a6557a61d198c77e71a7d03e
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 21
-  completed_plans: 20
+  completed_plans: 21
   percent: 9
 ---
 
@@ -32,21 +32,28 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 02 (Hook Payloads, Matchers, and Stop Limit) — EXECUTING
-Plan: 9 of 10 complete; 02-10 next
+Plan: 10 of 10 executed; phase audits and goal verification next
 Status: Executing Phase 02
-Last activity: 2026-11-13 — Phase 02 wave 8 verified
+Last activity: 2026-11-13 — Phase 02 wave 9 verified
 
 Progress: [█░░░░░░░░░] 9%
 
 
 ### parity-gaps Phase 2 execution
 
-Waves 1–8 (02-01, 02-02, 02-08, 02-09, 02-03, 02-04, 02-05, 02-06, 02-07) are merged and verified.
-`npm run check` exited 0 at `27925ebbb935565a229833440efc9b7b51279813`, Node v26.13.0: 1867 adapter scenarios / 22776 steps and 161 built-in scenarios / 2193 steps. Merged LCOV: coverage/direct.lcov (361 records). Log: `/tmp/pg2-wave8-check.log`.
-Wave 9 records the supported contracts and final acceptance evidence (02-10).
+All nine waves and ten plans are merged and verified.
+`npm run check` exited 0 at `fae378d2b58ea520a6557a61d198c77e71a7d03e`, Node v26.13.0: 1867 adapter scenarios / 22776 steps and 161 built-in scenarios / 2193 steps. Merged LCOV: coverage/direct.lcov (361 records). Log: `/tmp/pg2-wave9-check.log`.
+Nyquist validation, security review, code review and goal verification remain.
 PG-HOOK-01 remains in progress; matcher and Stop plans cover PG-HOOK-03/13.
 The Stop checks observed eight continuations before ninth override, ten
 tool-separated blocks with no cap notice, and a fresh eight after reload.
+
+Wave 9 documents the supported contracts, all twelve accepted decisions,
+and task/threat/probe evidence. Its 107-scenario focused run and full gate
+passed. Parent review restored an accidentally removed UserPromptSubmit
+context explanation in `fae378d2`; the combined gate above includes it.
+One recorded scenario filter is stale after per-tool cases were renamed;
+Nyquist validation will refresh it and verify the five current scenarios.
 
 Wave 8 selects MCP output aliases after identity recovery, preserves native
 MCP/custom result schemas, and replaces all stale result carriers. Both MCP

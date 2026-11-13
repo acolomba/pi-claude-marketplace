@@ -91,6 +91,8 @@ status: complete
 
 Both task commits passed normal hooks. The first Task 1 message attempt failed gitlint on a literal newline escape and made no commit; its corrected retry passed. Neither task staged a build input, so the commit hooks correctly skipped `npm run check:commit`. No commit hook was bypassed.
 
+3. **Task 1 correction: Restore the existing prompt context explanation**: `fae378d2b58ea520a6557a61d198c77e71a7d03e`
+
 ## Verification
 
 - **Task 1 focused gate:** `npm run test:cucumber:profile -- --profile adapter features/hook/tool-use.feature features/hook/tool-failure.feature features/hook/async.feature features/hook/matchers.feature features/hook/prompt-and-stop.feature` exited 0 at Task 1 head on Node v26.13.0: 107 scenarios, 1,610 steps, seed 413084, 1m 34.920s wall time. Log: `/tmp/pg2-p10-focused.log`. Its sandbox attempt stopped before scenarios with `spawnSync npm EPERM`; the ordinary-permission rerun supplied the passing result.
@@ -110,6 +112,17 @@ None - plan executed exactly as written.
 
 - The focused test's first attempt could not start npm in the sandbox (`EPERM`); the same command passed with ordinary host permissions.
 - The first Task 1 commit message contained a literal `\\n`, exceeded gitlint's 80-column body limit, and was rejected. The retry used a compliant subject and passed normal hooks.
+
+## Parent Combined-Tree Verification
+
+`npm run check` exited 0 at `fae378d2b58ea520a6557a61d198c77e71a7d03e`, Node v26.13.0: 1867 adapter scenarios / 22776 steps and 161 built-in scenarios / 2193 steps. Merged LCOV: coverage/direct.lcov (361 records). Log: `/tmp/pg2-wave9-check.log`.
+
+The parent verified exact task ancestry, the six declared files plus summary,
+a clean handoff and Fallow review. Commit `fae378d2` restores the unrelated
+UserPromptSubmit additional-context explanation accidentally replaced by a
+checkmark in Task 1. Only that table and its formatter alignment changed;
+normal hooks and Fallow audit/review passed. This full gate includes the
+restoration. No implementation changed.
 
 ## Threat Flags
 
