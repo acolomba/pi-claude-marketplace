@@ -281,6 +281,24 @@ test("preserves an explicit null custom structured result", () => {
   assert.strictEqual(payload.tool_response, null);
 });
 
+test("keeps the native result when a malformed envelope omits the tool name", () => {
+  const event = {
+    type: "tool_result",
+    toolCallId: "missing-name",
+    input: {},
+    content: [{ type: "text" as const, text: "native result" }],
+    details: undefined,
+    isError: false,
+  } as ToolResultEvent;
+  const context = {
+    sessionId: "session",
+    transcriptPath: "/sessions/session.jsonl",
+    cwd: "/workspace",
+  } satisfies TranslationContext;
+
+  assert.deepStrictEqual(translatePostToolUse(event, context).tool_response, event.content);
+});
+
 test("projects a successful write from its executed input", () => {
   const event = {
     type: "tool_result",

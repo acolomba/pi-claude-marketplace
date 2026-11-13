@@ -31,6 +31,7 @@ import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { hookMcpCallScript } from "../../lib/hook-mcp-calls.ts";
 import { HOOK_MCP_TOOL_SERVER } from "../../lib/hook-mcp-tool-server.ts";
+import { HOOK_RUNS_LOG } from "../../lib/hook-recorder.ts";
 import {
   HOOK_RESULT_OBSERVER_EXTENSION,
   HOOK_RESULT_OBSERVER_LOG,
@@ -48,6 +49,7 @@ import {
 } from "../../lib/scripted-model/script.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
+import type { HookRun } from "../../lib/hook-recorder.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
 // A Node start and one listing take well under a second; the deadline leaves
@@ -113,6 +115,39 @@ function observedResultRows(world: ScenarioWorld): string[] {
   );
 }
 
+function profileRecords(table: DataTable, profile: string): string[] {
+  return table.hashes().flatMap(({ profile: rowProfile, record }) => {
+    assert.ok(rowProfile !== undefined && record !== undefined);
+    return rowProfile === profile ? [record] : [];
+  });
+}
+
+function toolCallRows(world: ScenarioWorld): string[][] {
+  return callMessageRows(modelCallsOf(world.requireTurn().logs)).map(([call, role, text]) => [
+    call,
+    role,
+    text.endsWith(" returned: ") ? `${text}<empty>` : projectTokens("text", text, world.tokens),
+  ]);
+}
+
+Then(
+  "the hooks record these complete mcp inputs:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const runs = (this.requireTurn().logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
+    const actual = runs.map((run) => {
+      const session = run.stdin.session_id;
+      if (typeof session !== "string") {
+        throw new Error("MCP hook run has no session id");
+      }
+
+      return projectTokens("text", JSON.stringify(run), this.tokens).replaceAll(session, "first");
+    });
+    const expected = profileRecords(table, this.mcpProfile);
+    assert.deepStrictEqual(actual, expected);
+    this.markTurnCompared();
+  },
+);
+
 Then(
   "another pi handler observes these complete file results:",
   function (this: ScenarioWorld, table: DataTable) {
@@ -130,10 +165,7 @@ Then(
   "another pi handler observes these complete mcp results:",
   function (this: ScenarioWorld, table: DataTable) {
     const actual = observedResultRows(this);
-    const expected = table.hashes().flatMap(({ profile, record }) => {
-      assert.ok(profile !== undefined && record !== undefined);
-      return profile === this.mcpProfile ? [record] : [];
-    });
+    const expected = profileRecords(table, this.mcpProfile);
     assert.deepStrictEqual(actual, expected);
     this.markTurnCompared();
   },
@@ -142,9 +174,7 @@ Then(
 Then(
   "the model receives these complete mcp calls:",
   function (this: ScenarioWorld, table: DataTable) {
-    const actual = callMessageRows(modelCallsOf(this.requireTurn().logs)).map(
-      ([call, role, text]) => [call, role, projectTokens("text", text, this.tokens)],
-    );
+    const actual = toolCallRows(this);
     const expected = table.hashes().flatMap(({ profile, call, role, text }) => {
       assert.ok(
         profile !== undefined && call !== undefined && role !== undefined && text !== undefined,
@@ -176,13 +206,7 @@ Then(
 Then(
   "the model receives these calls, with an empty tool result:",
   function (this: ScenarioWorld, table: DataTable) {
-    const rows = callMessageRows(modelCallsOf(this.requireTurn().logs)).map(
-      ([call, role, text]) => [
-        call,
-        role,
-        text.endsWith(" returned: ") ? `${text}<empty>` : projectTokens("text", text, this.tokens),
-      ],
-    );
+    const rows = toolCallRows(this);
     assert.deepStrictEqual([["call", "role", "text"], ...rows], table.raw());
     this.markTurnCompared();
   },
@@ -245,10 +269,12 @@ function piMcpText(server: string, tool: string): string {
 
 // The `.mcp.json` of a plugin whose only server is the stub, started as the
 // server `server` of the plugin `plugin`.
-function hookStubMcpText(plugin: string, server: string, tool?: string): string {
+function hookStubMcpText(plugin: string, server: string, tool?: string, rich = false): string {
   const launch = {
     command: process.execPath,
-    args: [MCP_STUB_SERVER, plugin, server, ...(tool === undefined ? [] : [tool])],
+    args: rich
+      ? [HOOK_MCP_TOOL_SERVER, tool ?? "echo", plugin, server]
+      : [MCP_STUB_SERVER, plugin, server, ...(tool === undefined ? [] : [tool])],
   };
   return `${JSON.stringify({ mcpServers: { [server]: launch } }, null, 2)}\n`;
 }
@@ -259,9 +285,10 @@ async function writeHookStubMcpFile(
   name: string,
   server: string,
   tool?: string,
+  rich = false,
 ): Promise<void> {
   const published = world.requirePublished(name);
-  const text = hookStubMcpText(plugin, server, tool);
+  const text = hookStubMcpText(plugin, server, tool, rich);
   await writePublishedPluginFiles(published, plugin, { [MCP_FILE]: text });
   const written = path.join(published.root, "plugins", plugin, MCP_FILE);
   assert.strictEqual(await readFile(written, "utf8"), text);
@@ -293,6 +320,13 @@ Given(
   "the published plugin {string} of the marketplace {string} has the stub mcp server {string} for its hooks with tool {string}",
   async function (this: ScenarioWorld, plugin: string, name: string, server: string, tool: string) {
     await writeHookStubMcpFile(this, plugin, name, server, tool);
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} has the rich stub mcp server {string} for its hooks",
+  async function (this: ScenarioWorld, plugin: string, name: string, server: string) {
+    await writeHookStubMcpFile(this, plugin, name, server, "echo", true);
   },
 );
 

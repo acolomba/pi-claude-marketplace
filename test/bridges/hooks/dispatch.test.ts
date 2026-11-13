@@ -4220,7 +4220,7 @@ describe("routing-order fold of mutations", () => {
     assert.strictEqual(customOutput, undefined);
   });
 
-  test("does not fall back to a legacy output when modern output is present but invalid", async () => {
+  test("uses a modern false output as data without falling back to legacy output", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -4250,7 +4250,7 @@ describe("routing-order fold of mutations", () => {
     );
 
     // assert
-    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "false" }], details: null });
   });
 
   test("keeps an accepted replacement when a later output is invalid or unchanged", async () => {

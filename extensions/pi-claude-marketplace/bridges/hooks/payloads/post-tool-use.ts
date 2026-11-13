@@ -35,7 +35,7 @@ export interface PostToolUseStdin {
 }
 
 function nativeToolResponse(event: ToolResultEvent): unknown {
-  if (event.toolName.startsWith("mcp__")) {
+  if (typeof event.toolName === "string" && event.toolName.startsWith("mcp__")) {
     return {
       content: event.content,
       ...(event.structuredContent === undefined

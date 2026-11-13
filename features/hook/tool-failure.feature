@@ -378,3 +378,46 @@ Feature: Hook tool failure
       | event              | session | tool name                               | tool input      | error     | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                             | CLAUDE_PLUGIN_DATA                                        | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PostToolUseFailure | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | echo:ping | false        | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
       | PostToolUseFailure | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | echo:ping | false        | {project dir} |                 | prefixed  | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
+
+  @mcp
+  Scenario: A failed MCP result ignores both replacement fields
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name      | version |
+      | hook-demo | 1.0.0   |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event       | matcher                                 | form   | output |
+      | failure | PostToolUseFailure | mcp__plugin_hook-demo_stub-server__echo | script | {"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","updatedToolOutput":[{"type":"text","text":"MALICIOUS_MODERN"}],"updatedMCPToolOutput":[{"type":"text","text":"MALICIOUS_LEGACY"}]}} |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has the rich stub mcp server "stub-server" for its hooks
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install hook-demo@fixtures --scope user", which did not fail
+    Given a stand-in registers the stub mcp server "stub-server" of the plugin "hook-demo" with pi's built-in mcp
+    Given pi runs with the scripted model, the mcp implementation and a downstream result observer
+    Given the mcp implementation has listed the tools of the stub mcp server "stub-server" of the plugin "hook-demo"
+    Given the scripted model calls the tool "echo" of the hooks' stub mcp server "stub-server" of the plugin "hook-demo" through the mcp implementation with '{"text":"fail"}', then replies "Done."
+    When the user prompts "call the stub"
+    Then the hooks record these complete mcp inputs:
+      | profile | record |
+      | adapter | {"event":"PostToolUseFailure","stdin":{"session_id":"first","transcript_path":"","cwd":"{project dir}","hook_event_name":"PostToolUseFailure","tool_name":"mcp__plugin_hook-demo_stub-server__echo","tool_input":{"text":"fail"},"error":"Error: echo:fail","is_interrupt":false},"arguments":["failure"],"environment":{"CLAUDE_CODE_SESSION_ID":"first","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/hook-demo","CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/hook-demo","CLAUDE_PROJECT_DIR":"{project dir}","CLAUDE_SESSION_ID":"first","CLAUDECODE":"1"}} |
+      | builtin | {"event":"PostToolUseFailure","stdin":{"session_id":"first","transcript_path":"","cwd":"{project dir}","hook_event_name":"PostToolUseFailure","tool_name":"mcp__plugin_hook-demo_stub-server__echo","tool_input":{"text":"fail"},"error":"echo:fail","is_interrupt":false},"arguments":["failure"],"environment":{"CLAUDE_CODE_SESSION_ID":"first","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/hook-demo","CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/hook-demo","CLAUDE_PROJECT_DIR":"{project dir}","CLAUDE_SESSION_ID":"first","CLAUDECODE":"1"}} |
+    Then another pi handler observes these complete mcp results:
+      | profile | record |
+      | adapter | {"toolName":"mcp__plugin_hook-demo_stub-server__echo","content":[{"type":"text","text":"Error: echo:fail"}],"details":{"mode":"call","server":"plugin_hook-demo_stub-server_","tool":"echo","canonicalTool":"mcp__plugin_hook-demo_stub-server__echo","error":"tool_error","mcpResult":{"content":[{"type":"text","text":"echo:fail"}],"isError":true}},"structuredContent":{"content":[{"type":"text","text":"Error: echo:fail"}],"isError":true},"isError":true} |
+| adapter | {"toolName":"mcp","content":[{"type":"text","text":"Error: echo:fail"}],"details":{"mode":"call","server":"plugin_hook-demo_stub-server_","tool":"echo","canonicalTool":"mcp__plugin_hook-demo_stub-server__echo","error":"tool_error","mcpResult":{"content":[{"type":"text","text":"echo:fail"}],"isError":true}},"structuredContent":null,"isError":true} |
+      | builtin | {"toolName":"tool_search","content":[{"type":"text","text":"Loaded 1 tool. They are available from your next call:\\n- mcp__plugin_hook_demo_stub_server__echo: Answers with its own name and the text it is given."}],"details":{"loaded":["mcp__plugin_hook_demo_stub_server__echo"]},"structuredContent":null,"isError":false} |
+| builtin | {"toolName":"mcp__plugin_hook_demo_stub_server__echo","content":[{"type":"text","text":"echo:fail"}],"details":{"server":"plugin_hook-demo_stub-server","tool":"echo"},"structuredContent":{"content":[{"type":"text","text":"echo:fail"}],"isError":true},"isError":true} |
+    Then the model receives these complete mcp calls:
+      | profile | call | role        | text |
+      | adapter | 1    | user        | call the stub |
+      | adapter | 2    | user        | call the stub |
+      | adapter | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_hook-demo_stub-server__echo","args":{"text":"fail"}} |
+      | adapter | 2    | tool result | mcp failed: Error: echo:fail |
+      | builtin | 1    | user        | call the stub |
+      | builtin | 2    | user        | call the stub |
+      | builtin | 2    | assistant   | tool call tool_search {"query":"mcp__plugin_hook_demo_stub_server__echo","limit":1} |
+      | builtin | 2    | tool result | tool_search returned: Loaded 1 tool. They are available from your next call:\n- mcp__plugin_hook_demo_stub_server__echo: Answers with its own name and the text it is given. |
+      | builtin | 3    | user        | call the stub |
+      | builtin | 3    | assistant   | tool call tool_search {"query":"mcp__plugin_hook_demo_stub_server__echo","limit":1} |
+      | builtin | 3    | tool result | tool_search returned: Loaded 1 tool. They are available from your next call:\n- mcp__plugin_hook_demo_stub_server__echo: Answers with its own name and the text it is given. |
+      | builtin | 3    | assistant   | tool call mcp__plugin_hook_demo_stub_server__echo {"text":"fail"} |
+      | builtin | 3    | tool result | mcp__plugin_hook_demo_stub_server__echo failed: echo:fail |
