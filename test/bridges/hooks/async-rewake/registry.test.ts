@@ -90,7 +90,19 @@ for (const eventName of ["PostToolUse", "PostToolUseFailure"] as const) {
     assert.deepStrictEqual(
       payload,
       eventName === "PostToolUse"
-        ? { ...common, tool_response: [{ type: "text", text: "missing file" }] }
+        ? {
+            ...common,
+            tool_response: {
+              type: "text",
+              file: {
+                filePath: path.join(root, "missing.txt"),
+                content: "missing file",
+                startLine: 1,
+                numLines: 1,
+                totalLines: 1,
+              },
+            },
+          }
         : { ...common, error: "missing file", is_interrupt: false },
     );
   });
