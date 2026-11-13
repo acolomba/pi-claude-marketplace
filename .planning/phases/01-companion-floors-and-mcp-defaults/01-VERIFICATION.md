@@ -367,3 +367,13 @@ For 01-07 T3, the “longer than 64” restriction applies to unverified hook-li
 
 _Verified: 2026-11-12T20:00:07Z_
 _Verifier: gsd-verifier_
+
+## PG-MCP-02 Published-Companion Adoption Supplement — 2026-11-13
+
+This supplement records a new result for the deferred real-child exclusion truth. It does not rerun Phase 1 verification, replace its 2026-11-12 score or covered-file fingerprint, or clear its active override before the parent combined-tree gate. The historical 0.88.0 failure and accepted deferral above remain dated evidence.
+
+Published pi-subagents 0.88.1 (`nicobailon/pi-subagents`, registry integrity `sha512-Yrt0kBT+ChgnmcVzBu2004lwuwmRTHdr1jGUdLd9X7+TAdpLaCILCRFHQhnM9u4fnyOPDLE8wASnedp0nuXc9g==`) passed all six installed-package launch cases. The final positive ambient cases failed on intact 0.88.0 in exactly two cases, with all four explicit grant and restriction controls passing. The old-red and new-green logs are `/tmp/261113-8yn-positive-old-red.tap` and `/tmp/261113-8yn-positive-new-green.tap`.
+
+The default installed-package runner passed three actual detached children on 0.88.1. The short-grant child offered and called its short tool. The unrestricted child offered and called the long tool. The exclusion-only child omitted the long tool in every provider request while offering and calling the short tool. Every child completed; the MCP server recorded each call. The fixture and complete inventories are `/tmp/pg1-live-companion-pHdbmd/summary.json`; provider and status records are in `/tmp/pg1-live-companion-pHdbmd/drive.out`; MCP calls are in `/tmp/pg1-live-companion-pHdbmd/server-home/harness/mcp-stub-requests.jsonl`; complete command output is `/tmp/261113-8yn-real-child-0881.log`. The [saved runner README](../../debug/artifacts/real-child-mcp-automation/README.md) documents the command and package identity.
+
+The exact previously deferred PG-MCP-02 truth is now proven at runtime: a real child with a long-name `disallowedTools` entry is not offered that adapter tool while an unrestricted control is offered and calls it, and the restricted child still receives and calls its permitted short tool. This is selective exclusion, separate from the still-open AGTLONGNAME-01 explicit long-grant mismatch. The current suite selects 0.88.1 while the general optional peer floor stays `>=0.87.0`. Final requirement acceptance and removal of the active override/deferred entry wait for the parent's merged-tree `npm run check`; see the [quick-task summary](../../quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md).

@@ -5181,21 +5181,20 @@ Noted 2026-11-09 (behavioral-gaps, P7-DC-04, D-BG-705). When a load cannot read 
 
 Noted 2026-11-11 (parity-gaps, PG-MCP-02, D-PG1-10). Measured by `test/integration/agents-adapter-grant-conformance.test.ts` against pi-subagents 0.88.0: for `mcp:plugin_demo_warehouse_/list_every_table_in_the_warehouse_with_row_counts`, pi-subagents requires the uncut 77-character `mcp__plugin_demo_warehouse__list_every_table_in_the_warehouse_with_row_counts`, while pi-mcp-adapter 7.0.1 registers `mcp__plugin_demo_warehouse__list_every_table_in_the_war_17c0721b`. An agent whose `mcp:` grant covers that tool, including a whole-server grant, does not launch because the required name is absent from the child. `excludeTools` is unaffected; the bridge writes the registered name there. Trigger: a pi-subagents release that shortens the granted name as the adapter does. Then remove this gap from `docs/mcp-compatibility.md` and re-pin or delete the conformance test.
 
-## AGTAMBIENT-01: adopt the pi-subagents fix for ambient direct MCP tools in children
+## ~~AGTAMBIENT-01: adopt the pi-subagents fix for ambient direct MCP tools in children~~ -- ADOPTED
 
-Noted and explicitly deferred by the user on 2026-11-12 (parity-gaps Phase 1,
-PG-MCP-02). Installed pi-subagents 0.88.0 suppresses all direct MCP tools for
-unrestricted and exclusion-only children. Local fix and real-child controls pass;
-[upstream PR #3259](https://github.com/nicobailon/pi-subagents/pull/3259) is awaiting
-adoption through a published release. Phase 1 may close with this accepted
-deferral; the adopted-dependency behavior remains unverified.
-
-**Trigger:** a published pi-subagents release contains that fix or a verified
-equivalent. [SEED-261112-81c](seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md)
-owns the upgrade, two known-bug test replacements, three positive real-child
-controls, full gate and acceptance-record updates. Review during companion
-upgrades and milestone planning; this is not an external-event watcher.
-AGTLONGNAME-01 remains a separate explicit-grant naming defect.
+Originally deferred by the user on 2026-11-12 (parity-gaps Phase 1,
+PG-MCP-02): installed pi-subagents 0.88.0 suppressed all direct MCP tools for
+unrestricted and exclusion-only children. The local fix passed real-child
+controls. On 2026-11-13, published pi-subagents 0.88.1 was adopted for the
+suite and local launcher. Six launch checks and three actual detached-child
+controls pass; the two positive ambient checks fail on 0.88.0 with all four
+explicit controls passing. The [quick-task summary](quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md)
+records the package and run evidence. Final PG-MCP-02 acceptance waits for the
+parent's combined-tree `npm run check` after merge. The
+[retired seed](seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md)
+has no release trigger. AGTLONGNAME-01 remains a separate explicit-grant
+naming defect.
 
 ## HOOKRESULT-01: investigate and implement execution wrappers for full Claude-shaped hook results
 

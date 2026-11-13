@@ -1,9 +1,9 @@
 ---
 id: SEED-261112-81c
-status: dormant
+status: completed
 planted: 2026-11-12
 planted_during: parity-gaps / Phase 1
-trigger_when: A published pi-subagents release contains the ambient direct-MCP child-launch fix from nicobailon/pi-subagents PR 3259; review when updating companions or starting a milestone
+trigger_when: none
 scope: small
 ---
 
@@ -11,29 +11,34 @@ scope: small
 
 ## Why This Matters
 
+The following is the 2026-11-12 rationale, before the published release was adopted.
+
 pi-subagents 0.88.0 gives children without an explicit MCP selector
 `MCP_DIRECT_TOOLS=__none__`. Unrestricted and exclusion-only agents therefore
 lose all direct MCP tools. Our long-name exclusion cannot be accepted on that
 version because its permitted-tool control also fails. The local companion
-fix passed all three real-child controls; this project's dependency is unchanged.
+fix passed all three real-child controls; at that time, this project's tested companion was unchanged.
 
 On 2026-11-12 the user explicitly asked to defer adoption until a fixed version
 is available and move on from Phase 1. This is the carrier for the remaining
 PG-MCP-02 acceptance, tracked as BACKLOG AGTAMBIENT-01. It does not waive a
 failed upgrade test or claim the installed companion is fixed.
 
-## When to Surface
+## Retired Disposition — 2026-11-13
 
-**Trigger:** a published, supported pi-subagents release includes
-[PR #3259](https://github.com/nicobailon/pi-subagents/pull/3259), or an equivalent
-fix whose behavior is verified. Check the release contents before choosing a
-version; no release number is assumed.
+Published pi-subagents 0.88.1 contains the ambient child-launch fix from
+[PR #3259](https://github.com/nicobailon/pi-subagents/pull/3259). The shared
+suite and local launcher now select 0.88.1. The optional peer floor remains
+`>=0.87.0`: this adoption uses no new companion API. The installed release
+passes six launch checks and all three actual detached-child controls; the
+positive ambient checks fail only their two intended cases on 0.88.0. See the
+[quick-task summary](../quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md)
+for the package identity, commands, and evidence.
 
-Review this seed during companion upgrades and new-milestone planning. GSD seeds
-surface during milestone scans; they do not watch GitHub or install updates in
-the background.
+The release trigger is retired. Final PG-MCP-02 acceptance waits for the
+parent's combined-tree `npm run check` after these commits are merged.
 
-## Scope Estimate
+## Historical Scope Estimate — 2026-11-12
 
 **Small** — a dependency upgrade and automated acceptance task through GSD.
 
@@ -66,10 +71,10 @@ the background.
 - debug/artifacts/real-child-mcp-automation/README.md — runnable positive acceptance and retained logs.
 - `test/integration/optional-peer-suite-versions.json` — shared suite pin.
 
-## Notes
+## Historical Notes — 2026-11-12
 
 PR #3259's reviewed branch head is `7629470d1d86f62e4fd4b6ccb1ee4b2c28953db4`.
 The original fix is `1e79b864159430cc124783a7d7c9e4e5daa2a7bf`. The last recorded
-PR state is open with CI passing; that is not publication evidence. No workaround
+PR state was open with CI passing; that was not publication evidence. No workaround
 is introduced. AGTLONGNAME-01, the mismatch for explicit grants of shortened
 adapter names, has its own trigger and is not fixed by this PR.
