@@ -169,6 +169,10 @@ function readResponse(event: ToolResultEvent, filePath: string): unknown {
 
 /** Projects facts supplied by a successful Pi file tool into Claude's result fields. */
 export function fileToolResponse(event: ToolResultEvent, cwd: string): unknown {
+  if (typeof event.toolName !== "string") {
+    return undefined;
+  }
+
   const tool = event.toolName.toLowerCase();
   if (tool !== "read" && tool !== "edit" && tool !== "write") {
     return undefined;

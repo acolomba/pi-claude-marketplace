@@ -1826,7 +1826,8 @@ describe("toolResultCompositeHandler", () => {
       return Promise.resolve({
         kind: "mutate",
         updatedToolOutput: {
-          content: [{ type: "text", text: `${entry.pluginId} replacement` }],
+          filePath: "/workspace/edit-results/document.txt",
+          newString: `${entry.pluginId} replacement`,
         },
       });
     };
@@ -1873,7 +1874,10 @@ describe("toolResultCompositeHandler", () => {
       assert.strictEqual(seen.structuredContent, event.structuredContent);
     }
 
-    assert.deepStrictEqual(output, { content: [{ type: "text", text: "second replacement" }] });
+    assert.deepStrictEqual(output, {
+      content: [{ type: "text", text: "/workspace/edit-results/document.txt: second replacement" }],
+      details: null,
+    });
     assert.deepStrictEqual(event, original);
   });
 
@@ -2074,6 +2078,7 @@ describe("toolResultCompositeHandler", () => {
           text: 'PostToolUse:Bash hook blocking error from command: "printf block-empty": Blocked by hook',
         },
       ],
+      isError: false,
     };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "block-empty", event: createToolResultEvent(false) },
@@ -2127,6 +2132,7 @@ describe("toolResultCompositeHandler", () => {
           text: 'PostToolUse:Bash hook blocking error from command: "printf block-first": tool denied',
         },
       ],
+      isError: false,
     };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "block-first", event: createToolResultEvent(false) },
@@ -2176,6 +2182,7 @@ describe("toolResultCompositeHandler", () => {
     );
     const expectedOutput = {
       content: [{ type: "text", text: "patched output" }],
+      details: null,
       isError: true,
     };
     const expectedEvent: ToolResultEvent = createToolResultEvent(false);
@@ -2345,6 +2352,7 @@ describe("toolResultCompositeHandler", () => {
           text: `PostToolUseFailure:${ADAPTER_TOOL} hook blocking error from command: "printf failure-observer": look again`,
         },
       ],
+      isError: true,
     });
   });
 
@@ -4175,7 +4183,7 @@ describe("routing-order fold of mutations", () => {
     const output = await handler(event, createExtensionContext("/workspace/outputs"));
 
     // assert
-    assert.deepStrictEqual(output, { content: [{ type: "text", text: "two" }] });
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "two" }], details: null });
   });
 });
 
@@ -4956,7 +4964,7 @@ describe("tool hook context (HOOK-04 / D-CF5-13)", () => {
     );
 
     // assert
-    assert.deepStrictEqual(output, { content: [{ type: "text", text: "kept" }] });
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "kept" }], details: null });
     assert.deepStrictEqual(debugLines(), [
       "[hooks] dispatch: tool hook context failed: session closed",
     ]);
@@ -6304,6 +6312,7 @@ describe("built-in MCP tool names in tool results and if fields (MHK-01)", () =>
             text: `${label} hook blocking error from command: "printf guard": no`,
           },
         ],
+        isError: claudeEvent === "PostToolUseFailure",
       });
       assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry(`${label} says: checked`)]);
       assert.deepStrictEqual(sent, [toolContextMessage(`${label} hook additional context: why`)]);

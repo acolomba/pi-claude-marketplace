@@ -248,6 +248,18 @@ test("a complete native truncation record allows a whole-file count", () => {
   );
 });
 
+test("leaves a result without a tool name unprojected", () => {
+  // arrange
+  const event = result("read", { path: "file.txt" }, [{ type: "text", text: "file" }]);
+  Reflect.deleteProperty(event, "toolName");
+
+  // act
+  const response = fileToolResponse(event, "/work");
+
+  // assert
+  assert.strictEqual(response, undefined);
+});
+
 test("unsupported or incomplete file observations stay unprojected", () => {
   assert.strictEqual(fileToolResponse(result("bash", {}, []), "/work"), undefined);
   assert.strictEqual(fileToolResponse(result("read", {}, []), "/work"), undefined);
