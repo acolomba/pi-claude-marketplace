@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 15
+open_count: 16
 waived_count: 52
 fixed_count: 47
-total_count: 114
-last_updated: 2026-11-13T02:44:26.169Z
+total_count: 115
+last_updated: 2026-11-13T23:19:58.582Z
 ---
 
 # Broken Windows Ledger
@@ -129,6 +129,7 @@ last_updated: 2026-11-13T02:44:26.169Z
 | 112 | 2 | unmet-truth | features/mcp-server/lifecycle.feature |  | [mcp-builtin] 'A new session offers the plugin's tool again (BLT-01)' runs @adapter-only, not @mcp: Pi 1.5.0 RPC new_session emits session_start twice and Pi's built-in MCP leaves the first connection's stub running past the profile Pi, so the HAR-05 stand-in check fails the builtin run; lift to @mcp once the harness tolerates it | fixed |  | 2026-11-04T15:04:12.808Z | 2026-11-05T02:11:02.263Z |
 | 113 | 01 | deviation | features/plugin/config-migration.feature | 27 | [behavioral-gaps] CFGMIG-01 seed pins today's MIG-01 output for a deleted config: a disabled plugin is declared {} (enabled lost) and the load reports will enable; Phase 8 owns the fix in persistence/migrate-config.ts and the seed rewrite | open |  | 2026-11-08T03:04:18.774Z |  |
 | 114 | 02 | deviation | features/hook/async.feature |  | [parity-gaps] Async lifecycle scenarios intermittently report the wrong exit code, miss rewake, or leave a hook running. Cleanup failure also reproduced on pre-wave commit 309a45559e9f086d76198acae906b038a4c9e1bc, so it predates atomic edit preflight. Preserve assertions and investigate under ASYNCLIFECYCLE-01; no gate waived. | open |  | 2026-11-13T02:44:26.169Z |  |
+| 115 | 03 | deviation | docs/hooks-compatibility.md | 27 | [parity-gaps] 03-08-02 verify 'npx --no prettier --check' on the two compatibility pages cannot pass: prettier and mdformat disagree on two pre-existing lines of hooks-compatibility.md (27, 144; also failing at 1a8aa893); mdformat/markdownlint pass and mcp-compatibility.md passes prettier | open |  | 2026-11-13T23:19:58.582Z |  |
 
 ````json
 [
@@ -1555,6 +1556,19 @@ last_updated: 2026-11-13T02:44:26.169Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-13T02:44:26.169Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 115,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "docs/hooks-compatibility.md",
+    "line": 27,
+    "description": "[parity-gaps] 03-08-02 verify 'npx --no prettier --check' on the two compatibility pages cannot pass: prettier and mdformat disagree on two pre-existing lines of hooks-compatibility.md (27, 144; also failing at 1a8aa893); mdformat/markdownlint pass and mcp-compatibility.md passes prettier",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-13T23:19:58.582Z",
     "resolved_at": null,
     "milestone": null
   }
