@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 02
 current_phase_name: Hook Payloads, Matchers, and Stop Limit
 status: executing
-stopped_at: parity-gaps Phase 2 wave 2 verified; wave 3 next
-last_updated: "2026-11-13T00:28:42.181152+00:00"
+stopped_at: parity-gaps Phase 2 wave 3 verified; wave 4 next
+last_updated: "2026-11-13T01:28:31.217144+00:00"
 last_activity: 2026-11-13
-last_activity_desc: Phase 02 wave 2 verified; 3 of 10 plans complete
-state_head: a7f869eba28b3432d27272ea89d59c6e724c4379
+last_activity_desc: Phase 02 wave 3 verified; 4 of 10 plans complete
+state_head: 2f1ba19e51753d4642435700d6383cb4eb1b4d26
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 21
-  completed_plans: 14
+  completed_plans: 15
   percent: 9
 ---
 
@@ -32,22 +32,24 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 02 (Hook Payloads, Matchers, and Stop Limit) — EXECUTING
-Plan: 3 of 10 complete; 02-09 next
+Plan: 4 of 10 complete; 02-03 next
 Status: Executing Phase 02
-Last activity: 2026-11-13 — Phase 02 wave 2 verified
+Last activity: 2026-11-13 — Phase 02 wave 3 verified
 
 Progress: [█░░░░░░░░░] 9%
 
 
 ### parity-gaps Phase 2 execution
 
-Waves 1–2 (02-01, 02-02, 02-08) are merged and verified. The latest
+Waves 1–3 (02-01, 02-02, 02-08, 02-09) are merged and verified. The latest
 `npm run check` exited 0 on the clean combined tree at
-`a7f869eba28b3432d27272ea89d59c6e724c4379`, Node v26.13.0: 1,834 adapter
+`2f1ba19e51753d4642435700d6383cb4eb1b4d26`, Node v26.13.0: 1,837 adapter
 scenarios, 155 built-in scenarios and 356 direct-coverage pairs. Log:
-`/tmp/pg2-wave2-check-final.log`. Schema drift passed; stale codebase-map
-drift is advisory, with no remap requested. Wave 3 is the Stop cap (02-09).
-PG-HOOK-01 remains in progress; the matcher plan covers PG-HOOK-03.
+`/tmp/pg2-wave3-check.log`. Schema drift passed; stale codebase-map
+drift is advisory, with no remap requested. Wave 4 is atomic multi-edit preflight (02-03).
+PG-HOOK-01 remains in progress; matcher and Stop plans cover PG-HOOK-03/13.
+The Stop checks observed eight continuations before ninth override, ten
+tool-separated blocks with no cap notice, and a fresh eight after reload.
 
 The initial sandboxed gate failed on local-process permissions (`mkfifo`
 EPERM); all 129 tests in the three affected architecture files passed with
