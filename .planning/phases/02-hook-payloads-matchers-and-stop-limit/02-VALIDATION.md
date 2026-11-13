@@ -228,3 +228,11 @@ The latest parent full gate includes the prompt-context documentation correction
 | Gaps found | 1 |
 | Resolved | 1 |
 | Escalated | 0 |
+
+## Final review-closeout gate — 2026-11-13
+
+`npm run check` exited **0** on Node v26.13.1 for source commit `d893084229f11876c92b4e036a09b112c4002873`. The 2,400-second bounded run started at 2026-11-13T13:49:46.660374+00:00 and finished at 2026-11-13T14:05:05.098545+00:00 (15m 18s). All static, unpaired-unit and integration checks passed. Adapter: **1,869 scenarios / 22,807 steps** (seed 567364); builtin: **162 scenarios / 2,210 steps** (seed 225284). All **361** direct source/test pairs passed with 100% required coverage. Log: `/tmp/pg2-final-check.log`; proof: `/tmp/pg2-final-gate.json`.
+
+This gate includes all six code-review correction commits and pi-subagents 0.88.1. The four runtime findings have owner and live-Pi behavioral regressions; same-text MCP redaction passes under both profiles. Independent rereview returned clean and refreshed security review closed all 27 threats. No manual verification remains for those findings.
+
+The configured prior-phase regression command is also `npm run check` with a 2,400-second timeout; this exact run covers the 34 prior-phase test files collected in the handoff. Subsequent commits through `06abcab40848ca548196538977ea97432fdc4e01` change only planning Markdown. The exact non-planning diff is empty, Node is unchanged, and no untracked executable input exists. The phase-goal verifier remains the final gate.
