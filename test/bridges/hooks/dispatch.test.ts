@@ -1788,6 +1788,144 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
+  test("delivers one actual edit result to each pair before folding replacements", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", [
+      createRoutingEntry({
+        pluginId: "first",
+        claudeEvent: "PostToolUse",
+        rawMatcher: "Edit",
+        declarationIndex: 0,
+      }),
+      createRoutingEntry({
+        pluginId: "second",
+        claudeEvent: "PostToolUse",
+        rawMatcher: "Edit",
+        declarationIndex: 1,
+      }),
+    ]);
+    const event: ToolResultEvent = {
+      ...createToolResultEvent(false, "edit"),
+      input: {
+        path: "document.txt",
+        edits: [
+          { oldText: "first", newText: "one" },
+          { oldText: "second", newText: "two" },
+        ],
+      },
+      content: [{ type: "text", text: "Successfully replaced 2 blocks" }],
+      details: { path: "document.txt", replacements: 2 },
+      structuredContent: { replacements: 2 },
+    };
+    const original = structuredClone(event);
+    const received: ToolResultEvent[] = [];
+    const executor: HookExecutor = (entry, hookEvent) => {
+      received.push(hookEvent as ToolResultEvent);
+      return Promise.resolve({
+        kind: "mutate",
+        updatedToolOutput: {
+          content: [{ type: "text", text: `${entry.pluginId} replacement` }],
+        },
+      });
+    };
+
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/edit-results"));
+
+    // assert
+    assert.deepStrictEqual(
+      received.map((seen) => seen.input),
+      [
+        {
+          file_path: "/workspace/edit-results/document.txt",
+          old_string: "first",
+          new_string: "one",
+        },
+        {
+          file_path: "/workspace/edit-results/document.txt",
+          old_string: "first",
+          new_string: "one",
+        },
+        {
+          file_path: "/workspace/edit-results/document.txt",
+          old_string: "second",
+          new_string: "two",
+        },
+        {
+          file_path: "/workspace/edit-results/document.txt",
+          old_string: "second",
+          new_string: "two",
+        },
+      ],
+    );
+    for (const seen of received) {
+      assert.strictEqual(seen.content, event.content);
+      assert.strictEqual(seen.details, event.details);
+      assert.strictEqual(seen.structuredContent, event.structuredContent);
+    }
+
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "second replacement" }] });
+    assert.deepStrictEqual(event, original);
+  });
+
+  test("drops every edit pair result when the hook generation changes", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", [
+      createRoutingEntry({
+        pluginId: "late",
+        claudeEvent: "PostToolUse",
+        rawMatcher: "Edit",
+        declarationIndex: 0,
+      }),
+    ]);
+    const event: ToolResultEvent = {
+      ...createToolResultEvent(false, "edit"),
+      input: {
+        path: "document.txt",
+        edits: [
+          { oldText: "first", newText: "one" },
+          { oldText: "second", newText: "two" },
+        ],
+      },
+    };
+    const original = structuredClone(event);
+    let calls = 0;
+    const executor: HookExecutor = () => {
+      calls += 1;
+      runtime.advanceGeneration();
+      return Promise.resolve({
+        kind: "mutate",
+        updatedToolOutput: { content: [{ type: "text", text: "stale" }] },
+      });
+    };
+
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/stale-edit"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.strictEqual(calls, 1);
+    assert.deepStrictEqual(event, original);
+  });
+
   test("routes a failed result only through the PostToolUseFailure bucket", async () => {
     // arrange
     const runtime = createHooksRuntime();
@@ -1832,6 +1970,80 @@ describe("toolResultCompositeHandler", () => {
     // assert
     assert.deepStrictEqual(output, expectedOutput);
     assert.deepStrictEqual(executorCalls, expectedCalls);
+  });
+
+  test("gives duplicate edit pairs the same failure without accepting output changes", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUseFailure", [
+      createRoutingEntry({
+        pluginId: "failure",
+        claudeEvent: "PostToolUseFailure",
+        rawMatcher: "Edit",
+        declarationIndex: 0,
+      }),
+    ]);
+    const event: ToolResultEvent = {
+      ...createToolResultEvent(true, "edit"),
+      input: {
+        path: "document.txt",
+        edits: [
+          { oldText: "missing", newText: "one" },
+          { oldText: "missing", newText: "one" },
+        ],
+      },
+      content: [
+        { type: "text", text: "Could not find edits[0]" },
+        { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+      ],
+      details: { failedIndex: 0 },
+    };
+    const original = structuredClone(event);
+    const received: ToolResultEvent[] = [];
+    const executor: HookExecutor = (_entry, hookEvent) => {
+      received.push(hookEvent as ToolResultEvent);
+      return Promise.resolve({
+        kind: "mutate",
+        updatedToolOutput: { content: [{ type: "text", text: "replaced" }], isError: false },
+      });
+    };
+
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/failed-edit"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.strictEqual(received.length, 2);
+    assert.deepStrictEqual(
+      received.map((seen) => seen.input),
+      [
+        {
+          file_path: "/workspace/failed-edit/document.txt",
+          old_string: "missing",
+          new_string: "one",
+        },
+        {
+          file_path: "/workspace/failed-edit/document.txt",
+          old_string: "missing",
+          new_string: "one",
+        },
+      ],
+    );
+    for (const seen of received) {
+      assert.strictEqual(seen.content, event.content);
+      assert.strictEqual(seen.details, event.details);
+      assert.strictEqual(seen.isError, true);
+    }
+
+    assert.deepStrictEqual(event, original);
   });
 
   test("adapts a block without a reason to the tool output and the default feedback", async () => {

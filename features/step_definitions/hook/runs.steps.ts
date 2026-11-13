@@ -168,10 +168,24 @@ Then("the hooks record no runs", function (this: ScenarioWorld) {
 Then(
   "the hook processes record these lifecycle events:",
   function (this: ScenarioWorld, table: DataTable) {
-    const events = (this.requireTurn().logs.get(HOOK_LIFECYCLE_LOG) ??
-      []) as readonly HookLifecycleEvent[];
-    const rows = events.map((event) => [event.hook, event.phase, String(event.code ?? "")]);
-    assert.deepStrictEqual([LIFECYCLE_COLUMNS, ...rows], table.raw());
+    assert.deepStrictEqual(lifecycleRows(this), table.raw());
+    this.markTurnCompared();
+  },
+);
+
+function lifecycleRows(world: ScenarioWorld): readonly (readonly string[])[] {
+  const events = (world.requireTurn().logs.get(HOOK_LIFECYCLE_LOG) ??
+    []) as readonly HookLifecycleEvent[];
+  return [
+    LIFECYCLE_COLUMNS,
+    ...events.map((event) => [event.hook, event.phase, String(event.code ?? "")]),
+  ];
+}
+
+Then(
+  "the hook processes record these lifecycle events in any order:",
+  function (this: ScenarioWorld, table: DataTable) {
+    assert.deepStrictEqual(sortedRows(lifecycleRows(this)), sortedRows(table.raw()));
     this.markTurnCompared();
   },
 );

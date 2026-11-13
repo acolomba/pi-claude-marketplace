@@ -6,6 +6,57 @@ Feature: Hook async
   after a crash. Waiting scripts stand in for slow hooks, the scripted model for
   a real one, and a local marketplace for a published one.
 
+  Scenario: Background edit hooks receive every translated pair
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name       | event       | matcher | form   | async | async rewake |
+      | pre-plain  | PreToolUse  | Edit    | script | true  |              |
+      | post-plain | PostToolUse | Edit    | script | true  |              |
+      | post-wake  | PostToolUse | Edit    | script |       | true         |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                                                                        |
+      |       | edit | {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | Done. |      |                                                                                                                  |
+    When the user prompts "edit both blocks" and 6 background hook runs finish
+    Then the hooks record these runs in any order:
+      | event       | session | tool name | tool input                                                                            | tool response                                                                         | cwd           | transcript path | arguments  | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse  | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   |                                                                                       | {project dir} |                 | pre-plain  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse  | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} |                                                                                       | {project dir} |                 | pre-plain  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | [{"type":"text","text":"Successfully replaced 2 block(s) in document.txt."}] | {project dir} |                 | post-plain | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | [{"type":"text","text":"Successfully replaced 2 block(s) in document.txt."}] | {project dir} |                 | post-plain | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | [{"type":"text","text":"Successfully replaced 2 block(s) in document.txt."}] | {project dir} |                 | post-wake  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | [{"type":"text","text":"Successfully replaced 2 block(s) in document.txt."}] | {project dir} |                 | post-wake  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hook processes record these lifecycle events in any order:
+      | hook       | phase | exit code |
+      | pre-plain  | start |           |
+      | pre-plain  | start |           |
+      | pre-plain  | end   | 0         |
+      | pre-plain  | end   | 0         |
+      | post-plain | start |           |
+      | post-plain | start |           |
+      | post-plain | end   | 0         |
+      | post-plain | end   | 0         |
+      | post-wake  | start |           |
+      | post-wake  | start |           |
+      | post-wake  | end   | 0         |
+      | post-wake  | end   | 0         |
+    Then the project file "document.txt" has the text "one\nmiddle\ntwo\n" after a tool hook
+    Then the hooks show the user no rewake summaries
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                     |
+      | 1    | user        | edit both blocks                                                                                                         |
+      | 2    | user        | edit both blocks                                                                                                         |
+      | 2    | assistant   | tool call edit {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | 2    | tool result | edit returned: Successfully replaced 2 block(s) in document.txt.                                                       |
+
   Scenario: An async rewake hook goes on running after the prompt that started it
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

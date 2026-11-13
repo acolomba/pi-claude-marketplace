@@ -1063,9 +1063,14 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const folded = await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
-      matcherFiresOnToolEvent(entry.matcher, view.tool),
-    );
+    const batch =
+      event.toolName === "edit" ? editPairViews(event.input, ctx.cwd, homedir()) : undefined;
+    const folded =
+      batch === undefined
+        ? await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
+            matcherFiresOnToolEvent(entry.matcher, view.tool),
+          )
+        : await runEditResultPairs(runtime, bucket, view, batch.pairs, ctx, pi, executor);
     const label = hookEventLabel(claudeEvent, view.event.toolName);
     showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
     sendToolContext(pi, label, folded.result);
@@ -1077,6 +1082,43 @@ export function toolResultCompositeHandler(
       attributedTo: folded.attributedTo,
     });
   };
+}
+
+// Each hook receives a pair input and the same native result carriers. Pair
+// outcomes are folded in pair order, then routing order, after every run ends.
+async function runEditResultPairs(
+  runtime: HooksRuntime,
+  bucket: readonly RoutingEntry[],
+  view: { readonly event: ToolResultEvent; readonly tool: McpToolIdentity },
+  pairs: readonly { readonly input: ToolResultEvent["input"] }[],
+  ctx: ExtensionContext,
+  pi: ExtensionAPI | undefined,
+  executor: HookExecutor,
+): Promise<FoldedBucket> {
+  const event = view.event;
+  const hooks = matchingHooks(
+    bucket,
+    event,
+    ctx,
+    (entry) => matcherFiresOnToolEvent(entry.matcher, view.tool),
+    view.tool,
+  );
+  const capturedGeneration = runtime.currentGeneration();
+  const runs = await Promise.all(
+    pairs.map(({ input }) => {
+      if (capturedGeneration !== runtime.currentGeneration()) {
+        return Promise.resolve(undefined);
+      }
+
+      const pairEvent: ToolResultEvent = { ...event, input };
+      return runHooks(runtime, hooks, (entry) => executor(entry, pairEvent, ctx, pi, runtime));
+    }),
+  );
+  if (!runs.every((outcomes): outcomes is BucketOutcome[] => outcomes !== undefined)) {
+    return NOOP_FOLD;
+  }
+
+  return foldOutcomes(runs.flat());
 }
 
 // ──────────────────────────────────────────────────────────────────────────
