@@ -1724,7 +1724,7 @@ Feature: Hook tool use
       | PreToolUse  | first   | Write     | {"file_path":"{project dir}/output.txt","content":"written"} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |                                                             |
       | PostToolUse | first   | Write     | {"file_path":"{project dir}/output.txt","content":"written"} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | {"filePath":"{project dir}/output.txt","content":"written"} |
 
-  Scenario: Search result hooks receive emitted facts and truncation for Glob
+  Scenario: A Glob result names a file under an at-prefixed native search root
     Given pi runs with the scripted model and search tools
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -1741,13 +1741,13 @@ Feature: Hook tool use
     Given the project holds the file "found.md" with the text "found" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                         |
-      |       | find | {"pattern":"found*.md","limit":2} |
+      |       | find | {"pattern":"found*.md","path":"@{project dir}","limit":2} |
       | Done. |      |                                   |
     When the user prompts "run Glob"
     Then the hooks record these runs:
       | event       | session | tool name | tool input              | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response                                         |
-      | PreToolUse  | first   | Glob      | {"pattern":"found*.md"} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |                                                       |
-      | PostToolUse | first   | Glob      | {"pattern":"found*.md"} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | {"filenames":["{project dir}/found.md"],"numFiles":1} |
+      | PreToolUse  | first   | Glob      | {"pattern":"found*.md","path":"@{project dir}"} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |                                                       |
+      | PostToolUse | first   | Glob      | {"pattern":"found*.md","path":"@{project dir}"} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | {"filenames":["{project dir}/found.md"],"numFiles":1} |
 
   Scenario: Search result hooks receive emitted facts and truncation for Grep
     Given pi runs with the scripted model and search tools

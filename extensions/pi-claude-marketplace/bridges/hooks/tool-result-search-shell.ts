@@ -1,4 +1,7 @@
+import { homedir } from "node:os";
 import path from "node:path";
+
+import { requestedPath } from "./tool-input.ts";
 
 import type { ToolResultEvent } from "../../platform/pi-api.ts";
 
@@ -81,7 +84,8 @@ function globResponse(event: ToolResultEvent, cwd: string): unknown {
     return response;
   }
 
-  const root = typeof event.input.path === "string" ? path.resolve(cwd, event.input.path) : cwd;
+  const root =
+    typeof event.input.path === "string" ? requestedPath(event.input.path, cwd, homedir()) : cwd;
   response.filenames = [path.resolve(root, raw)];
   response.numFiles = 1;
   return response;

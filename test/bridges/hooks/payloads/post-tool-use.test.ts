@@ -1,6 +1,8 @@
 // Unit test for the PostToolUse payload translator (PAYL-01 + TOOL-01 / D-60-04).
 
 import assert from "node:assert/strict";
+import { homedir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { translatePostToolUse } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts";
@@ -52,6 +54,28 @@ test("maps a successful built-in tool to the complete PostToolUse envelope", () 
   assert.deepStrictEqual(payload, expectedPayload);
   assert.notStrictEqual(payload.tool_input, toolInput);
   assert.deepStrictEqual(payload.tool_response, expectedPayload.tool_response);
+});
+
+test("projects a native find result under its expanded search root", () => {
+  const event = {
+    type: "tool_result",
+    toolCallId: "find-home",
+    toolName: "find",
+    input: { path: "@~/docs", pattern: "*.txt" },
+    content: [{ type: "text", text: "a.txt" }],
+    details: undefined,
+    isError: false,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "find-session",
+    transcriptPath: "/sessions/find.jsonl",
+    cwd: "/workspace",
+  } satisfies TranslationContext;
+
+  assert.deepStrictEqual(translatePostToolUse(event, context).tool_response, {
+    filenames: [path.join(homedir(), "docs", "a.txt")],
+    numFiles: 1,
+  });
 });
 
 for (const { name, toolName, input, expected, expectedName } of [

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { homedir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { searchShellToolResponse } from "../../../extensions/pi-claude-marketplace/bridges/hooks/tool-result-search-shell.ts";
@@ -133,6 +135,25 @@ test("glob excludes byte-cut partial records and ambiguous names", () => {
     ),
     { filenames: ["/work/src/single.ts"], numFiles: 1 },
   );
+});
+
+test("glob resolves native search roots before reporting a filename", () => {
+  for (const { root, expected } of [
+    { root: "~/docs", expected: path.join(homedir(), "docs", "a.txt") },
+    { root: "@~/docs", expected: path.join(homedir(), "docs", "a.txt") },
+    { root: "@src", expected: "/work/src/a.txt" },
+    { root: "file:///work/my%20docs", expected: "/work/my docs/a.txt" },
+    { root: "src\u00a0files", expected: "/work/src files/a.txt" },
+  ]) {
+    assert.deepStrictEqual(
+      searchShellToolResponse(
+        result("find", [{ type: "text", text: "a.txt" }], undefined, { path: root }),
+        "/work",
+      ),
+      { filenames: [expected], numFiles: 1 },
+      root,
+    );
+  }
 });
 
 test("unsupported or contentless results fall through unchanged", () => {
