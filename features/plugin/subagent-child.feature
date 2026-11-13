@@ -1,8 +1,8 @@
 Feature: Plugin subagent child
 
   A load in a pi-subagents background child changes nothing installed, yet loads the installed
-  components (D-MB-12). Stand-ins: a profile Pi with the runner's marker for the child, a one-shot
-  json-mode Pi for the next parent load, a scripted model, recording hooks, and a local marketplace.
+  components (D-MB-12), and a child runs a plugin's tool hooks but no main-session hook (D-PG3-08). Stand-ins: Pis with
+  the runner's marker beside a main Pi, a json-mode Pi, a scripted model, recording hooks, and a local marketplace.
 
   Scenario: A background child's load with autoapply on leaves a pending install, uninstall, and update for the next parent load
     Given the marketplace "fixtures" is published as a dir source
@@ -195,29 +195,201 @@ Feature: Plugin subagent child
       | 2    | assistant   | tool call bash {"command":"echo from-model"} |
       | 2    | tool result | bash returned: from-model\n                  |
 
-  Scenario: A background child runs tool hooks without parent lifecycle hooks
+  @mcp
+  Scenario: A child runs tool hooks without main-session hooks
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
-      | name       | event            | matcher |
-      | start      | SessionStart     |         |
-      | prompt     | UserPromptSubmit |         |
-      | before     | PreToolUse       | Bash    |
-      | after      | PostToolUse      | Bash    |
-      | ending     | SessionEnd       |         |
-      | stop       | Stop             |         |
-      | stop-error | StopFailure      |         |
+      | name         | event              | matcher | form   | on reentry | output                                     |
+      | start        | SessionStart       |         |        |            |                                            |
+      | prompt       | UserPromptSubmit   |         |        |            |                                            |
+      | before       | PreToolUse         | *       |        |            |                                            |
+      | after        | PostToolUse        | *       |        |            |                                            |
+      | failure      | PostToolUseFailure | *       |        |            |                                            |
+      | stop         | Stop               |         | script | allow      | {"decision":"block","reason":"keep going"} |
+      | stop-error   | StopFailure        |         |        |            |                                            |
+      | pre-compact  | PreCompact         | *       |        |            |                                            |
+      | post-compact | PostCompact        | *       |        |            |                                            |
+      | ending       | SessionEnd         |         |        |            |                                            |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given pi runs with the scripted model as a pi-subagents background child
+    Given pi runs with the scripted model and the mcp implementation as a pi-subagents background child
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      |       | read | {"path": "missing.txt"}        |
+      | Done. |      |                                |
+    When the user prompts "run the tools" in pi's startup session
+    Then the hooks record these runs:
+      | event              | session | tool name | tool input                                | tool response                                                                      | error                                                                 | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse         | first   | Bash      | {"command":"echo from-model"}             |                                                                                    |                                                                       |              | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse        | first   | Bash      | {"command":"echo from-model"}             | {"interrupted":false,"structuredContent":[{"type":"text","text":"from-model\\n"}]} |                                                                       |              | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse         | first   | Read      | {"file_path":"{project dir}/missing.txt"} |                                                                                    |                                                                       |              | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{project dir}/missing.txt"} |                                                                                    | ENOENT: no such file or directory, access '{project dir}/missing.txt' | false        | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                                                               |
+      | 1    | user        | run the tools                                                                      |
+      | 2    | user        | run the tools                                                                      |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"}                                       |
+      | 2    | tool result | bash returned: from-model\n                                                        |
+      | 3    | user        | run the tools                                                                      |
+      | 3    | assistant   | tool call bash {"command":"echo from-model"}                                       |
+      | 3    | tool result | bash returned: from-model\n                                                        |
+      | 3    | assistant   | tool call read {"path":"missing.txt"}                                              |
+      | 3    | tool result | read failed: ENOENT: no such file or directory, access '{project dir}/missing.txt' |
+
+  @mcp
+  Scenario: A child ignores a Stop hook that would continue the main session
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event      | matcher | form   | on reentry | output                                     |
+      | before | PreToolUse | *       |        |            |                                            |
+      | stop   | Stop       |         | script | allow      | {"decision":"block","reason":"keep going"} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given pi runs with the scripted model and the mcp implementation as a pi-subagents background child
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
       | Done. |      |                                |
-    When the user prompts "run the echo"
+    When the user prompts "finish up" in pi's startup session
     Then the hooks record these runs:
-      | event       | tool name | CLAUDECODE | CLAUDE_CODE_SESSION_ID | CLAUDE_PLUGIN_DATA                                         | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PROJECT_DIR | CLAUDE_SESSION_ID | arguments | cwd           | session | tool input                    | tool response                                                                                 | transcript path |
-      | PreToolUse  | Bash      | 1          | first                  | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {home}/marketplaces/fixtures/plugins/demo | {project dir}      | first             | before    | {project dir} | first   | {"command":"echo from-model"} |                                                                                               |                 |
-      | PostToolUse | Bash      | 1          | first                  | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {home}/marketplaces/fixtures/plugins/demo | {project dir}      | first             | after     | {project dir} | first   | {"command":"echo from-model"} | {"interrupted":false,"structuredContent":[{"type":"text","text":"from-model\\n"}]} |                 |
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                         |
+      | 1    | user        | finish up                                    |
+      | 2    | user        | finish up                                    |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"} |
+      | 2    | tool result | bash returned: from-model\n                  |
+
+  @mcp
+  Scenario: Child compaction runs no main-session hooks
+    Given pi keeps only one recent token when the hooks session compacts
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name         | event        | matcher |
+      | start        | SessionStart | *       |
+      | before       | PreToolUse   | *       |
+      | pre-compact  | PreCompact   | *       |
+      | post-compact | PostCompact  | *       |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given pi runs with the scripted model and the mcp implementation as a pi-subagents background child
+    Given the scripted model plays these steps:
+      | reply      | tool | arguments                      | context tokens |
+      |            | bash | {"command": "echo from-model"} |                |
+      | Hello.     |      |                                | 120000         |
+      | Summary A. |      |                                |                |
+    When the user prompts "hello" in pi's startup session
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then pi compacts the session once for its context threshold
+
+  @mcp
+  Scenario: A main session still runs its lifecycle hooks
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name         | event              | matcher | form   | on reentry | output                                     |
+      | start        | SessionStart       |         |        |            |                                            |
+      | prompt       | UserPromptSubmit   |         |        |            |                                            |
+      | before       | PreToolUse         | *       |        |            |                                            |
+      | after        | PostToolUse        | *       |        |            |                                            |
+      | failure      | PostToolUseFailure | *       |        |            |                                            |
+      | stop         | Stop               |         | script | allow      | {"decision":"block","reason":"keep going"} |
+      | stop-error   | StopFailure        |         |        |            |                                            |
+      | pre-compact  | PreCompact         | *       |        |            |                                            |
+      | post-compact | PostCompact        | *       |        |            |                                            |
+      | ending       | SessionEnd         |         |        |            |                                            |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given pi runs with the scripted model and the mcp implementation
+    Given the scripted model plays these steps:
+      | reply  | tool | arguments                      |
+      |        | bash | {"command": "echo from-model"} |
+      |        | read | {"path": "missing.txt"}        |
+      | Done.  |      |                                |
+      | Fixed. |      |                                |
+    When the user prompts "run the tools" in pi's startup session and the stop hooks send the turn back
+    Then the hooks record these runs:
+      | event              | session | source  | prompt        | tool name | tool input                                | tool response                                                                      | error                                                                 | is interrupt | last assistant message | stop hook active | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionStart       | first   | startup |               |           |                                           |                                                                                    |                                                                       |              |                        |                  | {project dir} |                 | start     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
+      | UserPromptSubmit   | first   |         | run the tools |           |                                           |                                                                                    |                                                                       |              |                        |                  | {project dir} |                 | prompt    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo |                                                                           | first                  | first             | 1          |
+      | PreToolUse         | first   |         |               | Bash      | {"command":"echo from-model"}             |                                                                                    |                                                                       |              |                        |                  | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo |                                                                           | first                  | first             | 1          |
+      | PostToolUse        | first   |         |               | Bash      | {"command":"echo from-model"}             | {"interrupted":false,"structuredContent":[{"type":"text","text":"from-model\\n"}]} |                                                                       |              |                        |                  | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo |                                                                           | first                  | first             | 1          |
+      | PreToolUse         | first   |         |               | Read      | {"file_path":"{project dir}/missing.txt"} |                                                                                    |                                                                       |              |                        |                  | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo |                                                                           | first                  | first             | 1          |
+      | PostToolUseFailure | first   |         |               | Read      | {"file_path":"{project dir}/missing.txt"} |                                                                                    | ENOENT: no such file or directory, access '{project dir}/missing.txt' | false        |                        |                  | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo |                                                                           | first                  | first             | 1          |
+      | Stop               | first   |         |               |           |                                           |                                                                                    |                                                                       |              | Done.                  | false            | {project dir} |                 | stop      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo |                                                                           | first                  | first             | 1          |
+      | Stop               | first   |         |               |           |                                           |                                                                                    |                                                                       |              | Fixed.                 | true             | {project dir} |                 | stop      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo |                                                                           | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                                                               |
+      | 1    | user        | run the tools                                                                      |
+      | 2    | user        | run the tools                                                                      |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"}                                       |
+      | 2    | tool result | bash returned: from-model\n                                                        |
+      | 3    | user        | run the tools                                                                      |
+      | 3    | assistant   | tool call bash {"command":"echo from-model"}                                       |
+      | 3    | tool result | bash returned: from-model\n                                                        |
+      | 3    | assistant   | tool call read {"path":"missing.txt"}                                              |
+      | 3    | tool result | read failed: ENOENT: no such file or directory, access '{project dir}/missing.txt' |
+      | 4    | user        | run the tools                                                                      |
+      | 4    | assistant   | tool call bash {"command":"echo from-model"}                                       |
+      | 4    | tool result | bash returned: from-model\n                                                        |
+      | 4    | assistant   | tool call read {"path":"missing.txt"}                                              |
+      | 4    | tool result | read failed: ENOENT: no such file or directory, access '{project dir}/missing.txt' |
+      | 4    | assistant   | Done.                                                                              |
+      | 4    | user        | Stop hook feedback:\nkeep going                                                    |
+
+  @mcp
+  Scenario: Loading and stopping a child leaves parent and sibling hooks running
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name         | event            | matcher | form   | async rewake | waits |
+      | parent-wait  | UserPromptSubmit | *       | script | true         | true  |
+      | sibling-wait | PreToolUse       | Bash    | script | true         | true  |
+      | child-wait   | PreToolUse       | Read    | script | true         | true  |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the project holds the file "notes.txt" with the text "child notes\n" for a tool hook
+    Given pi runs with the scripted model and the mcp implementation
+    Given the scripted model plays these steps:
+      | reply         | tool | arguments                   |
+      | Parent done.  |      |                             |
+      |               | bash | {"command": "echo sibling"} |
+      | Sibling done. |      |                             |
+      |               | read | {"path": "notes.txt"}       |
+      | Child done.   |      |                             |
+    Given the user has prompted "wait in the parent" and the hook "parent-wait" goes on in the background
+    Given a pi-subagents background sibling child has prompted "run the sibling" and the hook "sibling-wait" goes on in the background
+    When a pi-subagents background child loads, runs the hook "child-wait" for "read the notes" until the hook ends, starts a new session, and stops
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                              | cwd           | transcript path | arguments  | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Read      | {"file_path":"{project dir}/notes.txt"} | {project dir} |                 | child-wait | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hook processes record these lifecycle events:
+      | hook       | phase | exit code |
+      | child-wait | start |           |
+      | child-wait | end   | 0         |
+    Then these hook processes have started and not ended:
+      | hook         | running |
+      | parent-wait  | true    |
+      | sibling-wait | true    |
+    When the user releases the waiting hooks "parent-wait" and "sibling-wait"
+    Then the hook processes record these lifecycle events in any order:
+      | hook         | phase | exit code |
+      | parent-wait  | end   | 0         |
+      | sibling-wait | end   | 0         |

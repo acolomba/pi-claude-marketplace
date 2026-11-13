@@ -56,6 +56,48 @@ test("maps a successful built-in tool to the complete PostToolUse envelope", () 
   assert.deepStrictEqual(payload.tool_response, expectedPayload.tool_response);
 });
 
+for (const identity of [
+  { agentType: "reviewer", sessionId: "child-session" },
+  undefined,
+  { agentType: "reviewer", sessionId: "other-session" },
+]) {
+  test(`includes only matching child identity in a successful result: ${identity?.sessionId ?? "absent"}`, () => {
+    // arrange
+    const event = {
+      type: "tool_result",
+      toolCallId: "child-result",
+      toolName: "catalog",
+      input: { query: "entry" },
+      content: [{ type: "text", text: "found" }],
+      details: undefined,
+      isError: false,
+    } satisfies ToolResultEvent;
+    const context = {
+      sessionId: "child-session",
+      transcriptPath: "/sessions/child.jsonl",
+      cwd: "/workspace",
+      ...(identity === undefined ? {} : { childIdentity: identity }),
+    } satisfies TranslationContext;
+
+    // act
+    const payload = translatePostToolUse(event, context);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "child-session",
+      transcript_path: "/sessions/child.jsonl",
+      cwd: "/workspace",
+      hook_event_name: "PostToolUse",
+      tool_name: "catalog",
+      tool_input: { query: "entry" },
+      tool_response: [{ type: "text", text: "found" }],
+      ...(identity?.sessionId === context.sessionId
+        ? { agent_type: "reviewer", agent_id: "child-session" }
+        : {}),
+    });
+  });
+}
+
 test("projects a native find result under its expanded search root", () => {
   const event = {
     type: "tool_result",
