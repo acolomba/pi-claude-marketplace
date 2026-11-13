@@ -257,8 +257,7 @@ function toolResultPatch(
 
   if (
     isDeepStrictEqual(decoded.content, event.content) &&
-    (decoded.structuredContent === undefined ||
-      isDeepStrictEqual(decoded.structuredContent, event.structuredContent))
+    isDeepStrictEqual(decoded.structuredContent, event.structuredContent)
   ) {
     return undefined;
   }

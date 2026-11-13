@@ -125,6 +125,31 @@ test("a generic content-only patch clears structured output and explicit-null de
   assert.strictEqual(JSON.stringify({ result, observed }).includes("OLD_"), false);
 });
 
+test("an MCP content-only patch clears structured output when public text is unchanged", async () => {
+  const observed: ToolResultEvent[] = [];
+  const runner = runnerWith([
+    (incoming) =>
+      adapter(
+        {
+          kind: "mutate",
+          updatedToolOutput: { content: [{ type: "text", text: "public" }] },
+        },
+        incoming,
+      ),
+    (incoming) => {
+      observed.push(structuredClone(incoming));
+    },
+  ]);
+  const result = await runner.emitToolResult(event("mcp__catalog__lookup", "public"));
+  assert.deepStrictEqual(result?.content, [{ type: "text", text: "public" }]);
+  assert.strictEqual(result?.details, null);
+  assert.strictEqual(result?.structuredContent, undefined);
+  assert.deepStrictEqual(observed[0]?.content, result?.content);
+  assert.strictEqual(observed[0]?.details, null);
+  assert.strictEqual(observed[0]?.structuredContent, undefined);
+  assert.strictEqual(JSON.stringify({ result, observed }).includes("OLD_"), false);
+});
+
 test("an image replacement removes the earlier image and its note", async () => {
   const observed: ToolResultEvent[] = [];
   const runner = runnerWith([
