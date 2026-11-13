@@ -17,6 +17,14 @@ import type { AssistantMessage } from "../../platform/pi-api.ts";
  */
 export const STOP_OVERRIDE_CAP = 8;
 
+/** One runtime's journal identity, fixed at its first child spawn in a session. */
+export interface ChildJournalOwner {
+  readonly ownerPid: number;
+  readonly sessionId: string;
+  readonly ownerToken: string;
+  readonly loc: ScopedLocations;
+}
+
 /** One live async-rewake child owned by a hooks runtime. */
 export interface HooksRuntimeChildEntry {
   readonly dispatchId: string;
@@ -34,6 +42,7 @@ export interface HooksRuntimeChildEntry {
   readonly stderr: StreamText;
   readonly capturedGeneration: number;
   readonly loc: ScopedLocations;
+  readonly persistenceOwner?: ChildJournalOwner;
 }
 
 /** Persisted PID-table row derived from a runtime-owned child. */
@@ -111,8 +120,18 @@ export interface HooksRuntime {
   readonly recordRunStart: (startedByRewake: boolean) => void;
   readonly registerChild: (entry: HooksRuntimeChildEntry) => void;
   readonly takeChild: (dispatchId: string) => HooksRuntimeChildEntry | undefined;
-  readonly pidTableEntries: (loc: ScopedLocations) => readonly HooksRuntimePidEntry[];
-  readonly shutdownChildren: () => void;
+  readonly persistenceOwner: (
+    loc: ScopedLocations,
+    sessionId: string,
+    ownerToken: string,
+  ) => ChildJournalOwner;
+  readonly persistenceOwners: () => readonly ChildJournalOwner[];
+  readonly forgetPersistenceOwners: () => void;
+  readonly pidTableEntries: (
+    loc: ScopedLocations,
+    owner?: ChildJournalOwner,
+  ) => readonly HooksRuntimePidEntry[];
+  readonly shutdownChildren: () => readonly HooksRuntimeChildEntry[];
   readonly runPidTableOperation: (key: string, operation: () => Promise<void>) => Promise<void>;
 }
 
@@ -165,6 +184,7 @@ export function createHooksRuntime(): HooksRuntime {
   const parsedConfigCache = new Map<string, CacheEntry>();
   const routingTable = new Map<BucketAEvent, readonly RoutingEntry[]>();
   const children = new Map<string, HooksRuntimeChildEntry>();
+  const childOwners = new Map<string, ChildJournalOwner>();
   const pidTableOperations = new Map<string, Promise<void>>();
   let generation = 0;
   let trustedProject: string | undefined;
@@ -308,10 +328,40 @@ export function createHooksRuntime(): HooksRuntime {
       return entry;
     },
 
-    pidTableEntries(loc: ScopedLocations): readonly HooksRuntimePidEntry[] {
+    persistenceOwner(
+      loc: ScopedLocations,
+      sessionId: string,
+      ownerToken: string,
+    ): ChildJournalOwner {
+      const key = `${loc.dataRoot}\0${sessionId}`;
+      const existing = childOwners.get(key);
+      if (existing !== undefined) {
+        return existing;
+      }
+
+      const owner: ChildJournalOwner = { ownerPid: process.pid, sessionId, ownerToken, loc };
+      childOwners.set(key, owner);
+      return owner;
+    },
+
+    persistenceOwners(): readonly ChildJournalOwner[] {
+      return [...childOwners.values()];
+    },
+
+    forgetPersistenceOwners(): void {
+      childOwners.clear();
+    },
+
+    pidTableEntries(
+      loc: ScopedLocations,
+      owner?: ChildJournalOwner,
+    ): readonly HooksRuntimePidEntry[] {
       const entries: HooksRuntimePidEntry[] = [];
       for (const entry of children.values()) {
-        if (entry.loc === loc || entry.loc.extensionRoot === loc.extensionRoot) {
+        if (
+          (entry.loc === loc || entry.loc.extensionRoot === loc.extensionRoot) &&
+          entry.persistenceOwner === owner
+        ) {
           entries.push({
             pid: entry.pid,
             dispatchId: entry.dispatchId,
@@ -326,7 +376,8 @@ export function createHooksRuntime(): HooksRuntime {
       return entries;
     },
 
-    shutdownChildren(): void {
+    shutdownChildren(): readonly HooksRuntimeChildEntry[] {
+      const stopped = [...children.values()];
       for (const entry of children.values()) {
         entry.ladder.cancel();
         try {
@@ -337,6 +388,7 @@ export function createHooksRuntime(): HooksRuntime {
       }
 
       children.clear();
+      return stopped;
     },
 
     runPidTableOperation(key: string, operation: () => Promise<void>): Promise<void> {

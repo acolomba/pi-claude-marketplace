@@ -1077,7 +1077,7 @@ async function registerHooksBridgeWith(
   // new runtime for every load, so in production this walk finds nothing:
   // the user-scope reap below and the project hydrate's reap stop an earlier
   // load's children, on /reload and after a crash alike (D-BG-207).
-  shutdownInMemoryChildren(runtime);
+  void shutdownInMemoryChildren(runtime);
 
   const hydrated = await hydrateCacheFromDisk(opts, reader, routingState, generationIsCurrent);
   for (const { loc } of hydrated) {

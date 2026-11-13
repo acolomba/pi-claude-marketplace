@@ -593,6 +593,57 @@ test("owns child removal, PID snapshots, and shutdown per runtime", () => {
   ]);
 });
 
+test("keeps journal owners and PID rows separate by session and runtime", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const siblingRuntime = createHooksRuntime();
+  const loc = locationsFor("project", "/workspace");
+  const calls: string[] = [];
+  const firstOwner = runtime.persistenceOwner(loc, "session-a", "token-a");
+  const sameOwner = runtime.persistenceOwner(loc, "session-a", "different-token");
+  const laterOwner = runtime.persistenceOwner(loc, "session-b", "token-b");
+  const siblingOwner = siblingRuntime.persistenceOwner(loc, "session-a", "sibling-token");
+  runtime.registerChild({
+    ...runtimeChildEntry("first", 11, calls, loc),
+    persistenceOwner: firstOwner,
+  });
+  runtime.registerChild({
+    ...runtimeChildEntry("later", 12, calls, loc),
+    persistenceOwner: laterOwner,
+  });
+  siblingRuntime.registerChild({
+    ...runtimeChildEntry("sibling", 13, calls, loc),
+    persistenceOwner: siblingOwner,
+  });
+
+  // act
+  const firstRows = runtime.pidTableEntries(loc, firstOwner);
+  const laterRows = runtime.pidTableEntries(loc, laterOwner);
+  const parentRows = runtime.pidTableEntries(loc);
+  const owners = runtime.persistenceOwners();
+  runtime.shutdownChildren();
+  runtime.forgetPersistenceOwners();
+
+  // assert
+  assert.strictEqual(sameOwner, firstOwner);
+  assert.notStrictEqual(siblingOwner, firstOwner);
+  assert.deepStrictEqual(owners, [firstOwner, laterOwner]);
+  assert.deepStrictEqual(
+    firstRows.map((row) => row.dispatchId),
+    ["first"],
+  );
+  assert.deepStrictEqual(
+    laterRows.map((row) => row.dispatchId),
+    ["later"],
+  );
+  assert.deepStrictEqual(parentRows, []);
+  assert.deepStrictEqual(runtime.persistenceOwners(), []);
+  assert.deepStrictEqual(
+    siblingRuntime.pidTableEntries(loc, siblingOwner).map((row) => row.dispatchId),
+    ["sibling"],
+  );
+});
+
 test("serializes each PID path and continues after an operation rejects", async () => {
   // arrange
   const runtime = createHooksRuntime();
