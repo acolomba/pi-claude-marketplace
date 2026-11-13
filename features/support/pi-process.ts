@@ -243,6 +243,10 @@ Before(async (): Promise<void> => {
   }
 
   const { skills, payloads } = await startSession(run.pi);
+  // The new session ends the old one, which runs the SessionEnd hooks of a
+  // plugin the last scenario installed through this Pi (D-CF5-26). Their
+  // recorder writes into the harness directory emptied above, so it goes again.
+  await rm(harnessDirectory(run.sandbox.home), { recursive: true, force: true });
   // The new session ends the old session's MCP connections, so every stub
   // that the shared Pi started exits.
   await waitUntilProcessesExit(stubPids, STUB_EXIT_TIMEOUT_MS);
