@@ -52,8 +52,10 @@ Wave 9 documents the supported contracts, all twelve accepted decisions,
 and task/threat/probe evidence. Its 107-scenario focused run and full gate
 passed. Parent review restored an accidentally removed UserPromptSubmit
 context explanation in `fae378d2`; the combined gate above includes it.
-One recorded scenario filter is stale after per-tool cases were renamed;
-Nyquist validation will refresh it and verify the five current scenarios.
+Nyquist validation corrected the stale scenario filter and verified all five
+current scenarios (75 steps). All 29 tasks have automated coverage; the latest
+combined-tree gate also passes with pi-subagents 0.88.1. Security, code review
+and goal verification are next.
 
 Wave 8 selects MCP output aliases after identity recovery, preserves native
 MCP/custom result schemas, and replaces all stale result carriers. Both MCP

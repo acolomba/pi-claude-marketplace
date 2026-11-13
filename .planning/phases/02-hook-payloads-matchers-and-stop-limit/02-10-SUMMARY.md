@@ -91,7 +91,7 @@ status: complete
 
 Both task commits passed normal hooks. The first Task 1 message attempt failed gitlint on a literal newline escape and made no commit; its corrected retry passed. Neither task staged a build input, so the commit hooks correctly skipped `npm run check:commit`. No commit hook was bypassed.
 
-3. **Task 1 correction: Restore the existing prompt context explanation**: `fae378d2b58ea520a6557a61d198c77e71a7d03e`
+3. **Task 1: Restore the existing prompt context explanation (parent correction)**: `fae378d2b58ea520a6557a61d198c77e71a7d03e`
 
 ## Verification
 

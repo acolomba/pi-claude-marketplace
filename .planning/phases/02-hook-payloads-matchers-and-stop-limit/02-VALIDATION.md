@@ -1,9 +1,9 @@
 ---
 phase: "02"
 slug: "hook-payloads-matchers-and-stop-limit"
-status: execution-verified
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-11-12"
 ---
 
@@ -38,7 +38,7 @@ Ten plans contain 29 tasks in nine waves. Commands below are copied from the exe
 | 02-01-02 | 02-01 | 1 | PG-HOOK-01 | T-02-01, T-02-02, T-02-03 | Expand the live codec to Write, Bash and PowerShell | owner + cucumber | `npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/hooks/tool-input.ts`<br>**fails_when:** Any translated type/range or supported/unsupported mixture lacks owner coverage, or a malformed timeout is accepted.<br><br>`npm run test:cucumber:profile -- --profile adapter features/hook/tool-use.feature`<br>**fails_when:** A real Write/Bash hook cannot rewrite its native call, original-call fallback is partial, or existing tool-use behavior regresses. | Create declared new paths before this task's first command; see creation map. | focused pass; [evidence](02-01-SUMMARY.md) `a3ee93a2cfd320f8116b593dbc5c8eef26fa7972` |
 | 02-01-03 | 02-01 | 1 | PG-HOOK-01 | T-02-01, T-02-02, T-02-03 | Hold native predicates, path normalization and hostile rewrites at the boundary | owner + cucumber | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/tool-input.test.ts test/bridges/hooks/event-adapters.test.ts test/bridges/hooks/dispatch.test.ts`<br>**fails_when:** Native conditions read translated keys, an invalid candidate partially mutates input, or a sensitive value reaches an ignored-rewrite notice.<br><br>`npx cucumber-js --profile adapter --name "A native path condition\|An unsupported rewrite notice" features/hook/tool-use.feature`<br>**fails_when:** The condition misses its native path or the notice contains the secret fixture value. | Create declared new paths before this task's first command; see creation map. | focused pass; [evidence](02-01-SUMMARY.md) `a937b4cb3595fd0930838edf81a34e896ea64b1b` |
 | 02-02-01 | 02-02 | 2 | PG-HOOK-01 | T-02-04, T-02-05 | Translate equivalent Glob and Grep requests on the live hook path | owner + cucumber | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/tool-input-search.test.ts test/bridges/hooks/tool-input.test.ts`<br>**fails_when:** Mode defaults, literal patterns, caps, aliases or omitted fields round-trip with changed semantics.<br><br>`npx cucumber-js --profile adapter --name "A Glob hook\|A Grep hook\|An unsupported Grep rewrite" features/hook/tool-use.feature`<br>**fails_when:** A real search runs a partial candidate, the hook sees native keys, or the notice claims a rejected option was enforced. | Create declared new paths before this task's first command; see creation map. | focused pass; [evidence](02-02-SUMMARY.md) `c69bf7affbaea9fb648777ce0247b65a8e294930` |
-| 02-02-02 | 02-02 | 2 | PG-HOOK-01 | T-02-04, T-02-05 | Send translated input to successful result hooks | owner + cucumber | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/payloads/post-tool-use.test.ts test/domain/components/hook-tool-names.test.ts`<br>**fails_when:** The successful event keeps raw mapped input keys or any locked name changes.<br><br>`npx cucumber-js --profile adapter --name "Successful tool hooks receive the translated input that executed" features/hook/tool-use.feature`<br>**fails_when:** Recorded successful stdin differs from the executed call's translated input. | Tracked owners / prior-created artifacts | focused pass; [evidence](02-02-SUMMARY.md) `f5d604718b0cfd60e7c3e7cb2478e41cca9f0651` |
+| 02-02-02 | 02-02 | 2 | PG-HOOK-01 | T-02-04, T-02-05 | Send translated input to successful result hooks | owner + cucumber | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/payloads/post-tool-use.test.ts test/domain/components/hook-tool-names.test.ts`<br>**fails_when:** The successful event keeps raw mapped input keys or any locked name changes.<br><br>`npx cucumber-js --profile adapter --name "File result hooks receive\|Search result hooks receive\|A Bash result hook receives" features/hook/tool-use.feature`<br>**fails_when:** Recorded successful stdin differs from the executed call's translated input. | Tracked owners / prior-created artifacts | focused pass; [evidence](02-02-SUMMARY.md) `f5d604718b0cfd60e7c3e7cb2478e41cca9f0651` |
 | 02-02-03 | 02-02 | 2 | PG-HOOK-01 | T-02-04, T-02-05 | Carry the same input contract through failure and background payload construction | owner + cucumber | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/payloads/post-tool-use-failure.test.ts test/architecture/hooks-translators.test.ts test/bridges/hooks/async-rewake/registry.test.ts`<br>**fails_when:** A translator lane sees a different input contract or failure becomes a fabricated successful result.<br><br>`npm run test:cucumber:profile -- --profile adapter features/hook/tool-failure.feature`<br>**fails_when:** The failed real tool bypasses translation or failed output replacement becomes effective. | Tracked owners / prior-created artifacts | focused pass; [evidence](02-02-SUMMARY.md) `45317714112907adbb3930cf06744deb509a4713` |
 | 02-03-01 | 02-03 | 4 | PG-HOOK-01 | T-02-06, T-02-07, T-02-08 | Run one preflight transaction over every edit pair | owner + cucumber | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/dispatch.test.ts test/bridges/hooks/event-adapters.test.ts`<br>**fails_when:** A pair is omitted, deduplicated, applied early, evaluated with hook-shaped predicate input, or committed after a generation change.<br><br>`npx cucumber-js --profile adapter --name "A hook sees each edit pair\|An edit hook rewrites its corresponding pair" features/hook/tool-use.feature`<br>**fails_when:** The real recorder misses a pair, the wrong pair changes, or more than one native edit executes. | Tracked owners / prior-created artifacts | focused pass; [evidence](02-03-SUMMARY.md) `1e07d0645248cf08fcec54d5f7c697c6cb32358f` |
 | 02-03-02 | 02-03 | 4 | PG-HOOK-01 | T-02-06, T-02-07, T-02-08 | Prove later-pair denial with a real conditional command hook | owner + cucumber | `npx cucumber-js --profile adapter --name "A denial of the second edit pair\|A stop from a later edit pair\|An unsupported later edit pair" features/hook/tool-use.feature`<br>**fails_when:** The file changes on denial/stop, only part of the original batch executes on fallback, or any pair invocation is missing.<br><br>`npm run check:features`<br>**fails_when:** The new fixture-facing step is undefined, ambiguous, unused, or violates feature layout. | Tracked owners / prior-created artifacts | focused pass; [evidence](02-03-SUMMARY.md) `e9cf74c5a520721c86c316cea144b536d0444ddb` |
@@ -186,6 +186,23 @@ PowerShell input/output claims have [input](../../../test/bridges/hooks/tool-inp
 
 While Task 2's three planning Markdown files were dirty, `git diff --binary 043118e0d20044fbe737b25d3fdc10e6d5e2b621 -- . ':(exclude,glob).planning/**/*.md' | sha256sum` returned the empty SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`; `git diff --quiet` on the same pathspec exited 0, `git ls-files --others --exclude-standard` listed nothing, and `git diff --check` exited 0. Recheck that comparison after the planning-only Task 2 and SUMMARY commits. This same-input result is Wave 9's execution gate and can be reused for phase/handoff evaluation only while those exact inputs and Node version remain unchanged. The parent owns the post-merge combined-tree gate and phase verifier; this worktree's evidence does not declare the phase complete. LS schema, live PowerShell execution, upstream legacy MCP field intent, Phase 1 ambient/long-name constraints, Phase 5 event/env-var work and complete wrappers remain outside proven parity.
 
+## Validation filter correction (2026-11-13)
+
+Task 02-02-02's original success-input scenario filter selected zero scenarios
+(`/tmp/pg2-validation-old-filter.log`). Plans 02-05 and 02-06 renamed its five
+Read, Write, Glob, Grep and Bash cases while retaining their complete PreToolUse
+and PostToolUse stdin assertions. The map now selects those existing cases with
+`File result hooks receive|Search result hooks receive|A Bash result hook receives`.
+No test or assertion changed.
+
+`npx cucumber-js --profile adapter --name 'File result hooks receive|Search result hooks receive|A Bash result hook receives' features/hook/tool-use.feature`
+exited **0** at `d1dac054b446d0af0fa4c99246fd7d9f69fa493b`, Node v26.13.0:
+**5 scenarios and 75 steps passed**, seed 666796, 28.754s reported duration.
+Log: `/tmp/pg2-validation-current-filter-host.log`. The initial sandbox attempt
+failed before scenarios with localhost `listen EPERM`; the approved host-permission
+rerun above is the passing behavioral evidence. The mapping gap is filled;
+phase status and Nyquist sign-off remain for the parent verifier.
+
 ## Validation Sign-Off
 
 - [x] All 29 tasks have concrete automated verification with observable fails_when conditions.
@@ -194,6 +211,20 @@ While Task 2's three planning Markdown files were dirty, `git diff --binary 0431
 - [x] No watch-mode flags.
 - [x] Actual focused and full-gate feedback latency recorded.
 - [x] Full combined-tree gate passed at the recorded input commit.
-- [ ] `nyquist_compliant: true` set only after validation.
+- [x] `nyquist_compliant: true` set after validation.
 
-**Approval:** execution evidence recorded; parent phase verification and post-merge gate remain pending.
+**Approval:** validation audit passed on 2026-11-13; security review, code review and goal verification remain separate gates.
+
+## Parent validation sign-off — 2026-11-13
+
+All 29 tasks have automated coverage. The single stale scenario selector was corrected in both this map and plan 02-02; its five existing scenarios passed (75 steps, seed 666796, 28.754s). No assertions were weakened or duplicate tests added.
+
+The latest parent full gate includes the prompt-context documentation correction and pi-subagents 0.88.1 adoption: `npm run check` exited 0 at `2db3b81a9cc97098bee6bc744d451aeab4fe9fad`, Node v26.13.0, 2026-11-13T12:11:32Z to 12:20:59Z (9m 27s). Adapter: 1867 scenarios / 22776 steps (seed 271179); built-in: 161 / 2193 (seed 560790); all 361 direct coverage pairs passed. Log: `/tmp/subagents0881-root-check.log`; proof: `/tmp/subagents0881-root-gate.json`. Exact build-input comparison remains empty; subsequent changes are planning Markdown only.
+
+## Validation Audit 2026-11-13
+
+| Metric | Count |
+|---|---|
+| Gaps found | 1 |
+| Resolved | 1 |
+| Escalated | 0 |
