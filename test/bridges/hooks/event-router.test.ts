@@ -49,7 +49,10 @@ import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HooksHydrationDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
-import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import type {
+  HooksRuntime,
+  HooksRuntimeChildEntry,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -4690,3 +4693,108 @@ test(
     assert.deepStrictEqual(dispatched, []);
   },
 );
+
+function runningAsyncHook(
+  dispatchId: string,
+  claudeEvent: BucketAEvent,
+  loc: HooksRuntimeChildEntry["loc"],
+  signals: string[],
+): HooksRuntimeChildEntry {
+  return {
+    dispatchId,
+    pid: 47_000 + signals.length,
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: dispatchId,
+    claudeEvent,
+    spawnedAt: "2026-11-13T00:00:00.000Z",
+    rewakeMessage: undefined,
+    rewakeSummary: undefined,
+    child: {
+      kill(signal?: NodeJS.Signals | number): boolean {
+        signals.push(`${dispatchId}:${String(signal)}`);
+        return true;
+      },
+    },
+    ladder: { cancel: () => undefined, fired: () => false },
+    stdout: { text: () => "" },
+    stderr: { text: () => "" },
+    capturedGeneration: 0,
+    loc,
+  };
+}
+
+for (const scenario of [
+  {
+    name: "main session quit leaves running async hooks and async SessionEnd hooks alive",
+    child: false,
+    signals: [],
+    running: ["post-tool-use-async", "session-end-async", "session-end-rewake"],
+  },
+  {
+    name: "child session quit stops its running async hooks",
+    child: true,
+    signals: ["post-tool-use-async:SIGKILL"],
+    running: [],
+  },
+] as const) {
+  test(scenario.name, { concurrency: false }, async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-shutdown-async-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    const runtime = createHooksRuntime();
+    t.after(async () => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+    });
+    const loc = locationsFor("project", root);
+    const signals: string[] = [];
+    const { pi, registrations } = makeRecordingPi();
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      // Registers the hook as `spawnAndRegister` does before the dispatch returns.
+      executor: (entry) => {
+        runtime.registerChild(runningAsyncHook(entry.pluginId, entry.claudeEvent, loc, signals));
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    runtime.setRoutingBucket(
+      "SessionEnd",
+      (["async", "rewake"] as const).map((kind) => ({
+        ...preToolUseEntry(`session-end-${kind}`, root),
+        claudeEvent: "SessionEnd",
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+        handlerDecl: {
+          type: "command",
+          command: `run-session-end-${kind}`,
+          ...(kind === "async" ? { async: true } : { asyncRewake: true }),
+        },
+      })),
+    );
+    runtime.registerChild(runningAsyncHook("post-tool-use-async", "PostToolUse", loc, signals));
+    if (scenario.child) {
+      process.env.PI_SUBAGENT_CHILD = "1";
+    } else {
+      delete process.env.PI_SUBAGENT_CHILD;
+    }
+
+    // act
+    await registeredHandler(registrations, "session_shutdown")(
+      { type: "session_shutdown", reason: "quit" },
+      makeContext(root, root),
+    );
+
+    // assert
+    assert.deepStrictEqual(signals, scenario.signals);
+    assert.deepStrictEqual(
+      runtime.pidTableEntries(loc).map((row) => row.dispatchId),
+      scenario.running,
+    );
+  });
+}

@@ -921,10 +921,11 @@ async function prepareSessionStartDataDirs(
 /**
  * The `session_shutdown` callback: it maps Pi's reason once, with the live
  * session mode, and dispatches the Claude-side SessionEnd event (D-CF5-02).
- * Pi `reload` keeps the session, so it runs no SessionEnd (D-CF5-03). Every
- * shutdown drains this runtime's async children, including reload and child
- * sessions. A context whose mode is not a notification mode skips dispatch
- * with a debug line but still runs that cleanup.
+ * Pi `reload` keeps the session, so it runs no SessionEnd (D-CF5-03). In a
+ * pi-subagents child, every shutdown, reload included, drains this runtime's
+ * async children, also when the mode check skips dispatch with a debug line.
+ * A main session leaves its async hooks running, as Claude Code does; the
+ * next load's reap stops what an earlier load left (D-BG-207).
  */
 function sessionShutdownCallback(
   sessionEndHandler: CompositeHandler<"SessionEnd">,
@@ -950,7 +951,9 @@ function sessionShutdownCallback(
       await sessionEndHandler({ reason: claudeSessionEndReason(event.reason, mode) }, ctx);
       return;
     } finally {
-      await shutdownInMemoryChildren(runtime);
+      if (isSubagentChild(process.env)) {
+        await shutdownInMemoryChildren(runtime);
+      }
     }
   };
 }
