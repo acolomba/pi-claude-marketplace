@@ -26,7 +26,7 @@ Feature: Hook tool use
       |       | edit | {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
       | Done. |      |                                                                                                                  |
     When the user prompts "edit both blocks"
-    Then the hooks record these runs:
+    Then the hooks record these runs in any order:
       | event      | session | tool name | tool input                                                                              | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
       | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
@@ -56,11 +56,85 @@ Feature: Hook tool use
       |       | edit | {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
       | Done. |      |                                                                                                                  |
     When the user prompts "rewrite the first edit"
-    Then the hooks record these runs:
+    Then the hooks record these runs in any order:
       | event      | session | tool name | tool input                                                                              | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
       | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the project file "document.txt" has the text "ONE\nmiddle\ntwo\n" after a tool hook
+
+  Scenario: A denial of the second edit pair leaves the whole file unchanged
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event      | matcher | form   | when old string | output                                                                                                                            | matched output                                                                                                                        |
+      | guard | PreToolUse | Edit    | script | second          | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"first","new_string":"ONE"}}} | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"second denied"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                                                                        |
+      |       | edit | {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | Done. |      |                                                                                                                  |
+    When the user prompts "deny the second edit"
+    Then the hooks record these runs in any order:
+      | event      | session | tool name | tool input                                                                              | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the project file "document.txt" has the text "first\nmiddle\nsecond\n" after a tool hook
+
+  Scenario: A stop from a later edit pair prevents the whole call
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event      | matcher | form   | when old string | output                                                                                                                            | matched output                                       |
+      | guard | PreToolUse | Edit    | script | second          | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"first","new_string":"ONE"}}} | {"continue":false,"stopReason":"later stop"} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                                                                        |
+      |       | edit | {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+    When the user prompts "stop the second edit"
+    Then the hooks record these runs in any order:
+      | event      | session | tool name | tool input                                                                              | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the project file "document.txt" has the text "first\nmiddle\nsecond\n" after a tool hook
+
+  Scenario: An unsupported later edit pair keeps every original replacement
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event      | matcher | form   | when old string | output                                                                                                                            | matched output                                                                                                                               |
+      | guard | PreToolUse | Edit    | script | second          | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"first","new_string":"ONE"}}} | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"second","new_string":"TWO","replace_all":true}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                                                                        |
+      |       | edit | {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | Done. |      |                                                                                                                  |
+    When the user prompts "ignore the unsupported edit"
+    Then the hooks record these runs in any order:
+      | event      | session | tool name | tool input                                                                              | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hooks show the user these messages:
+      | severity | text                                                |
+      | info     | PreToolUse:Edit ignored input rewrite (value)       |
+    Then the project file "document.txt" has the text "one\nmiddle\ntwo\n" after a tool hook
 
   Scenario: A PreToolUse hook runs once for a scripted bash call with Claude's tool name and input
     Given pi runs with the scripted model
