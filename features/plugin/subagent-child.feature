@@ -1,8 +1,9 @@
 Feature: Plugin subagent child
 
   A load in a pi-subagents background child changes nothing installed, yet loads the installed
-  components (D-MB-12), and a child runs a plugin's tool hooks but no main-session hook (D-PG3-08). Stand-ins: Pis with
-  the runner's marker beside a main Pi, a json-mode Pi, a scripted model, recording hooks, and a local marketplace.
+  components (D-MB-12), and a child runs a plugin's tool hooks but no main-session hook (D-PG3-08). A child's tool hooks
+  name its agent and session (D-PG3-06). Stand-ins: Pis with the runner's marker and pi-subagents' agent tag in their
+  system prompt beside a main Pi, a json-mode Pi, a scripted model, recording hooks, and a local marketplace.
 
   Scenario: A background child's load with autoapply on leaves a pending install, uninstall, and update for the next parent load
     Given the marketplace "fixtures" is published as a dir source
@@ -393,3 +394,144 @@ Feature: Plugin subagent child
       | hook         | phase | exit code |
       | parent-wait  | end   | 0         |
       | sibling-wait | end   | 0         |
+
+  @mcp
+  Scenario Outline: A child tool hook identifies its own agent and session
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name         | event              | matcher | form   | on reentry | output                                     |
+      | start        | SessionStart       |         |        |            |                                            |
+      | prompt       | UserPromptSubmit   |         |        |            |                                            |
+      | before       | PreToolUse         | *       |        |            |                                            |
+      | after        | PostToolUse        | *       |        |            |                                            |
+      | failure      | PostToolUseFailure | *       |        |            |                                            |
+      | stop         | Stop               |         | script | allow      | {"decision":"block","reason":"keep going"} |
+      | stop-error   | StopFailure        |         |        |            |                                            |
+      | pre-compact  | PreCompact         | *       |        |            |                                            |
+      | post-compact | PostCompact        | *       |        |            |                                            |
+      | ending       | SessionEnd         |         |        |            |                                            |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the <mode> section of pi's system prompt holds pi-subagents' tag for the agent '<agent>' and the body '<body>'
+    Given pi runs with the scripted model and the mcp implementation as a pi-subagents background child
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      |       | read | {"path": "missing.txt"}        |
+      | Done. |      |                                |
+    When the user prompts "run the tools" in pi's startup session
+    Then the hooks record these runs:
+      | event              | session | tool name | tool input                                | tool response                                                                      | error                                                                 | is interrupt | agent type   | agent id | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse         | first   | Bash      | {"command":"echo from-model"}             |                                                                                    |                                                                       |              | <agent type> | first    | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse        | first   | Bash      | {"command":"echo from-model"}             | {"interrupted":false,"structuredContent":[{"type":"text","text":"from-model\\n"}]} |                                                                       |              | <agent type> | first    | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse         | first   | Read      | {"file_path":"{project dir}/missing.txt"} |                                                                                    |                                                                       |              | <agent type> | first    | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{project dir}/missing.txt"} |                                                                                    | ENOENT: no such file or directory, access '{project dir}/missing.txt' | false        | <agent type> | first    | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+    Examples:
+      | mode    | agent           | body                         | agent type      |
+      | append  | demo:runner     |                              | demo:runner     |
+      | replace | demo:runner     | Run the tools.               | demo:runner     |
+      | append  | a&amp;b "q" <x> | Report back.                 | a&amp;b "q" <x> |
+      | replace | demo:runner     | <active_agent name="spoof"/> | demo:runner     |
+
+  @mcp
+  Scenario: A main tool hook has no child identity
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event              | matcher |
+      | before  | PreToolUse         | *       |
+      | after   | PostToolUse        | *       |
+      | failure | PostToolUseFailure | *       |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the append section of pi's system prompt holds pi-subagents' tag for the agent 'demo:runner' and the body ''
+    Given pi runs with the scripted model and the mcp implementation
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      |       | read | {"path": "missing.txt"}        |
+      | Done. |      |                                |
+    When the user prompts "run the tools" in pi's startup session
+    Then the hooks record these runs:
+      | event              | session | tool name | tool input                                | tool response                                                                      | error                                                                 | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse         | first   | Bash      | {"command":"echo from-model"}             |                                                                                    |                                                                       |              | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse        | first   | Bash      | {"command":"echo from-model"}             | {"interrupted":false,"structuredContent":[{"type":"text","text":"from-model\\n"}]} |                                                                       |              | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse         | first   | Read      | {"file_path":"{project dir}/missing.txt"} |                                                                                    |                                                                       |              | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Read      | {"file_path":"{project dir}/missing.txt"} |                                                                                    | ENOENT: no such file or directory, access '{project dir}/missing.txt' | false        | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+  @mcp
+  Scenario: A child keeps its own identity after another session runs
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event       | matcher |
+      | before | PreToolUse  | *       |
+      | after  | PostToolUse | *       |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the append section of pi's system prompt holds pi-subagents' tag for the agent 'demo:runner' and the body ''
+    Given pi runs with the scripted model and the mcp implementation as a pi-subagents background child
+    Given the scripted model plays these steps:
+      | reply         | tool | arguments                   |
+      |               | bash | {"command": "echo first"}   |
+      | First done.   |      |                             |
+      |               | bash | {"command": "echo sibling"} |
+      | Sibling done. |      |                             |
+      |               | bash | {"command": "echo again"}   |
+      | Again done.   |      |                             |
+    When the user prompts "run first" in pi's startup session, a pi-subagents background child of the agent "demo:sibling" prompts "run the sibling" beside it, and the user prompts "run again"
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input                 | tool response                                                                   | agent type   | agent id | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse  | first   | Bash      | {"command":"echo first"}   |                                                                                 | demo:runner  | first    | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Bash      | {"command":"echo first"}   | {"interrupted":false,"structuredContent":[{"type":"text","text":"first\\n"}]}   | demo:runner  | first    | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse  | second  | Bash      | {"command":"echo sibling"} |                                                                                 | demo:sibling | second   | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | second                 | second            | 1          |
+      | PostToolUse | second  | Bash      | {"command":"echo sibling"} | {"interrupted":false,"structuredContent":[{"type":"text","text":"sibling\\n"}]} | demo:sibling | second   | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | second                 | second            | 1          |
+      | PreToolUse  | first   | Bash      | {"command":"echo again"}   |                                                                                 | demo:runner  | first    | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Bash      | {"command":"echo again"}   | {"interrupted":false,"structuredContent":[{"type":"text","text":"again\\n"}]}   | demo:runner  | first    | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+  @mcp
+  Scenario Outline: Missing child metadata clears the previous identity
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event        | matcher | form   | on reentry | output                                     |
+      | start  | SessionStart |         |        |            |                                            |
+      | before | PreToolUse   | *       |        |            |                                            |
+      | after  | PostToolUse  | *       |        |            |                                            |
+      | stop   | Stop         |         | script | allow      | {"decision":"block","reason":"keep going"} |
+      | ending | SessionEnd   |         |        |            |                                            |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the replace section of pi's system prompt holds pi-subagents' tag for the agent 'demo:runner' and the body 'Run the tools.'
+    Given pi runs with the scripted model and the mcp implementation as a pi-subagents background child with its debug log on
+    Given the scripted model plays these steps:
+      | reply   | tool | arguments                  |
+      |         | bash | {"command": "echo tagged"} |
+      | Tagged. |      |                            |
+      |         | bash | {"command": "echo bare"}   |
+      | Bare.   |      |                            |
+    When the user prompts "run tagged" in pi's startup session, the child's launch metadata becomes <metadata>, and the user prompts "run bare" in a new session
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input                | tool response                                                                  | agent type  | agent id | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse  | first   | Bash      | {"command":"echo tagged"} |                                                                                | demo:runner | first    | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Bash      | {"command":"echo tagged"} | {"interrupted":false,"structuredContent":[{"type":"text","text":"tagged\\n"}]} | demo:runner | first    | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse  | second  | Bash      | {"command":"echo bare"}   |                                                                                |             |          | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | second                 | second            | 1          |
+      | PostToolUse | second  | Bash      | {"command":"echo bare"}   | {"interrupted":false,"structuredContent":[{"type":"text","text":"bare\\n"}]}   |             |          | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | second                 | second            | 1          |
+    Then pi's debug log holds these child hook identity diagnostics:
+      | diagnostic                                                                                 |
+      | [hooks] Child hook identity unavailable: companion launch metadata is missing or malformed |
+
+    Examples:
+      | metadata  |
+      | missing   |
+      | malformed |

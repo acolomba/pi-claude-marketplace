@@ -19,6 +19,16 @@
  * journal again: the journal is kept while its bytes are those that the
  * capture read.
  *
+ * A stand-in child gets the agent pi-subagents launches it as in the
+ * structured section of its system prompt that pi-subagents tags (E1, E3):
+ * the tag `<active_agent name="..."/>` with the name XML-escaped as
+ * pi-subagents escapes it, a blank line, and the agent's body. Pi reads
+ * `<agent dir>/SYSTEM.md` as that section in replace mode and
+ * `<agent dir>/APPEND_SYSTEM.md` in append mode, when it starts and when it
+ * starts a new session, before any extension's before-run handler. A stand-in
+ * is not a real pi-subagents launch: `features/lib/real-subagent-child.ts`
+ * runs the installed companion.
+ *
  * Every wait is bounded by `STAGE_TIMEOUT_MS`. `close()` stops every Pi that
  * the session started and kills the process group of every hook script of
  * the sandbox that still runs with its dispatch marker and the sandbox HOME,
@@ -26,7 +36,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -61,6 +71,18 @@ const CHILD_JOURNALS = "async-rewake-children";
 
 /** Whether a Pi runs as a main session or as a pi-subagents background child. */
 export type SessionRole = "main" | "child";
+
+/**
+ * The section of a child's system prompt that pi-subagents tags: Pi's custom
+ * prompt when the agent replaces the system prompt, its appended prompt
+ * otherwise (E1).
+ */
+export type ChildPromptMode = "append" | "replace";
+
+const PROMPT_SECTION_FILES: Readonly<Record<ChildPromptMode, string>> = {
+  append: "APPEND_SYSTEM.md",
+  replace: "SYSTEM.md",
+};
 
 /** Where the Pis of a session run and what they load. */
 export interface SubagentHookSessionOptions {
@@ -99,10 +121,25 @@ export interface ChildStageObservation {
 /** The stages of a child that `runChildStages` observes after, in order. */
 export type ChildStage = "load" | "hook start" | "hook end" | "new session" | "stop";
 
+/** The tagged section of a stand-in child's system prompt and its text. */
+export interface ChildPromptSection {
+  readonly mode: ChildPromptMode;
+  readonly text: string;
+}
+
 /** The Pis of one sandbox and the waiting hooks they start. */
 export interface SubagentHookSession {
-  /** Starts a Pi in `role` and selects the scripted model. */
-  start(role: SessionRole): Promise<PiProcess>;
+  /**
+   * Starts a Pi in `role` and selects the scripted model. With `prompt`, the
+   * Pi loads that section of its system prompt, and the sandbox's sections
+   * are as they were once it started, so a Pi that starts later loads them.
+   */
+  start(role: SessionRole, prompt?: ChildPromptSection): Promise<PiProcess>;
+  /**
+   * Prompts `pi`, waits for its turn to settle, asserts that Pi reported no
+   * fault, and returns the records since the prompt.
+   */
+  runTurn(pi: PiProcess, prompt: string): Promise<readonly RpcRecord[]>;
   /**
    * Prompts `pi`, waits for the turn to settle and for `hook` to log a start,
    * asserts that the hook has not ended, and captures it.
@@ -180,6 +217,80 @@ function absentWhenMissing(error: unknown): undefined {
 
 async function readOptional(file: string): Promise<string | undefined> {
   return readFile(file, "utf8").catch(absentWhenMissing);
+}
+
+/** Returns `mode` as a prompt mode, or throws when it names none. */
+export function parseChildPromptMode(mode: string): ChildPromptMode {
+  if (mode !== "append" && mode !== "replace") {
+    throw new Error(`a child prompt mode is append or replace, not ${mode}`);
+  }
+
+  return mode;
+}
+
+// pi-subagents' `escapeXmlAttr` in `src/runs/shared/child-launch.js`.
+function escapeXmlAttribute(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+/**
+ * Returns the section text that pi-subagents' launch builds for the agent
+ * `agent` with the body `body`: its tag, a blank line, and the body.
+ */
+export function taggedChildPrompt(agent: string, body: string): string {
+  return `<active_agent name="${escapeXmlAttribute(agent)}"/>\n\n${body}`;
+}
+
+/**
+ * Writes `text` as the `mode` section of the system prompt of each Pi that
+ * starts, or starts a new session, with the agent directory `agentDir`, and
+ * removes the other section, so one section holds the stand-in's metadata.
+ */
+export async function writeChildPromptSection(
+  agentDir: string,
+  mode: ChildPromptMode,
+  text: string,
+): Promise<void> {
+  await removeChildPromptSections(agentDir);
+  await writeFile(path.join(agentDir, PROMPT_SECTION_FILES[mode]), text);
+}
+
+/** Removes both prompt sections from `agentDir`, so a Pi that loads later has no metadata. */
+export async function removeChildPromptSections(agentDir: string): Promise<void> {
+  await Promise.all(
+    Object.values(PROMPT_SECTION_FILES).map((file) =>
+      rm(path.join(agentDir, file), { force: true }),
+    ),
+  );
+}
+
+// The prompt sections of `agentDir` as they are, so a write for one Pi can be undone.
+async function readChildPromptSections(
+  agentDir: string,
+): Promise<ReadonlyMap<ChildPromptMode, string>> {
+  const sections = new Map<ChildPromptMode, string>();
+  for (const mode of ["append", "replace"] as const) {
+    const text = await readOptional(path.join(agentDir, PROMPT_SECTION_FILES[mode]));
+    if (text !== undefined) {
+      sections.set(mode, text);
+    }
+  }
+
+  return sections;
+}
+
+async function restoreChildPromptSections(
+  agentDir: string,
+  sections: ReadonlyMap<ChildPromptMode, string>,
+): Promise<void> {
+  await removeChildPromptSections(agentDir);
+  for (const [mode, text] of sections) {
+    await writeFile(path.join(agentDir, PROMPT_SECTION_FILES[mode]), text);
+  }
 }
 
 // The environment of process `pid` as name-value lines, or none once it exited.
@@ -325,7 +436,7 @@ export function createSubagentHookSession(
     assert.strictEqual(response.success, true, JSON.stringify(response));
   }
 
-  async function start(role: SessionRole): Promise<PiProcess> {
+  async function startPi(role: SessionRole): Promise<PiProcess> {
     const pi = await PiProcess.start(options.sandbox, options.git, {
       extensions: options.extensions,
       environment: {
@@ -334,9 +445,55 @@ export function createSubagentHookSession(
       },
     });
     started.push(pi);
+    return pi;
+  }
+
+  async function start(role: SessionRole, prompt?: ChildPromptSection): Promise<PiProcess> {
+    let pi: PiProcess;
+    if (prompt === undefined) {
+      pi = await startPi(role);
+    } else {
+      const agentDir = options.sandbox.agentDir;
+      const sections = await readChildPromptSections(agentDir);
+      await writeChildPromptSection(agentDir, prompt.mode, prompt.text);
+      try {
+        pi = await startPi(role);
+        // Pi answers a request only after its startup, so the section is read.
+        await expectSuccess(pi, { type: "get_state" });
+      } finally {
+        await restoreChildPromptSections(agentDir, sections);
+      }
+    }
+
     await expectSuccess(pi, { type: "set_model", provider: "faux", modelId: "faux-1" });
     await expectSuccess(pi, { type: "set_auto_retry", enabled: false });
     return pi;
+  }
+
+  // Prompts `pi`, asserts that the prompt started a turn, and returns the
+  // number of records Pi printed before it.
+  async function startTurn(pi: PiProcess, prompt: string): Promise<number> {
+    const from = pi.recordCount();
+    const { response } = await within(
+      pi.request({ type: "prompt", message: prompt }),
+      STAGE_TIMEOUT_MS,
+      `the prompt ${prompt}`,
+    );
+    assert.strictEqual(promptDisposition(response), "started", JSON.stringify(response));
+    return from;
+  }
+
+  async function runTurn(pi: PiProcess, prompt: string): Promise<readonly RpcRecord[]> {
+    const from = await startTurn(pi, prompt);
+    const settled = await pi.waitForRecord(
+      from,
+      (record) => record.type === "agent_settled",
+      STAGE_TIMEOUT_MS,
+    );
+    assert.strictEqual(settled.aborted, false, JSON.stringify(settled));
+    const records = pi.recordsSince(from);
+    assert.deepStrictEqual(records.filter(isFault), []);
+    return records;
   }
 
   async function promptPastWaitingHook(
@@ -345,13 +502,7 @@ export function createSubagentHookSession(
     hook: string,
   ): Promise<WaitingHook> {
     const lengths = await readLogLengths(harness);
-    const from = pi.recordCount();
-    const { response } = await within(
-      pi.request({ type: "prompt", message: prompt }),
-      STAGE_TIMEOUT_MS,
-      `the prompt ${prompt}`,
-    );
-    assert.strictEqual(promptDisposition(response), "started", JSON.stringify(response));
+    const from = await startTurn(pi, prompt);
     const [settled, startLine] = await Promise.all([
       pi.waitForRecord(from, (record) => record.type === "agent_settled", STAGE_TIMEOUT_MS),
       waitForHookLifecycle(harness, hook, "start", lengths, STAGE_TIMEOUT_MS),
@@ -438,5 +589,14 @@ export function createSubagentHookSession(
     );
   }
 
-  return { start, promptPastWaitingHook, waitingHooks, observe, runChildStages, release, close };
+  return {
+    start,
+    runTurn,
+    promptPastWaitingHook,
+    waitingHooks,
+    observe,
+    runChildStages,
+    release,
+    close,
+  };
 }

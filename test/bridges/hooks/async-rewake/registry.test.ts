@@ -39,6 +39,7 @@ import type {
   ExtensionContext,
   BeforeAgentStartEvent,
   ToolCallEvent,
+  ToolResultEvent,
 } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 
@@ -1498,24 +1499,89 @@ test(
   },
 );
 
-for (const { name, marker, background, identity } of [
+// D-PG3-07: the three tool events a child dispatches, each with the event Pi
+// fires and the fields its translator adds to the common envelope.
+const IDENTITY_TOOL_EVENTS = [
   {
-    name: "child plain async",
-    marker: "1",
-    background: { async: true },
-    identity: { agent_type: "recording-agent", agent_id: "recording-session" },
+    claudeEvent: "PreToolUse",
+    event: {
+      type: "tool_call",
+      toolCallId: "recording-call",
+      toolName: "bash",
+      input: { command: "pwd" },
+    } satisfies ToolCallEvent,
+    fields: { tool_name: "Bash", tool_input: { command: "pwd" } },
   },
   {
-    name: "child asyncRewake",
+    claudeEvent: "PostToolUse",
+    event: {
+      type: "tool_result",
+      toolCallId: "recording-call",
+      toolName: "bash",
+      input: { command: "pwd" },
+      content: [{ type: "text", text: "recorded\n" }],
+      isError: false,
+      details: { durationMs: 3 },
+    } satisfies ToolResultEvent,
+    fields: {
+      tool_name: "Bash",
+      tool_input: { command: "pwd" },
+      tool_response: {
+        interrupted: false,
+        structuredContent: [{ type: "text", text: "recorded\n" }],
+      },
+    },
+  },
+  {
+    claudeEvent: "PostToolUseFailure",
+    event: {
+      type: "tool_result",
+      toolCallId: "recording-call",
+      toolName: "bash",
+      input: { command: "pwd" },
+      content: [{ type: "text", text: "pwd failed" }],
+      isError: true,
+      details: { exitCode: 1 },
+    } satisfies ToolResultEvent,
+    fields: {
+      tool_name: "Bash",
+      tool_input: { command: "pwd" },
+      error: "pwd failed",
+      is_interrupt: false,
+    },
+  },
+] as const;
+
+const IDENTITY_ROLES = [
+  {
+    role: "child",
     marker: "1",
-    background: { asyncRewake: true },
     identity: { agent_type: "recording-agent", agent_id: "recording-session" },
   },
-  { name: "main plain async", marker: "0", background: { async: true }, identity: {} },
-  { name: "main asyncRewake", marker: "0", background: { asyncRewake: true }, identity: {} },
-] as const) {
+  { role: "main", marker: "0", identity: {} },
+] as const;
+
+const IDENTITY_LANES = [
+  { lane: "plain async", background: { async: true } },
+  { lane: "asyncRewake", background: { asyncRewake: true } },
+] as const;
+
+for (const {
+  claudeEvent,
+  event,
+  fields,
+  role,
+  marker,
+  identity,
+  lane,
+  background,
+} of IDENTITY_TOOL_EVENTS.flatMap((toolEvent) =>
+  IDENTITY_ROLES.flatMap((identityRole) =>
+    IDENTITY_LANES.map((identityLane) => ({ ...toolEvent, ...identityRole, ...identityLane })),
+  ),
+)) {
   test(
-    `records ${name} stdin through a real background process`,
+    `records ${role} ${lane} ${claudeEvent} stdin through a real background process`,
     { concurrency: false, timeout: 15_000 },
     async (t) => {
       // arrange
@@ -1572,6 +1638,7 @@ for (const { name, marker, background, identity } of [
         },
       );
       const entry = createEntry(root, {
+        claudeEvent,
         handlerDecl: {
           type: "command",
           command: process.execPath,
@@ -1594,12 +1661,7 @@ for (const { name, marker, background, identity } of [
       await spawnAndRegister(
         runtime,
         entry,
-        {
-          type: "tool_call",
-          toolCallId: "recording-call",
-          toolName: "bash",
-          input: { command: "pwd" },
-        },
+        event,
         createContext(root, "recording-session", true).context,
         createPi().pi,
         loc,
@@ -1630,11 +1692,12 @@ for (const { name, marker, background, identity } of [
         session_id: "recording-session",
         transcript_path: "",
         cwd: root,
-        hook_event_name: "PreToolUse",
-        tool_name: "Bash",
-        tool_input: { command: "pwd" },
+        hook_event_name: claudeEvent,
+        ...fields,
         ...identity,
       });
+      assert.strictEqual(Object.hasOwn(recorded as object, "agent_type"), role === "child");
+      assert.strictEqual(Object.hasOwn(recorded as object, "agent_id"), role === "child");
       assert.deepStrictEqual(exit, [0, null]);
     },
   );

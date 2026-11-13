@@ -19,6 +19,13 @@
  * stage of the child, its load, its hook's start and end, a new session, and
  * its stop, and fails at the first stage that ends such a hook or changes the
  * record that lets a later load stop it (D-PG3-09).
+ *
+ * A stand-in child knows its agent from the section of its system prompt that
+ * pi-subagents tags (D-PG3-06). The section step writes it before the profile
+ * Pi starts; the sibling-turn step starts a sibling of another agent between
+ * two turns of the profile Pi; the metadata step removes or breaks the tag
+ * before a new session; and the diagnostics step reads the bridge's identity
+ * line from the child's debug log.
  */
 
 import assert from "node:assert/strict";
@@ -30,13 +37,22 @@ import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
 import { inLoadOrder, resolveCompanion } from "../../lib/companions.ts";
 import { mcpImplementationLaunch } from "../../lib/mcp-implementation.ts";
+import { startSession } from "../../lib/pi-commands.ts";
+import {
+  PI_LAUNCH_ENVIRONMENT_EXTENSION,
+  writeLaunchEnvironment,
+} from "../../lib/pi-launch-environment.ts";
 import { DIALOG_METHODS } from "../../lib/pi-process.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 import {
   createSubagentHookSession,
+  parseChildPromptMode,
+  removeChildPromptSections,
   STAGE_TIMEOUT_MS,
+  taggedChildPrompt,
   unendedHookProcesses,
+  writeChildPromptSection,
 } from "../../lib/subagent-hook-session.ts";
 import { readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
@@ -59,6 +75,24 @@ const CHILD_STAGES_TIMEOUT_MS = 6 * STAGE_TIMEOUT_MS;
 const RELEASE_TIMEOUT_MS = 2 * STAGE_TIMEOUT_MS;
 
 const CHILD_STAGES = ["load", "hook start", "hook end", "new session", "stop"] as const;
+
+// A turn of the profile Pi, a sibling's start and turn, and a second turn
+// each wait one stage bound.
+const SIBLING_TURNS_TIMEOUT_MS = 4 * STAGE_TIMEOUT_MS;
+
+// Two turns and a new session each wait one stage bound.
+const NEW_SESSION_TURNS_TIMEOUT_MS = 3 * STAGE_TIMEOUT_MS;
+
+// The line the hooks bridge logs, with its debug log on, before a child run
+// whose launch metadata is missing or malformed (D-PG3-06).
+const IDENTITY_DIAGNOSTIC = "Child hook identity unavailable";
+
+// What a stand-in child's launch metadata becomes before its new session: no
+// tagged section, or a tag whose name is not a quoted attribute.
+const CHANGED_METADATA: Readonly<Record<string, string | undefined>> = {
+  missing: undefined,
+  malformed: "<active_agent name=demo:runner/>\n\n",
+};
 
 function isFault(record: RpcRecord): boolean {
   return (
@@ -93,6 +127,24 @@ async function sessionOptions(world: ScenarioWorld): Promise<SubagentHookSession
   };
 }
 
+// Keeps `records` and every stand-in log line since the profile Pi started as
+// the last turn, after asserting that the model was called no further than
+// its script.
+async function recordStartupTurn(
+  world: ScenarioWorld,
+  prompt: string,
+  records: readonly RpcRecord[],
+): Promise<void> {
+  const logs = await readLogLinesSince(world.profileHarness(), new Map());
+  const pastScript = modelCallsOf(logs).filter((call) => call.overflow);
+  assert.deepStrictEqual(
+    pastScript.map(({ index }) => index + 1),
+    [],
+    "the model was called past the end of its script",
+  );
+  world.recordTurn({ prompt, disposition: "started", records, logs });
+}
+
 // Sends `text` to the profile Pi, waits for `settlements` settles, and keeps
 // every record since the prompt and every stand-in log line since the profile
 // Pi started as the last turn, after asserting that Pi reported no fault and
@@ -102,7 +154,6 @@ async function promptInStartupSession(
   text: string,
   settlements: number,
 ): Promise<void> {
-  const harness = world.profileHarness();
   const prompt = expandTokens(text, world.tokens);
   const from = world.pi.recordCount();
   const { response } = await world.pi.request({ type: "prompt", message: prompt });
@@ -120,14 +171,7 @@ async function promptInStartupSession(
 
   const records = world.pi.recordsSince(from);
   assert.deepStrictEqual(records.filter(isFault), []);
-  const logs = await readLogLinesSince(harness, new Map());
-  const pastScript = modelCallsOf(logs).filter((call) => call.overflow);
-  assert.deepStrictEqual(
-    pastScript.map(({ index }) => index + 1),
-    [],
-    "the model was called past the end of its script",
-  );
-  world.recordTurn({ prompt, disposition: "started", records, logs });
+  await recordStartupTurn(world, prompt, records);
 }
 
 // D-BG-10: the marker is in the spawn environment, as pi-subagents' runner
@@ -139,6 +183,39 @@ Given(
   async function (this: ScenarioWorld) {
     await this.usePiWithProfile({
       ...mcpImplementationLaunch(this.mcpProfile),
+      subagentChild: true,
+    });
+  },
+);
+
+// A stand-in for pi-subagents' launch metadata (E1): the section that its
+// launch tags, read by every Pi that starts later in the sandbox. The step
+// says which mode and which tag a real launch would write, and the release
+// removes both sections.
+Given(
+  "the {word} section of pi's system prompt holds pi-subagents' tag for the agent {string} and the body {string}",
+  async function (this: ScenarioWorld, mode: string, agent: string, body: string) {
+    const agentDir = this.tokens.agentDir;
+    this.onRelease(() => removeChildPromptSections(agentDir));
+    await writeChildPromptSection(
+      agentDir,
+      parseChildPromptMode(mode),
+      taggedChildPrompt(agent, body),
+    );
+  },
+);
+
+// The launch environment turns the extension's debug log on in the child, as
+// a user's shell would, so its stderr holds the bridge's diagnostics.
+Given(
+  "pi runs with the scripted model and the mcp implementation as a pi-subagents background child with its debug log on",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await writeLaunchEnvironment(this.tokens.home, { PI_CLAUDE_MARKETPLACE_DEBUG: "1" });
+    const launch = mcpImplementationLaunch(this.mcpProfile);
+    await this.usePiWithProfile({
+      ...launch,
+      extraExtensions: [...launch.extraExtensions, PI_LAUNCH_ENVIRONMENT_EXTENSION],
       subagentChild: true,
     });
   },
@@ -168,6 +245,50 @@ When(
   "the user prompts {string} in pi's startup session and the stop hooks send the turn back",
   async function (this: ScenarioWorld, text: string) {
     await promptInStartupSession(this, text, 2);
+  },
+);
+
+// The sibling is a stand-in child of its own agent, started beside the
+// profile Pi, which keeps the section it loaded at its start.
+When(
+  "the user prompts {string} in pi's startup session, a pi-subagents background child of the agent {string} prompts {string} beside it, and the user prompts {string}",
+  { timeout: SIBLING_TURNS_TIMEOUT_MS },
+  async function (
+    this: ScenarioWorld,
+    first: string,
+    agent: string,
+    sibling: string,
+    second: string,
+  ) {
+    const session = createSubagentHookSession(await sessionOptions(this));
+    this.onRelease(() => session.close());
+    const firstRecords = await session.runTurn(this.pi, expandTokens(first, this.tokens));
+    const child = await session.start("child", {
+      mode: "append",
+      text: taggedChildPrompt(agent, ""),
+    });
+    await session.runTurn(child, expandTokens(sibling, this.tokens));
+    const secondRecords = await session.runTurn(this.pi, expandTokens(second, this.tokens));
+    await recordStartupTurn(this, second, [...firstRecords, ...secondRecords]);
+  },
+);
+
+// A new session reloads the sections of the system prompt, as a reload, a
+// fork, or a resume of a child does.
+When(
+  "the user prompts {string} in pi's startup session, the child's launch metadata becomes {word}, and the user prompts {string} in a new session",
+  { timeout: NEW_SESSION_TURNS_TIMEOUT_MS },
+  async function (this: ScenarioWorld, first: string, metadata: string, second: string) {
+    assert.ok(Object.hasOwn(CHANGED_METADATA, metadata), `unknown launch metadata ${metadata}`);
+    const changed = CHANGED_METADATA[metadata];
+    const session = createSubagentHookSession(await sessionOptions(this));
+    const firstRecords = await session.runTurn(this.pi, expandTokens(first, this.tokens));
+    await (changed === undefined
+      ? removeChildPromptSections(this.tokens.agentDir)
+      : writeChildPromptSection(this.tokens.agentDir, "append", changed));
+    await startSession(this.pi);
+    const secondRecords = await session.runTurn(this.pi, expandTokens(second, this.tokens));
+    await recordStartupTurn(this, second, [...firstRecords, ...secondRecords]);
   },
 );
 
@@ -230,5 +351,19 @@ Then(
       [["hook", "running"], ...unended.map(({ hook, running }) => [hook, String(running)])],
       table.raw(),
     );
+  },
+);
+
+// The extension's debug log is Pi's stderr, which also holds Pi's own lines,
+// so the step states only the lines of the bridge's identity diagnostic. It
+// reads Pi's stderr, not the turn, so it leaves the turn uncompared.
+Then(
+  "pi's debug log holds these child hook identity diagnostics:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const lines = this.pi.stderrText
+      .split("\n")
+      .filter((line) => line.includes(IDENTITY_DIAGNOSTIC))
+      .map((line) => [line]);
+    assert.deepStrictEqual([["diagnostic"], ...lines], table.raw());
   },
 );

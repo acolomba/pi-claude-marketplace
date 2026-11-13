@@ -911,6 +911,97 @@ test("omits stale child identity from synchronous stdin", { concurrency: false }
   assert.strictEqual(Object.hasOwn(payload, "agent_id"), false);
 });
 
+// D-PG3-07: the synchronous lane of each tool event a child dispatches. A real
+// hook process records its stdin; the runtime captures another session's
+// identity once the process runs, and the recorded payload keeps the identity
+// of its own dispatch.
+for (const translatorCase of TRANSLATOR_CASES.filter(({ claudeEvent }) =>
+  ["PreToolUse", "PostToolUse", "PostToolUseFailure"].includes(claudeEvent),
+)) {
+  for (const { role, marker, identity } of [
+    {
+      role: "child",
+      marker: "1",
+      identity: { agent_type: "sync-runner", agent_id: "sync-session" },
+    },
+    { role: "main", marker: "0", identity: {} },
+  ] as const) {
+    test(
+      `records ${role} synchronous ${translatorCase.claudeEvent} stdin through a real process`,
+      { concurrency: false, timeout: 15_000 },
+      async (t) => {
+        // arrange
+        const previousMarker = process.env.PI_SUBAGENT_CHILD;
+        process.env.PI_SUBAGENT_CHILD = marker;
+        t.after(() => {
+          if (previousMarker === undefined) {
+            delete process.env.PI_SUBAGENT_CHILD;
+          } else {
+            process.env.PI_SUBAGENT_CHILD = previousMarker;
+          }
+        });
+        const runtime = createHooksRuntime();
+        const identityEvent = (agent: string): BeforeAgentStartEvent =>
+          ({
+            type: "before_agent_start",
+            systemPromptOptions: { customPrompt: `<active_agent name="${agent}"/>\n\n` },
+          }) as BeforeAgentStartEvent;
+        runtime.captureChildIdentity(identityEvent("sync-runner"), "sync-session");
+        const root = await makeCaseRoot(t, "dispatch-identity-real-");
+        const recordingPath = path.join(root, "stdin.json");
+        const spawned: ChildProcess[] = [];
+        const spawnImpl = t.mock.fn(
+          (command: string, args: readonly string[], options: SpawnOptions): ChildProcess => {
+            const child = spawn(command, [...args], options);
+            spawned.push(child);
+            runtime.captureChildIdentity(identityEvent("later-runner"), "later-session");
+            return child;
+          },
+        );
+        const entry = makeEntry(root, {
+          claudeEvent: translatorCase.claudeEvent,
+          command: process.execPath,
+          args: [
+            "-e",
+            'require("node:fs").writeFileSync(process.argv[1], require("node:fs").readFileSync(0));',
+            recordingPath,
+          ],
+        });
+
+        // act
+        const outcome = await dispatchHookExec(
+          entry,
+          translatorCase.createEvent(),
+          makeContext(root, "sync-session"),
+          undefined,
+          runtime,
+          // dispatchHookExec uses only spawn's three-argument overload with piped streams.
+          { spawnImpl: spawnImpl as unknown as typeof spawn },
+        );
+        const recorded: unknown = JSON.parse(await readFile(recordingPath, "utf8"));
+
+        // assert
+        assert.deepStrictEqual(outcome, { kind: "noop" });
+        assert.strictEqual(spawned.length, 1);
+        assert.deepStrictEqual(recorded, {
+          session_id: "sync-session",
+          transcript_path: "",
+          cwd: root,
+          hook_event_name: translatorCase.claudeEvent,
+          ...translatorCase.eventFields,
+          ...identity,
+        });
+        assert.strictEqual(Object.hasOwn(recorded as object, "agent_type"), role === "child");
+        assert.strictEqual(Object.hasOwn(recorded as object, "agent_id"), role === "child");
+        assert.deepStrictEqual(runtime.childIdentityFor("later-session"), {
+          kind: role === "child" ? "known" : "main",
+          ...(role === "child" ? { agentType: "later-runner", childId: "later-session" } : {}),
+        });
+      },
+    );
+  }
+}
+
 /**
  * One dispatch of `translatorCase`'s envelope with `omittedField` deleted (or
  * of the complete envelope when `omittedField` is `undefined`), reported
