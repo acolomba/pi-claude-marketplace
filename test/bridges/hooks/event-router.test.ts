@@ -1398,6 +1398,257 @@ const PROMPT_TURN = {
   systemPromptOptions: {},
 } as BeforeAgentStartEvent;
 
+test(
+  "before_agent_start captures the companion prefix while draining pending context",
+  { concurrency: false },
+  async (t) => {
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const { runtime, handler, context } = await beforeAgentStartFixture(t);
+    runtime.appendPendingSessionStartContext({
+      context: "start context",
+      scope: "user",
+      marketplace: "catalog",
+      pluginId: "demo",
+    });
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const event = {
+      ...PROMPT_TURN,
+      systemPromptOptions: { customPrompt: '<active_agent name="demo:runner"/>\n\nagent body' },
+    } as BeforeAgentStartEvent;
+
+    const result = await handler(event, context);
+
+    assert.deepStrictEqual(result, {
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [{ type: "text", text: "SessionStart hook additional context: start context" }],
+        display: false,
+      },
+    });
+    assert.deepStrictEqual(runtime.childIdentityFor(context.sessionManager.getSessionId()), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: context.sessionManager.getSessionId(),
+    });
+  },
+);
+
+test(
+  "before_agent_start clears invalid child metadata and emits one fixed diagnostic per capture",
+  { concurrency: false },
+  async (t) => {
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const { runtime, handler, context } = await beforeAgentStartFixture(t);
+    const readDiagnostics = observeRouterDebug(t);
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const valid = {
+      ...PROMPT_TURN,
+      systemPromptOptions: { appendSystemPrompt: '<active_agent name="demo:runner"/>\n\n' },
+    } as BeforeAgentStartEvent;
+    const malformed = {
+      ...PROMPT_TURN,
+      systemPromptOptions: { customPrompt: '<active_agent name="bad"/>\n' },
+    } as BeforeAgentStartEvent;
+
+    await handler(valid, context);
+    await handler(malformed, context);
+    await handler(PROMPT_TURN, context);
+
+    assert.deepStrictEqual(runtime.childIdentityFor(context.sessionManager.getSessionId()), {
+      kind: "unavailable",
+    });
+    assert.deepStrictEqual(readDiagnostics(), [
+      "[hooks] Child hook identity unavailable: companion launch metadata is missing or malformed",
+      "[hooks] Child hook identity unavailable: companion launch metadata is missing or malformed",
+    ]);
+  },
+);
+
+test(
+  "before_agent_start leaves a new session unavailable until its own callback",
+  { concurrency: false },
+  async (t) => {
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const { runtime, handler, context } = await beforeAgentStartFixture(t);
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const secondContext = makeContext(path.join(context.cwd, "next-session"), context.cwd);
+    const event = {
+      ...PROMPT_TURN,
+      systemPromptOptions: { customPrompt: '<active_agent name="demo:first"/>\n\n' },
+    } as BeforeAgentStartEvent;
+
+    await handler(event, context);
+    const beforeSecondRun = runtime.childIdentityFor(secondContext.sessionManager.getSessionId());
+    await handler(
+      {
+        ...event,
+        systemPromptOptions: {
+          appendSystemPrompt: '<active_agent name="demo:second"/>\n\n',
+        },
+      },
+      secondContext,
+    );
+
+    assert.deepStrictEqual(beforeSecondRun, { kind: "unavailable" });
+    assert.deepStrictEqual(runtime.childIdentityFor(context.sessionManager.getSessionId()), {
+      kind: "unavailable",
+    });
+    assert.deepStrictEqual(runtime.childIdentityFor(secondContext.sessionManager.getSessionId()), {
+      kind: "known",
+      agentType: "demo:second",
+      childId: secondContext.sessionManager.getSessionId(),
+    });
+  },
+);
+
+test(
+  "reload resets child identity and stale before-run callbacks cannot restore it",
+  { concurrency: false },
+  async (t) => {
+    const { root } = await createHermeticEnvironment(t, "hooks-router-child-identity-reload-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const runtime = createHooksRuntime();
+    const { pi, registrations } = makeRecordingPi();
+    const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
+    const context = makeContext(root, root);
+    await hydration.registerHooksBridge(pi, { cwd: root });
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const staleHandler = registeredHandler(registrations, "before_agent_start");
+    const event = {
+      ...PROMPT_TURN,
+      systemPromptOptions: { customPrompt: '<active_agent name="demo:old"/>\n\n' },
+    } as BeforeAgentStartEvent;
+    await staleHandler(event, context);
+    assert.deepStrictEqual(runtime.childIdentityFor(context.sessionManager.getSessionId()), {
+      kind: "known",
+      agentType: "demo:old",
+      childId: context.sessionManager.getSessionId(),
+    });
+    await hydration.registerHooksBridge(pi, { cwd: root });
+    const readDiagnostics = observeRouterDebug(t);
+
+    await staleHandler(event, context);
+    const afterStale = runtime.childIdentityFor(context.sessionManager.getSessionId());
+    await registeredHandler(
+      registrations,
+      "before_agent_start",
+      1,
+    )(
+      {
+        ...event,
+        systemPromptOptions: { appendSystemPrompt: '<active_agent name="demo:new"/>\n\n' },
+      },
+      context,
+    );
+
+    assert.deepStrictEqual(afterStale, { kind: "unavailable" });
+    assert.deepStrictEqual(runtime.childIdentityFor(context.sessionManager.getSessionId()), {
+      kind: "known",
+      agentType: "demo:new",
+      childId: context.sessionManager.getSessionId(),
+    });
+    assert.deepStrictEqual(readDiagnostics(), []);
+  },
+);
+
+test(
+  "two before-run bridges in one child process keep distinct agent types",
+  { concurrency: false },
+  async (t) => {
+    const { root } = await createHermeticEnvironment(t, "hooks-router-child-two-runtimes-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const first = createHooksRuntime();
+    const second = createHooksRuntime();
+    const firstPi = makeRecordingPi();
+    const secondPi = makeRecordingPi();
+    await createHooksHydration(first, EMPTY_STATE_READER).registerHooksBridge(firstPi.pi, {
+      cwd: root,
+    });
+    await createHooksHydration(second, EMPTY_STATE_READER).registerHooksBridge(secondPi.pi, {
+      cwd: root,
+    });
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const context = makeContext(root, root);
+    const firstHandler = registeredHandler(firstPi.registrations, "before_agent_start");
+    const secondHandler = registeredHandler(secondPi.registrations, "before_agent_start");
+
+    await firstHandler(
+      {
+        ...PROMPT_TURN,
+        systemPromptOptions: {
+          customPrompt: '<active_agent name="demo:first"/>\n\n',
+        },
+      },
+      context,
+    );
+    await secondHandler(
+      {
+        ...PROMPT_TURN,
+        systemPromptOptions: {
+          appendSystemPrompt: '<active_agent name="demo:second"/>\n\n',
+        },
+      },
+      context,
+    );
+    await firstHandler(
+      {
+        ...PROMPT_TURN,
+        systemPromptOptions: {
+          customPrompt: '<active_agent name="demo:first-new"/>\n\n',
+        },
+      },
+      context,
+    );
+
+    const sessionId = context.sessionManager.getSessionId();
+    assert.deepStrictEqual(first.childIdentityFor(sessionId), {
+      kind: "known",
+      agentType: "demo:first-new",
+      childId: sessionId,
+    });
+    assert.deepStrictEqual(second.childIdentityFor(sessionId), {
+      kind: "known",
+      agentType: "demo:second",
+      childId: sessionId,
+    });
+  },
+);
+
 test("before_agent_start sends buffered prompt context as one message after the prompt (D-CF5-13)", async (t) => {
   // arrange
   const { runtime, handler, context } = await beforeAgentStartFixture(t);

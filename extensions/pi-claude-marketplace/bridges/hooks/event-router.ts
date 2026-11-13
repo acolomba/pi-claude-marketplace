@@ -148,6 +148,9 @@ const CHILD_EVENT_POLICY = {
   StopFailure: "suppress",
 } as const satisfies Record<BucketAEvent, ChildEventOutcome>;
 
+const CHILD_IDENTITY_DIAGNOSTIC =
+  "Child hook identity unavailable: companion launch metadata is missing or malformed";
+
 function dispatchesInCurrentSession(event: BucketAEvent): boolean {
   return !isSubagentChild(process.env) || CHILD_EVENT_POLICY[event] === "dispatch";
 }
@@ -270,7 +273,13 @@ function createBeforeAgentStartHandler(
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
-  return (event) => {
+  return (event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    runtime.captureChildIdentity(event, sessionId);
+    if (runtime.childIdentityFor(sessionId).kind === "unavailable") {
+      hookDebugLog(CHILD_IDENTITY_DIAGNOSTIC);
+    }
+
     runtime.recordRunStart(
       event.messageType === "custom" && event.message.customType === REWAKE_CUSTOM_TYPE,
     );
@@ -912,10 +921,10 @@ async function prepareSessionStartDataDirs(
 /**
  * The `session_shutdown` callback: it maps Pi's reason once, with the live
  * session mode, and dispatches the Claude-side SessionEnd event (D-CF5-02).
- * Pi `reload` keeps the session, so it runs no SessionEnd and a cleanup hook
- * never tears down state of a session that continues (D-CF5-03). A context
- * whose mode is not a notification mode is skipped with a debug line before
- * the event is read.
+ * Pi `reload` keeps the session, so it runs no SessionEnd (D-CF5-03). Every
+ * shutdown drains this runtime's async children, including reload and child
+ * sessions. A context whose mode is not a notification mode skips dispatch
+ * with a debug line but still runs that cleanup.
  */
 function sessionShutdownCallback(
   sessionEndHandler: CompositeHandler<"SessionEnd">,
@@ -977,10 +986,11 @@ async function runCompactionSessionStart(
 /**
  * The `session_compact` callback (D-CF5-04, D-CF5-05): one compaction runs
  * SessionStart with `source: "compact"` to completion and then PostCompact,
- * as upstream. The compaction SessionStart never passes the SSDEDUP-01 guard
- * of `session_start`, so each compaction runs it again. A context whose mode
- * is not a notification mode is skipped with a debug line before the event
- * is read.
+ * as upstream in main sessions. Child sessions dispatch neither event. The
+ * compaction SessionStart never passes the SSDEDUP-01 guard of
+ * `session_start`, so each main-session compaction runs it again. A context
+ * whose mode is not a notification mode is skipped with a debug line before
+ * the event is read.
  */
 function sessionCompactCallback(
   handlers: {
@@ -1096,6 +1106,7 @@ async function registerHooksBridgeWith(
   // with both pending buffers empty, which only the SessionStart and
   // UserPromptSubmit adapters can subsequently populate (D-CF5-13).
   runtime.preparePendingContextForRegistration();
+  runtime.resetChildIdentity();
 
   // Same epoch hygiene for the settle dispatcher's cached last-assistant
   // message: clear it so a `/reload` cannot leak the prior session's message

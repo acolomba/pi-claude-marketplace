@@ -1,3 +1,5 @@
+import { isSubagentChild } from "../../platform/subagent-child.ts";
+
 import type { ChildLike, TimerLadder } from "./exec-timer.ts";
 import type {
   CacheEntry,
@@ -9,7 +11,7 @@ import type {
 import type { StreamText } from "./stream-text.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { AssistantMessage } from "../../platform/pi-api.ts";
+import type { AssistantMessage, BeforeAgentStartEvent } from "../../platform/pi-api.ts";
 
 /**
  * STOP-07: the number of consecutive Stop continuations allowed. The next
@@ -23,6 +25,46 @@ export interface ChildJournalOwner {
   readonly sessionId: string;
   readonly ownerToken: string;
   readonly loc: ScopedLocations;
+}
+
+export interface MainChildIdentity {
+  readonly kind: "main";
+}
+
+export interface UnavailableChildIdentity {
+  readonly kind: "unavailable";
+}
+
+export interface KnownChildIdentity {
+  readonly kind: "known";
+  readonly agentType: string;
+  readonly childId: string;
+}
+
+export type ChildIdentity = MainChildIdentity | UnavailableChildIdentity | KnownChildIdentity;
+
+const ACTIVE_AGENT_PREFIX = /^<active_agent name="((?:[^"&<>]|&(?:amp|quot|lt|gt);)+)"\/>\n\n/;
+const XML_ENTITY_VALUES = {
+  "&amp;": "&",
+  "&quot;": '"',
+  "&lt;": "<",
+  "&gt;": ">",
+} as const;
+
+function parseIdentitySection(section: string | undefined): string | null | undefined {
+  if (!section?.startsWith("<active_agent")) {
+    return undefined;
+  }
+
+  const encoded = ACTIVE_AGENT_PREFIX.exec(section)?.[1];
+  if (encoded === undefined) {
+    return null;
+  }
+
+  return encoded.replace(
+    /&(?:amp|quot|lt|gt);/g,
+    (entity) => XML_ENTITY_VALUES[entity as keyof typeof XML_ENTITY_VALUES],
+  );
 }
 
 /** One live async-rewake child owned by a hooks runtime. */
@@ -118,6 +160,9 @@ export interface HooksRuntime {
    * leaves the Stop re-entry flag and the STOP-07 cap as they are.
    */
   readonly recordRunStart: (startedByRewake: boolean) => void;
+  readonly resetChildIdentity: () => void;
+  readonly captureChildIdentity: (event: BeforeAgentStartEvent, sessionId: string) => void;
+  readonly childIdentityFor: (sessionId: string) => ChildIdentity;
   readonly registerChild: (entry: HooksRuntimeChildEntry) => void;
   readonly takeChild: (dispatchId: string) => HooksRuntimeChildEntry | undefined;
   readonly persistenceOwner: (
@@ -202,6 +247,8 @@ export function createHooksRuntime(): HooksRuntime {
   let runStartedByRewake = false;
   let consecutiveBlockCount = 0;
   let capNotifiedThisSession = false;
+  let childIdentity: ChildIdentity = { kind: "unavailable" };
+  let childIdentitySessionId: string | undefined;
 
   function finishStopSequence(): void {
     consecutiveBlockCount = 0;
@@ -316,6 +363,44 @@ export function createHooksRuntime(): HooksRuntime {
 
     recordRunStart(startedByRewake: boolean): void {
       runStartedByRewake = startedByRewake;
+    },
+
+    resetChildIdentity(): void {
+      childIdentity = { kind: "unavailable" };
+      childIdentitySessionId = undefined;
+    },
+
+    captureChildIdentity(event: BeforeAgentStartEvent, sessionId: string): void {
+      childIdentitySessionId = sessionId;
+      if (!isSubagentChild(process.env)) {
+        childIdentity = { kind: "main" };
+        return;
+      }
+
+      const custom = parseIdentitySection(event.systemPromptOptions.customPrompt);
+      const appended = parseIdentitySection(event.systemPromptOptions.appendSystemPrompt);
+      if (
+        custom === null ||
+        appended === null ||
+        (custom !== undefined && appended !== undefined && custom !== appended)
+      ) {
+        childIdentity = { kind: "unavailable" };
+        return;
+      }
+
+      const agentType = custom ?? appended;
+      childIdentity =
+        agentType === undefined
+          ? { kind: "unavailable" }
+          : { kind: "known", agentType, childId: sessionId };
+    },
+
+    childIdentityFor(sessionId: string): ChildIdentity {
+      if (!isSubagentChild(process.env)) {
+        return { kind: "main" };
+      }
+
+      return childIdentitySessionId === sessionId ? childIdentity : { kind: "unavailable" };
     },
 
     registerChild(entry: HooksRuntimeChildEntry): void {

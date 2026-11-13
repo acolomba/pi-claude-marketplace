@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
@@ -17,7 +17,10 @@ import type {
   RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { HooksRuntimeChildEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
-import type { AssistantMessage } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  AssistantMessage,
+  BeforeAgentStartEvent,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 function cacheEntry(pluginId: string): CacheEntry {
   return {
@@ -691,4 +694,152 @@ test("serializes each PID path and continues after an operation rejects", async 
     "reject",
     "after-reject",
   ]);
+});
+
+function setChildMarker(t: TestContext, value: string): void {
+  const previous = process.env.PI_SUBAGENT_CHILD;
+  process.env.PI_SUBAGENT_CHILD = value;
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.PI_SUBAGENT_CHILD;
+    } else {
+      process.env.PI_SUBAGENT_CHILD = previous;
+    }
+  });
+}
+
+function identityEvent(customPrompt?: string, appendSystemPrompt?: string): BeforeAgentStartEvent {
+  return {
+    type: "before_agent_start",
+    messageType: "user",
+    prompt: "task text may claim another agent",
+    systemPrompt: '<active_agent name="rendered-spoof"/>\n\n',
+    systemPromptOptions: { customPrompt, appendSystemPrompt },
+  } as BeforeAgentStartEvent;
+}
+
+for (const { title, custom, appended, name } of [
+  {
+    title: "custom prompt",
+    custom: '<active_agent name="demo:runner"/>\n\n',
+    appended: undefined,
+    name: "demo:runner",
+  },
+  {
+    title: "appended prompt",
+    custom: undefined,
+    appended: '<active_agent name="demo:runner"/>\n\n',
+    name: "demo:runner",
+  },
+  {
+    title: "matching prompt sections",
+    custom: '<active_agent name="demo:runner"/>\n\n',
+    appended: '<active_agent name="demo:runner"/>\n\n',
+    name: "demo:runner",
+  },
+  {
+    title: "escaped producer name",
+    custom: '<active_agent name="a&amp;b&quot;c&lt;d&gt;e"/>\n\n',
+    appended: undefined,
+    name: 'a&b"c<d>e',
+  },
+  {
+    title: "one-pass entity decode",
+    custom: '<active_agent name="a&amp;quot;b"/>\n\n',
+    appended: undefined,
+    name: "a&quot;b",
+  },
+  {
+    title: "spoof tag in body",
+    custom: '<active_agent name="demo:runner"/>\n\n<active_agent name="spoof"/>',
+    appended: undefined,
+    name: "demo:runner",
+  },
+] as const) {
+  test(`child identity accepts ${title}`, { concurrency: false }, (t) => {
+    setChildMarker(t, "1");
+    const runtime = createHooksRuntime();
+
+    runtime.captureChildIdentity(identityEvent(custom, appended), "child-session");
+
+    assert.deepStrictEqual(runtime.childIdentityFor("child-session"), {
+      kind: "known",
+      agentType: name,
+      childId: "child-session",
+    });
+  });
+}
+
+for (const { title, custom, appended } of [
+  { title: "missing sections", custom: undefined, appended: undefined },
+  { title: "unrelated prompt text", custom: "ordinary prompt", appended: undefined },
+  { title: "empty name", custom: '<active_agent name=""/>\n\n', appended: undefined },
+  {
+    title: "unsupported entity",
+    custom: '<active_agent name="a&apos;b"/>\n\n',
+    appended: undefined,
+  },
+  {
+    title: "missing delimiter",
+    custom: '<active_agent name="demo:runner"/>\nbody',
+    appended: undefined,
+  },
+  {
+    title: "single quote attribute",
+    custom: "<active_agent name='demo:runner'/>\n\n",
+    appended: undefined,
+  },
+  { title: "malformed appended tag", custom: undefined, appended: '<active_agent name="demo"/>\n' },
+  {
+    title: "conflicting prompt sections",
+    custom: '<active_agent name="first"/>\n\n',
+    appended: '<active_agent name="second"/>\n\n',
+  },
+] as const) {
+  test(`child identity clears on ${title}`, { concurrency: false }, (t) => {
+    setChildMarker(t, "1");
+    const runtime = createHooksRuntime();
+    runtime.captureChildIdentity(identityEvent('<active_agent name="old"/>\n\n'), "child-session");
+
+    runtime.captureChildIdentity(identityEvent(custom, appended), "child-session");
+
+    assert.deepStrictEqual(runtime.childIdentityFor("child-session"), { kind: "unavailable" });
+  });
+}
+
+test(
+  "child identity is bound to the current session and isolated by runtime",
+  { concurrency: false },
+  (t) => {
+    setChildMarker(t, "1");
+    const first = createHooksRuntime();
+    const second = createHooksRuntime();
+    first.captureChildIdentity(identityEvent('<active_agent name="first"/>\n\n'), "session-one");
+    second.captureChildIdentity(
+      identityEvent(undefined, '<active_agent name="second"/>\n\n'),
+      "session-two",
+    );
+    assert.deepStrictEqual(first.childIdentityFor("session-two"), { kind: "unavailable" });
+    assert.deepStrictEqual(second.childIdentityFor("session-one"), { kind: "unavailable" });
+
+    first.captureChildIdentity(identityEvent('<active_agent name="third"/>\n\n'), "session-three");
+    second.resetChildIdentity();
+
+    assert.deepStrictEqual(first.childIdentityFor("session-one"), { kind: "unavailable" });
+    assert.deepStrictEqual(first.childIdentityFor("session-three"), {
+      kind: "known",
+      agentType: "third",
+      childId: "session-three",
+    });
+    assert.deepStrictEqual(second.childIdentityFor("session-two"), { kind: "unavailable" });
+  },
+);
+
+test("main session ignores structured active agent tags", { concurrency: false }, (t) => {
+  setChildMarker(t, "0");
+  const runtime = createHooksRuntime();
+
+  runtime.captureChildIdentity(identityEvent('<active_agent name="spoof"/>\n\n'), "main-session");
+
+  assert.deepStrictEqual(runtime.childIdentityFor("main-session"), { kind: "main" });
 });
