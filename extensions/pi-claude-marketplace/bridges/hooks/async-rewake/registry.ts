@@ -251,9 +251,15 @@ export async function spawnAndRegister(
   try {
     const dispatchId = makeDispatchId();
     const capturedGeneration = runtime.currentGeneration();
-    const transCtx = buildTranslationContext(ctx);
+    const identity = runtime.childIdentityFor(ctx.sessionManager.getSessionId());
+    const transCtx = buildTranslationContext(
+      ctx,
+      identity.kind === "known"
+        ? { agentType: identity.agentType, sessionId: identity.childId }
+        : undefined,
+    );
     const persistenceOwner = isSubagentChild(process.env)
-      ? runtime.persistenceOwner(loc, ctx.sessionManager.getSessionId(), dispatchId)
+      ? runtime.persistenceOwner(loc, transCtx.sessionId, dispatchId)
       : undefined;
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
     const exit: RewakeExit = {

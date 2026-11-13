@@ -36,6 +36,7 @@ import type { BucketAEvent } from "../../../../extensions/pi-claude-marketplace/
 import type {
   ExtensionAPI,
   ExtensionContext,
+  BeforeAgentStartEvent,
   ToolCallEvent,
 } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
@@ -1047,9 +1048,28 @@ test(
     });
     const ctx = createContext(root, "shared-owner-session", true).context;
     const pi = createPi().pi;
+    const event = {
+      type: "tool_call",
+      toolCallId: "shared-owner-call",
+      toolName: "bash",
+      input: { command: "printf shared" },
+    } satisfies ToolCallEvent;
+    const rewakeChunks: Buffer[] = [];
+    const plainChunks: Buffer[] = [];
+    rewake.stdin?.on("data", (chunk: Buffer) => rewakeChunks.push(Buffer.from(chunk)));
+    plain.stdin?.on("data", (chunk: Buffer) => plainChunks.push(Buffer.from(chunk)));
+    const rewakeEnd = once(rewake.stdin!, "end");
+    const plainEnd = once(plain.stdin!, "end");
+    runtime.captureChildIdentity(
+      {
+        type: "before_agent_start",
+        systemPromptOptions: { customPrompt: '<active_agent name="shared-runner"/>\n\n' },
+      } as BeforeAgentStartEvent,
+      "shared-owner-session",
+    );
 
     // act
-    await spawnAndRegister(runtime, createEntry(root), {}, ctx, pi, loc, {
+    await spawnAndRegister(runtime, createEntry(root), event, ctx, pi, loc, {
       spawnImpl: createSpawn(rewake.child, []),
       dispatchId: () => "rewake-dispatch",
     });
@@ -1058,7 +1078,7 @@ test(
       createEntry(root, {
         handlerDecl: { type: "command", command: "/opt/hooks/plain", async: true },
       }),
-      {},
+      event,
       ctx,
       pi,
       loc,
@@ -1067,6 +1087,14 @@ test(
         dispatchId: () => "plain-dispatch",
       },
     );
+    runtime.captureChildIdentity(
+      {
+        type: "before_agent_start",
+        systemPromptOptions: { customPrompt: '<active_agent name="later-runner"/>\n\n' },
+      } as BeforeAgentStartEvent,
+      "later-session",
+    );
+    await Promise.all([rewakeEnd, plainEnd]);
     const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
     const names = await readdir(journalDir);
     const journal: unknown = JSON.parse(
@@ -1075,12 +1103,107 @@ test(
 
     // assert
     assert.strictEqual(names.length, 1);
+    const expectedPayload = {
+      session_id: "shared-owner-session",
+      transcript_path: "",
+      cwd: root,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "printf shared" },
+      agent_type: "shared-runner",
+      agent_id: "shared-owner-session",
+    };
+    assert.deepStrictEqual(
+      JSON.parse(Buffer.concat(rewakeChunks).toString("utf8")),
+      expectedPayload,
+    );
+    assert.deepStrictEqual(
+      JSON.parse(Buffer.concat(plainChunks).toString("utf8")),
+      expectedPayload,
+    );
     assert.deepStrictEqual(
       (journal as { entries: PidTableEntry[] }).entries.map((row) => row.dispatchId),
       ["rewake-dispatch", "plain-dispatch"],
     );
   },
 );
+
+for (const { name, marker, handlerDecl } of [
+  {
+    name: "main plain async",
+    marker: "0",
+    handlerDecl: { type: "command", command: "/opt/hooks/plain", async: true },
+  },
+  {
+    name: "main asyncRewake",
+    marker: "0",
+    handlerDecl: { type: "command", command: "/opt/hooks/rewake", asyncRewake: true },
+  },
+  {
+    name: "unavailable child plain async",
+    marker: "1",
+    handlerDecl: { type: "command", command: "/opt/hooks/plain", async: true },
+  },
+  {
+    name: "unavailable child asyncRewake",
+    marker: "1",
+    handlerDecl: { type: "command", command: "/opt/hooks/rewake", asyncRewake: true },
+  },
+] as const) {
+  test(`omits identity from ${name} stdin`, { concurrency: false }, async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-identity-absent-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_120);
+    const chunks: Buffer[] = [];
+    child.stdin?.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    const stdinEnd = once(child.stdin!, "end");
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = marker;
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+
+    // act
+    await spawnAndRegister(
+      runtime,
+      createEntry(root, { handlerDecl }),
+      {
+        type: "tool_call",
+        toolCallId: "identity-absent-call",
+        toolName: "bash",
+        input: { command: "printf absent" },
+      } satisfies ToolCallEvent,
+      createContext(root, "identity-absent-session", true).context,
+      createPi().pi,
+      loc,
+      { spawnImpl: createSpawn(child.child, []), dispatchId: () => "identity-absent-dispatch" },
+    );
+    await stdinEnd;
+    const payload: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "identity-absent-session",
+      transcript_path: "",
+      cwd: root,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "printf absent" },
+    });
+    assert.strictEqual(Object.hasOwn(payload, "agent_type"), false);
+    assert.strictEqual(Object.hasOwn(payload, "agent_id"), false);
+  });
+}
 
 test(
   "a delayed exit after reload removes only its captured session row",
