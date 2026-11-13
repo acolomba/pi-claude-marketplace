@@ -132,6 +132,23 @@ None - the plan's eight declared source and test files were the only production 
 
 None -- no security-relevant surface outside the plan's `<threat_model>` was introduced.
 
+## Parent Acceptance Correction
+
+Post-merge review found that Task 2's background stdin checks used recording
+test doubles. The plan also required real background subprocesses. Commit
+`27987110` adds four real Node-process cases for child/main sessions in plain
+async and asyncRewake modes. Each records the complete stdin payload, waits
+while the runtime captures a later session identity, then exits on explicit
+release. Main controls require both identity properties to remain absent.
+
+The named tests fail against the pre-wave registry: both child cases lack
+`agent_type` and `agent_id`, while both main controls pass. All four pass with
+the current implementation. Evidence is in
+`/tmp/pg3-wave2-real-background-red.log` and
+`/tmp/pg3-wave2-real-background-green.log`. Normal commit hooks passed after
+correcting the fixture's Promise API, required SDK `cwd`, and spawn overload
+typing. The combined-tree gate is recorded separately in 03-VALIDATION.md.
+
 ## User Setup Required
 
 None - no external configuration or credentials are required.

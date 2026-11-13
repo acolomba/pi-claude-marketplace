@@ -89,8 +89,8 @@ status: complete
 
 ## Task Commits
 
-1. **Emit the corrected warning through fresh conversion, staging and install:** `5df645cbbcf690f1808d14286d0476d7bdc6cb84` — `feat(agents): correct fresh MCP background warning`.
-2. **Update grant-form and public diagnostic contracts:** `795a41279a412d74c142e0a263564a03c2017d4b` — `test(agents): pin corrected MCP grant diagnostics`.
+1. **Task 1: Emit the corrected warning through fresh conversion, staging and install** - 5df645cbbcf690f1808d14286d0476d7bdc6cb84
+2. **Task 2: Update grant-form and public diagnostic contracts** - 795a41279a412d74c142e0a263564a03c2017d4b
 
 The two task commits descend from `ea93edcbe2b13faa661cf502674035005cf5b8cf`; `git rev-list --count ea93edcbe2b13faa661cf502674035005cf5b8cf..795a41279a412d74c142e0a263564a03c2017d4b` returned 2. Normal commit hooks passed on both commits.
 

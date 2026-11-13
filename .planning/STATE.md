@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 03
 current_phase_name: Background Subagents
 status: executing
-stopped_at: Phase 03 wave 1 verified; wave 2 next
-last_updated: "2026-11-13T17:08:51.930784+00:00"
+stopped_at: Phase 03 wave 2 verified; wave 3 next
+last_updated: "2026-11-13T17:50:35.066160+00:00"
 last_activity: 2026-11-13
-last_activity_desc: Phase 03 wave 1 verified; wave 2 next
-state_head: 5dfe02148494586a35c7f53ab38f1e09fca3a902
+last_activity_desc: Phase 03 wave 2 verified; wave 3 next
+state_head: 27987110e4a670d2a20115ab81027eec41b98148
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 29
-  completed_plans: 23
+  completed_plans: 25
   percent: 18
 ---
 
@@ -32,28 +32,29 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03 (Background Subagents) — EXECUTING
-Plan: 3 of 8
+Plan: 5 of 8
 Status: Executing Phase 03
-Last activity: 2026-11-13 — Phase 03 wave 1 verified; wave 2 next
+Last activity: 2026-11-13 — Phase 03 wave 2 verified; wave 3 next
 
 Progress: [██░░░░░░░░] 18%
 
 
 ### parity-gaps Phase 3 execution
 
-Wave 1 is merged and verified: 2/8 plans complete. Child hook journals isolate
-parent/sibling process ownership, the ten-event policy admits only child tool
-hooks, and runtime identity comes from the companion structured prefix. Exact
-historical and corrected MCP warning generations migrate while preserving edits.
+Waves 1 and 2 are merged and verified: 4/8 plans complete. Child journals
+isolate parent/sibling process ownership. Child PreToolUse carries a copied,
+session-checked identity in synchronous, plain async and asyncRewake hooks.
+Exact historical/corrected warnings migrate while fresh MCP warnings use the
+corrected wording. The parent added four real background-process stdin tests
+in `27987110`; the old registry fails both child cases and main controls pass.
 
-The first combined gate caught a new real-child test assertion racing queued
-journal cleanup. Commit `5dfe0214` synchronizes it without relaxing assertions.
-The full `npm run check` passed at `5dfe02148494586a35c7f53ab38f1e09fca3a902`,
-Node v26.13.1: 1876 adapter scenarios, 168 builtin scenarios and all 361 direct
-coverage pairs. Log: `/tmp/pg3-wave1-check-fixed.log`; 03-VALIDATION.md records
-the failed and passing runs. Schema drift is clear; map drift remains advisory.
-Wave 2 next: 03-03 pre-tool identity across execution lanes and 03-04 corrected
-current MCP warning output. No manual verification is requested.
+The full `npm run check` passed at
+`27987110e4a670d2a20115ab81027eec41b98148`, Node v26.13.1: 1876 adapter
+scenarios, 168 builtin scenarios and all 361 direct coverage pairs.
+Log: `/tmp/pg3-wave2-check.log`; 03-VALIDATION.md records the exact evidence.
+The earlier wave-1 cleanup assertion race remains resolved by `5dfe0214`.
+Wave 3 next: 03-05 success/failure identity and installed lifecycle/process
+ownership acceptance. No manual verification is requested.
 
 ### parity-gaps Phase 2 execution
 
