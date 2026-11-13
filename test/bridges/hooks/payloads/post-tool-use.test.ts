@@ -108,7 +108,24 @@ for (const { name, toolName, input, expected, expectedName } of [
 
     assert.deepStrictEqual(payload.tool_input, expected);
     assert.strictEqual(payload.tool_name, expectedName);
-    assert.strictEqual(payload.tool_response, event.content);
+    if (toolName === "read") {
+      assert.deepStrictEqual(payload.tool_response, {
+        type: "text",
+        file: {
+          filePath: "/workspace/result/notes.txt",
+          content: "result",
+          startLine: 2,
+          numLines: 1,
+        },
+      });
+    } else if (toolName === "write") {
+      assert.deepStrictEqual(payload.tool_response, {
+        filePath: "/workspace/result/output.txt",
+        content: "written",
+      });
+    } else {
+      assert.strictEqual(payload.tool_response, event.content);
+    }
   });
 }
 
@@ -171,5 +188,27 @@ test("preserves a successful custom tool name and nested values without mutation
     sessionId: "session-custom",
     transcriptPath: "/sessions/session-custom.jsonl",
     cwd: "/workspace/custom",
+  });
+});
+
+test("projects a successful write from its executed input", () => {
+  const event = {
+    type: "tool_result",
+    toolCallId: "write-result",
+    toolName: "write",
+    input: { path: "output.txt", content: "written" },
+    content: [{ type: "text" as const, text: "Successfully wrote to output.txt" }],
+    isError: false,
+    details: undefined,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "write-session",
+    transcriptPath: "/sessions/write.jsonl",
+    cwd: "/workspace/result",
+  } satisfies TranslationContext;
+
+  assert.deepStrictEqual(translatePostToolUse(event, context).tool_response, {
+    filePath: "/workspace/result/output.txt",
+    content: "written",
   });
 });
