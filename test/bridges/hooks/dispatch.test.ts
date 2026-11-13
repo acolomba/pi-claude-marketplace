@@ -1900,7 +1900,9 @@ describe("toolResultCompositeHandler", () => {
       },
     };
     const original = structuredClone(event);
+    let calls = 0;
     const executor: HookExecutor = () => {
+      calls += 1;
       runtime.advanceGeneration();
       return Promise.resolve({
         kind: "mutate",
@@ -1920,6 +1922,7 @@ describe("toolResultCompositeHandler", () => {
 
     // assert
     assert.strictEqual(output, undefined);
+    assert.strictEqual(calls, 1);
     assert.deepStrictEqual(event, original);
   });
 

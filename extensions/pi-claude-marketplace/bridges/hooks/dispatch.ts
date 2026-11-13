@@ -1103,8 +1103,13 @@ async function runEditResultPairs(
     (entry) => matcherFiresOnToolEvent(entry.matcher, view.tool),
     view.tool,
   );
+  const capturedGeneration = runtime.currentGeneration();
   const runs = await Promise.all(
     pairs.map(({ input }) => {
+      if (capturedGeneration !== runtime.currentGeneration()) {
+        return Promise.resolve(undefined);
+      }
+
       const pairEvent: ToolResultEvent = { ...event, input };
       return runHooks(runtime, hooks, (entry) => executor(entry, pairEvent, ctx, pi, runtime));
     }),
