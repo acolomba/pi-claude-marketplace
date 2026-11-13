@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { EventEmitter, once } from "node:events";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
@@ -1496,6 +1497,148 @@ test(
     );
   },
 );
+
+for (const { name, marker, background, identity } of [
+  {
+    name: "child plain async",
+    marker: "1",
+    background: { async: true },
+    identity: { agent_type: "recording-agent", agent_id: "recording-session" },
+  },
+  {
+    name: "child asyncRewake",
+    marker: "1",
+    background: { asyncRewake: true },
+    identity: { agent_type: "recording-agent", agent_id: "recording-session" },
+  },
+  { name: "main plain async", marker: "0", background: { async: true }, identity: {} },
+  { name: "main asyncRewake", marker: "0", background: { asyncRewake: true }, identity: {} },
+] as const) {
+  test(
+    `records ${name} stdin through a real background process`,
+    { concurrency: false, timeout: 15_000 },
+    async (t) => {
+      // arrange
+      const root = await mkdtemp(path.join(tmpdir(), "async-real-identity-"));
+      const loc = locationsFor("project", root);
+      const runtime = createHooksRuntime();
+      const recordingPath = path.join(root, "stdin.json");
+      let ready: Promise<unknown[]> | undefined;
+      let closed: Promise<unknown[]> | undefined;
+      let child: ChildProcess | undefined;
+      const previousMarker = process.env.PI_SUBAGENT_CHILD;
+      t.after(async () => {
+        await shutdownInMemoryChildren(runtime);
+        if (child !== undefined) {
+          await closed;
+        }
+
+        if (previousMarker === undefined) {
+          delete process.env.PI_SUBAGENT_CHILD;
+        } else {
+          process.env.PI_SUBAGENT_CHILD = previousMarker;
+        }
+
+        await rm(root, { recursive: true, force: true });
+      });
+      process.env.PI_SUBAGENT_CHILD = marker;
+      const beforeRun: BeforeAgentStartEvent = {
+        type: "before_agent_start",
+        messageType: "user",
+        prompt: "record stdin",
+        systemPrompt: "",
+        systemPromptOptions: {
+          cwd: root,
+          customPrompt: '<active_agent name="recording-agent"/>\n\n',
+          appendSystemPrompt: "",
+          selectedTools: [],
+          hiddenTools: [],
+          toolSnippets: {},
+          toolGuidelines: {},
+          promptGuidelines: [],
+          sections: {},
+          contextFiles: [],
+          skills: [],
+        },
+      };
+      runtime.captureChildIdentity(beforeRun, "recording-session");
+      const recordingSpawn = t.mock.fn(
+        (command: string, args: readonly string[], options: SpawnOptions): ChildProcess => {
+          child = spawn(command, [...args], options);
+          assert.ok(child.stdout);
+          ready = once(child.stdout, "data");
+          closed = once(child, "close");
+          return child;
+        },
+      );
+      const entry = createEntry(root, {
+        handlerDecl: {
+          type: "command",
+          command: process.execPath,
+          args: [
+            "-e",
+            'const fs = require("node:fs"); let text = ""; ' +
+              'process.on("SIGTERM", () => process.exit(0)); ' +
+              "setInterval(() => undefined, 1000); " +
+              'process.stdin.setEncoding("utf8"); ' +
+              'process.stdin.on("data", (chunk) => { text += chunk; }); ' +
+              'process.stdin.on("end", () => { fs.writeFileSync(process.argv[1], text); ' +
+              'process.stdout.write("ready"); });',
+            recordingPath,
+          ],
+          ...background,
+        },
+      });
+
+      // act
+      await spawnAndRegister(
+        runtime,
+        entry,
+        {
+          type: "tool_call",
+          toolCallId: "recording-call",
+          toolName: "bash",
+          input: { command: "pwd" },
+        },
+        createContext(root, "recording-session", true).context,
+        createPi().pi,
+        loc,
+        // The registry uses only spawn's three-argument overload with piped streams.
+        { spawnImpl: recordingSpawn as unknown as NonNullable<SpawnDeps["spawnImpl"]> },
+      );
+      assert.ok(ready);
+      assert.ok(closed);
+      await ready;
+      runtime.captureChildIdentity(
+        {
+          ...beforeRun,
+          systemPromptOptions: {
+            ...beforeRun.systemPromptOptions,
+            customPrompt: '<active_agent name="later-agent"/>\n\n',
+          },
+        },
+        "later-session",
+      );
+      assert.ok(child);
+      assert.strictEqual(child.exitCode, null);
+      child.kill("SIGTERM");
+      const exit = await closed;
+      const recorded: unknown = JSON.parse(await readFile(recordingPath, "utf8"));
+
+      // assert
+      assert.deepStrictEqual(recorded, {
+        session_id: "recording-session",
+        transcript_path: "",
+        cwd: root,
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "pwd" },
+        ...identity,
+      });
+      assert.deepStrictEqual(exit, [0, null]);
+    },
+  );
+}
 
 for (const scenario of [
   { name: "live owner", ownerSignal: "alive", marker: "matching", reaped: false },
