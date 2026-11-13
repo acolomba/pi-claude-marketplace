@@ -5233,3 +5233,27 @@ the recorded result proves the corresponding field.
 adds the required structured results or an execution-interception seam. This is
 implementation follow-up, not a decision to revisit whether translators belong
 in Phase 2; the user already required them there.
+
+## ASYNCLIFECYCLE-01: investigate intermittent hook exit, rewake and cleanup failures
+
+Observed 2026-11-13 during parity-gaps Phase 2 wave 4 verification (WINDOWS
+#114). The adapter suite reported an async hook exit code of 0 instead of 1.
+That scenario passed unchanged alone. Whole-feature reruns instead reported
+waiting hook processes after reload/restart, then a missing rewake. No assertion,
+timeout or process cleanup rule was weakened.
+
+The pre-wave commit `309a45559e9f086d76198acae906b038a4c9e1bc`, exported to an
+isolated temporary snapshot with the same installed dependencies, also failed
+the project-plugin reload cleanup scenario. That establishes a pre-existing
+cleanup failure; the exit-code and rewake failures still need a root cause.
+The snapshot used the normal eight-worker adapter runner, seed 853766:
+17/18 scenarios and 275/276 steps passed. Logs from this session are
+`/tmp/pg2-wave4-async-baseline.log`, `/tmp/pg2-wave4-async-feature.log` and
+`/tmp/pg2-wave4-async-feature-isolated.log`.
+
+**Next investigation:** preserve failed process state and hook lifecycle logs;
+check scenario-order contamination and process identity/reaping before calling
+this a load-related timeout. Reproduce with a fixed order, fix the proven cause,
+and show the reproduction fails without that fix. Revisit during the remaining
+hook-lane work and before milestone closeout. A later passing gate does not
+resolve this item or waive the full-suite requirement.
