@@ -45,8 +45,8 @@ Every task has explicit automated commands immediately followed by failing-direc
 | 03-04-02 | 04 | 2 | PG-AGENT-01 | T-03-14, T-03-16, T-03-20 | Update grant-form and public diagnostic contracts for the current emitter | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/agents/grant-forms.test.ts` | Existing or created by declared predecessor; extend | passed |
 | 03-05-01 | 05 | 3 | PG-HOOK-07a | T-03-10 | Record identity after one successful and one failed child tool call | owner/integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/payloads/post-tool-use.test.ts test/bridges/hooks/payloads/post-tool-use-failure.test.ts test/integration/hooks-dispatch-end-to-end.test.ts` | Existing or created by declared predecessor; extend | passed |
 | 03-05-02 | 05 | 3 | PG-HOOK-07a | T-03-01, T-03-02, T-03-03, T-03-05, T-03-21 | Prove lifecycle suppression and process ownership through installed plugins | owner/integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/integration/subagent-hook-ownership.test.ts` | New fixture/step/integration files created with consumers here | passed |
-| 03-06-01 | 06 | 4 | PG-HOOK-07a, PG-AGENT-01 | T-03-07, T-03-10, T-03-11 | Exercise child identity, every execution lane and parent controls | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/dispatch-exec.test.ts test/bridges/hooks/async-rewake/registry.test.ts` | Existing or created by declared predecessor; extend | pending |
-| 03-06-02 | 06 | 4 | PG-HOOK-07a, PG-AGENT-01 | T-03-11, T-03-12, T-03-13 | Promote detached and concurrent companion probes into permanent acceptance | owner/integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/integration/pi-subagents-child-identity.test.ts` | New maintained driver and integration owner created with feature consumers here | pending |
+| 03-06-01 | 06 | 4 | PG-HOOK-07a, PG-AGENT-01 | T-03-07, T-03-10, T-03-11 | Exercise child identity, every execution lane and parent controls | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/hooks/dispatch-exec.test.ts test/bridges/hooks/async-rewake/registry.test.ts` | Existing or created by declared predecessor; extend | passed |
+| 03-06-02 | 06 | 4 | PG-HOOK-07a, PG-AGENT-01 | T-03-11, T-03-12, T-03-13 | Promote detached and concurrent companion probes into permanent acceptance | owner/integration | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/integration/pi-subagents-child-identity.test.ts` | New maintained driver and integration owner created with feature consumers here | passed |
 | 03-07-01 | 07 | 5 | PG-AGENT-01 | T-03-17 | Install one ordinary agent with delegated preference and preserve forced background cases | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/bridges/agents/convert.test.ts test/bridges/agents/grant-forms.test.ts test/bridges/agents/stage.test.ts test/orchestrators/plugin/install-flow-ledger.test.ts` | Existing or created by declared predecessor; extend | pending |
 | 03-07-02 | 07 | 5 | PG-AGENT-01 | T-03-17, T-03-18 | Keep all current-output owners green and prove companion-selected default mode | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/update-swap.test.ts test/orchestrators/plugin/reinstall-flow.test.ts` | Existing or created by declared predecessor; extend | pending |
 | 03-08-01 | 08 | 6 | PG-AGENT-01, PG-HOOK-07a | T-03-18 | Preserve installed bytes on load and migrate through update and reinstall | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/update-swap.test.ts test/orchestrators/plugin/reinstall-flow.test.ts` | Existing or created by declared predecessor; extend | pending |
@@ -61,7 +61,7 @@ Normal commit hooks are mandatory. Each combined-tree gate uses the complete com
 | Wave 1 combined tree | `npm run check` | 2400 seconds | Runtime/capture and legacy-recognition merges; exact commit/tree, Node version, exit and complete stages | passed |
 | Wave 2 combined tree | `npm run check` | 2400 seconds | Pre-tool dispatch and corrected current-warning merges; same evidence | passed |
 | Wave 3 combined tree | `npm run check` | 2400 seconds | Result identity and installed lifecycle/process acceptance; same evidence | passed |
-| Wave 4 combined tree | `npm run check` | 2400 seconds | Complete lanes and actual detached/concurrent companion acceptance; same evidence | pending |
+| Wave 4 combined tree | `npm run check` | 2400 seconds | Complete lanes and actual detached/concurrent companion acceptance; same evidence | passed |
 | Wave 5 combined tree | `npm run check` | 2400 seconds | Atomic default producer/current-output expectations and both MCP profiles; same evidence | pending |
 | Wave 6 combined tree | `npm run check` | 2400 seconds | Installed migration, ordinary real-child cases and documentation; same evidence | pending |
 | Phase gate | `npm run check` | 2400 seconds | Combined final tree after Parent lines; reuse only when build inputs are identical | pending |
@@ -72,8 +72,8 @@ Normal commit hooks are mandatory. Each combined-tree gate uses the complete com
 
 - [x] 03-05-02 creates features/lib/subagent-hook-session.ts, features/step_definitions/plugin/subagent-hooks.steps.ts and test/integration/subagent-hook-ownership.test.ts with their first consumers.
 - [x] 03-01-03 and 03-03-01/02 provide runtime capture and translated identity with production consumers in their plans.
-- [ ] 03-06-01 supplies structured stand-in metadata, complete recording assertions and all nine execution-lane combinations.
-- [ ] 03-06-02 creates the one maintained features/lib/real-subagent-child.ts and test/integration/pi-subagents-child-identity.test.ts with Node and Cucumber consumers; no temporary-script dependency.
+- [x] 03-06-01 supplies structured stand-in metadata, complete recording assertions and all nine execution-lane combinations.
+- [x] 03-06-02 creates the one maintained features/lib/real-subagent-child.ts and test/integration/pi-subagents-child-identity.test.ts with Node and Cucumber consumers; no temporary-script dependency.
 - [ ] Existing source owners receive their paired tests; no new production module or unconsumed export is planned.
 - [x] All provisional verification rows have concrete task IDs, waves, threat references, paths and commands.
 
@@ -175,3 +175,25 @@ backup byte for byte. Task SHAs: `1a896787` (result identity) and `ac952b64`
   checks, unpaired tests, integration tests, 1880 adapter scenarios / 22964
   steps, 173 builtin scenarios / 2367 steps and all 361 direct pairs passed.
   Log: `/tmp/pg3-wave3-check.log`.
+
+## Wave 4 Execution Evidence
+
+Plan 03-06 ran sequentially on `features/gaps` from `2625f6f9`. Task SHAs:
+`52871464` (child identity in every tool hook lane) and `4963f504` (real
+pi-subagents children as hook evidence), plus two verification fixes,
+`1b6faa8b` and `4349dc5e`, and the summary `b78a670e`.
+
+- RED neutralized production lines in the working tree only: removing identity
+  from the tool payload translators fails the 9 child owner cases, 7 of 8 new
+  scenario rows, all 3 integration cases and both real-child scenarios; making
+  identity stick across sessions fails both "missing child metadata" rows;
+  turning off child lifecycle suppression fails the detached case. Logs:
+  `/tmp/pg3-06-*-red-*.log`.
+- Plan scope deviation (recorded in 03-06-SUMMARY.md):
+  `features/support/pi-process.ts` now clears the harness directory after the
+  shared Pi reset starts its new session, because the previous scenario's
+  SessionEnd hook wrote a run into the next scenario's harness.
+- Full gate: `npm run check`, exit 0 at `b78a670e`, Node v26.13.1; 1890 adapter
+  scenarios / 23084 steps, 182 builtin
+  scenarios / 2480 steps and all 361 direct pairs passed. Log:
+  `/tmp/pg3-wave4-check.log`.

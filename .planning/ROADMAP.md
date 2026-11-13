@@ -270,13 +270,13 @@ Plans:
   3. In the stand-in child of `features/plugin/subagent-child.feature`, a plugin's recording `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd` hooks record no run, and its `PreToolUse` hook still runs (PG-HOOK-07a).
   4. A tool hook that runs in the child receives `agent_type`, and `agent_id` when the child can know it. The same hook in a main session receives neither field (PG-HOOK-07a).
 
-**Plans**: 4/8 plans executed
+**Plans**: 6/8 plans executed
 - [x] 03-01-PLAN.md
 - [x] 03-02-PLAN.md
 - [x] 03-03-PLAN.md
 - [x] 03-04-PLAN.md
 - [x] 03-05-PLAN.md
-- [ ] 03-06-PLAN.md
+- [x] 03-06-PLAN.md
 - [ ] 03-07-PLAN.md
 - [ ] 03-08-PLAN.md
 
