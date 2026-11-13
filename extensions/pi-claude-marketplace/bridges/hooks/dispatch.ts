@@ -52,6 +52,8 @@
 // tables (DISP-03 zombie-defense belt-and-suspenders), and a run whose
 // generation changed while its hooks ran folds to noop.
 
+import { homedir } from "node:os";
+
 import { closedSetMatcherValues } from "../../domain/components/hook-events.ts";
 import { mapPiToClaudeToolName } from "../../domain/components/hook-tool-names.ts";
 import {
@@ -74,6 +76,8 @@ import {
   adaptObservationResultForEvent,
   adaptToolCallResult,
   adaptToolResultResult,
+  notifyIgnoredToolInputRewrite,
+  replaceToolCallInput,
 } from "./event-adapters.ts";
 import {
   compactionBlockedText,
@@ -87,6 +91,7 @@ import {
 import { ifFires } from "./if-field/index.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
+import { decideEditBatch, editPairViews } from "./tool-batch.ts";
 
 import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
 import type { HookExecResult } from "./exec-result.ts";
@@ -810,6 +815,22 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       return undefined as CompositeReturnFor<E>;
     }
 
+    if (
+      claudeEvent === "PreToolUse" &&
+      (event as ToolCallEvent).toolName === "edit" &&
+      Array.isArray(((event as ToolCallEvent).input as Record<string, unknown> | null)?.edits)
+    ) {
+      return (await runEditPreflight(
+        runtime,
+        bucket,
+        view,
+        ctx,
+        pi,
+        executor,
+        capturedGeneration,
+      )) as CompositeReturnFor<E>;
+    }
+
     const folded = await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, view),
     );
@@ -827,6 +848,134 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
     return (await adaptForEvent(claudeEvent, folded, view.event, context)) as CompositeReturnFor<E>;
   };
+}
+
+async function authorizeEditPairs(
+  pairRuns: readonly { readonly event: ToolCallEvent; readonly folded: FoldedBucket }[],
+  contextFor: (folded: FoldedBucket) => HookAdapterContext,
+  runtime: HooksRuntime,
+  capturedGeneration: number,
+  ctx: ExtensionContext,
+): Promise<ToolCallEventResult | undefined> {
+  const decisions = await Promise.all(
+    pairRuns.map(({ event, folded }) =>
+      folded.result.kind === "mutate"
+        ? adaptToolCallResult(
+            { ...folded.result, updatedInput: undefined },
+            event,
+            contextFor(folded),
+          )
+        : Promise.resolve(undefined),
+    ),
+  );
+  if (capturedGeneration !== runtime.currentGeneration() || ctx.signal?.aborted) {
+    return undefined;
+  }
+
+  return decisions.find((decision) => decision?.block);
+}
+
+// Every pair keeps the original tool-call identity, while hook stdin sees one
+// Claude Edit input. Pi still receives just the original native tool call.
+async function runEditPreflight(
+  runtime: HooksRuntime,
+  bucket: readonly RoutingEntry[],
+  view: HookEventView,
+  ctx: ExtensionContext,
+  pi: ExtensionAPI | undefined,
+  executor: HookExecutor,
+  capturedGeneration: number,
+): Promise<ToolCallEventResult | undefined> {
+  const nativeEvent = view.event as ToolCallEvent;
+  const batch = editPairViews(nativeEvent.input, ctx.cwd, homedir());
+  if (batch === undefined) {
+    return undefined;
+  }
+
+  const hooks = matchingHooks(
+    bucket,
+    view.event,
+    ctx,
+    (entry) => entryFires("PreToolUse", entry, view),
+    view.tool,
+  );
+  const runs = await Promise.all(
+    batch.pairs.map(async (pair) => {
+      const pairEvent: ToolCallEvent = {
+        ...(view.event as ToolCallEvent),
+        input: pair.input,
+      };
+      const outcomes = await runHooks(runtime, hooks, (entry) =>
+        executor(entry, pairEvent, ctx, pi, runtime),
+      );
+      return outcomes === undefined
+        ? undefined
+        : { event: pairEvent, folded: foldOutcomes(outcomes) };
+    }),
+  );
+  const pairRuns = runs.filter((run): run is NonNullable<typeof run> => run !== undefined);
+  if (pairRuns.length !== batch.pairs.length) {
+    return undefined;
+  }
+
+  if (capturedGeneration !== runtime.currentGeneration() || ctx.signal?.aborted) {
+    return undefined;
+  }
+
+  for (const { event, folded } of pairRuns) {
+    const label = noticeLabel("PreToolUse", event);
+    showHookNotices(ctx, pi, hookNotices("PreToolUse", label, folded));
+    sendToolContext(pi, label, folded.result);
+  }
+
+  const contextFor = (folded: FoldedBucket): HookAdapterContext => ({
+    runtime,
+    ctx,
+    pi,
+    attributedTo: folded.attributedTo,
+  });
+  const decisive =
+    pairRuns.find(({ folded }) => folded.result.kind === "stop") ??
+    pairRuns.find(({ folded }) => folded.result.kind === "block");
+  if (decisive !== undefined) {
+    return adaptToolCallResult(decisive.folded.result, decisive.event, contextFor(decisive.folded));
+  }
+
+  const authorization = await authorizeEditPairs(
+    pairRuns,
+    contextFor,
+    runtime,
+    capturedGeneration,
+    ctx,
+  );
+  if (capturedGeneration !== runtime.currentGeneration() || ctx.signal?.aborted) {
+    return undefined;
+  }
+
+  if (authorization?.block) {
+    return authorization;
+  }
+
+  const decision = decideEditBatch(
+    batch,
+    pairRuns.map(({ folded: { outcomes } }) =>
+      outcomes.map(({ result }) => (result.kind === "mutate" ? result.updatedInput : undefined)),
+    ),
+    ctx.cwd,
+    homedir(),
+  );
+  switch (decision.kind) {
+    case "block":
+      return { block: true, reason: "PreToolUse:Edit hook error: conflicting edit targets" };
+    case "original":
+      notifyIgnoredToolInputRewrite(nativeEvent, contextFor(NOOP_FOLD), decision.category);
+      return undefined;
+    case "accepted":
+      replaceToolCallInput(nativeEvent, decision.input);
+      return undefined;
+    case "unchanged":
+      return undefined;
+  }
 }
 
 // D-BG-402: Claude Code fires no PostToolUseFailure hook on a running tool

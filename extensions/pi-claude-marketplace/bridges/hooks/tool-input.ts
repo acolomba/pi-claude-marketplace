@@ -19,7 +19,7 @@ function record(input: unknown): input is Input {
   return input !== null && typeof input === "object" && !Array.isArray(input);
 }
 
-function requestedPath(input: string, cwd: string, home: string): string {
+export function requestedPath(input: string, cwd: string, home: string): string {
   let normalized = input.replace(UNICODE_SPACES, " ");
   if (normalized.startsWith("@")) {
     normalized = normalized.slice(1);
