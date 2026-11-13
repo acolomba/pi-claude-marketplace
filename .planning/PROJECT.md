@@ -75,6 +75,25 @@ marketplace) work end to end on Pi.
 - Spikes S5, S7, and S8 have not run. Each runs in the phase it gates.
 - P2 and P3 rows of the PRD are not scheduled.
 
+### Phase 2 hook decisions implemented (2026-11-13)
+
+The accepted choices below apply to PG-HOOK-01/03/13. The [current hook contract](../docs/hooks-compatibility.md#current-tool-contract-phase-2-2026-11-13) names supported fields and limitations; [Phase 2 validation](phases/02-hook-payloads-matchers-and-stop-limit/02-VALIDATION.md) ties each outcome to owner and real Pi tests. These decisions preserve Claude Code parity where Pi provides the necessary facts. The original-call fallback in D-PG2-09 is an intentional project decision where Pi cannot perform a requested rewrite.
+
+| Decision | Actual outcome and evidence |
+| --- | --- |
+| D-PG2-01 | Each native Edit pair gets a Claude-shaped pre/result hook invocation; [pair scenarios](../features/hook/tool-use.feature) and [dispatch owner](../test/bridges/hooks/dispatch.test.ts). |
+| D-PG2-02 | All pair prechecks finish before one native edit; a later denial blocks it; [later-pair scenarios](../features/hook/tool-use.feature). |
+| D-PG2-03 | Rewrites apply to their own pair; unchanged pairs also participate in final target agreement. Conflicts block; per-pair command side effects can repeat; [batch owner](../test/bridges/hooks/tool-batch.test.ts). |
+| D-PG2-04 | Result hooks see each pair with the same actual native batch result or failure, never an invented per-pair outcome; [success scenarios](../features/hook/tool-use.feature) and [failure scenarios](../features/hook/tool-failure.feature). |
+| D-PG2-05 | File, search, shell and MCP results project only available Pi facts; LS remains native passthrough; [file owner](../test/bridges/hooks/tool-result-files.test.ts), [search/shell owner](../test/bridges/hooks/tool-result-search-shell.test.ts). |
+| D-PG2-06 | Valid successful output replacements render to the model and later Pi handlers, clearing stale carriers. Failed outputs stay failed. MCP modern presence wins before the legacy alias; [Pi boundary](../test/integration/hooks-result-boundary.test.ts), [both-profile scenarios](../features/hook/tool-use.feature). |
+| D-PG2-07 | Missing original file/type, separate streams, timing and ambiguous counts remain omitted. Full execution capture remains [HOOKRESULT-01](BACKLOG.md#hookresult-01-investigate-and-implement-execution-wrappers-for-full-claude-shaped-hook-results). |
+| D-PG2-08 | Equivalent Read/Edit/Write, shell and search input fields map both ways while native `if` inputs and MCP/custom schemas retain their own shape; [input owners](../test/bridges/hooks/tool-input.test.ts) and [search owner](../test/bridges/hooks/tool-input-search.test.ts). |
+| D-PG2-09 | Unsupported input rewrites use the whole original call with a sanitized notice unless denial, stop or target conflict blocks; [fallback and notice scenarios](../features/hook/tool-use.feature). This accepted divergence avoids pretending Pi executed an unsupported option. |
+| D-PG2-10 | Exact comma/pipe lists, whole unanchored JavaScript regex and ignored prompt/Stop matchers operate at install and runtime; [matcher scenarios](../features/hook/matchers.feature). |
+| D-PG2-11 | Eight Stop blocks continue, ninth overrides, and native tool calls/reload reset the count. Timing remains on `agent_settled`; Phase 5 owns event migration and the cap environment variable; [Stop scenarios](../features/hook/prompt-and-stop.feature). |
+| D-PG2-12 | Visible changes have real command-hook scenarios and owner/integration tests; normal commit hooks and combined-tree gates are tracked in [validation](phases/02-hook-payloads-matchers-and-stop-limit/02-VALIDATION.md). PowerShell has pure contract tests only. |
+
 ## Previous Milestone: behavioral-gaps -- Behavioral Coverage Gaps (branch: features/behavioral-gaps, started 2026-11-07, completed 2026-11-08, not yet pushed, no PR or npm release yet)
 
 **Goal:** The cucumber suite covers the user-visible behavior that the
