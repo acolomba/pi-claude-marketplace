@@ -26,6 +26,8 @@ export interface PreToolUseStdin {
   readonly hook_event_name: "PreToolUse";
   readonly tool_name: string;
   readonly tool_input: unknown;
+  readonly agent_type?: string;
+  readonly agent_id?: string;
 }
 
 export function translatePreToolUse(
@@ -39,5 +41,8 @@ export function translatePreToolUse(
     hook_event_name: "PreToolUse",
     tool_name: mapPiToClaudeToolName(event.toolName),
     tool_input: toHookToolInput(event.toolName, event.input, ctx.cwd, homedir()),
+    ...(ctx.childIdentity === undefined
+      ? {}
+      : { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }),
   };
 }

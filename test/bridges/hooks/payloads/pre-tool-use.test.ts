@@ -42,6 +42,8 @@ test("maps a built-in tool to the complete PreToolUse envelope", () => {
 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
+  assert.strictEqual(Object.hasOwn(payload, "agent_type"), false);
+  assert.strictEqual(Object.hasOwn(payload, "agent_id"), false);
   assert.deepStrictEqual(toolInput, { command: "printf 'ready\\n'", timeout: 15 });
 });
 
@@ -91,5 +93,36 @@ test("preserves a custom tool name and input without mutation", () => {
     sessionId: "session-custom",
     transcriptPath: "/sessions/session-custom.jsonl",
     cwd: "/workspace/custom",
+  });
+});
+
+test("includes current child identity in the complete PreToolUse envelope", () => {
+  // arrange
+  const event = {
+    type: "tool_call",
+    toolCallId: "child-call",
+    toolName: "mcp__catalog__lookup",
+    input: { query: "ready" },
+  } satisfies ToolCallEvent;
+  const context = {
+    sessionId: "child-session",
+    transcriptPath: "",
+    cwd: "/workspace/child",
+    childIdentity: { agentType: 'review&"<agent>', sessionId: "child-session" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePreToolUse(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "child-session",
+    transcript_path: "",
+    cwd: "/workspace/child",
+    hook_event_name: "PreToolUse",
+    tool_name: "mcp__catalog__lookup",
+    tool_input: { query: "ready" },
+    agent_type: 'review&"<agent>',
+    agent_id: "child-session",
   });
 });

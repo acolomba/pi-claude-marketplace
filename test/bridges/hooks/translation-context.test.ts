@@ -22,6 +22,49 @@ import { buildTranslationContext } from "../../../extensions/pi-claude-marketpla
 import type { TranslationContext } from "../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
+function inMemoryContext(sessionId: string, cwd: string): ExtensionContext {
+  const sessionManager = SessionManager.inMemory(cwd, { id: sessionId });
+  return {
+    get ui(): ExtensionContext["ui"] {
+      throw new Error("buildTranslationContext must not read ui");
+    },
+    mode: "print",
+    hasUI: false,
+    cwd,
+    sessionManager,
+    get modelRegistry(): ExtensionContext["modelRegistry"] {
+      throw new Error("buildTranslationContext must not read modelRegistry");
+    },
+    model: undefined,
+    scopedModels: [],
+    isIdle(): never {
+      throw new Error("buildTranslationContext must not call isIdle");
+    },
+    isProjectTrusted(): never {
+      throw new Error("buildTranslationContext must not call isProjectTrusted");
+    },
+    signal: undefined,
+    abort(): never {
+      throw new Error("buildTranslationContext must not call abort");
+    },
+    hasPendingMessages(): never {
+      throw new Error("buildTranslationContext must not call hasPendingMessages");
+    },
+    shutdown(): never {
+      throw new Error("buildTranslationContext must not call shutdown");
+    },
+    getContextUsage(): never {
+      throw new Error("buildTranslationContext must not call getContextUsage");
+    },
+    compact(): never {
+      throw new Error("buildTranslationContext must not call compact");
+    },
+    getSystemPrompt(): never {
+      throw new Error("buildTranslationContext must not call getSystemPrompt");
+    },
+  } satisfies ExtensionContext;
+}
+
 const typedTranslationContext: TranslationContext = {
   sessionId: "session-type",
   transcriptPath: "/sessions/session-type.jsonl",
@@ -188,4 +231,41 @@ test("uses an empty transcript path for an in-memory session", () => {
     transcriptPath: "",
     cwd: "/workspace/empty-session",
   });
+});
+
+test("copies a matching child identity into the current session snapshot", () => {
+  // arrange
+  const context = inMemoryContext("child-session", "/workspace/child");
+  const identity = { agentType: 'review&"<agent>', sessionId: "child-session" };
+
+  // act
+  const translationContext = buildTranslationContext(context, identity);
+  identity.agentType = "changed";
+
+  // assert
+  assert.deepStrictEqual(translationContext, {
+    sessionId: "child-session",
+    transcriptPath: "",
+    cwd: "/workspace/child",
+    childIdentity: { agentType: 'review&"<agent>', sessionId: "child-session" },
+  });
+});
+
+test("omits a child identity from another session", () => {
+  // arrange
+  const context = inMemoryContext("current-session", "/workspace/child");
+
+  // act
+  const translationContext = buildTranslationContext(context, {
+    agentType: "reviewer",
+    sessionId: "stale-session",
+  });
+
+  // assert
+  assert.deepStrictEqual(translationContext, {
+    sessionId: "current-session",
+    transcriptPath: "",
+    cwd: "/workspace/child",
+  });
+  assert.strictEqual(Object.hasOwn(translationContext, "childIdentity"), false);
 });
