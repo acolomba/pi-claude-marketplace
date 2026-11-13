@@ -4,17 +4,17 @@ milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 03
 current_phase_name: Background Subagents
-status: paused
-stopped_at: Paused by user during Phase 03 plan 03-05 Task 1
-last_updated: "2026-11-13T18:07:15.576Z"
+status: executing
+stopped_at: Phase 03 wave 3 verified; wave 4 next
+last_updated: "2026-11-13T20:11:47Z"
 last_activity: 2026-11-13
-last_activity_desc: Paused by user during Phase 03 plan 03-05 Task 1
-state_head: 27987110e4a670d2a20115ab81027eec41b98148
+last_activity_desc: Phase 03 wave 3 verified; wave 4 next
+state_head: 9a242dc37dc44bc0b2c89972c07d5137b162fc27
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 29
-  completed_plans: 25
+  completed_plans: 26
   percent: 18
 ---
 
@@ -31,32 +31,29 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 03 (Background Subagents) — PAUSED
-Plan: 5 of 8
-Status: Paused by user; see HANDOFF.json
-Last activity: 2026-11-13 — Paused by user during Phase 03 plan 03-05 Task 1
+Phase: 03 (Background Subagents) — EXECUTING
+Plan: 6 of 8
+Status: Executing Phase 03
+Last activity: 2026-11-13 — Phase 03 wave 3 verified; wave 4 next
 
 Progress: [██░░░░░░░░] 18%
 
 
 ### parity-gaps Phase 3 execution
 
-Waves 1 and 2 are merged and verified: 4/8 plans complete. Child journals
-isolate parent/sibling process ownership. Child PreToolUse carries a copied,
-session-checked identity in synchronous, plain async and asyncRewake hooks.
-Exact historical/corrected warnings migrate while fresh MCP warnings use the
-corrected wording. The parent added four real background-process stdin tests
-in `27987110`; the old registry fails both child cases and main controls pass.
+Waves 1-3 are merged and verified: 5/8 plans complete. Child journals isolate
+parent/sibling process ownership. Child PreToolUse, PostToolUse and
+PostToolUseFailure carry a session-checked identity.
+Installed-plugin scenarios under both MCP profiles prove a child runs only tool
+hooks, ignores a blocking Stop hook, and leaves parent and sibling hooks
+running; a real-process test proves survival and dead-owner recovery.
 
-The full `npm run check` passed at
-`27987110e4a670d2a20115ab81027eec41b98148`, Node v26.13.1: 1876 adapter
-scenarios, 168 builtin scenarios and all 361 direct coverage pairs.
-Log: `/tmp/pg3-wave2-check.log`; 03-VALIDATION.md records the exact evidence.
-The earlier wave-1 cleanup assertion race remains resolved by `5dfe0214`.
-Wave 3 is paused at the user’s request. Plan 03-05 Task 1 has five staged
-files in its preserved executor worktree; commit checks were interrupted.
-See HANDOFF.json and the phase .continue-here.md before resuming. No manual
-verification is requested.
+Wave 3 resumed from the user pause in its preserved worktree and merged as
+`9a242dc3`. The full `npm run check` passed there, Node v26.13.1: 1880 adapter
+scenarios, 173 builtin scenarios and all 361 direct coverage pairs.
+Log: `/tmp/pg3-wave3-check.log`; 03-VALIDATION.md records the evidence.
+Wave 4 next: 03-06 complete lanes and real detached/concurrent companion
+acceptance. No manual verification is requested.
 
 ### parity-gaps Phase 2 execution
 

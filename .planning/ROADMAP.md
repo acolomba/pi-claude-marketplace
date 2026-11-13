@@ -275,7 +275,7 @@ Plans:
 - [x] 03-02-PLAN.md
 - [x] 03-03-PLAN.md
 - [x] 03-04-PLAN.md
-- [ ] 03-05-PLAN.md
+- [x] 03-05-PLAN.md
 - [ ] 03-06-PLAN.md
 - [ ] 03-07-PLAN.md
 - [ ] 03-08-PLAN.md
@@ -420,7 +420,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Companion Floors and MCP Defaults | 11/11 | Complete    | 2026-11-12 |
 | 2. Hook Payloads, Matchers, and Stop Limit | 10/10 | Complete    | 2026-11-13 |
-| 3. Background Subagents | 4/8 | In Progress | - |
+| 3. Background Subagents | 5/8 | In Progress | - |
 | 4. Skill and Workflow Install Defects | 0/0 | Not started | - |
 | 5. Stop Continuation and Hook Failures | 0/0 | Not started | - |
 | 6. Hook Inputs and Events | 0/0 | Not started | - |
