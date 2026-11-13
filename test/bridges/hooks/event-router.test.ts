@@ -180,7 +180,7 @@ test(
     });
     const { root } = await createHermeticEnvironment(t, "hooks-router-reload-");
     const projectRoot = path.join(root, "project");
-    shutdownInMemoryChildren(runtime);
+    await shutdownInMemoryChildren(runtime);
     const userLocations = locationsFor("user", projectRoot);
     const projectLocations = locationsFor("project", projectRoot);
     const hydration = createHooksHydration(runtime, {
@@ -4148,3 +4148,294 @@ for (const trusted of [true, false]) {
     assert.deepStrictEqual(await readPidTable(locations), trusted ? [] : [deadRow]);
   });
 }
+
+test("child input does not dispatch a UserPromptSubmit hook", { concurrency: false }, async (t) => {
+  const { root } = await createHermeticEnvironment(t, "hooks-router-child-input-");
+  const previous = process.env.PI_SUBAGENT_CHILD;
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.PI_SUBAGENT_CHILD;
+    } else {
+      process.env.PI_SUBAGENT_CHILD = previous;
+    }
+  });
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: BucketAEvent[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  runtime.setRoutingBucket("UserPromptSubmit", [
+    { ...preToolUseEntry("child-input", root), claudeEvent: "UserPromptSubmit" },
+  ]);
+  process.env.PI_SUBAGENT_CHILD = "1";
+
+  await registeredHandler(registrations, "input")(
+    { type: "input", text: "hello", source: "interactive" },
+    makeContext(root, root),
+  );
+
+  assert.deepStrictEqual(dispatched, []);
+});
+
+for (const child of [false, true]) {
+  for (const claudeEvent of BUCKET_A_EVENTS) {
+    test(
+      `${child ? "child" : "main"} routes ${claudeEvent} by the ten-event policy`,
+      { concurrency: false },
+      async (t) => {
+        const { root } = await createHermeticEnvironment(t, "hooks-router-event-policy-");
+        const previous = process.env.PI_SUBAGENT_CHILD;
+        t.after(() => {
+          if (previous === undefined) {
+            delete process.env.PI_SUBAGENT_CHILD;
+          } else {
+            process.env.PI_SUBAGENT_CHILD = previous;
+          }
+        });
+        const runtime = createHooksRuntime();
+        const { pi, registrations, messages } = makeRecordingPi();
+        const dispatched: BucketAEvent[] = [];
+        await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+          cwd: root,
+          executor: (entry) => {
+            dispatched.push(entry.claudeEvent);
+            return Promise.resolve({ kind: "noop" });
+          },
+        });
+        const entry: RoutingEntry = {
+          ...preToolUseEntry("policy-plugin", root),
+          scope: "user",
+          claudeEvent,
+          matcher: parseMatcher(""),
+          rawMatcher: "",
+        };
+        runtime.setRoutingBucket(claudeEvent, [entry]);
+        if (claudeEvent === "SessionStart") {
+          seedPluginConfig(
+            runtime,
+            "user",
+            "catalog",
+            "policy-plugin",
+            entry.resolvedSource,
+            makeConfig([{ event: "SessionStart", handlers: 1 }]),
+            new Map(),
+          );
+        }
+
+        if (claudeEvent === "PostCompact") {
+          runtime.setRoutingBucket("SessionStart", [{ ...entry, claudeEvent: "SessionStart" }]);
+        }
+
+        process.env.PI_SUBAGENT_CHILD = child ? "1" : "0";
+        const context = makeContext(root, root);
+        switch (claudeEvent) {
+          case "SessionStart":
+            await registeredHandler(registrations, "session_start")(
+              { type: "session_start", reason: "new" },
+              context,
+            );
+            break;
+          case "UserPromptSubmit":
+            await registeredHandler(registrations, "input")(
+              { type: "input", text: "hello", source: "interactive" },
+              context,
+            );
+            break;
+          case "PreToolUse":
+            await registeredHandler(registrations, "tool_call")(
+              { type: "tool_call", toolCallId: "policy-call", toolName: "bash", input: {} },
+              context,
+            );
+            break;
+          case "PostToolUse":
+          case "PostToolUseFailure":
+            await registeredHandler(registrations, "tool_result")(
+              {
+                type: "tool_result",
+                toolCallId: "policy-call",
+                toolName: "bash",
+                input: {},
+                content: [],
+                isError: claudeEvent === "PostToolUseFailure",
+              },
+              context,
+            );
+            break;
+          case "PreCompact":
+            await registeredHandler(registrations, "session_before_compact")(
+              { type: "session_before_compact", reason: "manual" },
+              context,
+            );
+            break;
+          case "PostCompact":
+            await registeredHandler(registrations, "session_compact")(
+              compactionEvent("policy summary"),
+              context,
+            );
+            break;
+          case "SessionEnd":
+            await registeredHandler(registrations, "session_shutdown")(
+              { type: "session_shutdown", reason: "quit" },
+              context,
+            );
+            break;
+          case "Stop":
+          case "StopFailure":
+            await registeredHandler(registrations, "agent_end")(
+              {
+                type: "agent_end",
+                messages: [
+                  {
+                    ...assistantForBookkeeping(),
+                    stopReason: claudeEvent === "Stop" ? "stop" : "error",
+                  },
+                ],
+              },
+              context,
+            );
+            await registeredHandler(registrations, "agent_settled")(
+              { type: "agent_settled" },
+              context,
+            );
+            break;
+        }
+
+        const expected: BucketAEvent[] = child
+          ? (["PreToolUse", "PostToolUse", "PostToolUseFailure"] as BucketAEvent[]).includes(
+              claudeEvent,
+            )
+            ? [claudeEvent]
+            : []
+          : claudeEvent === "PostCompact"
+            ? ["SessionStart", "PostCompact"]
+            : [claudeEvent];
+        assert.deepStrictEqual(dispatched, expected);
+        assert.deepStrictEqual(messages, []);
+      },
+    );
+  }
+}
+
+test(
+  "child hydrates user tool hooks without executing untrusted project hooks",
+  { concurrency: false },
+  async (t) => {
+    const { root } = await createHermeticEnvironment(t, "hooks-router-child-trust-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    for (const scope of ["user", "project"] as const) {
+      const loc = locationsFor(scope, root);
+      const hooksDirectory = path.join(loc.hooksDir, `${scope}-hooks`);
+      await mkdir(hooksDirectory, { recursive: true });
+      await writeFile(
+        path.join(hooksDirectory, "hooks.json"),
+        JSON.stringify(makeConfig([{ event: "PreToolUse", matcher: "Bash", handlers: 1 }])),
+      );
+      await saveState(
+        loc.extensionRoot,
+        makeScopeState({
+          scope,
+          cwd: root,
+          plugins: {
+            [scope]: makeStoredPlugin({ root: path.join(root, scope), hooks: [`${scope}-hooks`] }),
+          },
+        }),
+      );
+    }
+
+    const runtime = createHooksRuntime();
+    const { pi, registrations } = makeRecordingPi();
+    const dispatched: string[] = [];
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry) => {
+        dispatched.push(`${entry.scope}:${entry.pluginId}`);
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const context = makeContext(root, root, false);
+
+    await registeredHandler(registrations, "session_start")(
+      { type: "session_start", reason: "new" },
+      context,
+    );
+    await registeredHandler(registrations, "tool_call")(
+      { type: "tool_call", toolCallId: "trust-call", toolName: "bash", input: {} },
+      context,
+    );
+
+    assert.deepStrictEqual(dispatched, ["user:user"]);
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.scope),
+      ["user"],
+    );
+  },
+);
+
+test(
+  "child session shutdown cleans up on reload, quit, and rejected mode",
+  { concurrency: false },
+  async (t) => {
+    const { root } = await createHermeticEnvironment(t, "hooks-router-child-shutdown-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const state = createHooksRuntime();
+    let shutdownCalls = 0;
+    const runtime = new Proxy(state, {
+      get(target, property, receiver): unknown {
+        if (property === "shutdownChildren") {
+          return (): ReturnType<typeof target.shutdownChildren> => {
+            shutdownCalls += 1;
+            return target.shutdownChildren();
+          };
+        }
+
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const { pi, registrations } = makeRecordingPi();
+    const dispatched: BucketAEvent[] = [];
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry) => {
+        dispatched.push(entry.claudeEvent);
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    runtime.setRoutingBucket("SessionEnd", [
+      { ...preToolUseEntry("shutdown", root), claudeEvent: "SessionEnd" },
+    ]);
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const shutdown = registeredHandler(registrations, "session_shutdown");
+
+    await shutdown({ type: "session_shutdown", reason: "reload" }, makeContext(root, root));
+    await shutdown({ type: "session_shutdown", reason: "quit" }, makeContext(root, root));
+    const rejectedContext = new Proxy(makeContext(root, root), {
+      get(target, property, receiver): unknown {
+        return property === "mode" ? "unknown" : Reflect.get(target, property, receiver);
+      },
+    });
+    await shutdown({ type: "session_shutdown", reason: "quit" }, rejectedContext);
+
+    assert.strictEqual(shutdownCalls, 4);
+    assert.deepStrictEqual(dispatched, []);
+  },
+);

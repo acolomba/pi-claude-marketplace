@@ -57,6 +57,7 @@ import {
   isRecordedButDisabled,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
+import { isSubagentChild } from "../../platform/subagent-child.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -131,6 +132,25 @@ type EventRouterRoutingState = Pick<
   | "setParsedConfig"
   | "setRoutingBucket"
 >;
+
+type ChildEventOutcome = "dispatch" | "suppress" | "SubagentStart" | "SubagentStop";
+
+const CHILD_EVENT_POLICY = {
+  SessionStart: "SubagentStart",
+  UserPromptSubmit: "suppress",
+  PreToolUse: "dispatch",
+  PostToolUse: "dispatch",
+  PostToolUseFailure: "dispatch",
+  PreCompact: "suppress",
+  PostCompact: "suppress",
+  SessionEnd: "suppress",
+  Stop: "SubagentStop",
+  StopFailure: "suppress",
+} as const satisfies Record<BucketAEvent, ChildEventOutcome>;
+
+function dispatchesInCurrentSession(event: BucketAEvent): boolean {
+  return !isSubagentChild(process.env) || CHILD_EVENT_POLICY[event] === "dispatch";
+}
 
 /**
  * Read `hooks.json` from disk, parse via `parseHooksConfig`, and
@@ -899,24 +919,30 @@ async function prepareSessionStartDataDirs(
  */
 function sessionShutdownCallback(
   sessionEndHandler: CompositeHandler<"SessionEnd">,
-): (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<undefined> | undefined {
-  return (event, ctx) => {
-    let mode: ExtensionMode;
+  runtime: HooksRuntime,
+): (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<undefined> {
+  return async (event, ctx) => {
     try {
-      // Without a notification mode the user-facing channel is unavailable, so
-      // the hook could not report its outcome. The callback is skipped and
-      // debug-logged instead; the same skip applies at the other mode checks.
-      mode = requireNotificationMode(ctx.mode);
-    } catch (error: unknown) {
-      hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
-      return undefined;
-    }
+      let mode: ExtensionMode;
+      try {
+        // Without a notification mode the user-facing channel is unavailable, so
+        // the hook could not report its outcome. The callback is skipped and
+        // debug-logged instead; the same skip applies at the other mode checks.
+        mode = requireNotificationMode(ctx.mode);
+      } catch (error: unknown) {
+        hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+        return undefined;
+      }
 
-    if (event.reason === "reload") {
-      return undefined;
-    }
+      if (event.reason === "reload" || !dispatchesInCurrentSession("SessionEnd")) {
+        return undefined;
+      }
 
-    return sessionEndHandler({ reason: claudeSessionEndReason(event.reason, mode) }, ctx);
+      await sessionEndHandler({ reason: claudeSessionEndReason(event.reason, mode) }, ctx);
+      return;
+    } finally {
+      await shutdownInMemoryChildren(runtime);
+    }
   };
 }
 
@@ -969,6 +995,10 @@ function sessionCompactCallback(
       requireNotificationMode(ctx.mode);
     } catch (error: unknown) {
       hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+      return undefined;
+    }
+
+    if (!dispatchesInCurrentSession("SessionStart")) {
       return undefined;
     }
 
@@ -1077,7 +1107,7 @@ async function registerHooksBridgeWith(
   // new runtime for every load, so in production this walk finds nothing:
   // the user-scope reap below and the project hydrate's reap stop an earlier
   // load's children, on /reload and after a crash alike (D-BG-207).
-  void shutdownInMemoryChildren(runtime);
+  await shutdownInMemoryChildren(runtime);
 
   const hydrated = await hydrateCacheFromDisk(opts, reader, routingState, generationIsCurrent);
   for (const { loc } of hydrated) {
@@ -1168,7 +1198,10 @@ async function registerHooksBridgeWith(
           }
 
           requireNotificationMode(ctx.mode);
-          await sessionStartHandler({ source: claudeSessionStartSource(event.reason) }, ctx);
+          if (dispatchesInCurrentSession("SessionStart")) {
+            await sessionStartHandler({ source: claudeSessionStartSource(event.reason) }, ctx);
+          }
+
           if (!generationIsCurrent()) {
             return;
           }
@@ -1183,14 +1216,17 @@ async function registerHooksBridgeWith(
     bind((generation) =>
       sessionShutdownCallback(
         compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
+        runtime,
       ),
     ),
   );
   pi.on(
     "session_before_compact",
-    bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor),
-    ),
+    bindWithMode((generation) => {
+      const handler = compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor);
+      return (event, ctx) =>
+        dispatchesInCurrentSession("PreCompact") ? handler(event, ctx) : undefined;
+    }),
   );
   pi.on(
     "session_compact",
@@ -1207,9 +1243,17 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "input",
-    bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "UserPromptSubmit", generation, pi, opts.executor),
-    ),
+    bindWithMode((generation) => {
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptSubmit",
+        generation,
+        pi,
+        opts.executor,
+      );
+      return (event, ctx) =>
+        dispatchesInCurrentSession("UserPromptSubmit") ? handler(event, ctx) : undefined;
+    }),
   );
   // D-P5-07: both tool handlers of this generation share one view, so they
   // read the proxy rule's implementation at most once together. Creating the
@@ -1252,7 +1296,17 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "agent_settled",
-    bind((generation) => settleHandlerFor(runtime, generation, pi, opts.executor)),
+    bind((generation) => {
+      const handler = settleHandlerFor(runtime, generation, pi, opts.executor);
+      return (event, ctx) => {
+        if (!dispatchesInCurrentSession("Stop") && !dispatchesInCurrentSession("StopFailure")) {
+          runtime.takeLastAssistant();
+          return Promise.resolve();
+        }
+
+        return handler(event, ctx);
+      };
+    }),
   );
   // STOP-07 loop-protection reset: a dedicated second `input` subscription
   // (distinct from the UserPromptSubmit dispatch handler above) clears the
