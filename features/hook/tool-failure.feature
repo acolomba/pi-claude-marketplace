@@ -7,6 +7,66 @@ Feature: Hook tool failure
   that record each run stand in for the plugin's hooks. The payload leaves out
   `tool_use_id`, `duration_ms`, and `mcp_server` (D-CF5-28, D-BG-403).
 
+  Scenario: Failed edit hooks receive each pair and the same actual error
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event              | matcher |
+      | failure | PostToolUseFailure | Edit    |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "document.txt" with the text "first\nmiddle\n" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                                                                             |
+      |       | edit | {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | Done. |      |                                                                                                                       |
+    When the user prompts "edit a missing block"
+    Then the hooks record these runs in any order:
+      | event              | session | tool name | tool input                                                                            | error                                                                                                     | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUseFailure | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | Could not find edits[1] in document.txt. The oldText must match exactly including all whitespace and newlines. | false        | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | Could not find edits[1] in document.txt. The oldText must match exactly including all whitespace and newlines. | false        | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the project file "document.txt" has the text "first\nmiddle\n" after a tool hook
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                     |
+      | 1    | user        | edit a missing block                                                                                                     |
+      | 2    | user        | edit a missing block                                                                                                     |
+      | 2    | assistant   | tool call edit {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | 2    | tool result | edit failed: Could not find edits[1] in document.txt. The oldText must match exactly including all whitespace and newlines. |
+
+  Scenario: A failed edit hook cannot replace the failed result
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event              | matcher | form   | output                                                                                                                                             |
+      | replace | PostToolUseFailure | Edit    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","updatedToolOutput":{"content":[{"type":"text","text":"replaced"}],"isError":false}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "document.txt" with the text "first\nmiddle\n" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                                                                             |
+      |       | edit | {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | Done. |      |                                                                                                                       |
+    When the user prompts "edit a missing block"
+    Then the hooks record these runs in any order:
+      | event              | session | tool name | tool input                                                                            | error                                                                                                     | is interrupt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUseFailure | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | Could not find edits[1] in document.txt. The oldText must match exactly including all whitespace and newlines. | false        | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUseFailure | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | Could not find edits[1] in document.txt. The oldText must match exactly including all whitespace and newlines. | false        | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the project file "document.txt" has the text "first\nmiddle\n" after a tool hook
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                     |
+      | 1    | user        | edit a missing block                                                                                                     |
+      | 2    | user        | edit a missing block                                                                                                     |
+      | 2    | assistant   | tool call edit {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | 2    | tool result | edit failed: Could not find edits[1] in document.txt. The oldText must match exactly including all whitespace and newlines. |
+
   Scenario: A failed Read hook receives a Claude file input
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

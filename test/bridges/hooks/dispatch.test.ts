@@ -1969,6 +1969,80 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
+  test("gives duplicate edit pairs the same failure without accepting output changes", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUseFailure", [
+      createRoutingEntry({
+        pluginId: "failure",
+        claudeEvent: "PostToolUseFailure",
+        rawMatcher: "Edit",
+        declarationIndex: 0,
+      }),
+    ]);
+    const event: ToolResultEvent = {
+      ...createToolResultEvent(true, "edit"),
+      input: {
+        path: "document.txt",
+        edits: [
+          { oldText: "missing", newText: "one" },
+          { oldText: "missing", newText: "one" },
+        ],
+      },
+      content: [
+        { type: "text", text: "Could not find edits[0]" },
+        { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+      ],
+      details: { failedIndex: 0 },
+    };
+    const original = structuredClone(event);
+    const received: ToolResultEvent[] = [];
+    const executor: HookExecutor = (_entry, hookEvent) => {
+      received.push(hookEvent as ToolResultEvent);
+      return Promise.resolve({
+        kind: "mutate",
+        updatedToolOutput: { content: [{ type: "text", text: "replaced" }], isError: false },
+      });
+    };
+
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/failed-edit"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.strictEqual(received.length, 2);
+    assert.deepStrictEqual(
+      received.map((seen) => seen.input),
+      [
+        {
+          file_path: "/workspace/failed-edit/document.txt",
+          old_string: "missing",
+          new_string: "one",
+        },
+        {
+          file_path: "/workspace/failed-edit/document.txt",
+          old_string: "missing",
+          new_string: "one",
+        },
+      ],
+    );
+    for (const seen of received) {
+      assert.strictEqual(seen.content, event.content);
+      assert.strictEqual(seen.details, event.details);
+      assert.strictEqual(seen.isError, true);
+    }
+
+    assert.deepStrictEqual(event, original);
+  });
+
   test("adapts a block without a reason to the tool output and the default feedback", async () => {
     // arrange
     const runtime = createHooksRuntime();

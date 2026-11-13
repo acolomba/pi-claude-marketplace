@@ -136,6 +136,32 @@ test("sends only the text parts of a failure that also carries an image", () => 
   assert.strictEqual("tool_response" in payload, false);
 });
 
+test("an image-only failed edit has an empty error and no response", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "failed-edit-image",
+    toolName: "edit",
+    input: { file_path: "/workspace/document.txt", old_string: "a", new_string: "b" },
+    content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }],
+    isError: true,
+    details: undefined,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "failed-edit",
+    transcriptPath: "",
+    cwd: "/workspace",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUseFailure(event, context);
+
+  // assert
+  assert.strictEqual(payload.error, "");
+  assert.strictEqual(payload.is_interrupt, false);
+  assert.strictEqual("tool_response" in payload, false);
+});
+
 test("translates a failed Read path without inventing a successful response", () => {
   const event = {
     type: "tool_result",
