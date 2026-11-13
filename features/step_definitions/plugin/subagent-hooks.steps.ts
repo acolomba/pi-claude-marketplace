@@ -26,9 +26,17 @@
  * two turns of the profile Pi; the metadata step removes or breaks the tag
  * before a new session; and the diagnostics step reads the bridge's identity
  * line from the child's debug log.
+ *
+ * The real-child steps run the installed pi-subagents through
+ * `features/lib/real-subagent-child.ts`, in a fixture of the driver's own with
+ * a loopback provider, and keep its hook runs, its child sessions in launch
+ * order, and its main session as the last turn. A child session reads as its
+ * launch-order ordinal, and the main session's control prompt is the positive
+ * control (D-PG3-09).
  */
 
 import assert from "node:assert/strict";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,6 +44,7 @@ import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
 import { inLoadOrder, resolveCompanion } from "../../lib/companions.ts";
+import { HOOK_RUNS_LOG } from "../../lib/hook-recorder.ts";
 import { mcpImplementationLaunch } from "../../lib/mcp-implementation.ts";
 import { startSession } from "../../lib/pi-commands.ts";
 import {
@@ -43,6 +52,13 @@ import {
   writeLaunchEnvironment,
 } from "../../lib/pi-launch-environment.ts";
 import { DIALOG_METHODS } from "../../lib/pi-process.ts";
+import {
+  FIXTURE_TIMEOUT_MS,
+  parseConcurrentLaunches,
+  parseRealChildAgents,
+  runConcurrentRealSubagentChildren,
+  runRealSubagentChild,
+} from "../../lib/real-subagent-child.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 import {
@@ -57,7 +73,9 @@ import {
 import { readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
+import type { HookRun } from "../../lib/hook-recorder.ts";
 import type { RpcRecord } from "../../lib/pi-process.ts";
+import type { RealChildFixtureOptions } from "../../lib/real-subagent-child.ts";
 import type { SubagentHookSessionOptions } from "../../lib/subagent-hook-session.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -86,6 +104,27 @@ const NEW_SESSION_TURNS_TIMEOUT_MS = 3 * STAGE_TIMEOUT_MS;
 // The line the hooks bridge logs, with its debug log on, before a child run
 // whose launch metadata is missing or malformed (D-PG3-06).
 const IDENTITY_DIAGNOSTIC = "Child hook identity unavailable";
+
+// The turn logs of a run of real pi-subagents children: each child session
+// in launch order, and the main session.
+const REAL_CHILDREN_LOG = "real-pi-subagents-children";
+const REAL_MAIN_LOG = "real-pi-subagents-main";
+
+// A child session as a run of real children records it in the turn.
+interface RealChildSession {
+  readonly generation: number;
+  readonly agent: string;
+  readonly mode: string;
+  readonly state: string;
+  readonly sessionId: string | undefined;
+  readonly pid: number | undefined;
+}
+
+const CHILD_ORDINALS: readonly string[] = ["first", "second", "third", "fourth"];
+
+// The main session's runs for its control prompt: its start, the prompt, a
+// bash call, and the Stop hook's block and the re-entered stop.
+const MAIN_CONTROL_RUNS = 6;
 
 // What a stand-in child's launch metadata becomes before its new session: no
 // tagged section, or a tag whose name is not a quoted attribute.
@@ -172,6 +211,64 @@ async function promptInStartupSession(
   const records = world.pi.recordsSince(from);
   assert.deepStrictEqual(records.filter(isFault), []);
   await recordStartupTurn(world, prompt, records);
+}
+
+// What every run of real children shares: the profile's MCP implementation,
+// the worker's compile cache, and the world's release.
+async function realChildFixture(world: ScenarioWorld): Promise<RealChildFixtureOptions> {
+  const { environment } = await world.oneShotPiLaunch();
+  return {
+    mcpProfile: world.mcpProfile,
+    compileCache: await realpath(path.join(environment.TMPDIR, "jiti")),
+    register: (release) => {
+      world.onRelease(release);
+    },
+  };
+}
+
+// Keeps a run of real children as the last turn: its hook runs, its child
+// sessions in launch order, and its main session.
+function recordRealChildren(
+  world: ScenarioWorld,
+  prompt: string,
+  hookRuns: readonly HookRun[],
+  sessions: readonly RealChildSession[],
+  mainSessionId: string,
+): void {
+  world.recordTurn({
+    prompt,
+    disposition: "started",
+    records: [],
+    logs: new Map<string, readonly unknown[]>([
+      [HOOK_RUNS_LOG, hookRuns],
+      [REAL_CHILDREN_LOG, sessions],
+      [REAL_MAIN_LOG, [mainSessionId]],
+    ]),
+  });
+}
+
+function realChildSessions(world: ScenarioWorld): readonly RealChildSession[] {
+  return (world.requireTurn().logs.get(REAL_CHILDREN_LOG) ?? []) as readonly RealChildSession[];
+}
+
+// Each child session's id by its ordinal, in launch order.
+function childOrdinals(sessions: readonly RealChildSession[]): ReadonlyMap<string, string> {
+  return new Map(
+    sessions.flatMap(({ sessionId }, index) => {
+      const ordinal = CHILD_ORDINALS[index];
+      assert.ok(ordinal !== undefined, `more child sessions than ${CHILD_ORDINALS.length}`);
+      return sessionId === undefined ? [] : [[sessionId, ordinal] as const];
+    }),
+  );
+}
+
+function stdinCell(value: unknown, ordinals: ReadonlyMap<string, string>): string {
+  if (value === undefined) {
+    return "";
+  }
+
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return ordinals.get(text) ?? text;
 }
 
 // D-BG-10: the marker is in the spawn environment, as pi-subagents' runner
@@ -292,6 +389,61 @@ When(
   },
 );
 
+// D-PG3-09: the installed pi-subagents launches each child; the main Pi's
+// model names no launch mode, so the agent and pi-subagents' asyncByDefault
+// decide it.
+When(
+  "pi-subagents, with its async-by-default setting {word}, launches from a main pi session a real child of each of these agents of a plugin with a stub mcp server, whose hooks record every event and whose stop hook would send a main session back:",
+  { timeout: FIXTURE_TIMEOUT_MS },
+  async function (this: ScenarioWorld, asyncByDefault: string, table: DataTable) {
+    assert.ok(["true", "false"].includes(asyncByDefault), `asyncByDefault is ${asyncByDefault}`);
+    const observed = await runRealSubagentChild({
+      ...(await realChildFixture(this)),
+      agents: parseRealChildAgents(table.raw()),
+      asyncByDefault: asyncByDefault === "true",
+    });
+    const sessions = observed.children.map(({ agent, mode, state, sessionId, pid }) => ({
+      generation: 1,
+      agent,
+      mode,
+      state: state ?? "",
+      sessionId,
+      pid,
+    }));
+    recordRealChildren(this, "real children", observed.hookRuns, sessions, observed.mainSessionId);
+  },
+);
+
+When(
+  "a pi-subagents runner process starts these child sessions of a plugin whose hooks record every event at once, prompts them all at once twice, and starts them again as new sessions:",
+  { timeout: FIXTURE_TIMEOUT_MS },
+  async function (this: ScenarioWorld, table: DataTable) {
+    const generation = parseConcurrentLaunches(table.raw());
+    const observed = await runConcurrentRealSubagentChildren({
+      ...(await realChildFixture(this)),
+      generations: [generation, generation],
+      rounds: 2,
+    });
+    const sessions = observed.generations.flatMap((launched, index) =>
+      launched.map(({ agent, sessionId, pid }) => ({
+        generation: index + 1,
+        agent,
+        mode: "runner",
+        state: "disposed",
+        sessionId,
+        pid,
+      })),
+    );
+    recordRealChildren(
+      this,
+      "concurrent children",
+      observed.hookRuns,
+      sessions,
+      observed.mainSessionId,
+    );
+  },
+);
+
 When(
   "a pi-subagents background child loads, runs the hook {string} for {string} until the hook ends, starts a new session, and stops",
   { timeout: CHILD_STAGES_TIMEOUT_MS },
@@ -365,5 +517,105 @@ Then(
       .filter((line) => line.includes(IDENTITY_DIAGNOSTIC))
       .map((line) => [line]);
     assert.deepStrictEqual([["diagnostic"], ...lines], table.raw());
+  },
+);
+
+// The runner's pid differs on every run, so a row states whether pi-subagents
+// recorded one for the child, and its session by its launch-order ordinal.
+Then(
+  "pi-subagents ran the real children like this:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const sessions = realChildSessions(this);
+    const ordinals = childOrdinals(sessions);
+    const rows = sessions.map(({ agent, mode, state, sessionId, pid }) => [
+      agent,
+      mode,
+      state,
+      pid === undefined ? "none" : "recorded",
+      sessionId === undefined ? "" : (ordinals.get(sessionId) ?? sessionId),
+    ]);
+    assert.deepStrictEqual(
+      [["agent", "mode", "state", "runner process", "session"], ...rows],
+      table.raw(),
+    );
+  },
+);
+
+// One runner process hosts every session, so the step asserts one pid and
+// states each session by its launch-order ordinal.
+Then(
+  "one runner process hosted these child sessions:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const sessions = realChildSessions(this);
+    const ordinals = childOrdinals(sessions);
+    assert.strictEqual(new Set(sessions.map(({ pid }) => pid)).size, 1, "one runner process");
+    assert.strictEqual(ordinals.size, sessions.length, "each session has an id of its own");
+    const rows = sessions.map(({ generation, agent, sessionId }) => [
+      String(generation),
+      agent,
+      ordinals.get(sessionId ?? "") ?? "",
+    ]);
+    assert.deepStrictEqual([["generation", "agent", "session"], ...rows], table.raw());
+  },
+);
+
+// The child sessions' runs, in any order, since concurrent sessions append
+// theirs as they run; a session and an agent id name the child session by
+// its launch-order ordinal. The main session's runs are pi-subagents' turns
+// as much as the user's, so the step states none of them, and asserts only
+// that none of them carries a child identity.
+Then(
+  "the real children's hooks record these runs in any order, and no main-session run names a child:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const turn = this.requireTurn();
+    const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
+    const ordinals = childOrdinals(realChildSessions(this));
+    const isChild = (run: HookRun): boolean => ordinals.has(String(run.stdin.session_id));
+    const rows = runs
+      .filter(isChild)
+      .map((run) =>
+        ["session_id", "hook_event_name", "tool_name", "agent_type", "agent_id"].map((key) =>
+          stdinCell(run.stdin[key], ordinals),
+        ),
+      )
+      .sort((left, right) => left.join("\0").localeCompare(right.join("\0")));
+    const [header = [], ...stated] = table.raw();
+    assert.deepStrictEqual(
+      [header, ...rows],
+      [
+        header,
+        ...[...stated].sort((left, right) => left.join("\0").localeCompare(right.join("\0"))),
+      ],
+    );
+    assert.deepStrictEqual(header, ["session", "event", "tool name", "agent type", "agent id"]);
+    const named = runs
+      .filter((run) => !isChild(run))
+      .filter(
+        (run) => Object.hasOwn(run.stdin, "agent_type") || Object.hasOwn(run.stdin, "agent_id"),
+      );
+    assert.deepStrictEqual(named, []);
+    this.markTurnCompared();
+  },
+);
+
+// The positive control: the main session's first runs, for a prompt whose
+// model calls bash, carry no child identity.
+Then(
+  "the main session's hooks record these runs for its control prompt:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const turn = this.requireTurn();
+    const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
+    const [mainSessionId] = turn.logs.get(REAL_MAIN_LOG) ?? [];
+    const rows = runs
+      .filter((run) => run.stdin.session_id === mainSessionId)
+      .slice(0, MAIN_CONTROL_RUNS)
+      .map((run) => [
+        run.event,
+        stdinCell(run.stdin.tool_name, new Map()),
+        Object.hasOwn(run.stdin, "agent_type") || Object.hasOwn(run.stdin, "agent_id")
+          ? "named"
+          : "none",
+      ]);
+    assert.deepStrictEqual([["event", "tool name", "child identity"], ...rows], table.raw());
   },
 );

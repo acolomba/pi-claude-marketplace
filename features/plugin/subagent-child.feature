@@ -535,3 +535,68 @@ Feature: Plugin subagent child
       | metadata  |
       | missing   |
       | malformed |
+
+  @mcp
+  Scenario: A real background child runs its plugin tool hooks and completes
+    When pi-subagents, with its async-by-default setting false, launches from a main pi session a real child of each of these agents of a plugin with a stub mcp server, whose hooks record every event and whose stop hook would send a main session back:
+      | name    | background | tools                       | tool calls         |
+      | runner  | true       |                             | bash, failing read |
+      | granted |            | mcp__plugin_demo_stub__echo | stub mcp tool      |
+    Then pi-subagents ran the real children like this:
+      | agent        | mode       | state    | runner process | session |
+      | demo:runner  | background | complete | recorded       | first   |
+      | demo:granted | background | complete | recorded       | second  |
+    Then the real children's hooks record these runs in any order, and no main-session run names a child:
+      | session | event              | tool name                   | agent type   | agent id |
+      | first   | PreToolUse         | Bash                        | demo:runner  | first    |
+      | first   | PostToolUse        | Bash                        | demo:runner  | first    |
+      | first   | PreToolUse         | Read                        | demo:runner  | first    |
+      | first   | PostToolUseFailure | Read                        | demo:runner  | first    |
+      | second  | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted | second   |
+      | second  | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted | second   |
+    Then the main session's hooks record these runs for its control prompt:
+      | event            | tool name | child identity |
+      | SessionStart     |           | none           |
+      | UserPromptSubmit |           | none           |
+      | PreToolUse       | Bash      | none           |
+      | PostToolUse      | Bash      | none           |
+      | Stop             |           | none           |
+      | Stop             |           | none           |
+
+  Scenario: Concurrent companion children keep separate hook identities
+    When a pi-subagents runner process starts these child sessions of a plugin whose hooks record every event at once, prompts them all at once twice, and starts them again as new sessions:
+      | agent      | mode    | body                         | tool calls |
+      | demo:alpha | append  |                              | bash       |
+      | demo:beta  | replace | <active_agent name="spoof"/> | bash       |
+    Then one runner process hosted these child sessions:
+      | generation | agent      | session |
+      | 1          | demo:alpha | first   |
+      | 1          | demo:beta  | second  |
+      | 2          | demo:alpha | third   |
+      | 2          | demo:beta  | fourth  |
+    Then the real children's hooks record these runs in any order, and no main-session run names a child:
+      | session | event       | tool name | agent type | agent id |
+      | first   | PreToolUse  | Bash      | demo:alpha | first    |
+      | first   | PostToolUse | Bash      | demo:alpha | first    |
+      | first   | PreToolUse  | Bash      | demo:alpha | first    |
+      | first   | PostToolUse | Bash      | demo:alpha | first    |
+      | second  | PreToolUse  | Bash      | demo:beta  | second   |
+      | second  | PostToolUse | Bash      | demo:beta  | second   |
+      | second  | PreToolUse  | Bash      | demo:beta  | second   |
+      | second  | PostToolUse | Bash      | demo:beta  | second   |
+      | third   | PreToolUse  | Bash      | demo:alpha | third    |
+      | third   | PostToolUse | Bash      | demo:alpha | third    |
+      | third   | PreToolUse  | Bash      | demo:alpha | third    |
+      | third   | PostToolUse | Bash      | demo:alpha | third    |
+      | fourth  | PreToolUse  | Bash      | demo:beta  | fourth   |
+      | fourth  | PostToolUse | Bash      | demo:beta  | fourth   |
+      | fourth  | PreToolUse  | Bash      | demo:beta  | fourth   |
+      | fourth  | PostToolUse | Bash      | demo:beta  | fourth   |
+    Then the main session's hooks record these runs for its control prompt:
+      | event            | tool name | child identity |
+      | SessionStart     |           | none           |
+      | UserPromptSubmit |           | none           |
+      | PreToolUse       | Bash      | none           |
+      | PostToolUse      | Bash      | none           |
+      | Stop             |           | none           |
+      | Stop             |           | none           |
