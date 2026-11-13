@@ -165,3 +165,46 @@ Feature: Hook prompt and stop
     When the user prompts "finish up" through 11 agent settlements
     Then ten stop blocks separated by tool calls continue
     Then the stop override cap notice count is 0
+
+  Scenario: Reload starts a fresh Stop continuation count
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event | matcher | form   | output                                     |
+      | always | Stop  |         | script | {"decision":"block","reason":"keep going"} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply    | stop reason |
+      | Before 1 |             |
+      | Before 2 |             |
+      | Before 3 |             |
+      | Pause    | length      |
+      | After 1  |             |
+      | After 2  |             |
+      | After 3  |             |
+      | After 4  |             |
+      | After 5  |             |
+      | After 6  |             |
+      | After 7  |             |
+      | After 8  |             |
+      | After 9  |             |
+    When the user prompts "before reload" until "Pause", reloads pi, and prompts "after reload" through the stop limit
+    Then the reloaded stop sequence has these exact replies and hook states:
+      | run    | reply    | stop hook active |
+      | before | Before 1 | false            |
+      | before | Before 2 | true             |
+      | before | Before 3 | true             |
+      | after  | After 1  | false            |
+      | after  | After 2  | true             |
+      | after  | After 3  | true             |
+      | after  | After 4  | true             |
+      | after  | After 5  | true             |
+      | after  | After 6  | true             |
+      | after  | After 7  | true             |
+      | after  | After 8  | true             |
+      | after  | After 9  | true             |

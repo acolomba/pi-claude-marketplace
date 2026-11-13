@@ -39,6 +39,7 @@ import { readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 
 import type { HookLifecycleEvent, HookRun } from "../../lib/hook-recorder.ts";
 import type { RpcRecord } from "../../lib/pi-process.ts";
+import type { ModelCall } from "../../lib/scripted-model/script.ts";
 import type { ModelTurn, ScenarioWorld } from "../../support/world.ts";
 
 // Two scripted turns settle in well under a second each; the margin covers a
@@ -126,6 +127,31 @@ async function recordRun(
   world.recordTurn(await checkedRun(world, prompt, lengths, from));
 }
 
+function stopRunRows(turn: ModelTurn): (readonly [string, unknown, unknown])[] {
+  const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
+  return runs.map((run) => [
+    run.event,
+    run.stdin.last_assistant_message,
+    run.stdin.stop_hook_active,
+  ]);
+}
+
+function assertStopRuns(turn: ModelTurn, expected: readonly (readonly [string, boolean])[]): void {
+  assert.deepStrictEqual(
+    stopRunRows(turn),
+    expected.map(([reply, active]) => ["Stop", reply, active]),
+  );
+}
+
+function modelCallsWithCount(turn: ModelTurn, count: number): ModelCall[] {
+  const calls = modelCallsOf(turn.logs);
+  assert.deepStrictEqual(
+    calls.map((call) => [call.index + 1, call.overflow]),
+    Array.from({ length: count }, (_, index) => [index + 1, false]),
+  );
+  return calls;
+}
+
 // Sends `text`, waits for its turn to settle and for `hook` to log its start,
 // in either order, and asserts that the hook has not ended. Returns the turn,
 // after the checks `recordRun` makes.
@@ -197,16 +223,11 @@ Then(
     const [header, ...rows] = table.raw();
     assert.deepStrictEqual(header, ["reply", "stop hook active"]);
     const turn = this.requireTurn();
-    const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
-    assert.deepStrictEqual(
-      runs.map((run) => [run.event, run.stdin.last_assistant_message, run.stdin.stop_hook_active]),
-      rows.map(([reply, active]) => ["Stop", reply, active === "true"]),
+    assertStopRuns(
+      turn,
+      rows.map(([reply, active]) => [reply ?? "", active === "true"]),
     );
-    const calls = modelCallsOf(turn.logs);
-    assert.deepStrictEqual(
-      calls.map((call) => [call.index + 1, call.overflow]),
-      rows.map((_, index) => [index + 1, false]),
-    );
+    const calls = modelCallsWithCount(turn, rows.length);
     const expected: [string, string, string][] = [];
 
     for (const [index, [reply]] of rows.entries()) {
@@ -263,16 +284,11 @@ Then("the stop override cap notice count is {int}", function (this: ScenarioWorl
 
 Then("ten stop blocks separated by tool calls continue", function (this: ScenarioWorld) {
   const turn = this.requireTurn();
-  const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
-  const calls = modelCallsOf(turn.logs);
+  const calls = modelCallsWithCount(turn, 21);
 
-  assert.deepStrictEqual(
-    runs.map((run) => [run.event, run.stdin.last_assistant_message, run.stdin.stop_hook_active]),
-    Array.from({ length: 10 }, (_, index) => ["Stop", `Done ${index + 1}`, index > 0]),
-  );
-  assert.deepStrictEqual(
-    calls.map((call) => [call.index + 1, call.overflow]),
-    Array.from({ length: 21 }, (_, index) => [index + 1, false]),
+  assertStopRuns(
+    turn,
+    Array.from({ length: 10 }, (_, index) => [`Done ${index + 1}`, index > 0]),
   );
   assert.strictEqual(turn.records.filter(isSettled).length, 11);
   for (let index = 0; index < 10; index += 1) {
@@ -295,6 +311,73 @@ Then("ten stop blocks separated by tool calls continue", function (this: Scenari
 
   this.markTurnCompared();
 });
+
+When(
+  "the user prompts {string} until {string}, reloads pi, and prompts {string} through the stop limit",
+  { timeout: 180_000 },
+  async function (this: ScenarioWorld, before: string, lastBefore: string, after: string) {
+    const tui = await this.startTuiSession("scripted");
+    const harness = this.profileHarness();
+    const lengths = await readLogLengths(harness);
+    const beforeMark = tui.markOutput();
+    tui.sendLine(before);
+    await tui.waitForTextAfter(lastBefore, beforeMark, 60_000);
+    assert.strictEqual(tui.text.includes("Stop hook override cap reached."), false);
+    await tui.reload(30_000);
+    const afterMark = tui.markOutput();
+    tui.sendLine(after);
+    await tui.waitForTextAfter("After 9", afterMark, 90_000);
+    await tui.waitForTextAfter("Stop hook override cap reached.", afterMark, 90_000);
+    const logs = await readLogLinesSince(harness, lengths);
+    assert.deepStrictEqual(callsPastScript(logs), []);
+    this.recordTurn({ prompt: after, disposition: "interactive", records: [], logs });
+  },
+);
+
+Then(
+  "the reloaded stop sequence has these exact replies and hook states:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const [header, ...rows] = table.raw();
+    assert.deepStrictEqual(header, ["run", "reply", "stop hook active"]);
+    const before = rows.filter(([run]) => run === "before");
+    const after = rows.filter(([run]) => run === "after");
+    assert.strictEqual(before.length, 3);
+    assert.strictEqual(after.length, 9);
+    const turn = this.requireTurn();
+    assertStopRuns(
+      turn,
+      rows.map(([, reply, active]) => [reply ?? "", active === "true"]),
+    );
+    const calls = modelCallsWithCount(turn, 13);
+    for (const [offset, replies] of [
+      [0, before],
+      [4, after],
+    ] as const) {
+      for (const [index, [, reply]] of replies.entries()) {
+        const call = calls[offset + index];
+        assert.ok(call !== undefined);
+        const messages = callMessageRows([call]);
+        if (index === 0) {
+          assert.deepStrictEqual(messages.at(-1), [
+            String(offset + 1),
+            "user",
+            offset === 0 ? "before reload" : "after reload",
+          ]);
+        } else {
+          assert.deepStrictEqual(messages.slice(-2), [
+            [String(offset + index + 1), "assistant", replies[index - 1]?.[1]],
+            [String(offset + index + 1), "user", "Stop hook feedback:\nkeep going"],
+          ]);
+        }
+
+        assert.ok(reply !== undefined);
+      }
+    }
+
+    assert.ok(this.requireTuiSession().text.includes("Stop hook override cap reached."));
+    this.markTurnCompared();
+  },
+);
 
 // Sends `prompt`, waits for its tool to start, and queues `queuedText` into
 // the running agent as `behavior`. Keeps the whole run as the last turn.

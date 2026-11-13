@@ -520,6 +520,10 @@ test(
       throw new Error("persisted orphan row could not be read before reload");
     }
 
+    for (let index = 0; index < 4; index += 1) {
+      runtime.recordStopReentry();
+    }
+
     traceReload = true;
 
     // act
@@ -530,9 +534,12 @@ test(
       { type: "session_start", reason: "reload" },
       { mode: "unknown" },
     );
+    const allowedAfterReload = Array.from({ length: 8 }, () => runtime.recordStopReentry());
     if (typeof staleToolCallHandler === "function") {
       await Reflect.apply(staleToolCallHandler, undefined, [toolCall, context]);
     }
+
+    const capAfterStaleTool = runtime.recordStopReentry();
 
     const staleBeforeAgentResult = await staleBeforeAgentStartHandler(
       {
@@ -641,6 +648,11 @@ test(
       },
     ]);
     assert.strictEqual(epochAfterReload, previousEpoch + 1);
+    assert.deepStrictEqual(
+      allowedAfterReload,
+      Array.from({ length: 8 }, () => ({ reenter: true, notifyCap: false })),
+    );
+    assert.deepStrictEqual(capAfterStaleTool, { reenter: false, notifyCap: true });
     assert.deepStrictEqual(pendingAfterReload, []);
     assert.strictEqual(childKilled, true);
     assert.strictEqual(orphanTableExistsAfterReload, false);
@@ -1090,8 +1102,8 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
         assert.strictEqual(supportedActive, false);
         assert.strictEqual(runtime.isStopHookActive(), true);
         assert.deepStrictEqual(runtime.recordStopReentry(), {
-          reenter: false,
-          notifyCap: reentries === 7,
+          reenter: reentries === 7,
+          notifyCap: reentries === 8,
         });
       });
     }
@@ -2754,18 +2766,28 @@ test("separate runtimes keep their current callbacks live and route through thei
     toolName: "bash",
     input: { command: "printf isolated" },
   } satisfies ToolCallEvent;
+  for (let index = 0; index < 8; index += 1) {
+    firstRuntime.recordStopReentry();
+    secondRuntime.recordStopReentry();
+  }
 
   // act
   await registeredHandler(firstPi.registrations, "tool_call")(
     toolCall,
     makeContext(firstCwd, root),
   );
+  const firstAfterTool = firstRuntime.recordStopReentry();
+  const secondWithoutTool = secondRuntime.recordStopReentry();
   await registeredHandler(secondPi.registrations, "tool_call")(
     toolCall,
     makeContext(secondCwd, root),
   );
+  const secondAfterTool = secondRuntime.recordStopReentry();
 
   // assert
+  assert.deepStrictEqual(firstAfterTool, { reenter: true, notifyCap: false });
+  assert.deepStrictEqual(secondWithoutTool, { reenter: false, notifyCap: true });
+  assert.deepStrictEqual(secondAfterTool, { reenter: true, notifyCap: false });
   assert.deepStrictEqual(firstDispatched, ["first-plugin"]);
   assert.deepStrictEqual(secondDispatched, ["second-plugin"]);
   assert.deepStrictEqual(firstPi.messages, []);

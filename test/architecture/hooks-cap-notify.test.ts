@@ -17,7 +17,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { STOP_OVERRIDE_CAP } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import {
+  createHooksRuntime,
+  STOP_OVERRIDE_CAP,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { notifyStopHookOverrideCap } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
@@ -58,6 +61,34 @@ function onlyNotification(notifications: readonly Notification[]): Notification 
 
   return first;
 }
+
+test("eight Stop continuations precede the single ninth-block notice", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const { ctx, notifications } = makeCtx(t);
+  const expected = await readCatalogBlock("stop-override-cap");
+
+  // act
+  const allowed = Array.from({ length: 8 }, () => runtime.recordStopReentry());
+  const ninth = runtime.recordStopReentry();
+  if (ninth.notifyCap) {
+    notifyStopHookOverrideCap(ctx, runWithNothingLoaded(), CATALOG_PLUGIN_ID, STOP_OVERRIDE_CAP);
+  }
+
+  const repeated = runtime.recordStopReentry();
+  if (repeated.notifyCap) {
+    notifyStopHookOverrideCap(ctx, runWithNothingLoaded(), CATALOG_PLUGIN_ID, STOP_OVERRIDE_CAP);
+  }
+
+  // assert
+  assert.deepStrictEqual(
+    allowed,
+    Array.from({ length: 8 }, () => ({ reenter: true, notifyCap: false })),
+  );
+  assert.deepStrictEqual(ninth, { reenter: false, notifyCap: true });
+  assert.deepStrictEqual(repeated, { reenter: false, notifyCap: false });
+  assert.deepStrictEqual(notifications, [{ message: expected, severity: "warning" }]);
+});
 
 test("STOP-07 / D-88-01: notifyStopHookOverrideCap emits one warning-severity ctx.ui.notify call", (t) => {
   // arrange

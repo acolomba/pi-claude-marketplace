@@ -1008,6 +1008,40 @@ test("a reload during awaited Stop work discards every stale effect", async () =
   );
 });
 
+test("a pending old-generation Stop completion cannot consume a reloaded budget", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+  let resolveOldHook: ((result: HookExecResult) => void) | undefined;
+  const executor: HookExecutor = () =>
+    new Promise((resolve) => {
+      resolveOldHook = resolve;
+    });
+  const { pi, sent } = makePi();
+  const { ctx, notified } = makeContext();
+  const oldGeneration = runtime.currentGeneration();
+  agentEndCacheHandler(runtime, oldGeneration)(agentEnd("stop"));
+  const pending = settleHandlerFor(runtime, oldGeneration, pi, executor)(settledEvent, ctx);
+
+  // act
+  runtime.advanceGeneration();
+  resetSettleState(runtime);
+  const freshEight = Array.from({ length: 8 }, () => runtime.recordStopReentry());
+  resolveOldHook?.({ kind: "block", reason: "stale" });
+  await pending;
+  const ninth = runtime.recordStopReentry();
+
+  // assert
+  assert.deepStrictEqual(
+    freshEight,
+    Array.from({ length: 8 }, () => ({ reenter: true, notifyCap: false })),
+  );
+  assert.deepStrictEqual(ninth, { reenter: false, notifyCap: true });
+  assert.deepStrictEqual(sent, []);
+  assert.deepStrictEqual(notified, []);
+});
+
 test("the ninth consecutive block is suppressed and warns only once", async () => {
   // arrange
   const runtime = createHooksRuntime();
