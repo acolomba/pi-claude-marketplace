@@ -1,6 +1,5 @@
 {
   "model_profile": "quality",
-  "runtime": "codex",
   "model_profile_overrides": {
     "codex": {
       "opus": "gpt-6-astra",
@@ -9,12 +8,30 @@
     }
   },
   "models": {
-    "planning": "opus",
-    "discuss": "opus",
-    "research": "opus",
-    "execution": "sonnet",
+    "execution": "opus",
     "verification": "opus",
     "completion": "opus"
+  },
+  "model_overrides": {
+    "gsd-planner": "fable",
+    "gsd-roadmapper": "fable",
+    "gsd-pattern-mapper": "fable",
+    "gsd-eval-planner": "fable",
+    "gsd-framework-selector": "fable",
+    "gsd-assumptions-analyzer": "fable",
+    "gsd-phase-researcher": "fable",
+    "gsd-project-researcher": "fable",
+    "gsd-research-synthesizer": "fable",
+    "gsd-codebase-mapper": "fable",
+    "gsd-ui-researcher": "fable",
+    "gsd-advisor-researcher": "fable",
+    "gsd-ai-researcher": "fable",
+    "gsd-doc-classifier": "fable",
+    "gsd-doc-synthesizer": "fable",
+    "gsd-domain-researcher": "fable",
+    "gsd-intel-updater": "fable",
+    "gsd-mempalace-curator": "fable",
+    "gsd-user-profiler": "fable"
   },
   "git": {
     "create_tag": false,
