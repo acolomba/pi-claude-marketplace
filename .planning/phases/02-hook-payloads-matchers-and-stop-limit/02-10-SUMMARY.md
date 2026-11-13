@@ -93,6 +93,8 @@ Both task commits passed normal hooks. The first Task 1 message attempt failed g
 
 3. **Task 1: Restore the existing prompt context explanation (parent correction)**: `fae378d2b58ea520a6557a61d198c77e71a7d03e`
 
+4. **Task 1: Correct stale MCP matcher and invalid-regex support claims (security audit correction)**: `10750a0ef185082226f11e79d40f5a6140c27580`
+
 ## Verification
 
 - **Task 1 focused gate:** `npm run test:cucumber:profile -- --profile adapter features/hook/tool-use.feature features/hook/tool-failure.feature features/hook/async.feature features/hook/matchers.feature features/hook/prompt-and-stop.feature` exited 0 at Task 1 head on Node v26.13.0: 107 scenarios, 1,610 steps, seed 413084, 1m 34.920s wall time. Log: `/tmp/pg2-p10-focused.log`. Its sandbox attempt stopped before scenarios with `spawnSync npm EPERM`; the ordinary-permission rerun supplied the passing result.
@@ -135,3 +137,7 @@ LS's current upstream schema is unresolved; PowerShell has contract tests but no
 ## Self-Check: PASSED
 
 All six declared task files and this summary exist. Both exact task SHAs are ancestors of this branch. The focused and full gates exited 0, all 29 task rows have evidence, and the final build-input diff from the full-gate commit is empty. No shared orchestration artifact was modified.
+
+## Security audit correction
+
+T-02-26 found two stale matcher claims in the compatibility page. Commit `10750a0e` documents whole native regex matching under both MCP profiles and limits regex-related partition drops to invalid syntax. Normal hooks and Fallow audit/review passed; the independent security recheck closed all 27 threats. A fresh combined-tree gate follows code review.
