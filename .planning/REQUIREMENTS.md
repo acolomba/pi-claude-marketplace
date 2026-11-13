@@ -54,8 +54,8 @@
 ### MCP Servers
 
 - [x] **PG-MCP-01**: A tool call of a plugin MCP server that declares no `timeout` may be silent for 30 minutes on a stdio server and 5 minutes on a remote server, under both implementations. Under the adapter, a timeout the user wrote on the entry still wins. (P0; decision 4 answered)
-- [ ] **PG-MCP-02**: The declared pi-mcp-adapter floor is 7.0.1. Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works everywhere the project names it: a hook matcher written with the Claude Code name matches it, the hook receives the Claude Code name, and an agent's disallowed-tool entry removes it. (P0; decision 3 answered)
-  - On 2026-11-13, published pi-subagents 0.88.1 passed the installed-release launch checks and all three real-child controls, including long-name exclusion with a working permitted short tool. The general peer floor remains `>=0.87.0`. Final PG-MCP-02 acceptance waits for the parent's combined-tree `npm run check` after merge; see the [quick-task summary](quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md).
+- [x] **PG-MCP-02**: The declared pi-mcp-adapter floor is 7.0.1. Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works everywhere the project names it: a hook matcher written with the Claude Code name matches it, the hook receives the Claude Code name, and an agent's disallowed-tool entry removes it. (P0; decision 3 answered)
+  - On 2026-11-13, published pi-subagents 0.88.1 passed the installed-release launch checks and all three real-child controls, including long-name exclusion with a working permitted short tool. The general peer floor remains `>=0.87.0`. PG-MCP-02 is complete after the merged-tree check passed at `2db3b81a`; see the [quick-task summary](quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md).
 - [ ] **PG-MCP-06**: Under the adapter, a stdio plugin server that has started stays running for the session (`lifecycle: "lazy-keep-alive"`), unless the user set a lifecycle on the entry. Remote servers stay `lazy`. (P1; decision 5)
 - [ ] **PG-MCP-08**: The MCP compatibility page states, for each implementation, whether a plugin server can use resources, prompts, elicitation, sampling, roots, and output limits, and that `@server:uri` mentions do not exist on Pi. One scenario for each implementation reads a resource of a plugin server. (P1)
 - [ ] **PG-MCP-09**: Under the adapter, a value the user wrote in `protocolVersion`, `tasks`, `exposeResources`, or `caFile` on a plugin entry survives an update or reinstall. (P1)
@@ -196,7 +196,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-WF-05     | Phase 8  | Pending |
 | PG-WF-07     | Phase 8  | Pending |
 | PG-MCP-01    | Phase 1  | Complete |
-| PG-MCP-02    | Phase 1  | Partial — 0.88.1 runtime proof passed; combined-tree gate pending |
+| PG-MCP-02    | Phase 1  | Complete |
 | PG-MCP-06    | Phase 9  | Pending |
 | PG-MCP-08    | Phase 9  | Pending |
 | PG-MCP-09    | Phase 9  | Pending |

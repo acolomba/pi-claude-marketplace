@@ -1,6 +1,6 @@
 ---
 status: complete
-acceptance: runtime-passed-final-gate-pending
+acceptance: completed
 phase: 01-companion-floors-and-mcp-defaults
 source: [01-VERIFICATION.md]
 started: 2026-11-12T07:36:00Z
@@ -42,9 +42,9 @@ deferred_accepted: 0
 
 The installed package identifies `pi-subagents@0.88.1`, published from `nicobailon/pi-subagents` with registry integrity `sha512-Yrt0kBT+ChgnmcVzBu2004lwuwmRTHdr1jGUdLd9X7+TAdpLaCILCRFHQhnM9u4fnyOPDLE8wASnedp0nuXc9g==`. The detailed launch module passed six of six checks on 0.88.1. Its two positive ambient cases failed on intact 0.88.0, with all four explicit controls passing. Logs: `/tmp/261113-8yn-positive-old-red.tap` and `/tmp/261113-8yn-positive-new-green.tap`.
 
-`env -u PG_COMPANION_INDEX -u PG_AGENT node .planning/debug/artifacts/real-child-mcp-automation/run.mjs` passed against the installed 0.88.1 package. In `/tmp/pg1-live-companion-pHdbmd/summary.json`, runner offers and calls short, control offers and calls both short and long, and restricted offers and calls short while omitting long from every provider request. All three child statuses are complete. `/tmp/pg1-live-companion-pHdbmd/drive.out` holds provider requests and status; `/tmp/pg1-live-companion-pHdbmd/server-home/harness/mcp-stub-requests.jsonl` holds the actual MCP calls. The full output is `/tmp/261113-8yn-real-child-0881.log`. Foreground agent-grants scenarios also passed: adapter 14/14 scenarios (210 steps), built-in 6/6 (95 steps), in `/tmp/261113-8yn-agent-grants-adapter.log` and `/tmp/261113-8yn-agent-grants-builtin.log`.
+`env -u PG_COMPANION_INDEX -u PG_AGENT node .planning/debug/artifacts/real-child-mcp-automation/run.mjs` passed against the installed 0.88.1 package. In `/tmp/pg1-live-companion-pHdbmd/summary.json`, runner offers and calls short, control offers short and long and calls long, and restricted offers and calls short while omitting long from every provider request. All three child statuses are complete. `/tmp/pg1-live-companion-pHdbmd/drive.out` holds provider requests and status; `/tmp/pg1-live-companion-pHdbmd/server-home/harness/mcp-stub-requests.jsonl` holds the actual MCP calls. The full output is `/tmp/261113-8yn-real-child-0881.log`. Foreground agent-grants scenarios also passed: adapter 14/14 scenarios (210 steps), built-in 6/6 (95 steps), in `/tmp/261113-8yn-agent-grants-adapter.log` and `/tmp/261113-8yn-agent-grants-builtin.log`.
 
-This is runtime acceptance of test 2, with fresh confirmation of test 1. Final PG-MCP-02 acceptance remains pending the parent's combined-tree `npm run check` after merge. The original 0.88.0 blocked run remains below as historical evidence.
+This is runtime acceptance of test 2, with fresh confirmation of test 1. PG-MCP-02 is accepted after the merged-tree gate. `npm run check` passed (exit 0) at `2db3b81a9cc97098bee6bc744d451aeab4fe9fad`, Node v26.13.0; log: `/tmp/subagents0881-root-check.log`. The original 0.88.0 blocked run remains below as historical evidence.
 
 ## Historical Test 2 Blocked Run — 2026-11-12
 
@@ -169,7 +169,7 @@ contract in `01-VERIFICATION.md` before continuing.
 
 ## Gaps
 
-No local implementation failure is established. Tests 1 and 2 pass on the published 0.88.1 companion. Final PG-MCP-02 acceptance waits for the parent combined-tree gate. Focused-feedback timing sign-off remains a separate validation-record item.
+No local implementation failure is established. Tests 1 and 2 pass on the published 0.88.1 companion. PG-MCP-02 acceptance is complete; the combined-tree gate passed. Focused-feedback timing sign-off remains a separate validation-record item.
 
 ## Historical Accepted External-Dependency Deferral — 2026-11-12
 

@@ -6,10 +6,10 @@ current_phase: 02
 current_phase_name: Hook Payloads, Matchers, and Stop Limit
 status: executing
 stopped_at: parity-gaps Phase 2 all waves verified; phase audits next
-last_updated: "2026-11-13T10:36:16.244870+00:00"
+last_updated: "2026-11-13T12:21:57.272Z"
 last_activity: 2026-11-13
-last_activity_desc: Phase 02 all 10 plans executed; phase audits pending
-state_head: fae378d2b58ea520a6557a61d198c77e71a7d03e
+last_activity_desc: Adopted pi-subagents 0.88.1; Phase 02 audits remain pending
+state_head: 2db3b81a9cc97098bee6bc744d451aeab4fe9fad
 progress:
   total_phases: 11
   completed_phases: 1
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: 02 (Hook Payloads, Matchers, and Stop Limit) — EXECUTING
 Plan: 10 of 10 executed; phase audits and goal verification next
 Status: Executing Phase 02
-Last activity: 2026-11-13 — Phase 02 wave 9 verified
+Last activity: 2026-11-13 — Completed quick task 261113-8yn; pi-subagents 0.88.1 adopted and full gate passed
 
 Progress: [█░░░░░░░░░] 9%
 
@@ -134,7 +134,11 @@ self-check, including prose about failure hooks. Exact PASSED headings,
 created files, clean branches, committed summaries and all task SHA ancestry
 were checked directly before the scoped worktree merges. No check was waived.
 
-### parity-gaps Phase 1 closeout
+### pi-subagents 0.88.1 adoption — 2026-11-13
+
+Published pi-subagents 0.88.1 passed all six launch checks and all three real-child controls. PG-MCP-02 is complete; AGTAMBIENT-01 and its seed trigger are retired. `npm run check` passed (exit 0) at `2db3b81a9cc97098bee6bc744d451aeab4fe9fad`, Node v26.13.0; log: `/tmp/subagents0881-root-check.log`. AGTLONGNAME-01 and PG1-TIMING-01 remain open. See the [adoption summary](quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md).
+
+### parity-gaps Phase 1 closeout — historical 2026-11-12
 
 All 11 plans are complete. Verification passes with 19 verified truths and one
 explicit user-approved deferral, accepted 2026-11-12. The installed companion
@@ -336,6 +340,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 34 | Run one cucumber worker per available CPU, at most 8 (CI timeouts on PR #310) | 2026-11-09 | 6be7cb0c | — | — |
 | 35 | Wait for the background save of a migrated state.json in the state-migration step (CI run 42842685676 flake) | 2026-11-10 | ecc72b9d | — | — |
 | 261112-jzs | Add installed-companion MCP gap tests and upstream PR 3259 | 2026-11-12 | 92bace26 | — | [261112-jzs-add-installed-companion-characterization](./quick/261112-jzs-add-installed-companion-characterization/) |
+| 261113-8yn | Adopt pi-subagents 0.88.1, verify ambient MCP regression tests, and retire the upgrade trigger | 2026-11-13 | 2db3b81a | complete | [261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi](./quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 

@@ -30,8 +30,8 @@ key-decisions:
   - Keep the general optional pi-subagents peer floor at >=0.87.0; ambient direct MCP requires >=0.88.1.
   - Keep PG-MCP-02 open until the parent's merged-tree npm run check passes.
 patterns-established: []
-requirements-completed: []
-requirements-pending: [PG-MCP-02]
+requirements-completed: [PG-MCP-02]
+requirements-pending: []
 coverage:
   - id: D1
     description: The suite and local launcher select published pi-subagents 0.88.1 while the peer floor remains >=0.87.0.
@@ -72,7 +72,7 @@ plan_head_after: 5bd4cbeb5c23694fa43f4dbc9e3120247c818921
 
 - Completed: 2026-11-13T12:07:25Z; Node: v26.13.0.
 - Tasks: 3; changed files: 14; task commits: 3.
-- The executor tasks are complete. Parent merge and the combined-tree gate remain pending.
+- The executor tasks, parent merge and combined-tree gate are complete.
 
 ## Accomplishments
 
@@ -82,9 +82,9 @@ plan_head_after: 5bd4cbeb5c23694fa43f4dbc9e3120247c818921
 
 ## Task Commits
 
-1. Task 1 — b730d0b3948ac024e9f2c5d7d87c6700f777f703 — test(subagents): adopt published ambient MCP fix.
-2. Task 2 — 5f5720f39e2a40f7038941dea6deb20206ef7164 — docs(subagents): describe ambient MCP release.
-3. Task 3 — 5bd4cbeb5c23694fa43f4dbc9e3120247c818921 — docs(subagents): retire ambient MCP release trigger.
+1. **Task 1: test(subagents): adopt published ambient MCP fix.**: `b730d0b3948ac024e9f2c5d7d87c6700f777f703`
+2. **Task 2: docs(subagents): describe ambient MCP release.**: `5f5720f39e2a40f7038941dea6deb20206ef7164`
+3. **Task 3: docs(subagents): retire ambient MCP release trigger.**: `5bd4cbeb5c23694fa43f4dbc9e3120247c818921`
 
 ## Package Identity
 
@@ -127,7 +127,7 @@ None — the plan's product and evidence scope was executed as written. The firs
 
 None -- no security-relevant surface outside the plan's threat model was introduced.
 
-## Parent Handoff
+## Parent Handoff — fulfilled below
 
 The parent must review and merge these three commits into features/gaps without rewriting history, then run npm run check in the parent checkout with the configured 2400-second limit. A failure or timeout is not acceptance. Record command, exit status, merged commit, Node version, and log path. The 0.88.0 gate cannot cover this change.
 
@@ -145,3 +145,11 @@ No merge, push, PR, version bump, or release was performed by this executor.
 ## Self-Check: PASSED
 
 All 14 declared changed files exist, the three task commits descend from the starting head, the seed assertion passes, both cache and suite pin are 0.88.1, and the worktree was clean before this summary write.
+
+## Parent Merge and Acceptance — 2026-11-13
+
+Merged into `features/gaps` through the recorded manifest; temporary worktree and branch removed. `npm run check` passed (exit 0) at `2db3b81a9cc97098bee6bc744d451aeab4fe9fad`, Node v26.13.0; log: `/tmp/subagents0881-root-check.log`.
+
+All static, integration, adapter and built-in behavioral checks passed, with 361 direct-coverage pairs. PG-MCP-02 is complete; the active override and deferred entry are removed. The seed has status completed and trigger_when none. Historical evidence, the optional peer floor, AGTLONGNAME-01 and PG1-TIMING-01 remain intact. Phase 2 remains the active phase.
+
+The only pre-existing unstaged change was Phase 2 validation Markdown, retained in `/tmp/subagents0881-root-precheck.diff`. Final follow-through changes only planning Markdown; the exact build-input comparison to the gate commit is empty and no untracked executable input exists.

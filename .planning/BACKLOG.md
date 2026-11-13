@@ -5190,8 +5190,7 @@ controls. On 2026-11-13, published pi-subagents 0.88.1 was adopted for the
 suite and local launcher. Six launch checks and three actual detached-child
 controls pass; the two positive ambient checks fail on 0.88.0 with all four
 explicit controls passing. The [quick-task summary](quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md)
-records the package and run evidence. Final PG-MCP-02 acceptance waits for the
-parent's combined-tree `npm run check` after merge. The
+records the package and run evidence. PG-MCP-02 is complete after the merged-tree check. `npm run check` passed (exit 0) at `2db3b81a9cc97098bee6bc744d451aeab4fe9fad`, Node v26.13.0; log: `/tmp/subagents0881-root-check.log`. The
 [retired seed](seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md)
 has no release trigger. AGTLONGNAME-01 remains a separate explicit-grant
 naming defect.

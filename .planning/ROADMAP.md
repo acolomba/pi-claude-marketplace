@@ -184,6 +184,8 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 
 **Closeout (2026-11-12):** 19 truths verified and one accepted override. The remaining real-child exclusion acceptance in criterion 3 is deferred by the user to [AGTAMBIENT-01](BACKLOG.md#agtambient-01-adopt-the-pi-subagents-fix-for-ambient-direct-mcp-tools-in-children) / [SEED-261112-81c](seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md), triggered by a published companion fix. PG-MCP-02 remains partial. Focused-feedback timing bookkeeping (PG1-TIMING-01) remains advisory debt in the validation report; no claim of Nyquist compliance.
 
+**Adoption (2026-11-13):** Published pi-subagents 0.88.1 passed all six launch checks and all three real-child controls. PG-MCP-02 is complete; AGTAMBIENT-01 and its seed trigger are retired. `npm run check` passed (exit 0) at `2db3b81a9cc97098bee6bc744d451aeab4fe9fad`, Node v26.13.0; log: `/tmp/subagents0881-root-check.log`. AGTLONGNAME-01 and PG1-TIMING-01 remain open. See the [adoption summary](quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md).
+
 **Plans**: 11/11 plans complete
 
 Plans:

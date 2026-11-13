@@ -35,8 +35,7 @@ positive ambient checks fail only their two intended cases on 0.88.0. See the
 [quick-task summary](../quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md)
 for the package identity, commands, and evidence.
 
-The release trigger is retired. Final PG-MCP-02 acceptance waits for the
-parent's combined-tree `npm run check` after these commits are merged.
+The release trigger is retired and PG-MCP-02 is complete. `npm run check` passed (exit 0) at `2db3b81a9cc97098bee6bc744d451aeab4fe9fad`, Node v26.13.0; log: `/tmp/subagents0881-root-check.log`.
 
 ## Historical Scope Estimate — 2026-11-12
 

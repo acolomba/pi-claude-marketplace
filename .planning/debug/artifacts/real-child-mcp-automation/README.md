@@ -10,7 +10,7 @@ The final positive launch checks failed on installed 0.88.0 in exactly the unres
 
 The default installed-package replay, `env -u PG_COMPANION_INDEX -u PG_AGENT node .planning/debug/artifacts/real-child-mcp-automation/run.mjs`, passed all three actual detached children. Its fixture is `/tmp/pg1-live-companion-pHdbmd`, driver log is `/tmp/pg1-live-companion-pHdbmd/drive.out`, MCP request log is `/tmp/pg1-live-companion-pHdbmd/server-home/harness/mcp-stub-requests.jsonl`, and full run output is `/tmp/261113-8yn-real-child-0881.log`. The saved `summary.json` holds every provider inventory. The short-grant child called short; the unrestricted child offered and called long; the restricted child omitted long in every provider request while offering and calling short. Each child completed. This proves selective exclusion with the published package. It does not close AGTLONGNAME-01, which concerns explicit grants of shortened names.
 
-The integration suite now asserts the corrected ambient behavior and retains all four explicit grant and restriction controls. Its selected companion is 0.88.1. The general optional peer floor remains 0.87.0. The full combined-tree gate and final PG-MCP-02 acceptance remain with the parent after merge.
+The integration suite now asserts the corrected ambient behavior and retains all four explicit grant and restriction controls. Its selected companion is 0.88.1. The general optional peer floor remains 0.87.0. PG-MCP-02 is accepted after the merged-tree gate. `npm run check` passed (exit 0) at `2db3b81a9cc97098bee6bc744d451aeab4fe9fad`, Node v26.13.0; log: `/tmp/subagents0881-root-check.log`.
 
 ## Historical local-patch provenance — 2026-11-12
 
